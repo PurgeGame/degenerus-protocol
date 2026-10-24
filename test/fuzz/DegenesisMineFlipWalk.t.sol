@@ -17,8 +17,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         above it. A call must progress, or revert NoWork when the engine's selector said Idle,
 ///         or RngNotReady when it said Wait; any other outcome fails the test with the action,
 ///         the gas and the selector. Contracts are re-cooled before each call.
-///         - a stall across the whole sale: orders on all seven days, nobody mines until after
-///           the close, then the first request splits all seven cohorts;
+///         - a stall across the whole sale: orders over seven calendar days in the same cohort, nobody mines until after
+///           the close, then the first request splits that cohort;
 ///         - a busy week mined daily, the next pool over the level-1 target, through the turbo
 ///           level-1 jackpot at the close;
 ///         - a deadman game over during the sale with every cohort unsplit;
@@ -62,13 +62,13 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
     // =====================================================================
 
     /// @notice Orders on all seven sale days, nobody mines until after the close: the first
-    ///         request splits all seven cohorts and prices cohort 1, then settlement runs one
+    ///         request splits and prices cohort 1, then settlement runs one
     ///         cohort per day. Every call at the minimum.
     function test_StallAcrossWholeSale_MinimumGas() public {
         _saleWithoutMining(3);
         _walkDays(GameTimeLib.MAIN_LAUNCH_DAY + 1, 24, true);
         _assertSettledAtLevelOne();
-        assertEq(splits, 7, "seven cohorts split");
+        assertEq(splits, 1, "only the occupied logical cohort split");
     }
 
     /// @notice A busy week mined daily, the next pool above the level-1 target: the close runs
@@ -99,7 +99,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
         vm.warp(block.timestamp + 32 days);
         assertTrue(game.livenessTriggered(), "deadman fires");
         _walkTerminal();
-        assertEq(splits, 7, "terminal setup split all seven cohorts");
+        assertEq(splits, 1, "terminal setup split the single occupied cohort");
         assertEq(fundsReleased, 1, "Degenesis funds released once");
     }
 
@@ -107,8 +107,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
     ///         applied: the sale is mined through Degenesis day 4, the day-index-6 request prices a
     ///         cohort and its word lands, then nobody mines for 31 days. The ending draws its own
     ///         terminal word instead of applying the stale one, so the bound day is never recorded
-    ///         and nothing is copied into degenesisWord: the terminal apply's DAILY_GAP +
-    ///         DAILY_APPLY admission needs no DEGENESIS_WORD_COPY_GAS. The setup forfeits the
+    ///         and nothing is copied into degenesisWord: the terminal apply's DAILY_APPLY admission needs no DEGENESIS_WORD_COPY_GAS. The setup forfeits the
     ///         unsettled cohort and releases the Degenesis funds. Every call at the minimum.
     function test_TerminalAppliesBoundCohortWord_MinimumGas() public {
         for (uint256 c = 1; c <= 4; ++c) {
@@ -160,7 +159,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
         _saleWithoutMining(2);
         vm.warp(block.timestamp + 32 days);
         _walkTerminal();
-        assertEq(splits, 7, "terminal setup split all seven cohorts");
+        assertEq(splits, 1, "terminal setup split the single occupied cohort");
     }
 
     // =====================================================================
@@ -170,6 +169,8 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
     /// @dev `perDay` buyers a day on all seven sale days, each earning credit through an
     ///      ordinary lootbox and buying orders at the bounds; no mineFlip at all.
     function _saleWithoutMining(uint256 perDay) internal {
+        _warpTo(2, 0);
+        _walkToIdle(gasSeed == 0); // open the first logical sale cohort
         for (uint256 c = 1; c <= 7; ++c) {
             _warpTo(_dayOf(c), c * 1 hours);
             for (uint256 k; k < perDay; ++k) _orderAtBound(buyers[(c * perDay + k) % buyers.length], c * 7 + k);
@@ -257,10 +258,11 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
     ///      the call ends after its first unit. Returns false on NoWork / RngNotReady.
     function _tightStep() internal returns (bool) {
         for (uint256 g = 200_000; g < MAX_GAS; g = g * 5 / 4) {
+            vm.recordLogs();
             vm.prank(miner);
             (bool ok, bytes memory ret) =
                 address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-            if (ok) return true;
+            if (ok) { _scan(vm.getRecordedLogs()); return true; }
             bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
             if (sel == E_NO_WORK || sel == E_RNG_NOT_READY) return false;
         }
@@ -342,6 +344,10 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
             else if (t == SIG_RESOLVED) ++resolved;
             else if (t == SIG_BURNED) ++burns;
             else if (t == SIG_FUNDS_RELEASED) ++fundsReleased;
+            else if (t == SIG_ADVANCE) {
+                (uint8 stage, uint24 lvl) = abi.decode(logs[i].data, (uint8, uint24));
+                if (lvl == 1 && stage == 7) sawJackpotPhase = true;
+            }
         }
     }
 

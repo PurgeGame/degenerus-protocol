@@ -16,10 +16,13 @@ contract TerminalLoanSeeder is DegenerusGame {
     /// @dev A level-1 purchase phase `age` days old, sealed yesterday (DeadVrfEnding's DeadlineSeeder).
     function livePurchase(uint24 age) external {
         TQ.retireCompleted(address(this), 2);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;
@@ -32,7 +35,10 @@ contract TerminalLoanSeeder is DegenerusGame {
     ///      unfunded: the ending fires today. Fixture purchases (smurfs, a deity pass) would
     ///      otherwise have filled the next pool past its target and rescued the level.
     function pastDeadline() external {
-        purchaseStartDay = _simulatedDayIndex() - 31;
+        purchaseStartDay = dailyIdx - 30;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _setPrizePools(9 ether, uint128(_getFuturePrizePool()));
     }
 
@@ -80,6 +86,7 @@ abstract contract TerminalLoanBase is DeployProtocol {
 
     function _restore() internal {
         vm.etch(address(game), gameRuntime);
+        _syncCoinflipFixtureDay(game.currentDayView());
     }
 
     function _fund(uint32 id, uint128 amount) internal { _seeder().fund(id, amount); _restore(); }
@@ -466,7 +473,7 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
 
     // ---------------------------------------------------------------- VRF failing after the decision
 
-    function test_OlderRequestDyingDuringSettlementNeitherSkipsNorReversesIt() public {
+    function test_HardDeadlineInterruptsTerminalLoanBookWithoutReversingPaidPrefix() public {
         uint256 n = 12;
         uint32[] memory ids = new uint32[](n);
         for (uint256 i; i < n; ++i) {
@@ -482,21 +489,32 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         vm.recordLogs();
         assertTrue(_mine(30_000_000)); // decision: VRF alive, settlement owed
         assertEq(_loanStep(), 1);
-        assertTrue(_mine(800_000)); // part of the book
+        // The cursor first crosses protocol wallets; stop after the first owned loan.
+        for (uint256 i; i < 32 && _payee(ids[0]) != address(sdgnrs); ++i) assertTrue(_mine(800_000));
         assertTrue(_anyOpen(), "the book is still part-settled");
         assertEq(game.nextMinerAction(), ACTION_TERMINAL, "settlement outranks the wait for the old word");
 
-        // The older request now times out. Settlement still finishes every remaining loan.
-        vm.warp(block.timestamp + 15 days);
-        for (uint256 calls; calls < 100 && _anyOpen(); ++calls) {
-            _mine(800_000);
-            _assertNothingAheadOfLoans();
+        Vm.Log[] memory prefix = vm.getRecordedLogs();
+        uint256 settledBefore;
+        for (uint256 i; i < n; ++i) {
+            (uint256 seized, uint256 repaid) = _countSettlements(prefix, ids[i]);
+            settledBefore += seized + repaid;
         }
-        assertFalse(_anyOpen(), "no loan skipped after the timeout");
+        assertGt(settledBefore, 0, "settlement prefix is nonempty");
+        assertLt(settledBefore, n, "some loans remain pending");
+        // Hard completion expiry now takes precedence over every remaining normal loan.
+        vm.warp(vm.getBlockTimestamp() + 15 days);
+        vm.recordLogs();
         for (uint256 i; i < 200 && !(game.gameOver() && _jackpotPaid()); ++i) _mine(30_000_000);
-        assertTrue(game.gameOver() && _jackpotPaid(), "the deterministic fallback finished");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < n; ++i) _assertSeized(logs, ids[i], "settled once; ownership stands after the fallback");
+        assertTrue(game.gameOver() && _jackpotPaid(), "deterministic fallback finished");
+        Vm.Log[] memory suffix = vm.getRecordedLogs();
+        for (uint256 i; i < n; ++i) {
+            (uint256 seized, uint256 repaid) = _countSettlements(suffix, ids[i]);
+            assertEq(seized + repaid, 0, "hard ending performs no further loan work");
+            (seized, repaid) = _countSettlements(prefix, ids[i]);
+            if (seized != 0) assertEq(_payee(ids[i]), address(sdgnrs), "paid prefix ownership retained");
+        }
+
     }
 
     function test_OlderWordLandingDuringSettlementChangesNothing() public {
@@ -645,7 +663,7 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
         return 0;
     }
 
-    function test_DeadmanFinishesThePendingBatchFromItsCursorThenLaterLevels() public {
+    function test_HardDeadlineBypassesUnfinishedNormalLoanBatch() public {
         uint256 n = 30;
         uint32[] memory ids = new uint32[](n);
         for (uint256 i; i < n; ++i) {
@@ -656,7 +674,7 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
             _seedLevel(ids[i], 60, 400);
             _borrow(owner, ids[i], i < 20 ? 1 : (i < 25 ? 2 : 40));
         }
-        _driveToTransitionAfterGap(1, 28);
+        _driveToTransitionAfterGap(1, 10);
         uint256 requestedAt = vm.getBlockTimestamp();
         _fulfillLatest(); // the transition's word lands: VRF is alive
         vm.recordLogs();
@@ -666,29 +684,21 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
         assertGt(cursorAfterOrdinary, 0, "part of the batch settled");
         assertLt(cursorAfterOrdinary, 20, "and part is still pending");
 
-        // Mining stops again. The day before the gap was the last sealed day, so the deadman fires
-        // a few days later, while the delivered word is still inside its 14-day window: VRF alive.
-        for (uint256 i; i < 10 && !game.livenessTriggered(); ++i) vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertTrue(game.livenessTriggered(), "deadman");
-        assertLt(vm.getBlockTimestamp(), requestedAt + 14 days, "the word is still inside its window");
+        // A stalled normal loan consumer cannot postpone the hard completion deadline.
+        for (uint256 i; i < 14 && !game.livenessTriggered(); ++i) vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(game.livenessTriggered(), "hard completion deadline");
+        assertLt(vm.getBlockTimestamp(), requestedAt + 14 days, "the unfinished daily round predates this request");
         assertEq(game.nextMinerAction(), ACTION_TERMINAL);
-        requestAtDecision = mockVRF.lastRequestId();
-        assertTrue(_mine(30_000_000)); // decision
-        assertEq(_loanStep(), 1, "settlement owed");
-        uint256 settleCalls;
-        for (; settleCalls < 100 && _anyOpen(); ++settleCalls) {
-            _mine(800_000);
-            _assertNothingAheadOfLoans();
-        }
-        assertGt(settleCalls, 1, "the book spans several checkpoints");
-        assertFalse(_anyOpen(), "pending batch and later levels all settled");
-        _driveEnding(30_000_000, true, 300);
-
+        for (uint256 i; i < 300 && !(game.gameOver() && _jackpotPaid()); ++i) _mine(30_000_000);
+        assertTrue(game.gameOver() && _jackpotPaid(), "terminal payout bypasses the unfinished normal batch");
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 settled;
         for (uint256 i; i < n; ++i) {
             (uint256 seized, uint256 repaid) = _countSettlements(logs, ids[i]);
-            assertEq(seized + repaid, 1, "each loan settled exactly once across both stages");
-            assertEq(_payee(ids[i]), address(sdgnrs));
+            assertLe(seized + repaid, 1, "no loan settles twice");
+            settled += seized + repaid;
         }
+        assertEq(settled, cursorAfterOrdinary, "hard ending performs no further normal loan work");
+
     }
 }

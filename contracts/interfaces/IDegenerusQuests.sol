@@ -202,7 +202,7 @@ interface IDegenerusQuests {
     /// @dev GAME only. Directly increases the player's streak count.
     /// @param id Wallet ID of the player to award bonus to
     /// @param amount The number of bonus streak days to award
-    /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
+    /// @param currentDay The caller's current logical game day; quest state pins to the newest rolled day
     function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external;
 
     /// @notice Record a paid craps action: quest progress and the whole-day streak credit.
@@ -227,7 +227,7 @@ interface IDegenerusQuests {
     ///      slot-0 completions are streak-neutral / reward-deferred; returns the synced streak
     ///      so the caller bases the run's snapshot on it.
     /// @param id Wallet ID of the subscriber starting an afking run
-    /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
+    /// @param currentDay The caller's current logical game day; quest state pins to the newest rolled day
     /// @return streak The player's gap-synced streak at the start of the run
     function beginAfking(uint32 id, uint24 currentDay) external returns (uint24 streak);
 
@@ -241,7 +241,7 @@ interface IDegenerusQuests {
     /// @param earnedStreak The run's live streak at the reward endpoint, Game-computed
     /// @param afkingCoveredDay The Game-side handback anchor: the day before the run ended,
     ///        floored at the reward endpoint
-    /// @param currentDay The current calendar day (the decay reference)
+    /// @param currentDay The current logical game day (the decay reference)
     function finalizeAfking(uint32 id, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
 
     /// @notice Returns the quest state for a specific player

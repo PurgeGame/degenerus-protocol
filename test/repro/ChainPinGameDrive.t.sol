@@ -148,12 +148,12 @@ contract ChainPinGameDrive is DeployProtocol {
     uint256 private constant PLAYERS = 10;
 
     uint8 private constant A_TICKETS = 4;
-    uint8 private constant A_AFKING = 9;
-    uint8 private constant A_BOXES = 10;
-    uint8 private constant A_DEGEN = 11;
-    uint8 private constant A_DEC = 12;
-    uint8 private constant A_PREPARE = 15;
-    uint8 private constant A_DAILY_PHASE = 7;
+    uint8 private constant A_AFKING = 8;
+    uint8 private constant A_BOXES = 9;
+    uint8 private constant A_DEGEN = 10;
+    uint8 private constant A_DEC = 11;
+    uint8 private constant A_PREPARE = 14;
+    uint8 private constant A_DAILY_PHASE = 6;
 
     uint256 private constant V_T1 = 0;
     uint256 private constant V_T2 = 1;

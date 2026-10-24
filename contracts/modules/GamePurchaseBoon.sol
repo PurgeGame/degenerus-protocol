@@ -14,7 +14,7 @@ abstract contract GamePurchaseBoon is DegenerusGameStorage {
         uint8 tier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
         if (tier == 0) return 0;
 
-        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 currentDay = uint24(_gameDay());
         uint24 deityDay = uint24(s0 >> BP_DEITY_PURCHASE_DAY_SHIFT);
         if (deityDay != 0 && deityDay != currentDay) {
             bp.slot0 = (s0 & BP_PURCHASE_CLEAR) | BP_SLOT0_RETAINED;

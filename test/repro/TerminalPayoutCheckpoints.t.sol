@@ -19,11 +19,14 @@ contract TerminalBurnCounter {
 
 contract TerminalPayoutHarness is DegenerusGameGameOverModule, BucketSeed {
     function seed(uint24 lvl, uint256 word) external returns (uint24 day) {
-        day = _simulatedDayIndex();
+        day = _wallDay();
         level = lvl;
         degenesisClosed = uint8(DEGENESIS_DAYS);
         jackpotPhaseFlag = true;
-        dailyIdx = day - 31;
+        dailyIdx = day;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = day;
         rngRequestDay = day;
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);

@@ -13,7 +13,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 /// @title VRFPathHandler -- Invariant handler for VRF path lifecycle testing
 /// @notice Wraps purchase/mineFlip/VRF/coordinatorSwap/warp operations while
 ///         tracking ghost variables for TEST-01 (lootbox index lifecycle),
-///         TEST-02 (stall-to-recovery state machine), and TEST-03 (gap backfill).
+///         TEST-02 (stall-to-recovery state machine), and TEST-03 (sequential logical-day commitment).
 contract VRFPathHandler is Test {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
@@ -40,9 +40,9 @@ contract VRFPathHandler is Test {
     bool public ghost_swapPending;
     bool public ghost_livenessLatched;
 
-    // --- Ghost variables: TEST-03 (gap backfill) ---
-    uint256 public ghost_maxGapSize;
-    uint256 public ghost_gapBackfillFailures;
+    // --- Ghost variables: TEST-03 (sequential logical-day commitment) ---
+    uint256 public ghost_maxResetDelay;
+    uint256 public ghost_logicalDayViolations;
     uint48 public ghost_dayBeforeSwap;
 
     // --- Non-vacuity: successes ---
@@ -200,45 +200,21 @@ contract VRFPathHandler is Test {
         // TEST-01: one committed request per call at most, flips only on a request.
         _noteRequests(indexBefore, reqBefore, unansweredBefore);
 
-        // TEST-02/03: recovery after a coordinator swap. The recovery consumes the in-flight
-        // word for the day it was requested for and seals THAT day; the same call may then go
-        // on to the wall day's fresh request (the engine composes actions, 60d31f775), so the
-        // trigger is the seal (dailyIdx advancing), not a lock transition. The two-day ring keeps
-        // the sealed day's word and the final gap day's derived word (6d0e64b09/c729ecfc9);
-        // every gap day settles through its coinflip day.
+        // Normal index increments only for one fresh request; no missed reset creates a round.
+        uint48 dailyIdxAfter = _dailyIdx();
+        if (dailyIdxAfter < dailyIdxBefore || dailyIdxAfter > dailyIdxBefore + 1) ++ghost_logicalDayViolations;
+        uint24 mirrored = uint24(uint256(vm.load(ContractAddresses.COINFLIP, bytes32(uint256(4)))) >> 176);
+        if (mirrored != dailyIdxAfter) ++ghost_logicalDayViolations;
         if (ghost_swapPending && ghost_livenessLatched) {
             ghost_swapPending = false;
             recoveryFrom = 0;
         }
-        uint48 dailyIdxAfter = _dailyIdx();
-        if (ghost_swapPending && dailyIdxAfter > dailyIdxBefore && !game.gameOver()) {
-            // The gap is its own checkpoint (applyDailyGap parks dailyIdx at day - 1 before the
-            // request day itself is applied and sealed): remember where the recovery started and
-            // evaluate once the request day is sealed.
-            if (recoveryFrom == 0) recoveryFrom = dailyIdxBefore + 1;
-            uint24 requestDay = uint24(uint256(vm.load(address(game), bytes32(uint256(5)))));
-            if (game.rngLocked() && requestDay == uint24(dailyIdxAfter) + 1) return;
-            dailyIdxBefore = recoveryFrom - 1;
-            recoveryFrom = 0;
-            if (RecyclingState.dailyWord(address(game), uint24(dailyIdxAfter)) == 0) {
-                ghost_gapBackfillFailures++;
-            }
-            uint32 gapStart = uint32(dailyIdxBefore + 1);
-            uint32 gapEnd = uint32(dailyIdxAfter);
-            if (gapEnd > gapStart) {
-                if (RecyclingState.dailyWord(address(game), uint24(gapEnd - 1)) == 0) {
-                    ghost_gapBackfillFailures++;
-                }
-                // Gap settlement is capped at the deadman window (_backfillGapDays bound).
-                if (gapEnd - gapStart > 31) gapEnd = gapStart + 31;
-                for (uint32 d = gapStart; d < gapEnd; d++) {
-                    if (!_coinflipSettled(uint24(d))) ghost_gapBackfillFailures++;
-                }
-            }
-            uint256 gapSize = uint256(uint32(dailyIdxAfter) - gapStart);
-            if (gapSize > ghost_maxGapSize) ghost_maxGapSize = gapSize;
+        if (ghost_swapPending && !game.gameOver() && _coinflipSettled(uint24(ghost_dayBeforeSwap))) {
+            uint256 elapsedResets = game.currentWallDayView() > ghost_dayBeforeSwap
+                ? game.currentWallDayView() - ghost_dayBeforeSwap : 0;
+            if (elapsedResets > ghost_maxResetDelay) ghost_maxResetDelay = elapsedResets;
             ghost_swapPending = false;
-            ghost_recoveryCount++;
+            ++ghost_recoveryCount;
         }
         // Clear swap flag if game ended (no recovery possible)
         if (ghost_swapPending && game.gameOver()) {
@@ -281,7 +257,7 @@ contract VRFPathHandler is Test {
         calls_requestMidday++;
 
         if (game.gameOver() || game.rngLocked()) return;
-        if (game.nextMinerAction() != 18) return;
+        if (game.nextMinerAction() != 17) return;
 
         uint48 indexBefore = _lootboxRngIndex();
         uint256 reqBefore = vrf.lastRequestId();

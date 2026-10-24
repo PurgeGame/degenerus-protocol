@@ -36,10 +36,13 @@ import {Vm} from "forge-std/Vm.sol";
 
 contract SkimTransitionSeeder is DegenerusGame {
     function seed(uint24 age, uint24 incomingLevel) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = incomingLevel - 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         lastPurchaseDay = true;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
@@ -110,6 +113,7 @@ contract FuturepoolSkimTest is DeployProtocol {
         vm.etch(address(game), type(SkimTransitionSeeder).runtimeCode);
         SkimTransitionSeeder(payable(address(game))).seed(age, incomingLevel);
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(address(game), 300 ether); // no yield surplus to perturb the pools
         uint256 word = 0xA77E1;
         bytes32 skimSig = keccak256("PoolSkimApplied(uint24,uint256,uint256)");

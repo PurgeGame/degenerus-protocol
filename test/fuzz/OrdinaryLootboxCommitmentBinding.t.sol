@@ -197,7 +197,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     ///      orders are the next read consumer of mineFlip.
     function _advanceToHumanBoxes(uint48 index, uint256[2] memory orders) private {
         for (uint256 i; i < 400; ++i) {
-            if (game.nextMinerAction() == 10) return; // MinerAction.HumanBoxes
+            if (game.nextMinerAction() == 9) return; // MinerAction.HumanBoxes
             _stepMinimal();
             _assertOrders(index, orders, false);
         }

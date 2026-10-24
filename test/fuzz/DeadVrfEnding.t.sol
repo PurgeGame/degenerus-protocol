@@ -27,9 +27,12 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
         external
     {
         level = lvl;
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         purchaseStartDay = day - age;
         dailyIdx = day - sealedAge;
+        dailyComplete = requestTime <= 1;
+        lastDailyCompletedAt = uint48(block.timestamp - uint256(sealedAge) * 1 days);
+        lastDailyRequestWallDay = _wallDayAt(lastDailyCompletedAt);
         rngRequestTime = requestTime;
         _setRngRequestActive(requestTime > 1);
         _setRngSessionPublished(requestTime <= 1);
@@ -43,7 +46,8 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
 
     function applyWordFor(uint48 t, uint256 word) external {
         _setRngSessionPublished(true);
-        _recordDailyRng(_simulatedDayIndexAt(t), word);
+        dailyComplete = false;
+        _recordDailyRng(_wallDayAt(t), word);
     }
 
     function publish() external {
@@ -52,6 +56,7 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
 
     function startEnding() external {
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
+        _setRngTerminal();
     }
 
     function markRetrySpent() external {
@@ -64,10 +69,11 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
         _setRngSessionPublished(false);
         vrfRequestId = 777;
         rngLockedFlag = false;
-        _recordDailyRng(_simulatedDayIndexAt(t), 123);
+        _recordDailyRng(_wallDayAt(t), 123);
     }
 
     function latchDeadMidday() external {
+        _setRngTerminal();
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
         _setRngRequestActive(false);
     }
@@ -98,7 +104,7 @@ contract DeadVrfLivenessTest is Test {
         h.seed(5, 32, sent, 3, 0, 0);
         assertFalse(h.liveness(), "past the deadline but behind: the deadline waits");
         vm.warp(uint256(sent) + 14 days - 1);
-        assertFalse(h.liveness(), "still inside the VRF-dead window");
+        assertTrue(h.liveness(), "prior completion hard deadline precedes the later request timeout");
         vm.warp(uint256(sent) + 14 days);
         assertTrue(h.vrfDead(), "14 days unanswered");
         assertTrue(h.liveness(), "VRF dead ends the game");
@@ -110,7 +116,7 @@ contract DeadVrfLivenessTest is Test {
         h.markRetrySpent();
         assertFalse(h.liveness(), "a spent retry does not end the grace");
         vm.warp(uint256(sent) + 14 days - 1);
-        assertFalse(h.liveness(), "the retry did not restart or extend the window");
+        assertTrue(h.liveness(), "retry cannot extend the prior completion deadline");
         vm.warp(uint256(sent) + 14 days);
         assertTrue(h.liveness(), "the window runs from the original send");
     }
@@ -120,7 +126,7 @@ contract DeadVrfLivenessTest is Test {
         h.seed(5, 10, sent, 20, 2, 0xB0B);
         h.applyWordFor(sent, 0xB0B);
         assertFalse(h.vrfDead(), "an applied word is not a dead VRF");
-        assertFalse(h.liveness(), "a 20-day backlog in the jackpot phase stays alive");
+        assertTrue(h.liveness(), "published entropy cannot extend the daily hard-progress deadline");
     }
 
     function test_onlyAPublishedWordKeepsVrfAlivePastTheWindow() public {
@@ -137,7 +143,7 @@ contract DeadVrfLivenessTest is Test {
         h.seed(5, 31, 0, 1, 0, 0);
         assertTrue(h.liveness(), "caught up past the deadline");
         h.seed(5, 33, 0, 3, 0, 0);
-        assertFalse(h.liveness(), "behind past the deadline (a gap, however it arose): waits for its credit");
+        assertTrue(h.liveness(), "unattended reset cannot undo completed purchase days");
         h.seed(5, 33, uint48(block.timestamp - 2 days), 3, 0, 0);
         assertFalse(h.liveness(), "behind with a request in flight (a stall): waits for its credit");
         h.startEnding();
@@ -209,6 +215,8 @@ contract DeadVrfEndingTest is DeployProtocol {
 
     function _restore() private {
         vm.etch(address(game), realCode);
+        uint256 packed = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((packed & ~(uint256(0xffffff) << 176)) | (uint256(game.currentDayView()) << 176)));
     }
 
     function _seedHoldings() private {
@@ -435,19 +443,13 @@ contract DeadVrfEndingTest is DeployProtocol {
             }
         }
         assertTrue(game.gameOver(), "ended");
-        assertFalse(_sawPayoutFixed(vm.getRecordedLogs()), "the normal VRF ending");
-        assertGt(mockVRF.lastRequestId(), before, "on a fresh terminal request");
-        uint24 today = game.currentDayView();
-        assertTrue(game.rngWordForDay(today) != 0, "applied to the ending's own day");
-        assertEq(game.rngWordForDay(s), 0, "old processing words are retired");
-        assertEq(game.rngWordForDay(s + 1), 0, "gap words have no archive");
-        // The terminal backfill starts after an already-applied day. Gap wins take raw-root
-        // bits 1..31 from that original start and pay a fixed double-or-nothing 100% profit
-        // (backfilled coinflip days, 60d31f775: stored 100 on a win, 1 on a loss).
-        uint24 gapStart = applied ? s + 1 : s;
-        if (applied) _assertCoinflipResult(s, 0x57AC);
-        else _assertGapCoinflipResult(s, (uint256(0xF00D) >> 1) & 1 != 0);
-        _assertGapCoinflipResult(s + 1, (uint256(0xF00D) >> (1 + uint256(s + 1) - gapStart)) & 1 != 0);
+        assertTrue(_sawPayoutFixed(vm.getRecordedLogs()), "hard progress expiry uses deterministic payout");
+        assertEq(mockVRF.lastRequestId(), before, "hard ending never requests a replacement outcome");
+        assertEq(game.rngWordForDay(s), applied ? 0x57AC : 0, "already applied result is preserved");
+        (uint16 result,) = coinflip.getCoinflipDayResult(s);
+        assertEq(result, applied ? 1 : 0);
+        (result,) = coinflip.getCoinflipDayResult(s + 1);
+        assertEq(result, 0, "terminal never synthesizes a calendar-gap result");
     }
 
     function _assertCoinflipResult(uint24 day, uint256 word) private view {
@@ -489,6 +491,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineFlip{gas: 2_000_000}(type(uint32).max);
         assertTrue(game.boxIndexComplete(read), "the test's prior delivered read cohort must finish");
         uint256 before = mockVRF.lastRequestId();
+        vm.fee(1 gwei); // Set immediately before the isolated priced transaction.
         vm.prank(caller);
         game.mineFlip(0);
         id = mockVRF.lastRequestId();
@@ -665,32 +668,22 @@ contract DeadVrfEndingTest is DeployProtocol {
     /// @dev The deadline day seals and nobody advances the next day. The skipped day is a gap: it
     ///      is credited and the day after seals normally; the following caught-up day starts the
     ///      ending on a terminal word requested after the freeze.
-    function test_skippedDayPastTheDeadlineIsCreditedThenEndsOnAFreshWord() public {
+    function test_UnattendedPurchaseDeadlineEndsWithoutCalendarCredit() public {
         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
         DeadlineSeeder(payable(address(game))).seed(30);
         _restore();
         _runDay(mockVRF);
-        uint24 dl = game.currentDayView();
-
-        // vm.getBlockTimestamp, not block.timestamp: via-IR caches the latter across warps.
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertTrue(game.livenessTriggered(), "the first day past the deadline is frozen");
-        vm.warp(vm.getBlockTimestamp() + 1 days); // dl + 1 left unattended
-        assertEq(game.currentDayView(), dl + 2, "harness: two days past the sealed deadline day");
-        assertFalse(game.livenessTriggered(), "the skipped day is a gap: it waits for its credit");
-        _runDay(mockVRF);
-        assertFalse(game.gameOver(), "the gap is credited and the day seals");
-        assertTrue(game.rngWordForDay(dl + 2) != 0, "sealed on its own word");
-
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertTrue(game.livenessTriggered(), "the next caught-up day past the deadline fires");
+        uint24 completed = game.currentDayView();
+        vm.warp(vm.getBlockTimestamp() + 2 days);
+        assertEq(game.currentDayView(), completed);
+        assertTrue(game.livenessTriggered());
         uint256 before = mockVRF.lastRequestId();
-        vm.recordLogs();
         _runDay(mockVRF);
-        assertTrue(game.gameOver(), "the next advance ends the level");
-        assertGt(mockVRF.lastRequestId(), before, "on a terminal word requested after the freeze");
-        assertTrue(game.rngWordForDay(dl + 3) != 0, "applied to the ending's own day");
-        assertFalse(_sawPayoutFixed(vm.getRecordedLogs()), "the normal VRF payout");
+        assertTrue(game.gameOver());
+        assertEq(game.currentDayView(), completed);
+        assertGt(mockVRF.lastRequestId(), before, "one terminal cohort receives its own word");
+        assertGt(game.rngWordForDay(completed + 1), 0);
+        assertEq(game.rngWordForDay(completed + 2), 0);
     }
 
     /// @dev A coordinator swap re-sends a stalled daily request and spends the vault owner's
@@ -851,10 +844,14 @@ contract DeadlineSeeder is DegenerusGame {
         // Entering this purchase phase means the prior level's queues, including
         // its frozen level-2 pool, have already materialized.
         TQ.retireCompleted(address(this), 2);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
+        _setRngComplete(true);
         _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;

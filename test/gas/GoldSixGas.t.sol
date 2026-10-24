@@ -25,7 +25,7 @@ contract GoldSixGasHarness is DegenerusGameTicketModule, WalletSeed {
 
 contract GoldSixFoilGasHarness is DegenerusGameFoilPackModule, WalletSeed {
     function seed() external {
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
         _setTicketBufferLevel(1);
         uint256 priorOwner = uint256(_seedWallet(address(0xBEEF)));

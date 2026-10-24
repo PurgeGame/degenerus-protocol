@@ -122,8 +122,18 @@ contract MockGame {
     }
 
 
+    /// @dev Ordinary-operation table double: each advanced fixture reset represents one
+    ///      served request. Production pause/delay behavior is exercised against the real Game.
     function extsload_g8132(bytes32 slot) external view returns (bytes32) {
-        return slots[slot];
+        uint256 value = uint256(slots[slot]);
+        uint24 day = GameTimeLib.currentDayIndex();
+        if (slot == bytes32(0)) value = (value & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24);
+        if (slot == bytes32(uint256(5))) value = (value & ~(uint256(0xffffff) << 216)) | (uint256(day) << 216);
+        return bytes32(value);
+    }
+    function currentDayView() external view returns (uint24) { return GameTimeLib.currentDayIndex(); }
+    function dailyScheduleOpen() external view returns (bool) {
+        return uint256(slots[bytes32(0)]) & (uint256(1) << 253) == 0;
     }
 
     function playerActivityScore(address player) external view returns (uint256) {

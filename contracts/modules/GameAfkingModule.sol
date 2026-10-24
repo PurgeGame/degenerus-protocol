@@ -206,15 +206,15 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         uint256 seatId
     ) external payable {
         // Closed from the liveness trigger onward, which subsumes post-gameOver: the
-        // predicate stays true once death is declared (_unlockRng deliberately freezes
-        // dailyIdx so the deadman never un-fires, and the phase flags it reads can no
-        // longer be cleared). AFKing reward collection closes at the same boundary.
+        // predicate stays true once death is declared: terminal processing cannot
+        // refresh the final normal completion timestamp or reopen the live phase.
+        // AFKing reward collection closes at the same boundary.
         if (_livenessTriggered()) revert GameOver();
 
         // Include the pre-first-miner-call window and post-unlock AFKing consumption.
         // The old RNG completion flag remains true during preparation, so it is not a lock.
         if (rngLockedFlag || _afkingResetDay > dailyIdx
-            || _simulatedDayIndex() > dailyIdx || _pendingBoxCount != 0) revert RngLocked();
+            || !dailyComplete || _dailyRequestDue() || _pendingBoxCount != 0) revert RngLocked();
 
         // The account rule: the caller for id 0, else an account the caller may act for.
         uint32 subId = _resolveAccountId(id);
@@ -230,7 +230,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
         if (msg.value > 0) _creditAfkingValue(subId, msg.value);
 
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _gameDay();
         uint256 position1 = _subPosition1(subId);
 
         if (dailyQuantity == 0) {
@@ -614,7 +614,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     function _cancelAcquiredSubscription(uint32 id) private {
         (uint256 lane, uint256 position1) = _subLaneOf(id);
         if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
-        _finalizeAfking(id, lane, _simulatedDayIndex());
+        _finalizeAfking(id, lane, _gameDay());
         _setSubLaneAt(position1 - 1, lane | SUB_REMOVAL_BIT);
         emit SubscriptionUpdated(id, 0, lane & SUB_TICKETS_BIT != 0);
     }

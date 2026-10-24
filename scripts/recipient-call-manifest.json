@@ -561,14 +561,6 @@
   },
   {
     "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip.creditFlipBatch",
-    "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id, amount, 0, false)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/Coinflip.sol",
     "scope": "Coinflip.creditFlipPair_g578",
     "kind": "recipient-helper",
     "expression": "_addDailyFlip(id1, amount1, 0, false)",
@@ -620,14 +612,6 @@
     "scope": "Coinflip.previewFlipBacking",
     "kind": "recipient-helper",
     "expression": "_viewWalletId(player)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip.processCoinflipGap",
-    "kind": "recipient-helper",
-    "expression": "_settleCoinflipDay(day, 100, wins & 1 != 0)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -737,6 +721,22 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._currentBonusSlot",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._currentBonusSlot",
+    "kind": "recipient-helper",
+    "expression": "_scheduleResetPassed()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._door",
     "kind": "recipient-helper",
     "expression": "_resolveAccount(id)",
@@ -758,6 +758,22 @@
     "expression": "_burnForCraps( account, _tag(cost, _CRAPS_FLAG_JOIN | _CRAPS_FLAG_PASS | (high ? _CRAPS_FLAG_HIGH : _CRAPS_FLAG_NORMAL) | flags) )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._enterDayLane",
+    "kind": "recipient-helper",
+    "expression": "_writeDaySeat(daySlot, id, packed, high, multiple - 1, boonMask)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._enterToday",
+    "kind": "recipient-helper",
+    "expression": "_currentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -795,9 +811,33 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._joinableSlot",
     "kind": "recipient-helper",
+    "expression": "_currentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._joinableSlot",
+    "kind": "recipient-helper",
+    "expression": "_scheduledAdmissionsOpen()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._joinableSlot",
+    "kind": "recipient-helper",
     "expression": "_slotWindow(slot)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._joinableWindow",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -857,6 +897,14 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._place",
+    "kind": "recipient-helper",
+    "expression": "_writeSlip(betId, id, chips, high ? _BET_HIGH_BIT : 0, multiple - 1, boonMask)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._rememberBoard",
     "kind": "external",
     "expression": "IGameCraps(_GAME).rngLocked()",
@@ -870,6 +918,30 @@
     "expression": "_reservableDay(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._reserveDay",
+    "kind": "recipient-helper",
+    "expression": "_reserveDaySeat(id, day, high, packed, boonMask)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._reserveDaySeat",
+    "kind": "recipient-helper",
+    "expression": "_writeDaySeat(daySlot, id, packed, high, 0, boonMask)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._reserveRun",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -889,11 +961,27 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._reserveRun",
+    "kind": "recipient-helper",
+    "expression": "_reserveDaySeat(id, uint24(d), high, packed, i == 0 ? boonMask : 0)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._reserveWindow",
     "kind": "recipient-helper",
     "expression": "_reservableDay(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._reserveWindow",
+    "kind": "recipient-helper",
+    "expression": "_writeSlip( betId, id, chips, high ? _BET_HIGH_BIT : 0, 0, 0 )",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -918,6 +1006,14 @@
     "expression": "IHighRollerReserve(address(this)).settleHighRollerReserve(slot)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._resolveSlotRange",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(slot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -958,6 +1054,14 @@
     "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin(address(uint160(account)), cost)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._seatBody",
+    "kind": "recipient-helper",
+    "expression": "_writeDaySeat(daySlot, id, chips, high, 0, 0)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1025,11 +1129,43 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._upgradeDayWindows",
+    "kind": "recipient-helper",
+    "expression": "_storeBet(betId, header | (newMask << _BET_HIGH_SHIFT))",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._windowTerms",
     "kind": "recipient-helper",
     "expression": "_dailyWordAt(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._writeDaySeat",
+    "kind": "recipient-helper",
+    "expression": "_writeSlip( (daySlot << 64) | seat, id, chips, high ? _BET_DAYHIGH_MASK : 0, evMult, boonMask )",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._writeSlip",
+    "kind": "recipient-helper",
+    "expression": "_appendBet(betId, uint256(id) | (chips << _BET_CHIPS_SHIFT) | boon | highBits)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.amendSlip",
+    "kind": "recipient-helper",
+    "expression": "_currentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1054,6 +1190,14 @@
     "expression": "_rememberBoard(word, chips)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.amendSlip",
+    "kind": "recipient-helper",
+    "expression": "_storeBet(betId, (header & ~(_BET_CHIPS_MASK << _BET_CHIPS_SHIFT)) | (packed << _BET_CHIPS_SHIFT))",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1118,6 +1262,14 @@
     "expression": "ensReg.call( abi.encodeWithSignature(\"setName(string)\", \"craps.degenerus.eth\") )",
     "count": 1,
     "review": "DEPLOYMENT: constructor-only call; ENS registration is best effort."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.deliverPasses",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1217,11 +1369,59 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.minerMaintenancePending_g11976",
+    "kind": "recipient-helper",
+    "expression": "_currentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.minerMaintenancePending_g11976",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.minerMaintenancePending_g11976",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(cur)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.openBonusDay",
+    "kind": "recipient-helper",
+    "expression": "_currentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.openBonusDay",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.openBonusDay",
     "kind": "recipient-helper",
     "expression": "_dailyWordAt(today)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.openBonusDay",
+    "kind": "recipient-helper",
+    "expression": "_scheduledAdmissionsOpen()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1286,6 +1486,14 @@
     "expression": "_burnForCraps(account, _tag(charged, _CRAPS_FLAG_PASS | _CRAPS_FLAG_COMP))",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle.vaultComp",
+    "kind": "recipient-helper",
+    "expression": "_currentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -3955,6 +4163,14 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.previewBorrow",
     "kind": "recipient-helper",
+    "expression": "_dailyIdx(game)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.previewBorrow",
+    "kind": "recipient-helper",
     "expression": "_farFutureLaneMirror(game, uint24(target), id)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -4193,6 +4409,14 @@
   },
   {
     "path": "contracts/DegenerusJackpots.sol",
+    "scope": "DegenerusJackpots.beginBaf",
+    "kind": "recipient-helper",
+    "expression": "GameTimeLib.gameDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
+  },
+  {
+    "path": "contracts/DegenerusJackpots.sol",
     "scope": "DegenerusJackpots.claimBafConsolation",
     "kind": "external",
     "expression": "degenerusGame.walletIdOf_g3120(msg.sender)",
@@ -4214,6 +4438,14 @@
     "expression": "ensReg.call( abi.encodeWithSignature(\"setName(string)\", \"jackpots.degenerus.eth\") )",
     "count": 1,
     "review": "DEPLOYMENT: constructor-only call; ENS registration is best effort."
+  },
+  {
+    "path": "contracts/DegenerusJackpots.sol",
+    "scope": "DegenerusJackpots.markBafSkipped",
+    "kind": "recipient-helper",
+    "expression": "GameTimeLib.gameDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/DegenerusOwnerGovernance.sol",
@@ -4417,6 +4649,14 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._awardStreakBonus",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDayFast()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._canRollDecimatorQuest",
     "kind": "external",
     "expression": "game_.decWindow()",
@@ -4435,9 +4675,33 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._crapsJoinQuest",
     "kind": "recipient-helper",
+    "expression": "_currentQuestDay(quests)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._crapsJoinQuest",
+    "kind": "recipient-helper",
     "expression": "_questCompleteWithPair( id, state, quests, slotIndex, quest, currentDay, 0 )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._currentQuestDay",
+    "kind": "recipient-helper",
+    "expression": "_questGameDay()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._currentQuestDayFast",
+    "kind": "recipient-helper",
+    "expression": "_questGameDay()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4446,6 +4710,14 @@
     "expression": "questGame.floorAfkingStreakBase(id, FOIL_STREAK_FLOOR)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handleAffiliate",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(quests)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4462,6 +4734,14 @@
     "expression": "_questCompleteWithPair(id, state, quests, slotIndex, quest, currentDay, 0)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handleFlip",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(quests)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4526,6 +4806,14 @@
     "expression": "_questCreditFlip(id, 800)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handlePurchase",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(quests)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4633,6 +4921,14 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._questGameDay",
+    "kind": "recipient-helper",
+    "expression": "GameTimeLib.gameDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._questHandleProgressSlot",
     "kind": "recipient-helper",
     "expression": "_handleLevelQuestProgress(id, handlerQuestType, levelDelta, levelQuestPrice)",
@@ -4681,11 +4977,43 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.beginAfking",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDayFast()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.constructor",
     "kind": "opcode-or-value",
     "expression": "ensReg.call( abi.encodeWithSignature(\"setName(string)\", \"quests.degenerus.eth\") )",
     "count": 1,
     "review": "DEPLOYMENT: constructor-only call; ENS registration is best effort."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.effectiveBaseStreak",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(_materializeActiveQuestsForView())",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.effectiveBaseStreakAndAfking_g2654",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDayFast()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.getActiveQuests",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(local)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4715,6 +5043,14 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.getPlayerQuestView",
     "kind": "recipient-helper",
+    "expression": "_currentQuestDay(local)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.getPlayerQuestView",
+    "kind": "recipient-helper",
     "expression": "_questViewData( local[slot], state, slot, currentDay )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -4726,6 +5062,14 @@
     "expression": "_handleAffiliate(id, amount)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.handleDecimator",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(quests)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4750,6 +5094,14 @@
     "expression": "_questCreditFlip(id, reward)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.handleDegenerette",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(quests)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4782,6 +5134,14 @@
     "expression": "_handleFlip(id, flipCredit)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.handleFoilPurchase",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(quests)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4825,11 +5185,19 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.playerQuestStates",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(local)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordCrapsAction_g14623",
     "kind": "recipient-helper",
-    "expression": "_awardStreakBonus( id, actionFlags & CRAPS_FLAG_STREAK_HIGH != 0 ? CRAPS_DAY_STREAK_HIGH : CRAPS_DAY_STREAK, GameTimeLib.currentDayIndex() )",
+    "expression": "_awardStreakBonus( id, actionFlags & CRAPS_FLAG_STREAK_HIGH != 0 ? CRAPS_DAY_STREAK_HIGH : CRAPS_DAY_STREAK, _questGameDay() )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4838,6 +5206,14 @@
     "expression": "_crapsJoinQuest(id)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.recordCrapsAction_g14623",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDayFast()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4857,6 +5233,14 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.recordCrapsAction_g14623",
+    "kind": "recipient-helper",
+    "expression": "_questGameDay()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordGrowthBet",
     "kind": "external",
     "expression": "questGame.mintPackedOfId_g5372(id)",
@@ -4870,6 +5254,14 @@
     "expression": "questGame.recordAfkingSecondary(id, GROWTH_QUEST_STREAK_BONUS)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.recordGrowthBet",
+    "kind": "recipient-helper",
+    "expression": "_currentQuestDay(_loadActiveQuests())",
+    "count": 1,
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4929,6 +5321,22 @@
   },
   {
     "path": "contracts/DegenerusRecordBounty.sol",
+    "scope": "DegenerusRecordBounty.recordInfo",
+    "kind": "recipient-helper",
+    "expression": "GameTimeLib.gameDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
+  },
+  {
+    "path": "contracts/DegenerusRecordBounty.sol",
+    "scope": "DegenerusRecordBounty.recordSet",
+    "kind": "recipient-helper",
+    "expression": "GameTimeLib.gameDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
+  },
+  {
+    "path": "contracts/DegenerusRecordBounty.sol",
     "scope": "DegenerusRecordBounty.setRenderColors",
     "kind": "recipient-helper",
     "expression": "onlyOwner",
@@ -4950,6 +5358,14 @@
     "expression": "_tryRenderExternal( rendererAddr, tokenId, holder, mark, sinceDay, daysHeld, recordName )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/DegenerusRecordBounty.sol",
+    "scope": "DegenerusRecordBounty.tokenURI",
+    "kind": "recipient-helper",
+    "expression": "recordInfo(tokenId)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/DegenerusVault.sol",
@@ -5891,9 +6307,25 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._append",
     "kind": "recipient-helper",
+    "expression": "_appendBet(id, uint256(playerId) | (uint256(chips) << _BET_CHIPS_SHIFT))",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._append",
+    "kind": "recipient-helper",
     "expression": "_bookFees(slot, r, totalUnits * bankroll, mainPool, uint32(_loadHighField(key)))",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing helper route; only the high-field read moved to the lane-C ring accessor."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._append",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(slot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -5953,6 +6385,22 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._jackpotCurrentBonusSlot",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._jackpotCurrentBonusSlot",
+    "kind": "recipient-helper",
+    "expression": "_scheduleResetPassed()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._jackpotPayProgressive",
     "kind": "recipient-helper",
     "expression": "_payProgressiveShare(w.key, winnerId, winnerWord, peakFlip, score, bps)",
@@ -5995,6 +6443,14 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepRngCohort",
     "kind": "recipient-helper",
+    "expression": "_scheduledExpired(slot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._keepRngCohort",
+    "kind": "recipient-helper",
     "expression": "_wordAt(index)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -6011,9 +6467,25 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._keepScheduled",
+    "kind": "recipient-helper",
     "expression": "_jackpotArmSlot(cur, w)",
     "count": 1,
     "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._keepScheduled",
+    "kind": "recipient-helper",
+    "expression": "_jackpotCurrentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6030,6 +6502,22 @@
     "expression": "_readCrapsStage()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._keepScheduled",
+    "kind": "recipient-helper",
+    "expression": "_refundSkippedWindow(cur, meter)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._keepScheduled",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(cur)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6113,6 +6601,14 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._refundSkippedWindow",
+    "kind": "recipient-helper",
+    "expression": "_creditComps(comps)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._runDailyBattleWork",
     "kind": "external",
     "expression": "IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance)",
@@ -6121,11 +6617,27 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._runDailyBattleWork",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(slot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._settleHighRollerReserve",
     "kind": "recipient-helper",
     "expression": "_creditFlip(draw.nominee, amount)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._settleHighRollerReserve",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(slot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6203,9 +6715,33 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 2,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.donate",
+    "kind": "recipient-helper",
     "expression": "_dailyWordAt(_currentDayIndex())",
     "count": 1,
     "review": "PROTOCOL_VIEW: donation readiness reads the recorded day word; no value decision, player door only."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.donate",
+    "kind": "recipient-helper",
+    "expression": "_jackpotCurrentBonusSlot()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.donate",
+    "kind": "recipient-helper",
+    "expression": "_scheduledAdmissionsOpen()",
+    "count": 2,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6225,6 +6761,30 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.jackpotProgress",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(slot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.lockJackpotBattle",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(_activeJackpotSlot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.lockJackpotBattle",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(slot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.payBattlePot",
     "kind": "recipient-helper",
     "expression": "_creditFlip(shooter, share)",
@@ -6238,6 +6798,14 @@
     "expression": "_creditFlip(winner, pot)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.prepareJackpotBattle",
+    "kind": "recipient-helper",
+    "expression": "_scheduledExpired(_activeJackpotSlot)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6304,6 +6872,22 @@
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.upgradeReservedDay",
+    "kind": "recipient-helper",
+    "expression": "_storeBet(betId, header | _BET_DAYHIGH_MASK)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/LootboxCraps.sol",
+    "scope": "LootboxCraps._currentDayIndex",
+    "kind": "recipient-helper",
+    "expression": "_sload(RNG_STATE_SLOT)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
     "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._dailyWordAt(uint24:default)",
     "kind": "recipient-helper",
@@ -6345,6 +6929,22 @@
   },
   {
     "path": "contracts/LootboxCraps.sol",
+    "scope": "LootboxCraps._scheduleResetPassed",
+    "kind": "recipient-helper",
+    "expression": "_sload(5)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/LootboxCraps.sol",
+    "scope": "LootboxCraps._scheduledAdmissionsOpen",
+    "kind": "external",
+    "expression": "IGameSlotReader(_GAME).dailyScheduleOpen()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: typed STATICCALL to the immutable Game for logical identity, schedule/ending readiness or authenticated retained result. No value, player-controlled destination, mutation or callback."
+  },
+  {
+    "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._sload",
     "kind": "recipient-helper",
     "expression": "_extsload(bytes32(slot))",
@@ -6377,6 +6977,14 @@
   },
   {
     "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP._drawClaimOpen",
+    "kind": "external",
+    "expression": "game.latestDailyResultDay()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: typed STATICCALL to the immutable Game for logical identity, schedule/ending readiness or authenticated retained result. No value, player-controlled destination, mutation or callback."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
     "scope": "WWXRP._holdsWwxrpBoon",
     "kind": "external",
     "expression": "game.extsload_g8132(slot)",
@@ -6390,6 +6998,14 @@
     "expression": "game.rngWordForDay(day + 1)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP._outcome",
+    "kind": "recipient-helper",
+    "expression": "_drawClaimOpen(day)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -6443,6 +7059,14 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.enter",
     "kind": "external",
+    "expression": "game.extsload_g8132(bytes32(0))",
+    "count": 1,
+    "review": "LDAYS2: trusted Game static read of slot 0 combines logical day and irreversible terminal latch. No player-controlled callee, write or callback; close before terminal entropy can settle that day."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP.enter",
+    "kind": "external",
     "expression": "game.level()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
@@ -6489,11 +7113,27 @@
   },
   {
     "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP.findWinningEntry",
+    "kind": "recipient-helper",
+    "expression": "_drawClaimOpen(day)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.previewOutcome",
     "kind": "external",
     "expression": "game.rngWordForDay(day + 1)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP.previewOutcome",
+    "kind": "recipient-helper",
+    "expression": "_drawClaimOpen(day)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -6622,6 +7262,14 @@
     "expression": "_remaining(meter, minimum, reserve, CALL_OVERHEAD)",
     "count": 1,
     "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
+  },
+  {
+    "path": "contracts/libraries/GameTimeLib.sol",
+    "scope": "GameTimeLib.gameDayIndex",
+    "kind": "external",
+    "expression": "IDegenerusGame(ContractAddresses.GAME).currentDayView()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: typed STATICCALL to the immutable Game for logical identity, schedule/ending readiness or authenticated retained result. No value, player-controlled destination, mutation or callback."
   },
   {
     "path": "contracts/libraries/JackpotBattleFieldLib.sol",
@@ -6889,14 +7537,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.applyDailyGap",
-    "kind": "recipient-helper",
-    "expression": "_backfillGapDays(_rawDailyRngWord(_currentRngWord()), dailyIdx + 1, day)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.applyDailyWord_g1652",
     "kind": "external",
     "expression": "ICrapsBonusDay(ContractAddresses.CRAPS).openBonusDay()",
@@ -6923,9 +7563,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.applyDailyWord_g1652",
     "kind": "external",
-    "expression": "quests.rollDailyQuest( day, currentWord, lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0, finalJackpotRun && gapDays == 0, decDayOne && gapDays == 0 )",
+    "expression": "quests.rollDailyQuest( day, currentWord, lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0, finalJackpotRun, decDayOne )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "LOGICAL_DAYS: existing pinned Coinflip quest-host call now rolls every committed logical day, including a late-delivered round; no calendar suppression and no recipient parameter."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7035,9 +7675,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
     "kind": "recipient-helper",
-    "expression": "_sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter)",
+    "expression": "_sealPurchaseDay(purchaseLevel, day, purchaseStartDay, meter)",
     "count": 3,
-    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged. Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation. OPTFIX4: symbol-only migration; body/authorization proof unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7139,9 +7779,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runTerminalPhase",
     "kind": "recipient-helper",
-    "expression": "_handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL))",
+    "expression": "_handleGameOverPath(_gameDay(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7238,6 +7878,14 @@
     "expression": "_boxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase)",
     "count": 1,
     "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameBoonModule.sol",
+    "scope": "DegenerusGameBoonModule.rollDegenesisBoons",
+    "kind": "recipient-helper",
+    "expression": "_deliverBoon(id, boonType, currentDay, amount)",
+    "count": 1,
+    "review": "P8: at most three committed draws, in slot order, delivered to the stored wallet ID with ordinary upgrade/discard/expiry semantics; fixed level-1 normalization. Shared activity and shield protocol calls retain their Game authorization and rollback with the whole order."
   },
   {
     "path": "contracts/modules/DegenerusGameDecimatorModule.sol",
@@ -7510,6 +8158,14 @@
     "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Degenesis, _payee(_walletElement(o.id)), o.dgnrs)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
+    "scope": "DegenerusGameDegenesisModule._resolveDegenesisOrder",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameBoonModule.rollDegenesisBoons.selector, o.id, o.units * DEGENESIS_UNIT, boonSeed) )",
+    "count": 1,
+    "review": "P8: fixed Box-bundle target in Game storage; stored recipient, raw amount and cohort/order-tagged retained word seed. No Game issuance route; errors bubble and roll back cursor, primary legs, boons, events and queued coin credits together. Added admission bound covers complete boon path."
   },
   {
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
@@ -7811,33 +8467,9 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._applyTerminalRng",
     "kind": "external",
-    "expression": "coinflip.getCoinflipDayResult(first)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule._applyTerminalRng",
-    "kind": "external",
-    "expression": "coinflip.processCoinflipPayouts(0, currentWord, day)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule._applyTerminalRng",
-    "kind": "external",
     "expression": "dgnrs.resolveTerminalRedemptions()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule._applyTerminalRng",
-    "kind": "recipient-helper",
-    "expression": "_backfillGapDays(_rawDailyRngWord(currentWord), first, day)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8882,6 +9514,14 @@
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestDailyRng_g8190",
+    "kind": "external",
+    "expression": "coinflip.onDailyRequest(day)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: pinned Game-to-Coinflip bounded packed-state hook; authenticated caller, idempotent closure or sequential mirror update, no callback. Boundary writes precede coordinator execution."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameRngModule.sol",
+    "scope": "DegenerusGameRngModule.requestDailyRng_g8190",
     "kind": "recipient-helper",
     "expression": "_minerMaintenancePending()",
     "count": 1,
@@ -8926,14 +9566,6 @@
     "expression": "_requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4))",
     "count": 1,
     "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngUtils.sol",
-    "scope": "DegenerusGameRngUtils._backfillGapDays",
-    "kind": "external",
-    "expression": "coinflip.processCoinflipGap(vrfWord, startDay, endDay)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/modules/DegenerusGameRngUtils.sol",
@@ -9275,9 +9907,9 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._cancelAcquiredSubscription",
     "kind": "recipient-helper",
-    "expression": "_finalizeAfking(id, lane, _simulatedDayIndex())",
+    "expression": "_finalizeAfking(id, lane, _gameDay())",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -10521,6 +11153,22 @@
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",
+    "scope": "CrapsBattleStorage._appendBet",
+    "kind": "recipient-helper",
+    "expression": "_betWriteDay(id)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/storage/CrapsBattleStorage.sol",
+    "scope": "CrapsBattleStorage._betWriteDay",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/storage/CrapsBattleStorage.sol",
     "scope": "CrapsBattleStorage._readCrapsStage",
     "kind": "external",
     "expression": "IGameCrapsWorkStage(_GAME).rngConsumerStage_g379()",
@@ -10531,9 +11179,41 @@
     "path": "contracts/storage/CrapsBattleStorage.sol",
     "scope": "CrapsBattleStorage._reservableDay",
     "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/storage/CrapsBattleStorage.sol",
+    "scope": "CrapsBattleStorage._reservableDay",
+    "kind": "recipient-helper",
     "expression": "_dailyWordAt(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/storage/CrapsBattleStorage.sol",
+    "scope": "CrapsBattleStorage._reservableDay",
+    "kind": "recipient-helper",
+    "expression": "_scheduledAdmissionsOpen()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/storage/CrapsBattleStorage.sol",
+    "scope": "CrapsBattleStorage._scheduledExpired",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/storage/CrapsBattleStorage.sol",
+    "scope": "CrapsBattleStorage._storeBet",
+    "kind": "recipient-helper",
+    "expression": "_betWriteDay(id)",
+    "count": 1,
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",
@@ -10662,21 +11342,5 @@
     "expression": "BoundedCall.staticWordRemaining(meter, address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId))",
     "count": 1,
     "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameBoonModule.sol",
-    "scope": "DegenerusGameBoonModule.rollDegenesisBoons",
-    "kind": "recipient-helper",
-    "expression": "_deliverBoon(id, boonType, currentDay, amount)",
-    "count": 1,
-    "review": "P8: at most three committed draws, in slot order, delivered to the stored wallet ID with ordinary upgrade/discard/expiry semantics; fixed level-1 normalization. Shared activity and shield protocol calls retain their Game authorization and rollback with the whole order."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
-    "scope": "DegenerusGameDegenesisModule._resolveDegenesisOrder",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameBoonModule.rollDegenesisBoons.selector, o.id, o.units * DEGENESIS_UNIT, boonSeed) )",
-    "count": 1,
-    "review": "P8: fixed Box-bundle target in Game storage; stored recipient, raw amount and cohort/order-tagged retained word seed. No Game issuance route; errors bubble and roll back cursor, primary legs, boons, events and queued coin credits together. Added admission bound covers complete boon path."
   }
 ]

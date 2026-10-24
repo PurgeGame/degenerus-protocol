@@ -28,14 +28,14 @@ const MintPaymentKind = { DirectEth: 0 };
  *
  *   - Inside the deadman window (no day sealed for <= 30 days) the pause holds
  *     and liveness stays false: the jackpot phase completes normally.
- *   - Once the stall exceeds 30 days the deadman fires, overriding the pause.
+ *   - Once the stall reaches fourteen days the deadman fires, overriding the pause.
  *     mineFlip then consults it separately (AdvanceModule:216,
  *     `(!inJackpot && !lastPurchase) || _vrfDeadmanFired()`) to reach
  *     _handleGameOverPath and drain to terminal fund release even mid-jackpot,
  *     rather than bricking.
  *
  * dailyIdx (slot 0, byte offset 3, uint24) is read straight from storage to
- * land the warp exactly on the 30-day deadman threshold.
+ * land the warp exactly on the 13-day deadman threshold.
  */
 describe("LivenessMidJackpot", function () {
   this.timeout(600_000);
@@ -71,9 +71,9 @@ describe("LivenessMidJackpot", function () {
 
   /** Days since the last sealed day: the live argument of _vrfDeadmanFired(). */
   async function stallDays(game) {
-    const dailyIdx = readUint24(await readSlot0(await game.getAddress()), OFF_DAILY_IDX);
-    const currentDay = Number(await game.currentDayView());
-    return currentDay - dailyIdx;
+    const { timestamp } = await hre.ethers.provider.getBlock("latest");
+    const [, , completedAt] = await game.dailySessionState();
+    return Math.floor((timestamp - Number(completedAt)) / 86400);
   }
 
   async function buyFullTickets(game, buyer, n, totalEth) {
@@ -88,7 +88,7 @@ describe("LivenessMidJackpot", function () {
   }
 
   async function driveOneCycleSameDay(game, deployer, mockVRF, word) {
-    await game.connect(deployer).mineFlip(0);
+    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
     const reqId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(reqId, word);
@@ -97,7 +97,7 @@ describe("LivenessMidJackpot", function () {
     }
     for (let i = 0; i < 200; i++) {
       try {
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       } catch {
         break;
       }
@@ -119,7 +119,7 @@ describe("LivenessMidJackpot", function () {
   async function driveToGameOver(game, deployer, mockVRF) {
     for (let i = 0; i < 600; i++) {
       try {
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       } catch {
         await advanceToNextDay();
       }
@@ -202,7 +202,7 @@ describe("LivenessMidJackpot", function () {
     );
   });
 
-  it("productive pause holds at exactly the 30-day stall (deadman not yet fired)", async function () {
+  it("productive pause holds at exactly the 13-day stall (deadman not yet fired)", async function () {
     const fixture = await loadFixture(deployAtJackpot);
     const { game } = fixture;
 
@@ -210,19 +210,19 @@ describe("LivenessMidJackpot", function () {
 
     // Warp the stall (currentDay - dailyIdx) to exactly 30: the deadman is a
     // strict `> 30`, so it stays unfired and the jackpot pause holds.
-    const warpDays = 30 - (await stallDays(game));
+    const warpDays = 13 - (await stallDays(game));
     expect(warpDays).to.be.greaterThan(0);
     await advanceTime(warpDays * 86400);
 
-    expect(await stallDays(game)).to.equal(30);
+    expect(await stallDays(game)).to.equal(13);
     expect(await game.jackpotPhase()).to.equal(true);
     expect(await game.livenessTriggered()).to.equal(
       false,
-      "30-day stall: deadman not yet fired, in-phase clock still suppressed"
+      "13-day stall: deadman not yet fired, in-phase clock still suppressed"
     );
   });
 
-  it("VRF-death deadman overrides the jackpot pause once the stall exceeds 30 days", async function () {
+  it("VRF-death deadman overrides the jackpot pause once the stall reaches fourteen days", async function () {
     const fixture = await loadFixture(deployAtJackpot);
     const { game } = fixture;
 
@@ -230,15 +230,15 @@ describe("LivenessMidJackpot", function () {
 
     // Warp the stall to 31 days: deadman fires. jackpotPhaseFlag is still set,
     // yet liveness flips true because _livenessTriggered returns the deadman.
-    const warpDays = 31 - (await stallDays(game));
+    const warpDays = 14 - (await stallDays(game));
     expect(warpDays).to.be.greaterThan(0);
     await advanceTime(warpDays * 86400);
 
-    expect(await stallDays(game)).to.equal(31);
+    expect(await stallDays(game)).to.equal(14);
     expect(await game.jackpotPhase()).to.equal(true);
     expect(await game.livenessTriggered()).to.equal(
       true,
-      "31-day stall: deadman overrides the in-phase jackpot pause"
+      "14-day stall: deadman overrides the in-phase jackpot pause"
     );
   });
 
@@ -249,7 +249,7 @@ describe("LivenessMidJackpot", function () {
     expect(await game.jackpotPhase()).to.equal(true);
 
     // Warp well past the deadman while still in jackpot phase.
-    await advanceTime(125 * 86400);
+    await advanceTime(14 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 
     // mineFlip now takes the deadman game-over path instead of the jackpot
@@ -267,7 +267,7 @@ describe("LivenessMidJackpot", function () {
     expect(await game.gameOver()).to.equal(false);
 
     // Warp past the deadman, then drive mineFlip to the terminal drain.
-    await advanceTime(125 * 86400);
+    await advanceTime(14 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 
     const reached = await driveToGameOver(game, deployer, mockVRF);

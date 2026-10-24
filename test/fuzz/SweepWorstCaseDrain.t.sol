@@ -107,8 +107,8 @@ contract SweepWorstCaseDrain is DeployProtocol {
     // the remaining allowance covers the next declared bound, so the wall is sized against the
     // ~25k gas one such entry actually costs, not the 1.3M it declares.
     uint256 private constant SKIP_WALL = 600;
-    uint8 private constant ACTION_AFKING = 9;
-    uint8 private constant ACTION_HUMAN_BOXES = 10;
+    uint8 private constant ACTION_AFKING = 8;
+    uint8 private constant ACTION_HUMAN_BOXES = 9;
 
     address private actor;
 

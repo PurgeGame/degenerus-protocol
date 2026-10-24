@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -215,7 +216,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         // A stuck latch would hold the request back: it must be the engine's next action.
         vm.prank(crank);
-        assertEq(game.minerAction(), 18, "a stuck latch refuses the next request");
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "a stuck latch refuses the next request");
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
         (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));

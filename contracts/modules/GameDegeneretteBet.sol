@@ -215,7 +215,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
         // ETH-only per-bet bookkeeping: biggest-spin record and protocol boon entries.
 
         if (c.currency == CURRENCY_ETH) {
-            uint24 day = _simulatedDayIndex();
+            uint24 day = _gameDay();
             // Gate the record behind the entry floor: a bet under it can never hold
             // the record, so skipping the call costs no outcome and keeps the external
             // arm off the bets that make up nearly all ETH volume. The candidate is

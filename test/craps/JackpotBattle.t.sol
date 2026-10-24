@@ -387,8 +387,9 @@ contract JackpotBattleTest is CrapsPins {
         table.resolveSeats(detached, 1);
         assertEq(table.bonusCursorOf(detached), 1);
         uint64 daySlot = uint64(uint256(day) * 8);
+        uint64 parked = table.minerSlot();
         _crank(table);
-        assertEq(table.minerSlot(), daySlot, "daily lock prevents maintenance interleaving");
+        assertEq(table.minerSlot(), parked, "daily lock prevents maintenance interleaving");
         assertEq(table.bonusCursorOf(detached), 1);
         _finish();
         uint256 settledLane = flip.compLane();

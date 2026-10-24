@@ -45,6 +45,7 @@ contract CoinflipStorageReuseTest is Test {
     function setUp() public {
         r = new CoinflipReuseHarness();
         oracle = new CoinflipReuseReference();
+        oracle.setSeedWindow(2, 21); // twenty requested flips; bootstrap index 1 has no word
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("purchaseInfo()"), abi.encode(uint24(4), false, false, false, uint256(0)));
         vm.mockCall(ContractAddresses.JACKPOTS, abi.encodeWithSignature("getLastBafResolvedDay()"), abi.encode(uint24(0)));
         vm.mockCall(ContractAddresses.JACKPOTS, abi.encodeWithSignature("recordBafFlip(uint32,uint24,uint256)"), hex"");
@@ -165,7 +166,8 @@ contract CoinflipStorageReuseTest is Test {
         vm.record();
         r.credit(ID, 7, 0, false);
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(r));
-        assertEq(reads.length, 0);
+        // The shared closure header may be read; no player stake page may be accessed.
+        for (uint256 i; i < reads.length; ++i) assertEq(reads[i], bytes32(uint256(4)));
         assertEq(writes.length, 0);
     }
 }

@@ -32,7 +32,10 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
     ///      engine selects DailyPhase only for an active, published, not-yet-complete session),
     ///      and every queue through level 100 drained before its phase ended.
     function openTransitionDailyPhase() external {
-        rngRequestDay = _simulatedDayIndex();
+        rngRequestDay = dailyIdx;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         _setRngRequestActive(true);
         _setRngSessionPublished(true);
         _setRngComplete(false);
@@ -40,7 +43,7 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
     }
 
     function prepareCenturyRequest(uint8 compression) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         // The level-99 last-purchase state already materialized the constructor's
         // far-future allocations through purchase level 100. Retire those stale genesis
         // queues before a real whale award can reuse their physical roots.
@@ -61,6 +64,9 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
         _setRngComplete(true);
         humanReadComplete = true;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;

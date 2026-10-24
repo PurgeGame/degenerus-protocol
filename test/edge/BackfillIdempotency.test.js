@@ -4,196 +4,75 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
 import { advanceToNextDay, eth, ZERO_BYTES32 } from "../helpers/testUtils.js";
 
-const UINT24_MASK = (1n << 24n) - 1n;
-const STAGE_RNG_REQUESTED = 1n;
-const STAGE_GAP_BACKFILLED = 12n;
-const REQUEST_WORD = 0xcafebaben;
-const RESUME_WORD = 0xbadc0ffen;
-const LATER_WORD = 0xa110cen;
-
-// Slot 0 starts with purchaseStartDay:uint24, dailyIdx:uint24. These reads
-// observe the real production state; setup never writes contract storage.
-async function readClocks(game) {
+const ONE_UNIT = 0xffffffff;
+async function clocks(game) {
   const packed = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), 0));
-  return {
-    purchaseStartDay: packed & UINT24_MASK,
-    dailyIdx: (packed >> 24n) & UINT24_MASK,
-  };
+  return [packed & 0xffffffn, (packed >> 24n) & 0xffffffn];
 }
-
-async function advanceStages(game, advanceModule, gasLimit = 12_000_000) {
-  const receipt = await (await game.mineFlip(0, { gasLimit })).wait();
-  const topic = advanceModule.interface.getEvent("Advance").topicHash;
-  const gameAddress = (await game.getAddress()).toLowerCase();
-  const events = receipt.logs
-    .filter((log) => log.address.toLowerCase() === gameAddress && log.topics[0] === topic)
-    .map((log) => advanceModule.interface.parseLog(log));
-  // The engine may complete several safe atomic steps in one transaction.
-  return events.map((event) => event.args.stage);
-}
-
-async function requestDay(game, advanceModule, mockVRF) {
-  expect(await game.rngLocked(), "request begins unlocked").to.equal(false);
-  const previousId = await mockVRF.lastRequestId();
-  for (let i = 0; i < 64; ++i) {
-    const stages = await advanceStages(game, advanceModule);
-    if (stages.includes(STAGE_RNG_REQUESTED)) {
-      expect(await game.rngLocked(), "fresh request holds the lock").to.equal(true);
-      const requestId = await mockVRF.lastRequestId();
-      expect(requestId, "coordinator received a new request").to.be.gt(previousId);
-      return requestId;
-    }
+async function request(game, vrf) {
+  for (let i = 0; i < 200 && !(await game.rngLocked()); ++i) {
+    const id = await vrf.lastRequestId();
+    if (id && !(await vrf.pendingRequests(id))[2]) await vrf.fulfillRandomWords(id, 777n);
+    await game.mineFlip(ONE_UNIT, { gasLimit: 16_777_216 });
   }
-  throw new Error("daily request was not reached in 64 advances");
+  expect(await game.rngLocked()).to.equal(true);
+  return vrf.lastRequestId();
+}
+async function finish(game) {
+  for (let i = 0; i < 200 && !(await game.dailySessionState())[0]; ++i) await game.mineFlip(ONE_UNIT, { gasLimit: 16_777_216 });
+  expect((await game.dailySessionState())[0]).to.equal(true);
 }
 
-async function drainDay(game, advanceModule, assertState) {
-  for (let i = 0; i < 128 && await game.rngLocked(); ++i) {
-    await advanceStages(game, advanceModule);
-    // Gap application and daily application can both emit stage 12. The clock
-    // and packed-outcome assertions below prove that credit never repeats.
-    await assertState();
-  }
-  expect(await game.rngLocked(), "the committed day finishes within the drain bound").to.equal(false);
-}
-
-describe("BackfillIdempotency", function () {
+describe("Delayed logical rounds never backfill calendar gaps", function () {
   this.timeout(600_000);
-
-  after(function () {
-    restoreAddresses();
-  });
-
+  after(() => restoreAddresses());
   for (const paidNudge of [false, true]) {
-  it(`credits a delayed VRF gap exactly once across midnight (${paidNudge ? "paid nudge" : "no nudge"})`, async function () {
-    const { game, advanceModule, mockVRF, coinflip, coin, alice } = await loadFixture(deployFullProtocol);
-    // An odd initial word funds the real nudge through Alice's resolved purchase credit.
-    const requestWord = paidNudge ? REQUEST_WORD | 1n : REQUEST_WORD;
-    // +1 carries across several gap bits, making accidental use of the nudged root visible.
-    const resumeWord = paidNudge ? 0xbadc0fffn : RESUME_WORD;
-    const appliedResumeWord = resumeWord + (paidNudge ? 1n : 0n);
-    const initial = await readClocks(game);
-    const deployDay = await game.currentDayView();
-    expect(initial).to.deep.equal({ purchaseStartDay: deployDay, dailyIdx: deployDay });
-
-    await game.connect(alice).purchase(
-      0, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) }
-    );
-    await advanceToNextDay();
-    const requestDayR = await game.currentDayView();
-    expect(requestDayR).to.equal(initial.dailyIdx + 1n);
-    const stalledId = await requestDay(game, advanceModule, mockVRF);
-
-    // Deliver the original request four days late. It must still seal only R;
-    // the intervening days await a separately requested current-day word.
-    for (let i = 0; i < 4; ++i) await advanceToNextDay();
-    const resumeDayW = await game.currentDayView();
-    expect(resumeDayW).to.equal(requestDayR + 4n);
-    await mockVRF.fulfillRandomWords(stalledId, requestWord);
-    await drainDay(game, advanceModule, async () => {
-      expect((await readClocks(game)).purchaseStartDay).to.equal(initial.purchaseStartDay);
-      for (let day = requestDayR + 1n; day <= resumeDayW; ++day) {
-        expect(await game.rngWordForDay(day), `late request did not resolve day ${day}`).to.equal(0n);
+    it(`settles each committed cohort once across resets (${paidNudge ? "paid nudge" : "no nudge"})`, async function () {
+      const { game, mockVRF, coinflip, coin, alice } = await loadFixture(deployFullProtocol);
+      const [start, initial] = await clocks(game);
+      await game.connect(alice).purchase(0, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) });
+      await advanceToNextDay();
+      expect(await game.currentDayView()).to.equal(initial);
+      const id = await request(game, mockVRF);
+      const day = initial + 1n;
+      expect(await game.currentDayView()).to.equal(day);
+      expect(await coinflip.requestedDailyIdx()).to.equal(day);
+      for (let i = 0; i < 8; ++i) await advanceToNextDay();
+      expect(await game.currentDayView()).to.equal(day);
+      const pool = await coinflip.recordPool();
+      await mockVRF.fulfillRandomWords(id, 0xcafebabfn);
+      await finish(game);
+      expect(await clocks(game)).to.deep.equal([start, day]);
+      expect(await game.rngWordForDay(day)).to.equal(0xcafebabfn);
+      expect(await coinflip.recordPool()).to.be.gte(pool);
+      for (let d = day + 1n; d < day + 9n; ++d) {
+        expect((await coinflip.getCoinflipDayResult(d))[0]).to.equal(0n);
+        expect(await game.rngWordForDay(d)).to.equal(0n);
       }
-    });
-    expect(await readClocks(game)).to.deep.equal({
-      purchaseStartDay: initial.purchaseStartDay, dailyIdx: requestDayR,
-    });
-    expect(await game.rngWordForDay(requestDayR), "calendar-expired full word is hidden").to.equal(0n);
-    expect((await coinflip.getCoinflipDayResult(requestDayR))[0], "sealed outcome survives expiry").to.be.gt(0n);
-
-    if (paidNudge) {
-      const [queued, cost] = await game.rngNudgeQuote();
-      expect(queued).to.equal(0n);
-      const available = await coin.balanceOfWithClaimable(alice.address);
-      expect(available, "resolved winnings fund the nudge").to.be.gte(cost);
-      await game.connect(alice).reverseFlip(cost);
-      expect(await coin.balanceOfWithClaimable(alice.address), "real FLIP cost was burned").to.equal(available - cost);
-      expect((await game.rngNudgeQuote())[0], "one paid nudge is queued").to.equal(1n);
-      expect((resumeWord >> 1n) & 7n, "raw gap fixture wins every skipped day").to.equal(7n);
-      expect((appliedResumeWord >> 1n) & 7n, "nudged gap bits would instead lose").to.equal(0n);
-    }
-
-    const resumeId = await requestDay(game, advanceModule, mockVRF);
-    expect(resumeId).to.be.gt(stalledId);
-    await mockVRF.fulfillRandomWords(resumeId, resumeWord);
-    let reachedBackfill = false;
-    for (let i = 0; i < 64; ++i) {
-      // Physically supplied gas admits the 1.5M gap step but not the following
-      // 3.6M daily-application step, exposing the real safe checkpoint.
-      if ((await advanceStages(game, advanceModule, 3_000_000)).includes(STAGE_GAP_BACKFILLED)) {
-        reachedBackfill = true;
-        break;
+      const settled = Array.from(await coinflip.getCoinflipDayResult(day));
+      if (paidNudge) {
+        const [, cost] = await game.rngNudgeQuote();
+        const available = await coin.balanceOfWithClaimable(alice.address);
+        expect(available).to.be.gte(cost);
+        await game.connect(alice).reverseFlip(cost);
+        expect(await coin.balanceOfWithClaimable(alice.address)).to.equal(available - cost);
       }
-      expect(await game.rngLocked(), "the gap cannot silently finish without stage 12").to.equal(true);
-    }
-    expect(reachedBackfill, "the real gap-backfill stage executed").to.equal(true);
-    expect(await game.rngLocked(), "the wall-day draw is still owed after backfill").to.equal(true);
-
-    const gapCount = resumeDayW - requestDayR - 1n;
-    expect(gapCount).to.equal(3n);
-    const creditedStart = initial.purchaseStartDay + gapCount;
-    expect(await readClocks(game)).to.deep.equal({
-      purchaseStartDay: creditedStart, dailyIdx: resumeDayW - 1n,
-    });
-    expect(await game.rngWordForDay(resumeDayW), "daily application is still owed at the gap checkpoint").to.equal(0n);
-    const expectedWords = new Map([[requestDayR, requestWord]]);
-    for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
-      const derived = BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256", "uint256"], [68n, resumeWord, day])));
-      expectedWords.set(day, derived === 0n ? 1n : derived);
-    }
-    const expectedResults = new Map();
-    for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
-      // Gap wins use bits 1..31 of the RAW root; nudges affect only the real daily word.
-      // The retained yesterday word still serves the other daily RNG consumers.
-      const win = ((resumeWord >> (day - (requestDayR + 1n) + 1n)) & 1n) !== 0n;
-      expectedResults.set(day, [win ? 100n : 1n, win]);
-    }
-    async function assertRetainedWordsAndGapResults() {
-      const today = await game.currentDayView();
-      for (const [day, word] of expectedWords) {
-        const retained = day <= today && today - day <= 1n;
-        expect(await game.rngWordForDay(day), `retained word for day ${day}`).to.equal(retained ? word : 0n);
+      const next = await request(game, mockVRF);
+      expect(next).to.be.gt(id);
+      expect(await game.currentDayView()).to.equal(day + 1n);
+      await mockVRF.fulfillRandomWords(next, 0xbadc0fffn);
+      await finish(game);
+      expect(await game.rngWordForDay(day + 1n)).to.equal(0xbadc0fffn + (paidNudge ? 1n : 0n));
+      expect(Array.from(await coinflip.getCoinflipDayResult(day))).to.deep.equal(settled);
+      expect(await clocks(game)).to.deep.equal([start, day + 1n]);
+      // The actual send window permits only one fresh daily request.
+      for (let i = 0; i < 20 && (await game.nextMinerAction()) !== 0n; ++i) {
+        const pending = await mockVRF.lastRequestId();
+        if (pending && !(await mockVRF.pendingRequests(pending))[2]) await mockVRF.fulfillRandomWords(pending, 999n);
+        await game.mineFlip(ONE_UNIT, { gasLimit: 16_777_216 });
       }
-      for (const [day, result] of expectedResults) {
-        expect(Array.from(await coinflip.getCoinflipDayResult(day)), `immutable outcome ${day}`).to.deep.equal(result);
-      }
-    }
-    async function assertFrozenGap() {
-      expect((await readClocks(game)).purchaseStartDay, "exactly one gap credit").to.equal(creditedStart);
-      await assertRetainedWordsAndGapResults();
-      expect(await game.rngWordForDay(resumeDayW + 1n), "next day has no borrowed word").to.equal(0n);
-      expect(await mockVRF.lastRequestId(), "drain keeps the same request").to.equal(resumeId);
-    }
-    await assertFrozenGap();
-
-    // Stage 12 deliberately leaves the lock held. Cross midnight at that exact
-    // boundary, then require every remaining advance to preserve the credit and
-    // packed gap outcomes while finishing W rather than the new wall day W+1.
-    await advanceToNextDay();
-    expect(await game.currentDayView()).to.equal(resumeDayW + 1n);
-    await drainDay(game, advanceModule, assertFrozenGap);
-    expect((await readClocks(game)).dailyIdx).to.equal(resumeDayW);
-    expect(await game.rngWordForDay(resumeDayW), "original logical day applied after the checkpoint").to.equal(appliedResumeWord);
-    expectedWords.set(resumeDayW, appliedResumeWord);
-    expect((await coinflip.getCoinflipDayResult(resumeDayW))[1], "real daily flip uses the final nudged bit 0")
-      .to.equal((appliedResumeWord & 1n) !== 0n);
-    expect(await game.gameOver()).to.equal(false);
-
-    const laterId = await requestDay(game, advanceModule, mockVRF);
-    expect(laterId).to.be.gt(resumeId);
-    expect(await game.rngWordForDay(resumeDayW + 1n)).to.equal(0n);
-    await mockVRF.fulfillRandomWords(laterId, LATER_WORD);
-    await drainDay(game, advanceModule, async () => {
-      expect((await readClocks(game)).purchaseStartDay).to.equal(creditedStart);
-      await assertRetainedWordsAndGapResults();
+      expect(await game.currentDayView()).to.equal(day + 1n);
+      expect(await game.gameOver()).to.equal(false);
     });
-    expect(await readClocks(game)).to.deep.equal({
-      purchaseStartDay: creditedStart, dailyIdx: resumeDayW + 1n,
-    });
-    expect(await game.rngWordForDay(resumeDayW + 1n)).to.equal(LATER_WORD);
-    expect(LATER_WORD).not.to.equal(appliedResumeWord);
-    expect(await game.gameOver()).to.equal(false);
-  });
   }
 });

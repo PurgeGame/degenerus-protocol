@@ -3,7 +3,18 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+
+contract NormalEndingDrainSeeder is DegenerusGame {
+    function normalDeadline() external {
+        dailyIdx = 39;
+        purchaseStartDay = 9;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
+    }
+}
 
 /// @title GameOverBestEffortDrainTest -- Phase 232.1 D-05 revised semantics
 /// @notice D-05 (revised) claim: game-over path BEST-EFFORT drains queued
@@ -109,12 +120,14 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
             MintPaymentKind.DirectEth, false
         );
 
-        // Step 2: trigger liveness timeout without completing a normal day.
-        //   The first game-over advance requests VRF; subsequent advance after
-        //   VRF fulfills runs _gameOverEntropy -> best-effort drain round 1
-        //   (empty read slot) -> swap write->read -> round 2 drains purchased
-        //   tickets -> terminal drain.
-        vm.warp(block.timestamp + 370 days);
+        // Seed the normal thirty-completed-round boundary. Hard expiry deliberately
+        // bypasses the ticket worker and is exercised by the separate empty-user case.
+        vm.warp(vm.getBlockTimestamp() + 30 days);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(NormalEndingDrainSeeder).runtimeCode);
+        NormalEndingDrainSeeder(payable(address(game))).normalDeadline();
+        vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(39);
 
         (uint256 totalTraits, uint256 totalAdvances) = _driveToGameOver();
 

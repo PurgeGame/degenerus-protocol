@@ -13,8 +13,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @notice The DegenerusQuests constructor stamps the deploy day's daily quests with
 ///         fixed types (no VRF exists at deploy): slot 0 MINT_ETH — the roll's own
 ///         always-slot — and slot 1 DEGENERETTE_ETH, placeable from genesis with
-///         progress credited at placement. The rolled-day bitmap bit is set so the
-///         seed is a real rolled day for streak accounting, and rollDailyQuest's
+///         progress credited at placement. The seed belongs to the opening logical
+///         day, and rollDailyQuest's
 ///         same-day idempotency guard holds the pair for the whole deploy day; the
 ///         first entropy roll lands on day two.
 contract GenesisDailyQuestSeed is DeployProtocol {
@@ -22,7 +22,6 @@ contract GenesisDailyQuestSeed is DeployProtocol {
     uint8 private constant QUEST_TYPE_DEGENERETTE_ETH = 7;
     uint8 private constant CURRENCY_ETH = 0;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
-    uint256 private constant QUEST_BITMAP_SLOT = QaSlots.ROLLED;
 
     address private player;
 
@@ -61,19 +60,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
             QUEST_TYPE_DEGENERETTE_ETH,
             "slot 1 carries the seeded DEGENERETTE_ETH type"
         );
-        // The seed marks a real rolled day for the streak machinery.
-        uint256 word = uint256(
-            vm.load(
-                address(quests),
-                keccak256(
-                    abi.encode(uint256(uint16(day0 >> 8)), QUEST_BITMAP_SLOT)
-                )
-            )
-        );
-        assertTrue(
-            (word >> uint8(day0)) & 1 == 1,
-            "the deploy day must be marked rolled in the bitmap"
-        );
+
     }
 
     function testDeployDayPairCompletesInOrder() public {

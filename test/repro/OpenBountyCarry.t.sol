@@ -29,7 +29,7 @@ contract OpenBountyCarry is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.deal(address(game), 10_000_000 ether);
         _finishSubscriptionWindow();
     }
@@ -103,9 +103,7 @@ contract OpenBountyCarry is DeployProtocol {
         // The stake ledger is keyed by wallet ID: a keeper without one does the work unpaid.
         if (game.walletIdOf_g3120(keeper) == 0) _giveWalletId(keeper);
         vm.recordLogs();
-        vm.prank(keeper);
-        if (allowance == 0) game.mineFlip(0);
-        else game.mineFlip{gas: allowance}(0);
+        this.mineAtFee(keeper, allowance);
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (
@@ -120,6 +118,16 @@ contract OpenBountyCarry is DeployProtocol {
                 (, used,) = abi.decode(logs[i].data, (uint8, uint256, uint256));
             }
         }
+    }
+
+    /// @dev --isolate rebuilds the transaction environment at a top-level call. Set the fee
+    ///      inside that call so the measured work and its reward use the same nonzero fee.
+    function mineAtFee(address keeper, uint256 allowance) external {
+        require(msg.sender == address(this));
+        vm.fee(1 gwei);
+        vm.prank(keeper);
+        if (allowance == 0) game.mineFlip(0);
+        else game.mineFlip{gas: allowance}(0);
     }
 
     uint256 private _restPay;
@@ -137,18 +145,17 @@ contract OpenBountyCarry is DeployProtocol {
     /// @dev Stamp every subscriber for a new day and drive that day's cohort, in minimal
     ///      checkpoints, until its AFKing backlog is the next work. The call that releases the
     ///      day's lock opens what its leftover admits; the rest is the backlog under test. A
-    ///      nonzero base fee prices the bounty.
+    ///      nonzero base fee is supplied by mineAtFee for each measured keeper call.
     function _backlogAtAfking(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D);
         _settleIdle(vrfWord ^ 0xF00D);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 400; ++i) {
-            if (game.nextMinerAction() == 9) break; // MinerAction.Afking
+            if (game.nextMinerAction() == 8) break; // MinerAction.Afking
             _fulfillPending(vrfWord);
             _stepMinimal();
         }
-        assertEq(game.nextMinerAction(), 9, "harness: the AFKing backlog is the next work");
-        vm.fee(1 gwei);
+        assertEq(game.nextMinerAction(), 8, "harness: the AFKing backlog is the next work");
     }
 
     /// @dev Answer outstanding requests and finish delivered cohorts until the engine is idle.
@@ -166,19 +173,9 @@ contract OpenBountyCarry is DeployProtocol {
         revert("harness: cohorts never settled");
     }
 
-    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots).
+    /// @dev Maximum calibration stops after the first mandatory checkpoint.
     function _stepMinimal() internal {
-        uint256 lo = 200_000;
-        uint256 hi = 30_000_000;
-        while (hi - lo > 1_000) {
-            uint256 mid = (lo + hi) / 2;
-            uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-            vm.revertToStateAndDelete(snap);
-            if (ok) hi = mid;
-            else lo = mid;
-        }
-        game.mineFlip{gas: hi}(0);
+        game.mineFlip{gas: 30_000_000}(type(uint32).max);
     }
 
     function _pendingCount() internal view returns (uint256) {
@@ -204,7 +201,7 @@ contract OpenBountyCarry is DeployProtocol {
 
     function _runStageNewDay(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _settleGame(vrfWord);
     }
 

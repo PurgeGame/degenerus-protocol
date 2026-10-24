@@ -16,10 +16,13 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// ticket owners. No settlement or request is performed under this runtime.
 contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
     function seed(address attacker) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 4;
         purchaseStartDay = day - 3;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         jackpotPhaseFlag = true;
         jackpotCounter = 0;
         jackpotFlags = 0;
@@ -103,7 +106,8 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         vm.etch(address(game), type(DailyJackpotCommitmentSeeder).runtimeCode);
         DailyJackpotCommitmentSeeder(payable(address(game))).seed(ATTACKER);
         vm.etch(address(game), runtime);
-        day = game.currentDayView();
+        day = game.currentDayView() + 1;
+        _syncCoinflipFixtureDay(day - 1);
         vm.warp(start - 1 days);
         vm.prank(address(game));
         crapsBattle.openBonusDay();
@@ -275,7 +279,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         assertEq(first.length, 1, "the request call carries one marker");
         assertEq(first[0], 1, "first call must request fresh entropy");
         assertTrue(game.rngLocked());
-        assertEq(uint24(_packed() >> 24), day - 1, "logical day frozen at request");
+        assertEq(uint24(_packed() >> 24), day, "logical day advances at accepted request");
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0);
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
@@ -352,7 +356,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
             );
             if (!main) {
                 assertTrue(game.rngLocked(), "lock survives between distinct payout stages");
-                assertEq(uint24(_packed() >> 24), day - 1, "day cannot seal between payout stages");
+                assertEq(uint24(_packed() >> 24), day, "logical day stays fixed between payout stages");
             }
         }
         assertTrue(paidEth && early && main, "all three financial stages must execute");

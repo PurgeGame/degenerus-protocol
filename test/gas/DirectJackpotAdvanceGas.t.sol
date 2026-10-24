@@ -11,10 +11,13 @@ import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 
 contract DirectAdvanceSeeder is DegenerusGame, BucketSeed {
     function seed(uint256 word) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 41;
         purchaseStartDay = day - 2;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         jackpotPhaseFlag = true;
         jackpotCounter = 1;
         jackpotFlags = 0;

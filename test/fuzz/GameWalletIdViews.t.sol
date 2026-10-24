@@ -84,7 +84,7 @@ contract ViewsGameExt is DegenerusGame {
         (uint256 lane,) = _subLaneOf(id);
         return _subStreakAt(lane, _afkingEndpoint());
     }
-    function x_today() external view returns (uint24) { return _simulatedDayIndex(); }
+    function x_today() external view returns (uint24) { return _wallDay(); }
 }
 
 /// @dev Stand-in for the jackpot battle at the CRAPS address: answers the four calls the
@@ -614,6 +614,9 @@ contract GameWalletIdViews is DeployProtocol {
     /// @dev Deliver `word` for the cohort at IDX (as DegeneretteSweep does) and resolve it.
     function _resolve(uint256 word) private returns (Vm.Log[] memory logs) {
         RecyclingState.seedWord(address(game), IDX, bytes32(word));
+        // This resolver fixture already serviced the current wall reset; the crank
+        // must not open an unrelated daily round and credit its protocol seeds.
+        _seedLogicalFixtureDay(game.currentDayView());
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));

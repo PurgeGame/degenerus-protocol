@@ -1,3 +1,4 @@
+import { seedLogicalDay } from "../helpers/logicalDayFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -37,8 +38,8 @@ async function lootboxNominalOf(gameAddress, position) {
   return boNominal(await boxEntryAt(gameAddress, index, position));
 }
 
-// 250 days in seconds (deploy idle timeout for level 0, per _DEPLOY_IDLE_TIMEOUT_DAYS)
-const DEPLOY_TIMEOUT_SECONDS = 250 * 86400;
+// 30 game days in seconds (deploy idle timeout for level 0, per _DEPLOY_IDLE_TIMEOUT_DAYS)
+const DEPLOY_TIMEOUT_SECONDS = 30 * 86400;
 // Daily boundary: days roll over at 22:57 UTC (GameTimeLib.JACKPOT_RESET_TIME), not midnight.
 const DAY_RESET_SECONDS = 82620;
 
@@ -78,7 +79,7 @@ describe("Distress-Mode Lootboxes", function () {
 
   /**
    * Advance time to just before distress mode.
-   * At level 0, distress triggers when currentDay >= purchaseStartDay + 250.
+   * At level 0, distress triggers when currentDay >= purchaseStartDay + 30.
    * Since the contract uses day-based granularity (days reset at 22:57 UTC),
    * we need a full-day buffer to ensure we land on the day before distress.
    */
@@ -87,35 +88,12 @@ describe("Distress-Mode Lootboxes", function () {
    * that, and the VRF deadman ends any game with no sealed day for 120 days, so re-stamp the
    * index (slot 0, bytes 3..5) to yesterday after each warp.
    */
-  async function syncDailyIdx(game) {
-    const addr = await game.getAddress();
-    const day = BigInt(await game.currentDayView());
-    const word = BigInt(await hre.ethers.provider.getStorage(addr, 0));
-    const mask = 0xffffffn << 24n;
-    const next = (word & ~mask) | ((day - 1n) << 24n);
-    await hre.network.provider.send("hardhat_setStorageAt", [addr, "0x0", hre.ethers.toBeHex(next, 32)]);
-  }
-
   async function advanceToPreDistress(game) {
-    // Advance to 2 days before the 250-day timeout to ensure day index is below threshold
-    await advanceTime(DEPLOY_TIMEOUT_SECONDS - 2 * 86400);
-    await syncDailyIdx(game);
+    await seedLogicalDay(game, 37n); // 28 completed purchase days after baseline 9.
   }
 
-  /**
-   * Advance deterministically into distress mode.
-   * Distress is DAY-granular: _isDistressMode() is true once currentDay >= purchaseStartDay + 250,
-   * where days roll over at 22:57 UTC (GameTimeLib). A fixed second-offset before the "timeout"
-   * lands on day psd+249 or psd+250 depending on the wall-clock time the fixture deploys at, which
-   * made this suite flaky by time-of-day. Instead advance a whole 250 days and re-center to mid-day:
-   * this lands squarely on the single distress day (psd+250) — 12h from either daily boundary, and
-   * short of the day-251 (> 250) liveness/game-over trigger — regardless of deploy time.
-   */
   async function advanceToDistress(game) {
-    const ts = await getBlockTimestamp();
-    const intoDay = (ts - DAY_RESET_SECONDS) % 86400;
-    await advanceTime(250 * 86400 - intoDay + 43200);
-    await syncDailyIdx(game);
+    await seedLogicalDay(game, 39n); // Thirtieth day complete; rescue remains open until next reset.
   }
 
   // ---------------------------------------------------------------------------

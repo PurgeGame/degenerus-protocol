@@ -91,29 +91,29 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
     /// @dev Call sequence from the deep campaign that reaches a repeated natural gold six: the independent
     /// oracle must replace it using the committed numeric domain.
     function _replayGoldSixCounterexample() internal {
-        handler.fulfillVrf(438283144491947435312461);
-        handler.advance();
-        handler.warpTime(115651955875362229857941445212139178433166013695);
-        handler.advance();
-        handler.advance();
-        handler.advance();
-        handler.purchase(17833);
-        handler.advance();
-        handler.warpTime(25217355840405407495934704602712554674695321266726248404902075851862397);
-        handler.purchase(649551339414811309385862790305989359195237978233780825491233004751472);
-        handler.advance();
-        handler.advance();
-        handler.advance();
-        handler.purchase(31012);
-        handler.advance();
-        handler.purchase(4096082689);
-        handler.advance();
-        handler.advance();
-        handler.fulfillVrf(2096683609362009316760078521489823205379);
-        handler.advance();
-        handler.advance();
-        handler.advance();
-        handler.advance();
+        // Preserve the committed words from the historical witness, and explicitly
+        // request each logical cohort after its paid entries have joined the write buffer.
+        uint256[2] memory words = [uint256(438283144491947435312461), 2096683609362009316760078521489823205379];
+        for (uint256 round; round < words.length; ++round) {
+            for (uint256 i; i < 200; ++i) {
+                (bool complete,,) = game.dailySessionState();
+                if (complete) break;
+                handler.advance();
+            }
+            handler.purchase(round == 0 ? 17833 : 31012);
+            handler.purchase(4096082689);
+            handler.warpTime(1 days);
+            for (uint256 i; i < 100 && !game.rngLocked(); ++i) handler.advance();
+            assertTrue(game.rngLocked(), "replay requested the next logical cohort");
+            handler.fulfillVrf(words[round]);
+            for (uint256 i; i < 200; ++i) {
+                (bool complete,,) = game.dailySessionState();
+                if (complete) break;
+                handler.advance();
+            }
+            (bool done,,) = game.dailySessionState();
+            assertTrue(done, "replay drained the committed cohort");
+        }
     }
 
     /// @dev Found on the ordinary timeline, where the replay checks new persisted entries; that

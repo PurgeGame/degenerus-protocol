@@ -16,7 +16,7 @@ import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 ///      engine selects DailyPhase only for an active, published, not-yet-complete session.
 contract RecycleSessionSeeder is DegenerusGame {
     function openDailyPhase() external {
-        rngRequestDay = _simulatedDayIndex();
+        rngRequestDay = _wallDay();
         _setRngRequestActive(true);
         _setRngSessionPublished(true);
         _setRngComplete(false);

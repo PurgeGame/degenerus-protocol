@@ -9,10 +9,13 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract DecimatorScheduleHost is DegenerusGameAdvanceModule {
     function prime(uint24 next, bool fast, bool sealing) external returns (uint24 day) {
-        day = _simulatedDayIndex();
+        day = _wallDay();
         level = next - 1;
         degenesisClosed = 7;
-        dailyIdx = day - 1;
+        dailyIdx = sealing ? day : day - 1;
+        dailyComplete = !sealing;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = sealing ? _wallDay() : _wallDay() - 1;
         purchaseStartDay = day - (fast ? 1 : 3);
         lastPurchaseDay = !fast && !sealing;
         jackpotFlags = 2; // preserve the independent pending bonus bit

@@ -38,7 +38,7 @@ import {RngTags} from "./libraries/RngTags.sol";
  *      - Integrates with FLIP for burn/mint operations
  *      - Holds the all-time record pool (flip / degenerette spin / lootbox deposit /
  *        ticket buy) and quest rewards
- *      - Seeds the initial FLIP emission as flip stakes (200k/day, days 1-20, to
+ *      - Seeds the initial FLIP emission as flip stakes (200k/day, rounds 2-21, to
  *        VAULT and sDGNRS); arms sDGNRS perpetual auto-rebuy after the seed window
  *
  * @dev INTERACTIONS:
@@ -285,7 +285,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
     uint16 private constant COIN_CLAIM_DAYS = 90;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
-    /// @dev Initial-emission seed stakes: 200k FLIP per day for days 1-20, each to
+    /// @dev Initial-emission seed stakes: 200k FLIP per day for rounds 2-21, each to
     ///      VAULT and sDGNRS. All initial FLIP must survive a coinflip before minting.
     uint256 private constant SEED_FLIP_DAILY = 200_000;
     uint24 private constant SEED_FLIP_DAYS = 20;
@@ -331,7 +331,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     uint128 public biggestFlipEver;
 
     // RNG state + the five per-category record claim clocks (all pack into one slot)
-    uint24 internal flipsClaimableDay;
+    uint24 internal flipsClaimableDay = 1;
     /// @dev One-shot latch: sDGNRS perpetual auto-rebuy arms once the final seeded day settles.
     bool internal sdgnrsAutoRebuyArmed;
     /// @dev Day a record category last claimed, one clock per kind. Stamped on the
@@ -352,6 +352,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     ///      reset it performs is also what prices a second hit on the same day at the
     ///      5% floor of an already-reduced pool.
     uint24 internal recordDayDiceRun;
+    /// @notice Game-authenticated normal request frontier; opening day has no result.
+    uint24 public requestedDailyIdx = 1;
 
     // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
     // purchase day stakes it): every direct self-funded deposit staking that day
@@ -387,7 +389,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     /// @dev Absolute page overflow; appended at slot 9 so every prior root/offset stays fixed.
     mapping(uint32 => mapping(uint24 => uint256)) internal coinflipStakeOverflow;
 
-    /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for days 1-20,
+    /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for rounds 2-21,
     ///         each to VAULT and sDGNRS. The claim walk adds the seed to those days' stored
     ///         stake rather than writing a stake lane, so the seeds stay off the BAF weighted
     ///         draw and the flip record.
@@ -404,14 +406,14 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         // share accrued since launch (the 5% floor plus 0.5% per untouched day,
         // ceiling 75%) — a dormant category grows until its bounty justifies its
         // entry floor.
-        uint24 recordStartDay = GameTimeLib.currentDayIndex();
+        uint24 recordStartDay = 1;
         recordDayFlip = recordStartDay;
         recordDaySpin = recordStartDay;
         recordDayLuckbox = recordStartDay;
         recordDayBuy = recordStartDay;
         recordDayDiceRun = recordStartDay;
 
-        emit SeedWindowArmed(1, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
+        emit SeedWindowArmed(2, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -1166,7 +1168,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         // divisible by five would let a candidate claim on strictly less than a
         // fifth. Multiplying the increase instead is exact.
         if (mark == 0 || (candidate - mark) * RECORD_BEAT_DIV >= mark) {
-            uint24 today = GameTimeLib.currentDayIndex();
+            uint24 today = requestedDailyIdx;
             uint256 stamped = _recordDay(kind);
             shareBps = RECORD_SHARE_FLOOR_BPS +
                 (uint256(today) > stamped ? uint256(today) - stamped : 0) *
@@ -1281,7 +1283,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         if (candidate <= mark) return 0;
         biggestDiceRunEver = uint128(candidate);
 
-        uint24 today = GameTimeLib.currentDayIndex();
+        uint24 today = requestedDailyIdx;
         uint256 stamped = recordDayDiceRun;
         uint256 shareBps = RECORD_SHARE_FLOOR_BPS +
             (uint256(today) > stamped ? uint256(today) - stamped : 0) *
@@ -1337,26 +1339,15 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
       |                    AUTO-REBUY FUNCTIONS                              |
       +======================================================================+*/
 
-    /// @notice True once today's flip has been applied — its VRF word recorded and paid out.
-    /// @dev Settlement marker for the carry freeze, and the sole gate on every carry mutator.
-    ///      The advance records the day's word and runs processCoinflipPayouts in one step, so
-    ///      past this point the carry has resolved through today's word and rides tomorrow —
-    ///      whose word has not been requested. The game's RNG lock is deliberately NOT read:
-    ///      it spans request -> _unlockRng and advanceGame defers that unlock behind chunked
-    ///      ticket drains, a pending daily jackpot, and a phase transition, so it stays up long
-    ///      after the word that priced the carry was consumed. This marker is also strictly
-    ///      tighter than the lock — it stays shut from the day boundary until the word lands,
-    ///      covering the pre-request gap the lock leaves open — and needs no cross-contract
-    ///      read. `day` never exceeds the wall day (the advance clamps it down to dailyIdx + 1),
-    ///      so equality is the settled state and the comparison cannot open early.
+    /// @notice Whether the most recently committed flip is applied.
     function flipResolvedToday() external questsContext view returns (bool) {
-        return flipsClaimableDay >= GameTimeLib.currentDayIndex();
+        return !_flipFrozen();
     }
 
     /// @dev Freeze predicate for the carry: today's flip is unapplied, so a word that prices the
     ///      carry may be knowable but unconsumed.
     function _flipFrozen() private view returns (bool) {
-        return flipsClaimableDay < GameTimeLib.currentDayIndex();
+        return flipsClaimableDay < requestedDailyIdx;
     }
 
     /// @notice Configure auto-rebuy mode for account `id`'s coinflips.
@@ -1415,10 +1406,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     /// @dev Internal auto-rebuy configuration.
     ///      A position already on auto-rebuy is frozen while a day is unresolved: it holds a
     ///      carry that the pending word prices, so toggling off would extract it before a known
-    ///      loss. Arming stays open while only today is unresolved (a known result can only roll
-    ///      into an unknown day) but is frozen once two or more days are unresolved: after a stall
-    ///      every such day's result derives from one delivered word, and arming then would
-    ///      compound a stake through a run of results that are already readable.
+    ///      loss. Enabling first settles all published outcomes and can affect only the
+    ///      following unknown round. Calendar delays introduce no additional outcomes.
     function _setCoinflipAutoRebuy(
         address key,
         address payee,
@@ -1429,7 +1418,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         id = _walletId(key, id, true);
         PlayerCoinflipState storage state = playerState[id];
         uint256 mintable;
-        if (_flipFrozen() && (state.autoRebuyEnabled || flipsClaimableDay + 1 < GameTimeLib.currentDayIndex())) {
+        if (_flipFrozen() && state.autoRebuyEnabled) {
             revert RngLocked();
         }
 
@@ -1440,7 +1429,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
             state.autoRebuyStop = takeProfit == 0 ? 1 : uint128(takeProfit);
             state.autoRebuyUnlimited = takeProfit == 0;
             state.autoRebuyEnabled = true;
-            state.autoRebuyStartDay = state.lastClaim;
+            state.autoRebuyStartDay = requestedDailyIdx;
             emit CoinflipAutoRebuyStopSet(id, takeProfit);
             emit CoinflipAutoRebuyToggled(id, true);
         } else {
@@ -1534,6 +1523,14 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
       |                    RNG PROCESSING                                    |
       +======================================================================+*/
 
+    /// @notice Advance once at the Game's atomic fresh daily request boundary.
+    /// @dev Duplicate or out-of-order internal calls are non-reverting no-ops.
+    function onDailyRequest(uint24 day) external onlyDegenerusGameContract {
+        if (uint256(day) != uint256(requestedDailyIdx) + 1) return;
+        requestedDailyIdx = day;
+    }
+
+
     /// @notice Process coinflip payout for a day (called by game contract).
     /// @param bonus Reward-percent bonus for this day, precomputed by the caller from frozen state:
     ///        0 = normal day, 2 = bonus day (a level-0 day, the second day of a level's jackpot
@@ -1546,6 +1543,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         uint256 rngWord,
         uint24 epoch
     ) external questsContext onlyDegenerusGameContract {
+        if (epoch <= flipsClaimableDay) return;
         uint16 rewardPercent = _coinflipReward(bonus, rngWord, epoch);
         bool win = (rngWord & 1) == 1;
         _storeDayResult(epoch, rewardPercent, win);
@@ -1559,39 +1557,6 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     ///      a recycling player nets ~99.9% / ~101.9% RTP after the recycle bonus compounds.
     function _coinflipReward(uint8 bonus, uint256 rngWord, uint24 epoch) private pure returns (uint16) {
         return FlipRoundLib.coinflipRewardPercent(bonus, rngWord, epoch);
-    }
-
-    /// @notice Resolve at most 31 skipped days at double-or-nothing payouts.
-    /// @dev Raw word bits 1..31 supply wins in the caller's original day order;
-    ///      bit 0 belongs to the recovery day. Every gap reward is fixed at 100% profit.
-    ///      Skipping an already-settled prefix must not restart the bit sequence.
-    ///      The Game's shared recovery caller caps the range to 31 days before this call.
-    function processCoinflipGap(uint256 root, uint24 start, uint24 end) external questsContext onlyDegenerusGameContract {
-        if (end <= start) return;
-        uint24 originalStart = start;
-        if (start <= flipsClaimableDay) start = flipsClaimableDay + 1;
-        if (end <= start) return;
-        uint32 wins = uint32(root >> (1 + uint256(start) - originalStart));
-        uint24 key = start >> 5;
-        uint256 packed = coinflipDayResultPacked[key];
-        for (uint24 day = start; day < end; ++day) {
-            uint24 nextKey = day >> 5;
-            if (nextKey != key) {
-                coinflipDayResultPacked[key] = packed;
-                key = nextKey;
-                packed = coinflipDayResultPacked[key];
-            }
-            uint256 offset = day - start;
-            bool win = wins & (uint32(1) << offset) != 0;
-            uint256 shift = (day & 31) * 8;
-            packed = (packed & ~(uint256(255) << shift)) | (uint256(win ? 100 : 1) << shift);
-        }
-        coinflipDayResultPacked[key] = packed;
-        // Preserve per-day funding, seed-window transitions, and sequential sDGNRS carry.
-        for (uint24 day = start; day < end; ++day) {
-            _settleCoinflipDay(day, 100, wins & 1 != 0);
-            wins >>= 1;
-        }
     }
 
     function _settleCoinflipDay(uint24 epoch, uint16 rewardPercent, bool win) private {
@@ -1637,7 +1602,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
 
             // Once the final seeded day settles, sDGNRS goes on perpetual auto-rebuy
             // (0 take-profit): every later flip credit rolls win-after-win until a loss.
-            if (epoch >= SEED_FLIP_DAYS) {
+            if (epoch >= SEED_FLIP_DAYS + 1) {
                 sdgnrsAutoRebuyArmed = true;
                 sdgnrsState.autoRebuyStop = 1;
                 sdgnrsState.autoRebuyUnlimited = true;
@@ -1686,11 +1651,12 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         uint256[] calldata amounts
     ) external questsContext onlyFlipCreditors {
         uint256 len = ids.length;
+        uint24 day = _targetFlipDay();
         for (uint256 i; i < len; ) {
             uint32 id = ids[i];
             uint256 amount = amounts[i];
             if (id != 0 && amount != 0) {
-                _addDailyFlip(id, amount, 0, false);
+                _addFlipStake(id, day, amount);
             }
             unchecked {
                 ++i;
@@ -2052,11 +2018,11 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         return id == VAULT_WALLET_ID || id == SDGNRS_WALLET_ID;
     }
 
-    /// @dev A seed recipient's unstored stake on `day`: SEED_FLIP_DAILY on days 1..SEED_FLIP_DAYS,
+    /// @dev A seed recipient's unstored stake on `day`: SEED_FLIP_DAILY on rounds 2..SEED_FLIP_DAYS + 1,
     ///      else 0 (day 0 wraps far past the window).
     function _seedStake(uint24 day) private pure returns (uint256) {
         unchecked {
-            return uint256(day) - 1 < SEED_FLIP_DAYS ? SEED_FLIP_DAILY : 0;
+            return uint256(day) - 2 < SEED_FLIP_DAYS ? SEED_FLIP_DAILY : 0;
         }
     }
 
@@ -2097,11 +2063,10 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         return value > type(uint128).max ? type(uint128).max : uint128(value);
     }
 
-    /// @dev The target day for new coinflip deposits: tomorrow's index. GameTimeLib is the
-    ///      same time-only source DegenerusGame.currentDayView resolves to, so the day is
-    ///      derived locally without a cross-contract call.
+    /// @dev New deposits target the next unknown logical round. The Game updates this
+    ///      local mirror atomically at each daily request, so no clock read is needed.
     function _targetFlipDay() internal view returns (uint24) {
-        return GameTimeLib.currentDayIndex() + 1;
+        return requestedDailyIdx + 1;
     }
 
     /// @dev Helper to process quest rewards and emit event.
@@ -2155,6 +2120,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
 
     // These bridges are statically bound and absent from the public ABI. Each
     // caller supplies the original credited wallet, independent of msg.sender.
+    function _questGameDay() internal view override returns (uint24) { return requestedDailyIdx; }
+
     function _questCreditFlip(uint32 id, uint256 amount) internal override {
         _creditFlip(id, amount);
     }

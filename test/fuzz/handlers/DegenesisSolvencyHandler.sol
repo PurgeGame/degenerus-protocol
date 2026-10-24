@@ -105,6 +105,7 @@ contract DegenesisSolvencyHandler is Test {
     uint256 public ghost_mineDriftCalls;
     uint256 public ghost_terminalDriftCalls;
     uint256 public ghost_revertedMines; // engine calls that reverted (logs discarded)
+    uint256 public openedAt; // observed timestamp of the last fresh logical request
     bool public ended;
     bool public endedDuringSale;
 
@@ -137,7 +138,7 @@ contract DegenesisSolvencyHandler is Test {
     }
 
     function dayIndex() public view returns (uint256) {
-        return (_now() - GameTimeLib.JACKPOT_RESET_TIME) / 1 days + 1;
+        return game.currentDayView();
     }
 
     function header(uint256 c) public view returns (uint256) {
@@ -224,7 +225,7 @@ contract DegenesisSolvencyHandler is Test {
     function buyDegenesis(uint256 actorSeed, uint256 amtSeed, uint256 modeSeed, uint256 secsSeed) external {
         if (game.gameOver()) return;
         if (secsSeed % 3 == 0) {
-            uint256 dayStart = (dayIndex() - 1) * 1 days + GameTimeLib.JACKPOT_RESET_TIME;
+            uint256 dayStart = (_now() - GameTimeLib.JACKPOT_RESET_TIME) / 1 days * 1 days + GameTimeLib.JACKPOT_RESET_TIME;
             uint256 target = dayStart + bound(secsSeed >> 8, 0, 1 days - 1);
             if (target > _now()) vm.warp(target);
         }
@@ -270,7 +271,7 @@ contract DegenesisSolvencyHandler is Test {
             ++ghost_cohortCount[c];
             if (game.claimablePoolView() - poolBefore != value) _flag("buy moved claimablePool by other than msg.value");
             if (game.degenesisCreditOf(a) != credit - amount) _flag("credit not consumed 1:1");
-            uint256 secs = (_now() - GameTimeLib.JACKPOT_RESET_TIME) % 1 days;
+            uint256 secs = _now() - openedAt;
             if (secs > 6 hours) secs = 6 hours;
             uint256 want = uint256(id) | (units << 32) | (secs << 70);
             uint256 pos = index % 3;
@@ -434,6 +435,7 @@ contract DegenesisSolvencyHandler is Test {
         bool overBefore = game.gameOver();
         bool livenessBefore = game.livenessTriggered();
         int256 surplusBefore = surplus();
+        uint256 requestedBefore = dayIndex();
         vm.recordLogs();
         try game.mineFlip{gas: g}(0) {
             ran = true;
@@ -446,6 +448,7 @@ contract DegenesisSolvencyHandler is Test {
             ++ghost_revertedMines;
             return false;
         }
+        if (dayIndex() > requestedBefore) openedAt = _now();
         // A live engine call moves ETH and obligations together. The terminal transition changes
         // the obligation set itself (SolvencyObligations drops the dead live pools at game over),
         // so calls that end the game or run after liveness are tallied apart.

@@ -1,3 +1,4 @@
+import { setPackedField } from "../helpers/logicalDayFixture.js";
 import { compiledStorageLayout } from "../helpers/storageLayout.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -69,6 +70,8 @@ async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintF
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
+  await setPackedField(game, "dailyIdx", day);
+  await setPackedField(quests, "requestedDailyIdx", day, "Coinflip");
   const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy, forceMintFlip, false, false);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return { tx };
@@ -124,6 +127,8 @@ async function rollQuestWithBonusType(hreEthers, game, quests, day, targetBonusT
   try {
     for (let entropy = 0n; entropy < 256n; entropy++) {
       const snapshot = await hreEthers.provider.send("evm_snapshot", []);
+      await setPackedField(game, "dailyIdx", day);
+      await setPackedField(quests, "requestedDailyIdx", day, "Coinflip");
       await quests.connect(gameSigner).rollDailyQuest(day, entropy, false, false, false);
       const active = await quests.getActiveQuests();
       if (Number(active[1].questType) === targetBonusType) return;
@@ -1086,6 +1091,8 @@ describe("DegenerusQuests", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
       let chosenDay = 0n;
       for (let d = 1n; d <= 300n; d++) {
+        await setPackedField(game, "dailyIdx", d);
+        await setPackedField(quests, "requestedDailyIdx", d, "Coinflip");
         await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
         const active = await quests.getActiveQuests();
         if (Number(active[1].questType) !== QUEST_TYPE_FLIP) {
@@ -1211,6 +1218,8 @@ describe("DegenerusQuests", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
       let chosenDay = 0n;
       for (let d = 1n; d <= 300n; d++) {
+        await setPackedField(game, "dailyIdx", d);
+        await setPackedField(quests, "requestedDailyIdx", d, "Coinflip");
         await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
         const active = await quests.getActiveQuests();
         if (Number(active[1].questType) !== QUEST_TYPE_AFFILIATE) {
@@ -1272,6 +1281,8 @@ describe("DegenerusQuests", function () {
       const gameSigner = await hreEthers.getSigner(gameAddr);
       let chosenDay = 0n;
       for (let d = 1n; d <= 300n; d++) {
+        await setPackedField(game, "dailyIdx", d);
+        await setPackedField(quests, "requestedDailyIdx", d, "Coinflip");
         await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
         const active = await quests.getActiveQuests();
         if (Number(active[1].questType) === targetType) {

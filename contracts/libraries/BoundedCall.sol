@@ -90,6 +90,9 @@ library BoundedCall {
     function _remaining(MineFlipGas.Meter memory meter, uint256 minimum, uint256 reserve, uint256 overhead)
         private view returns (uint256 available)
     {
+        // The mandatory first unit owns all available gas, including its dependency calls.
+        // Scaled minima and tail reservations admit optional continuation only.
+        if (meter.mustProgress) return gasleft();
         minimum = MineFlipGas.scale(meter, minimum);
         reserve = MineFlipGas.scale(meter, reserve + overhead);
         available = gasleft();

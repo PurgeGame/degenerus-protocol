@@ -47,7 +47,7 @@ contract HeroWagerCommitmentIntegrationTest is RedemptionFixture {
             assertEq(game.getDailyHeroWager(originalDay, 1, 5), 100, "frozen pool survives stalled days");
             assertEq(game.getDailyHeroWager(game.currentDayView(), 1, 7), (i + 2) * 200);
         }
-        uint24 nextDay = game.currentDayView();
+        uint24 nextDay = game.currentDayView() + 1;
         uint256 delayed = mockVRF.lastRequestId();
         assertTrue(_fulfillPending(0xBEEF));
         assertEq(_metadata(), beforeRetry, "callback does not rotate hero buffers");

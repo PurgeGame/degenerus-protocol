@@ -24,7 +24,7 @@ async function dailyIdx(game) {
 }
 async function requestNextDay(game) {
   await advanceToNextDay();
-  for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0);
+  for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0, { gasLimit: 16_777_216 });
   expect(await game.rngLocked(), "a real daily request sealed the pool").to.equal(true);
   return (await game.currentDayView()) - 1n;
 }
@@ -41,8 +41,8 @@ describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", f
     expect(await game.getDailyHeroWager(start, 2, 5)).to.equal(UNITS);
     await advanceToNextDay();
     await bet(game, bob, 2, 5);
-    expect(await game.getDailyHeroWager(start + 1n, 2, 5)).to.equal(2n * UNITS);
-    expect(await game.getDailyHeroWager(start, 2, 5)).to.equal(0n);
+    expect(await game.getDailyHeroWager(start, 2, 5)).to.equal(2n * UNITS);
+    expect(await game.getDailyHeroWager(start + 1n, 2, 5)).to.equal(0n);
     expect(await dailyIdx(game)).to.equal(index, "clock and wagers do not advance the operational index");
   });
 
@@ -75,7 +75,7 @@ describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", f
       expect(await game.getDailyHeroWager(await game.currentDayView(), 2, 7)).to.equal(BigInt(i + 1) * UNITS);
       expect(await dailyIdx(game)).to.equal(frozenIndex);
     }
-    expect(await game.getDailyHeroWager(sealed + 1n, 2, 7)).to.equal(0n, "no invented calendar-day history");
+    expect(await game.getDailyHeroWager(sealed + 2n, 2, 7)).to.equal(0n, "no invented calendar-day history");
   });
 
   it("keeps an empty committed draw empty while later bets build the next pool", async function () {

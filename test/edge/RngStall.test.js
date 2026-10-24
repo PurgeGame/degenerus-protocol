@@ -195,7 +195,7 @@ describe("RngStall", function () {
       await advanceTime(3600); // 1 hour — well under the 20h threshold.
 
       await expect(
-        game.connect(deployer).mineFlip(0)
+        game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
@@ -210,7 +210,7 @@ describe("RngStall", function () {
       await advanceTime(6 * 3600); // 6 hours — under the 20h threshold.
 
       await expect(
-        game.connect(deployer).mineFlip(0)
+        game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
@@ -467,7 +467,7 @@ describe("RngStall", function () {
       await advanceTime(30 * 60);
 
       await expect(
-        game.connect(deployer).mineFlip(0)
+        game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
@@ -625,7 +625,7 @@ describe("RngStall", function () {
 
       // Day 2: fresh normal advance must succeed without errors (no brick).
       await advanceToNextDay();
-      const tx = await game.connect(deployer).mineFlip(0);
+      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -636,7 +636,7 @@ describe("RngStall", function () {
       let newId = await getLastVRFRequestId(mockVRF);
       for (let i = 0; i < 10 && newId <= retryId; i++) {
         if (await game.jackpotPhase()) break;
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
         newId = await getLastVRFRequestId(mockVRF);
       }
       expect(newId).to.be.gt(retryId);

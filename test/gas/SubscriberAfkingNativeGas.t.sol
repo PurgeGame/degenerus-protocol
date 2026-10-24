@@ -15,9 +15,12 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 ///      The measured calls delegate to the unmodified production AFKing module.
 contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     function prepare(bool whale) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 4;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _afkingResetDay = day;
         _afkingEndpointDay = day - 1;
         _subCursor = 0;
@@ -84,7 +87,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     }
 
     function openFixture(address player, uint256 word) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 299;
         dailyIdx = day;
         rngRequestDay = day;
@@ -153,7 +156,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _setRngComplete(false);
     }
     function nextPass() external {
-        _afkingResetDay = _simulatedDayIndex();
+        _afkingResetDay = _wallDay();
         _subCursor = 0;
         subsFullyProcessed = false;
     }
@@ -327,7 +330,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol, NativeGasExport {
             if (mode == 3 || mode == 4) assertEq(host.memberCount(), 0, "expired member removed");
             else {
                 (uint24 bought, uint24 opened) = host.delivered(PLAYER);
-                assertEq(bought, game.currentDayView());
+                assertEq(bought, game.currentDayView() + 1, "preparation stamps the upcoming logical round");
                 assertEq(opened, mode == 5 ? bought - 1 : bought);
             }
             if (used > peak) peak = used;

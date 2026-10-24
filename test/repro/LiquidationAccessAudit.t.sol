@@ -13,8 +13,11 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 ///      seizure, cancellation, cleanup and claims execute the production implementations.
 contract LiquidationAuditHost is DegenerusGame {
     function openWindow() external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         dailyIdx = day;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = day;
         purchaseStartDay = day;
         _afkingResetDay = day;
         _afkingEndpointDay = day;
@@ -44,8 +47,11 @@ contract LiquidationAuditHost is DegenerusGame {
     }
 
     function prepareNextDay() external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = day - 1;
         _afkingResetDay = day;
         _subCursor = 0;
         subsFullyProcessed = false;
@@ -77,6 +83,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         vm.etch(address(game), type(LiquidationAuditHost).runtimeCode);
         host = LiquidationAuditHost(payable(address(game)));
         host.openWindow();
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(address(game), 1000 ether);
         host.fundLender();
         borrower = makeAddr("audit-borrower");
@@ -108,6 +115,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
 
     function _cleanup() private {
         vm.warp(block.timestamp + 1 days);
+        _syncCoinflipFixtureDay(game.currentWallDayView() - 1);
         host.prepareNextDay();
     }
 

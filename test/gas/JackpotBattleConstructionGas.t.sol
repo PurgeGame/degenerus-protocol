@@ -37,13 +37,22 @@ contract BattlePaidMinerProbe {
 /// @dev Test-only storage construction. Every measured worker is the deployed production
 /// bytecode, including Game -> Miner -> Advance -> Jackpot -> Draw -> Craps -> JackpotBattle.
 contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
+    /// @dev Craps reads its logical day through the production raw-slot interface even
+    ///      while the test overlay is installing the synthetic paid field.
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+        assembly { value := sload(slot) }
+    }
+
     function seedMinerPass(address miner, uint256 packed) external {
         _registerWallet(miner, type(uint256).max); mintPacked_[_walletIdOf(miner)] = packed; }
 
     function seedSession(uint24 ceiling, uint24 day, uint256 word) external {
         level = ceiling - 1;
         purchaseStartDay = day - 1;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         // This fixture isolates battle construction after the Vault's daily
         // checkpoint; a due backstop has its own integration and gas tests.
         vaultFlipSettledDay = day;

@@ -57,7 +57,7 @@ describe("GnrusRecovery", function () {
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       } catch {
         /* multi-tx drain may revert mid-sequence; keep driving */
       }
@@ -83,7 +83,7 @@ describe("GnrusRecovery", function () {
       if ((await gnrus.sweptAt()) !== 0n) return;
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       } catch {}
       const reqAfter = await getLastVRFRequestId(mockVRF);
       if (reqAfter > reqBefore) {

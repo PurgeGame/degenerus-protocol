@@ -17,7 +17,10 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
         vrfSubscriptionId = 1;
         vrfRequestId = id;
         rngLockedFlag = daily;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = logicalDay;
+        dailyComplete = !daily;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
         rngRequestDay = logicalDay;
         rngRequestTime = originalTime;

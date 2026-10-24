@@ -14,14 +14,18 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @dev Advance the environment without replaying hundreds of unrelated game days.
 ///      Claims and draws still run through the production facade and modules.
 contract FoilMatchTimeSeeder is DegenerusGame {
-    function liveWithReusedWords(uint24 newLevel) external returns (uint256) {
-        dailyIdx = _simulatedDayIndex();
+    function liveWithReusedWords(uint24 newLevel, uint24 roundsLater) external returns (uint256) {
+        dailyIdx += roundsLater;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
         rngLockedFlag = false;
         _setRngRequestActive(false);
         if (newLevel != 0) level = newLevel;
         _recordDailyRng(dailyIdx - 1, 12345);
         _recordDailyRng(dailyIdx, 67890);
+        dailyFoilDraw[dailyIdx & 1] = _packFoilDraw(0, level, dailyIdx, 67890);
         return dailyIdx;
     }
     function recorded(uint24 day) external view returns (uint256) { return _recordedDailyWord(day); }
@@ -31,7 +35,9 @@ contract FoilMatchTimeSeeder is DegenerusGame {
         lastPurchaseDay = false;
         phaseTransitionActive = false;
         rngLockedFlag = false;
-        dailyIdx = _simulatedDayIndex();
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
         _setRngRequestActive(false);
     }
@@ -526,7 +532,7 @@ contract FoilClaimBatch is DeployProtocol {
         _assertFlatFaceTable(p2, resolve2, lvl2, mult2, "jackpot day");
 
         // ---- Ride out the rest of level 1's jackpot phase into level 2's purchase phase.
-        _tickUntilPurchasePhase(30);
+        _tickUntilPurchasePhase(300);
         assertFalse(game.jackpotPhase(), "harness: level 1's jackpot phase must have ended");
 
         // ---- Level >= 2 purchase day.
@@ -566,11 +572,12 @@ contract FoilClaimBatch is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + daysLater * 1 days);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), type(FoilMatchTimeSeeder).runtimeCode);
-        FoilMatchTimeSeeder(payable(address(game))).liveWithReusedWords(newLevel);
+        FoilMatchTimeSeeder(payable(address(game))).liveWithReusedWords(newLevel, uint24(daysLater));
         if (daysLater >= 2) {
             assertEq(FoilMatchTimeSeeder(payable(address(game))).recorded(_endDay), 0, "original word overwritten");
         }
         vm.etch(address(game), runtime);
+        _syncCoinflipFixtureDay(game.currentDayView());
         assertFalse(game.livenessTriggered(), "fixture remains live");
     }
 
@@ -709,10 +716,9 @@ contract FoilClaimBatch is DeployProtocol {
         game.claimFoilMatchMany(players, days_, tickets);
     }
 
-    function test_expiry_rejectsSecondFollowingDayEvenWithRetainedRecords() public {
-        uint256 draw = _drawWord();
+    function test_expiry_rejectsSecondFollowingPublishedDraw() public {
         _deferMatch(2, 0);
-        assertEq(_drawWord(), draw, "expiry does not depend on slot replacement");
+        assertEq(uint24(_drawWord() >> 217), _endDay + 2, "two published draws advance the retained frontier");
         vm.expectRevert(bytes4(NO_MATCH));
         game.claimFoilMatch(_fid[0], _endDay, 3);
 

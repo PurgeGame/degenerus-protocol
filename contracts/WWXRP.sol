@@ -85,12 +85,11 @@ import {RngTags} from "./libraries/RngTags.sol";
  *        headers and entries; historical getters return zero after overwrite.
  *
  * @dev DRAW SECURITY — WHY day d SETTLES ON WORD d+1:
- *      _recordedDailyWord(X) is only ever written for days X <= the current wall
- *      day (AdvanceModule _applyDailyRng / _backfillGapDays), and the
- *      RNGREUSE clamp guarantees a word requested on day R resolves only
- *      days <= R — so the value of word d+1 is unknowable until day d has
- *      already closed. enter() derives the day from GameTimeLib (the exact
- *      pure math behind the game's own day index), so a recorded word for
+ *      A normal daily request advances the logical index before its word can
+ *      arrive. enter() reads that index from Game slot 0, so normal word
+ *      d+1 is unknowable while participation day d remains open. Entries after
+ *      game over are unguarded: WWXRP is worthless then.
+ *      Thus a recorded word for
  *      day d+1 while entry is open is structurally impossible — the same
  *      settlement-blindness model as coinflip deposits, which also stay open
  *      through the daily lock and settle on the next word. reverseFlip
@@ -113,6 +112,7 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /// @dev Minimal Game surface consumed by the daily draw and generic WWXRP boon hook.
 interface IDrawGame {
+    function latestDailyResultDay() external view returns (uint24);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyerId);
     /// @notice DegenerusGame's recorded VRF word for `day` (0 if none recorded yet).
     function rngWordForDay(uint24 day) external view returns (uint256);
@@ -776,7 +776,7 @@ contract WWXRP {
     ///      Entry stays open during the daily RNG lock (like flip deposits):
     ///      the lock covers TODAY's word while this entry settles on
     ///      TOMORROW's, which cannot exist yet — structurally, since the game
-    ///      only ever records words for days <= the current wall day, so no
+    ///      only ever records words for requested logical days, so no
     ///      in-path check is needed. The
     ///      incinerator piggyback needs no such care: its deciding word's
     ///      request bumps the level off x99 first (see
@@ -792,6 +792,8 @@ contract WWXRP {
     ///                 register past paid admission.
     function enter(uint32 id, uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
+        // The requested logical day lives in Game slot 0 bits 24..47.
+        uint256 gameHeader = uint256(game.extsload_g8132(bytes32(0)));
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
@@ -799,10 +801,7 @@ contract WWXRP {
             if (!authorized) revert NotApproved();
         }
 
-        // Same pure wall-clock math as the game's own day index — no external
-        // call needed. Words for day+1 cannot exist yet: the game only ever
-        // records words for days <= the current wall day.
-        uint24 day = GameTimeLib.currentDayIndex();
+        uint24 day = uint24(gameHeader >> 24);
         // Self entrants resolve or register through the canonical Game registry before
         // activity and reward records use the ID. Registration follows the free-ID policy;
         // this token burn does not provide a qualifying ETH quote beyond that limit.
@@ -1285,7 +1284,7 @@ contract WWXRP {
 
     function _drawClaimOpen(uint24 participationDay) private view returns (bool) {
         if (participationDay == type(uint24).max) return false;
-        uint256 today = GameTimeLib.currentDayIndex();
+        uint256 today = game.latestDailyResultDay();
         uint256 resolves = uint256(participationDay) + 1;
         return resolves <= today && today - resolves <= 1;
     }

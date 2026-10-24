@@ -10,7 +10,7 @@ import {Vm} from "forge-std/Vm.sol";
 contract TerminalSetupNativeHost is DegenerusGame {
     function nativeTerminalSetup(uint256 allowance) external {
         (bool ok, bytes memory reason) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
-            abi.encodeWithSignature("runGameOverAdvance(uint24,uint24,uint256)", _simulatedDayIndex(), level,
+            abi.encodeWithSignature("runGameOverAdvance(uint24,uint24,uint256)", _wallDay(), level,
                 MineFlipGas.budget(allowance, 10_000, true)));
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
     }

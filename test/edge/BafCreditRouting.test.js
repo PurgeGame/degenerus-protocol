@@ -1,3 +1,4 @@
+import { completeLogicalDay } from "../helpers/logicalDayFixture.js";
 import { compiledStorageSlot } from "../helpers/storageLayout.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -144,22 +145,7 @@ describe("BafCreditRouting", function () {
     if ((word & 1n) === 0n) {
       throw new Error("word must be odd for a winning daily flip");
     }
-    await advanceToNextDay();
-    await game.connect(deployer).mineFlip(0);
-    const requestId = await getLastVRFRequestId(mockVRF);
-    try {
-      await mockVRF.fulfillRandomWords(requestId, word);
-    } catch {
-      /* may already be fulfilled */
-    }
-    for (let i = 0; i < 30; i++) {
-      if (!(await game.rngLocked())) break;
-      try {
-        await game.connect(deployer).mineFlip(0);
-      } catch {
-        break;
-      }
-    }
+    await completeLogicalDay(game, deployer, mockVRF, word);
   }
 
   /**

@@ -36,10 +36,13 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         address writePlayer,
         uint32 entriesEach
     ) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
 
-        purchaseStartDay = day - 121;
-        dailyIdx = day - 121;
+        purchaseStartDay = day - 30;
+        dailyIdx = day;
+        dailyComplete = !inJackpot && !isLastPurchase;
+        lastDailyRequestWallDay = day - 1;
+        lastDailyCompletedAt = uint48(block.timestamp - (dailyComplete ? 1 days : 14 days));
         level = lvl;
         jackpotPhaseFlag = inJackpot;
         jackpotCounter = 0;
@@ -64,9 +67,8 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         _setRngRequestActive(locked);
         _setRngSessionPublished(!locked);
         vrfRequestId = locked ? 777 : 1;
-        // A held request whose word was delivered is inside its 14-day window (mining resumed after
-        // the gap, sent this catch-up request, then stopped before the deadman); an unanswered one
-        // is past it.
+        // A delivered request is inside its own 14-day window. The independent
+        // completion clock still forces a hard ending in jackpot/transition states.
         rngRequestTime = locked ? uint48(block.timestamp - (preFreezeWord > 1 ? 2 days : 120 days)) : 1;
 
         ticketCursor = 0;
@@ -88,13 +90,16 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         address readPlayer,
         uint32 entries
     ) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
 
         // Trigger game-over through a daily request with nothing delivered for 14 days (VRF
         // dead). dailyIdx stays at `day`, keeping the deadman false and the day caught up and
         // sealed, so the purchase deadline stays off: the dead request is the only trigger.
-        purchaseStartDay = day - 121;
+        purchaseStartDay = day;
         dailyIdx = day;
+        dailyComplete = false;
+        lastDailyRequestWallDay = day;
+        lastDailyCompletedAt = uint48(block.timestamp);
         level = lvl;
         _setLevelPrizePool(lvl, type(uint256).max);
         jackpotPhaseFlag = false;
@@ -242,7 +247,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
     }
 
-    function testJackpotTerminalExcludesPostCommitWriteBuffer() public {
+    function testHardDeadlineDuringJackpotRetainsUncreatedClaimWeights() public {
         // Queue roots recycle under an absolute-level tag: the jump to level 777 models every
         // earlier level's queue as drained so the level-777 roots can bind.
         RingStorage.retireCompleted(address(game), LEVEL - 1);
@@ -266,46 +271,17 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
-        _decideEnding();
-        // The pre-freeze daily request's word only finalizes the lootbox index it reserved.
-        game.mineFlip(0);
-        assertFalse(game.rngLocked(), "pre-freeze request dropped");
-        assertEq(_holderEntryCount(LEVEL, committedBuyer), 0, "finalizing the index runs no drain batch");
+        uint256 requests = mockVRF.lastRequestId();
+        _finishHardEnding();
+        assertEq((uint256(game.extsload_g8132(bytes32(0))) >> 254) & 1, 0, "hard ending revokes callback authority");
+        assertEq(mockVRF.lastRequestId(), requests, "hard ending requests no new entropy");
+        assertEq(_holderEntryCount(LEVEL, committedBuyer), 0, "unfinished read tickets stay uncreated");
+        assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "unfinished write tickets stay uncreated");
+        assertEq(_totalQueuedOwed(LEVEL, committedBuyer), ENTRIES, "read claim weight retained");
+        assertEq(_totalQueuedOwed(LEVEL, frozenBuyer), ENTRIES, "write claim weight retained");
+        assertEq(_holderEntryCount(LEVEL, currentLevelWinner), 256, "created current inventory retained");
+        assertEq(claimableBalance(game, nextLevelWinner), 0, "other level receives no payout");
 
-        // The read cohort that request committed drains on its word, before the terminal swap.
-        game.mineFlip(0);
-        assertGt(_holderEntryCount(LEVEL, committedBuyer), 0, "pre-request read cohort materialized");
-        assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "write cohort waits for the terminal word");
-
-        // The one terminal swap takes the write cohort bought before the freeze, then the terminal
-        // request goes out: from here the terminal draw's cohort is fixed.
-        uint256 before = mockVRF.lastRequestId();
-        game.mineFlip(0);
-        uint256 requestId = mockVRF.lastRequestId();
-        assertGt(requestId, before, "terminal request sent after the swap");
-
-        // A write-buffer entry at the terminal level after that commitment.
-        seeder = _installSeeder();
-        seeder.seedWriteQueue(LEVEL, lateBuyer, ENTRIES);
-        _restoreGame();
-        mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
-
-        // Apply the terminal word, then drain the swapped cohort on it.
-        game.mineFlip(0);
-        assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "the application runs no drain batch");
-        game.mineFlip(0);
-        assertGt(_holderEntryCount(LEVEL, frozenBuyer), 0, "pre-request write cohort drawn on the terminal word");
-        assertFalse(game.gameOver(), "terminal jackpot remains isolated in its own tx");
-        assertEq(_holderEntryCount(LEVEL, lateBuyer), 0, "post-request write cohort not materialized");
-        assertEq(_totalQueuedOwed(LEVEL, lateBuyer), ENTRIES, "late write cohort remains queued");
-
-        // The payout must not promote the write buffer; it pays the current-level jackpot and latches.
-        game.mineFlip(0);
-        assertTrue(game.gameOver(), "game-over latches after committed snapshot drains");
-        assertEq(_holderEntryCount(LEVEL, lateBuyer), 0, "late cohort never enters terminal traits");
-        assertEq(_totalQueuedOwed(LEVEL, lateBuyer), ENTRIES, "late cohort remains excluded at latch");
-        assertGt(claimableBalance(game, currentLevelWinner), 0, "jackpot pays current-level cohort");
-        assertEq(claimableBalance(game, nextLevelWinner), 0, "jackpot does not pay level+1 cohort");
     }
 
     function testPurchaseTerminalFreezesUnsnappedNextLevelBeforeRequest() public {
@@ -339,7 +315,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         // The terminal word is applied in its own transaction.
         game.mineFlip(0);
-        assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "terminal word applied");
+        assertTrue(game.rngWordForDay(game.currentDayView() + 1) != 0, "separate terminal identity applied");
         assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "the application runs no drain batch");
 
         // Drain the frozen cohort, then settle in a separate transaction.
@@ -465,7 +441,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
     }
 
-    function testLockedLastPurchaseUsesPromotedReadCohort() public {
+    function testHardDeadlineDuringTransitionUsesPromotedReadCohort() public {
         TerminalCohortSeeder seeder = _installSeeder();
         seeder.seedTerminalState(
             LEVEL,
@@ -485,30 +461,15 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
-        // The first entry latches the promoted level while the last-purchase request still holds
-        // the lock; that request's word then only finalizes its lootbox index and it is dropped.
-        _decideEnding();
-        game.mineFlip(0);
-        assertFalse(game.rngLocked(), "pre-freeze request dropped");
+        uint256 requests = mockVRF.lastRequestId();
+        _finishHardEnding();
+        assertEq((uint256(game.extsload_g8132(bytes32(0))) >> 254) & 1, 0, "hard ending revokes callback authority");
+        assertEq(mockVRF.lastRequestId(), requests, "no terminal RNG is needed");
+        assertEq(_holderEntryCount(LEVEL, committedBuyer), 0, "promoted tickets stay uncreated");
+        assertEq(_totalQueuedOwed(LEVEL, committedBuyer), ENTRIES, "promoted claim weight retained");
+        assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level remains excluded");
+        assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later queue untouched");
 
-        // The promoted read cohort drains on that word.
-        game.mineFlip(0);
-        assertGt(_holderEntryCount(LEVEL, committedBuyer), 0, "sealed purchase cohort drains at promoted level");
-        assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level+1 write cohort remains excluded");
-        assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later write cohort remains queued");
-
-        // Terminal request, word application and payout, one transaction each.
-        uint256 before = mockVRF.lastRequestId();
-        game.mineFlip(0);
-        uint256 requestId = mockVRF.lastRequestId();
-        assertGt(requestId, before, "terminal request sent");
-        mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
-        game.mineFlip(0);
-        assertFalse(game.gameOver(), "payout runs apart from the word's application");
-        game.mineFlip(0);
-        assertTrue(game.gameOver(), "locked-transition terminal settlement completes");
-        assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level+1 write cohort never drawn");
-        assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later write cohort remains queued at latch");
     }
 
     function testRefusedTerminalRequestsKeepOneTimerAndNoCallbackAuthority() public {
@@ -558,6 +519,12 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "no ticket was materialized");
         assertEq(_totalQueuedOwed(LEVEL + 1, committedBuyer), ENTRIES, "the cohort stays queued for its claim");
         assertTrue(game.livenessTriggered(), "the trigger stays on after game over");
+    }
+
+    function _finishHardEnding() private {
+        assertTrue(game.livenessTriggered(), "hard deadline reached");
+        for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineFlip{gas: 16_000_000}(0);
+        assertTrue(game.gameOver(), "hard ending completes without normal consumers");
     }
 
     /// @dev The ending's first call only decides it (VRF alive: the loan book settles first) and

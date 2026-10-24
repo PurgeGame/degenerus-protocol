@@ -41,7 +41,7 @@ async function triggerGameOver(game, caller, mockVRF) {
   for (let i = 0; i < 12; i++) {
     const reqBefore = await getLastVRFRequestId(mockVRF);
     try {
-      await game.connect(caller).mineFlip(0);
+      await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
     } catch {
       /* may revert mid-sequence; keep driving */
     }

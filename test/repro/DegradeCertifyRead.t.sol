@@ -9,7 +9,7 @@ contract CertifyReadSeeder is DegenerusGame {
     /// @notice Published, delivered, unlocked, request inactive, every consumer clear, no
     ///         certificate: the selector reads stage 7 and selects CertifyRead.
     function seedStageSevenUncertified(uint256 word) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         dailyIdx = today;
         _afkingResetDay = today;
         purchaseStartDay = today;
@@ -45,7 +45,7 @@ contract CertifyReadSeeder is DegenerusGame {
 ///         selection implies certification, with no ETH moving.
 contract DegradeCertifyReadTest is DeployProtocol {
     bytes internal realCode;
-    uint8 private constant CERTIFY_READ = 14;
+    uint8 private constant CERTIFY_READ = 13;
 
     function setUp() public {
         _deployProtocol();

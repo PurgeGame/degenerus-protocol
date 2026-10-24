@@ -48,6 +48,8 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         _deployProtocol();
         // Genesis is the Craps warm-up day; play from genesis + 1.
         vm.warp(block.timestamp + 1 days);
+        _seedLogicalFixtureDay(game.currentDayView() + 1);
+        _primeCurrentDayRng();
         day = crapsBattle.currentDayIndex();
         ownerId = _giveWalletId(owner);
         walletId = _giveWalletId(wallet);

@@ -24,7 +24,6 @@ contract TerminalCoinflipFixture {
     uint24 public settledDay;
     function getCoinflipDayResult(uint24) external pure returns (uint16, bool) { return (0, false); }
     function processCoinflipPayouts(uint8, uint256, uint24 day) external { ++settlements; settledDay = day; }
-    function processCoinflipGap(uint256, uint24, uint24) external {}
 }
 
 /// @dev Answers the payout's game-over hooks and balance reads with nothing.
@@ -41,8 +40,11 @@ contract TerminalSinkFixture {
 ///      latched normal ending whose prior day sealed with a word.
 contract TerminalRngCheckpointHarness is DegenerusGameGameOverModule {
     function seed(address coordinator) external returns (uint24 priorDay) {
-        priorDay = _simulatedDayIndex();
+        priorDay = _wallDay();
         dailyIdx = priorDay;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         level = 10;
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
@@ -105,8 +107,7 @@ contract TerminalRngCheckpointsTest is Test {
         _advance(priorDay + 2, gasleft());
         uint48 applied = h.appliedAt();
         TerminalCoinflipFixture cf = TerminalCoinflipFixture(ContractAddresses.COINFLIP);
-        assertEq(cf.settlements(), 1);
-        assertEq(cf.settledDay(), day);
+        assertEq(cf.settlements(), 0, "terminal entry settles no coinflip day");
         assertEq(h.dayWord(day), 0xC0FFEE);
         // The next terminal call moves on to the (empty) payout and never re-applies the word.
         vm.etch(ContractAddresses.STETH_TOKEN, type(TerminalSinkFixture).runtimeCode);
@@ -115,7 +116,7 @@ contract TerminalRngCheckpointsTest is Test {
         vm.etch(ContractAddresses.SDGNRS, type(TerminalSinkFixture).runtimeCode);
         vm.warp(vm.getBlockTimestamp() + 2 days);
         _advance(priorDay + 4, gasleft());
-        assertEq(cf.settlements(), 1);
+        assertEq(cf.settlements(), 0);
         assertEq(h.appliedAt(), applied);
         (uint24 retainedDay, uint48 retainedAt, bool active, bool published) = h.identity();
         assertEq(retainedDay, day);
@@ -123,21 +124,16 @@ contract TerminalRngCheckpointsTest is Test {
         assertTrue(active && published);
     }
 
-    function test_ExtremeCalibrationRetainsTheExternalRequestMinimum() public {
-        // First mandatory progress bypasses the worker estimate, while the
-        // external coordinator call still requires its scaled forwarding minimum.
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        h.runGameOverAdvance{gas: 4_000_000}(
-            priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
-        (uint24 day, uint48 at, bool active,) = h.identity();
-        assertEq(day, 0);
-        assertEq(at, 0);
-        assertFalse(active);
-        assertEq(vrf.calls(), 0);
+    function test_ExtremeCalibrationStillAttemptsTheFirstRequest() public {
         (,,, bool progressed) = h.runGameOverAdvance{gas: 4_000_000}(
-            priorDay, 10, MineFlipGas.budget(4_000_000, 0, true));
+            priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
+        (uint24 day, uint48 at, bool active, bool published) = h.identity();
         assertTrue(progressed);
-        assertEq(vrf.calls(), 1);
+        assertEq(day, priorDay + 1);
+        assertEq(at, vm.getBlockTimestamp());
+        assertTrue(active);
+        assertFalse(published);
+        assertEq(vrf.calls(), 1, "the mandatory request uses the remaining gas");
     }
 
     function test_CoordinatorGasFailureCannotUndoArmedTimer() public {

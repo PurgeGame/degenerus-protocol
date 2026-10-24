@@ -12,7 +12,7 @@ import {RedemptionCloseTools} from "./helpers/RedemptionCloseTools.sol";
 
 contract WriteTrimSeeder is DegenerusGameStorage {
     function seed(uint32 id, uint32 entries) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         _recordDailyRng(day - 1, 123456);
         dailyIdx = day;
         purchaseStartDay = day;
@@ -224,9 +224,9 @@ contract AfkingWriteTrimTest is DeployProtocol {
         uint256 calls;
         while (game.rngConsumerStage_g379() == 2) {
             require(++calls < 200, "harness: open walk never finished");
-            uint256 gasCap = _minimalGas();
+            uint256 gasCap = _singleUnitGas();
             vm.recordLogs();
-            game.mineFlip{gas: gasCap}(0);
+            game.mineFlip{gas: gasCap}(type(uint32).max);
             _tallySettlements(vm.getRecordedLogs());
         }
         assertGt(calls, 1, "open walk split across calls");
@@ -254,16 +254,16 @@ contract AfkingWriteTrimTest is DeployProtocol {
         _drainDay(uint256(keccak256("wt_pre")) | 1);
         vm.warp(block.timestamp + 1 days);
         // Run the new day's earlier work, stopping where subscriber preparation is next.
-        for (uint256 i; i < 400 && game.nextMinerAction() != 15; ++i) _stepMinimal();
-        assertEq(game.nextMinerAction(), 15, "preparation is next"); // PrepareSubscriptions
+        for (uint256 i; i < 400 && game.nextMinerAction() != 14; ++i) _stepMinimal();
+        assertEq(game.nextMinerAction(), 14, "preparation is next"); // PrepareSubscriptions
         uint256 poolBefore = game.claimablePoolView();
         int256 balancesBefore = _balanceSum(a, b, c);
         int256 minerBefore = _balance(game.walletIdOf_g3120(address(this)));
 
         uint256 calls;
-        for (; calls < 400 && game.nextMinerAction() == 15; ++calls) _stepMinimal();
+        for (; calls < 400 && game.nextMinerAction() == 14; ++calls) _stepMinimal();
         assertGt(calls, 1, "preparation split across chunks");
-        assertTrue(game.nextMinerAction() != 15, "preparation finished");
+        assertTrue(game.nextMinerAction() != 14, "preparation finished");
 
         int256 balanceDelta = _balanceSum(a, b, c) - balancesBefore
             + _balance(game.walletIdOf_g3120(address(this))) - minerBefore;
@@ -350,23 +350,12 @@ contract AfkingWriteTrimTest is DeployProtocol {
         }
     }
 
-    /// @dev The smallest mineFlip allowance that succeeds now (bisection over snapshots).
-    function _minimalGas() private returns (uint256) {
-        uint256 lo = 200_000;
-        uint256 hi = 30_000_000;
-        while (hi - lo > 1_000) {
-            uint256 mid = (lo + hi) / 2;
-            uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-            vm.revertToStateAndDelete(snap);
-            if (ok) hi = mid;
-            else lo = mid;
-        }
-        return hi;
-    }
+    /// @dev Maximum multiplier exposes exactly one mandatory unit per call. A successful
+    ///      low-gas coordinator refusal is not evidence that a request was made.
+    function _singleUnitGas() private pure returns (uint256) { return 30_000_000; }
 
     function _stepMinimal() private {
-        game.mineFlip{gas: _minimalGas()}(0);
+        game.mineFlip{gas: _singleUnitGas()}(type(uint32).max);
     }
 
     function _fulfill(uint256 vrfWord) private {
@@ -386,7 +375,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
         _drainDay(vrfWord ^ 0xF00D);
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 400; ++i) {
-            if (game.nextMinerAction() == 17) return; // RequestDaily
+            if (game.nextMinerAction() == 16) return; // RequestDaily
             uint256 req = mockVRF.lastRequestId();
             _stepMinimal();
             if (mockVRF.lastRequestId() != req && _resetDay() == _today()) return;
@@ -400,7 +389,8 @@ contract AfkingWriteTrimTest is DeployProtocol {
 
     function _drainDay(uint256 vrfWord) private {
         for (uint256 i; i < 800; ++i) {
-            if (!game.advanceDue() && game.rngComplete()) return;
+            (bool complete,,) = game.dailySessionState();
+            if (complete && !game.advanceDue() && game.rngComplete()) return;
             _fulfill(vrfWord + i);
             _stepMinimal();
         }

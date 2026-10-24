@@ -350,7 +350,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         s0 = boonPacked[id].slot0;
         uint24 boonDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         if (boonDay != 0) {
-            uint24 currentDay = _simulatedDayIndex();
+            uint24 currentDay = _gameDay();
             uint24 deityWhaleDay = uint24(s0 >> BP_DEITY_WHALE_DAY_SHIFT);
             valid = deityWhaleDay != 0 ? deityWhaleDay == currentDay : currentDay <= boonDay + 4;
         }
@@ -626,7 +626,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint16 boonDiscountBps = _lazyPassTierToBps(lazyTier);
         uint24 boonDay = uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT);
         if (boonDay != 0) {
-            uint24 currentDay = _simulatedDayIndex();
+            uint24 currentDay = _gameDay();
             uint24 deityDay = uint24(s1 >> BP_DEITY_LAZY_PASS_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
                 bpLazy.slot1 = (s1 & BP_LAZY_PASS_CLEAR) | BP_SLOT1_RETAINED;
@@ -851,12 +851,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             bool expired;
             uint24 deityDay = uint24(s1Deity >> BP_DEITY_DEITY_PASS_DAY_SHIFT);
             if (deityDay != 0) {
-                expired = uint24(_simulatedDayIndex()) > deityDay;
+                expired = uint24(_gameDay()) > deityDay;
             } else {
                 uint24 stampDay = uint24(s1Deity >> BP_DEITY_PASS_DAY_SHIFT);
                 expired =
                     stampDay > 0 &&
-                    uint24(_simulatedDayIndex()) >
+                    uint24(_gameDay()) >
                     stampDay + DEITY_PASS_BOON_EXPIRY_DAYS;
             }
             if (!expired) {

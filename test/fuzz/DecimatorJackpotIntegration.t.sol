@@ -61,7 +61,7 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
 
     function prepare(uint24 lvl, uint40 n, uint96 pot, uint128 ethBudget, uint256 word, bool entries) external {
         level = lvl;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         jackpotPhaseFlag = true;
         jackpotFlags = JACKPOT_TURBO;
         rngLockedFlag = true;

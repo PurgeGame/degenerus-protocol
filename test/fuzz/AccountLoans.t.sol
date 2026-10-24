@@ -32,14 +32,13 @@ contract LoanSeeder is DegenerusGameStorage {
         prizePoolFrozen = true;
         _setPendingPools(0.5 ether, 0.25 ether);
     }
-    function creditStallDays(uint24 count) external { purchaseStartDay += count; }
     function awardSdgnrs(uint32 id, uint256 amount) external {
         dgnrs.transferFromPool(IsDGNRS.Pool.Reward, _payee(_walletElement(id)), amount);
     }
     function seedLevel(uint32 id, uint24 level_, uint32 entries) external { _queueEntries(id, level_, entries, false); }
 
     function seed(uint32 id, uint32 entries, uint128 claimable, uint128 prepaid) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         _recordDailyRng(day - 1, 123456);
         dailyIdx = day;
         purchaseStartDay = day;
@@ -121,6 +120,7 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function _resolve(uint24 day, bool win) private {
         vm.warp((uint256(day - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        _seedLogicalFixtureDay(day);
         uint256 word = win ? 123457 : 123456;
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, word, day);
@@ -343,6 +343,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     function _warpDaysIn(uint256 daysIn) private {
         uint256 start = uint24(uint256(vm.load(address(game), bytes32(GameSlots.PURCHASE_START_DAY))));
         vm.warp((start + daysIn - 1 + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        _seedLogicalFixtureDay(uint24(start + daysIn));
     }
 
     function test_DayTwentyLoanIsAllEth() public {
@@ -474,15 +475,13 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore);
     }
 
-    function test_CreditedStallDaysDelayLoanTicketThreshold() public {
+    function test_CalendarStallDoesNotChangeLoanTicketThreshold() public {
+        _warpDaysIn(20);
+        assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).ticketWei, 0);
+        vm.warp(vm.getBlockTimestamp() + 2 days);
+        assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).ticketWei, 0);
         _warpDaysIn(21);
         assertGt(lens.previewBorrow(address(game), root, 1, type(uint256).max).ticketWei, 0);
-        _etch(); LoanSeeder(address(game)).creditStallDays(2); _unetch();
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
-        assertEq(q.ticketWei, 0);
-        uint256 before = seller.balance;
-        _borrow(root, 1);
-        assertEq(seller.balance, before + q.principal);
     }
 
     function test_LateLoanBelowOneTicketPaysAllCash() public {
@@ -1290,6 +1289,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _coinState(child, 71, 10_000, 2);
         _default(root);
         vm.warp(block.timestamp + 1 days);
+        _seedLogicalFixtureDay(3); // accepted, unresolved round freezes the existing carry
         (uint256 ethOut, uint256 flipOut) = game.sweepAccounts(_one(child));
         assertEq(ethOut, 0); assertEq(flipOut, 71);
         (bool enabled,, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(child);

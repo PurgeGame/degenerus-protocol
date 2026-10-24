@@ -55,10 +55,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
 
     function _step(uint256 supplied) private returns (uint256 used, uint256 reward) {
         vm.recordLogs();
-        vm.prank(MINER);
-        uint256 before = gasleft();
-        game.mineFlip{gas: supplied}(0);
-        used = before - gasleft() + 21_192;
+        used = this.pricedMine(supplied);
         assertLe(used, supplied + 30_000, "engine call exceeds supplied gas plus intrinsic/frame");
         if (used > largestCall) largestCall = used;
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -80,6 +77,17 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
             }
         }
         if (paidJackpot) ++payoutCalls;
+    }
+
+    /// @dev Set the fee after --isolate creates the outer transaction; measure only
+    ///      the production mineFlip call and its intrinsic gas, excluding this adapter.
+    function pricedMine(uint256 supplied) external returns (uint256 used) {
+        require(msg.sender == address(this));
+        vm.fee(1 gwei);
+        vm.prank(MINER);
+        uint256 before = gasleft();
+        game.mineFlip{gas: supplied}(0);
+        used = before - gasleft() + 21_192;
     }
 
     function _fulfillPending() private {
@@ -180,10 +188,11 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
                 uint256 request = mockVRF.lastRequestId();
                 uint48 read = RecyclingState.readBuffer(address(game));
                 uint256 word = RecyclingState.word(address(game), read);
-                // mineFlip is the only door to a fresh request, and it selects one (daily 17 or
-                // mid-day 18) only after the read cohort completes: no caller can reach one here.
+                // mineFlip selects a fresh daily or mid-day request only after the read
+                // cohort completes: no caller can reach one here.
                 uint8 creditless = game.nextMinerAction();
-                assertTrue(creditless != 17 && creditless != 18, "no fresh request is selectable");
+                assertTrue(creditless != uint8(DegenerusGameStorage.MinerAction.RequestDaily)
+                    && creditless != uint8(DegenerusGameStorage.MinerAction.RequestMidday), "no fresh request is selectable");
                 vm.prank(MINER);
                 uint8 asMiner = game.minerAction();
                 assertEq(asMiner, creditless, "the miner selects the same consumer stage");

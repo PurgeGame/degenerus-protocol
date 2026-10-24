@@ -483,7 +483,7 @@ abstract contract GamePurchase is
         if (amount < principal) principal = amount;
         uint24 buyLevel = _activeTicketLevel();
         uint256 price = PriceLookupLib.priceForLevel(buyLevel);
-        uint256 ticketWei = _loanTicketWei(principal, _simulatedDayIndex(), purchaseStartDay, price,
+        uint256 ticketWei = _loanTicketWei(principal, _gameDay(), purchaseStartDay, price,
             jackpotPhaseFlag);
         if (principal < LOAN_MIN_PRINCIPAL || principal - ticketWei < minEthOut) revert E();
         uint32 lender = _resolveLender(principal);

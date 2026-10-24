@@ -177,7 +177,9 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
         assertGe(handler.ghost_fulfilments(), 1, "vacuous: no word delivered");
         assertGe(handler.ghost_frozenChecks(), 1, "vacuous: frozen inputs never re-checked");
         assertGe(handler.ghost_boxEpochChecks(), 1, "vacuous: sealed boxes never re-checked");
-        assertGe(handler.ghost_battleLocks(), 1, "vacuous: no jackpot battle locked");
+        // The fixed first window is day 3; a run ending on day 3 has no battle yet.
+        if (game.currentDayView() >= 4 && !game.gameOver())
+            assertGe(handler.ghost_battleLocks(), 1, "vacuous: no jackpot battle locked");
         assertGe(
             handler.ghost_buysWhileRequestOpen() + handler.ghost_boxBuysWhileRequestOpen()
                 + handler.ghost_delaysWhileRequestOpen() + handler.ghost_nudgeAttemptsInDailyWindow(),
@@ -211,6 +213,10 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
         assertGe(handler.ghost_boxBuysWhileRequestOpen(), 1, "a box buy inside the window");
         assertGe(handler.ghost_nudgeAttemptsInDailyWindow(), 1, "a refused nudge");
         assertEq(handler.ghost_retries(), 1, "the retry re-issued");
+        handler.drainAll();
+        handler.nextDay(0);
+        handler.drainAll();
+        assertGe(handler.ghost_battleLocks(), 1, "the next request locks the first logical window");
         invariant_degenesisOutcomesBindToTheirRequest();
         invariant_pricingRidesItsRequest();
         invariant_pendingInputsFrozen();

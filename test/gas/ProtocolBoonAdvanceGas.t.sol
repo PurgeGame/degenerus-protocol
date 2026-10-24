@@ -13,8 +13,11 @@ import {Vm} from "forge-std/Vm.sol";
 
 contract ProtocolDrawGasSeeder is DegenerusGameStorage {
     function seed() external {
-        uint24 day = _simulatedDayIndex();
-        dailyIdx = day - 1;
+        uint24 day = _wallDay();
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;
@@ -50,13 +53,14 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 2 days);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentWallDayView();
         bytes memory original = address(game).code;
         vm.etch(address(game), type(ProtocolDrawGasSeeder).runtimeCode);
         ProtocolDrawGasSeeder(address(game)).seed();
         vm.etch(address(game), type(ProtocolBoonDrawSeeder).runtimeCode);
         ProtocolBoonDrawSeeder(address(game)).seedPools(day, 987654321);
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(day);
     }
     function testColdAdvanceAwardsSixAtMaximumSearchDepthAndResumes() public {
         vm.recordLogs();

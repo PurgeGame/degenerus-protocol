@@ -385,8 +385,65 @@ abstract contract DeployProtocol is Test {
         crapsEngine = CrapsEngine(payable(address(crapsBattle)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS
+        // A post-Degenesis unit-test fixture must seed logical headers explicitly:
+        // advancing wall time alone no longer advances gameplay. Day-one fixtures skip this.
+        uint24 fixtureDay = _deployDay();
+        if (fixtureDay != 1) {
+            _seedLogicalFixtureDay(fixtureDay);
+            _seedCrapsFixtureCursor(fixtureDay);
+        }
         _beforeProtocolDeityInitialization();
         if (initializeDeities) game.initProtocolDeity();
+    }
+
+    /// @dev The synthetic post-bootstrap history has no outstanding scheduled battles.
+    function _seedCrapsFixtureCursor(uint24 day) internal {
+        bytes32 slot = bytes32(uint256(11));
+        uint256 word = uint256(vm.load(address(crapsBattle), slot));
+        vm.store(address(crapsBattle), slot, bytes32((word & ~uint256(type(uint64).max)) | (uint256(day) * 8)));
+    }
+
+    /// @dev Header-only post-Degenesis fixture, with no synthetic results or seed emissions.
+    ///      End-to-end bootstrap tests use DegenesisDeployProtocol and the actual request chain.
+    function _seedLogicalFixtureDay(uint24 day) internal {
+        uint256 session = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint256 wall = game.currentWallDayView();
+        session = (session & ~((uint256(0xff) << 24) | (uint256(0xffffff) << 216))) | (uint256(1) << 24) | (wall << 216);
+        vm.store(address(game), bytes32(uint256(5)), bytes32(session));
+        uint256 clocks = uint256(vm.load(address(game), bytes32(uint256(13))));
+        vm.store(address(game), bytes32(uint256(13)), bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (vm.getBlockTimestamp() << 128)));
+        uint256 header = uint256(vm.load(address(game), bytes32(0)));
+        header = (header & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24);
+        vm.store(address(game), bytes32(0), bytes32(header));
+        uint256 afking = uint256(vm.load(address(game), bytes32(uint256(40))));
+        afking = (afking & ~(uint256(0xffffff) << 216)) | (uint256(day) << 216);
+        vm.store(address(game), bytes32(uint256(40)), bytes32(afking));
+        _syncCoinflipFixtureDay(day);
+    }
+
+    /// @dev Unit-test request headers only: preserve claim cursors, records, quest clocks and completion state.
+    function _setRequestedFixtureDay(uint24 day) internal {
+        uint256 header = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32((header & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24)));
+        uint256 flips = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)),
+            bytes32((flips & ~(uint256(0xffffff) << 176)) | (uint256(day) << 176)));
+    }
+
+    /// @dev Synchronize a synthetic Game header without changing its request/completion state.
+    function _syncCoinflipFixtureDay(uint24 day) internal {
+        uint256 flips = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        flips = (flips & ~(uint256(0xffffff) << 176)) | (uint256(day) << 176);
+        for (uint256 i; i < 5; ++i) {
+            uint256 shift = (i == 4 ? 19 : 4 + 3 * i) * 8;
+            flips = (flips & ~(uint256(0xffffff) << shift)) | (uint256(day) << shift);
+        }
+        vm.store(address(coinflip), bytes32(uint256(4)), bytes32(flips));
+        bytes32 root = 0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200;
+        uint256 pair = uint256(vm.load(address(coinflip), root));
+        uint256 mask = uint256(0xffffff) | (uint256(0xffffff) << 64);
+        pair = (pair & ~mask) | day | (uint256(day) << 64);
+        vm.store(address(coinflip), root, bytes32(pair));
     }
 
     /// @dev Reach the real post-daily subscription window after a test advances time.

@@ -56,7 +56,8 @@ contract GameRetentionHarness is DegenerusGameRngUtils {
 contract RetainedBoonHarness is DegenerusGameBoxModule {
     function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16) { return _consumeActionBoon(id); }
     function seed(uint256 s0) external { boonPacked[7].slot0 = s0; }
-    function today() external view returns (uint24) { return _simulatedDayIndex(); }
+    function today() external view returns (uint24) { return _gameDay(); }
+    function setDay(uint24 day) external { dailyIdx = day; }
 }
 
 contract RetainedTicketBudgetHarness is DegenerusGameJackpotModule {
@@ -81,6 +82,7 @@ contract GameRetentionTest is Test {
     function test_BoonConsumeAndExpiryRetainSlotZero() public {
         vm.etch(ContractAddresses.GAME, address(new RetainedBoonHarness()).code);
         RetainedBoonHarness boon = RetainedBoonHarness(ContractAddresses.GAME);
+        boon.setDay(1);
         uint24 day = boon.today();
         boon.seed(RETAINED | day | (uint256(3) << 48));
         assertEq(boon.consumeCoinflipBoon_g2902(7), 2500);
@@ -89,6 +91,7 @@ contract GameRetentionTest is Test {
         assertFalse(boon.checkAndClearExpiredBoon(7), "sentinel is not a live boon");
         boon.seed(RETAINED | (uint256(day) << 200) | (uint256(3) << 248));
         vm.warp(block.timestamp + 5 days);
+        boon.setDay(day + 5);
         assertFalse(boon.checkAndClearExpiredBoon(7));
         (s0,) = boon.boonPacked(7);
         assertEq(s0, RETAINED, "whale expiry preserves bit 255");

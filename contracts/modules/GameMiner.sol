@@ -78,7 +78,8 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
             // Only reads separate the initial selection from the first dispatch.
             // Every later iteration must reselect after the preceding worker's changes.
             MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender, meter);
-            if (action == MinerAction.Idle || action == MinerAction.Wait) break;
+            if (action == MinerAction.Idle || action == MinerAction.Wait
+                || (action == MinerAction.Terminal && first != MinerAction.Terminal)) break;
             if (moved) MineFlipGas.markProgress(meter);
             if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
 
@@ -86,7 +87,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                 // Selected only with the read cohort drained (stage 7) and no certificate.
                 // That selector read is the certificate's evidence, so certify from it:
                 // the action can never be reselected in the same state.
-                _setRngComplete(true);
+                _certifyRngComplete();
                 moved = true;
                 MineFlipGas.markProgress(meter);
                 continue;
@@ -94,7 +95,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
 
             if (action == MinerAction.PrepareSubscriptions && _afkingResetDay <= dailyIdx) {
                 // Once pinned, a preparation day survives midnight and partial batches.
-                _afkingResetDay = _simulatedDayIndex();
+                _afkingResetDay = dailyIdx + 1;
                 _subCursor = 0;
                 _subOpenCursor = 0;
                 subsFullyProcessed = false;
@@ -114,16 +115,12 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                 basicResult = true;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
                 callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runTerminalPhase.selector, allowance);
-            } else if (action == MinerAction.DailyGap || action == MinerAction.DailyApply) {
-                bool gap = action == MinerAction.DailyGap;
-                uint256 applyMax = gap ? GasBounds.DAILY_GAP : GasBounds.DAILY_APPLY;
-                // Recording a word also copies it for Degenesis until the seventh cohort closes.
+            } else if (action == MinerAction.DailyApply) {
+                uint256 applyMax = GasBounds.DAILY_APPLY;
                 if (degenesisClosed < DEGENESIS_DAYS) applyMax += GasBounds.DEGENESIS_WORD_COPY_GAS;
                 if (!MineFlipGas.canRun(meter, applyMax, RETURN_RESERVE + WORKER_BOUNDARY)) break;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
-                callData = abi.encodeWithSelector(
-                    gap ? IDegenerusGameAdvanceModule.applyDailyGap.selector : IDegenerusGameAdvanceModule.applyDailyWord_g1652.selector
-                );
+                callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyWord_g1652.selector);
             } else if (action == MinerAction.DailyPhase) {
                 basicResult = true;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;

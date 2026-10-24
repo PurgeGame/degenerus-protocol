@@ -14,12 +14,15 @@ import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 ///      lock/request/apply RNG, consolidate/seal, generate entries, unlock and pay originals.
 contract DecimatorPurchaseSeeder is BucketSeed {
     function seed(bool fast) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         // The seeded buckets represent minted tickets through purchase level 5.
         // Retire their already-consumed genesis queues before the circular keys are reused.
         TQ.retireCompleted(address(this), 5);
         level = 4;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         purchaseStartDay = day - (fast ? 1 : 3);
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
@@ -30,7 +33,7 @@ contract DecimatorPurchaseSeeder is BucketSeed {
         _setLevelPrizePool(3, 350 ether);
         _setLevelPrizePool(4, 400 ether);
         _setDecWindowOpen(true);
-        decBattleRounds[5].openedDay = day;
+        decBattleRounds[5].openedDay = day - 1;
         decEntriesLevel = 5;
         for (uint256 trait; trait < 256; ++trait) _seedBucket(5, uint8(trait), address(0xA100), 1);
     }
@@ -59,6 +62,8 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
         vm.etch(address(game), type(DecimatorPurchaseSeeder).runtimeCode);
         DecimatorPurchaseSeeder(address(game)).seed(fast);
         vm.etch(address(game), code);
+        _syncCoinflipFixtureDay(DAY - 1);
+        _seedCrapsFixtureCursor(DAY - 1);
         vm.deal(address(game), 600 ether);
         vm.prank(address(0xA100));
         crapsBattle.setPreferredBoard(0, 3);
@@ -115,7 +120,7 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
                 assertLt(calls, 999, "closing daily or original settlement stalled");
             }
             if (lens.decBattleRoundOf(address(game), 5).phase == 3) break;
-            vm.warp(block.timestamp + 1 days);
+            vm.warp(vm.getBlockTimestamp() + 1 days);
         }
         DegenerusGameStorage.DecJackpotPlan memory plan = lens.decJackpotPlanOf(address(game), 5);
         DegenerusGameStorage.DecBattleRound memory round = lens.decBattleRoundOf(address(game), 5);

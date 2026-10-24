@@ -14,7 +14,7 @@ contract IdVoteAdminHarness is DegenerusAdmin {
         proposalCount = 1;
         proposals[1] = Proposal({proposer: 1, createdAt: uint40(block.timestamp), votingSnapshot: 1_000_000,
             path: ProposalPath.Community, state: ProposalState.Active, coordinator: address(0xBEEF),
-            approveWeight: 0, rejectWeight: 0, keyHash: bytes32(uint256(1))});
+            callbackGasLimit: 300_000, approveWeight: 0, rejectWeight: 0, keyHash: bytes32(uint256(1))});
     }
 }
 

@@ -265,7 +265,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.pauseGasMetering();
         _driveDay();
         _stallDailyRequest();
-        uint24 sealedDay = _dailyIdx() + 1; // the day this stalled word will resolve
+        uint24 sealedDay = _dailyIdx(); // the day this stalled word will resolve
 
         // The wall clock crosses the next day break before the word arrives.
         simTime += 1 days + 1;
@@ -475,7 +475,8 @@ contract DailyRngStallRecovery is DeployProtocol {
         for (uint256 i; i < 64; i++) {
             if (game.rngLocked()) return;
             uint8 action = game.nextMinerAction();
-            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == uint8(DegenerusGameStorage.MinerAction.Idle)
+                || action == uint8(DegenerusGameStorage.MinerAction.RequestDaily)) return;
             if (action == 2) {
                 uint256 id = mockVRF.lastRequestId();
                 (, , bool done) = mockVRF.pendingRequests(id);
@@ -571,13 +572,14 @@ contract DailyRngStallRecovery is DeployProtocol {
         _driveDay();
         _stallDailyRequest();
 
-        simTime += 13 days;
+        (,,uint48 completedAt) = game.dailySessionState();
+        simTime = uint256(completedAt) + 14 days - 1;
         vm.warp(simTime);
-        assertFalse(game.livenessTriggered(), "inside the VRF-dead window a stall is only waited out");
+        assertFalse(game.livenessTriggered(), "hard deadline is anchored to full daily completion");
 
-        simTime += 2 days;
+        simTime += 1;
         vm.warp(simTime);
-        assertTrue(game.livenessTriggered(), "14 days with nothing delivered: VRF dead");
+        assertTrue(game.livenessTriggered(), "exactly 14 days without daily completion ends the game");
         for (uint256 j = 0; j < 20 && !game.gameOver(); j++) {
             (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;

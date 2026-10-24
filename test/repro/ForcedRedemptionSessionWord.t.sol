@@ -126,7 +126,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         assertFalse(game.rngLocked(), "daily work released the lock");
         assertTrue(sdgnrs.redemptionSettlementPending(), "read cohort remains outstanding");
         assertFalse(game.rngComplete(), "reuse blocked before remaining claims settle");
-        assertEq(game.nextMinerAction(), 8, "no request can cut in ahead of MinerAction.Redemption");
+        assertEq(game.nextMinerAction(), 7, "no request can cut in ahead of MinerAction.Redemption");
 
         // FIFO: the first unsettled owner heads the queue; at least one more follows it.
         uint256 head = OWNERS;

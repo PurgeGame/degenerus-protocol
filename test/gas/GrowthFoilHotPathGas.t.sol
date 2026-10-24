@@ -16,7 +16,10 @@ contract GrowthFoilGasSeeder is DegenerusGameStorage {
     }
     function seed(address player, uint256 mintData) external {
         level = 24;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = 21;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
         rngRequestTime = uint48(block.timestamp);
         degenesisClosed = 7;
@@ -61,6 +64,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
         GrowthFoilGasSeeder(address(game)).seed(PLAYER, mintData);
         mintSlot = GrowthFoilGasSeeder(address(game)).mintSlot(PLAYER);
         vm.etch(address(game), code);
+        _syncCoinflipFixtureDay(DAY);
         pid = game.walletIdOf_g3120(PLAYER);
     }
 

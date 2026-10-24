@@ -103,7 +103,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         // day's separator, so nothing can ever fall behind initialization: a pass awarded
         // earlier reserves the first window day, and the cursor is already standing there.
         // Written from INIT code, which costs the runtime nothing.
-        uint256 first = uint256(_currentDayIndex()) + 1;
+        uint256 first = 2;
         if (first <= GameTimeLib.DEGENESIS_START_DAY) first = GameTimeLib.DEGENESIS_START_DAY + 1;
         _bonus = first;
         _minerSlot = uint64(_daySlotOf(first));
@@ -1305,6 +1305,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     function openBonusDay() external {
         if (msg.sender != _GAME) revert OnlyGame();
         uint24 today = _currentDayIndex();
+        if (!_scheduledAdmissionsOpen()) return;
         unchecked {
             if (_bonus >= uint256(today) + 1) return;
             // The word is what draws every window's terms, and it is what makes the house's seat
@@ -1337,8 +1338,14 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
             emit CrapsProgressiveFunded(today, contribution, pool);
             emit CrapsHighRollerDayOpened(today, uint16(_highMultOf(word)), mainBudget, highBudget);
             uint256 cost;
+            (, uint256 firstOpen,) = _currentBonusSlot();
             for (uint256 p = 0; p < _BONUS_PERIODS_PER_DAY; ++p) {
-                cost += _openWindow(today, p, word);
+                if (p < firstOpen) {
+                    bytes32 key = bytes32(_slotOf(today, p));
+                    _storeBattle(key, _loadBattle(key) | (_BG_TERMS_SKIPPED << _BG_TERM_TIER_SHIFT));
+                } else {
+                    cost += _openWindow(today, p, word);
+                }
             }
             // The house and the vault take DAY seats — one ticket each for the whole day, rather
             // than one per window. Two bet writes instead of fourteen, for the same field in every
@@ -1386,6 +1393,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
                 if (block.timestamp >= ((c >> _CB_CLOSE_SHIFT) & _CB_CLOSE_MASK)) revert BonusPeriodSpent();
             }
         } else {
+            if (!_scheduledAdmissionsOpen()) revert BonusPeriodSpent();
             // A window whose period has already come round is shut whether or not anyone armed it.
             if (_isJackpotSlot(slot)) {
                 if (slot != _slotOf(_bonus - 1, _BONUS_PERIODS_PER_DAY - 1)
@@ -1576,7 +1584,8 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     function _currentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
         day = _currentDayIndex();
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
-        if (elapsed >= 1 days - 20 minutes) period = 5;
+        if (_scheduleResetPassed()) period = _BONUS_PERIODS_PER_DAY;
+        else if (elapsed >= 1 days - 20 minutes) period = 5;
         else if (elapsed >= 20 minutes) {
             unchecked { period = 1 + (elapsed - 3 minutes) / 6 hours; }
         }

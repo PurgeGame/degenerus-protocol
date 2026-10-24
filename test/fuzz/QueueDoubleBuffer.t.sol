@@ -115,7 +115,7 @@ contract QueueDoubleBufferTest is Test {
 
     function setUp() public {
         // Warp past JACKPOT_RESET_TIME (82620s) so GameTimeLib.currentDayIndexAt(block.timestamp)
-        // does not underflow when a queue write reaches _livenessTriggered -> _simulatedDayIndex.
+        // does not underflow when a queue write reaches _livenessTriggered -> _wallDay.
         // Foundry's default block.timestamp is 1; ts - JACKPOT_RESET_TIME would revert Panic(0x11).
         vm.warp(block.timestamp + 1 days);
         harness = new QueueHarness();
@@ -312,7 +312,7 @@ contract MidDaySwapTest is Test {
 
     function setUp() public {
         // Warp past JACKPOT_RESET_TIME (82620s) so GameTimeLib.currentDayIndexAt(block.timestamp)
-        // does not underflow when a queue write reaches _livenessTriggered -> _simulatedDayIndex.
+        // does not underflow when a queue write reaches _livenessTriggered -> _wallDay.
         // Foundry's default block.timestamp is 1; ts - JACKPOT_RESET_TIME would revert Panic(0x11).
         vm.warp(block.timestamp + 1 days);
         harness = new QueueHarness();

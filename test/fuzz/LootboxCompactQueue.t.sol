@@ -614,7 +614,7 @@ contract CompactProducerFixture is DegenerusGameStorage, WalletSeed {
         uint32 id = _seedWallet(who);
         uint256 s0 = boonPacked[id].slot0 & BP_WHALE_CLEAR;
         boonPacked[id].slot0 = s0 | (uint256(tier) << BP_WHALE_TIER_SHIFT)
-            | (uint256(_simulatedDayIndex()) << BP_WHALE_DAY_SHIFT);
+            | (uint256(_wallDay()) << BP_WHALE_DAY_SHIFT);
     }
 }
 

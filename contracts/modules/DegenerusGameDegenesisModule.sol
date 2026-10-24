@@ -153,7 +153,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         if (address(this) != ContractAddresses.GAME) revert E();
         uint32 buyerId = _registerCallerAccount(_resolveAccountId(id), amount);
         uint256 value = msg.value;
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _gameDay();
         uint256 units = amount / DEGENESIS_UNIT;
         if (
             !_degenesisSaleDay(today) || _livenessTriggered() || amount < DEGENESIS_MIN
@@ -180,7 +180,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         uint256 degenesisDay = today - GameTimeLib.DEGENESIS_START_DAY + 1;
         uint256 header = degenesisDays[degenesisDay];
         uint256 index = uint32(header >> GD_COUNT_SHIFT);
-        uint256 secondsIntoDay = (block.timestamp - GameTimeLib.JACKPOT_RESET_TIME) % 1 days;
+        uint256 secondsIntoDay = block.timestamp - degenesisOpenedAt;
         if (secondsIntoDay > DEGENESIS_BONUS_WINDOW) secondsIntoDay = DEGENESIS_BONUS_WINDOW;
         uint256 lane = buyerId | (units << DEGENESIS_AMOUNT_SHIFT) | (secondsIntoDay << DEGENESIS_SECONDS_SHIFT);
         uint256 key = (degenesisDay << 32) | (index / 3);
@@ -539,7 +539,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
             IDegenesisPasses(ContractAddresses.CRAPS).creditPasses(o.id, o.normalPasses, o.highPasses);
         }
         if (o.wwxrp) IDegenesisWwxrp(ContractAddresses.WWXRP).creditPrize(o.id, DEGENESIS_WWXRP_PRIZE);
-        uint256 boonSeed = EntropyLib.hash4(RngTags.DEGENESIS_BOON, g.word, g.day, index);
+        uint256 boonSeed = EntropyLib.hash3(RngTags.DEGENESIS_BOON, g.word, index);
         (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameBoonModule.rollDegenesisBoons.selector, o.id, o.units * DEGENESIS_UNIT, boonSeed)
         );

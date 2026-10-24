@@ -60,8 +60,10 @@ contract DegenesisCraps is DegenesisCrapsChecks, DegenesisFixture {
     ///         window day; from day 3 on it books tomorrow.
     function test_DeliverPasses_Day1AndDay2_BookDay3() public {
         (uint32 a, uint24 dayA) = _deliver("deliver-day1");
-        assertEq(dayA, 3, "day-1 delivery books day 3");
-        assertGt(crapsBattle.daySeatNumberOfId(3, a), 0, "seated on day 3");
+        assertEq(dayA, 0, "bootstrap has no published schedule: delivery banks");
+        assertEq(crapsBattle.daySeatNumberOfId(3, a), 0, "no admission before published terms");
+        (uint256 banked,) = crapsBattle.passCreditsOf(makeAddr("deliver-day1"));
+        assertEq(banked, 1, "award remains spendable");
         assertEq(crapsBattle.daySeatNumberOfId(2, a), 0, "never on day 2");
 
         _driveDay(2);
@@ -152,13 +154,14 @@ contract DegenesisCraps is DegenesisCrapsChecks, DegenesisFixture {
 contract DegenesisCrapsLateDeploy is DegenesisCrapsChecks {
     function test_LateDeploy_FirstWindowIsDeployPlusOne() public view {
         assertEq(_deployDay(), GameTimeLib.MAIN_LAUNCH_DAY, "fixture: deployed on day 9");
-        assertEq(_firstWindowDay(), _deployDay() + 1, "first window = deploy + 1");
+        assertEq(_firstWindowDay(), 3, "logical first window is deployment-independent");
     }
 
     function test_LateDeploy_DeliveryOnDeployDayBooksDeployPlusOne() public {
         (uint32 id, uint24 day) = _deliver("late-deliver");
-        assertEq(day, _deployDay() + 1, "tomorrow is the first window day");
-        assertGt(crapsBattle.daySeatNumberOfId(day, id), 0, "seated");
+        assertEq(day, 0, "synthetic bootstrap has no published daily schedule");
+        (uint256 banked,) = crapsBattle.passCreditsOf(makeAddr("late-deliver"));
+        assertEq(banked, 1, "delivery banks until a schedule opens");
     }
 
     /// @notice The request on deploy + 1 would lock the deploy day's battle as a detached round;
@@ -175,8 +178,8 @@ contract DegenesisCrapsLateDeploy is DegenesisCrapsChecks {
         vm.recordLogs();
         _drain(false, 400);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_locksIn(logs), 0, "no detached round for the deploy day");
-        assertFalse(_battlePending(), "no pending bit");
+        assertEq(_locksIn(logs), 1, "logical day 9 is a scheduled day in this synthetic fixture");
+        assertTrue(_battlePending(), "the prior logical battle is detached");
         _drain();
         (h,) = _seedPasses();
         assertEq(h, 19, "first window day spends the first seed pass");

@@ -44,7 +44,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         }
     }
     function live() external {
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
     }
     function enqueue(address player) external {
@@ -88,7 +88,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
     }
     function claimableDraw(uint24 day) external view returns (bool) { return _foilGoldClaimOpen(day); }
     function seedMatch(address player, uint256 word) external returns (uint24 day, uint32 id) {
-        day = _simulatedDayIndex();
+        day = _wallDay();
         uint32 line = 0xC5824100; // Crypto 0, Zodiac 1, Cards 2, Dice 6.
         dailyFoilDraw[day & 1] = _packFoilDraw(line, 1, day, word);
         id = _seedWallet(player);
@@ -255,12 +255,15 @@ contract FoilGenerationCohortTest is Test {
         h.claimGoldenTicket(idA, 1);
     }
 
-    function test_GoldExpiresOnSecondDayEvenWithoutOverwrite() public {
+    function test_GoldExpiresOnlyAfterTwoPublishedLogicalResults() public {
         uint24 day = GameTimeLib.currentDayIndex();
         uint32 idA = h.seedGold(A, day);
         h.seedWord(day, 99);
         vm.warp(vm.getBlockTimestamp() + 2 days);
         h.live();
+        assertTrue(h.claimableDraw(day), "calendar delay retains claim rights");
+        assertEq(h.retained(day), 99);
+        h.seedWord(day + 2, 101);
         assertFalse(h.claimableDraw(day));
         assertEq(h.retained(day), 0);
         vm.expectRevert(bytes4(keccak256("NoGoldenTicket()")));

@@ -27,9 +27,6 @@ contract RingSingleStepFixture is DegenerusGame {
             target = ContractAddresses.GAME_TICKET_MODULE;
             uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
             input = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, uint256(10_000_000));
-        } else if (action == MinerAction.DailyGap) {
-            target = ContractAddresses.GAME_ADVANCE_MODULE;
-            input = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyGap.selector);
         } else if (action == MinerAction.DailyApply) {
             target = ContractAddresses.GAME_ADVANCE_MODULE;
             input = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyWord_g1652.selector);
@@ -110,6 +107,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         assertGe(_openAfkRing(), subs.length);
         for (uint256 i; i < subs.length; ++i) assertFalse(_isOpenable(subs[i]));
         assertEq(_openAfkRing(), 0, "completed cohort never replays");
+        _finishReadConsumers();
         vm.prank(joiner);
         game.subscribe(0, false, 1, seat);
         assertFalse(_isOpenable(joiner), "signup buys nothing");
@@ -122,7 +120,7 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     function test_PartialOpensAdvanceWithoutWrapOrRepeatedPayout() public {
         address[] memory subs = _stampSealedOpenableSubs(5);
-        for (uint256 i; i < 8 && uint8(game.nextMinerAction()) == 9; ++i) {
+        for (uint256 i; i < 8 && uint8(game.nextMinerAction()) == 8; ++i) {
             uint16 beforeCursor = _openCursor();
             bytes memory code = address(game).code;
             vm.etch(address(game), address(new RingSingleStepFixture()).code);
@@ -137,7 +135,7 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     function test_PublicMinerResumesTheLinearOpenCursor() public {
         address[] memory subs = _stampSealedOpenableSubs(5);
-        for (uint256 i; i < 8 && uint8(game.nextMinerAction()) == 9; ++i) {
+        for (uint256 i; i < 8 && uint8(game.nextMinerAction()) == 8; ++i) {
             uint16 beforeCursor = _openCursor();
             game.mineFlip(type(uint32).max);
             assertGt(_openCursor(), beforeCursor);
@@ -201,7 +199,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         bytes memory productionCode = address(game).code;
         bytes memory checkpointCode = address(new RingSingleStepFixture()).code;
         for (uint256 i; i < 256; ++i) {
-            if (uint8(game.nextMinerAction()) == 9) return;
+            if (uint8(game.nextMinerAction()) == 8) return;
             vm.etch(address(game), checkpointCode);
             RingSingleStepFixture(payable(address(game))).stepBeforeAfk();
             vm.etch(address(game), productionCode);
@@ -231,8 +229,8 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     /// @dev A false advance hint can mean the read cohort must drain first.
     function _daySealed() internal view returns (bool) {
-        uint24 sealedDay = uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
-        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked();
+        (bool complete,,) = game.dailySessionState();
+        return complete && game.rngComplete() && !game.advanceDue() && !game.rngLocked();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

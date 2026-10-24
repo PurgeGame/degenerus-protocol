@@ -108,7 +108,7 @@ async function advanceGameOneDay(game, caller, mockVRF) {
         await fulfillVRF(mockVRF, reqId, BigInt(hre.ethers.keccak256(hre.ethers.toBeHex(reqId, 32))));
       }
     }
-    await game.connect(caller).mineFlip(0);
+    await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
   }
   throw new Error("miner chain did not seal the target day and finish its read consumers");
 }
@@ -462,7 +462,7 @@ describe("Governance & Gating (Phase 43)", function () {
       await advanceGameOneDay(game, deployer, mockVRF);
       await jumpToNextGameDayBoundary(5);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
-      await expect(game.connect(alice).mineFlip(0)).to.not.be.reverted;
+      await expect(game.connect(alice).mineFlip(0, { gasLimit: 16_777_216 })).to.not.be.reverted;
       expect(await game.rngLocked()).to.equal(true);
     });
 

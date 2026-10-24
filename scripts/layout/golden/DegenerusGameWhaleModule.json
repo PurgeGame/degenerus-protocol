@@ -210,7 +210,7 @@
   {
     "bytes": "1",
     "encoding": "inplace",
-    "label": "rngGapApplied",
+    "label": "dailyComplete",
     "offset": 3,
     "slot": 5,
     "typeLabel": "bool"
@@ -260,6 +260,14 @@
     "encoding": "inplace",
     "label": "decEntriesLevel",
     "offset": 24,
+    "slot": 5,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "lastDailyRequestWallDay",
+    "offset": 27,
     "slot": 5,
     "typeLabel": "uint24"
   },
@@ -392,6 +400,22 @@
     "typeLabel": "uint128"
   },
   {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "lastDailyCompletedAt",
+    "offset": 16,
+    "slot": 13,
+    "typeLabel": "uint48"
+  },
+  {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "degenesisOpenedAt",
+    "offset": 22,
+    "slot": 13,
+    "typeLabel": "uint48"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "degenesisCredit",
@@ -462,6 +486,14 @@
     "offset": 0,
     "slot": 22,
     "typeLabel": "contract IVRFCoordinator"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "vrfCallbackGasLimit",
+    "offset": 20,
+    "slot": 22,
+    "typeLabel": "uint32"
   },
   {
     "bytes": "32",

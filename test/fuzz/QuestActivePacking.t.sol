@@ -12,6 +12,7 @@ contract QuestActivePackingTest is Test {
     uint32 internal constant PLAYER = 0xB071;
 
     function setUp() public {
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("currentDayView()"), abi.encode(uint24(1)));
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("level()"), abi.encode(uint24(24)));
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("decWindow()"), abi.encode(false));
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("mintPrice()"), abi.encode(uint256(0.04 ether)));
@@ -62,6 +63,7 @@ contract QuestActivePackingTest is Test {
         uint24 day = uint24(uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE)))) + 1;
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(day, 123, true, false, false);
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("currentDayView()"), abi.encode(day));
         vm.prank(ContractAddresses.GAME);
         quests.handlePurchase_g4831(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         progress = uint256(vm.load(address(quests), progressSlot));

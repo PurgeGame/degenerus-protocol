@@ -68,8 +68,9 @@ contract GameIsolationHost is DegenerusGame {
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
     }
     function seedPhase() external {
-        uint24 day = _simulatedDayIndex();
-        level = 1; dailyIdx = day - 1; purchaseStartDay = day - 1;
+        uint24 day = _wallDay();
+        level = 1; dailyIdx = day; purchaseStartDay = day - 1;
+        dailyComplete = false; lastDailyRequestWallDay = day; lastDailyCompletedAt = uint48(block.timestamp);
         rngRequestDay = day; rngRequestTime = uint48(block.timestamp);
         rngLockedFlag = true; ticketsFullyProcessed = true;
         phaseTransitionActive = true; vaultFlipSettledDay = day;
@@ -77,8 +78,10 @@ contract GameIsolationHost is DegenerusGame {
         degenesisClosed = 7;
     }
     function seedRng(bool daily, bool prefix) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 1; dailyIdx = daily ? day - 1 : day; purchaseStartDay = day;
+        dailyComplete = true; lastDailyRequestWallDay = daily ? day - 1 : day;
+        lastDailyCompletedAt = uint48(block.timestamp);
         _afkingResetDay = day; subsFullyProcessed = true;
         ticketsFullyProcessed = true; humanReadComplete = true;
         rngRequestTime = uint48(block.timestamp); rngRequestDay = 0; rngWordCurrent = 777;
@@ -88,7 +91,8 @@ contract GameIsolationHost is DegenerusGame {
         _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, 0);
     }
     function seedTerminal(bool drain) external {
-        level = 10; dailyIdx = _simulatedDayIndex() - 31;
+        level = 10; dailyIdx = _wallDay() - 31;
+        lastDailyCompletedAt = uint48(block.timestamp - (drain ? 14 days : 0));
         degenesisClosed = 7; _setRngComplete(false); _setRngTerminal();
         _setRngRequestActive(false); _setRngSessionPublished(false);
         rngRequestDay = 0; rngRequestTime = 0; rngWordCurrent = RNG_WORD_WAITING;
@@ -330,7 +334,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         uint256 sub = admin.subscriptionId();
         uint256 beforeSD = ContractAddresses.SDGNRS.balance;
         uint256 firstSuccess;
-        for (uint256 supplied = 750_000; supplied <= 2_800_000; supplied += 5_000) {
+        for (uint256 supplied = 50_000; supplied <= 2_800_000; supplied += 5_000) {
             uint256 snap = vm.snapshotState();
             (bool ok,) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (uint32(0))));
             if (ok) {
@@ -344,7 +348,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             }
             assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
         }
-        assertGt(firstSuccess, 750_000); assertLt(firstSuccess, 2_800_000);
+        assertGt(firstSuccess, 50_000); assertLt(firstSuccess, 2_800_000);
         emit log_named_uint("final_sweep_first_success_5k_grid", firstSuccess);
     }
 
@@ -387,8 +391,8 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function test_UnderfundedFinalShutdownRollsBackSweptMarkerAndTransfers() public {
         host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
         uint256 beforeSD = ContractAddresses.SDGNRS.balance;
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        game.mineFlip{gas: 750_000}(0);
+        (bool ok,) = address(game).call{gas: 50_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
+        assertFalse(ok, "underfunded first unit must roll back");
         assertFalse(host.swept());
         assertEq(game.redemptionReserve(), 9 ether);
         assertEq(address(game).balance, 9 ether);
@@ -417,6 +421,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             uint256 supplied = 10_000_000;
             if (site == 0) {
                 host.seedRng(true, true);
+                _seedCrapsFixtureCursor(game.currentDayView());
                 vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector));
                 _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
                 input = abi.encodeCall(game.mineFlip, (uint32(0)));
@@ -471,6 +476,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
         } else {
             host.seedRng(kind == 1, true);
+            _seedCrapsFixtureCursor(game.currentDayView());
         }
         bytes memory input = abi.encodeCall(game.mineFlip, (uint32(10_000)));
         string memory label = kind == 0 ? "optfix-sweep" : kind == 1 ? "optfix-daily" : "optfix-midday";

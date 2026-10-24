@@ -242,7 +242,8 @@ contract ChainPinCrapsMockTest is CrapsPins {
     }
 
     function _closeOf(uint256 period) internal view returns (uint256) {
-        if (period + 1 == craps.BONUS_PERIODS_PER_DAY()) return 1 days - craps.EVENT_LEAD();
+        if (period + 2 == craps.BONUS_PERIODS_PER_DAY()) return 1 days - craps.EVENT_LEAD();
+        if (period + 1 == craps.BONUS_PERIODS_PER_DAY()) return 1 days;
         uint256 base = period == 0 ? craps.BONUS_EVENT_CLOSE() : period * craps.BONUS_PERIOD();
         return base + craps.BONUS_CLOCK_ALIGN();
     }
@@ -263,7 +264,9 @@ contract ChainPinCrapsMockTest is CrapsPins {
         craps.openBonusDay();
         assertTrue(_agree("B: separator with a budget"));
 
-        assertGt(craps.slotIndexOf(craps.minerSlot()), 0, "fixture: the opener was not armed");
+        vm.warp(_dayStart() + _closeOf(3));
+        assertTrue(_agree("B2: first live scheduled window closed"));
+        assertGt(craps.slotIndexOf(craps.minerSlot()), 0, "fixture: the first live window was armed");
         assertFalse(_agree("C: armed, unresolved"));
 
         uint64 head = craps.minerSlot();
@@ -273,8 +276,13 @@ contract ChainPinCrapsMockTest is CrapsPins {
         assertTrue(_agree("D: armed, fully resolved"));
 
         assertFalse(_agree("E: unarmed, still taking bets"));
-        vm.warp(_dayStart() + _closeOf(1));
-        assertTrue(_agree("F: unarmed, closed"));
+        // The unbounded D call may skip every empty closed window. Seed this
+        // independent truth-table row at a known unarmed routine window.
+        uint64 unarmed = uint64(uint256(craps.currentDayIndex()) * 8 + 4);
+        assertEq(craps.slotIndexOf(unarmed), 0, "F fixture: unarmed routine field");
+        craps.setCursor(unarmed);
+        vm.warp(_dayStart() + _closeOf(3));
+        assertTrue(_agree("F: unarmed, closed"), "F: closed unarmed routine field");
 
         vm.warp(vm.getBlockTimestamp() + 40 days);
         uint256 today = craps.currentDayIndex();
@@ -462,7 +470,7 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
         for (uint48 b; b < 2; ++b) {
             assertEq(_bit(b), !crapsBattle.rngCohortComplete(b), "F3: Game pending bit and craps FIFO disagree");
         }
-        if (game.nextMinerAction() == 16) assertTrue(game.rngComplete(), "F5b: Maintenance selected while incomplete");
+        if (game.nextMinerAction() == 15) assertTrue(game.rngComplete(), "F5b: Maintenance selected while incomplete");
         if (!game.rngComplete() || game.gameOver()) return;
         assertEq(uint256(game.rngConsumerStage_g379()), 7, "F5b: RNG complete but the consumer stage is not 7");
         assertFalse(game.rngLocked(), "F5b: complete while locked");
@@ -659,36 +667,28 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         if (!done) mockVRF.fulfillRandomWords(req, uint256(keccak256(abi.encode("pin-f7", req))) | 2);
     }
 
-    /// @dev S1 F7: after the longest idle gap that does not trip the VRF deadman (no mineFlip for up to
-    ///      30 days) the bare protocol views on the selector path return, `minerAction()` returns, and
-    ///      mineFlip proceeds until the lagging craps cursor has caught up.
+    /// @dev A calendar gap below the hard deadline creates no logical backlog.
+    ///      Servicing the next actual reset advances exactly one round and its table cursor.
     /// forge-config: default.fuzz.runs = 6
     function testFuzz_F7_idleGapViewsReturnAndMineFlipProceeds(uint256 gapRaw) public {
-        uint256 gap = bound(gapRaw, 20, 30);
+        uint256 gap = bound(gapRaw, 2, 12);
+        uint24 beforeDay = game.currentDayView();
+        uint64 beforeCursor = crapsBattle.minerSlot();
         vm.warp(vm.getBlockTimestamp() + gap * 1 days);
-        uint24 today = crapsBattle.currentDayIndex();
-        assertTrue(uint256(crapsBattle.minerSlot()) / 8 < today, "fixture: the cursor does not lag");
-
-        assertTrue(crapsBattle.minerMaintenancePending_g11976(), "a lagging cursor is owed maintenance");
-        assertFalse(sdgnrs.redemptionSettlementPending(), "no redemption batch is settling");
-        assertLe(uint256(game.nextMinerAction()), 21);
-        assertLe(uint256(game.minerAction()), 21);
-        assertTrue(game.nextMinerAction() != 1, "the idle gap tripped the terminal path");
-
-        uint256 calls;
-        for (uint256 i; i < 150 && crapsBattle.minerMaintenancePending_g11976(); ++i) {
-            try game.mineFlip(0) {
-                ++calls;
-            } catch (bytes memory reason) {
-                bytes4 sel = reason.length >= 4 ? bytes4(reason) : bytes4(0);
-                if (sel != bytes4(keccak256("NoWork()")) && sel != bytes4(keccak256("RngNotReady()"))) {
-                    assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
-                }
-                _fulfilPending();
+        assertEq(crapsBattle.currentDayIndex(), beforeDay, "calendar gap creates no table days");
+        assertEq(crapsBattle.minerSlot(), beforeCursor, "calendar gap creates no cursor debt");
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertTrue(game.nextMinerAction() != 1, "gap is inside the completion deadline");
+        for (uint256 i; i < 300; ++i) {
+            _fulfilPending();
+            if (game.currentDayView() == beforeDay + 1) {
+                (bool complete,,) = game.dailySessionState();
+                if (complete && !crapsBattle.minerMaintenancePending_g11976()) return;
             }
+            game.mineFlip{gas: 16_700_000}(0);
+            assertLe(game.currentDayView(), beforeDay + 1, "one round per actual reset");
         }
-        assertGt(calls, 0, "mineFlip never succeeded after the idle gap");
-        assertFalse(crapsBattle.minerMaintenancePending_g11976(), "mineFlip never cleared the idle-gap maintenance");
+        fail("one delayed round did not complete");
     }
 
     /// @dev Past the deadman the selector goes terminal, but the same views must still return for any
@@ -701,7 +701,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         uint24 today = crapsBattle.currentDayIndex();
         if (uint256(crapsBattle.minerSlot()) / 8 + 30 < today) assertTrue(pending, "an expired cursor is owed maintenance");
         assertFalse(sdgnrs.redemptionSettlementPending());
-        assertLe(uint256(game.nextMinerAction()), 21);
+        assertLe(uint256(game.nextMinerAction()), 20);
         assertLe(uint256(game.minerAction()), 21);
     }
 }

@@ -70,7 +70,6 @@ library RngTags {
     uint256 internal constant FOIL_SPIN = 65;
     uint256 internal constant FUTURE_BATTLE = 66;
     uint256 internal constant FUTURE_BATTLE_VISIT = 67;
-    uint256 internal constant GAP_DAY = 68;
     uint256 internal constant GOLD_DAILY = 69;
     uint256 internal constant GOLD_REPLACEMENT = 70;
     uint256 internal constant JACKPOT_ALLOCATION = 71;

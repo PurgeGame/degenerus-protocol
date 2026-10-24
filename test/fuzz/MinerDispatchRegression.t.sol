@@ -9,8 +9,11 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract MinerDispatchHarness is MinerHarness {
     function seed(bool ticketsDone, bool humanDone, bool nextDayDue) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         dailyIdx = nextDayDue ? today - 1 : today;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = nextDayDue ? today - 1 : today;
         _afkingResetDay = dailyIdx;
         purchaseStartDay = today;
         level = 10;

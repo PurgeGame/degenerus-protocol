@@ -36,6 +36,7 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
 
     function setDailyIdx(uint24 v) external {
         dailyIdx = v;
+        rngRequestDay = v;
     }
 
     function setCurrentPool(uint256 v) external {
@@ -58,10 +59,10 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
         yieldAccumulator = v;
     }
 
-    /// @dev Wager `amount` units on (quadrant, symbol) for the hero pool read by
-    ///      draws whose frozen dailyIdx == day.
-    function setHeroWager(uint24 day, uint8 q, uint8 s, uint32 amount) external {
+    /// @dev Seed the preceding pool committed to the requested draw day.
+    function setHeroWager(uint24 requestDay, uint8 q, uint8 s, uint32 amount) external {
         if (q >= 3) return;
+        uint24 day = requestDay - 1;
         uint256 meta = lootboxRngPacked;
         uint256 key = ((meta >> HERO_WRITE_SHIFT) & 1) ^ 1;
         uint256 bit = uint256(1) << (24 + key * 3 + q);
@@ -706,7 +707,7 @@ contract GoldenTicketArmResolve is Test {
             h.setDailyIdx(uint24(word));
             vm.prank(ContractAddresses.GAME);
             h.emitDailyWinningTraits(word);
-            (bool present, uint32 board,) = h.foilDrawFor(word + 1);
+            (bool present, uint32 board,) = h.foilDrawFor(word);
             assertTrue(present);
             assertEq(board, expected, "daily published and foil boards share the adjustment");
         }
@@ -734,7 +735,7 @@ contract GoldenTicketArmResolve is Test {
             mainPacked = abi.decode(logs[i].data, (uint32));
         }
         assertTrue(found, "DailyWinningTraits emitted with the (uint24,uint32) signature");
-        assertEq(day, ARM_IDX + 1, "day indexed as dailyIdx + 1");
+        assertEq(day, ARM_IDX, "event identifies the requested logical day");
         (bool present, uint32 recordedMain, ) = h.foilDrawFor(day);
         assertTrue(present, "the day's foil record was written");
         assertEq(mainPacked, recordedMain, "the event's board equals the one recorded for foil claims");

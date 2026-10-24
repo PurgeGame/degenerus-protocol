@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 
 import {Vm} from "forge-std/Vm.sol";
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {DegenesisDeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -12,7 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         pin the walks reading the seed instead of a lane.
 ///         The outer self-call keeps the measured protocol call nested under --isolate, so
 ///         lastCallGas reports execution gas without adding transaction intrinsic gas.
-contract CoinflipSeedWindowGas is DeployProtocol {
+contract CoinflipSeedWindowGas is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant VAULT = ContractAddresses.VAULT;
 
@@ -29,7 +29,7 @@ contract CoinflipSeedWindowGas is DeployProtocol {
         _deployProtocol();
         // Days 1..20 carry the deploy window; resolve 1..19 so day 20 is left to measure and the
         // vault's cursor still sits at 0.
-        for (uint24 d = 1; d < 20; ++d) {
+        for (uint24 d = 2; d < 21; ++d) {
             _resolve(d, d % 3 != 0);
         }
     }
@@ -64,9 +64,9 @@ contract CoinflipSeedWindowGas is DeployProtocol {
 
     /// @dev A seeded day's resolution, which walks sDGNRS across that day.
     function test_SeededDayResolutionCold() public {
-        _warpToDay(20);
+        _warpToDay(21);
         uint256 used = this.measureSeedCall(GAME, abi.encodeCall(coinflip.processCoinflipPayouts,
-            (0, uint256(keccak256("seed_window_gas_day20")) | 1, 20)));
+            (0, uint256(keccak256("seed_window_gas_day21")) | 1, 21)));
         emit log_named_uint("seeded_day_resolution_cold_gas", used);
         assertLt(used, SEEDED_DAY_RESOLVE_GAS_CEIL, "sDGNRS's seeded day costs no lane clear");
     }

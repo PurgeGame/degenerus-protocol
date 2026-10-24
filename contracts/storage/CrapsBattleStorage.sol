@@ -421,6 +421,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BG_STAKE_SHIFT = 201;
     uint256 internal constant _BG_TERM_TIER_SHIFT = 250;
     uint256 internal constant _BG_TERM_HIGH_TAIL = 4; // within the six-bit terms lane
+    uint256 internal constant _BG_TERMS_SKIPPED = 8; // elapsed before this logical day opened
     uint256 internal constant _BG_TERMS_FROZEN = 32;
     uint256 internal constant _MASK32 = 0xFFFFFFFF;
 
@@ -525,7 +526,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      `day > today` already covers).
     function _reservableDay(uint24 day) internal view returns (bool) {
         uint256 today = _currentDayIndex();
-        return day > today && day > GameTimeLib.DEGENESIS_START_DAY && day <= today + _RESERVATION_DAYS
+        return _scheduledAdmissionsOpen() && day > today && day > GameTimeLib.DEGENESIS_START_DAY && day <= today + _RESERVATION_DAYS
             && _dailyWordAt(day) == 0;
     }
 

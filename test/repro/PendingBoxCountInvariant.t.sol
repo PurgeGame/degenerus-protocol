@@ -31,7 +31,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         // Advance one day off the deploy boundary so the day index is a clean, stable index.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.deal(address(game), 10_000_000 ether);
         _finishSubscriptionWindow();
     }
@@ -100,10 +100,10 @@ contract PendingBoxCountInvariant is DeployProtocol {
     ///      through the day's subscriber preparation until its daily request is the next work.
     function _stampToRequest(uint256 vrfWord) internal {
         _drainDay(vrfWord ^ 0xF00D, false);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 400; ++i) {
             _assertInvariant("preparation checkpoint");
-            if (game.nextMinerAction() == 17) return; // MinerAction.RequestDaily
+            if (game.nextMinerAction() == 16) return; // MinerAction.RequestDaily
             _stepMinimal();
         }
         revert("harness: the daily request never became the next work");
@@ -123,7 +123,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
                 return;
             }
             _fulfillPending(vrfWord + i);
-            if (!partialUsed && game.nextMinerAction() == 9) { // MinerAction.Afking
+            if (!partialUsed && game.nextMinerAction() == 8) { // MinerAction.Afking
                 partialUsed = true;
                 uint256 before = _pendingBoxCount();
                 uint256 starved = _oneBoxBudget();
@@ -132,7 +132,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
                 assertEq(_pendingBoxCount(), before - 1, "the starved engine call opened exactly one box");
                 _trackedFlip(makeAddr("pb_drain_b"), 1_500_000);
                 _assertInvariant("after a moderate engine drain");
-                if (game.nextMinerAction() == 9) {
+                if (game.nextMinerAction() == 8) {
                     _trackedFlip(makeAddr("pb_crank"), 2_000_000);
                     _assertInvariant("after a rewarded mineFlip drain");
                 }
@@ -160,19 +160,9 @@ contract PendingBoxCountInvariant is DeployProtocol {
         return hi;
     }
 
-    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots).
+    /// @dev Maximum calibration preserves one checkpoint and records every AFKing settlement.
     function _stepMinimal() internal {
-        uint256 lo = 200_000;
-        uint256 hi = 30_000_000;
-        while (hi - lo > 1_000) {
-            uint256 mid = (lo + hi) / 2;
-            uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-            vm.revertToStateAndDelete(snap);
-            if (ok) hi = mid;
-            else lo = mid;
-        }
-        _trackedFlip(address(this), hi);
+        _trackedFlip(address(this), 30_000_000, type(uint32).max);
     }
 
     // ---- settlement evidence (independent of the counter and cursor) ----
@@ -199,10 +189,14 @@ contract PendingBoxCountInvariant is DeployProtocol {
     /// @dev One mineFlip; a call made while AFKing opens are the next read work has its settlement
     ///      records tallied, each account counted once per call.
     function _trackedFlip(address caller, uint256 gasCap) internal {
+        _trackedFlip(caller, gasCap, 0);
+    }
+
+    function _trackedFlip(address caller, uint256 gasCap, uint32 multiplier) internal {
         bool afking = game.rngConsumerStage_g379() == 2;
         if (afking) vm.recordLogs();
         if (caller != address(this)) vm.prank(caller);
-        game.mineFlip{gas: gasCap}(0);
+        game.mineFlip{gas: gasCap}(multiplier);
         if (!afking) return;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint32[] memory seen = new uint32[](logs.length);

@@ -57,7 +57,11 @@ contract SolvencyActionHandlerDegenesis is DegenesisDeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        vm.warp(block.timestamp + 1 days); // Degenesis day 1
+        vm.warp(block.timestamp + 1 days);
+        mockVRF.fundSubscription(1, 1_000 ether);
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 777);
+        _finishReadConsumers(); // Fresh request 2 opens Degenesis cohort 1.
         vm.deal(address(game), 5_000_000 ether);
         h = new SolvencyActionHandler(game, deityPass, mockVRF, 5, true);
         actor = h.actors(1);

@@ -20,7 +20,6 @@ contract QuestsWalletIdsTest is DeployProtocol {
     uint256 private constant ACTIVE_ROOT = QaSlots.ACTIVE;
     uint256 private constant STATE_ROOT = QaSlots.STATE;
     uint256 private constant LEVEL_ROOT = QaSlots.LEVEL;
-    uint256 private constant BITMAP_ROOT = QaSlots.ROLLED;
     // PlayerQuestState byte offsets.
     uint256 private constant OFF_LAST_SYNC = 6;
     uint256 private constant OFF_STREAK = 9;
@@ -39,7 +38,6 @@ contract QuestsWalletIdsTest is DeployProtocol {
     bytes32 private constant E_PROGRESS = keccak256("QuestProgressUpdated(uint32,uint24,uint8,uint8,uint128,uint256)");
     bytes32 private constant E_COMPLETED = keccak256("QuestCompleted(uint32,uint24,uint8,uint8,uint32,uint256)");
     bytes32 private constant E_SHIELD_USED = keccak256("QuestStreakShieldUsed(uint32,uint16,uint16,uint24)");
-    bytes32 private constant E_STALL = keccak256("QuestStreakStallForgiven(uint32,uint32,uint24)");
     bytes32 private constant E_SHIELD_GRANTED = keccak256("QuestStreakShieldGranted(uint32,uint16,uint8)");
     bytes32 private constant E_BONUS = keccak256("QuestStreakBonusAwarded(uint32,uint16,uint24,uint24)");
     bytes32 private constant E_RESET = keccak256("QuestStreakReset(uint32,uint24,uint24)");
@@ -94,15 +92,15 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.store(address(quests), bytes32(ACTIVE_ROOT), bytes32(w));
     }
 
-    /// @dev Publish `day` with slot 0 MINT_ETH and slot 1 `slot1Type`, and mark it rolled.
+    /// @dev Publish `day` with slot 0 MINT_ETH and slot 1 `slot1Type`, and advance its logical-day mirror.
     function _setDaily(uint24 day, uint8 slot1Type) private {
         uint256 w = _active();
         uint256 rec0 = uint256(day) | (uint256(QT_MINT_ETH) << 24);
         uint256 rec1 = uint256(day) | (uint256(slot1Type) << 24);
         w = (w & ~uint256(type(uint128).max)) | rec0 | (rec1 << 64);
         vm.store(address(quests), bytes32(ACTIVE_ROOT), bytes32(w));
-        bytes32 b = keccak256(abi.encode(uint256(day >> 8), BITMAP_ROOT));
-        vm.store(address(quests), b, bytes32(uint256(vm.load(address(quests), b)) | (uint256(1) << uint8(day))));
+        uint256 mirror = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((mirror & ~(uint256(0xffffff) << 176)) | (uint256(day) << 176)));
     }
 
     /// @dev A mint word passing the level-quest gates at the current level (400 units at
@@ -149,7 +147,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
         id = game.walletIdOf_g3120(buyer);
         if (id == 0) id = _giveWalletId(buyer);
         for (;;) {
-            uint24 day = GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
+            // The affiliate roll keys the wall day.
+            uint24 day = GameTimeLib.currentDayIndex();
             uint256 r = uint256(keccak256(abi.encodePacked(ROLL_TAG, day, id, code))) % 20;
             if ((r < 15 ? 0 : (r < 19 ? 1 : 2)) == cls) return id;
             vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -158,7 +157,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
 
     function _senderFor(bytes32 code, uint8 cls, uint32 from) private view returns (uint32 id) {
         for (id = from; ; ++id) {
-            uint24 day = GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
+            uint24 day = GameTimeLib.currentDayIndex();
             uint256 r = uint256(keccak256(abi.encodePacked(ROLL_TAG, day, id, code))) % 20;
             if ((r < 15 ? 0 : (r < 19 ? 1 : 2)) == cls) return id;
         }
@@ -682,7 +681,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         }
     }
 
-    function test_AllNineEventsCarryTheWalletId() public {
+    function test_AllEightEventsCarryTheWalletId() public {
         address p = makeAddr("events");
         uint32 id = _giveWalletId(p);
         vm.recordLogs();
@@ -691,7 +690,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _primary(id);
         _as(address(game), abi.encodeCall(quests.awardQuestStreakBonus, (id, 3, 20)));
         _setDaily(21, QT_DEG_ETH); // rolled and missed: one shield
-        _setDaily(23, QT_DEG_ETH); // 22 never rolled: forgiven
+        _setDaily(23, QT_DEG_ETH); // Days 21 and 22 were missed logical rounds
         _primary(id);
         for (uint24 d = 24; d <= 27; ++d) _setDaily(d, QT_DEG_ETH); // 24..26 missed past the last shield
         _primary(id);
@@ -700,9 +699,9 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _as(address(coinflip), abi.encodeCall(quests.handleFlip, (id, 20_000)));
         _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.level(), 10)));
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32[9] memory sigs =
-            [E_PROGRESS, E_COMPLETED, E_SHIELD_USED, E_STALL, E_SHIELD_GRANTED, E_BONUS, E_RESET, E_LEVEL, E_GROWTH];
-        for (uint256 i; i < 9; ++i) assertGt(_countTopic(logs, sigs[i], id), 0, "event emitted by ID");
+        bytes32[8] memory sigs =
+            [E_PROGRESS, E_COMPLETED, E_SHIELD_USED, E_SHIELD_GRANTED, E_BONUS, E_RESET, E_LEVEL, E_GROWTH];
+        for (uint256 i; i < 8; ++i) assertGt(_countTopic(logs, sigs[i], id), 0, "event emitted by ID");
 
     }
 
@@ -943,11 +942,6 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint256 lq = _lq(id);
         assertEq(uint8(lq), uint8(_active() >> 136), "levelQuestPlayerState at slot 2: version");
         assertEq(uint128(lq >> 8), 100, "levelQuestPlayerState at slot 2: progress");
-        uint24 day = 300;
-        vm.prank(address(game));
-        quests.rollDailyQuest(day, 7, false, false, false);
-        bytes32 b = keccak256(abi.encode(uint256(day >> 8), BITMAP_ROOT));
-        assertEq((uint256(vm.load(address(quests), b)) >> uint8(day)) & 1, 1, "questRolledDayBitmap at slot 3");
         (uint32 streak,,,) = quests.playerQuestStates(id);
         assertEq(streak, _field(id, OFF_STREAK, 16));
     }

@@ -8,6 +8,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 ///      (DegenerusGame.sol:509) because the RNG lifecycle and shared word payload are
 ///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
+    function dailyScheduleOpen() external view returns (bool);
     function rngWordForDay(uint24 day) external view returns (uint256);
 
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
@@ -24,8 +25,8 @@ interface IGameSlotReader {
 ///      Fulfillment stores the shared session word. Mandatory miner publication
 ///      makes it available to consumers and emits LootboxRngApplied(tag, word, requestId).
 ///      Requests which never receive a usable word can be retried without swapping.
-///      Unfinished battles lose their entropy on terminal entry. Settled battles
-///      never consult a reused tag again; historical replay uses event positions.
+///      Terminal entry ends unfinished battles. Settled battles never consult a reused
+///      tag again; historical replay uses event positions.
 ///
 ///      The word and physical tag determine the shared shooter, rather than the
 ///      player or board. All players in one session see the same sequence of dice.
@@ -70,8 +71,8 @@ contract LootboxCraps is Craps {
     function _wordAt(uint48 index) internal view returns (uint256) {
         uint256 state = _sload(RNG_STATE_SLOT);
         // Bit253 is terminal, bit255 is miner publication, bit252 selects write.
-        // Settled battles never consult this payload again; unfinished ones die at terminal.
-        if (state & (uint256(1) << 253) != 0 || state & (uint256(1) << 255) == 0
+        if (state & (uint256(1) << 253) != 0) return 0;
+        if (state & (uint256(1) << 255) == 0
             || index != (((state >> 252) & 1) ^ 1)) return 0;
         uint256 stored = _sload(LOOTBOX_RNG_WORD_SLOT);
         return stored == 1 ? 0 : stored;
@@ -97,11 +98,19 @@ contract LootboxCraps is Craps {
         return uint256(_extsload(bytes32(RNG_WORD_BY_DAY_SLOT + (day & 1))));
     }
 
-    /// @notice The protocol's day index right now — `GameTimeLib.currentDayIndexAt`, restated
-    ///         against the same two constants rather than reached for through a call.
+    function _scheduledAdmissionsOpen() internal view returns (bool) {
+        return IGameSlotReader(_GAME).dailyScheduleOpen();
+    }
+
+    function _scheduleResetPassed() internal view returns (bool) {
+        uint24 sent = uint24(_sload(5) >> 216);
+        uint24 wall = uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
+        return wall > sent;
+    }
+
     function _currentDayIndex() internal view returns (uint24) {
         unchecked {
-            return uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
+            return uint24(_sload(RNG_STATE_SLOT) >> 24);
         }
     }
 

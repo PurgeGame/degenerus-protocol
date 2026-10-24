@@ -375,10 +375,12 @@ contract DegenesisRngFreezeHandler is Test {
     ///         cohort whose word has landed is still settling, three seeds in four wait for it; the
     ///         fourth moves on and leaves a backlog across the next request.
     function nextDay(uint256 secsSeed) external {
-        uint24 d = game.currentDayView();
-        if (uint24(_load(GameSlots.DAILY_IDX) >> (GameSlots.DAILY_IDX_OFFSET * 8)) < d) return;
+        (bool complete,,) = game.dailySessionState();
+        if (!complete) return;
         if (_word() != 0 && secsSeed % 4 != 0) return;
-        vm.warp(uint256(d) * 1 days + GameTimeLib.JACKPOT_RESET_TIME + secsSeed % 3 hours);
+        uint256 nowTs = vm.getBlockTimestamp();
+        uint256 nextReset = nowTs - (nowTs - GameTimeLib.JACKPOT_RESET_TIME) % 1 days + 1 days;
+        vm.warp(nextReset + secsSeed % 3 hours);
         vm.recordLogs();
         _afterAction(vm.getRecordedLogs(), vrf.lastRequestId());
     }

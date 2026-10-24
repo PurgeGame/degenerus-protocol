@@ -41,7 +41,7 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_traitBucketStale() external pure returns (uint256 s, uint256 o) { assembly { s := traitBucketStale.slot o := traitBucketStale.offset } }
     function s_decEntriesLevel() external pure returns (uint256 s, uint256 o) { assembly { s := decEntriesLevel.slot o := decEntriesLevel.offset } }
     function s_foilSlotRetained() external pure returns (uint256 s, uint256 o) { assembly { s := foilSlotRetained.slot o := foilSlotRetained.offset } }
-    function s_rngGapApplied() external pure returns (uint256 s, uint256 o) { assembly { s := rngGapApplied.slot o := rngGapApplied.offset } }
+    function s_dailyComplete() external pure returns (uint256 s, uint256 o) { assembly { s := dailyComplete.slot o := dailyComplete.offset } }
     function s_lastVrfProcessedTimestamp() external pure returns (uint256 s, uint256 o) { assembly { s := lastVrfProcessedTimestamp.slot o := lastVrfProcessedTimestamp.offset } }
     function s_ticketBufferLevels() external pure returns (uint256 s, uint256 o) { assembly { s := ticketBufferLevels.slot o := ticketBufferLevels.offset } }
     function s_dailyTicketBudgetsPacked() external pure returns (uint256 s, uint256 o) { assembly { s := dailyTicketBudgetsPacked.slot o := dailyTicketBudgetsPacked.offset } }
@@ -297,7 +297,7 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_rngWordCurrent(); assertEq(s, GameSlots.RNG_WORD_CURRENT, "rngWordCurrent.slot"); assertEq(o, 0, "rngWordCurrent.offset");
         (s, o) = h.s_vrfRequestId(); assertEq(s, GameSlots.VRF_REQUEST_ID, "vrfRequestId.slot"); assertEq(o, 0, "vrfRequestId.offset");
         (s, o) = h.s_rngRequestDay(); assertEq(s, GameSlots.RNG_REQUEST_DAY, "rngRequestDay.slot"); assertEq(o, 0, "rngRequestDay.offset");
-        (s, o) = h.s_rngGapApplied(); assertEq(s, GameSlots.RNG_GAP_APPLIED, "rngGapApplied.slot"); assertEq(o, GameSlots.RNG_GAP_APPLIED_OFFSET, "rngGapApplied.offset");
+        (s, o) = h.s_dailyComplete(); assertEq(s, GameSlots.DAILY_COMPLETE, "dailyComplete.slot"); assertEq(o, GameSlots.DAILY_COMPLETE_OFFSET, "dailyComplete.offset");
         (s, o) = h.s_lastVrfProcessedTimestamp(); assertEq(s, GameSlots.LAST_VRF_PROCESSED_TIMESTAMP, "lastVrfProcessedTimestamp.slot"); assertEq(o, GameSlots.LAST_VRF_PROCESSED_TIMESTAMP_OFFSET, "lastVrfProcessedTimestamp.offset");
         (s, o) = h.s_ticketBufferLevels(); assertEq(s, GameSlots.TICKET_BUFFER_LEVELS, "ticketBufferLevels.slot"); assertEq(o, GameSlots.TICKET_BUFFER_LEVELS_OFFSET, "ticketBufferLevels.offset");
         (s, o) = h.s_dailyTicketBudgetsPacked(); assertEq(s, GameSlots.DAILY_TICKET_BUDGETS_PACKED, "dailyTicketBudgetsPacked.slot"); assertEq(o, 0, "dailyTicketBudgetsPacked.offset");

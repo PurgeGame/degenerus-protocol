@@ -21,7 +21,10 @@ REVIEWED = {
     ("libraries/MineFlipGas.sol", "finish"): ["if (meter.bounded && gasleft() < meter.floor) revert WorkGasBound();"],
     ("libraries/MineFlipGas.sol", "forwardable"): ["if (meter.mustProgress) return gasleft();"],
     # Pre-call minimum and tail reservation; never classifies a callee failure.
-    ("libraries/BoundedCall.sol", "_remaining"): ["available = gasleft();"],
+    ("libraries/BoundedCall.sol", "_remaining"): [
+        # The first mandatory checkpoint forwards all remaining gas, regardless of estimates.
+        # mustProgress is a deterministic checkpoint flag, never a gas-dependent outcome branch.
+        "if (meter.mustProgress) return gasleft();", "available = gasleft();"],
     ("modules/GameMiner.sol", "_mineFlip"): [
         "uint256 rewardStart = gasleft();",
         "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",

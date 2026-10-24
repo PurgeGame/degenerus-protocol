@@ -376,31 +376,45 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         game.mineFlip(0);
     }
 
-    /// @dev THE ADVANCE STILL COMES FIRST. The craps leg is deliberately in the ELSE branch: an
-    ///      advance is already a multi-million-gas call, and a settle batch stacked on top of it
-    ///      would push the crank past the ceiling the protocol sizes every chunk against. So a
-    ///      window that is owed a shutting waits for a crank that is not advancing.
+    /// @dev Daily preparation may commit a closed table to the upcoming word. Its frozen field
+    ///      cannot admit late wagers or settle before that request's entropy is delivered.
     function test_theAdvanceLegStillPreemptsTheCrapsLeg() public {
         // Genesis is a warm-up day with no windows; play from genesis + 1.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         uint24 today = crapsBattle.currentDayIndex();
         _landDayWord(today, uint256(keccak256("mineflip craps day")));
         vm.prank(ContractAddresses.GAME);
         crapsBattle.openBonusDay();
 
-        uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
-        // Far enough on that period 1 has long stopped taking bets AND a day has turned over, so
-        // both legs have work and only one of them may run.
-        vm.warp(block.timestamp + 1 days);
-        assertTrue(game.advanceDue(), "the fixture owes no advance, so nothing is being preempted");
+        (uint128 bankroll,,,,,) = crapsBattle.bonusTermsFor(today, 1);
+        vm.prank(ContractAddresses.GAME);
+        coin.mintForGame(PLAYER, uint256(bankroll) * 4);
+        Craps.Bets memory board;
+        board.passLine = 3;
+        vm.prank(PLAYER);
+        crapsBattle.enterBonusBattle(1, board, 1);
 
-        // The call must actually run (a reverted call would leave the slot unarmed trivially):
-        // the advance leg takes it and requests the day's word.
+        uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
+        // A reset closes admission but leaves the existing table committed to its logical day.
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        (, uint24 requestedWall,) = game.dailySessionState();
+        assertGt(game.currentWallDayView(), requestedWall, "a fresh daily request is actually due");
+        assertTrue(game.advanceDue(), "the fixture owes no advance, so nothing is being preempted");
+        vm.prank(PLAYER);
+        vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()")));
+        crapsBattle.enterBonusBattle(1, board, 1);
+
+        // Preparation must make real progress, including arming the old table, before the
+        // next daily request. No table result can be applied using its already-known terms word.
         uint256 requestBefore = mockVRF.lastRequestId();
-        vm.prank(KEEPER);
-        game.mineFlip(0);
-        assertGt(mockVRF.lastRequestId(), requestBefore, "the advance leg ran");
-        assertEq(crapsBattle.slotIndexOf(slot), 0, "the craps leg ran alongside an advance");
+        for (uint256 i; i < 200 && mockVRF.lastRequestId() == requestBefore; ++i) {
+            vm.prank(KEEPER);
+            game.mineFlip{gas: 16_777_216}(type(uint32).max);
+            assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field cannot settle before the new word");
+        }
+        assertGt(mockVRF.lastRequestId(), requestBefore, "bounded preparation reaches the daily request");
+        assertGt(crapsBattle.slotIndexOf(slot), 0, "the existing field joins the request commitment");
+        assertEq(game.currentDayView(), today + 1, "the request advances only one logical day");
     }
 
     /// @dev THE BATCH IS SIZED BY MEASURED WORK, NOT BY CAUTION AND NOT BY A HEAD COUNT. A crank
@@ -611,6 +625,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
     /// @dev Land a day's committed word in the Game slot the table reads it out of.
     function _landDayWord(uint24 day, uint256 word) internal {
+        // Explicitly publish this synthetic logical cohort in the current actual reset.
+        _seedLogicalFixtureDay(day);
         RecyclingState.seedDailyWord(address(game), uint24(day), word);
         assertEq(crapsBattle.dailyWordAt(day), word, "the day word did not land where the table reads it");
     }

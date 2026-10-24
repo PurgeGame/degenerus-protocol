@@ -23,7 +23,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
     }
 
     function prepare() external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 4;
         dailyIdx = day - 1;
         _afkingResetDay = day;
@@ -83,7 +83,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
     }
 
     function nextDay() external {
-        _afkingResetDay = _simulatedDayIndex();
+        _afkingResetDay = _wallDay();
         dailyIdx = _afkingResetDay - 1;
         _subCursor = 0;
         subsFullyProcessed = false;
@@ -92,7 +92,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
     /// @dev Seed a completed empty/ticket-only day for subscribe-path fixtures.
     function subscriptionWindow() external {
         require(_pendingBoxCount == 0);
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         _afkingResetDay = dailyIdx;
         _afkingEndpointDay = dailyIdx;
         subsFullyProcessed = true;

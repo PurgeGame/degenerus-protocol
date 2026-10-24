@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
@@ -469,14 +470,14 @@ contract MiddayRngCreditTest is DeployProtocol {
     }
 
     /// @notice The engine's next action depends on the caller only here: a donor whose credit
-    ///         covers a below-threshold request sees RequestMidday (18) through `minerAction()`,
+    ///         covers a below-threshold request sees RequestMidday through `minerAction()`,
     ///         an outsider sees Idle, and the creditless views (`nextMinerAction`, `advanceDue`)
     ///         see no work.
     function test_minerActionShowsTheDonorItsRequest() public pricedBlock {
         _purchaseBelowThreshold();
         _grantCredit(donor, _expectedCharge() * 2);
 
-        assertEq(_actionFor(donor), 18, "the donor sees the request its mineFlip would pay for");
+        assertEq(_actionFor(donor), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "the donor sees the request its mineFlip would pay for");
         assertEq(_actionFor(outsider), 0, "an outsider sees Idle");
         assertEq(game.nextMinerAction(), 0, "the creditless view sees Idle");
         assertFalse(game.advanceDue(), "the creditless discovery view sees no work");
@@ -488,8 +489,8 @@ contract MiddayRngCreditTest is DeployProtocol {
         game.purchase{value: 1 ether}(
             0, 0, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        assertEq(_actionFor(outsider), 18, "at the threshold every caller sees the request");
-        assertEq(game.nextMinerAction(), 18, "and so does the creditless view");
+        assertEq(_actionFor(outsider), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "at the threshold every caller sees the request");
+        assertEq(game.nextMinerAction(), 17, "and so does the creditless view");
     }
 
     // ──────────────────────────────────────────────────────────────────────

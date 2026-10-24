@@ -43,7 +43,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         mockVRF.fundSubscription(1, 100e18);
         // Seal and finish the genesis read through the production lifecycle.
         // The golden nested-spin word is bound to physical write buffer 1.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _settleGame(0xB00757);
         _settleClean(0xB00757);
         _settleIdle(0xB00757);
@@ -63,6 +63,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             _settleIdle(0xB00758);
         }
         assertEq(RecyclingState.writeBuffer(address(game)), PARENT_BUFFER);
+        _giveWalletId(makeAddr("nested-seed-wallet"));
     }
 
     /// @dev Answer every outstanding request and finish every delivered cohort until the engine
@@ -81,20 +82,9 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         revert("harness: cohorts never settled");
     }
 
-    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots):
-    ///      it runs exactly the next admitted chunk and cannot also admit the box entry.
+    /// @dev Maximum calibration stops after the first mandatory checkpoint.
     function _stepMinimal() private {
-        uint256 lo = 200_000;
-        uint256 hi = 30_000_000;
-        while (hi - lo > 1_000) {
-            uint256 mid = (lo + hi) / 2;
-            uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-            vm.revertToStateAndDelete(snap);
-            if (ok) hi = mid;
-            else lo = mid;
-        }
-        game.mineFlip{gas: hi}(0);
+        game.mineFlip{gas: 30_000_000}(type(uint32).max);
     }
 
     /// @dev PLAYER buys the three-box parent entry into PARENT_BUFFER (its write buffer).
@@ -281,8 +271,8 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         vm.prank(PLAYER);
         game.mineFlip(0);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), vrfWord);
-        for (uint256 i; i < 50 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
-        assertEq(game.nextMinerAction(), 10, "the entry is the next read consumer");
+        for (uint256 i; i < 50 && game.nextMinerAction() != 9; ++i) _stepMinimal(); // HumanBoxes
+        assertEq(game.nextMinerAction(), 9, "the entry is the next read consumer");
         assertEq(RecyclingState.word(address(game), PARENT_BUFFER), vrfWord, "the word reached the entry's tag");
     }
 

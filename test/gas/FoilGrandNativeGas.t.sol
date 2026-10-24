@@ -12,7 +12,7 @@ import {DegenerusGameFoilCore} from "../../contracts/modules/DegenerusGameFoilCo
 contract FoilGrandNativeHost is DegenerusGame, DegenerusGameFoilCore, WalletSeed {
     function prepareGrand(address player) external {
         level = 19;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
         _seedWallet(player);
         _setPrizePools(50 ether, 400 ether);

@@ -24,7 +24,7 @@ import {
 contract UnpushedDecimatorSessionSeeder is DegenerusGame {
     function prime(uint24 lvl, uint256 word, uint128 pool) external {
         level = lvl - 1;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
         _recordDailyRng(dailyIdx, word);
         rngWordCurrent = word;

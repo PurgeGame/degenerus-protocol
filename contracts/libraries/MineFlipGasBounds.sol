@@ -15,8 +15,6 @@ library MineFlipGasBounds {
     uint256 internal constant ENGINE_SELECTION = 450_000;
     // Return and one caller credit; native R90 fresh/spill transactions: 130.7k/148.1k.
     uint256 internal constant ENGINE_RETURN = 200_000;
-    // Cold 29-day gap: 683.6k including state gas.
-    uint256 internal constant DAILY_GAP = 850_000;
     // Prior cold-century envelope: 5.954M including 25 fresh slots; revalidate R90 callers.
     uint256 internal constant DAILY_APPLY = 7_200_000;
     // Cold midday 530.7k + request admission 1,017,936 + LINK admission 260,793,

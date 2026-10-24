@@ -53,10 +53,9 @@ contract WhaleBoonExpiry is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        // The day index is time-derived (`currentDayView` == `_simulatedDayIndex`), so a plain
-        // warp moves it; no advance is needed for the sweep, which runs off the box open. Land
-        // well past day 5 so `currentDay - 5` in the lapsed case cannot underflow.
-        vm.warp(block.timestamp + 8 days);
+        // Unit fixture: explicitly seed the logical cohort independently of its wall reset.
+        vm.warp(vm.getBlockTimestamp() + 8 days);
+        _seedLogicalFixtureDay(17);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -122,27 +121,14 @@ contract WhaleBoonExpiry is DeployProtocol {
             game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         uint256 entry = BoxOrderLib.boEntry(game.walletIdOf_g3120(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
+        RecyclingState.seedWriteBuffer(address(game), index);
         bytes32 dataBase = keccak256(abi.encode(bytes32(SLOT_BOX_QUEUE + uint256(index))));
-        vm.store(address(game), dataBase, bytes32(entry)); // position 0: previous case was fully consumed
-
+        vm.store(address(game), dataBase, bytes32(entry));
+        uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
+        lr = (lr & ~(uint256(0xFFFFFFFF) << 120)) | (uint256(1) << 120);
+        vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr));
         uint256 vrfWord = uint256(keccak256(abi.encode("whaleBoonExpiry", player, index)));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
-
-        // mineFlip's human-box stage only ever finds a box by walking boxQueue[read] on the
-        // delivered read buffer. Park the frontier so the stage reaches exactly this one entry.
-        bytes32 cursorSlot = bytes32(GameSlots.BOX_CURSOR);
-        uint256 cur = uint256(vm.load(address(game), cursorSlot));
-        cur &= ~((uint256(type(uint48).max) << (GameSlots.BOX_CURSOR_OFFSET * 8))
-            | (uint256(type(uint32).max) << (GameSlots.BOX_READ_COUNT_OFFSET * 8)));
-        cur |= uint256(1) << (GameSlots.BOX_READ_COUNT_OFFSET * 8);
-        vm.store(address(game), cursorSlot, bytes32(cur));
-
-        // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
-        // the delivered cohort's human entry is then mineFlip's next read-consumer stage, and the
-        // engine stops when the cohort completes instead of preparing the next day.
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
-        vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 
     /// @dev Trigger checkAndClearExpiredBoon by opening a lootbox: LootboxModule's per-tier
@@ -217,7 +203,8 @@ contract WhaleBoonExpiry is DeployProtocol {
         assertEq(deityWhaleDaySame, currentDay, "deityWhaleDay untouched on a same-day sweep");
 
         // Advance one day so currentDay no longer matches the stamped deity day.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _seedLogicalFixtureDay(game.currentDayView() + 1);
         uint24 newDay = game.currentDayView();
         assertGt(newDay, currentDay, "day must have advanced past the deity stamp");
 

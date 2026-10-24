@@ -24,7 +24,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 // ReviewFixes0924 — regression tests for the 2026-09-24 review fixes.
 //
 //   T1  a VRF stall that recovers past the purchase deadline does not fire liveness before the
-//       next advance's backfill credits the skipped days (unit + integration).
+//       next accepted logical round, without calendar credit (unit + integration).
 //   T2  terminal routing is irreversible: the sDGNRS self-claim waits (NotGameOver) while liveness
 //       reads true before game over; sealed Decimator battles remain settleable through the ending
 //       and receive a full claim window after their last completion; the foil drain's terminal
@@ -44,9 +44,12 @@ bytes4 constant NOT_GAME_OVER = bytes4(keccak256("NotGameOver()"));
 contract RecoveredStallLivenessHarness is DegenerusGameStorage {
     function seed(uint24 lvl, uint24 age, uint24 sealedAge, uint48 lastVrf) external {
         level = lvl;
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         purchaseStartDay = day - age;
         dailyIdx = day - sealedAge;
+        dailyComplete = sealedAge <= 1;
+        lastDailyCompletedAt = uint48(block.timestamp - 2 days);
+        lastDailyRequestWallDay = day - 1;
         rngRequestTime = 0;
         lastVrfProcessedTimestamp = lastVrf;
     }
@@ -68,16 +71,16 @@ contract RecoveredStallLivenessUnitTest is Test {
     ///         applied today (or yesterday): a recovered stall, not an unattended gap.
     function test_recoveredStallWordTodayIsNotTriggered() public {
         h.seed(5, 33, 3, uint48(block.timestamp));
-        assertFalse(h.liveness(), "a stall whose late word landed today waits for its backfill credit");
+        assertFalse(h.liveness(), "word publication alone cannot certify daily completion");
         h.seed(5, 33, 3, uint48(block.timestamp - 1 days));
-        assertFalse(h.liveness(), "a late word applied yesterday also waits");
+        assertFalse(h.liveness(), "word publication yesterday also cannot certify completion");
     }
 
     /// @notice A gap behind dailyIdx waits for its credit whenever the last word was applied: the
     ///         deadline fires only on a caught-up day.
-    function test_gapWaitsWhateverTheLastWord() public {
+    function test_IncompleteRoundCannotCountTowardPurchaseEnding() public {
         h.seed(5, 33, 3, uint48(block.timestamp - 2 days));
-        assertFalse(h.liveness(), "a gap is a stall of that length and waits for its credit");
+        assertFalse(h.liveness(), "unfinished thirtieth round cannot trigger normal ending");
         h.seed(5, 33, 1, uint48(block.timestamp - 2 days));
         assertTrue(h.liveness(), "control: caught up past the deadline fires");
     }
@@ -86,10 +89,13 @@ contract RecoveredStallLivenessUnitTest is Test {
 /// @dev Level-1 purchase phase `age` days in, sealed yesterday, target unmet; plus read-backs.
 contract ReviewDeadlineSeeder is DegenerusGame {
     function seed(uint24 age) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;
@@ -137,61 +143,47 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
         if (!done) mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode(id, "review-word"))));
     }
 
-    /// @notice The request for the day before the deadline day stalls; its word lands three days
-    ///         later with the target unmet. The advance that finishes the stalled day must leave
-    ///         liveness off, and the next advance credits the skipped days and carries on.
-    function test_stallRecoveredPastDeadlineDoesNotEndTheLevel() public {
+    /// @notice A three-calendar-day delay completes only its committed logical round.
+    ///      The next real request completes the thirtieth round, with no calendar debt.
+    function test_DelayedRoundKeepsPurchaseBaselineAndCountsOnlyCompletedRounds() public {
         vm.etch(address(game), type(ReviewDeadlineSeeder).runtimeCode);
-        ReviewDeadlineSeeder(payable(address(game))).seed(29); // today = the day before the deadline day
+        ReviewDeadlineSeeder(payable(address(game))).seed(29);
         vm.etch(address(game), realCode);
-
-        uint24 d = game.currentDayView();
-        // setUp's synthetic 500-day jump leaves expired scheduled Craps days as maintenance
-        // checkpoints ahead of the first daily request (see MidDayStallCredit._sealDay).
+        _syncCoinflipFixtureDay(game.currentDayView());
+        _seedCrapsFixtureCursor(game.currentDayView());
+        uint24 d = game.currentDayView() + 1;
         for (uint256 i; i < 800 && !game.rngLocked(); ++i) game.mineFlip(0);
-        assertTrue(game.rngLocked(), "day D requested; VRF stalls");
-        (uint24 psd0,) = _clock();
-
-        // vm.getBlockTimestamp, not block.timestamp: via-IR caches the latter across warps.
+        assertTrue(game.rngLocked(), "round requested");
+        (uint24 baseline,) = _clock();
         vm.warp(vm.getBlockTimestamp() + 3 days);
-        uint24 w = game.currentDayView();
-        assertEq(w, d + 3, "harness: three days later");
-        assertGt(w, psd0 + 30, "harness: past the purchase deadline");
-        assertFalse(game.livenessTriggered(), "a request in flight waits (both before and after the fix)");
-
-        // The late word lands; the advance finishes the stalled day on it (RNGREUSE clamp).
+        assertEq(game.currentDayView(), d, "elapsed resets cannot fabricate rounds");
+        assertFalse(game.livenessTriggered(), "unfinished round inside hard deadline");
         _answer();
-        for (uint256 i; i < 200 && game.rngLocked(); ++i) {
-            game.mineFlip(0);
-            _answer();
+        for (uint256 i; i < 500; ++i) {
+            (bool complete,,) = game.dailySessionState();
+            if (complete) break;
+            game.mineFlip{gas: 16_700_000}(type(uint32).max);
         }
-        assertFalse(game.rngLocked(), "the stalled day finished");
-        assertTrue(_recordedWord(d) != 0, "on its own late word");
-        assertEq(game.rngWordForDay(d), 0, "the public view expires words older than yesterday");
-        (, uint24 idx1) = _clock();
-        assertEq(idx1, d, "harness: only the stalled day sealed; the gap is not yet credited");
-        assertFalse(game.gameOver(), "not over");
-
-        // THE FIX: nothing in flight, behind by a gap, past the deadline — but the word was
-        // applied today, so this is a recovered stall awaiting its backfill credit.
-        assertFalse(game.livenessTriggered(), "recovered stall: liveness must not fire before the backfill");
-
-        // The next advance requests today's word, backfills the gap and credits it.
-        _finishReadConsumers();
-        for (uint256 i; i < 200; ++i) {
-            assertFalse(game.gameOver(), "the level must not end");
-            _answer();
-            game.mineFlip(0);
-            _answer();
-            if (!game.rngLocked() && game.rngWordForDay(w) != 0) break;
+        assertGt(game.rngWordForDay(d), 0, "delayed result remains retained");
+        assertEq(game.currentDayView(), d);
+        assertFalse(game.livenessTriggered(), "29 completed rounds");
+        uint256 prior = mockVRF.lastRequestId();
+        for (uint256 i; i < 800 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip(0);
+        assertGt(mockVRF.lastRequestId(), prior);
+        _answer();
+        for (uint256 i; i < 500; ++i) {
+            (bool complete,,) = game.dailySessionState();
+            if (complete) break;
+            game.mineFlip{gas: 16_700_000}(type(uint32).max);
         }
-        assertFalse(game.gameOver(), "the game continues");
-        assertTrue(game.rngWordForDay(w) != 0, "today sealed");
-        (uint24 psd2, uint24 idx2) = _clock();
-        assertEq(psd2, psd0 + (w - d - 1), "the skipped days were credited to the deadline");
-        assertEq(idx2, w, "caught up");
-        assertFalse(game.livenessTriggered(), "and liveness stays off");
+        (uint24 baselineAfter, uint24 idx) = _clock();
+        assertEq(baselineAfter, baseline, "calendar delay never rewrites purchase baseline");
+        assertEq(idx, d + 1, "exactly one further accepted round");
+        assertFalse(game.livenessTriggered(), "thirtieth completion has its open window");
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(game.livenessTriggered(), "next actual reset permits normal ending");
     }
+
 }
 
 // =====================================================================================
@@ -201,10 +193,13 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
 contract ReviewClaimSeeder is DegenerusGame, WalletSeed {
     /// @dev Past the purchase deadline, caught up, target unmet: liveness reads true, !gameOver.
     function seedLiveness() external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 1;
         purchaseStartDay = day - 31;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         rngRequestTime = 0;
@@ -233,7 +228,7 @@ contract ReviewClaimSeeder is DegenerusGame, WalletSeed {
     }
 
     function seedZeroQuotaRun(uint24 lvl) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         dailyIdx = day; purchaseStartDay = day;
         rngLockedFlag = false; ticketsFullyProcessed = true; subsFullyProcessed = true;
         _afkingResetDay = day;
@@ -313,7 +308,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
         ReviewClaimSeeder(payable(address(game))).seedZeroQuotaRun(DLVL);
         vm.etch(address(game), realCode);
-        assertEq(game.nextMinerAction(), 12, "the zero-quota run are the next engine work (MinerAction.Decimator)");
+        assertEq(game.nextMinerAction(), 11, "the zero-quota run are the next engine work (MinerAction.Decimator)");
         vm.fee(1 gwei);
         address keeper = makeAddr("battle-keeper");
         uint256 before = coinflip.coinflipAmount(keeper);
@@ -328,7 +323,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
                 (first, used, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
             }
         }
-        assertEq(first, 12, "non-vacuity: the call ran the zero-quota run' Decimator stage");
+        assertEq(first, 11, "non-vacuity: the call ran the zero-quota run' Decimator stage");
         emit log_named_uint("losing run mineFlip gas", used);
         emit log_named_uint("losing run bounty", reward);
         assertEq(coinflip.coinflipAmount(keeper) - before, reward, "the bounty is credited to the keeper's stake");
@@ -355,7 +350,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
     function test_legIdlesAfterGameOver() public {
         _over();
         uint256 before = claimableBalance(game, winner);
-        assertTrue(game.nextMinerAction() != 12, "the engine never selects the Decimator after game over");
+        assertTrue(game.nextMinerAction() != 11, "the engine never selects the Decimator after game over");
         // An idle worker settles nothing and moves nothing.
         (MineFlipGas.Result memory result, uint256 gasUsed) = _runDecWorker(5_000_000);
         assertFalse(result.progressed); assertFalse(result.done); assertEq(result.rewardBasis, 0);
@@ -501,10 +496,13 @@ contract ReviewFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
     /// @dev Identical slot writes in every case, so only the values differ between measurements.
     ///      liveTrigger: past the purchase deadline, caught up, target unmet.
     function setCase(bool liveTrigger, bool latchLvl) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 5;
         purchaseStartDay = day - (liveTrigger ? 31 : 5);
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         rngRequestTime = 0;
         _setLevelPrizePool(5, 10 ether);
         _setPrizePools(9 ether, 0);

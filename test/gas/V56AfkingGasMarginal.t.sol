@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -73,10 +74,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @dev Historical transaction allowance used by bounded progress witnesses.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
-    /// @dev A worst-case VRF/keeper stall length (days) for the D-06 gap-resume resume. The gap backfill is
-    ///      capped at 30 days in the contract (_backfillGapDays) and the 30-day VRF deadman ends any longer
-    ///      stall; 30 is the binding worst case.
-    uint256 internal constant STALL_DAYS = 30;
+    /// @dev A multi-reset stall that remains inside the fourteen-day hard completion timeout.
+    uint256 internal constant STALL_DAYS = 8;
 
     /// @dev Informational v55/349.2 per-buy lootbox reference (~206k, the v55 measured marginal WITH the
     ///      per-buy cross-contract storm) and the ~130-140k GAS-01 target band (the v56 deferred-settle win).
@@ -229,162 +228,67 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
 
     // =========================================================================
-    // (f) D-06 / GAS-06 — the per-tx gap-resume ceiling + the gap/jackpot decouple (D-07)
+    // (f) Logical resume: each first unit fits; elapsed resets create no extra rounds.
     // =========================================================================
 
-    /// @notice The GAS-06 / D-06 worst-case multi-day VRF-stall resume. A 30-day VRF/keeper stall (the widest the deadman lets resume), then a
-    ///         resume: rngGate backfills the (capped 30-day) gap on ONE advance, and the gap/jackpot decouple
-    ///         (DegenerusGameAdvanceModule:369-372 `if (gapDays != 0) { stage = STAGE_GAP_BACKFILLED; break; }`)
-    ///         defers the up-to-305-winner daily jackpot to the NEXT advance — so the backfill (~9M) and the
-    ///         jackpot (~6M+) NEVER execute in one tx. Asserts the D-06 bar: EACH mineFlip tx (advance N =
-    ///         the gap-backfill break, advance N+1 = the deferred jackpot) is STRICTLY under 16,777,216
-    ///         (EIP-7825) INDIVIDUALLY — NOT the ~25M total. This is the empirical answer to the proof's
-    ///         per-tx gap-resume ESTIMATE (~15.8M), bracketing each advance separately (gasleft before/after a
-    ///         single mineFlip call). At a worst-case SUBSCRIBER_CAP=2000 STAGE the backfill advance ALSO
-    ///         processes the resumed-day STAGE, so the full-cap sizing is load-bearing here.
-    function testGapResumePerAdvanceCeilingAndDecouple() public {
-        // Heavy state: a funded STAGE at scale, driven through an ORGANIC gap resume. The
-        // UNLOCKED resume entry (advance N) walks the STAGE first — the funded buys — and
-        // then falls through to a cheap fresh request: the normal stamp-before-request tx.
-        // The fulfilled word arrives buffered UNDER the lock, where the VRF-outstanding
-        // entry gate keeps the STAGE out entirely, so the gap backfill (advance N+1) and
-        // the deferred daily jackpot (advance N+2) each get their own ring-walk-free tx.
-        // None of the heavy legs ever share a tx, so each stays under the per-tx ceiling
-        // regardless of ring size (the V62-02 close).
-        address[] memory subs = _setupFundedSubs(N_HI, "gr_", 5 ether, false);
-
-        _settleClean(uint256(keccak256("gr_clean")) | 1);
+    function testLogicalResumePerCheckpointCeilingWithoutBackfill() public {
+        address[] memory subs = _setupFundedSubs(N_HI, "logical_resume_", 5 ether, false);
+        _settleClean(uint256(keccak256("logical_resume_clean")) | 1);
         _finishReadConsumers();
-        // Level stays at genesis: the 30-day stall is within the lvl-0 365-day idle clock and the deadman,
-        // and the resume settles without a level transition (no charity-pick dependency).
+        uint24 previous = game.currentDayView();
+        uint24 oldWall = game.currentWallDayView();
+        uint32 purchaseBaseline = _purchaseStartDay();
+        (bool complete,, uint48 completedAt) = game.dailySessionState();
+        assertTrue(complete, "stall begins after final daily completion");
 
-        uint32 idxBeforeStall = _dailyIdx();
-        uint32 psdBeforeResume;
-
-        // The stall: warp STALL_DAYS whole days WITHOUT advancing, so currentDayView() runs far ahead of
-        // dailyIdx — `day > idx + 1 && _recordedDailyWord(idx + 1) == 0` (the gap-backfill precondition).
-        vm.warp(block.timestamp + STALL_DAYS * 1 days);
-        uint32 resumeDay = game.currentDayView();
-        // Death-clock excludes gap days -> purchaseStartDay kept recent (game alive: resumeDay - psd = 1 < 30).
-        _setHeaderField(0, 3, resumeDay - 1); // purchaseStartDay = resumeDay - 1
-        psdBeforeResume = _purchaseStartDay();
-
-        require(resumeDay > idxBeforeStall + 1, "fixture: a multi-day gap opened (day >> dailyIdx)");
-        require(rngWordByDay(idxBeforeStall + 1) == 0, "fixture: the gap range is unbackfilled pre-resume");
-        require(game.advanceDue(), "fixture: advanceDue on resume");
-
-        // ---- Advance N (UNLOCKED resume entry): the STAGE chunk + the fresh daily request.
-        // The stamp-before-request ordering: the ring walks to completion, then rngGate fires
-        // the request (cheap) — no word exists yet, so no backfill/jackpot can share this tx. ----
-        // A realistic 10M allowance succeeds (the engine admits chunks while the allowance lasts, so the
-        // call is reported, not bounded; the checkpoints below are bounded one at a time).
-        uint256 gasBeforeN = gasleft();
-        game.mineFlip{gas: 10_000_000}(0);
-        uint256 advNGas = gasBeforeN - gasleft();
-        emit log_named_uint("resume_stage_plus_request_advance_N_gas", advNGas);
-
-        // Non-vacuity + segregation invariants on advance N:
-        //  - the STAGE actually ran and completed before the request fired.
-        assertTrue(_subsFullyProcessed(), "V62-02: the STAGE completed in advance N (subsFullyProcessed set)");
-        //  - the request is in flight (LOCKED) — the entry gate now excludes the ring from every leg below.
-        assertTrue(game.rngLocked(), "V62-02: advance N fired the resume request (rngLocked)");
-        //  - no word existed in this tx, so nothing backfilled/sealed — structurally no composition.
-        (uint16 gapPercentN,) = coinflip.getCoinflipDayResult(uint24(idxBeforeStall + 1));
-        assertEq(gapPercentN, 0, "V62-02: advance N did NOT backfill (no word yet)");
-        assertTrue(rngWordByDay(resumeDay) == 0, "V62-02: advance N committed no resumed-day word (request only)");
-        assertEq(_dailyIdx(), idxBeforeStall, "V62-02: advance N did NOT advance dailyIdx");
-        assertEq(_purchaseStartDay(), psdBeforeResume, "V62-02: advance N did NOT bump purchaseStartDay (no gap accounting yet)");
-        // Liveness: the only remaining step is waiting on the word, which is not runnable work (the
-        // engine reports RngNotReady); the resume continues on delivery below.
-        assertFalse(game.advanceDue(), "V62-02: after advance N the engine waits on the word (not stuck: RngNotReady)");
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
-
-        // The word arrives — buffered, STILL LOCKED (the organic buffered-clamp state; the lock
-        // clears only at _unlockRng, and the entry gate keeps the STAGE out until then).
-        _fulfillPending(uint256(keccak256("gr_resume_word")) | 1);
-        assertTrue(game.rngLocked(), "buffered word: still rngLocked until _unlockRng");
-
-        // ---- Advance N+1: the gap-backfill leg (STAGE gated out — rngLocked; rngGate backfills the
-        // gap ALONE and breaks STAGE_GAP_BACKFILLED, deferring the jackpot downstream) ----
-        // The backfill is its own checkpoint: at the measured boundary allowance (the smallest that
-        // progresses) the call admits the gap backfill alone, and that checkpoint must fit the 10M
-        // realistic chunk limit (30-day worst case).
-        // (Publication and the ticket certificate precede it as their own small checkpoints.)
-        uint256 np1Allowance;
-        uint256 advNp1Gas;
-        for (uint256 i; i < 20 && _dailyIdx() != resumeDay - 1; ++i) {
-            np1Allowance = _boundaryAllowance();
-            uint256 gasBeforeNp1 = gasleft();
-            game.mineFlip{gas: np1Allowance}(0);
-            advNp1Gas = gasBeforeNp1 - gasleft();
+        vm.warp(vm.getBlockTimestamp() + STALL_DAYS * 1 days);
+        assertEq(game.currentDayView(), previous, "calendar stalls cannot create logical rounds");
+        assertEq(game.currentWallDayView(), oldWall + STALL_DAYS);
+        assertFalse(game.livenessTriggered(), "eight days remain inside the hard timeout");
+        uint256 peak;
+        for (uint256 i; i < 500 && game.currentDayView() == previous; ++i) {
+            uint256 used = _logicalResumeStep();
+            if (used > peak) peak = used;
         }
-        emit log_named_uint("gap_backfill_checkpoint_allowance", np1Allowance);
-        emit log_named_uint("gap_backfill_advance_Np1_gas", advNp1Gas);
-        assertLe(advNp1Gas, GAS_TARGET, "D-06: the 30-day gap-backfill checkpoint fits the 10M chunk limit");
-
-        // D-07 invariants on advance N+1 (the gap backfill, decoupled from BOTH the STAGE and the jackpot):
-        //  - the gap range is now backfilled (so rngGate is idempotent next call: _recordedDailyWord(idx+1) != 0).
-        // (Gap-day words are not retained — only today's and yesterday's are — so the backfill is observed
-        // through its settled gap coinflip days.)
-        (uint16 gapPercent,) = coinflip.getCoinflipDayResult(uint24(idxBeforeStall + 1));
-        assertGt(gapPercent, 0, "D-07: advance N+1 backfilled the gap (its first gap coinflip day resolved)");
-        //  - dailyIdx parked at resumeDay - 1 (the gap is skipped, not walked) -> advanceDue stays true.
-        assertEq(_dailyIdx(), resumeDay - 1, "D-07: advance N+1 parked dailyIdx at resumeDay - 1 (gap skipped, no _unlockRng)");
-        assertTrue(game.advanceDue(), "D-07: advanceDue() stays true between advance N+1 and advance N+2 (jackpot deferred)");
-        //  - purchaseStartDay bumped EXACTLY ONCE by the gap count (the death-clock extension, the single bump).
-        //    rngGate computes gapCount = day - idx - 1 = resumeDay - idxBeforeStall - 1 (uncapped at the psd
-        //    bump site; the 30-day cap is only on the backfill LOOP, _backfillGapDays).
-        uint32 psdAfterNp1 = _purchaseStartDay();
-        uint256 expectedBump = uint256(resumeDay - idxBeforeStall - 1);
-        assertEq(uint256(psdAfterNp1 - psdBeforeResume), expectedBump, "D-07: purchaseStartDay bumped exactly once by the gap count (resumeDay - dailyIdx - 1)");
-
-        // The resumed day's word is applied by the next checkpoint (DailyApply); every later checkpoint
-        // reads the SAME word — it is NOT re-rolled (deferral moves DISTRIBUTION, never the word).
-        game.mineFlip{gas: _boundaryAllowance()}(0);
-        uint256 resumeWordOnNp1 = rngWordByDay(resumeDay);
-        require(resumeWordOnNp1 != 0, "fixture: the resumed-day word landed on advance N+1 (committed pre-defer)");
-
-        // ---- Advance N+2: the deferred-distribution advance (re-entry is idempotent: _recordedDailyWord(idx+1) != 0
-        // -> gapDays == 0; the daily jackpot distributes HERE, NOT on N+1). The D-06 per-tx ceiling for N+2 is
-        // the pre-existing runDailyJackpot bound (<= DAILY_ETH_MAX_WINNERS = 305, the proof's ~6M measured row +
-        // the dedicated jackpot suites) — the NEW fact the decouple establishes is that this distribution
-        // executes in a SEPARATE tx from the gap backfill, so the two never compose into one tx. We bracket N+2
-        // via a low-level call so the gas-to-completion (or to the synthetic-fixture jackpot boundary — the
-        // cheap STAGE/open marginal fixture builds no full prize-pool/ticket economics) is captured regardless,
-        // and assert it stays under the EIP cap.
-        // The deferred distribution: the remaining daily checkpoints, each call with a realistic 10M
-        // allowance, which must succeed (per-chunk bounds for the jackpot legs live in the jackpot suites).
-        uint256 gbNp2 = gasleft();
-        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineFlip{gas: 10_000_000}(0);
-        uint256 advNp2Gas = gbNp2 - gasleft();
-        emit log_named_uint("deferred_jackpot_advance_Np2_gas", advNp2Gas);
-        assertFalse(game.rngLocked(), "D-06: the resumed day's distribution completed at realistic allowances");
-
-        // D-07: advance N+2 read the SAME frozen resumed-day word committed on advance N+1 (never re-rolled).
-        assertEq(rngWordByDay(resumeDay), resumeWordOnNp1, "D-07: the deferred jackpot reads the SAME frozen resumed-day word (committed on N+1, no re-roll on N+2)");
-        // D-07: purchaseStartDay was bumped EXACTLY ONCE across the whole resume (advance N+2 must NOT bump it
-        // again — the death-clock extension is a single event tied to the gap backfill, gapDays == 0 on N+2).
-        assertEq(_purchaseStartDay(), psdAfterNp1, "D-07: purchaseStartDay NOT bumped again on advance N+2 (exactly-once across the resume; idempotent gapDays==0)");
-
-        emit log_named_uint("subscriber_cap_used", SUBSCRIBER_CAP);
-        // Non-vacuity: the funded subs still exist (the resume processed them, did not drop the fixture).
-        require(subs.length == N_HI, "fixture: funded set intact");
+        uint24 requested = previous + 1;
+        assertEq(game.currentDayView(), requested, "resume accepts exactly the next round");
+        assertTrue(_subsFullyProcessed(), "all subscribers are stamped before requesting");
+        assertTrue(game.rngLocked());
+        uint48 atRequest;
+        (complete,, atRequest) = game.dailySessionState();
+        assertFalse(complete, "request does not certify completion");
+        assertEq(atRequest, completedAt);
+        assertEq(_purchaseStartDay(), purchaseBaseline, "stall grants no purchase-age extension");
+        assertEq(rngWordByDay(requested), 0, "no result before the callback");
+        uint256 requestId = mockVRF.lastRequestId();
+        uint256 word = uint256(keccak256("logical_resume_word")) | 1;
+        _fulfillPending(word);
+        for (uint256 i; i < 2000; ++i) {
+            (complete,,) = game.dailySessionState();
+            if (complete) break;
+            uint256 used = _logicalResumeStep();
+            if (used > peak) peak = used;
+            assertEq(game.currentDayView(), requested, "all consumers use the one requested round");
+        }
+        (complete,,) = game.dailySessionState();
+        assertTrue(complete, "the full normal chain finishes at bounded checkpoints");
+        assertEq(mockVRF.lastRequestId(), requestId, "no calendar-debt request");
+        assertEq(rngWordByDay(requested), word, "every consumer shares the committed word");
+        (uint16 percent,) = coinflip.getCoinflipDayResult(requested);
+        assertGt(percent, 0, "the actual requested flip resolves");
+        (percent,) = coinflip.getCoinflipDayResult(requested + 1);
+        assertEq(percent, 0, "no synthetic next-day flip");
+        assertEq(_purchaseStartDay(), purchaseBaseline);
+        assertEq(subs.length, N_HI, "funded workload is nonempty");
+        emit log_named_uint("logical_resume_subscribers", subs.length);
+        emit log_named_uint("logical_resume_peak_first_unit_gas", peak);
     }
 
-    /// @dev The smallest allowance (100k steps) with which the next keeper call succeeds: it admits the
-    ///      next checkpoint alone. Probed on snapshots; the state is left unchanged.
-    function _boundaryAllowance() internal returns (uint256 g) {
-        uint256 snap = vm.snapshotState();
-        for (g = 500_000; g <= GAS_TARGET; g += 100_000) {
-            try game.mineFlip{gas: g}(0) {
-                require(vm.revertToState(snap), "snapshot");
-                return g;
-            } catch {
-                require(vm.revertToState(snap), "snapshot");
-            }
-        }
-        revert("fixture: no allowance up to 10M progresses");
+    function _logicalResumeStep() private returns (uint256 used) {
+        uint256 beforeGas = gasleft();
+        game.mineFlip{gas: EIP7825_TX_GAS_CAP}(type(uint32).max);
+        used = beforeGas - gasleft();
+        assertLe(used, GAS_TARGET, "each indivisible resume checkpoint fits the existing 10M target");
     }
 
     // =========================================================================
@@ -483,7 +387,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      stamp day's session gas and the count of first-level ETH-type BoxSpin events.
     function _forceEthSpinSession(uint256 m, string memory prefix) internal returns (uint256 sessionGas, uint256 ethSpins) {
         uint256 word = uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1;
-        uint32 day = _simulatedDayIndex() + 1;
+        uint32 day = _logicalDay() + 1;
         address[] memory subs = new address[](m);
         uint256 found;
         for (uint256 k; found < m; ++k) {
@@ -499,7 +403,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             game.subscribe(0, false, 1, seat);
         }
         _stampNewDay(word);
-        require(_simulatedDayIndex() == day && _pendingBoxes() >= m, "fixture: the forced boxes are stamped for the predicted day");
+        require(_logicalDay() == day && _pendingBoxes() >= m, "fixture: the forced boxes are stamped for the predicted day");
         vm.recordLogs();
         sessionGas = _sessionGas(word);
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
@@ -607,11 +511,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 subOpenCursorBefore = _subOpenCursor();
 
         // One unbounded engine call: enough for BOTH the afking box AND the human box.
-        assertEq(game.nextMinerAction(), 9, "LIVE-01(a): the AFKing stage is the engine's next work"); // Afking
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Afking), "LIVE-01(a): the AFKing stage is the engine's next work");
         vm.recordLogs();
         vm.prank(makeAddr("v_opener"));
         game.mineFlip(0);
-        assertEq(_minerFirstAction(vm.getRecordedLogs()), 9, "LIVE-01(a): afking-first -- the call opened with the AFKing stage");
+        assertEq(_minerFirstAction(vm.getRecordedLogs()), uint8(DegenerusGameStorage.MinerAction.Afking), "LIVE-01(a): afking-first -- the call opened with the AFKing stage");
 
         // Afking-first: the afking box opened (no longer pending).
         assertFalse(_isPending(afk), "LIVE-01(a): afking-first -- the afking box opened by the engine");
@@ -853,7 +757,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 guardN; guardN < 2 * SETTLE_PERIOD; ++guardN) {
             t += 1 days;
             vm.warp(t);
-            uint32 nextDay = _simulatedDayIndex();
+            uint32 nextDay = game.currentWallDayView();
             bool isSettle = (uint256(nextDay) % SETTLE_PERIOD == 0);
             if (isSettle == onSettle) return;
         }
@@ -871,7 +775,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // is measured as that whole session's keeper gas; N and N-1 differ by exactly one open.
         uint256 word = uint256(keccak256(abi.encodePacked(prefix, "word"))) | 1;
         _stampNewDay(word);
-        uint32 stampDay = _simulatedDayIndex();
+        uint32 stampDay = _logicalDay();
         require(_endpoint() == stampDay, "fixture: subs stamped for the new day");
         for (uint256 i; i < n; ++i) {
             require(_isPending(subs[i]), "marginal pre: each box queued");
@@ -1148,9 +1052,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev The simulated day index the next advance stamps with — read in-context via the game's view
-    ///      (`currentDayView()` == `_simulatedDayIndexAt(block.timestamp)`, the exact `processDay` the STAGE
+    ///      (`currentDayView()` == `_wallDayAt(block.timestamp)`, the exact `processDay` the STAGE
     ///      stamps with, AdvanceModule:169). Used to align the warp onto a settle boundary.
-    function _simulatedDayIndex() internal view returns (uint32) {
+    function _logicalDay() internal view returns (uint32) {
         return game.currentDayView();
     }
 
@@ -1405,16 +1309,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
 
-    /// @notice STRUCTURAL PROTECTION PROOF: the subscriber-chunk + jackpot composition (buffered-clamp re-open)
-    ///         cannot carry a HEAVY chunk, because the clamp requires the RNG lock (AdvanceModule:211 `locked`)
-    ///         and the v45 freeze invariant reverts ALL subscribe/replace/cancel under that lock
-    ///         (GameAfkingModule:328). This drives the exact buffered-clamp window ORGANICALLY (multi-day gap ->
-    ///         far-day request -> fulfill -> one more wall-day) and asserts that AT the consuming window the game
-    ///         is rngLocked and a NEW subscribe REVERTS RngLocked(). So no new buy-subs (nor cancels/evicts) can
-    ///         enter the window: every re-opened sub was stamped to the far request-day and SKIPS at guard :1324.
-    ///         The re-opened chunk is therefore all-skip (bounded ~6.4M), and all-skip + the jackpot leg stays
-    ///         under the EIP-7825 cap. This is why the composition is reachable but NOT a cap breach.
-    function test_BufferedClampReopen_GateSkipsStageUnderLock() public {
+    /// @notice A delayed daily commitment keeps its identity and subscription freeze across
+    ///         resets. Its locked processing never repeats subscription preparation.
+    function test_DelayedCommittedDayKeepsSubscriptionPreparationOutsideLock() public {
         address[] memory old = _setupFundedSubs(1, "frzbuf_old_", 50 ether, false);
         _settleClean(uint256(keccak256("frzbuf_base")) | 1);
         vm.startPrank(makeAddr("frzbuf_open"));
@@ -1422,68 +1319,48 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.stopPrank();
         require(!game.advanceDue() && !game.rngLocked(), "fixture: clean idle baseline");
 
-        uint32 dIdx0 = _dailyIdx();
-
-        // Multi-day keeper gap with a CLEAN rng state -> the first post-gap advance processes a FAR day and
-        // REQUESTS a word (engaging the RNG lock). This is the moment the buffered-clamp precondition is armed.
-        vm.warp(block.timestamp + 4 days);
-        uint32 farDay = game.currentDayView();
-        require(farDay > dIdx0 + 1, "fixture: a multi-day gap opened (wallDay >> dailyIdx)");
-        require(game.advanceDue(), "fixture: advanceDue after the gap");
-        game.mineFlip(0);
-        require(game.rngLocked(), "fixture: the far-day advance requested a word (RNG LOCK engaged)");
-        require(_dailyIdx() == dIdx0, "fixture: the request advance did NOT seal (dailyIdx unchanged)");
+        uint32 initialDay = _dailyIdx();
+        uint24 initialWall = game.currentWallDayView();
+        vm.warp(vm.getBlockTimestamp() + 4 days);
+        assertGt(game.currentWallDayView(), initialWall + 1, "several resets elapsed");
+        assertEq(_dailyIdx(), initialDay, "elapsed resets create no logical rounds");
+        assertTrue(game.advanceDue(), "a fresh daily commitment is due");
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); ++i) game.mineFlip(0);
+        assertTrue(game.rngLocked(), "bounded preparation reaches the daily request");
+        assertEq(_dailyIdx(), initialDay + 1, "one accepted request advances once");
 
         _fulfillPending(uint256(keccak256("frzbuf_word")) | 1);
-        // One MORE wall-day passes with no advance -> the buffered clamp WILL fire on the next advance, and the
-        // game is STILL rngLocked (the lock clears only at _unlockRng, which the next advance's clamp defers).
-        vm.warp(block.timestamp + 1 days);
-        require(game.currentDayView() > farDay, "fixture: one more wall-day (buffered-clamp precondition met)");
-        assertTrue(game.rngLocked(), "the buffered-clamp consuming window is RNG-LOCKED (the clamp requires `locked`)");
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertEq(_dailyIdx(), initialDay + 1, "delivery and another reset preserve commitment");
+        assertTrue(game.rngLocked(), "the delivered cohort still owns the lock");
 
-        // THE STRUCTURAL PROTECTION: a NEW subscribe in this exact window REVERTS — so no buy-sub can join the
-        // re-opened chunk. The v45 freeze invariant IS the reason the composition can never carry a heavy chunk.
         address newBuyer = makeAddr("frzbuf_newbuyer");
         uint256 seat = _grantSeat(newBuyer);
         _fundPool(newBuyer, 50 ether);
         vm.prank(newBuyer);
-        vm.expectRevert(bytes4(keccak256("RngLocked()"))); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
+        vm.expectRevert(bytes4(keccak256("RngLocked()")));
         game.subscribe(0, false, 1, seat);
 
-        // THE ENTRY GATE, proven organically: drive the buffered-clamp consuming drain and
-        // assert the subscriber STAGE did not run in ANY locked call — zero AfkingDelivered
-        // emissions (the walk visits nothing under the lock; the old code re-opened an all-skip
-        // walk here). A ticket batch may legitimately interpose before the day seals, so keep
-        // draining under the same lock until dailyIdx advances. The gate is why a completing
-        // subscriber chunk and a buffered-word jackpot apply can never share one tx.
-        uint32 idxBeforeConsume = _dailyIdx();
-        bytes32 skippedSig = keccak256("AfkingDelivered(uint32,uint256)");
+        bytes32 deliveredSig = keccak256("AfkingDelivered(uint32,uint256)");
         uint256 consumeCalls;
-        while (_dailyIdx() == idxBeforeConsume && consumeCalls < DRAIN_MAX_ITERATIONS) {
+        while (game.rngLocked() && consumeCalls < DRAIN_MAX_ITERATIONS) {
             vm.recordLogs();
-            game.mineFlip(0);
-            Vm.Log[] memory consumeLogs = vm.getRecordedLogs();
-            for (uint256 i; i < consumeLogs.length; ++i) {
-                assertTrue(
-                    consumeLogs[i].topics.length == 0 || consumeLogs[i].topics[0] != skippedSig,
-                    "GATE: the subscriber stage never runs while rngLocked (no ring visits in the consuming drain)"
-                );
+            // One mandatory unit isolates each still-locked step from later unlocked work.
+            game.mineFlip{gas: 16_777_216}(type(uint32).max);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length; ++i) {
+                assertTrue(logs[i].topics.length == 0 || logs[i].topics[0] != deliveredSig,
+                    "subscription preparation never runs while the commitment is locked");
             }
-            unchecked {
-                ++consumeCalls;
-            }
+            ++consumeCalls;
         }
-        assertGt(_dailyIdx(), idxBeforeConsume, "non-vacuity: the consuming advance applied/sealed a day");
-        emit log_named_uint("buffered_clamp_consuming_calls", consumeCalls);
-
-        emit log_named_string(
-            "FINDING",
-            "The buffered-clamp consuming window is RNG-locked: subscribe/cancel revert (v45 freeze) "
-            "AND the VRF-outstanding entry gate keeps the subscriber STAGE out of the consuming tx entirely -- "
-            "the subscriber+jackpot composition is structurally impossible at any ring size."
-        );
+        assertGt(consumeCalls, 0, "the test processed a real delivered commitment");
+        assertFalse(game.rngLocked(), "the same committed daily phase unlocks within the bound");
+        assertEq(_dailyIdx(), initialDay + 1, "unlock does not advance or backfill days");
+        emit log_named_uint("delayed_locked_consuming_calls", consumeCalls);
         require(old.length == 1, "fixture: old sub intact");
     }
+
 
 
 }

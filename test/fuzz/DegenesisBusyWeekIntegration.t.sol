@@ -32,8 +32,8 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
 
     uint8 internal constant ACTION_IDLE = 0;
     uint8 internal constant ACTION_WAIT = 2;
-    uint8 internal constant ACTION_PREPARE_SUBS = 15;
-    uint8 internal constant ACTION_MAINTENANCE = 16;
+    uint8 internal constant ACTION_PREPARE_SUBS = 14;
+    uint8 internal constant ACTION_MAINTENANCE = 15;
     uint8 internal constant STAGE_PURCHASE_DAILY = 6;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
     uint8 internal constant STAGE_JACKPOT_PHASE_ENDED = 9;
@@ -358,6 +358,10 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         if (n > plan.players) n = plan.players;
         buyersOn[c] = n;
         uint256 early = n / 3 + 1;
+        vm.warp(_dayStart(d) + 1);
+        _stepToRequestMetered(plan);
+        _mine(dayA); // accepted logical request opens this cohort before its first purchase
+        assertEq(game.currentDayView(), d);
         uint256 runs;
         uint256[2] memory runAt = [uint256(1 hours), 12 hours];
         for (uint256 k; k < n; ++k) {
@@ -452,7 +456,8 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         uint256 index = _count(c);
         uint256 credit0 = game.degenesisCreditOf(p);
         uint256 claimable0 = game.claimablePoolView();
-        uint256 secs = (block.timestamp - GameTimeLib.JACKPOT_RESET_TIME) % 1 days;
+        // _saleDay commits each cohort exactly one second after its reset.
+        uint256 secs = block.timestamp - (_dayStart(_dayOf(c)) + 1);
         _buy(p, amount);
         assertEq(_count(c), index + 1, "order appended to today's cohort");
         assertEq(game.claimablePoolView(), claimable0 + amount, "the whole amount held in claimablePool");

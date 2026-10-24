@@ -19,10 +19,13 @@ contract JackpotMergeSeeder is DegenerusGame, WalletSeed {
     function seed(bool phase, bool transition, bool last, uint256 holders) external {
         // The synthetic jump to level 6 models levels 1..6 as drained: free their recycled roots.
         TQ.retireCompleted(address(this), 6);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 6;
         purchaseStartDay = day - 2;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         jackpotPhaseFlag = phase;
         phaseTransitionActive = transition;
         lastPurchaseDay = last;
@@ -99,6 +102,8 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         vm.etch(address(game), type(JackpotMergeSeeder).runtimeCode);
         JackpotMergeSeeder(payable(address(game))).seed(phase, transition, last, holders);
         vm.etch(address(game), code);
+        _syncCoinflipFixtureDay(game.currentDayView());
+        _seedCrapsFixtureCursor(game.currentDayView());
         vm.warp(start - 1 days);
         vm.prank(address(game)); crapsBattle.openBonusDay();
         uint24 day = crapsBattle.currentDayIndex();

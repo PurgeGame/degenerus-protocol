@@ -313,6 +313,8 @@ abstract contract DegenesisStallRequestGas is DegenesisGasBase {
         uint32 winnerId = _giveWalletId(WINNER);
         _etchHost();
         host.hostRequestSeed(1000 ether);
+        _syncCoinflipFixtureDay(GameTimeLib.currentDayIndex() - 1);
+        _quietCrapsTable();
         uint256 reserved;
         for (uint256 c = 1; c <= 7; ++c) {
             host.hostCohort(c, 1_000_000 + c, 100, false);
@@ -405,6 +407,8 @@ contract DegenesisTerminalSetupEngineGas is DegenesisGasBase {
         _giveWalletId(miner);
         for (uint256 c = 1; c <= 7; ++c) {
             vm.warp((uint256(GameTimeLib.DEGENESIS_START_DAY + c - 1) - 1) * 1 days + GameTimeLib.JACKPOT_RESET_TIME + 2 hours);
+            // Synthetic worst-case inventory: seven logical cohorts, each with no split.
+            _seedLogicalFixtureDay(uint24(GameTimeLib.DEGENESIS_START_DAY + c - 1));
             for (uint256 k; k < 3; ++k) {
                 address p = makeAddr(string(abi.encode("terminal-buyer", c, k)));
                 vm.deal(p, 1_000 ether);
@@ -502,7 +506,7 @@ contract DegenesisBattleSkipRequestGas is DegenesisGasBase {
         miner = makeAddr("skip-miner");
         _giveWalletId(miner);
         vm.warp(block.timestamp + 1 days);
-        require(game.currentDayView() == GameTimeLib.DEGENESIS_START_DAY, "fixture: Degenesis day 1");
+        require(game.currentDayView() == 1, "fixture: bootstrap until accepted request");
         for (uint256 i; i < 50; ++i) {
             if (game.nextMinerAction() == MineFlipAdmission.REQUEST_DAILY) break;
             game.mineFlip{gas: 3_000_000}(0);
@@ -577,7 +581,7 @@ contract DegenesisAdmissionCeilings is DegenesisGasBase {
             + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN, CEILING, "daily request with the Degenesis step");
         assertLt(GasBounds.DAILY_APPLY + GasBounds.DEGENESIS_WORD_COPY_GAS + GasBounds.ENGINE_BOUNDARY
             + GasBounds.ENGINE_RETURN, CEILING, "daily apply with the word copy");
-        assertLt(GasBounds.DAILY_GAP + GasBounds.DAILY_APPLY + GasBounds.DEGENESIS_WORD_COPY_GAS
+        assertLt(GasBounds.DAILY_APPLY + GasBounds.DEGENESIS_WORD_COPY_GAS
             + GasBounds.TERMINAL_TAIL + 250_000, CEILING, "terminal word application with the word copy");
         assertLt(GasBounds.TERMINAL_SETUP + GasBounds.DEGENESIS_TERMINAL_GAS + GasBounds.TERMINAL_TAIL + 250_000,
             CEILING, "terminal setup with the Degenesis split");

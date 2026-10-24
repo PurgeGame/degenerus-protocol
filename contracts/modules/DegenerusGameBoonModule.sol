@@ -131,7 +131,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     ///      is a no-op; a recipient's existing boon can only retain or upgrade its lane.
     function resolveProtocolBoonDraws(uint24 awardDay) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (gameOver || awardDay <= 1 || awardDay != _simulatedDayIndex()) return;
+        if (gameOver || awardDay <= 1 || awardDay != _gameDay()) return;
         uint256 menuWord = _recordedDailyWord(awardDay - 1);
         // Warm read: rngGate wrote this slot earlier in the same transaction, so passing the
         // word as calldata would cost more than reading it back.
@@ -208,7 +208,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (empty local state returns silently).
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 currentDay = uint24(_gameDay());
         BoonPacked storage bp = boonPacked[id];
         uint256 s0 = bp.slot0;
         uint256 s1 = bp.slot1;
@@ -527,7 +527,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
 
         expectedPerBoon = (avgMaxValue * LOOTBOX_BOON_UTILIZATION_BPS) / 10_000;
         if (expectedPerBoon == 0) return (0, 0);
-        currentDay = _simulatedDayIndex();
+        currentDay = _gameDay();
     }
 
     /// @dev Roll one homogeneous tier using a normalization shared by the whole entry.

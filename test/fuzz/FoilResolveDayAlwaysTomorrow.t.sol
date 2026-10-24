@@ -41,22 +41,22 @@ contract FoilGenerationFreshRequest is DeployProtocol {
 
         _t += 3 days;
         vm.warp(_t);
-        uint24 W = game.currentDayView();
-        assertEq(W, R + 3, "wall day is R+3");
+        assertEq(game.currentDayView(), R, "calendar stall preserves the outstanding logical day");
+        uint24 W = R + 1;
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
         _lastFulfilledReqId = reqR;
         // R seals on its late word. Once R's read cohort drains, the same crank chain issues
         // W's fresh daily request under the lock (a fresh normal request waits only for the
         // read consumers, so there is no unlocked window between the two).
         uint256 fresh = _crankUntilFreshRequest(reqR);
-        assertEq(_dailyIdx(), R, "sealed R");
+        assertEq(_dailyIdx(), W, "fresh request commits the next logical day");
         assertTrue(game.rngLocked(), "W's fresh request holds the lock");
 
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
         _lastFulfilledReqId = fresh;
         game.mineFlip(0);
         assertTrue(game.rngWordForDay(W) != 0, "W's word recorded by the fulfil crank");
-        assertEq(_dailyIdx(), W - 1, "gap days skipped");
+        assertEq(_dailyIdx(), W, "publication preserves the requested day");
         assertTrue(game.rngLocked(), "W's jackpot still owed under the lock");
 
         // Every word through W is public and the lock is up: a buy resolves against W+1.
@@ -90,7 +90,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         uint24 today = game.currentDayView();
-        assertEq(_dailyIdx(), today - 1, "wall day rolled, not yet advanced");
+        assertEq(_dailyIdx(), today, "calendar reset leaves the requested day unchanged");
         assertFalse(game.rngLocked(), "no request yet");
         address buyer = makeAddr("foil_slice");
         _buy(buyer);

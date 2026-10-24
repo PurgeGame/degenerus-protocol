@@ -8,11 +8,10 @@ import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title QuestStreakStallForgiveness
-/// @notice Regression coverage for unrolled quest days and AFKing deliveries across an
+/// @notice Regression coverage for logical quest days and AFKing deliveries across an
 ///         unadvanced calendar gap. Test-only storage reads use compiler-derived packed offsets.
 contract QuestStreakStallForgiveness is DeployProtocol {
     uint256 private constant QUEST_STATE_SLOT = QaSlots.STATE;
-    uint256 private constant QUEST_BITMAP_SLOT = QaSlots.ROLLED;
     uint256 private constant OFF_LAST_ACTIVE = 3;
     uint256 private constant OFF_LAST_SYNC = 6;
     uint256 private constant OFF_STREAK = 9;
@@ -30,390 +29,141 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        vm.warp(block.timestamp + 1 days);
+        mockVRF.fundSubscription(1, 1_000 ether);
         vm.deal(address(game), 5_000_000 ether);
-        _finishSubscriptionWindow();
     }
 
-    function test_ManualStreakForgivesOnlyUnrolledDays() public {
-        address player = makeAddr("manual-gap");
-        _roll(10);
-        _award(player, 10, 10);
-        _grantShields(player, 2);
-
-        _roll(18); // days 11..17 had no rolled quest
-        for (uint24 day = 11; day < 18; ++day) {
-            assertFalse(_questWasRolled(day), "jump leaves every intervening day unrolled");
-        }
-        assertEq(quests.effectiveBaseStreak(_qid(player)), 10, "unrolled days do not decay the streak view");
-        assertEq(_questField(player, OFF_SHIELD, 8), 2, "unrolled days consume no shields");
-
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "next rolled primary completes");
-        assertEq(streak, 11, "streak continues on the next playable quest");
-        assertEq(_questField(player, OFF_SHIELD, 8), 2, "sync consumed no shield");
-    }
-
-    function test_RealAdvanceRecoveryBanksGapAndKeepsManualStreak() public {
-        address player = makeAddr("real-advance-gap");
-        _settleCurrentGameDay(0xA11CE);
-        uint24 initialQuestDay = _activeQuestDay();
-        assertEq(initialQuestDay, uint24(game.currentDayView()), "fixture landed the healthy daily quest");
-        (, , uint32 initialStreak, bool initialCompleted) = _completePrimary(player);
-        assertTrue(initialCompleted, "fixture completed the healthy primary");
-        assertEq(initialStreak, 1, "fixture starts a one-day streak");
-
-        vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < 20 && !game.rngLocked(); ++i) game.mineFlip(0);
-        assertTrue(game.rngLocked(), "daily request entered the stalled window");
-        uint256 stalledRequest = mockVRF.lastRequestId();
-
+    function test_CalendarStallPreservesStreakAndShields() public {
+        address player = makeAddr("calendar-stall");
+        _roll(10); _award(player, 10, 10); _grantShields(player, 2);
+        uint256 beforeStreak = quests.effectiveBaseStreak(_qid(player));
         vm.warp(block.timestamp + 8 days);
-        mockVRF.fulfillRandomWords(stalledRequest, 0xBACC_F111);
-        uint24 recoveryDay = uint24(game.currentDayView());
-        // The stale buffered word only seals its request day (quest stays unrolled — forgiven);
-        // the wall day resolves from a fresh request, so keep fulfilling as the walk advances.
-        for (uint256 i; i < 40 && _activeQuestDay() != recoveryDay; ++i) {
-            game.mineFlip(0);
-            _fulfillLatest(0xF0110001);
-        }
-
-        assertEq(_activeQuestDay(), recoveryDay, "real rngGate recovery rolled only the wall-day quest");
-        for (uint24 day = initialQuestDay + 1; day < recoveryDay; ++day) {
-            assertFalse(_questWasRolled(day), "real recovery does not invent a quest for a gap day");
-        }
-        assertEq(quests.effectiveBaseStreak(_qid(player)), 1, "real stalled days preserve the manual streak");
-        (, , uint32 recoveredStreak, bool recoveredCompleted) = _completePrimary(player);
-        assertTrue(recoveredCompleted, "recovery-day primary completes");
-        assertEq(recoveredStreak, 2, "real recovery continues the streak");
-    }
-
-    function test_MixedGapConsumesShieldsOnlyForRolledMisses() public {
-        address player = makeAddr("mixed-gap");
-        _roll(10);
-        _award(player, 10, 10);
-        _grantShields(player, 3);
-
-        _roll(15); // four unrolled days: 11..14
-        _roll(16); // rolled and genuinely missed: 15
-        _roll(17); // rolled and genuinely missed: 16
-        _roll(18); // rolled and genuinely missed: 17
-
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "current primary completes");
-        assertFalse(_questWasRolled(14), "last skipped day remains unrolled");
-        assertTrue(_questWasRolled(15), "recovery day is playable");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "three real misses consume three shields");
-        assertEq(streak, 11, "covered real misses preserve the streak before the new completion");
-    }
-
-    function test_MidStallWallClockSyncCannotReopenCompletionOrMiscountGap() public {
-        address completedPlayer = makeAddr("mask-player");
-        address debtPlayer = makeAddr("debt-player");
-
-        // setUp rolled days 9 and 10, so this run starts on day 11.
+        assertEq(game.currentDayView(), 10);
+        assertEq(quests.effectiveBaseStreak(_qid(player)), beforeStreak);
+        assertEq(_questField(player, OFF_STREAK, 16), 10);
+        assertEq(_questField(player, OFF_SHIELD, 8), 2);
         _roll(11);
-        _award(debtPlayer, 5, 11);
-        _roll(13); // bank day 12
-
-        _award(completedPlayer, 5, 13);
-        _completePrimary(completedPlayer);
-        assertEq(_questField(completedPlayer, OFF_COMPLETION_MASK, 8) & 1, 1, "primary is complete");
-
-        // Game-side callers pass wall time here during a stalled advance. They must synchronize
-        // against the newest rolled quest day (13), not move the completion epoch to wall day 16.
-        uint32 qid1 = _qid(completedPlayer);
-        vm.prank(ContractAddresses.GAME);
-        quests.beginAfking(qid1, 16);
-        assertEq(_questField(completedPlayer, OFF_LAST_SYNC, 24), 13, "sync clock stays on rolled day");
-        assertEq(_questField(completedPlayer, OFF_COMPLETION_MASK, 8) & 1, 1, "completion mask stays closed");
-        (, , , bool duplicate) = _completePrimary(completedPlayer);
-        assertFalse(duplicate, "the same stale quest cannot pay twice");
-
-        // This player has an older anchor. A wall-day bonus advances it only to quest day 13;
-        // the rolled-day history then makes later gap accounting independent of wall time.
-        _award(debtPlayer, 4, 16);
-        assertEq(_questField(debtPlayer, OFF_LAST_ACTIVE, 24), 13, "bonus anchor normalized to quest day");
-        assertEq(_questField(debtPlayer, OFF_STREAK, 16), 9, "bonus reaches the raw streak");
-        assertEq(quests.effectiveBaseStreak(_qid(debtPlayer)), 5, "same-day view remains the start-of-day snapshot");
-
-        _roll(19);
-        assertFalse(_questWasRolled(18), "later gap day remains unrolled");
-        assertEq(quests.effectiveBaseStreak(_qid(debtPlayer)), 9, "recovery cannot panic or erase the bonus");
+        (,,uint32 streak,bool completed) = _completePrimary(player);
+        assertTrue(completed); assertEq(streak, 11);
+        assertEq(_questField(player, OFF_SHIELD, 8), 2);
     }
 
-    function test_FinalizeIgnoresUnrolledGapButNotNextRolledMiss() public {
-        address player = makeAddr("finalize-unrolled");
-        _roll(10);
-        _award(player, 10, 10);
-        _beginAfking(player, 10);
-
-        _roll(16); // bank days 11..15 before finalization
-        _finalizeAfking(player, 10, 10, 16);
-        assertEq(_questField(player, OFF_STREAK, 16), 10, "unrolled gap preserves earned streak");
-        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 10, "anchor remains the actual valid mint day");
-
-        _roll(17);
-        assertEq(quests.effectiveBaseStreak(_qid(player)), 0, "rolled day 16 was a real miss and is not forgiven twice");
+    function test_MissedLogicalDaysConsumeShieldsExactlyOnce() public {
+        address player = makeAddr("logical-misses");
+        _roll(10); _award(player, 10, 10); _grantShields(player, 3);
+        _roll(14); // Three actually requested logical days were missed.
+        (,,uint32 streak,bool completed) = _completePrimary(player);
+        assertTrue(completed); assertEq(streak, 11);
+        assertEq(_questField(player, OFF_SHIELD, 8), 0);
+        (,,,bool duplicate) = _completePrimary(player);
+        assertFalse(duplicate);
     }
 
-    function test_FinalizePendingTailSurvivesRecoveryThenDecaysOnRealMiss() public {
-        address player = makeAddr("finalize-tail");
-        _roll(10);
-        _award(player, 10, 10);
-        _beginAfking(player, 10);
-
-        _finalizeAfking(player, 10, 10, 13); // days 11 and 12 have no rolled quest yet
-        assertEq(_questField(player, OFF_STREAK, 16), 10, "pending unrolled tail is forgiven");
-        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 10, "future wall days are not stored as quest anchors");
-
-        _roll(16); // days 11..15 remain unrolled
-        assertEq(quests.effectiveBaseStreak(_qid(player)), 10, "streak remains live on recovery day");
-        _roll(17);
-        assertEq(quests.effectiveBaseStreak(_qid(player)), 0, "first genuinely missed rolled day still decays");
-    }
-
-    function test_FinalizeDeliveredAheadKeepsAnchorThroughRecovery() public {
-        address player = makeAddr("finalize-ahead");
-        _roll(10);
-        _award(player, 10, 10);
-        _beginAfking(player, 10);
-
-        // The afking stage delivers pre-RNG, so coverage (13) leads the newest roll (10) at a
-        // cancel inside the delivery->seal window. The delivered day must stay a valid anchor.
-        _finalizeAfking(player, 10, 13, 13);
-        assertEq(_questField(player, OFF_STREAK, 16), 10, "delivered-ahead finalize keeps the earned streak");
-        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 13, "anchor stays at the delivered high-water");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "finalization creates no synthetic shield");
-
-        _roll(13); // recovery roll lands ON the delivered day; 11 and 12 remain unrolled
-        assertFalse(_questWasRolled(12), "pre-anchor gap day remains unrolled");
-        assertTrue(_questWasRolled(13), "delivered anchor day later becomes playable");
-        _roll(14);
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "next-day primary completes");
-        assertEq(streak, 11, "the delivered day is not a phantom miss");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "no shield was needed or granted");
-    }
-
-    function test_FinalizeDeliveredAheadThenLaterStallNeedsNoSyntheticShield() public {
-        address player = makeAddr("finalize-deficit");
-        _roll(10);
-        _award(player, 10, 10);
-        _beginAfking(player, 10);
-        _finalizeAfking(player, 10, 13, 13);
-
-        // The anchor-day quest is covered even though it rolls after finalization. A later
-        // jump has no rolled quests on days 14..16, so it needs no scalar correction.
-        _roll(13);
-        _roll(17);
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "post-second-stall primary completes");
-        assertEq(streak, 11, "the rolled-day history preserves the streak exactly");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "no hidden compensation was consumed");
-    }
-
-    function test_FinalizeDeliveredAheadDoesNotLicenseRealMisses() public {
-        address player = makeAddr("finalize-no-license");
-        _roll(10);
-        _award(player, 10, 10);
-        _beginAfking(player, 10);
-        _finalizeAfking(player, 10, 13, 13);
-
-        // The anchor-day roll is covered, but rolled days 14 and 15 are genuine misses.
-        _roll(13); // days 11 and 12 remain unrolled
-        _roll(14);
-        _roll(15);
-        _roll(16); // rolled days 14 and 15 were really missed
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "day-16 primary completes");
-        assertEq(streak, 1, "two real rolled misses reset the streak");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "finalization never licensed a miss");
-    }
-
-    function test_FinalizeDeliveredAheadLateRecoveryBanksExactly() public {
-        address player = makeAddr("finalize-late-word");
-        _roll(10);
-        _award(player, 10, 10);
-        _beginAfking(player, 10);
-
-        // Word lands two days after the last delivery: the (13, 15) tail is forgiven at
-        // finalize, and recovery banking past the anchor is credited exactly once.
-        _finalizeAfking(player, 10, 13, 15);
-        assertEq(_questField(player, OFF_STREAK, 16), 10, "unadvanced tail beyond coverage is forgiven");
-        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 13, "anchor stays at the delivered high-water");
-
-        _roll(16); // days 11..15 remain unrolled, including 14 and 15 after the anchor
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "recovery-day primary completes");
-        assertEq(streak, 11, "post-anchor unrolled days are ignored exactly");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "no shield was minted");
-    }
-
-    function test_FinalizeAheadCyclesNeverGrantShields() public {
-        address player = makeAddr("finalize-no-farm");
-        _roll(10);
-        _award(player, 10, 10);
-        _beginAfking(player, 10);
-        _finalizeAfking(player, 10, 13, 13);
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "first ahead finalize grants no shield");
-
-        // A later coverage-advancing cycle was the farmable path in the compensating-shield
-        // workaround. Neither cycle may mutate the player's shield inventory.
-        _beginAfking(player, 13);
-        _finalizeAfking(player, 10, 14, 14);
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "coverage advancement grants nothing");
-        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 14, "anchor follows actual coverage");
-    }
-
-    function test_FinalizeStaleBankCannotForgiveRolledMisses() public {
-        address player = makeAddr("finalize-stale-bank");
-        _roll(10);
-        _award(player, 10, 10); // activity anchor 10
-        _beginAfking(player, 10);
-
-        _roll(16); // days 11..15 were unrolled inside coverage already settled by the run
-        _roll(17);
+    function test_NoBitmapForgivenessForMissedLogicalDays() public {
+        address player = makeAddr("unrolled-is-not-a-calendar-gap");
+        _roll(10); _award(player, 10, 10); _grantShields(player, 2);
         _roll(18);
-        _roll(19);
-        _roll(20);
-        _roll(21);
-        _roll(22);
-
-        // Coverage reached day 20; rolled days 21 and 22 were genuinely missed. The stale
-        // five-day bank (all behind the coverage high-water) must not forgive them.
-        _finalizeAfking(player, 20, 20, 23);
-        assertEq(_questField(player, OFF_STREAK, 16), 0, "pre-coverage stalls cannot keep a lapsed run alive");
+        assertEq(quests.effectiveBaseStreak(_qid(player)), 0);
+        (,,uint32 streak,bool completed) = _completePrimary(player);
+        assertTrue(completed); assertEq(streak, 1);
+        assertEq(_questField(player, OFF_SHIELD, 8), 0);
     }
 
-    function test_GenesisConsecutiveAndJumpMarkOnlyRolledDays() public {
-        _roll(10);
-        assertTrue(_questWasRolled(10), "genesis quest day is marked");
-        _roll(11);
-        _roll(12);
-        assertTrue(_questWasRolled(11), "consecutive day 11 is marked");
-        assertTrue(_questWasRolled(12), "consecutive day 12 is marked");
-        _roll(15);
-        assertFalse(_questWasRolled(13), "skipped day 13 is not marked");
-        assertFalse(_questWasRolled(14), "skipped day 14 is not marked");
-        assertTrue(_questWasRolled(15), "jump destination is marked");
+    function test_CalendarSyncCannotReopenCompletedQuest() public {
+        address player = makeAddr("completion-mask");
+        _roll(10); _award(player, 5, 10); _completePrimary(player);
+        vm.warp(block.timestamp + 8 days);
+        _beginAfking(player, 10);
+        assertEq(_questField(player, OFF_LAST_SYNC, 24), 10);
+        assertEq(_questField(player, OFF_COMPLETION_MASK, 8) & 1, 1);
+        (,,,bool duplicate) = _completePrimary(player); assertFalse(duplicate);
     }
 
-    function test_RolledMissBitmapCountsAcrossWordBoundary() public {
-        address player = makeAddr("bitmap-boundary");
-        _roll(254);
-        _award(player, 10, 254);
-        _grantShields(player, 2);
-
-        _roll(255); // high bit of bitmap word 0
-        _roll(256); // low bit of bitmap word 1
-        _roll(260); // days 257..259 were unrolled
-
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "current primary completes across bitmap boundary");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "only days 255 and 256 consume shields");
-        assertEq(streak, 11, "unrolled days 257..259 do not affect the streak");
+    function test_FinalizeCalendarTailPreservesOnlyDeliveredAnchor() public {
+        address player = makeAddr("finalize-calendar-tail");
+        _roll(10); _award(player, 10, 10); _beginAfking(player, 10);
+        vm.warp(block.timestamp + 8 days);
+        _finalizeAfking(player, 10, 10, 10);
+        assertEq(_questField(player, OFF_STREAK, 16), 10);
+        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 10);
+        _roll(11); assertEq(quests.effectiveBaseStreak(_qid(player)), 10);
+        _roll(12); assertEq(quests.effectiveBaseStreak(_qid(player)), 0);
     }
 
-    function test_MultipleStallsDoNotCrossCreditPastNewAnchor() public {
-        address player = makeAddr("two-stalls");
-        _roll(10);
-        _award(player, 10, 10);
-        _grantShields(player, 1);
-
-        _roll(15); // bank 11..14
-        _completePrimary(player); // new activity anchor on rolled day 15
-        _roll(16); // rolled day 15 is complete; day 16 will be the real miss
-        _roll(20); // bank 17..19
-
-        (, , uint32 streak, bool completed) = _completePrimary(player);
-        assertTrue(completed, "post-second-stall primary completes");
-        assertEq(_questField(player, OFF_SHIELD, 8), 0, "only rolled day 16 consumes the shield");
-        assertEq(streak, 12, "prior bank cannot be reused past the day-15 anchor");
+    function test_FinalizeDeliveredAheadRetainsPreRequestCoverage() public {
+        address player = makeAddr("delivered-ahead");
+        _roll(10); _award(player, 10, 10); _beginAfking(player, 10);
+        _finalizeAfking(player, 11, 11, 10);
+        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 11);
+        assertEq(_questField(player, OFF_SHIELD, 8), 0);
+        _roll(11); _roll(12);
+        (,,uint32 streak,bool completed) = _completePrimary(player);
+        assertTrue(completed); assertEq(streak, 12);
+        _finalizeAfking(player, 999, 999, 999);
+        assertEq(_questField(player, OFF_STREAK, 16), 12, "finalize is idempotent");
     }
 
-    function test_AfkingStageGapPreservesPreBuyScore() public {
-        address player = _startAfkingPlayer("stage-gap", 10);
-        uint256 snapshot = vm.snapshotState();
+    function test_FinalizeNeverLicensesLogicalMisses() public {
+        address player = makeAddr("no-miss-license");
+        _roll(10); _award(player, 10, 10); _beginAfking(player, 10);
+        _finalizeAfking(player, 10, 13, 15);
+        assertEq(_questField(player, OFF_STREAK, 16), 0);
+        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 13);
+        assertEq(_questField(player, OFF_SHIELD, 8), 0);
+    }
 
+    function test_LogicalMissesAcrossFormerBitmapBoundary() public {
+        address player = makeAddr("boundary");
+        _roll(254); _award(player, 10, 254); _grantShields(player, 2);
+        _roll(257);
+        (,,uint32 streak,bool completed) = _completePrimary(player);
+        assertTrue(completed); assertEq(streak, 11);
+        assertEq(_questField(player, OFF_SHIELD, 8), 0);
+        _roll(259); assertEq(quests.effectiveBaseStreak(_qid(player)), 0);
+    }
+
+    function test_MultipleCalendarStallsDoNotManufactureStreakCredit() public {
+        address player = makeAddr("multiple-stalls");
+        _roll(10); _award(player, 10, 10);
+        vm.warp(block.timestamp + 3 days); _roll(11); _completePrimary(player);
+        vm.warp(block.timestamp + 4 days); _roll(12);
+        (,,uint32 streak,bool completed) = _completePrimary(player);
+        assertTrue(completed); assertEq(streak, 12);
+        assertEq(_questField(player, OFF_SHIELD, 8), 0);
+    }
+
+    function test_RealDelayedRequestRetainsQuestAndStreakIdentity() public {
+        address player = makeAddr("real-delay");
+        uint24 initial = game.currentDayView();
+        _award(player, 10, initial);
         vm.warp(block.timestamp + 1 days);
-        _driveUntilDelivered(player);
-        uint256 healthyScore = _laneField(player, LANE_SCORE_SHIFT, 10);
-
-        vm.revertToState(snapshot);
-        vm.warp(block.timestamp + 3 days);
-        _driveUntilDelivered(player);
-        uint256 gapScore = _laneField(player, LANE_SCORE_SHIFT, 10);
-
-        assertEq(gapScore, healthyScore, "score freezes the preserved pre-buy streak, not a false zero");
-        assertGt(healthyScore, 0, "the frozen score carries the streak");
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
+        assertTrue(game.rngLocked());
+        uint24 requested = game.currentDayView();
+        assertEq(requested, initial + 1);
+        uint256 request = mockVRF.lastRequestId();
+        vm.warp(block.timestamp + 8 days);
+        assertEq(game.currentDayView(), requested);
+        mockVRF.fulfillRandomWords(request, 0xBACC_F111);
+        for (uint256 i; i < 100 && _activeQuestDay() != requested; ++i) game.mineFlip(0);
+        assertEq(_activeQuestDay(), requested);
+        (,,uint32 streak,bool completed) = _completePrimary(player);
+        assertTrue(completed); assertEq(streak, 11);
     }
 
-    /// @dev A stall resume credits every calendar day through the pass that completes: the run's
-    ///      checkpoint streak then covers the gap, and nothing was credited before that pass ran.
-    function test_AfkingStageGapCreditsEveryDayThroughTheCompletedPass() public {
-        address player = _startAfkingPlayer("stage-span", 10);
-        uint24 startDay = uint24(game.currentDayView());
-        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), startDay, "checkpointed at signup");
-        assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 10, "the manual streak is the checkpoint streak");
-
-        vm.warp(block.timestamp + 3 days);
-        assertEq(_endpoint(), startDay, "nothing is credited before a pass completes");
-        _driveUntilDelivered(player);
-        assertEq(_endpoint(), game.currentDayView(), "the pass completed the current day");
-        assertEq(_endpoint() - startDay, 3, "the resume credits the three elapsed days");
-
-        uint32[] memory ids = new uint32[](1);
-        ids[0] = game.walletIdOf_g3120(player);
-        game.claimAfkingFlip(ids);
-        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), _endpoint(), "settled through the endpoint");
-        assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 13, "the elapsed days fold into the streak");
-    }
-
-    function test_AfkingActiveResubscribeWaitsForOrderedCatchup() public {
-        address player = _startAfkingPlayer("resub-gap", 12);
-        vm.warp(vm.getBlockTimestamp() + 3 days);
-        vm.prank(player);
-        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
-        game.subscribe(0, false, 1, 0);
-        _finishSubscriptionWindow();
-        assertEq(_endpoint(), game.currentDayView(), "due preparation completed before updates reopen");
-        uint256 day = _laneField(player, LANE_DAY_SHIFT, 22);
-        uint256 streak = _laneField(player, LANE_STREAK_SHIFT, 16);
-        vm.prank(player);
-        game.subscribe(0, false, 2, 0);
-        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), _endpoint(), "an update settles through the endpoint");
-        assertEq(
-            _laneField(player, LANE_STREAK_SHIFT, 16),
-            streak + (_endpoint() - day),
-            "the settled days fold into the checkpoint streak"
-        );
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(player));
-        assertEq(((lane >> 32) & 7) + 1, 2, "new quantity applies");
-    }
-
-    function test_AfkingUpdateCannotReframePinnedPreparationToWallDay() public {
-        address player = _startAfkingPlayer("real-before-gap", 12);
-        uint256 start = _laneField(player, LANE_DAY_SHIFT, 22);
-        vm.warp(vm.getBlockTimestamp() + 5 days);
-        game.mineFlip(type(uint32).max);
-        vm.prank(player);
-        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
-        game.subscribe(0, true, 1, 0);
-        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), start, "a rejected update changes nothing");
-        _finishSubscriptionWindow();
-        assertEq(_endpoint(), game.currentDayView());
-        assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 12, "the checkpoint streak is untouched");
-    }
-
-    function test_LiveAfkingActivityScoreDoesNotDropDuringPendingGap() public {
-        address player = _startAfkingPlayer("live-gap", 11);
-
+    function test_AfkingCalendarGapDeliversOneLogicalDay() public {
+        address player = _startAfkingPlayer("afking-calendar-gap", 10);
+        uint24 start = game.currentDayView();
         uint256 beforeScore = activityScoreOf(address(game), player);
         vm.warp(block.timestamp + 3 days);
-        uint256 duringGapScore = activityScoreOf(address(game), player);
-
-        assertEq(duringGapScore, beforeScore, "unadvanced wall days do not temporarily zero the live AFKing streak");
+        assertEq(activityScoreOf(address(game), player), beforeScore);
+        assertEq(_endpoint(), start);
+        _driveUntilDelivered(player);
+        assertEq(_endpoint(), start + 1);
+        uint32[] memory ids = new uint32[](1); ids[0] = game.walletIdOf_g3120(player);
+        game.claimAfkingFlip(ids);
+        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), start + 1);
+        assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 11);
     }
 
     function _qid(address who) private returns (uint32 id) {
@@ -422,6 +172,9 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _roll(uint24 day) private {
+        _setDailyIdx(day);
+        uint256 packed = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((packed & ~(uint256(0xffffff) << 176)) | (uint256(day) << 176)));
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(day, uint256(keccak256(abi.encode("stall-quest", day))) | 1, false, false, false);
     }
@@ -475,8 +228,8 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _driveUntilDelivered(address) private {
-        uint24 today = uint24(game.currentDayView());
-        for (uint256 i; i < 40 && _endpoint() != today; ++i) {
+        uint24 today = uint24(game.currentDayView()) + 1;
+        for (uint256 i; i < 200 && _endpoint() != today; ++i) {
             _fulfillLatest(uint256(keccak256(abi.encode("drive", i))) | 1);
             game.mineFlip(0);
         }
@@ -510,11 +263,6 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     function _questField(address player, uint256 offset, uint256 width) private view returns (uint256) {
         return (_questWord(player) >> (offset * 8)) & ((uint256(1) << width) - 1);
-    }
-
-    function _questWasRolled(uint24 day) private view returns (bool) {
-        bytes32 slot = keccak256(abi.encode(uint16(day >> 8), QUEST_BITMAP_SLOT));
-        return (uint256(vm.load(address(quests), slot)) & (uint256(1) << uint8(day))) != 0;
     }
 
     function _laneField(address player, uint256 shift, uint256 width) private view returns (uint256) {

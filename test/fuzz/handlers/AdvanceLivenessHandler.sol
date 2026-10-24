@@ -6,6 +6,7 @@ import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
+import {DegenerusGameStorage} from "../../../contracts/storage/DegenerusGameStorage.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -226,13 +227,14 @@ contract AdvanceLivenessHandler is Test {
     }
 
     /// Box opening runs only as mineFlip's read-consumer stages: when the next engine action is
-    /// the AFK (9) or human-box (10) stage, a random player mines once.
+    /// the AFK or human-box stage, a random player mines once.
     function actOpenBoxes(uint256 actorSeed) external action("openBoxes") {
         if (game.gameOver()) return;
         address a = _actor(actorSeed);
         vm.prank(a);
         uint8 next = game.minerAction();
-        if (next != 9 && next != 10) return;
+        if (next != uint8(DegenerusGameStorage.MinerAction.Afking)
+            && next != uint8(DegenerusGameStorage.MinerAction.HumanBoxes)) return;
         vm.prank(a);
         (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         ok;
@@ -252,7 +254,7 @@ contract AdvanceLivenessHandler is Test {
     /// A funded LINK donor whose credit pays the threshold gate on the donor's own mineFlip.
     function _donor() internal returns (address donor) {
         donor = address(uint160(0xD0D0D0));
-        MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(block.timestamp);
+        MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(vm.getBlockTimestamp());
         vm.prank(ContractAddresses.ADMIN);
         game.creditMiddayRng(donor, 1 ether);
     }
@@ -283,7 +285,7 @@ contract AdvanceLivenessHandler is Test {
     }
 
     function actWarpWithinDay(uint256 secs) external action("warpWithinDay") {
-        vm.warp(block.timestamp + bound(secs, 1 minutes, 8 hours));
+        vm.warp(vm.getBlockTimestamp() + bound(secs, 1 minutes, 8 hours));
     }
 
     /// Warp into the next day at an offset; mode selects a near-boundary / pre-reset shape.
@@ -318,7 +320,7 @@ contract AdvanceLivenessHandler is Test {
             if (game.rngLocked()) ghost_vrfStallsDaily++;
             else ghost_vrfStallsMidday++;
         }
-        vm.warp(block.timestamp + dt);
+        vm.warp(vm.getBlockTimestamp() + dt);
     }
 
     /// Push the next prize pool over the level target (turbo if on purchase day <=1,
@@ -438,12 +440,12 @@ contract AdvanceLivenessHandler is Test {
             try game.purchase{value: 0.01 ether}(
                 0, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
-            MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(block.timestamp);
+            MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(vm.getBlockTimestamp());
             vm.prank(ContractAddresses.ADMIN);
             game.creditMiddayRng(probe, 1 ether);
             bool ok;
             vm.prank(probe);
-            if (game.minerAction() == 18) {
+            if (game.minerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) {
                 uint256 prior = vrf.lastRequestId();
                 vm.prank(probe);
                 (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
@@ -493,8 +495,8 @@ contract AdvanceLivenessHandler is Test {
         if (!quiet) return _snapshot(V_NO_QUIESCENCE, sel, cranks, phase);
         if (_midDayLatch() != 0) return _snapshot(V_LATCH_STUCK, sel, cranks, phase);
         if (sel != E_NOT_TIME_YET) return _snapshot(V_TERMINAL_REVERT, sel, cranks, phase);
-        uint24 wallDay = game.currentDayView();
-        if (_wordByDay(wallDay) == 0 || game.rngLocked()) return _snapshot(V_NOT_SEALED, sel, cranks, phase);
+        uint24 logicalDay = game.currentDayView();
+        if (_wordByDay(logicalDay) == 0 || game.rngLocked()) return _snapshot(V_NOT_SEALED, sel, cranks, phase);
         if (!_ticketsFullyProcessed() && !_requestActive()) {
             return _snapshot(V_STAGED_NO_WORKER, sel, cranks, phase);
         }
@@ -514,7 +516,7 @@ contract AdvanceLivenessHandler is Test {
         v.phase = phase;
         v.cranks = cranks;
         v.level = lvl;
-        v.wallDay = game.currentDayView();
+        v.wallDay = game.currentWallDayView();
         v.dailyIdx = uint24(s0 >> 24);
         v.jackpotPhase = uint8(s0 >> 120) != 0;
         v.lastPurchaseDay = uint8(s0 >> 136) != 0;
@@ -523,7 +525,7 @@ contract AdvanceLivenessHandler is Test {
         v.ticketsFullyProcessed = uint8(s0 >> 192) != 0;
         v.midDayLatch = _midDayLatch();
         v.rngRequestTime = uint48(s0 >> 48);
-        v.wordToday = _wordByDay(v.wallDay);
+        v.wordToday = _wordByDay(game.currentDayView());
         v.advanceDue = game.advanceDue();
         v.readLenL = _queueLen(_readKey(lvl));
         v.readLenL1 = _queueLen(_readKey(lvl + 1));
@@ -531,7 +533,7 @@ contract AdvanceLivenessHandler is Test {
         v.ffLenL1 = _queueLen((lvl + 1) | TICKET_FAR_FUTURE_BIT);
         v.ffLenL2 = _queueLen((lvl + 2) | TICKET_FAR_FUTURE_BIT);
         v.foilPending = _foilPending();
-        v.timestamp = block.timestamp;
+        v.timestamp = vm.getBlockTimestamp();
     }
 
     function firstViolation() external view returns (Violation memory) {
@@ -579,7 +581,7 @@ contract AdvanceLivenessHandler is Test {
         (uint24 lvl, bool inJp, bool lpd,,) = game.purchaseInfo();
         bool ffNonEmpty = _queueLen(lvl + 2 | TICKET_FAR_FUTURE_BIT) != 0;
         vm.prank(who);
-        if (game.minerAction() != 18) return;
+        if (game.minerAction() != uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return;
         uint256 prior = vrf.lastRequestId();
         vm.prank(who);
         (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
@@ -673,12 +675,12 @@ contract AdvanceLivenessHandler is Test {
         if (reqId == 0) return;
         (,, bool fulfilled) = vrf.pendingRequests(reqId);
         if (fulfilled) return;
-        uint256 word = uint256(keccak256(abi.encode(block.timestamp, reqId, "liveness")));
+        uint256 word = uint256(keccak256(abi.encode(vm.getBlockTimestamp(), reqId, "liveness")));
         try vrf.fulfillRandomWords(reqId, word) {} catch {}
     }
 
     function _nextDayStart() internal view returns (uint256) {
-        uint256 ts = block.timestamp;
+        uint256 ts = vm.getBlockTimestamp();
         return ts - ((ts - DAY_OFFSET) % 1 days) + 1 days;
     }
 

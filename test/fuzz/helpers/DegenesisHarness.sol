@@ -41,8 +41,8 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     uint256 internal constant FLIP_ROUND_TAG = 0x466c6970526f756e64;
     uint256 internal constant BOX_PASS_ROUND_TAG = 0x50617373526f756e64;
     uint32 internal constant SDGNRS_ID = 2;
-    uint8 internal constant ACTION_REQUEST_DAILY = 17;
-    uint8 internal constant ACTION_DEGENESIS_SETTLE = 21;
+    uint8 internal constant ACTION_REQUEST_DAILY = 16;
+    uint8 internal constant ACTION_DEGENESIS_SETTLE = 20;
 
     bytes32 internal constant SIG_RESOLVED =
         keccak256("DegenesisOrderResolved(uint32,uint8,uint32,uint256,uint256,uint256,uint256,uint32,uint32)");
@@ -158,9 +158,9 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         return true;
     }
 
-    /// @dev Warp to `secs` into day index `d` and drive the day with `vrfWord` (0 = derived).
+    /// @dev Open at the reset so purchase offsets measure elapsed cohort time.
     function _driveDay(uint24 d, uint256 vrfWord) internal {
-        _warpTo(d, 1 hours);
+        _warpTo(d, 0);
         _drive(vrfWord);
     }
 

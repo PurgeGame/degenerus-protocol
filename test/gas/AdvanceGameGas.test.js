@@ -133,7 +133,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (await game.gameOver()) return;
       const before = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       } catch {
         return;
       }
@@ -397,45 +397,14 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Advance 912+ days
       await advanceTime(912 * 86400 + 86400);
 
-      // Step 1: mineFlip -> the decision (VRF alive: the loan book settles first)
-      const { tx: txD, receipt: receiptD } = await mine(game, deployer);
-      const eventsD = await getAdvanceEvents(txD, advanceModule);
-      recordGas(`Game Over Decision (stage=${eventsD.length > 0 ? eventsD[0].args.stage : "?"})`, receiptD);
-
-      // Step 1b: mineFlip -> the loan stage scans every due level (empty book here)
-      const { tx: txL, receipt: receiptL } = await mine(game, deployer);
-      const eventsL = await getAdvanceEvents(txL, advanceModule);
-      recordGas(`Game Over Loan Settlement (stage=${eventsL.length > 0 ? eventsL[0].args.stage : "?"})`, receiptL);
-
-      // Step 1c: mineFlip -> arm the terminal request and send the VRF request (realistic allowance; terminal work is checkpointed)
-      const { tx: tx1, receipt: receipt1 } = await mine(game, deployer);
-      const events1 = await getAdvanceEvents(tx1, advanceModule);
-      const stage1 = events1.length > 0 ? events1[0].args.stage : "?";
-      recordGas(`Game Over VRF Request (stage=${stage1})`, receipt1);
-
-      // Step 2: Fulfill VRF
-      const requestId = await getLastVRFRequestId(mockVRF);
-      if (requestId > 0n) {
-        await mockVRF.fulfillRandomWords(requestId, 42n);
+      // Hard completion expiry bypasses the normal loan and VRF-request stages.
+      const requestsBefore = await getLastVRFRequestId(mockVRF);
+      for (let i = 0; i < 50 && !(await game.gameOver()); i++) {
+        const { tx, receipt } = await mine(game, deployer);
+        const events = await getAdvanceEvents(tx, advanceModule);
+        recordGas(`Hard Game Over (step=${i}, stage=${events.length ? events[0].args.stage : "?"})`, receipt);
       }
-
-      // Step 3: mineFlip -> terminal stage's game-over drain (the expensive one), realistic allowance
-      const { tx: tx2, receipt: receipt2 } = await mine(game, deployer);
-      const events2 = await getAdvanceEvents(tx2, advanceModule);
-      const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
-      recordGas(`Game Over Drain (stage=${stage2})`, receipt2);
-
-      // Drain remaining tickets so gameOver latches. With queued tickets the
-      // terminal stage spans several mineFlip calls before the game-over drain runs.
-      for (let i = 0; i < 50; i++) {
-        if (await game.gameOver()) break;
-        try {
-          await game.connect(deployer).mineFlip(0);
-        } catch {
-          break;
-        }
-      }
-
+      expect(await getLastVRFRequestId(mockVRF)).to.equal(requestsBefore);
       expect(await game.gameOver()).to.equal(true);
     });
   });
@@ -649,7 +618,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       await advanceToNextDay();
 
       // mineFlip() triggers the VRF request (stage=1, rngLockedFlag=true)
-      await game.connect(deployer).mineFlip(0);
+      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       const requestId = await getLastVRFRequestId(mockVRF);
 
       // Fulfill: this is rawFulfillRandomWords() — capture the full receipt.

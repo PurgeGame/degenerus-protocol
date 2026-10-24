@@ -16,23 +16,22 @@ library MineFlipAdmission {
     uint8 internal constant WAIT = 2;
     uint8 internal constant PUBLISH = 3;
     uint8 internal constant TICKETS = 4;
-    uint8 internal constant DAILY_GAP = 5;
-    uint8 internal constant DAILY_APPLY = 6;
-    uint8 internal constant DAILY_PHASE = 7;
-    uint8 internal constant REDEMPTION = 8;
-    uint8 internal constant AFKING = 9;
-    uint8 internal constant HUMAN_BOXES = 10;
-    uint8 internal constant DEGENERETTE = 11;
-    uint8 internal constant DECIMATOR = 12;
-    uint8 internal constant CRAPS = 13;
-    uint8 internal constant CERTIFY = 14;
-    uint8 internal constant PREPARE_SUBS = 15;
-    uint8 internal constant MAINTENANCE = 16;
-    uint8 internal constant REQUEST_DAILY = 17;
-    uint8 internal constant REQUEST_MIDDAY = 18;
-    uint8 internal constant GROWTH = 19;
-    uint8 internal constant SEIZE_LOANS = 20;
-    uint8 internal constant DEGENESIS_SETTLE = 21;
+    uint8 internal constant DAILY_APPLY = 5;
+    uint8 internal constant DAILY_PHASE = 6;
+    uint8 internal constant REDEMPTION = 7;
+    uint8 internal constant AFKING = 8;
+    uint8 internal constant HUMAN_BOXES = 9;
+    uint8 internal constant DEGENERETTE = 10;
+    uint8 internal constant DECIMATOR = 11;
+    uint8 internal constant CRAPS = 12;
+    uint8 internal constant CERTIFY = 13;
+    uint8 internal constant PREPARE_SUBS = 14;
+    uint8 internal constant MAINTENANCE = 15;
+    uint8 internal constant REQUEST_DAILY = 16;
+    uint8 internal constant REQUEST_MIDDAY = 17;
+    uint8 internal constant GROWTH = 18;
+    uint8 internal constant SEIZE_LOANS = 19;
+    uint8 internal constant DEGENESIS_SETTLE = 20;
 
     uint256 internal constant FACADE_ALLOWANCE = 150_000;
 
@@ -60,7 +59,6 @@ library MineFlipAdmission {
                 + (sale ? GasBounds.DEGENESIS_REQUEST_GAS : 0);
         }
         if (action == REQUEST_MIDDAY) return GasBounds.RNG_MIDDAY_REQUEST;
-        if (action == DAILY_GAP) return GasBounds.DAILY_GAP + (sale ? GasBounds.DEGENESIS_WORD_COPY_GAS : 0);
         if (action == DAILY_APPLY) return GasBounds.DAILY_APPLY + (sale ? GasBounds.DEGENESIS_WORD_COPY_GAS : 0);
         if (action == PREPARE_SUBS) return GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS;
         if (action == AFKING) return GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS;
@@ -78,7 +76,7 @@ library MineFlipAdmission {
         if (action == TERMINAL) {
             // The heaviest terminal checkpoint (the terminal word's gap and apply), the phase
             // pre-check, the terminal tail and the phase tail.
-            b = GasBounds.DAILY_GAP + GasBounds.DAILY_APPLY;
+            b = GasBounds.DAILY_APPLY;
             uint256 setup = GasBounds.TERMINAL_SETUP + GasBounds.DEGENESIS_TERMINAL_GAS;
             if (setup > b) b = setup;
             return b + 250_000 + GasBounds.TERMINAL_TAIL + GasBounds.DAILY_PHASE_TAIL;

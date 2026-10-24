@@ -17,10 +17,13 @@ import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 ///      regardless of the entrant population).
 contract ConsolidationLevelSeeder is DegenerusGame {
     function seed(uint24 lvl, uint128 nextPool, uint128 futurePool, uint40 decEntrants) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = lvl - 1;
         purchaseStartDay = day - 8;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         lastPurchaseDay = true;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;

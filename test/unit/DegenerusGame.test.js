@@ -1,3 +1,4 @@
+import { setPackedField } from "../helpers/logicalDayFixture.js";
 import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
@@ -297,8 +298,11 @@ describe("DegenerusGame", function () {
     });
 
     it("lootbox purchase also completes slot-0 MINT_ETH quest like ticket purchases", async function () {
-      const { game, coin, quests, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsGame(quests, game, 1n, 99n);
+      const { game, coin, coinflip, quests, alice } = await loadFixture(deployFullProtocol);
+      const day = (await game.currentDayView()) + 1n;
+      await setPackedField(game, "dailyIdx", day);
+      await setPackedField(coinflip, "requestedDailyIdx", day, "Coinflip");
+      await rollQuestAsGame(quests, game, day, 99n);
 
       const active = await quests.getActiveQuests();
       expect(active[0].questType).to.equal(QUEST_TYPE_MINT_ETH);
@@ -412,7 +416,7 @@ describe("DegenerusGame", function () {
     it("can be called by anyone", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
-      await expect(game.connect(alice).mineFlip(0)).to.not.be.reverted;
+      await expect(game.connect(alice).mineFlip(0, { gasLimit: 16_777_216 })).to.not.be.reverted;
     });
 
     it("mineFlip on a fresh deploy with nothing due reports NoWork", async function () {
@@ -420,7 +424,7 @@ describe("DegenerusGame", function () {
       // Nothing is due on the deploy day, so a caller without a mint gets the clean idle
       // refusal rather than any partial work.
       expect(await game.advanceDue()).to.equal(false);
-      await expect(game.connect(alice).mineFlip(0)).to.be.revertedWithCustomError(
+      await expect(game.connect(alice).mineFlip(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(
         errorAbi("NoWork()"),
         "NoWork"
       );

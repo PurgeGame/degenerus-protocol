@@ -31,14 +31,17 @@ contract LoanAccountingSeeder is DegenerusGameStorage {
     }
 
     function sync() public {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         _recordDailyRng(day - 1, 123456);
         dailyIdx = day;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
     }
 
     function startPhase(bool jackpot) public {
         sync();
-        purchaseStartDay = _simulatedDayIndex();
+        purchaseStartDay = dailyIdx;
         jackpotPhaseFlag = jackpot;
     }
 
@@ -126,7 +129,7 @@ contract LoanAccountingHandler is Test {
     uint256 internal constant TICKET_AFTER_DAYS = 20;
     uint256 internal constant MAX_DAYS_IN_PHASE = 28; // below the 30-day purchase deadline
     uint24 internal constant MAX_LEVEL = 100; // collateral stays inside one far-future ring cycle
-    uint8 internal constant ACTION_SEIZE_LOANS = 20;
+    uint8 internal constant ACTION_SEIZE_LOANS = 19;
     uint256 internal constant N_ACTORS = 3;
 
     uint8 internal constant OP_SEED = 0;
@@ -233,7 +236,7 @@ contract LoanAccountingHandler is Test {
         _etch();
         LoanAccountingSeeder(address(game)).startPhase(false);
         _unetch();
-        purchaseStart = GameTimeLib.currentDayIndex();
+        purchaseStart = GameTimeLib.gameDayIndex();
         for (uint256 i; i < N_ACTORS; ++i) {
             actors[i] = address(uint160(0x10A40000 + i));
             _newMain(i);
@@ -393,7 +396,7 @@ contract LoanAccountingHandler is Test {
         lent[c.lender] += c.principal;
         ++ghost_borrows;
         if (c.ticketWei != 0) ++ghost_ticketBorrows;
-        if (!jackpotPhase && GameTimeLib.currentDayIndex() == purchaseStart + TICKET_AFTER_DAYS) ++ghost_day20Borrows;
+        if (!jackpotPhase && GameTimeLib.gameDayIndex() == purchaseStart + TICKET_AFTER_DAYS) ++ghost_day20Borrows;
         if (jackpotPhase) ++ghost_jackpotBorrows;
         if (c.lender == VAULT_ID) ++ghost_vaultLoans;
         if (accts[c.idx].smurf) ++ghost_smurfLoans;
@@ -549,7 +552,7 @@ contract LoanAccountingHandler is Test {
         _etch();
         LoanAccountingSeeder(address(game)).enterDue(target, jackpot);
         _unetch();
-        purchaseStart = GameTimeLib.currentDayIndex();
+        purchaseStart = GameTimeLib.gameDayIndex();
         jackpotPhase = jackpot;
         _runWorker(b);
 
@@ -694,7 +697,7 @@ contract LoanAccountingHandler is Test {
     }
 
     function _warp(uint256 a, bool plan) internal {
-        uint256 daysIn = GameTimeLib.currentDayIndex() - purchaseStart;
+        uint256 daysIn = GameTimeLib.gameDayIndex() - purchaseStart;
         if (daysIn >= MAX_DAYS_IN_PHASE) return;
         uint256 room = MAX_DAYS_IN_PHASE - daysIn;
         uint256 d = plan
@@ -746,7 +749,7 @@ contract LoanAccountingHandler is Test {
     /// @dev Half the principal in whole tickets at the active level once more than 20 days into
     ///      the purchase phase; nothing in the jackpot phase.
     function _ticketPart(uint256 principal, uint256 cl) internal view returns (uint256) {
-        if (jackpotPhase || GameTimeLib.currentDayIndex() <= purchaseStart + TICKET_AFTER_DAYS) return 0;
+        if (jackpotPhase || GameTimeLib.gameDayIndex() <= purchaseStart + TICKET_AFTER_DAYS) return 0;
         uint256 price = PriceLookupLib.priceForLevel(uint24(cl));
         return principal / 2 / price * price;
     }

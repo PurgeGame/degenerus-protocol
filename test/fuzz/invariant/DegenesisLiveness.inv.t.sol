@@ -90,7 +90,7 @@ contract DegenesisLiveness is DegenesisDeployProtocol {
             "belowMinOtherReverts", "flipBuys", "tightSteps", "runs", "mineCalls", "mineProgress", "noWork", "rngNotReady", "minGasCalls", "settleCalls",
             "saleRequests", "saleApplies", "degenesisBuys", "degenesisMinBuys", "degenesisAfkingBuys",
             "vaultSpends", "bigBoxBuys", "whaleBuys", "splits", "priced", "resolved", "burns", "stalls",
-            "stallOverClose", "gapDays"
+            "stallAcrossReset", "gapDays"
         ];
         uint256[25] memory vals = [
             handler.ghost_belowMinOtherReverts(), handler.ghost_flipBuys(), handler.ghost_tightSteps(), uint256(1), handler.ghost_mineCalls(), handler.ghost_mineProgress(), handler.ghost_noWork(),
@@ -98,7 +98,7 @@ contract DegenesisLiveness is DegenesisDeployProtocol {
             handler.ghost_saleRequests(), handler.ghost_saleApplies(), handler.ghost_degenesisBuys(),
             handler.ghost_degenesisMinBuys(), handler.ghost_degenesisAfkingBuys(), handler.ghost_vaultSpends(),
             handler.ghost_bigBoxBuys(), handler.ghost_whaleBuys(), handler.ghost_splits(), handler.ghost_priced(),
-            handler.ghost_resolved(), handler.ghost_burns(), handler.ghost_stalls(), handler.ghost_stallOverClose(),
+            handler.ghost_resolved(), handler.ghost_burns(), handler.ghost_stalls(), handler.ghost_stallAcrossReset(),
             handler.ghost_gapDays()
         ];
         string memory line = "DEGENESIS_LIVENESS_COVERAGE";
@@ -125,7 +125,7 @@ contract DegenesisLiveness is DegenesisDeployProtocol {
                 string.concat("vacuous: never reached ", required[i]));
         }
         if (runs < 24) return;
-        assertGt(vm.envOr("DGL_COV_stallOverClose", uint256(0)), 0, "vacuous: never stalled across the close");
+        assertGt(vm.envOr("DGL_COV_stallAcrossReset", uint256(0)), 0, "vacuous: never stalled across an actual reset");
         assertGt(vm.envOr("DGL_COV_gapDays", uint256(0)), 0, "vacuous: never skipped a day");
         assertGt(vm.envOr("DGL_COV_flipBuys", uint256(0)), 0, "vacuous: never bought FLIP-paid tickets");
     }

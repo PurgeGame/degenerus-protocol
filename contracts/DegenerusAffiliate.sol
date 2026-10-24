@@ -1086,8 +1086,9 @@ contract DegenerusAffiliate {
         if (accepted != 0) _recordScore(ownerId, total, accepted, lvl);
     }
 
-    /// @dev Roll the purchase winner on the (day, buyer ID, route code) entropy: VAULT/SDGNRS
-    ///      evenly for a buyer without a referrer, else 75% owner, 20% upline1, 5% upline2.
+    /// @dev Roll the purchase winner on the (wall day, buyer ID, route code) entropy: VAULT/SDGNRS
+    ///      evenly for a buyer without a referrer, else 75% owner, 20% upline1, 5% upline2. The wall
+    ///      day is the cheapest day source; the roll only needs to vary daily.
     function _purchaseWinner(bytes32 code, uint32 ownerId, uint32 buyerId, bool noReferrer, uint256 word)
         private returns (uint32 winner, uint256 updatedWord)
     {

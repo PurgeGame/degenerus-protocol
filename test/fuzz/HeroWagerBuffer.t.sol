@@ -9,12 +9,13 @@ contract HeroWagerBufferHarness is DegenerusGameStorage {
     function record(uint8 q, uint8 s, uint256 units) external {
         lootboxRngPacked = _recordHeroWager(q, s, units, lootboxRngPacked);
     }
-    function seal(uint24 day) external { _sealHeroWagers(day); }
+    function seal(uint24 day) external { _sealHeroWagers(day); dailyIdx = day; }
+    function initializeDay(uint24 day) external { dailyIdx = day; }
     function read(uint24 day, uint8 q) external view returns (uint256) { return _dailyHeroWagerWord(day, q); }
     function raw(uint256 key, uint8 q) external view returns (uint256) { return dailyHeroWagers[key][q]; }
     function setMetadata(uint256 word) external { lootboxRngPacked = word; }
     function metadata() external view returns (uint256) { return lootboxRngPacked; }
-    function today() external view returns (uint24) { return _simulatedDayIndex(); }
+    function today() external view returns (uint24) { return _gameDay(); }
 }
 
 contract HeroWagerBufferTest is Test {
@@ -22,21 +23,22 @@ contract HeroWagerBufferTest is Test {
     uint256 private constant HERO_MASK = ((uint256(1) << 30) - 1) | (uint256(1) << 38);
     function setUp() public {
         h = new HeroWagerBufferHarness();
+        h.initializeDay(100);
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 100) * 1 days);
     }
 
     function test_StallAccumulatesWithoutChangingFrozenDraw() public {
         h.record(1, 5, 100);
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        uint24 sealedDay = h.today() - 1;
-        h.seal(h.today());
+        uint24 sealedDay = h.today();
+        h.seal(h.today() + 1);
         for (uint256 i; i < 5; ++i) {
             vm.warp(vm.getBlockTimestamp() + 1 days);
             h.record(1, 7, 10);
             assertEq(h.read(sealedDay, 1), uint256(100) << 160);
             assertEq(h.read(h.today(), 1), uint256((i + 1) * 10) << 224);
         }
-        h.seal(h.today());
+        h.seal(h.today() + 1);
         assertEq(h.read(h.today() - 1, 1), uint256(50) << 224, "all stalled wagers enter the next draw");
         assertEq(h.read(h.today(), 1), 0, "fresh write buffer starts empty");
         assertEq(h.read(sealedDay, 1), 0, "retired pool is inaccessible");
@@ -49,16 +51,17 @@ contract HeroWagerBufferTest is Test {
         vm.warp(vm.getBlockTimestamp() + 7 days);
         assertEq(h.metadata(), beforeMeta);
         assertEq(h.read(h.today(), 0), 100);
-        assertEq(h.read(oldDay, 0), 0, "views do not pretend to retain calendar history");
+        assertEq(h.read(oldDay, 0), 100, "calendar time preserves the logical cohort");
+        assertEq(h.read(oldDay + 1, 0), 0);
         h.record(0, 0, 200);
         assertEq(h.read(h.today(), 0), 300);
     }
 
     function test_RecyclingInvalidatesAllQuadrantsWithoutClearingWords() public {
         h.record(0, 0, 100); h.record(1, 0, 110); h.record(2, 0, 120);
-        h.seal(h.today());
+        h.seal(h.today() + 1);
         h.record(1, 0, 210);
-        vm.warp(vm.getBlockTimestamp() + 1 days); h.seal(h.today());
+        vm.warp(vm.getBlockTimestamp() + 1 days); h.seal(h.today() + 1);
         assertEq(h.raw(0, 1), 110, "retired physical data is retained");
         assertEq(h.read(h.today(), 0), 0); assertEq(h.read(h.today(), 1), 0);
         h.record(0, 1, 9);
@@ -69,10 +72,10 @@ contract HeroWagerBufferTest is Test {
     }
 
     function test_EmptyCommitmentCannotResurrectOldWeights() public {
-        h.record(0, 0, 100); h.seal(h.today());
-        vm.warp(vm.getBlockTimestamp() + 1 days); h.seal(h.today());
+        h.record(0, 0, 100); h.seal(h.today() + 1);
+        vm.warp(vm.getBlockTimestamp() + 1 days); h.seal(h.today() + 1);
         assertEq(h.read(h.today() - 1, 0), 0);
-        vm.warp(vm.getBlockTimestamp() + 1 days); h.seal(h.today());
+        vm.warp(vm.getBlockTimestamp() + 1 days); h.seal(h.today() + 1);
         assertEq(h.read(h.today() - 1, 0), 0);
         assertEq(h.raw(0, 0), 100);
     }
@@ -97,7 +100,7 @@ contract HeroWagerBufferTest is Test {
         uint256 preserved = bits & ~HERO_MASK;
         h.setMetadata(preserved);
         h.record(0, 0, 10); assertEq(h.metadata() & ~HERO_MASK, preserved);
-        h.seal(h.today()); assertEq(h.metadata() & ~HERO_MASK, preserved);
+        h.seal(h.today() + 1); assertEq(h.metadata() & ~HERO_MASK, preserved);
         h.record(2, 7, 20); assertEq(h.metadata() & ~HERO_MASK, preserved);
         h.seal(h.today() + 1); assertEq(h.metadata() & ~HERO_MASK, preserved);
     }
@@ -112,7 +115,7 @@ contract HeroWagerBufferTest is Test {
             if (r & 3 == 0) {
                 // A fresh request needs a later day than the preceding request.
                 if (h.today() <= stamp) vm.warp(vm.getBlockTimestamp() + 1 days);
-                stamp = h.today();
+                stamp = h.today() + 1;
                 for (uint256 q; q < 3; ++q) { frozen[q] = writing[q]; writing[q] = 0; }
                 h.seal(stamp);
             } else {

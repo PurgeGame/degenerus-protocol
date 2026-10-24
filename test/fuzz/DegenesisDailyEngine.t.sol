@@ -95,10 +95,10 @@ contract DegenesisDailyEngine is DegenesisFixture {
         _drain();
         for (uint256 d = 2; d <= 8; ++d) {
             _warpDay(d, 1 hours);
-            _buyDegenesis(alice, 0.01 ether);
             vm.recordLogs();
             _drain();
             Vm.Log[] memory logs = vm.getRecordedLogs();
+            _buyDegenesis(alice, 0.01 ether);
             assertEq(_stageCount(logs, STAGE_DEGENESIS_DAY), 1, "the Degenesis daily branch ran");
             assertEq(_stageCount(logs, STAGE_PURCHASE_DAILY), 0, "no level-0 daily draw path");
             assertEq(_stageCount(logs, STAGE_PURCHASE_DAILY_TICKETS), 0, "no purchase ticket leg");
@@ -168,7 +168,7 @@ contract DegenesisDailyEngine is DegenesisFixture {
 
         // The day-9 request is the first after main launch: it latches the turbo.
         assertTrue(game.rngLocked(), "day 9's request is out");
-        assertEq(_dailyIdx(), 8, "day 8 sealed");
+        assertEq(_dailyIdx(), 9, "day 9 request accepted");
         assertEq(_level(), 1, "the day-9 request advanced the level");
         assertEq(_jackpotFlags() & JACKPOT_TURBO, JACKPOT_TURBO, "turbo latched at the day-9 request");
     }
@@ -221,20 +221,21 @@ contract DegenesisDailyEngine is DegenesisFixture {
         vm.recordLogs();
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "the request went out on wall day 10");
-        assertEq(_dailyIdx(), 8, "for day 9: day 8 is the last sealed day");
+        assertEq(_dailyIdx(), 9, "requested logical day is 9 before its result");
         assertTrue(_lastPurchaseDay(), "lastPurchaseDay latched");
         assertEq(_jackpotFlags() & JACKPOT_TURBO, JACKPOT_TURBO, "with JACKPOT_TURBO");
         assertEq(_level(), 1, "the level becomes 1 at that request");
 
         assertTrue(_fulfillPending(), "answer day 9's request");
-        _drain(false, 400); // day 9's processing, then day 10's request
+        _drain(false, 400); // only day 9: this actual reset window was already used
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 request10 = _secondRequest(logs);
+        uint256 request10 = logs.length;
         assertEq(_stageCountUpTo(logs, STAGE_ENTERED_JACKPOT, request10), 1, "level 1's jackpot entered on day 9");
         assertEq(_stageCountUpTo(logs, STAGE_JACKPOT_PHASE_ENDED, request10), 1, "and ended on day 9");
         assertEq(_dailyIdx(), GameTimeLib.MAIN_LAUNCH_DAY, "day 9 sealed");
         assertFalse(_jackpotPhase(), "one-day jackpot phase complete before day 10");
         assertEq(_level(), 1, "level 1");
+        assertFalse(game.rngLocked(), "no second daily request in the actual send window");
     }
 
     /// @dev Log index of the second RNG request stage in `logs`.

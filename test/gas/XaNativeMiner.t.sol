@@ -14,7 +14,11 @@ contract XaNativeMinerSeed is DegenerusGame {
         _registerWallet(player, type(uint256).max);
         _registerWallet(miner, type(uint256).max);
         level = 99;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
+        dailyComplete = false;
+        rngRequestDay = dailyIdx;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
         _afkingResetDay = dailyIdx;
         subsFullyProcessed = true;
@@ -57,6 +61,7 @@ contract XaNativeMinerTest is DeployProtocol, NativeGasExport {
         vm.etch(address(game), type(XaNativeMinerSeed).runtimeCode);
         XaNativeMinerSeed(payable(address(game))).seed(address(0xB0A100), MINER);
         vm.etch(address(game), production);
+        _syncCoinflipFixtureDay(game.currentDayView());
         this.measureAndExport();
     }
 

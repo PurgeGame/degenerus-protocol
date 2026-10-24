@@ -1,105 +1,52 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
-
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {TransientLivenessHarness} from "./TransientLiveness.t.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
-
-contract PurchaseDeadlineHarness is DegenerusGameStorage {
-    function seed(uint24 lvl, uint24 age, uint48 requestTime, uint24 sealedAge, uint8 phase) external {
-        level = lvl;
-        uint24 day = _simulatedDayIndex();
-        purchaseStartDay = day - age;
-        dailyIdx = day - sealedAge;
-        rngRequestTime = requestTime;
-        _setRngRequestActive(requestTime > 1);
-        _setRngSessionPublished(requestTime <= 1);
-        lastPurchaseDay = phase == 1;
-        jackpotPhaseFlag = phase == 2;
-    }
-
-    function liveness() external view returns (bool) { return _livenessTriggered(); }
-    function distress() external view returns (bool) { return _isDistressMode(); }
-}
 
 contract PurchaseDeadlineTest is Test {
-    PurchaseDeadlineHarness private h;
-
-    function setUp() public {
-        vm.warp(1000 days + 12 hours);
-        h = new PurchaseDeadlineHarness();
+    TransientLivenessHarness private h;
+    function setUp() public { vm.warp(1000 days + 12 hours); h = new TransientLivenessHarness(); }
+    function test_BothLevelZeroAndLaterLevelsUseThirtyCompletedDays() public {
+        for (uint24 lvl; lvl < 2; ++lvl) {
+            h.seed(lvl, 29, true, uint48(vm.getBlockTimestamp() - 1 days));
+            assertFalse(h.liveness()); assertFalse(h.distress());
+            h.seed(lvl, 30, false, uint48(vm.getBlockTimestamp() - 1 days));
+            assertFalse(h.liveness()); assertTrue(h.distress());
+            h.seed(lvl, 30, true, uint48(vm.getBlockTimestamp()));
+            assertFalse(h.liveness(), "completion window stays open for rescue");
+            vm.warp(vm.getBlockTimestamp() + 1 days);
+            assertTrue(h.liveness());
+        }
     }
-
-    function test_day29_30_31() public {
-        h.seed(1, 29, 0, 1, 0);
-        assertFalse(h.distress());
-        assertFalse(h.liveness());
-        h.seed(1, 30, 0, 1, 0);
-        assertTrue(h.distress(), "day 30 remains a rescue day");
-        assertFalse(h.liveness());
-        h.seed(1, 31, 0, 1, 0);
-        assertTrue(h.liveness(), "purchase deadline expires on day 31");
-    }
-
-    /// @dev The level-0 deadline is 250 days (c729ecfc9 _DEPLOY_IDLE_TIMEOUT_DAYS = 250;
-    ///      docs/audit/RNG-DOMAINS.md "The initial level-0 idle deadline is 250 days").
-    function test_genesis249_250_251() public {
-        h.seed(0, 249, 0, 1, 0);
-        assertFalse(h.distress());
-        assertFalse(h.liveness());
-        h.seed(0, 250, 0, 1, 0);
-        assertTrue(h.distress());
-        assertFalse(h.liveness());
-        h.seed(0, 251, 0, 1, 0);
-        assertTrue(h.liveness());
-    }
-
-    function test_preDeadlineRequestGetsExisting14DayGrace() public {
-        uint48 start = uint48(block.timestamp - 1 days);
-        h.seed(5, 31, start, 2, 0);
-        assertFalse(h.liveness(), "request on day 30 suppresses day 31 death");
-        vm.warp(uint256(start) + 14 days - 1);
-        assertFalse(h.liveness(), "grace remains open just before 14 days");
-        vm.warp(uint256(start) + 14 days);
-        assertTrue(h.liveness(), "14 days of request age expires grace");
-    }
-
-    function test_postDeadlineRequestCannotReopenPurchases() public {
-        h.seed(5, 31, uint48(block.timestamp), 1, 0);
-        assertTrue(h.liveness(), "a terminal request does not reset the deadline");
-    }
-
-    function test_productivePhasesKeepIndependent30DayDeadman() public {
+    function test_FundedPhasesOnlyFaceFourteenDayHardDeadline() public {
+        uint48 nowTs = uint48(vm.getBlockTimestamp());
         for (uint8 phase = 1; phase <= 2; ++phase) {
-            h.seed(5, 31, 0, 1, phase);
-            assertFalse(h.liveness(), "funded phase may finish beyond purchase deadline");
-            h.seed(5, 60, 0, 30, phase);
-            assertFalse(h.liveness(), "deadman is still strict greater-than 30");
-            h.seed(5, 61, 0, 31, phase);
-            assertTrue(h.liveness(), "deadman fires after 30 days without a seal");
+            h.seed(5, 31, true, nowTs); h.phase(phase);
+            vm.warp(uint256(nowTs) + 14 days - 1); assertFalse(h.liveness());
+            vm.warp(uint256(nowTs) + 14 days); assertTrue(h.liveness());
         }
     }
 }
-
 contract PurchaseDeadlineSeeder is DegenerusGame {
     function seed(uint24 age) external {
-        // Entering this purchase phase means the prior level's queues, including its frozen
-        // level-2 pool, have already materialized (same premise as DeadVrfEnding's
-        // DeadlineSeeder). Queue slots now recycle 1..100 under a level tag (c729ecfc9), so an
-        // unretired genesis queue would collide with level 102's perpetual queue later.
-        TQ.retireCompleted(address(this), 2);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = 9 + age;
         level = 1;
-        purchaseStartDay = day - age;
-        dailyIdx = day - 1;
+        purchaseStartDay = 9;
+        dailyIdx = day;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - (age > 30 ? 1 days : 0));
+        lastDailyRequestWallDay = _wallDayAt(lastDailyCompletedAt);
+        _setRngComplete(true);
         _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;
-        ticketsFullyProcessed = true;
+        _releaseTicketQueue(_tqFarFutureKey(2));
+        earlyTicketLevel = 2;
+        ticketsFullyProcessed = false;
         subsFullyProcessed = true;
         _afkingResetDay = day;
     }
@@ -110,6 +57,7 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        mockVRF.fundSubscription(1, 1_000 ether);
         vm.warp(block.timestamp + 500 days);
         vm.deal(BUYER, 10 ether);
         vm.deal(address(game), 20 ether);
@@ -120,6 +68,8 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
         vm.etch(address(game), type(PurchaseDeadlineSeeder).runtimeCode);
         PurchaseDeadlineSeeder(payable(address(game))).seed(age);
         vm.etch(address(game), original);
+        uint256 packed = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((packed & ~(uint256(0xffffff) << 176)) | (uint256(9 + age) << 176)));
     }
 
     function _advanceWithVrf() private {

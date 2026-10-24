@@ -15,13 +15,16 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
         assembly ("memory-safe") { slot := gameOverStatePacked.slot }
     }
 
-    /// @dev Past the purchase deadline with nothing in flight. `sealedAge` 1 is the start of a
-    ///      caught-up day (the deadline ending); a longer stretch has also fired the deadman.
-    function seed(uint256 word, uint24 sealedAge) external {
-        uint24 day = _simulatedDayIndex();
+    /// @dev Thirty completed logical purchase rounds with a recent completion. Extra wall
+    ///      windows model accumulated harmless delays across prior rounds.
+    function seed(uint256 word, uint24 extraWallWindows) external {
+        uint24 day = _wallDay();
         level = 9;
-        purchaseStartDay = day - 121;
-        dailyIdx = day - sealedAge;
+        dailyIdx = day - 1 - extraWallWindows;
+        purchaseStartDay = dailyIdx - 30;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _setLevelPrizePool(9, 1000 ether);
         ticketsFullyProcessed = true;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
@@ -40,7 +43,7 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
 /// @dev The normal ending runs in separate transactions: the first latches the terminal level
 ///      (VRF alive, so the loan book settles next), the second settles the empty loan book, the
 ///      third sends the ending's own terminal request; once answered, the next applies the
-///      word and settles capped coinflip backfill; later calls finish the payout checkpoints.
+///      word and closes its single committed flip cohort; later calls finish the payout checkpoints.
 ///      setUp runs everything before the measured step, so the test body starts cold.
 abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
     uint256 internal constant WORD = uint256(keccak256("cold-terminal-full-payout")) | 1;
@@ -50,22 +53,23 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
     ///      also applies it, so the payout is the test body's first (cold) transaction.
     function _fresh() internal pure virtual returns (bool);
 
-    /// @dev Days since the last sealed day. 1 = caught up; a longer stretch is the deadman's
-    ///      ending, whose terminal word also settles at most 31 skipped coinflip days.
-    function _sealedAge() internal pure virtual returns (uint24) {
-        return 1;
+    /// @dev Accumulated extra reset windows across prior logical rounds, independent of
+    ///      the recent completion timestamp.
+    function _extraWallWindows() internal pure virtual returns (uint24) {
+        return 0;
     }
 
     function setUp() public {
         _deployProtocol();
         vm.warp((399 + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 3 hours);
-        uint24 lastSealedDay = game.currentDayView() - _sealedAge();
+        uint24 lastSealedDay = game.currentWallDayView() - 1 - _extraWallWindows();
+        _seedLogicalFixtureDay(lastSealedDay);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, WORD, lastSealedDay);
         bytes memory original = address(game).code;
         vm.etch(address(game), type(ColdTerminalSeeder).runtimeCode);
         terminalStateSlot = ColdTerminalSeeder(payable(address(game))).terminalPaidSlot();
-        ColdTerminalSeeder(payable(address(game))).seed(WORD, _sealedAge());
+        ColdTerminalSeeder(payable(address(game))).seed(WORD, _extraWallWindows());
         vm.etch(address(game), original);
         vm.deal(address(game), 5000 ether);
         _requestTerminalWord();
@@ -123,7 +127,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
     function _exportTerminal(uint256 snapshot, string memory stage) private {
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) return;
         assertTrue(vm.revertToState(snapshot));
-        string memory label = string.concat("terminal-", vm.toString(_sealedAge()), "-", _fresh() ? "fresh-" : "recorded-", stage);
+        string memory label = string.concat("terminal-", vm.toString(_extraWallWindows()), "-", _fresh() ? "fresh-" : "recorded-", stage);
         this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
         game.mineFlip{gas: 11_500_000 - 21_192}(0);
     }
@@ -158,11 +162,11 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, before, "the ending sends its own terminal request");
         assertFalse(game.gameOver(), "the payout waits for the terminal word");
-        assertEq(game.rngWordForDay(game.currentDayView()), 0, "no word before the request is answered");
+        assertEq(game.rngWordForDay(game.currentDayView() + 1), 0, "no word before the request is answered");
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
             uint256 post = vm.snapshotState();
             assertTrue(vm.revertToState(requestSnapshot));
-            this.exportNativeFixture(string.concat("terminal-request-", vm.toString(_sealedAge()), _fresh() ? "-fresh" : "-recorded"),
+            this.exportNativeFixture(string.concat("terminal-request-", vm.toString(_extraWallWindows()), _fresh() ? "-fresh" : "-recorded"),
                 address(this), address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
             assertTrue(vm.revertToState(post));
             vm.deleteStateSnapshot(post);
@@ -171,10 +175,9 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
         mockVRF.fulfillRandomWords(id, WORD);
     }
 
-    /// @dev Applying the terminal word records its day and reserved lootbox index, and settles
-    ///      the capped skipped coinflip days using the original win bits and 100% win rewards.
+    /// @dev Applying the terminal word records its logical cohort and reserved read index.
     function _applyTerminalWord() private {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView() + 1;
         // Cooling newly created accounts during setUp can discard their deployment in Foundry's
         // persisted setup state. The recorded fixture starts its measured work in the test body;
         // only fresh-word fixtures need explicit cooling before this application measurement.
@@ -193,36 +196,21 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
     function assertTerminalApplication(Vm.Log[] calldata logs, uint24 day, uint256 used) external {
         require(msg.sender == address(this), "terminal assertion self-call");
         uint256 applied;
-        uint256 gapResults;
-        uint24 gap = _sealedAge() - 1;
-        if (gap > 31) gap = 31;
-        uint24 firstGap = day - _sealedAge() + 1;
+        uint256 results;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
             if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applied;
             if (logs[i].emitter == address(coinflip)
                 && logs[i].topics[0] == keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)")) {
-                uint24 resolvedDay = uint24(uint256(logs[i].topics[1]));
-                if (resolvedDay >= firstGap && resolvedDay < firstGap + gap) {
-                    (bool win, uint16 reward,) = abi.decode(logs[i].data, (bool, uint16, uint128));
-                    assertEq(reward, 100, "every backfilled flip uses double-or-nothing rewards");
-                    assertEq(win, (WORD >> (1 + resolvedDay - firstGap)) & 1 != 0, "gap win bits stay pinned");
-                    ++gapResults;
-                }
+                ++results;
             }
         }
         emit log_named_uint("terminal_word_apply_including_intrinsic", used);
-        emit log_named_uint("terminal_coinflip_backfill_days", gap);
+        emit log_named_uint("terminal_coinflip_results", results);
         assertFalse(game.gameOver(), "the payout takes its own transaction");
         assertEq(game.rngWordForDay(day), WORD, "terminal word recorded");
         assertEq(applied, 1, "only the terminal day emits DailyRngApplied");
-        assertEq(gapResults, gap, "every capped gap day must settle exactly once");
-        for (uint24 i; i < gap; ++i) {
-            bool expectedWin = (WORD >> (1 + i)) & 1 != 0;
-            (uint16 reward, bool win) = coinflip.getCoinflipDayResult(firstGap + i);
-            assertEq(win, expectedWin, "stored gap outcomes keep the tagged gap bits");
-            assertEq(reward, expectedWin ? 100 : 1, "stored gap payout or loss sentinel");
-        }
+        assertEq(results, 0, "terminal entry settles no coinflip day");
         assertLt(used, 11_500_000, "terminal word application exceeds review target");
     }
 }
@@ -249,14 +237,14 @@ contract AdvanceColdTerminalFresh is ColdTerminalFixture {
     }
 }
 
-/// @dev The widest terminal-word application: the deadman's ending reached long after it fired,
-///      so the terminal word settles the capped 31 skipped coinflip days in the same transaction.
+/// @dev Calendar time can exceed logical time across many delayed rounds; terminal
+///      application still resolves only its single legitimate cohort.
 contract AdvanceColdTerminalFreshLongGap is ColdTerminalFixture {
     function _fresh() internal pure override returns (bool) {
         return true;
     }
 
-    function _sealedAge() internal pure override returns (uint24) {
+    function _extraWallWindows() internal pure override returns (uint24) {
         return 60;
     }
 

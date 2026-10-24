@@ -32,8 +32,10 @@ contract CrapsBoonModuleHarness is DegenerusGameBoxModule {
         return boonPacked[player].slot0;
     }
 
+    function setDay(uint24 day) external { dailyIdx = day; }
+
     function today() external view returns (uint24) {
-        return _simulatedDayIndex();
+        return _gameDay();
     }
 }
 
@@ -82,6 +84,7 @@ contract CrapsBoonLane is Test {
 
     function setUp() public {
         module_ = new CrapsBoonModuleHarness();
+        module_.setDay(1);
         viewer = new CrapsBoonViewerHarness();
     }
 
@@ -160,17 +163,19 @@ contract CrapsBoonLane is Test {
         uint24 d = module_.today();
         module_.writeSlot1(PLAYER, _lane(3, false, d));
         vm.warp(block.timestamp + uint256(EXPIRY_DAYS) * 1 days);
+        module_.setDay(d + EXPIRY_DAYS);
         vm.prank(ContractAddresses.COIN);
         assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 2500, "lane died inside its window");
 
         module_.writeSlot1(PLAYER, _lane(3, false, d));
         vm.warp(block.timestamp + 1 days);
+        module_.setDay(d + EXPIRY_DAYS + 1);
         vm.prank(ContractAddresses.COIN);
         assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 0, "expired lane still paid");
         assertEq(module_.slot1Of(PLAYER) & LANE_MASK, 0, "expired lane not cleared");
     }
 
-    function testDeityLaneDiesAtMidnightOfItsOwnDay() public {
+    function testDeityLaneExpiresOnTheNextLogicalDay() public {
         uint24 d = module_.today();
         module_.writeSlot1(PLAYER, _lane(2, true, d));
         vm.prank(ContractAddresses.COIN);
@@ -178,6 +183,7 @@ contract CrapsBoonLane is Test {
 
         module_.writeSlot1(PLAYER, _lane(2, true, d));
         vm.warp(block.timestamp + 1 days);
+        module_.setDay(d + 1);
         vm.prank(ContractAddresses.COIN);
         assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 0, "deity lane outlived its day");
     }

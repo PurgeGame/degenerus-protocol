@@ -42,6 +42,7 @@ contract StorageReuseNativeTest is DeployProtocol, NativeGasExport {
 
     function _clock(uint24 today, uint24 resolved) private {
         vm.warp((uint256(today - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        _seedLogicalFixtureDay(today);
         uint256 word = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
         vm.store(address(coinflip), bytes32(uint256(4)), bytes32((word & ~uint256(type(uint24).max)) | resolved));
     }

@@ -16,7 +16,10 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 contract BoundedPublicSeeder is DegenerusGameStorage, WalletSeed {
     function seed(address player) external {
         level = 24;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
         rngRequestTime = uint48(block.timestamp);
         degenesisClosed = 7;
@@ -43,6 +46,7 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(crapsBattle), vm.getDeployedCode("CrapsBattle.sol:CrapsBattle"));
         vm.warp(block.timestamp + 20 days);
         _seed(abi.encodeCall(BoundedPublicSeeder.seed, (PLAYER)));
+        _seedLogicalFixtureDay(game.currentDayView());
         playerId = game.walletIdOf_g3120(PLAYER);
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 1000 ether);
@@ -171,7 +175,10 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
     function test_C1_C2_OpenBonusDay() public {
         _measure("C1_C2_open_day", address(crapsBattle), address(game), 0, abi.encodeCall(CrapsBattle(address(crapsBattle)).openBonusDay, ()));
     }
-    function _openDay() private { vm.prank(address(game)); crapsBattle.openBonusDay(); }
+    function _openDay() private {
+        vm.warp(vm.getBlockTimestamp() - ((vm.getBlockTimestamp() - 82620) % 1 days) + 1);
+        vm.prank(address(game)); crapsBattle.openBonusDay();
+    }
     function test_C1_C4_CrapsWindowFirst() public {
         _openDay();
         _measure("C1_C4_window_first", address(crapsBattle), PLAYER, 0,

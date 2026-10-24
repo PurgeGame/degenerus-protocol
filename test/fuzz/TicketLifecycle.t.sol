@@ -2422,7 +2422,7 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev The mid-day request through mineFlip, its only door, when it is the engine's next
     ///      action for a creditless caller; otherwise nothing (the request would be refused).
     function _tryMiddayRequest() internal returns (bool requested) {
-        if (game.nextMinerAction() != 18) return false;
+        if (game.nextMinerAction() != 17) return false;
         game.mineFlip(0);
         return true;
     }

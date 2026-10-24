@@ -348,31 +348,31 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         for (uint256 i; i < subs.length; i++) if (_isPending(subs[i])) c++;
     }
 
-    /// @dev Settle the current day, move to the next, and step the engine in minimal checkpoints
+    /// @dev Settle the current day, move to the next, and step the engine in single-unit checkpoints
     ///      through the subscriber preparation until the day's request is the next work.
     function _stampToRequest(uint256 vrfWord) internal {
         _settleIdle(vrfWord ^ 0xF00D);
         _t += 1 days;
         vm.warp(_t);
         for (uint256 i; i < 600; i++) {
-            if (game.nextMinerAction() == 17) return; // MinerAction.RequestDaily
-            _stepMinimal();
+            if (game.nextMinerAction() == 16) return; // MinerAction.RequestDaily
+            _stepSingleUnit();
         }
         revert("harness: the daily request never became the next work");
     }
 
-    /// @dev Step the day's request and processing in minimal checkpoints until its AFKing backlog
+    /// @dev Step the day's request and processing in single-unit checkpoints until its AFKing backlog
     ///      is the next work (the call that releases the lock opens what its leftover admits).
     function _toAfkingStage(uint256 vrfWord) internal {
         for (uint256 i; i < 600; i++) {
-            if (game.nextMinerAction() == 9) return; // MinerAction.Afking
+            if (game.nextMinerAction() == 8) return; // MinerAction.Afking
             _fulfillPending(vrfWord);
-            if (game.advanceDue()) _stepMinimal();
+            if (game.advanceDue()) _stepSingleUnit();
         }
         revert("harness: the AFKing stage never became the next work");
     }
 
-    /// @dev Drive the stamped day to completion: minimal checkpoints up to the AFKing stage, then
+    /// @dev Drive the stamped day to completion: single-unit checkpoints up to the AFKing stage, then
     ///      `keeper` mineFlip calls at BOUNDED_OPEN_ALLOWANCE until every sub's box is open. Returns
     ///      the number of engine calls that opened at least one of `subs`. With `probe`, asserts
     ///      before every call that NoWork does not fire while any of `subs` is pending.
@@ -380,12 +380,12 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         internal
         returns (uint256 openCalls)
     {
-        for (uint256 i; i < 600 && game.nextMinerAction() != 9 && _countPending(subs) != 0; i++) {
+        for (uint256 i; i < 600 && game.nextMinerAction() != 8 && _countPending(subs) != 0; i++) {
             if (probe) assertFalse(_mintFlipWouldNoWork(keeper), "NoWork must NOT fire while open-pending boxes exist");
             _fulfillPending(vrfWord);
             if (!game.advanceDue()) continue;
             uint256 before = _countPending(subs);
-            _stepMinimal();
+            _stepSingleUnit();
             if (_countPending(subs) < before) openCalls++;
         }
         for (uint256 i; i < 200 && _countPending(subs) != 0; i++) {
@@ -415,19 +415,10 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         revert("harness: cohorts never settled");
     }
 
-    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots).
-    function _stepMinimal() internal {
-        uint256 lo = 200_000;
-        uint256 hi = 30_000_000;
-        while (hi - lo > 1_000) {
-            uint256 mid = (lo + hi) / 2;
-            uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-            vm.revertToStateAndDelete(snap);
-            if (ok) hi = mid;
-            else lo = mid;
-        }
-        game.mineFlip{gas: hi}(0);
+    /// @dev Maximum calibration admits the mandatory first unit and no optional
+    ///      aggregation, preserving each checkpoint without a success-only gas search.
+    function _stepSingleUnit() internal {
+        game.mineFlip{gas: 30_000_000}(type(uint32).max);
     }
 
     /// @dev One engine call with a bounded gas allowance; returns how many of `subs` it opened.

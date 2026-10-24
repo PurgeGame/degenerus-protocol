@@ -58,8 +58,12 @@ library GameSlots {
     uint256 internal constant RNG_WORD_CURRENT = 3;
     uint256 internal constant VRF_REQUEST_ID = 4;
     uint256 internal constant RNG_REQUEST_DAY = 5;
-    uint256 internal constant RNG_GAP_APPLIED = 5;
-    uint256 internal constant RNG_GAP_APPLIED_OFFSET = 3;
+    uint256 internal constant DAILY_COMPLETE = 5;
+    uint256 internal constant DAILY_COMPLETE_OFFSET = 3;
+    uint256 internal constant LAST_DAILY_REQUEST_WALL_DAY = 5;
+    uint256 internal constant LAST_DAILY_REQUEST_WALL_DAY_OFFSET = 27;
+    uint256 internal constant LAST_DAILY_COMPLETED_AT = 13;
+    uint256 internal constant LAST_DAILY_COMPLETED_AT_OFFSET = 16;
     uint256 internal constant LAST_VRF_PROCESSED_TIMESTAMP = 5;
     uint256 internal constant LAST_VRF_PROCESSED_TIMESTAMP_OFFSET = 4;
     uint256 internal constant TICKET_BUFFER_LEVELS = 5;

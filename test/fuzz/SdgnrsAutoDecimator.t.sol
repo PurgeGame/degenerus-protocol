@@ -29,7 +29,10 @@ contract AutoDecimatorGameHarness is DegenerusGame {
     }
 
     function prepareOpening(uint24 day, uint24 lvl, uint256 word, bool opening) external {
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = day - 1;
         level = lvl;
         rngRequestTime = uint48(block.timestamp);
@@ -44,7 +47,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         // An open window at level lvl targets lvl + 1, which owns the reusable entry bank (the
         // level transition that opened it set decEntriesLevel = lvl + 1).
         decEntriesLevel = lvl + 1;
-        if (opening) decBattleRounds[lvl + 1].openedDay = _simulatedDayIndex();
+        if (opening) decBattleRounds[lvl + 1].openedDay = day;
         _setDecDayOneActive(opening);
         lastPurchaseDay = opening;
         if (opening) _setPrizePools(10 ether, 20 ether);
@@ -59,6 +62,9 @@ contract AutoDecimatorGameHarness is DegenerusGame {
 
     function prepareNextRequest(uint24 day) external {
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         rngRequestTime = 1;
         vrfRequestId = 1;
         _setRngRequestActive(false);
@@ -102,10 +108,10 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         vm.etch(address(advanceModule), type(AutoDecimatorAdvanceHarness).runtimeCode);
         harness = AutoDecimatorGameHarness(payable(address(game)));
         // Bank one genesis win and arm sDGNRS's perpetual auto-rebuy normally.
-        for (uint24 day = 1; day <= 20; ++day) {
+        for (uint24 day = 2; day <= 21; ++day) {
             _warp(day);
             vm.prank(address(game));
-            coinflip.processCoinflipPayouts(0, day == 1 ? 3 : 2, day);
+            coinflip.processCoinflipPayouts(0, day == 2 ? 3 : 2, day);
         }
         genesisBackingSnapshot = vm.snapshotState();
         // Most cases start without a seed reserve; the mixed-source case restores it.
@@ -117,6 +123,10 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function _warp(uint24 day) private {
         vm.warp((uint256(day - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        bytes32 root = 0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200;
+        bytes32 pair = vm.load(address(coinflip), root);
+        _seedLogicalFixtureDay(day);
+        vm.store(address(coinflip), root, pair);
     }
 
     function _fund(uint256 amount) private {
@@ -160,8 +170,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function test_ManualBurnUsesFullMultiplierAndLateTopupDecay() public {
         address player = makeAddr("manual-decimator");
-        _prepare(21, 4, 3, true);
-        harness.applyOpeningWord(21);
+        _prepare(22, 4, 3, true);
+        harness.applyOpeningWord(22);
         uint32 playerId = _giveWalletId(player);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500), playerId));
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCachedById.selector, playerId), abi.encode(uint256(500)));
@@ -173,7 +183,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertGt(id, 0);
         assertEq(first, firstCredit);
         assertEq(first, firstBase * ActivityCurveLib.decBattleMultBps(activityScoreOf(address(game), player)) / 10_000);
-        _warp(23);
+        _warp(24);
         vm.recordLogs();
         vm.prank(player); coin.decimatorBurn(0, 2_000_000, 0);
         (uint256 topupBase,) = _recorded(vm.getRecordedLogs());
@@ -186,10 +196,10 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function test_OpeningBurnsCarryBeforeCrapsAndCompletesTodaysQuest() public {
         _fund(400_000);
-        _prepare(21, 4, 3, true);
+        _prepare(22, 4, 3, true);
         uint256 supplyBefore = coin.totalSupply();
         vm.recordLogs();
-        harness.applyOpeningWord(21);
+        harness.applyOpeningWord(22);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint256 spent, uint256 count) = _burned(logs);
         assertEq(spent, CAP);
@@ -224,29 +234,29 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertLt(settleIndex, questIndex, "coinflip settles before daily quests");
         assertLt(questIndex, burnIndex, "daily quests are rolled before the entry");
         assertLt(burnIndex, crapsIndex, "decimator gets first use of backing before craps");
-        assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
+        assertGt(crapsBattle.daySeatNumberOf(22, HOUSE), 0);
     }
 
     function test_RepeatedAdvancesCannotBurnTwice() public {
         _fund(400_000);
-        _prepare(21, 4, 3, true);
-        harness.applyOpeningWord(21);
+        _prepare(22, 4, 3, true);
+        harness.applyOpeningWord(22);
         uint256 backing = coinflip.previewFlipBacking(HOUSE);
         (uint256 weight,) = harness.entry(5);
-        harness.applyOpeningWord(21);
+        harness.applyOpeningWord(22);
         assertEq(coinflip.previewFlipBacking(HOUSE), backing);
         (uint256 afterWeight,) = harness.entry(5);
         assertEq(afterWeight, weight);
 
-        _prepare(22, 14, 3, true);
-        harness.applyOpeningWord(22);
+        _prepare(23, 14, 3, true);
+        harness.applyOpeningWord(23);
         (uint256 nextWeight,) = harness.entry(15);
         assertGt(nextWeight, 0, "a later window receives its own entry");
     }
 
     function test_RealAdvanceGameReachesTheOpeningEntry() public {
         _fund(400_000);
-        _prepare(21, 4, 3, true);
+        _prepare(22, 4, 3, true);
         vm.deal(address(game), 1000 ether);
         vm.recordLogs();
         // Genesis (initProtocolDeity) queues VAULT+SDGNRS perpetual entries into the
@@ -266,12 +276,12 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertGt(weight, 0, "entry uses resolution level after request-time promotion");
         (uint256 previousWeight,) = harness.entry(4);
         assertEq(previousWeight, 0, "cached purchase level is not the resolution level");
-        assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
+        assertGt(crapsBattle.daySeatNumberOf(22, HOUSE), 0);
     }
 
     function test_CenturyOpeningTargetsLevel100() public {
         _fund(400_000);
-        _prepare(21, 99, 3, true);
+        _prepare(22, 99, 3, true);
         vm.deal(address(game), 1000 ether);
         // As in test_RealAdvanceGameReachesTheOpeningEntry: _mintCeiling() = level(99)+1 = 100,
         // and genesis queued VAULT+SDGNRS perpetual entries into level 100's far-future pool at
@@ -286,13 +296,13 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function test_UnderfundedAttemptCannotRetryInTheSameWindow() public {
-        _prepare(21, 4, 3, true);
-        harness.applyOpeningWord(21);
+        _prepare(22, 4, 3, true);
+        harness.applyOpeningWord(22);
         _fund(400_000);
-        harness.applyOpeningWord(21);
+        harness.applyOpeningWord(22);
         // The next real daily request clears the opening flag while the decimator stays open.
-        _warp(22);
-        harness.prepareNextRequest(22);
+        _warp(23);
+        harness.prepareNextRequest(23);
         // The real daily request is the keeper engine's RequestDaily action (the advance module
         // only applies a delivered word); the word is then published and applied by the engine.
         uint256 requestBefore = mockVRF.lastRequestId();
@@ -300,8 +310,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertGt(mockVRF.lastRequestId(), requestBefore, "real daily request");
         assertTrue(game.rngLocked());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 3);
-        for (uint256 i; i < 20 && game.rngWordForDay(22) == 0; ++i) game.mineFlip(0);
-        assertGt(game.rngWordForDay(22), 0, "day 22 word applied");
+        for (uint256 i; i < 20 && game.rngWordForDay(23) == 0; ++i) game.mineFlip(0);
+        assertGt(game.rngWordForDay(23), 0, "day 23 word applied");
         assertTrue(game.decWindow());
         assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
         (uint256 weight,) = harness.entry(5);
@@ -310,30 +320,30 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function test_NoOpeningLatchLeavesBackingForCraps() public {
         _fund(400_000);
-        _prepare(21, 4, 3, false);
-        harness.applyOpeningWord(21);
+        _prepare(22, 4, 3, false);
+        harness.applyOpeningWord(22);
         (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
         assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
-        assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
+        assertGt(crapsBattle.daySeatNumberOf(22, HOUSE), 0);
     }
 
     function test_EmptyBackingSkipsAndStillOpensCraps() public {
-        _prepare(21, 4, 3, true);
-        harness.applyOpeningWord(21);
+        _prepare(22, 4, 3, true);
+        harness.applyOpeningWord(22);
         (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
-        assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
+        assertGt(crapsBattle.daySeatNumberOf(22, HOUSE), 0);
     }
 
     function test_PendingLossCannotEscapeIntoDecimator() public {
         _fund(400_000);
-        _prepare(21, 3, 3, false);
-        harness.applyOpeningWord(21);
-        assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
-        _prepare(22, 4, 2, true);
-        vm.recordLogs();
+        _prepare(22, 3, 3, false);
         harness.applyOpeningWord(22);
+        assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
+        _prepare(23, 4, 2, true);
+        vm.recordLogs();
+        harness.applyOpeningWord(23);
         (, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(count, 0, "advance settles the loss before attempting entry");
         assertEq(coinflip.previewFlipBacking(HOUSE), 0, "loss applied before sizing entry");
@@ -347,9 +357,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(reserve - 2000);
         _fund(400_000);
-        _prepare(21, 4, 3, true);
+        _prepare(22, 4, 3, true);
         vm.prank(address(game));
-        coinflip.processCoinflipPayouts(0, 3, 21);
+        coinflip.processCoinflipPayouts(0, 3, 22);
         uint256 banked = coinflip.previewClaimCoinflips(HOUSE);
         (,, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(HOUSE);
         assertGt(banked, 0);
@@ -364,9 +374,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function testFuzz_BankrollCapAndMinimum(uint256 bankroll) public {
         bankroll = bound(bankroll, 0, 2 * CAP);
         _fund(2 * CAP);
-        _prepare(21, 4, 3, true);
+        _prepare(22, 4, 3, true);
         vm.prank(address(game));
-        coinflip.processCoinflipPayouts(0, 3, 21);
+        coinflip.processCoinflipPayouts(0, 3, 22);
         uint256 backing = coinflip.previewFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(backing - bankroll);
@@ -377,14 +387,14 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function test_MinimumEntryCompletesDecimatorQuest() public {
         _fund(400_000);
-        _prepare(21, 4, 3, true);
+        _prepare(22, 4, 3, true);
         vm.prank(address(game));
-        coinflip.processCoinflipPayouts(0, 3, 21);
+        coinflip.processCoinflipPayouts(0, 3, 22);
         uint256 backing = coinflip.previewFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(backing - 2000);
         vm.prank(address(game));
-        quests.rollDailyQuest(21, 3, false, false, true);
+        quests.rollDailyQuest(22, 3, false, false, true);
         assertEq(_autoBurn(), 2000);
         (, bool secondary) = quests.questCompletionToday(HOUSE_ID);
         assertTrue(secondary);
@@ -403,9 +413,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function test_PreviousReferenceAboveOldCapControlsOpeningBurn() public {
         _fund(2_000_000);
         harness.setDecReference(400_001, 2, 100);
-        _prepare(21, 104, 3, true);
+        _prepare(22, 104, 3, true);
         vm.recordLogs();
-        harness.applyOpeningWord(21);
+        harness.applyOpeningWord(22);
         (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(spent, 800_002, "fourfold rational average, not rounded average or old ceiling");
         assertEq(count, 1);
@@ -413,9 +423,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function test_SubminimumReferenceSkipsWithoutConsuming() public {
         _fund(400_000);
-        _prepare(21, 4, 3, true);
+        _prepare(22, 4, 3, true);
         vm.prank(address(game));
-        coinflip.processCoinflipPayouts(0, 3, 21);
+        coinflip.processCoinflipPayouts(0, 3, 22);
         uint256 beforeBacking = coinflip.previewFlipBacking(HOUSE);
         vm.expectCall(address(coinflip), abi.encodeWithSignature("consumeFlipBacking(address,uint256)"), 0);
         vm.prank(address(game));
@@ -425,8 +435,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function test_ManualMinimumIncludesEveryTopup() public {
         address player = makeAddr("minimum-decimator");
-        _prepare(21, 4, 3, true);
-        harness.applyOpeningWord(21);
+        _prepare(22, 4, 3, true);
+        harness.applyOpeningWord(22);
         vm.prank(address(game));
         coin.mintForGame(player, 8000);
         vm.startPrank(player);

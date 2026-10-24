@@ -22,6 +22,10 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
         address player, uint24 sealedDay, uint24 stampDay, uint256 word, uint256 cleanPrefix, bool complete
     ) external {
         dailyIdx = sealedDay;
+        rngRequestDay = sealedDay;
+        dailyComplete = complete;
+        lastDailyRequestWallDay = _wallDay() - (stampDay > sealedDay ? 1 : 0);
+        lastDailyCompletedAt = uint48(block.timestamp);
         rngLockedFlag = false;
         rngWordCurrent = word;
         _setRngRequestActive(false);
@@ -83,6 +87,8 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
             PLAYER, sealedDay, stampDay, SESSION_WORD, cleanPrefix, complete
         );
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(sealedDay);
+        _seedCrapsFixtureCursor(sealedDay);
     }
 
     function _pending() private view returns (uint256) {
@@ -157,7 +163,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         uint256 requestId = mockVRF.lastRequestId();
         vm.warp(vm.getBlockTimestamp() + 2 days);
         // The pending AFKing consumer, not a fresh request, is the engine's next work.
-        assertEq(game.nextMinerAction(), 9, "no next request while the stamp is pending"); // Afking
+        assertEq(game.nextMinerAction(), 8, "no next request while the stamp is pending"); // Afking
         assertEq(mockVRF.lastRequestId(), requestId, "no next request while the stamp is pending");
         assertEq(RecyclingState.currentWord(address(game)), SESSION_WORD, "old session remains available");
 
@@ -179,7 +185,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertEq(_pending(), 1, "pre-seal stamp remains pending");
         assertTrue(game.rngComplete(), "cached prior completion still permits the daily seal");
         // The completed session offers the new stamp no AFKing stage on the prior published word.
-        assertTrue(game.nextMinerAction() != 9, "prior published word cannot open a new STAGE stamp"); // Afking
+        assertTrue(game.nextMinerAction() != 8, "prior published word cannot open a new STAGE stamp"); // Afking
 
         uint256 oldRequest = mockVRF.lastRequestId();
         for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip(0);
@@ -213,7 +219,8 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "old daily cache entry was recycled");
 
         _expectStampedResolve(stampDay);
-        game.mineFlip(0);
+        _keep();
+        _finishRead();
         _assertStampedResolve(vm.getRecordedLogs());
         assertEq(_pending(), 0, "delayed fulfillment needs no retained stamp-day word");
         assertEq(_openedDay(), stampDay, "frozen day remains the reward domain input");
@@ -243,7 +250,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         // stops on the seal.
         _expectStampedResolve(stampDay);
         vm.recordLogs();
-        for (uint256 i; i < 256 && _dailyIdx() < requestDay; ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && !_dailyComplete(); ++i) _keep();
         assertEq(_dailyIdx(), requestDay, "delayed request applied and unlocked");
         assertEq(RecyclingState.dailyWord(address(game), stampDay), SESSION_WORD, "the delayed request retains its pinned day");
         _mineAll(64);
@@ -264,6 +271,10 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         // Completion was certified: either the session still reads complete, or the next wall
         // day's request was sealed, which the read-complete gate permits only after it.
         assertTrue(game.rngComplete() || mockVRF.lastRequestId() > delivered, "the session completed");
+    }
+
+    function _dailyComplete() private view returns (bool complete) {
+        (complete,,) = game.dailySessionState();
     }
 
     function _dailyIdx() private view returns (uint24) {
@@ -296,15 +307,16 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _quietCrapsTable();
         _seed(day, day, 0, false);
         // The pending AFKing consumer, not a mid-day request, is the engine's next work.
-        assertEq(game.nextMinerAction(), 9, "no mid-day request while the AFKing stamp is pending"); // Afking
-        game.mineFlip(0);
+        assertEq(game.nextMinerAction(), 8, "no mid-day request while the AFKing stamp is pending"); // Afking
+        _keep();
+        _finishRead();
         assertTrue(game.rngComplete());
         _buyWriteBox();
         vm.prank(address(admin));
         game.creditMiddayRng(PLAYER, 100 ether);
         vm.prank(PLAYER);
         uint8 next = game.minerAction();
-        assertEq(next, 18, "the drained session admits the donor's mid-day request"); // RequestMidday
+        assertEq(next, 17, "the drained session admits the donor's mid-day request"); // RequestMidday
         vm.prank(PLAYER);
         game.mineFlip(0);
         assertFalse(game.rngComplete());

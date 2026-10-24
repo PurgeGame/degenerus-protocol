@@ -14,7 +14,9 @@ contract AfkingMembershipHarness is DegenerusGameBoxModule, WalletSeed {
     ///      member of the same cohort. The pass endpoint is the process day.
     function seed(address pending, address clean, uint8 quantity) external returns (uint24 processDay) {
         _seedProtocolWallets();
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
+        dailyComplete = true; lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
         processDay = dailyIdx + 1;
         _afkingResetDay = processDay;
         _afkingEndpointDay = processDay;

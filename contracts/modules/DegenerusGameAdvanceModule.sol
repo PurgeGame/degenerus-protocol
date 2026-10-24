@@ -84,7 +84,6 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
     uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 8;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 9;
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 10;
-    uint8 private constant STAGE_GAP_BACKFILLED = 12;
     uint8 private constant STAGE_JACKPOT_EARLY_BIRD_TICKETS = 14;
     uint8 private constant STAGE_PURCHASE_DAILY_TICKETS = 15;
     uint8 private constant STAGE_JACKPOT_BATTLE = 16;
@@ -114,19 +113,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 50;
     uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 250;
 
-    /// @notice Compact skipped-day funding is a separate indivisible daily action.
-    function applyDailyGap() external {
-        uint24 day = rngRequestDay;
-        if (address(this) != ContractAddresses.GAME || !rngLockedFlag || !_rngSessionPublished()
-            || !ticketsFullyProcessed || !_rngRequestActive() || day <= dailyIdx + 1
-            || _recordedDailyWord(day) != 0 || _livenessTriggered()) revert E();
-        uint24 count = day - dailyIdx - 1;
-        _backfillGapDays(_rawDailyRngWord(_currentRngWord()), dailyIdx + 1, day);
-        purchaseStartDay += count;
-        dailyIdx = day - 1;
-        rngGapApplied = true;
-        emit Advance(STAGE_GAP_BACKFILLED, level);
-    }
+
 
 
 
@@ -136,7 +123,6 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             || !ticketsFullyProcessed || !_rngRequestActive() || _livenessTriggered()) revert E();
         uint24 day = rngRequestDay;
         if (day == 0 || _recordedDailyWord(day) != 0) revert E();
-        uint48 ts = uint48(block.timestamp);
         uint24 lvl = level;
         bool inJackpot = jackpotPhaseFlag;
         bool isTicketJackpotDay = !inJackpot && lastPurchaseDay;
@@ -146,53 +132,22 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         uint8 coinflipBonus = bonusDay ? (bonusLvl != 0 && bonusLvl % 10 == 0 ? 6 : 2) : 0;
         uint256 currentWord = _currentRngWord();
         if (currentWord == 0) revert RngNotReady();
-        uint32 gapDays = rngGapApplied ? 1 : 0;
         // Normal daily RNG processing (request from current day)
         currentWord = _applyDailyRng(day, currentWord);
         coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
         // Settlement paid any owed bonus. Preserve a newly armed turbo.
         if ((jackpotFlags & TURBO_BONUS_PENDING) != 0) jackpotFlags &= JACKPOT_TURBO;
-        // Force the MINT_FLIP daily on the first jackpot day (lastPurchaseDay still set here,
-        // jackpot not yet entered) so the FLIP-mint quest only lands when the redeem window is
-        // live. Turbo is skipped — its jackpot collapses at this
-        // request, leaving no full open day for that quest.
-        // Force the buy-a-foil-pack daily on the day the purchase phase opens — the day
-        // whose jackpot run is the level's last, since the transition drains and reopens
-        // purchasing later in that same day. Whether this pass carries the final run is
-        // already decidable from the physical day counter and turbo bit. At a turbo
-        // transition, isTicketJackpotDay stands in for jackpotPhaseFlag, which has not
-        // yet been set. phaseTransitionActive is too late: it is raised after the word
-        // is recorded, so later rolls take the recorded-word early return
-        // above. Never collides with the MINT_FLIP force below: that fires on a level's
-        // first jackpot day, which is final only for turbo — where its own turbo exclusion
-        // already stands it down. Gated on gapDays == 0 so a VRF-stall backfill (which
-        // defers the whole transition to the next advance, line 412) does not roll the
-        // foil quest early. The final-jackpot REQUEST already rolls this quest at the
-        // routing boundary (prepareRequestBoundary), so on those days this force is an
-        // idempotent no-op backstop.
-        //
-        // Force the decimator daily on the day a burn window arms. _decDayOneActive() is
-        // exactly that day: the arming request raises it a few lines after opening the
-        // window, and only the NEXT day's fresh request clears it, so it still reads true
-        // when this roll consumes the arming day's word. It outranks the other two forces
-        // (see rollDailyQuest), which costs the MINT_FLIP force on x4/x99 levels — the
-        // arming day is also those levels' first jackpot day.
-        //
-        // All three forces are skipped entirely on a late-consumed word (buffered RNGREUSE
-        // clamp: day < wall day): that day's quest never rolled while the day was live, so
-        // a roll now would create a retroactive quest that immediately counts as a rolled
-        // miss against every streak. The day stays unrolled — forgiven, matching
-        // gap-backfill days.
+        // Quests belong to this logical commitment even when delivery crosses resets.
         bool finalJackpotRun =
             (jackpotPhaseFlag || isTicketJackpotDay) && _isFinalJackpotDay(jackpotCounter, jackpotFlags);
-        if (day == _simulatedDayIndexAt(ts)) {
+        {
             bool decDayOne = _decDayOneActive();
             quests.rollDailyQuest(
                 day,
                 currentWord,
                 lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0,
-                finalJackpotRun && gapDays == 0,
-                decDayOne && gapDays == 0
+                finalJackpotRun,
+                decDayOne
             );
 
             // Spend sDGNRS's settled backing on the opening-day decimator before the
@@ -227,7 +182,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             }
         }
 
-        emit Advance(gapDays == 0 ? STAGE_DAILY_WORD_APPLIED : STAGE_GAP_BACKFILLED, lvl);
+        emit Advance(STAGE_DAILY_WORD_APPLIED, lvl);
     }
 
 
@@ -290,13 +245,13 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             // Pricing can set ticket-leg flags before the ETH quadrants have finished.
             result = runDailyJackpot(inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail));
             if (result.done && !inJackpot && !_purchaseTicketLegPending()) {
-                _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter);
+                _sealPurchaseDay(purchaseLevel, day, purchaseStartDay, meter);
             }
             stage = inJackpot ? STAGE_JACKPOT_DAILY_STARTED : STAGE_PURCHASE_DAILY;
         } else if (!inJackpot) {
             if (_purchaseTicketLegPending()) {
                 result = runPurchaseDailyTickets(word, MineFlipGas.child(meter, sealTail));
-                if (result.done) _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter);
+                if (result.done) _sealPurchaseDay(purchaseLevel, day, purchaseStartDay, meter);
                 stage = STAGE_PURCHASE_DAILY_TICKETS;
             } else if (!lastPurchase && purchaseLevel == 1 && day < GameTimeLib.MAIN_LAUNCH_DAY) {
                 // A Degenesis day, keyed on the processed day: no level-1 FLIP draw, no foil draw
@@ -313,13 +268,14 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                     _emitLevelOneWinningTraits(word);
                     payDailyFlipJackpot(1, word, 1, 1);
                     result.progressed = true;
-                    MineFlipGas.markProgress(meter);
+                    // The draw and required seal are one indivisible unit. Keep its
+                    // first-unit gas permission through the seal's dependency calls.
                     result.done = true;
                 } else {
                     result = runDailyJackpot(false, purchaseLevel, word, MineFlipGas.child(meter, sealTail));
                 }
                 if (result.done && !_purchaseTicketLegPending()) {
-                    _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter);
+                    _sealPurchaseDay(purchaseLevel, day, purchaseStartDay, meter);
                 }
                 stage = STAGE_PURCHASE_DAILY;
             } else {
@@ -496,13 +452,13 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, 100_000, 150_000)) return result;
         if (address(this) != ContractAddresses.GAME || (!gameOver && !_livenessTriggered())) revert E();
-        if (_goRead(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK) != 0) {
+        if (_goRead(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK) != 0 && _endingReason() != EndingReason.HardStall) {
             _settleTerminalLoans(meter, result);
             MineFlipGas.finish(meter);
             if (result.progressed) emit Advance(STAGE_TERMINAL_LOANS, level);
             return result;
         }
-        (bool handled, uint8 stage, bool progressed) = _handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL));
+        (bool handled, uint8 stage, bool progressed) = _handleGameOverPath(_gameDay(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL));
         MineFlipGas.finish(meter);
         if (!handled) revert E();
         result.progressed = progressed;
@@ -512,7 +468,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
     /// @notice Fresh daily boundary only; the caller seals and sends in this same transaction.
     function prepareRequestBoundary(uint24 day) public {
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _livenessTriggered()
-            || day != _afkingResetDay || day <= dailyIdx || !subsFullyProcessed) revert E();
+            || day != _afkingResetDay || day != dailyIdx + 1 || !dailyComplete || !_dailyRequestDue() || !subsFullyProcessed) revert E();
         // Degenesis cohorts split and price before the request. Every cohort is split no later than
         // the call that closes it, so once the seventh closes no call is made.
         if (degenesisClosed < DEGENESIS_DAYS) {
@@ -526,7 +482,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         // whenever it lands.
         if (day >= GameTimeLib.MAIN_LAUNCH_DAY && !jackpotPhaseFlag && !lastPurchaseDay && day >= psd
             && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 1) {
-            if ((dailyIdx < GameTimeLib.MAIN_LAUNCH_DAY || (day == _simulatedDayIndex() && day - psd <= 1))
+            if ((dailyIdx < GameTimeLib.MAIN_LAUNCH_DAY || day - psd <= 1)
                 && level % 10 != 9 && _getNextPrizePool() > _prizePoolTarget(level + 1)) {
                 lastPurchaseDay = true;
                 jackpotFlags |= JACKPOT_TURBO;
@@ -601,7 +557,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             uint24 mod10 = lvl % 10;
             if ((mod10 == 4 && mod100 != 94) || mod100 == 99) {
                 _setDecWindowOpen(true);
-                decBattleRounds[lvl + 1].openedDay = _simulatedDayIndex();
+                decBattleRounds[lvl + 1].openedDay = day;
                 decEntriesLevel = lvl + 1;
                 // Arm the opening-day quest and protocol auto-entry.
                 _setDecDayOneActive(true);
@@ -630,18 +586,8 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         // x4/x99 level, where the final run is also the arming day. rollDailyQuest is
         // idempotent per day, so the fulfilment call no-ops on this day.
         //
-        // questDay == wall day mirrors the fulfilment roll's own guard: a day the RNGREUSE
-        // clamp held in the past must stay unrolled, since a retroactive quest lands already
-        // missed and bills every streak. That case rolls nothing.
-        //
-        // !isDailyRetry pins the roll to the request that MOVED the boundary. The level
-        // increment above carries the same gate, so a retry re-requests a word for a
-        // transition already made. A retry that crosses midnight carries the NEW wall day
-        // (no RNGREUSE clamp applies while a request is pending — rngWordCurrent is RNG_WORD_WAITING), so
-        // an ungated roll would force a SECOND foil daily on a day whose one-per-cycle slot
-        // the first day's quest may already have spent: a quest that can only miss.
         uint24 questDay = uint24(lvlAndQuestDay >> 24);
-        if (finalJackpotRequest && questDay == _simulatedDayIndex()) {
+        if (finalJackpotRequest) {
             quests.rollDailyQuest(questDay, 0, false, true, _decDayOneActive());
         }
 
@@ -923,9 +869,9 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         if (day > vaultFlipSettledDay) vaultFlipSettledDay = day;
     }
 
-    function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 wallDay, uint24 psd, MineFlipGas.Meter memory meter) private {
+    function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 psd, MineFlipGas.Meter memory meter) private {
         // No Degenesis day latches, however late it is cranked.
-        if (day >= GameTimeLib.MAIN_LAUNCH_DAY && day == wallDay && day >= psd
+        if (day >= GameTimeLib.MAIN_LAUNCH_DAY && day >= psd
             && _getNextPrizePool() > _prizePoolTarget(purchaseLevel)) {
             lastPurchaseDay = true;
             if (purchaseLevel % 10 == 5 && purchaseLevel % 100 != 95) jackpotFlags |= JACKPOT_TURBO;
@@ -1058,11 +1004,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
     }
 
     function _unlockRng(uint24 day, MineFlipGas.Meter memory meter) private {
-        // Game-over keeps its stale dailyIdx: the deadman reads currentDay - dailyIdx, so
-        // advancing it here would retire the very staleness that declared the game dead and
-        // let _livenessTriggered read false again while gameOver stays true — reopening every
-        // liveness-gated paid entrypoint. A dead game seals no day, so nothing else wants it.
-        if (!gameOver) dailyIdx = day;
+        // Jackpot unlock leaves the request index and full-session completion unchanged.
         bool wasLocked = rngLockedFlag;
         rngLockedFlag = false;
         // Retain the session word until every remaining read consumer completes.

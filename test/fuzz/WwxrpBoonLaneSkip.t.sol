@@ -46,6 +46,13 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         return game.currentDayView();
     }
 
+    /// @dev Game days are logical: move the requested day in Game slot 0 (bits 24..47) directly.
+    function _setDay(uint24 day) private {
+        uint256 header = uint256(vm.load(address(game), bytes32(0)));
+        header = (header & ~(uint256(type(uint24).max) << 24)) | (uint256(day) << 24);
+        vm.store(address(game), bytes32(0), bytes32(header));
+    }
+
     function _lane(uint256 tier, bool deity, uint256 day) private pure returns (uint256) {
         return ((day & 0x1FFFFF) << LANE_DAY_SHIFT) | (deity ? LANE_DEITY_BIT : 0) | tier;
     }
@@ -76,7 +83,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
     /// @dev An expired WWXRP boon has a nonzero tier, so the consume still runs and clears it,
     ///      paying nothing — exactly the pre-check-free behavior.
     function testExpiredWwxrpBoonIsStillCleared() public {
-        vm.warp(vm.getBlockTimestamp() + 12 days);
+        _setDay(_today() + 12);
         uint24 d = _today();
         _write(aliceId, 0, _lane(2, false, d - 10) << WWXRP_LANE_SHIFT);
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), 1);
@@ -99,7 +106,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         assertEq(s1, 1 << 24, "same-day deity lane not spent");
 
         _write(aliceId, 0, _lane(3, true, d) << WWXRP_LANE_SHIFT);
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _setDay(d + 1);
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), 1);
         vm.recordLogs();
         vm.prank(alice);

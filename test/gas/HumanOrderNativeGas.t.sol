@@ -31,7 +31,7 @@ contract HumanOrderGasSeed is DegenerusGame {
     function seedOrder(address player, uint256 input, uint256 entropy) external {
         _registerWallet(player, type(uint256).max);
         level = 99;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
         _afkingResetDay = dailyIdx;
         subsFullyProcessed = true;

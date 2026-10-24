@@ -65,6 +65,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
     /// @dev Wall clock just inside GameTimeLib day `d`.
     function _warpToDay(uint24 d) internal {
+        _setRequestedFixtureDay(d);
         vm.warp(
             (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
                 1 days +

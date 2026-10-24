@@ -147,7 +147,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     /// @dev Observe one real preparation checkpoint after a delayed daily reset.
     function _mintFlipAdvanceCreditAtStall(uint256 stallElapsed) internal returns (uint256) {
         // Move to the START of the NEXT calendar-day window, then add the stall offset. The advance
-        // module derives day = _simulatedDayIndexAt(ts) = (ts-82620)/1days + 1, and the stall window is
+        // module derives day = _wallDayAt(ts) = (ts-82620)/1days + 1, and the stall window is
         // elapsed = (ts-82620) mod 1days (DEPLOY_DAY_BOUNDARY==0). Rolling _today() forward by 1 makes a
         // fresh day-advance due; the offset INTO that day window is exactly `stallElapsed`, so the stall
         // ladder resolves as intended.

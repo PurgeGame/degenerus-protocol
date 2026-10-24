@@ -16,6 +16,13 @@ contract CoinflipReuseReference {
     mapping(uint24 => uint16) public results;
     mapping(uint32 => Position) public positions;
     uint24 public frontier;
+    uint24 public seedFirst = 1;
+    uint24 public seedLast = 20;
+
+    function setSeedWindow(uint24 first, uint24 last) external {
+        seedFirst = first;
+        seedLast = last;
+    }
 
     error StakeAboveDailyCap();
 
@@ -53,7 +60,7 @@ contract CoinflipReuseReference {
             uint256 reward = results[uint24(d)];
             if (reward == 0) continue;
             uint256 stake = stakes[id][uint24(d)];
-            if ((id == 1 || id == 2) && d >= 1 && d <= 20) stake += 200_000;
+            if ((id == 1 || id == 2) && d >= seedFirst && d <= seedLast) stake += 200_000;
             stake += carry;
             if (stake != 0) {
                 if (reward >= 50) {

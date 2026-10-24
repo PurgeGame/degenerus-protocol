@@ -11,10 +11,13 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
     function prepare(address player, bool cacheHit) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         uint32 id = _seedWallet(player);
         level = 24;
         dailyIdx = today - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _afkingResetDay = today;
         _subCursor = 0;
         _subOpenCursor = 0;

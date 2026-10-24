@@ -293,19 +293,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             return (true, STAGE_GAMEOVER, false);
         }
 
-        if (!_livenessTriggered()) return (false, 0, false);
-
-        bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0 || _vrfDead();
-
-        // A met pool target rescues a level from the deadline ending, but only before that
-        // ending has started (the drain-level latch below makes it irreversible), and never
-        // from the deadman or a dead VRF.
-        if (
-            !dead && lvl != 0 && _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0
-                && _getNextPrizePool() > _prizePoolTarget(lvl + 1) && !_vrfDeadmanFired()
-        ) {
-            return (false, 0, false);
-        }
+        EndingReason reason = _endingReason();
+        if (reason == EndingReason.None) return (false, 0, false);
+        bool dead = reason == EndingReason.HardStall;
 
         // Record which bucket the ending pays from before anything below can take the RNG
         // lock: the unlatched _gameOverTicketLevel reads the lock as "the last-purchase request
@@ -421,8 +411,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 }
             }
             // Request the terminal word, or apply it once it has landed. Either way this
-            // transaction ends here, so the word's application (which may derive up to a
-            // deadman's worth of skipped days) never shares a transaction with a drain batch.
+            // transaction ends here, so applying the one terminal cohort never shares
+            // a transaction with a drain batch.
             _applyTerminalRng(uint48(block.timestamp), day, lvl, meter, work);
             return (true, STAGE_GAMEOVER, false);
         }
@@ -449,16 +439,18 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0 || _rngRequestActive()) revert E();
         if (!MineFlipGas.canRun(meter, GasBounds.RNG_TERMINAL_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
         if (rngRequestDay == 0) {
-            rngRequestDay = day > dailyIdx ? day : dailyIdx + 1;
+            rngRequestDay = dailyIdx + 1;
             rngRequestTime = uint48(block.timestamp);
             _rearmRngRetry();
             _setRngSessionPublished(false);
             rngWordCurrent = RNG_WORD_WAITING;
             work.progressed = true;
-            MineFlipGas.markProgress(meter);
         }
+        // Arming and asking are one indivisible unit; a refusal still commits
+        // the timeout origin, while acceptance commits the request below.
         (bool ok, uint256 id) = _boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS, meter);
         if (!ok) {
+            if (work.progressed) MineFlipGas.markProgress(meter);
             work.refusal = abi.encodeWithSelector(ExternalRequestRefused.selector);
             return false;
         }
@@ -479,6 +471,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      entropy, retaining metadata; the dead latch and unpublished session keep the
     ///      terminal fallback reachable.
     function _latchDeadEnding() private {
+        _goWrite(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK, 0);
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
         _setRngRequestActive(false);
         _setRngSessionPublished(false);
@@ -494,14 +487,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (_terminalWordApplied()) return;
         uint256 currentWord = _currentRngWord();
         if (_rngRequestActive() && currentWord != 0) {
-            if (!MineFlipGas.canRun(meter, GasBounds.DAILY_GAP + GasBounds.DAILY_APPLY, GasBounds.TERMINAL_TAIL)) return;
+            if (!MineFlipGas.canRun(meter, GasBounds.DAILY_APPLY, GasBounds.TERMINAL_TAIL)) return;
             day = rngRequestDay;
-            uint24 first = dailyIdx + 1;
-            (uint16 firstResult,) = coinflip.getCoinflipDayResult(first);
-            if (firstResult != 0) ++first;
-            if (day > first) _backfillGapDays(_rawDailyRngWord(currentWord), first, day);
             currentWord = _applyDailyRng(day, currentWord);
-            if (lvl != 0) coinflip.processCoinflipPayouts(0, currentWord, day);
             // A settling sDGNRS redemption batch whose live settlement never started resolves at
             // a flat 100: every ending pays it at 100, never from a word.
             dgnrs.resolveTerminalRedemptions();
@@ -547,7 +535,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     /// @dev Process game over by distributing remaining funds. Runs when the game-over trigger
-    ///      fires: the purchase deadline (250 days at level 0, 30 after), the 30-day no-seal
+    ///      fires: the purchase deadline (30 completed purchase rounds), the 14-day no-completion
     ///      deadman, or a VRF request unanswered for 14 days. Sets terminal gameOver flag.
     ///
     ///      Distribution logic:
@@ -570,7 +558,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             return false;
         }
         work.progressed = true;
-        MineFlipGas.markProgress(meter); // Admitted setup below sets gameOver or latches the dead ending.
+        // Keep the first-unit allowance through the mandatory balance read and
+        // accounting; only the later resumable prize draw is optional.
 
         // Every unsplit Degenesis cohort splits first, so none of its volume stays reserved. The
         // split is idempotent, and once the seventh cohort closes every cohort is split.
@@ -695,6 +684,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // claimablePool includes the Game-held redemption reserve exactly once.
         uint256 postRefundReserved = uint256(claimablePool);
         uint256 available = totalFunds > postRefundReserved ? totalFunds - postRefundReserved : 0;
+        MineFlipGas.markProgress(meter);
 
         if (available == 0) { _finishTerminalPayout(); return true; }
 

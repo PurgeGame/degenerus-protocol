@@ -94,7 +94,7 @@ and `MAIN_LAUNCH_DAY = 9` is the first post-Degenesis day. The sale has no aggre
 All its logic lives in `DegenerusGameDegenesisModule`; outside it the game pays a constant
 timestamp compare (credit accrual) and slot-0 reads of `degenesisClosed`.
 
-**Credit.** While `block.timestamp < DEGENESIS_END_TS`, a qualifying spend earns `spend / 4`
+**Credit.** While the requested logical day is below 9, a qualifying spend earns `spend / 4`
 Degenesis credit on the buyer's wallet ID (`degenesisCredit`, view `degenesisCreditOf`): tickets
 (Mint `totalCost`), ordinary lootboxes, whale, lazy and deity passes (full charged price) and foil
 premiums. Only ETH,

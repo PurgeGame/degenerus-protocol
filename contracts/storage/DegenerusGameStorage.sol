@@ -93,7 +93,7 @@ interface IAdminLinkValue {
  * | EVM SLOT 0 (32 bytes) -- Timing, per-level flags, counters, buffer, freeze      |
  * +---------------------------------------------------------------------------------+
  * | [0:3]   purchaseStartDay         uint24   Deploy-relative day idx level began   |
- * | [3:6]   dailyIdx                 uint24   Deploy-rel day idx of last sealed day |
+ * | [3:6]   dailyIdx                 uint24   Most recently accepted logical round |
  * | [6:12]  rngRequestTime           uint48   When last VRF request was fired       |
  * | [12:15] level                    uint24   Current jackpot level (starts at 0)   |
  * | [15:16] jackpotPhaseFlag         bool     Payout mode: purchase(F)/jackpot(T)   |
@@ -143,7 +143,7 @@ interface IAdminLinkValue {
  *    (auto-getters). Other external reads go through explicit getters in DegenerusGame.
  *
  * 4. INITIALIZATION: Default values are set inline. For critical variables:
- *    - purchaseStartDay = deploy day index (set in constructor via GameTimeLib.currentDayIndex())
+ *    - purchaseStartDay = logical day 9 at level 0, excluding the seven Degenesis cohorts
  *    - jackpotPhaseFlag = false (purchase phase)
  *    - decimatorFlags = 0 (window opens at level 4 jackpot phase start)
  *    - levelPrizePool[level] is the per-level ratchet target; levelPrizePool[0] is set to
@@ -272,7 +272,7 @@ abstract contract DegenerusGameStorage {
     uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
 
     /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
-    uint32 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 250;
+
 
     /// @dev Final purchase/rescue day after level 0; game-over is eligible the following day.
     uint24 internal constant _PURCHASE_TIMEOUT_DAYS = 30;
@@ -283,16 +283,6 @@ abstract contract DegenerusGameStorage {
     ///      re-stamp. This is also the window a daily
     ///      stall straddling the purchase deadline has to recover in.
     uint48 internal constant _VRF_DEAD_TIMEOUT = 14 days;
-
-    /// @dev Deadman: no day sealed for this many days ends the game in every phase. dailyIdx
-    ///      advances on a successful day-seal or when a stalled word lands and its gap is
-    ///      skipped, so currentDay - dailyIdx counts days since the last sealed day. A dead VRF
-    ///      reaches _vrfDead first, so with VRF alive this is a game nobody advances (or a ticket
-    ///      backlog longer than the window) and it ends on the normal VRF payout. It also bounds
-    ///      every gap the backfill can meet (GAP_BACKFILL_MAX_DAYS). Applied at every level,
-    ///      including level 0, whose 250-day deploy window therefore needs a sealed day at
-    ///      least every 30 days. It clears only after game-over latches.
-    uint24 internal constant _VRF_DEADMAN_DAYS = 30;
 
     // =========================================================================
     // Errors
@@ -357,16 +347,15 @@ abstract contract DegenerusGameStorage {
     // All 32 bytes are used — see the SLOT 0 table in the file header for byte offsets.
 
     /// @dev Game day index when the purchase phase (or deploy) began.
-    ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
-    ///      Used for death clock, distress mode, future take curve, and gap extension.
+    ///      Initialized to logical day 9, after the seven Degenesis rounds.
+    ///      Used for purchase timeout, distress mode and the future-pool take curve.
     ///
     ///      SECURITY: uint24 holds day indices up to ~16.7 million — effectively unlimited
     ///      for day-granularity counters.
     uint24 internal purchaseStartDay;
 
-    /// @dev Monotonically increasing "day" counter derived from block timestamps.
-    ///      Incremented during game progression; used to key RNG words and track
-    ///      daily jackpot eligibility. NOT tied to calendar days — it's the deploy-relative day index (frozen during a VRF stall).
+    /// @dev Most recently requested normal logical round. Bootstrap is day 1;
+    ///      only an accepted fresh daily request increments it, exactly once.
     ///
     ///      SECURITY: uint24 holds day indices up to ~16.7 million — effectively unlimited
     ///      for day-granularity counters.
@@ -645,12 +634,12 @@ abstract contract DegenerusGameStorage {
     /// @dev Logical day the request in flight belongs to, independent of transport/retry time;
     ///      zero for a mid-day request and on terminal entry until the terminal request.
     uint24 internal rngRequestDay;
-    /// @dev Set once the request day's skipped-day gap is backfilled; a fresh request clears it.
-    bool internal rngGapApplied;
+    /// @dev True only after every consumer of the most recent daily request has finished.
+    bool internal dailyComplete = true;
 
     /// @dev Timestamp of the last successfully processed VRF word.
-    ///      Used by governance to detect VRF stalls (time-based vs day-gap-based); game
-    ///      liveness does not read it (a gap behind dailyIdx is itself the stall signal).
+    ///      Used by governance to detect VRF transport stalls; game liveness instead
+    ///      reads the final daily completion timestamp.
     ///      Initialized in wireVrf(), updated in _applyDailyRng(). Shares slot 5 with the
     ///      request day and the ticket buffer stamps.
     uint48 internal lastVrfProcessedTimestamp;
@@ -666,6 +655,8 @@ abstract contract DegenerusGameStorage {
     uint8 internal traitBucketStale;
     /// @dev Exact round occupying the reusable Decimator entry words.
     uint24 internal decEntriesLevel;
+    /// @dev Actual reset window of the last accepted daily request (slot 5, byte 27).
+    uint24 internal lastDailyRequestWallDay;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [battlePending (1 bit @ 72)]
@@ -730,8 +721,20 @@ abstract contract DegenerusGameStorage {
         if (degenesisClosed < DEGENESIS_DAYS && uint24(degenesisActive >> GA_DAY_SHIFT) == day) degenesisWord = word;
     }
 
+    function _latestDailyResultDay() internal view returns (uint24) {
+        uint24 a = uint24(rngDayTags);
+        uint24 b = uint24(rngDayTags >> 24);
+        return a > b ? a : b;
+    }
+
+    function _latestFoilDrawDay() internal view returns (uint24) {
+        uint24 a = uint24(dailyFoilDraw[0] >> _FOIL_DRAW_DAY_SHIFT);
+        uint24 b = uint24(dailyFoilDraw[1] >> _FOIL_DRAW_DAY_SHIFT);
+        return a > b ? a : b;
+    }
+
     function _retainedDailyWord(uint24 day) internal view returns (uint256) {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _latestDailyResultDay();
         if (day > today || uint256(today) - day > 1) return 0;
         return _recordedDailyWord(day);
     }
@@ -1064,7 +1067,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Derived actions only: no independently stored engine stage can become stale.
     enum MinerAction {
-        Idle, Terminal, Wait, Publish, Tickets, DailyGap, DailyApply, DailyPhase,
+        Idle, Terminal, Wait, Publish, Tickets, DailyApply, DailyPhase,
         Redemption, Afking, HumanBoxes, Degenerette, Decimator, Craps,
         CertifyRead, PrepareSubscriptions, Maintenance, RequestDaily, RequestMidday, GrowthSettle,
         SeizeLoans, DegenesisSettle
@@ -1095,7 +1098,7 @@ abstract contract DegenerusGameStorage {
             if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
                 && _goRead(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK) == 0
                 && _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0
-                && _rngRequestActive() && _currentRngWord() == 0 && !_vrfDead()) return MinerAction.Wait;
+                && _rngRequestActive() && _currentRngWord() == 0 && _endingReason() != EndingReason.HardStall) return MinerAction.Wait;
             return MinerAction.Terminal;
         }
         // Loans due at the level just entered are seized before anything uses its word.
@@ -1109,7 +1112,7 @@ abstract contract DegenerusGameStorage {
             if (!ticketsFullyProcessed) return MinerAction.Tickets;
             if (rngLockedFlag) {
                 if (_recordedDailyWord(rngRequestDay) != 0) return MinerAction.DailyPhase;
-                return rngRequestDay > dailyIdx + 1 ? MinerAction.DailyGap : MinerAction.DailyApply;
+                return MinerAction.DailyApply;
             }
             uint8 consumer = _rngConsumerStage();
             if (consumer == 1) return MinerAction.Redemption;
@@ -1121,7 +1124,7 @@ abstract contract DegenerusGameStorage {
             return consumer == 7 ? MinerAction.CertifyRead : MinerAction.Wait;
         }
         // The old read certificate stays valid while NEW subscriptions are stamped.
-        bool dailyDue = _afkingResetDay > dailyIdx || _simulatedDayIndex() > dailyIdx;
+        bool dailyDue = dailyComplete && _dailyRequestDue();
         if (dailyDue && (_afkingResetDay <= dailyIdx || !subsFullyProcessed)) return MinerAction.PrepareSubscriptions;
         if (_minerMaintenancePending()) return MinerAction.Maintenance;
         if (dailyDue) return MinerAction.RequestDaily;
@@ -1187,11 +1190,11 @@ abstract contract DegenerusGameStorage {
                 needsCredit = true;
             }
         }
-        if (_simulatedDayIndex() != dailyIdx) return false;
+        if (!dailyComplete || _dailyRequestDue()) return false;
         uint256 maxBasefee = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
         if (maxBasefee != 0 && block.basefee > maxBasefee * 1 gwei) return false;
         if ((block.timestamp - 82_620) % 1 days >= 1 days - 1 minutes) return false;
-        if (_recordedDailyWord(_simulatedDayIndex()) == 0) return false;
+        if (_recordedDailyWord(_gameDay()) == 0) return false;
         // No coordinator is wired before VRF setup, so nothing can be requested yet.
         if (address(vrfCoordinator) == address(0)) return false;
         (bool ok, uint256 linkBal) = _vrfLinkBalance(meter);
@@ -1253,12 +1256,12 @@ abstract contract DegenerusGameStorage {
     ///      and 25% ticket bonus on the distress-bought portion.
     function _isDistressMode() internal view returns (bool) {
         if (gameOver || lastPurchaseDay || jackpotPhaseFlag) return false;
-        return _simulatedDayIndex() >= _purchaseDeadlineDay();
+        return _gameDay() >= _purchaseDeadlineDay();
     }
 
     /// @dev Shared day boundary for distress and purchase-phase liveness.
     function _purchaseDeadlineDay() internal view returns (uint24) {
-        return purchaseStartDay + (level == 0 ? uint24(_DEPLOY_IDLE_TIMEOUT_DAYS) : _PURCHASE_TIMEOUT_DAYS);
+        return purchaseStartDay + _PURCHASE_TIMEOUT_DAYS;
     }
 
     /// @dev Queues entries for a wallet at a target level. The `entries` arg is in
@@ -2687,6 +2690,11 @@ abstract contract DegenerusGameStorage {
     /// @dev The Vault's 25% of split Degenesis volume: a reserved purchase obligation inside
     ///      claimablePool, outside Vault claimable, AFKing, backing and lending capacity.
     uint128 internal degenesisVaultBudget;
+    /// @dev Only full daily completion refreshes this real-time escape clock.
+    uint48 internal lastDailyCompletedAt = uint48(block.timestamp);
+    /// @dev Exact opening request of the current Degenesis cohort; slot 13, byte 22.
+    ///      Midday requests, retries and completion never restart its six-hour bonus.
+    uint48 internal degenesisOpenedAt;
 
     /// @dev Degenesis spending credit per wallet: 25% of qualifying spend while the credit
     ///      window is open, consumed 1:1 by Degenesis purchases.
@@ -3135,83 +3143,35 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Returns the current day index.
-    function _simulatedDayIndex() internal view returns (uint24) {
-        return GameTimeLib.currentDayIndex();
+    function _gameDay() internal view returns (uint24) {
+        return dailyIdx;
     }
 
-    /// @dev Whether the game-over trigger is active. Three causes:
-    ///
-    ///      VRF dead (_vrfDead): an unanswered daily request, or an unanswered mid-day request
-    ///      whose normal promotion was blocked by an ending, reaches _VRF_DEAD_TIMEOUT.
-    ///      That ending is deterministic and uses no entropy at all.
-    ///
-    ///      Deadman: no day sealed for _VRF_DEADMAN_DAYS, in any phase. A dead VRF is caught by
-    ///      the first cause long before this, so here VRF is alive and the ending is the
-    ///      normal VRF payout.
-    ///
-    ///      Purchase deadline, purchase phase only: purchaseStartDay + 250 days at level 0
-    ///      (deploy idle) or + 30 days after. Past it the trigger reads exactly what the
-    ///      advance's game-over path will decide: it fires once the ending has started (the
-    ///      drain-level latch, which keeps it firing across the multi-tx drain), never while the
-    ///      next pool beats the level's target (the rescue _handleGameOverPath applies), never on
-    ///      a day that already holds its word, and otherwise only at a caught-up day
-    ///      (today == dailyIdx + 1). A gap behind dailyIdx is a stall of that length — a VRF
-    ///      request that has not come back (daily or mid-day), a multi-day ticket backlog, or
-    ///      days nobody advanced — and it waits: the next advance requests the day's word, and
-    ///      rngGate's backfill credits the skipped days to purchaseStartDay when that word is
-    ///      applied. So a stall that opens on or before the deadline day and straddles it keeps
-    ///      the level alive with the stalled days not counted, however its word comes back, and
-    ///      needs no record of when it did. A gap that opens after the deadline is credited too,
-    ///      but the credit never outruns the clock (the deadline stays at or behind dailyIdx), so
-    ///      the next caught-up day still ends the level. The deadman and the VRF-dead window
-    ///      bound how long any gap can last. A caught-up day that nobody advances can
-    ///      therefore read true and then false once it has passed; the ending needs one advance
-    ///      on a caught-up day, which the miner router's advance leg sends whenever an advance
-    ///      is due. A day that already holds its word is finished on it, even when
-    ///      its own catch-up credit left the deadline behind it: the ending starts the next
-    ///      day, before any word exists, so its terminal word is always requested after the
-    ///      freeze and every cohort bought up to then is drawn.
-    ///
-    ///      Jackpot / last-purchase suppress the deadline: it would false-fire in the
-    ///      productive window between target-met and transition close, where purchaseStartDay
-    ///      has not yet moved.
-    ///
-    ///      Normal-path cost: the deadman compare and the VRF-dead probe read slot 0 only (the
-    ///      probe reads the request day's word solely once a request is a whole window old), and
-    ///      the latch, the pool target and today's word are read only past the deadline.
+    /// @dev One ending authority for mining dispatch, views and paid-entry guards.
+    enum EndingReason { None, PurchaseTimeout, HardStall }
+
+    function _endingReason() internal view returns (EndingReason) {
+        if (_vrfDeadmanFired() || _vrfDead()) return EndingReason.HardStall;
+        // Terminal entry sets the header latch before returning or requesting entropy.
+        // Ordinary calls need no cold lootboxRngPacked read just to exclude a latch.
+        if (gameOver || rngFlagsAndNudges & (uint16(1) << 13) != 0) {
+            return _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0
+                ? EndingReason.HardStall : EndingReason.PurchaseTimeout;
+        }
+        // Header-only exclusions precede the separate completion/request word.
+        if (lastPurchaseDay || jackpotPhaseFlag || dailyIdx < purchaseStartDay
+            || dailyIdx - purchaseStartDay < _PURCHASE_TIMEOUT_DAYS || !dailyComplete || !_dailyRequestDue()
+            || _wallDay() <= _wallDayAt(lastDailyCompletedAt)) return EndingReason.None;
+        if (_getNextPrizePool() > _prizePoolTarget(level + 1)) return EndingReason.None;
+        return EndingReason.PurchaseTimeout;
+    }
+
     function _livenessTriggered() internal view returns (bool) {
-        uint24 today = _simulatedDayIndex();
-        uint24 idx = dailyIdx;
-        if (today > idx + _VRF_DEADMAN_DAYS) return true;
-        if (_vrfDead()) return true;
-        if (lastPurchaseDay || jackpotPhaseFlag) return false;
-        if (today <= _purchaseDeadlineDay()) return false;
-        // The ending has started: irreversible.
-        if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0) return true;
-        // A met target rescues the level, exactly as _handleGameOverPath decides (the deadman
-        // and a dead VRF already returned above).
-        uint24 lvl = level;
-        if (lvl != 0 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) return false;
-        // A day that holds its word is finished on it.
-        if (_recordedDailyWord(today) != 0) return false;
-        // Gap credit advances dailyIdx before the separate daily-word action. Preserve
-        // that already published current-day commitment across this checkpoint; otherwise
-        // becoming caught up would trigger the deadline between credit and application.
-        // An older day's commitment cannot defer today's ending.
-        if (rngGapApplied && rngLockedFlag && rngRequestDay == today
-            && _rngRequestActive() && _rngSessionPublished() && rngWordCurrent > RNG_WORD_WAITING) return false;
-        // Only a caught-up day fires. A gap behind dailyIdx is a stall of that length and waits for
-        // the backfill the next daily word runs to credit it.
-        return today == idx + 1;
+        return _endingReason() != EndingReason.None;
     }
 
-    /// @dev Deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx advances in
-    ///      _unlockRng (a completed day) and past a stall's gap when its word lands (rngGate's
-    ///      backfill), so currentDay - dailyIdx counts days since real progress. It stays
-    ///      frozen after game over (the terminal _unlockRng leaves dailyIdx alone), so it never
-    ///      evaporates mid-drain.
     function _vrfDeadmanFired() internal view returns (bool) {
-        return _simulatedDayIndex() > uint24(dailyIdx) + _VRF_DEADMAN_DAYS;
+        return block.timestamp >= uint256(lastDailyCompletedAt) + _VRF_DEAD_TIMEOUT;
     }
 
     /// @dev An active request whose word is not yet in use (published) expires from its original
@@ -3219,10 +3179,12 @@ abstract contract DegenerusGameStorage {
     ///      timestamps grant neither callback authority nor a timeout. A refused terminal
     ///      attempt has no active request, but keeps its one-shot timer and unpublished latch.
     function _vrfDead() internal view returns (bool) {
+        // A published word is in use and cannot expire, whether active or idle.
+        // This header read also avoids the terminal metadata word in the common case.
+        if (_rngSessionPublished()) return false;
         uint48 t = rngRequestTime;
         if (block.timestamp < uint256(t) + _VRF_DEAD_TIMEOUT) return false;
         if (!_rngRequestActive()) {
-            if (_rngSessionPublished()) return false;
             if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0) return true;
             if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) return false;
         }
@@ -3232,18 +3194,20 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Returns the day index for a specific timestamp.
-    function _simulatedDayIndexAt(uint48 ts) internal pure returns (uint24) {
+    function _wallDay() internal view returns (uint24) {
+        return GameTimeLib.currentDayIndex();
+    }
+
+    function _dailyRequestDue() internal view returns (bool) {
+        return _wallDay() > lastDailyRequestWallDay;
+    }
+
+    function _wallDayAt(uint48 ts) internal pure returns (uint24) {
         return GameTimeLib.currentDayIndexAt(ts);
     }
 
-    /// @dev Gets the current mint day from dailyIdx or calculates from timestamp.
-    function _currentMintDay() internal view returns (uint24) {
-        uint24 day = dailyIdx;
-        if (day == 0) {
-            day = _simulatedDayIndex();
-        }
-        return day;
-    }
+    /// @dev Mint activity is stamped by the requested logical game day.
+    function _currentMintDay() internal view returns (uint24) { return dailyIdx; }
 
     /// @dev Updates the day field in packed mint data if changed.
     function _setMintDay(
@@ -3637,7 +3601,7 @@ abstract contract DegenerusGameStorage {
         uint256 meta = lootboxRngPacked;
         uint256 key = (meta >> HERO_WRITE_SHIFT) & 1;
         if (uint256(day) + 1 == uint24(meta)) key ^= 1;
-        else if (day != _simulatedDayIndex()) return 0;
+        else if (day != _gameDay()) return 0;
         if (meta & (uint256(1) << (24 + key * 3 + quadrant)) == 0) return 0;
         return dailyHeroWagers[key][quadrant];
     }
@@ -4392,8 +4356,8 @@ abstract contract DegenerusGameStorage {
     }
 
     function _foilGoldClaimOpen(uint256 day) internal view returns (bool) {
-        uint256 today = _simulatedDayIndex();
-        return day != 0 && day <= today && today - day <= 1;
+        uint256 today = _latestDailyResultDay();
+        return day != 0 && day <= dailyIdx && (today <= day || today - day <= 1);
     }
 
     /// @dev The per-cycle one-pack cap: true iff the player already bought a foil
@@ -4417,7 +4381,7 @@ abstract contract DegenerusGameStorage {
         uint24 oldLevel = uint24(packed >> _FOIL_LEVEL_SHIFT);
         if (packed & _FOIL_READY == 0 || oldLevel >= level
             || _foilGoldClaimOpen(uint24(packed >> _FOIL_GENERATED_DAY_SHIFT))) return false;
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _latestFoilDrawDay();
         (, , uint24 todayLevel) = _foilDrawFor(today);
         (, , uint24 yesterdayLevel) = _foilDrawFor(today == 0 ? 0 : today - 1);
         return oldLevel != todayLevel && oldLevel != yesterdayLevel;
@@ -4730,9 +4694,21 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Daily work must seal too. A delivered word with unpaid consumers is not complete.
     ///      Reverts in a consumer's effects roll this marker back with the rest of that transaction.
+    event DailySessionCompleted(uint24 indexed day, uint48 completedAt);
+
+    function _certifyRngComplete() internal {
+        _setRngComplete(true);
+        if (!dailyComplete && rngRequestDay == dailyIdx && !gameOver
+            && rngFlagsAndNudges & (uint16(1) << 13) == 0) {
+            dailyComplete = true;
+            lastDailyCompletedAt = uint48(block.timestamp);
+            emit DailySessionCompleted(dailyIdx, lastDailyCompletedAt);
+        }
+    }
+
     function _tryCompleteRng() internal {
         if (_rngComplete() || rngLockedFlag || _rngRequestActive() || !_rngSessionPublished()) return;
-        if (_rngConsumersComplete()) _setRngComplete(true);
+        if (_rngConsumersComplete()) _certifyRngComplete();
     }
     uint256 internal constant LR_CRAPS_PENDING_SHIFT = 250;
 
@@ -5065,7 +5041,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant GA_CURSOR_SHIFT = 184;
 
     function _degenesisCreditOpen() internal view returns (bool) {
-        return block.timestamp < GameTimeLib.DEGENESIS_END_TS;
+        return dailyIdx < GameTimeLib.MAIN_LAUNCH_DAY;
     }
 
     /// @dev Credit 25% of a qualifying spend while the window is open. The protocol bodies earn none.
@@ -5113,7 +5089,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Two-slot rings keyed [issuer index][day & 1] (Vault 0, sDGNRS 1); each day reuses slots written two
     ///      days earlier instead of fresh zero slots. Sound because day D's pool and entries are
-    ///      written only on wall day D (placement keys the wall day) and drawn only on wall day
+    ///      written only on logical day D and drawn only on logical day
     ///      D + 1 (resolveProtocolBoonDraws returns unless the award day is today), so when day
     ///      D + 2 reuses the slots, day D has been drawn or never can be. A pool whose `day` tag
     ///      is not the day asked for holds another day and reads as empty; the first entry

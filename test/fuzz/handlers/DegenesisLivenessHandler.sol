@@ -44,23 +44,22 @@ contract DegenesisLivenessHandler is Test {
     uint8 internal constant A_WAIT = 2;
     uint8 internal constant A_PUBLISH = 3;
     uint8 internal constant A_TICKETS = 4;
-    uint8 internal constant A_DAILY_GAP = 5;
-    uint8 internal constant A_DAILY_APPLY = 6;
-    uint8 internal constant A_DAILY_PHASE = 7;
-    uint8 internal constant A_REDEMPTION = 8;
-    uint8 internal constant A_AFKING = 9;
-    uint8 internal constant A_HUMAN_BOXES = 10;
-    uint8 internal constant A_DEGENERETTE = 11;
-    uint8 internal constant A_DECIMATOR = 12;
-    uint8 internal constant A_CRAPS = 13;
-    uint8 internal constant A_CERTIFY = 14;
-    uint8 internal constant A_PREPARE_SUBS = 15;
-    uint8 internal constant A_MAINTENANCE = 16;
-    uint8 internal constant A_REQUEST_DAILY = 17;
-    uint8 internal constant A_REQUEST_MIDDAY = 18;
-    uint8 internal constant A_GROWTH = 19;
-    uint8 internal constant A_SEIZE_LOANS = 20;
-    uint8 internal constant A_DEGENESIS_SETTLE = 21;
+    uint8 internal constant A_DAILY_APPLY = 5;
+    uint8 internal constant A_DAILY_PHASE = 6;
+    uint8 internal constant A_REDEMPTION = 7;
+    uint8 internal constant A_AFKING = 8;
+    uint8 internal constant A_HUMAN_BOXES = 9;
+    uint8 internal constant A_DEGENERETTE = 10;
+    uint8 internal constant A_DECIMATOR = 11;
+    uint8 internal constant A_CRAPS = 12;
+    uint8 internal constant A_CERTIFY = 13;
+    uint8 internal constant A_PREPARE_SUBS = 14;
+    uint8 internal constant A_MAINTENANCE = 15;
+    uint8 internal constant A_REQUEST_DAILY = 16;
+    uint8 internal constant A_REQUEST_MIDDAY = 17;
+    uint8 internal constant A_GROWTH = 18;
+    uint8 internal constant A_SEIZE_LOANS = 19;
+    uint8 internal constant A_DEGENESIS_SETTLE = 20;
 
     uint256 internal constant DAY_OFFSET = 82_620;
     uint256 internal constant MAX_GAS = 30_000_000;
@@ -118,7 +117,7 @@ contract DegenesisLivenessHandler is Test {
     uint256 public ghost_saleRequests; // daily requests while degenesisClosed < 7
     uint256 public ghost_saleApplies; // gap/apply with the Degenesis word copy admitted
     uint256 public ghost_stalls;
-    uint256 public ghost_stallOverClose;
+    uint256 public ghost_stallAcrossReset;
     uint256 public ghost_gapDays;
     uint256 public ghost_forcedFulfils;
     uint256 public ghost_poolSeeds;
@@ -327,17 +326,16 @@ contract DegenesisLivenessHandler is Test {
         _fulfillPending();
     }
 
-    /// @notice Warp past a timeout without answering. Kind 3 stalls across the sale's close:
-    ///         to the main launch day, with any request still open.
+    /// @notice Warp past a timeout without answering. Kind 3 crosses an actual reset
+    ///         during the logical sale without manufacturing a completed cohort.
     function actStall(uint256 kind, uint256 offset) external action("stall") {
         kind = kind % 4;
         if (_pending()) ++ghost_stalls;
         if (kind == 3) {
-            uint256 launch = GameTimeLib.DEGENESIS_END_TS + bound(offset, 0, 20 hours);
-            if (block.timestamp >= launch) return;
-            if (game.currentDayView() + 3 < GameTimeLib.MAIN_LAUNCH_DAY) return;
-            ++ghost_stallOverClose;
-            _warp(launch);
+            if (!_pending() || game.currentDayView() >= GameTimeLib.MAIN_LAUNCH_DAY) return;
+            uint256 nextReset = _nextDayStart() + bound(offset, 0, 20 hours);
+            ++ghost_stallAcrossReset;
+            _warp(nextReset);
             return;
         }
         uint256 dt = kind == 0 ? 4 hours + 1 : kind == 1 ? 12 hours + 1 : 12 hours + 1 days;
@@ -470,7 +468,7 @@ contract DegenesisLivenessHandler is Test {
         if (a == A_DEGENESIS_SETTLE) ++ghost_settleCalls;
         bool sale = _degenesisClosed() < 7;
         if (a == A_REQUEST_DAILY && sale) ++ghost_saleRequests;
-        if ((a == A_DAILY_GAP || a == A_DAILY_APPLY) && sale) ++ghost_saleApplies;
+        if ((a == A_DAILY_APPLY) && sale) ++ghost_saleApplies;
         vm.prank(caller);
         (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         _observe();

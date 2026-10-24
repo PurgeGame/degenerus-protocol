@@ -130,7 +130,10 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
     /// @notice A game over decided with VRF alive requests its terminal word with 6
     ///         confirmations.
     function test_TerminalRequestUsesSix() public {
-        _warpTo(60, 1 hours);
+        // Thirty completed purchase rounds with a recent completion make this a normal ending.
+        _warpTo(40, 1 hours);
+        _seedLogicalFixtureDay(39);
+        vm.warp(block.timestamp + 1 days);
         assertTrue(game.livenessTriggered(), "fixture: the ending fires");
         uint256 req0 = mockVRF.lastRequestId();
         vm.expectCall(address(mockVRF), _reqData(6), 1);

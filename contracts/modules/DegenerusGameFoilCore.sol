@@ -642,7 +642,7 @@ abstract contract DegenerusGameFoilCore is
     ) private returns (bool) {
         if (ticketIndex >= 4) return false;
         // Expire before reading reusable slots or replacing any claim bitmap lane.
-        uint256 today = _simulatedDayIndex();
+        uint256 today = _latestFoilDrawDay();
         if (day == 0 || day > today || today - day > 1) return false;
 
         // One retained record supplies the exact board, level and payout entropy.
@@ -876,7 +876,7 @@ abstract contract DegenerusGameFoilCore is
             if (!_ticketLevelRetired(packLevel) && !(terminal && packLevel != _gameOverTicketLevel(level))
                 && !_prepareTicketLevelAfterFoil(packLevel)) break;
             if (foilGenerationDay == 0) {
-                uint24 day = _simulatedDayIndex();
+                uint24 day = _gameDay();
                 foilGenerationDay = day;
                 (bool drawn,,) = _foilDrawFor(day);
                 foilFirstDrawDay = drawn ? day + 1 : day;
@@ -942,7 +942,7 @@ abstract contract DegenerusGameFoilCore is
         );
 
         uint256 record = _foilRecordWord(buyerId, lvl);
-        record |= uint256(foilFirstDrawDay) | (uint256(_simulatedDayIndex()) << _FOIL_GENERATED_DAY_SHIFT) | _FOIL_READY;
+        record |= uint256(foilFirstDrawDay) | (uint256(_gameDay()) << _FOIL_GENERATED_DAY_SHIFT) | _FOIL_READY;
         for (uint256 i; i < 4; ++i) record |= uint256(lines[i]) << (_FOIL_LINES_SHIFT + i * 32);
         foilRecord[lvl & 3][buyerId] = record;
         units = 4; // record, cursor and stored lines

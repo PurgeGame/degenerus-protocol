@@ -372,8 +372,8 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         mockVRF.fulfillRandomWords(request, word);
         // Publish the delivered midday word, in minimal checkpoints, up to the cohort's
         // human-box stage: the committed order is then mineFlip's next read consumer.
-        for (uint256 i; i < 100 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
-        assertEq(game.nextMinerAction(), 10, "the committed order is the next read consumer");
+        for (uint256 i; i < 100 && game.nextMinerAction() != 9; ++i) _stepMinimal(); // HumanBoxes
+        assertEq(game.nextMinerAction(), 9, "the committed order is the next read consumer");
         assertEq(_entry(index, position), committed, "publication alone opens nothing");
         assertFalse(_spent(index, position), "publication alone opens nothing");
         assertEq(_index(), (index ^ 1));

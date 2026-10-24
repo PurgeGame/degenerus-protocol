@@ -16,8 +16,11 @@ import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 contract WalletIdentityGasSeeder is DegenerusGamePayoutUtils {
     function seedLevel(uint24 lvl) external {
         level = lvl;
-        purchaseStartDay = _simulatedDayIndex();
+        purchaseStartDay = _wallDay();
         dailyIdx = purchaseStartDay;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
         rngRequestTime = uint48(block.timestamp);
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
@@ -90,7 +93,7 @@ contract WalletIdentityGasTest is DeployProtocol {
         return WalletIdentityGasSeeder(address(game));
     }
 
-    function _restoreGame() private { vm.etch(address(game), gameCode); }
+    function _restoreGame() private { vm.etch(address(game), gameCode); _syncCoinflipFixtureDay(game.currentDayView()); }
 
     function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
 

@@ -37,7 +37,7 @@ contract ChainPinBoxProbe is DegenerusGameStorage {
 ///      must hand it units <= LB_UNITS_MAX and a quantity <= 100.
 contract ChainPinWorkers is DeployProtocol {
     uint256 private constant FULL = 16_000_000;
-    uint8 private constant A_DEGEN = 11;
+    uint8 private constant A_DEGEN = 10;
     uint256 private constant LB_UNITS_MAX = 2_000_000;
 
     bytes32 private constant LOOT_BOX_BUY = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");

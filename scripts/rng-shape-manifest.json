@@ -153,7 +153,7 @@
       "function": "_purchaseWinner",
       "expression": "keccak256(abi.encodePacked(AFFILIATE_ROLL_TAG,GameTimeLib.currentDayIndex(),buyerId,code))",
       "class": "NON-RNG",
-      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input. Owner 2026-10-24: wall day is fine for this roll (cheapest source)."
     },
     {
       "file": "DegenerusGame.sol",
@@ -1220,13 +1220,6 @@
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "modules/DegenerusGameRngUtils.sol",
-      "function": "_backfillGapDays",
-      "expression": "EntropyLib.hash3(RngTags.GAP_DAY,vrfWord,yesterday)",
-      "class": "RNG",
-      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
-    },
-    {
       "file": "modules/DegenerusGameTicketModule.sol",
       "function": "<file-scope>",
       "expression": "keccak256(\"DEGENERUS_DIRECT_JACKPOT_TICKETS_V1\")",
@@ -1642,23 +1635,23 @@
     {
       "file": "modules/DegenerusGameDegenesisModule.sol",
       "function": "_resolveDegenesisOrder",
-      "expression": "EntropyLib.hash4(RngTags.DEGENESIS_BOON,g.word,g.day,index)",
+      "expression": "EntropyLib.hash3(RngTags.DEGENESIS_BOON,g.word,index)",
       "class": "RNG",
-      "reason": "P8: retained cohort word committed before settlement; cohort and order index identify the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
+      "reason": "P8: retained cohort word committed before settlement; each cohort binds its own daily word and the order index identifies the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
     },
     {
       "file": "modules/DegenerusGameBoonModule.sol",
       "function": "rollDegenesisBoons",
       "expression": "EntropyLib.hash2(RngTags.DEGENESIS_BOON_EXTRA,seed)",
       "class": "RNG",
-      "reason": "P8: retained cohort word committed before settlement; cohort and order index identify the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
+      "reason": "P8: retained cohort word committed before settlement; each cohort binds its own daily word and the order index identifies the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
     },
     {
       "file": "modules/DegenerusGameBoonModule.sol",
       "function": "rollDegenesisBoons",
       "expression": "EntropyLib.hash3(RngTags.DEGENESIS_BOON_TYPE,seed,slot)",
       "class": "RNG",
-      "reason": "P8: retained cohort word committed before settlement; cohort and order index identify the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
+      "reason": "P8: retained cohort word committed before settlement; each cohort binds its own daily word and the order index identifies the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
     }
   ],
   "rawBitExceptions": [
@@ -1667,12 +1660,6 @@
       "function": "processCoinflipPayouts",
       "expression": "boolwin=(rngWord&1)==1;",
       "reason": "Owner 2026-10-22: each reverse flip adds one to the raw daily word and must reverse its win bit."
-    },
-    {
-      "file": "Coinflip.sol",
-      "function": "processCoinflipGap",
-      "expression": "uint32wins=uint32(root>>(1+uint256(start)-originalStart));",
-      "reason": "Owner 2026-10-22: preserve baseline 67f8b9582 raw gap win bits 1..31, including settled-prefix offsets."
     }
   ]
 }

@@ -7,8 +7,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DegenesisTerminal -- Degenesis money at game over (check 11)
-/// @notice Both endings, driven for real: the VRF-alive ending through the 30-day deadman (every
-///         request answered), and the dead-VRF ending through a daily request left unanswered for
+/// @notice Hard endings, driven for real: idle or unfinished settlement reaches the
+///         completion deadline, and a daily request can also remain unanswered for
 ///         14 days. Terminal setup splits every unsplit cohort, then releases the Vault budget and
 ///         all sDGNRS AFKing funding from claimablePool into the final prizes, exactly once, before
 ///         gameOver; unresolved orders are forfeited with the burned inventory; player claims and
@@ -19,7 +19,7 @@ contract DegenesisTerminal is DegenesisFixture {
         keccak256("DegenesisOrderResolved(uint32,uint8,uint32,uint256,uint256,uint256,uint256,uint32,uint32)");
     bytes32 internal constant DRAINED_SIG = keccak256("GameOverDrained(uint24,uint256,uint256)");
     bytes32 internal constant REFUNDS_SIG = keccak256("DeityPassRefundsSettled(uint256)");
-    uint8 internal constant ACTION_DEGENESIS_SETTLE_ = 21;
+    uint8 internal constant ACTION_DEGENESIS_SETTLE_ = 20;
 
     address internal alice;
     address internal bob;
@@ -170,7 +170,7 @@ contract DegenesisTerminal is DegenesisFixture {
 
     // ------------------------------------------------------------------ VRF-alive, after the sale
 
-    function test_VrfAliveEnding_AfterSale_ReleasesOnceIntoFinalPrizes() public {
+    function test_HardDeadline_AfterSale_ReleasesOnceIntoFinalPrizes() public {
         for (uint256 d = 2; d <= 8; ++d) {
             _driveDay(d);
             _buyDegenesis(alice, 1 ether);
@@ -183,8 +183,8 @@ contract DegenesisTerminal is DegenesisFixture {
         uint256 bobClaimable = _claimableOf(bobId);
         uint256 bobAfking = _afkingOf(bobId);
 
-        _warpDay(10 + 32, 1 hours);
-        assertTrue(game.livenessTriggered(), "deadman: 30 days without a sealed day");
+        _warpDay(10 + 14, 1 hours);
+        assertTrue(game.livenessTriggered(), "fourteen days without a completed logical round");
         Pre memory start = _pre();
         Ending memory e = _driveEnding(true);
         assertEq(e.splitsDuringEnding, 0, "nothing left to split");
@@ -194,7 +194,7 @@ contract DegenesisTerminal is DegenesisFixture {
 
         // No second release on resumed work or the final sweep.
         vm.recordLogs();
-        _warpDay(10 + 32 + 31, 1 hours);
+        _warpDay(10 + 14 + 31, 1 hours);
         for (uint256 i; i < 50; ++i) if (!_tryMine()) break;
         assertEq(_countSig(vm.getRecordedLogs(), RELEASED_SIG), 0, "no second release");
         assertEq(_slot(GameSlots.YIELD_ACCUMULATOR), 0, "insurance stays cleared");
@@ -207,22 +207,22 @@ contract DegenesisTerminal is DegenesisFixture {
 
     /// @notice The game ends (deadman) while cohort 3 is priced with orders unresolved and cohort 4
     ///         is still unsplit: setup splits cohort 4, forfeits cohort 3's orders, and releases.
-    function test_VrfAliveEnding_DuringSale_SplitsAllAndForfeitsUnresolved() public {
+    function test_HardDeadline_DuringSale_SplitsAllAndForfeitsUnresolved() public {
         for (uint256 d = 2; d <= 4; ++d) {
             _driveDay(d);
             _buyDegenesis(alice, 1 ether);
             _buyDegenesis(alice, 0.5 ether);
         }
         _warpDay(5, 1 hours);
-        _buyDegenesis(alice, 0.7 ether);
         _stepTo(ACTION_DEGENESIS_SETTLE_);
+        _buyDegenesis(alice, 0.7 ether);
         assertTrue(_active() != 0, "fixture: cohort 3 priced, orders unresolved");
         assertEq(_degenesisClosed(), 2, "fixture: cohorts 1-2 closed");
         assertEq(_unsplitVolume(), 0.7 ether, "fixture: cohort 4 unsplit");
         uint256 bobClaimable = _claimableOf(bobId);
         uint256 bobAfking = _afkingOf(bobId);
 
-        _warpDay(5 + 32, 1 hours);
+        _warpDay(5 + 14, 1 hours);
         assertTrue(game.livenessTriggered(), "deadman");
         Pre memory start = _pre();
         Ending memory e = _driveEnding(true);
@@ -245,8 +245,8 @@ contract DegenesisTerminal is DegenesisFixture {
         _driveDay(3);
         _buyDegenesis(alice, 1.2 ether);
         _warpDay(4, 1 hours);
-        _buyDegenesis(alice, 0.3 ether);
         _drain(false, 400);
+        _buyDegenesis(alice, 0.3 ether);
         assertTrue(game.rngLocked(), "fixture: day 4's request is out");
         uint256 requestedAt = block.timestamp;
         assertTrue(_active() != 0, "fixture: cohort 2 priced");
@@ -255,7 +255,7 @@ contract DegenesisTerminal is DegenesisFixture {
             _buyDegenesis(alice, 0.1 ether * d);
         }
         uint256 unsplit = _unsplitVolume();
-        assertEq(unsplit, 0.3 ether + 2.6 ether, "fixture: cohorts 3-7 unsplit");
+        assertEq(unsplit, 0.3 ether + 2.6 ether, "fixture: the unresolved request keeps cohort 3 open");
         uint256 bobClaimable = _claimableOf(bobId);
         uint256 bobAfking = _afkingOf(bobId);
 
@@ -264,7 +264,7 @@ contract DegenesisTerminal is DegenesisFixture {
         Pre memory start = _pre();
         Ending memory e = _driveEnding(false);
 
-        assertEq(e.splitsDuringEnding, 5, "cohorts 3-7 split at terminal setup");
+        assertEq(e.splitsDuringEnding, 1, "only occupied cohort 3 splits at terminal setup");
         assertTrue(e.frozenAtSplit, "split while the pools are frozen by the unanswered request");
         assertTrue(e.splitCallSetGameOver, "dead latched up front: setup splits and releases together");
         assertEq(e.splitCallReleases, 1, "the release follows the split in the same call");

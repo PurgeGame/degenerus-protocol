@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {FLIP} from "../../contracts/FLIP.sol";
@@ -23,7 +23,7 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///                       into claimableStored (claimCoinflips territory) and only
 ///                       the remainder plus its recycle bonus rolls as carry;
 ///                       claimCoinflipCarry pays from the carry alone.
-contract CoinflipCarryClaim is DeployProtocol {
+contract CoinflipCarryClaim is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
 
     address internal player;
@@ -41,6 +41,18 @@ contract CoinflipCarryClaim is DeployProtocol {
 
     /// @dev Wall clock just inside GameTimeLib day `d`.
     function _warpToDay(uint24 d) internal {
+        uint256 word = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)),
+            bytes32((word & ~(uint256(0xffffff) << 176)) | (uint256(d) << 176)));
+        uint256 gameWord = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0),
+            bytes32((gameWord & ~(uint256(0xffffff) << 24)) | (uint256(d) << 24)));
+        // These fixtures directly settle daily outcomes; keep the independent progress clock current.
+        uint256 clocks = uint256(vm.load(address(game), bytes32(uint256(13))));
+        uint256 ts = (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621;
+        vm.store(address(game), bytes32(uint256(13)),
+            bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (ts << 128)));
+
         vm.warp(
             (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
                 1 days +

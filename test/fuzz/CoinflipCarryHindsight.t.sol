@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title CoinflipCarryHindsight — a dormant auto-rebuy account gets no look-ahead on its carry
@@ -24,7 +24,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      `mintForGame` as GAME and credits use `creditFlip_g317` as GAME, the routes every ordinary
 ///      award takes. No storage writes; lastClaim is read with vm.load and cross-checked against
 ///      the public startDay getter.
-contract CoinflipCarryHindsight is DeployProtocol {
+contract CoinflipCarryHindsight is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     uint24 internal constant ARM_DAY = 2;
     uint24 internal constant WINDOW = 90; // Coinflip.COIN_CLAIM_DAYS
@@ -56,6 +56,18 @@ contract CoinflipCarryHindsight is DeployProtocol {
     // ------------------------------------------------------------------ helpers
 
     function _warpToDay(uint24 d) internal {
+        uint256 word = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)),
+            bytes32((word & ~(uint256(0xffffff) << 176)) | (uint256(d) << 176)));
+        uint256 gameWord = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0),
+            bytes32((gameWord & ~(uint256(0xffffff) << 24)) | (uint256(d) << 24)));
+        // These fixtures directly settle daily outcomes; keep the independent progress clock current.
+        uint256 clocks = uint256(vm.load(address(game), bytes32(uint256(13))));
+        uint256 ts = (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621;
+        vm.store(address(game), bytes32(uint256(13)),
+            bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (ts << 128)));
+
         vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
     }
 

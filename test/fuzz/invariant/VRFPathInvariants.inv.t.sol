@@ -77,18 +77,12 @@ contract VRFPathInvariants is DeployProtocol {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // TEST-03: Gap Backfill
+    // TEST-03: Logical Day Identity
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// @notice After a recovery the sealed day and the final gap day hold their words in the
-    ///         two-day ring, and every gap day is settled (coinflip). Only the final gap day's
-    ///         derived word is retained since 6d0e64b09/c729ecfc9.
-    function invariant_allGapDaysBackfilled() public view {
-        assertEq(
-            handler.ghost_gapBackfillFailures(),
-            0,
-            "VRFPath: gap day missing rngWordForDay after recovery"
-        );
+    /// @notice Every successful fresh request advances once, and Coinflip agrees atomically.
+    function invariant_logicalDaysNeverSkipAndMirrorAgrees() public view {
+        assertEq(handler.ghost_logicalDayViolations(), 0, "VRFPath: logical request identity drift");
     }
 
 
@@ -108,7 +102,7 @@ contract VRFPathInvariants is DeployProtocol {
         uint256 swaps = _acc("VP_swaps", handler.ghost_stallCount());
         uint256 purchases = _acc("VP_purchases", handler.ghost_purchases());
         uint256 recoveries = _acc("VP_recoveries", handler.ghost_recoveryCount());
-        uint256 gaps = _acc("VP_gaps", handler.ghost_maxGapSize() > 0 ? 1 : 0);
+        uint256 gaps = _acc("VP_gaps", handler.ghost_maxResetDelay() > 0 ? 1 : 0);
         if (runs < 16) return;
         assertGt(advances, 0, "VRFPath: mineFlip never succeeded");
         assertGt(fulfillments, 0, "VRFPath: no VRF word was ever fulfilled");
@@ -118,7 +112,7 @@ contract VRFPathInvariants is DeployProtocol {
         if (runs < 192) return;
         assertGt(recoveries, 0, "VRFPath: no post-swap recovery was ever evaluated - TEST-03 unexercised");
         if (runs < 1024) return;
-        assertGt(gaps, 0, "VRFPath: no recovery ever spanned a skipped day - gap backfill unexercised");
+        assertGt(gaps, 0, "VRFPath: no recovery ever spanned a skipped day - delayed logical recovery unexercised");
     }
 
     function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {

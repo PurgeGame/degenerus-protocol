@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -155,7 +156,8 @@ contract C1BoxAutoOpen is DeployProtocol {
         for (uint256 i; i < 64; i++) {
             if (game.rngLocked()) return;
             uint8 action = game.nextMinerAction();
-            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == uint8(DegenerusGameStorage.MinerAction.Idle)
+                || action == uint8(DegenerusGameStorage.MinerAction.RequestDaily)) return;
             if (action == 2) {
                 uint256 id = mockVRF.lastRequestId();
                 (, , bool done) = mockVRF.pendingRequests(id);
@@ -199,7 +201,7 @@ contract C1BoxAutoOpen is DeployProtocol {
 
         // The box's pending ETH clears the mid-day threshold: the engine's mid-day request fires the
         // VRF AND seals buffer N (the write side flips to N ^ 1) before the word lands.
-        assertEq(game.nextMinerAction(), 18, "the mid-day request is the engine's next work"); // RequestMidday
+        assertEq(game.nextMinerAction(), 17, "the mid-day request is the engine's next work"); // RequestMidday
         vm.prank(actor);
         game.mineFlip(0);
         assertEq(_idx(), N ^ 1, "the mid-day request sealed buffer N before the word lands");
@@ -215,8 +217,8 @@ contract C1BoxAutoOpen is DeployProtocol {
         // the consumer order puts human boxes after ticket materialization (60d31f775). A 1.1M
         // allowance can never admit a human-box entry (HUMAN_ENTRY_GAS + tail), so these calls
         // stop with the box still closed, leaving its open to the human-box stage below.
-        for (uint256 i; i < 20 && game.nextMinerAction() != 10; i++) game.mineFlip{gas: 1_100_000}(0);
-        assertEq(game.nextMinerAction(), 10, "the human-box stage is next");
+        for (uint256 i; i < 20 && game.nextMinerAction() != 9; i++) game.mineFlip{gas: 1_100_000}(0);
+        assertEq(game.nextMinerAction(), 9, "the human-box stage is next");
         assertGt(_word(N), 0, "the VRF word landed at _lootboxWord(N) (box at N IS ready)");
         assertEq(_idx(), N ^ 1, "LR_INDEX is N+1 while the ready word sits at N");
         assertEq(_base(N, pos), baseAtCreate, "pre-open: box at N still closed");

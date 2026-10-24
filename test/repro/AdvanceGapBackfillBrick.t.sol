@@ -3,208 +3,48 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 
-/// @dev Etch-only setter for the exact target-met replay boundary. Measured advances execute the
-///      restored production runtime; this overlay only changes levelPrizePool in test storage.
-contract PurchaseStartDaySeeder is DegenerusGame {
-    function setLevelTarget(uint24 lvl, uint256 target) external {
-        _setLevelPrizePool(lvl, target);
-    }
-}
-
-/// @title AdvanceGapBackfillBrick — regression for finding C2 (AdvanceModule purchase-phase-stall brick).
-///
-/// @notice Before the fix, a purchase-phase VRF stall of a few days made `mineFlip` revert with
-///         an arithmetic underflow (Panic 0x11) on every subsequent call — a PERMANENT brick with
-///         no liveness escape. A bounds-only fix still let a target-met cached replay enter jackpot
-///         without the request-time level promotion. The final fix gates both transition latches to
-///         the real wall day, keeps `day >= psd` around the two subtractions, and requires an
-///         unrequested word for turbo. This test proves the clock bump, replay, and promotion sequence.
-///
-///         MECHANISM (AdvanceModule @ HEAD):
-///           - rngGate backfills a multi-day VRF gap and credits the FULL gap to storage
-///             `purchaseStartDay` (`purchaseStartDay += gapCount`, ~L1263) while filling
-///             `rngWordByDay` for every gap day, then defers (STAGE_GAP_BACKFILLED break ~L451)
-///             WITHOUT sealing — so `dailyIdx` stays put but `purchaseStartDay` jumps ahead.
-///           - The RNGREUSE clamp (L190: `day > dIdx+1 && _recordedDailyWord(dIdx+1) != 0 → day = dIdx+1`)
-///             cannot tell a backfilled gap day from a live in-progress day, so it rewinds `day`
-///             to `dailyIdx+1` and the walk seals one backfilled day per advance.
-///           - As soon as a walk day seals and `_unlockRng` clears `rngLockedFlag`, the NEXT
-///             advance reaches the turbo gate (L202, `!locked`) and computes
-///             `uint32 purchaseDays = day - psd` (L203) with the clamped `day` still BELOW the
-///             bumped `purchaseStartDay` → checked `uint24` subtraction underflow → Panic(0x11).
-///           - The panic precedes the game-over/deadman gate (L216), so there is no escape;
-///             `dailyIdx` and `purchaseStartDay` are frozen and every later call reverts identically.
-///
-/// @dev TEST-ONLY. No contracts/*.sol are touched. Run:
-///      forge test --match-path test/repro/AdvanceGapBackfillBrick.t.sol -vvv
+/// @notice The eight-reset interruption that formerly made purchaseStartDay outrun
+///         the processed day must preserve one commitment and never compensate the baseline.
 contract AdvanceGapBackfillBrick is DeployProtocol {
-    uint256 private constant HEADER_SLOT = 0;
-    uint256 private constant OFF_PURCHASE_START_DAY = 0;
-    uint256 private constant OFF_DAILY_IDX = 3;
-
     function setUp() public {
         _deployProtocol();
-        vm.warp(block.timestamp + 1 days);
+        mockVRF.fundSubscription(1, 1_000 ether);
     }
 
-    /// @dev Complete a full day: mineFlip -> fulfill the pending daily word -> drain until unlocked.
-    function _completeDay(uint256 vrfWord) internal {
-        _requestDailyAfterDraining();
-        uint256 reqId = mockVRF.lastRequestId();
-        mockVRF.fulfillRandomWords(reqId, vrfWord);
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip(0);
-        }
-    }
-
-    /// @dev A new daily request first drains the previous word's boxes/bets/fields.
-    ///      Keep the clock fixed and let production routing do that bounded work.
-    function _requestDailyAfterDraining() private {
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip(0);
-        assertTrue(game.rngLocked(), "prior cohort drained and daily request started");
-    }
-
-    function _purchaseStartDay() internal view returns (uint24) {
-        return _headerU24(OFF_PURCHASE_START_DAY);
-    }
-
-    function _dailyIdx() internal view returns (uint24) {
-        return _headerU24(OFF_DAILY_IDX);
-    }
-
-    function _headerU24(uint256 byteOffset) private view returns (uint24) {
-        uint256 packed = uint256(vm.load(address(game), bytes32(HEADER_SLOT)));
-        return uint24(packed >> (byteOffset * 8));
-    }
-
-    function _isArithmeticPanic(bytes memory reason) private pure returns (bool) {
-        if (reason.length != 36) return false;
-        bytes4 selector;
-        uint256 code;
-        assembly {
-            selector := mload(add(reason, 0x20))
-            code := mload(add(reason, 0x24))
-        }
-        return selector == 0x4e487b71 && code == 0x11;
-    }
-
-    function _advanceAndFulfill(uint256 salt) private {
-        try game.mineFlip(0) {
-            if (!game.rngLocked()) return;
-            uint256 reqId = mockVRF.lastRequestId();
-            if (reqId == 0) return;
-            (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
-            if (!fulfilled) {
-                mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("walk", salt))) | 1);
-            }
-        } catch (bytes memory reason) {
-            if (_isArithmeticPanic(reason)) {
-                revert("C2 REGRESSION: mineFlip underflow-panicked (the brick is back)");
-            }
-            // NotTimeYet/RngNotReady are ordinary bounded-loop control flow; the state assertions
-            // below make a permanently swallowed failure non-vacuous.
-        }
-    }
-
-    function _setLevelTarget(uint24 lvl, uint256 target) private {
-        bytes memory realCode = address(game).code;
-        vm.etch(address(game), type(PurchaseStartDaySeeder).runtimeCode);
-        PurchaseStartDaySeeder(payable(address(game))).setLevelTarget(lvl, target);
-        vm.etch(address(game), realCode);
+    function _request() private returns (uint256) {
+        for (uint256 i; i < 200 && !game.rngLocked(); ++i) game.mineFlip(0);
+        assertTrue(game.rngLocked());
+        return mockVRF.lastRequestId();
     }
 
     function test_C2_purchasePhaseStall_advanceGameSurvives() public {
-        // A buyer takes tickets in the opening purchase phase (sets the ticket queue + keeps us
-        // firmly in the pre-target purchase phase, psd anchored at the deploy day).
         address buyer = makeAddr("buyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         game.purchase{value: 0.05 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-
-        // Seal the first post-deploy day normally so dailyIdx advances one step while psd stays put.
-        _completeDay(0xDEAD0001);
-        uint24 idxBeforeStall = _dailyIdx();
-        uint24 psdBeforeStall = _purchaseStartDay();
-
-        // Now stall: fire the daily request, then let many days pass with NO fulfillment.
+        uint24 baseline = uint24(uint256(vm.load(address(game), bytes32(0))));
         vm.warp(block.timestamp + 1 days);
-        _requestDailyAfterDraining();
-        assertTrue(game.rngLocked(), "daily VRF request is in flight (window open)");
-        uint256 stalledReqId = mockVRF.lastRequestId();
-
-        // Let 8 calendar days elapse during the stall, then the SAME coordinator finally answers.
+        uint256 request = _request();
+        uint24 committed = game.currentDayView();
+        uint256 pool = coinflip.recordPool();
         vm.warp(block.timestamp + 8 days);
-        mockVRF.fulfillRandomWords(stalledReqId, 0xCAFEBABE);
-
-        // Drive only until the gap backfill happens. The stalled word was requested on
-        // reqDay (= idxBeforeStall + 1) and is public from its late fulfillment, so the
-        // buffered RNGREUSE arm first seals reqDay with the raw word (a live day — no
-        // purchase-clock credit); the following advance issues a fresh same-day request
-        // whose word backfills the remaining [reqDay+1, resumeDay) as gap days. The
-        // purchase clock must move by exactly that backfill count once, and dailyIdx
-        // jumps past the gap to resumeDay - 1: the skipped days get no draw and no seal.
-        uint24 resumeDay = game.currentDayView();
-        uint24 expectedGap = resumeDay - idxBeforeStall - 2;
-        bool backfilled;
-        for (uint256 i; i < 12; ++i) {
-            _advanceAndFulfill(i);
-            if (_purchaseStartDay() != psdBeforeStall) {
-                backfilled = true;
-                break;
-            }
+        assertEq(game.currentDayView(), committed, "calendar gaps create no rounds");
+        mockVRF.fulfillRandomWords(request, 0xCAFEBABE);
+        for (uint256 i; i < 500; ++i) {
+            if (mockVRF.lastRequestId() != request) break;
+            game.mineFlip(0);
         }
-        assertTrue(backfilled, "fixture reached the purchaseStartDay backfill bump");
-
-        uint24 psdAfterBackfill = _purchaseStartDay();
-        assertEq(psdAfterBackfill, psdBeforeStall + expectedGap, "purchaseStartDay bumped by exact gap once");
-        assertEq(_dailyIdx(), resumeDay - 1, "gap days skipped: index parked at the wall day minus one");
-        assertTrue(game.rngLocked(), "the wall day's jackpot is still owed under the lock");
-        // Full daily words expire from the two-day ring; compact Coinflip outcomes persist.
-        uint24 requestDay = idxBeforeStall + 1;
-        assertEq(game.rngWordForDay(requestDay), 0, "old request-day full word expired");
-        (uint16 requestReward, bool requestWon) = coinflip.getCoinflipDayResult(requestDay);
-        assertEq(requestReward, 1, "0xCAFEBABE request settled to the canonical loss sentinel");
-        assertFalse(requestWon, "request-day outcome retains the original even word's loss");
-
-        uint24 firstGapDay = requestDay + 1;
-        uint256 resumedRoot = game.rngWordForDay(resumeDay);
-        assertGt(resumedRoot, 1, "current resume-day root is retained");
-        assertEq(game.rngWordForDay(firstGapDay), 0, "old first gap-day full word expired");
-        bool expectedWin = resumedRoot & 2 != 0;
-        (uint16 gapReward, bool gapWon) = coinflip.getCoinflipDayResult(firstGapDay);
-        assertEq(gapReward, expectedWin ? 100 : 1, "first gap is double or nothing with canonical loss sentinel");
-        assertEq(gapWon, expectedWin, "first gap uses bit 1 of the resume root");
-        assertTrue(game.rngWordForDay(resumeDay - 1) != 0, "last gap day retains yesterday's full word");
-        // Make the target met only AFTER the backfill. The wall day is the only day left to
-        // seal, and it seals under the lock its own request holds.
-        _setLevelTarget(0, 0);
-        for (uint256 i; i < 80 && _dailyIdx() < resumeDay; ++i) {
-            _advanceAndFulfill(100 + i);
-            if (_dailyIdx() < resumeDay) {
-                (, bool inJackpot, , , ) = game.purchaseInfo();
-                assertFalse(inJackpot, "the owed wall-day jackpot must not enter jackpot phase");
-                assertEq(game.level(), 0, "no level promotion before the wall day seals");
-            }
-        }
-        assertEq(_dailyIdx(), resumeDay, "the wall day sealed");
-        assertEq(_purchaseStartDay(), psdAfterBackfill, "purchaseStartDay bump remained exactly-once");
-        assertFalse(game.gameOver(), "backfill recovery remains live");
-
-        // Only the real wall-day completion may latch the target. Level stays 0 until the following
-        // fresh calendar-day request, where _finalizeRngRequest is the sole writer that promotes it.
-        (, bool inJackpotAtCatchup, bool lastPurchaseAtCatchup, , ) = game.purchaseInfo();
-        assertFalse(inJackpotAtCatchup, "catch-up ends in purchase phase");
-        assertTrue(lastPurchaseAtCatchup, "real wall day may latch the met target");
-        assertEq(game.level(), 0, "level promotion waits for the fresh request");
-
-        vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < 20 && !game.rngLocked(); ++i) {
-            _advanceAndFulfill(1_000 + i);
-        }
-        assertTrue(game.rngLocked(), "fresh post-catchup day requested RNG");
-        assertEq(game.level(), 1, "fresh request promoted level through _finalizeRngRequest");
+        assertEq(uint24(uint256(vm.load(address(game), bytes32(0)))), baseline,
+            "no purchase-clock compensation or underflow");
+        assertEq(game.currentDayView(), committed + 1, "one next request, no backfill");
+        assertEq(coinflip.requestedDailyIdx(), committed + 1);
+        assertEq(coinflip.recordPool(), pool + 2_000, "only the real result funds rewards");
+        (uint16 reward, bool win) = coinflip.getCoinflipDayResult(committed);
+        assertEq(reward, 1);
+        assertFalse(win);
+        (reward,) = coinflip.getCoinflipDayResult(committed + 1);
+        assertEq(reward, 0, "following round still needs its own word");
+        assertFalse(game.gameOver());
     }
 }

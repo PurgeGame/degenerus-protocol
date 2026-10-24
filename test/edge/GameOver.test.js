@@ -19,26 +19,8 @@ import {
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
-/**
- * GameOver edge-case tests.
- *
- * The game over flow is multi-step:
- *   1. mineFlip when liveness guard fires → decides the ending; with VRF alive every
- *      outstanding loan settles first (the next mineFlip, more for a large book)
- *   2. mineFlip → issues the terminal VRF request (does NOT yet set gameOver)
- *   3. VRF fulfillment stores word in rngWordCurrent
- *   4. mineFlip again → processes the word → terminal drain → gameOver = true
- *
- * Two liveness guards:
- *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 250-day idle timeout)
- *   - level!=0 && currentDay - purchaseStartDay > 30                        (post-game 30-day death clock)
- *
- * Deity pass refunds (GameOverModule:105-135):
- *   - Levels 0-9: min(deityPassPricePaid[owner], 20 ETH) per owner, FIFO,
- *                 budget-capped (a standard 24/25 ETH pass is above the cap, so
- *                 the refund is exactly 20 ETH)
- *   - Level 10+: No refund
- */
+/** Terminal entry uses thirty completed purchase rounds or fourteen real days
+ * without a daily completion. The hard escape does not request another word. */
 describe("GameOver", function () {
   after(function () {
     restoreAddresses();
@@ -48,7 +30,7 @@ describe("GameOver", function () {
   // Helpers
   // -------------------------------------------------------------------------
 
-  const SECONDS_912_DAYS = 912 * 86400;
+  const SECONDS_HARD_STALL = 14 * 86400;
   const SECONDS_30_DAYS = 30 * 86400;
 
   /**
@@ -62,7 +44,7 @@ describe("GameOver", function () {
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        transactions.push(await game.connect(deployer).mineFlip(0));
+        transactions.push(await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }));
       } catch {
         /* may revert mid-sequence; keep driving */
       }
@@ -94,18 +76,18 @@ describe("GameOver", function () {
   }
 
   // =========================================================================
-  // 1. Pre-game timeout (912 days, level == 0)
+  // 1. Hard progress timeout at level 0
   // =========================================================================
 
-  describe("pre-game 912-day timeout (level 0)", function () {
-    it("gameOver becomes true after 912+ days at level 0", async function () {
+  describe("fourteen-day progress timeout (level 0)", function () {
+    it("gameOver becomes true after fourteen days at level 0", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       expect(await game.level()).to.equal(0n);
       expect(await game.gameOver()).to.equal(false);
 
-      // Advance past 912 days + buffer
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      // Expire the real daily-progress clock.
+      await advanceTime(SECONDS_HARD_STALL + 86400);
 
       // Multi-step: mineFlip → VRF → mineFlip
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -113,62 +95,27 @@ describe("GameOver", function () {
       expect(await game.gameOver()).to.equal(true);
     });
 
-    it("gameOver is NOT triggered at 911 days", async function () {
+    it("gameOver is NOT triggered before fourteen days", async function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
-      // Advance 911 days (just under threshold)
-      await advanceTime(911 * 86400);
+      // Stay below the fourteen-day hard deadline.
+      await advanceTime(12 * 86400);
       await advanceToNextDay();
 
       // mineFlip should not trigger game over (normal VRF path instead)
-      const tx = await game.connect(deployer).mineFlip(0);
+      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
       expect(await game.gameOver()).to.equal(false);
     });
 
-    it("first mineFlip at 912+ days issues VRF request but does NOT set gameOver yet", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(
-        deployFullProtocol
-      );
-
-      await advanceTime(SECONDS_912_DAYS + 86400);
-
-      // First call decides the ending: VRF is alive, so the loan book settles before any
-      // request. Second call settles the (empty) book. Neither requests a word.
-      await game.connect(deployer).mineFlip(0);
-      await game.connect(deployer).mineFlip(0);
-      expect(await getLastVRFRequestId(mockVRF)).to.equal(0n);
-
-      // Third call arms the terminal request and asks in the same call (gameOver still false)
-      await game.connect(deployer).mineFlip(0);
-      expect(await game.gameOver()).to.equal(false);
-
-      // VRF request was issued
-      const requestId = await getLastVRFRequestId(mockVRF);
-      expect(requestId).to.be.gt(0n);
-    });
-
-    it("mineFlip after VRF fulfillment drives the drain to gameOver", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(
-        deployFullProtocol
-      );
-
-      await advanceTime(SECONDS_912_DAYS + 86400);
-      await game.connect(deployer).mineFlip(0); // decision
-      await game.connect(deployer).mineFlip(0); // the (empty) loan book
-      await game.connect(deployer).mineFlip(0); // arm and request
-
-      const requestId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(requestId, 42n);
-
-      // After fulfillment the terminal drain completes over the remaining
-      // ticket-drain / gameOver-drain txs.
-      for (let i = 0; i < 12; i++) {
-        await game.connect(deployer).mineFlip(0);
-        if (await game.gameOver()) break;
-      }
+    it("hard-stall entry ends without an additional VRF request", async function () {
+      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      await advanceTime(SECONDS_HARD_STALL + 1);
+      const before = await getLastVRFRequestId(mockVRF);
+      await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
+      expect(await getLastVRFRequestId(mockVRF)).to.equal(before);
     });
 
     it("mineFlip reports NoWork after completed terminal payout while the sweep is not due", async function () {
@@ -176,13 +123,13 @@ describe("GameOver", function () {
         deployFullProtocol
       );
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
 
       expect(await game.nextMinerAction()).to.equal(0n);
       const miner = await hre.ethers.getContractFactory("DegenerusGame");
-      await expect(game.connect(deployer).mineFlip(0)).to.be.revertedWithCustomError(miner, "NoWork");
+      await expect(game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(miner, "NoWork");
       expect(await game.isFinalSwept()).to.equal(false);
     });
   });
@@ -211,7 +158,7 @@ describe("GameOver", function () {
       expect(await game.level()).to.equal(0n);
 
       const claimBefore = await game.claimableWinningsOf(alice.address);
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       const txs = await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
       const wins = (await Promise.all(txs.map(tx => getEvents(tx, jackpotModule, "JackpotEthWin")))).flat();
@@ -244,7 +191,7 @@ describe("GameOver", function () {
       const aliceBefore = await game.claimableWinningsOf(alice.address);
       const bobBefore = await game.claimableWinningsOf(bob.address);
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       const txs = await triggerGameOverAtLevel0(game, deployer, mockVRF);
       const wins = (await Promise.all(txs.map(tx => getEvents(tx, jackpotModule, "JackpotEthWin")))).flat();
       const idOf = { [alice.address]: await game.walletIdOf_g3120(alice.address), [bob.address]: await game.walletIdOf_g3120(bob.address) };
@@ -269,7 +216,7 @@ describe("GameOver", function () {
         deployFullProtocol
       );
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       expect(await game.gameOver()).to.equal(true);
@@ -280,7 +227,7 @@ describe("GameOver", function () {
         deployFullProtocol
       );
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       await expect(
@@ -299,7 +246,7 @@ describe("GameOver", function () {
 
     it("feed-swap proposals revert with GameOver after the terminal drain", async function () {
       const { game, admin, deployer, mockVRF } = await loadFixture(deployFullProtocol);
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.be.true;
       await expect(ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS]))
@@ -311,7 +258,7 @@ describe("GameOver", function () {
         deployFullProtocol
       );
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       expect(await game.gameOver()).to.be.true;
@@ -334,7 +281,7 @@ describe("GameOver", function () {
 
       await buyTickets(game, alice, 10, 0.1);
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
 
@@ -344,7 +291,7 @@ describe("GameOver", function () {
       const timestamp = await game.gameOverTimestamp();
       const reserved = await game.claimablePoolView();
       const miner = await hre.ethers.getContractFactory("DegenerusGame");
-      await expect(game.connect(deployer).mineFlip(0)).to.be.revertedWithCustomError(miner, "NoWork");
+      await expect(game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(miner, "NoWork");
       expect(await game.isFinalSwept()).to.equal(false);
       expect(await game.gameOverTimestamp()).to.equal(timestamp);
       expect(await game.claimablePoolView()).to.equal(reserved);
@@ -357,13 +304,13 @@ describe("GameOver", function () {
 
       await buyTickets(game, alice, 10, 0.1);
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       // 31 days post-gameover
       await advanceTime(SECONDS_30_DAYS + 86400);
 
-      const tx = await game.connect(deployer).mineFlip(0);
+      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       expect((await tx.wait()).status).to.equal(1);
     });
   });
@@ -383,7 +330,7 @@ describe("GameOver", function () {
         .connect(alice)
         .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: deityPrice });
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       expect(await game.gameOver()).to.equal(true);
@@ -407,7 +354,7 @@ describe("GameOver", function () {
         deployFullProtocol
       );
 
-      await advanceTime(SECONDS_912_DAYS + 86400);
+      await advanceTime(SECONDS_HARD_STALL + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       const claimable = await game.claimableWinningsOf(bob.address);

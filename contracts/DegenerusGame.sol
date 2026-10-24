@@ -183,15 +183,18 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
     /**
      * @notice Initialize the game with precomputed contract references.
      * @dev All addresses and deploy day boundary are compile-time constants from ContractAddresses.
-     *      purchaseStartDay is initialized to the deploy day index.
-     *      dailyIdx is set to the current day index so gap detection starts from deploy day.
+     *      purchaseStartDay starts at the first post-Degenesis logical day.
+     *      dailyIdx starts at bootstrap logical day 1 without recording a result.
      *      The deploy day is also the first AFKing reward endpoint: no subscriber pass runs for
      *      it, so runs started that day are checkpointed on it and first buy the next day.
-     *      Deploy day boundary determines which calendar day is "day 1" in the game.
+     *      Logical day 1 opens at deployment; the separate wall clock owns daily pacing.
      */
     constructor() {
-        uint24 currentDay = GameTimeLib.currentDayIndex();
-        purchaseStartDay = currentDay;
+        uint24 currentDay = 1;
+        purchaseStartDay = GameTimeLib.MAIN_LAUNCH_DAY;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
         dailyIdx = currentDay;
         _afkingEndpointDay = currentDay;
         _setLevelPrizePool(0, BOOTSTRAP_PRIZE_POOL);
@@ -505,9 +508,25 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
       |                       LOOT BOX CONTROLS                              |
       +======================================================================+*/
 
-    /// @notice Current day index.
+    /// @notice Most recently requested normal logical round; bootstrap is day 1.
     function currentDayView() external view returns (uint24) {
-        return _simulatedDayIndex();
+        return _gameDay();
+    }
+
+    /// @notice Calendar reset window, relative to deployment; resets at 22:57 UTC.
+    function currentWallDayView() external view returns (uint24) { return _wallDay(); }
+
+    /// @notice Current daily commitment completion and its real-time clocks.
+    function dailySessionState() external view returns (bool complete, uint24 requestWallDay, uint48 completedAt) {
+        return (dailyComplete, lastDailyRequestWallDay, lastDailyCompletedAt);
+    }
+
+    /// @notice Latest applied daily result, independent of an unresolved request.
+    function latestDailyResultDay() external view returns (uint24) { return _latestDailyResultDay(); }
+
+    /// @notice Scheduled admissions require the current reset's request and published terms.
+    function dailyScheduleOpen() external view returns (bool) {
+        return !_livenessTriggered() && !_dailyRequestDue() && _recordedDailyWord(dailyIdx) != 0;
     }
 
     /// @dev Shared by the vault-owner controls; preserve the same external check and error.
@@ -799,7 +818,7 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
             bool deityPassAvailable
         )
     {
-        day = _simulatedDayIndex();
+        day = _gameDay();
         uint32 boonPacked = uint32(deityBoonPacked[deityId]);
         usedMask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         decimatorOpen = _decWindowOpen();
@@ -1544,14 +1563,11 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
     }
 
     /// @notice Whether the game-over trigger is currently active.
-    /// @dev In every phase: a VRF request unanswered for 14 days (VRF dead: the deterministic
-    ///      ending), or no day sealed for 30 days (the deadman). In the purchase phase also the
-    ///      purchase deadline (250 days at level 0, 30 after), read at the start of a caught-up
-    ///      day, or an ending already under way. For the deadline cause, a gap behind the last
-    ///      sealed day (a stall across the deadline, however its word comes back) reads false
-    ///      until the next daily word's backfill credits it, so a coordinator rotation can still
-    ///      rescue a level whose stall began by its deadline day; the deadman and VRF-dead causes
-    ///      still fire in a gap.
+    /// @dev An existing ending stays latched. In every phase, 14 elapsed days without
+    ///      full daily completion or an expired VRF commitment selects the hard ending.
+    ///      Otherwise an unmet purchase target ends after 30 completed purchase rounds,
+    ///      no earlier than the next reset after their final completion. Degenesis rounds
+    ///      do not count. Callbacks, retries and partial workers cannot refresh the deadline.
     function livenessTriggered() external view returns (bool) {
         return _livenessTriggered();
     }

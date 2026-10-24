@@ -3,7 +3,7 @@ pragma solidity 0.8.38;
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -15,14 +15,14 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         - VIEW-01/02 coinflipAmount and the preview walk carry the seed for the recipients on
 ///           window days only; no later day, including past x00 levels, is seeded.
 ///         - ARM-01 the deploy window covers days 1..20 with no lane written and is announced once.
-contract CoinflipSeedWindowTest is DeployProtocol {
+contract CoinflipSeedWindowTest is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant COIN = ContractAddresses.COIN;
     address internal constant VAULT = ContractAddresses.VAULT;
     address internal constant SDGNRS = ContractAddresses.SDGNRS;
 
     uint256 internal constant SEED = 200_000;
-    uint24 internal constant SEED_DAYS = 20;
+    uint24 internal constant SEED_DAYS = 21; // Last seeded day; exactly twenty flips, days 2..21.
     bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
     bytes32 internal constant ARMED_SIG = keccak256("SeedWindowArmed(uint24,uint24,uint256)");
 
@@ -38,6 +38,10 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     // =====================================================================
 
     function _warpToDay(uint24 d) internal {
+        uint256 word = _slot4();
+        vm.store(address(coinflip), bytes32(uint256(4)),
+            bytes32((word & ~(uint256(0xffffff) << 176)) | (uint256(d) << 176)));
+
         vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
     }
 
@@ -113,7 +117,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         uint256 sdgnrsCarry;
         uint256 allowance0 = coin.vaultMintAllowance();
         uint256 wwxrpVault0 = wwxrp.claimable(game.walletIdOf_g3120(VAULT));
-        for (uint24 d = 1; d <= 22; ++d) {
+        for (uint24 d = 2; d <= 22; ++d) {
             _warpToDay(d);
             if (d == 2 || d == 9 || d == 21) {
                 _creditVault(12_345);
@@ -191,7 +195,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     function test_PreviewWalkCountsTheSeedForRecipientsOnly() public {
         address alice = makeAddr("seed_window_alice");
         uint256 expected;
-        for (uint24 d = 1; d <= SEED_DAYS; ++d) {
+        for (uint24 d = 2; d <= SEED_DAYS; ++d) {
             bool win = d % 4 != 0;
             _setResult(d, win ? 150 : 1);
             if (win) expected += SEED + (SEED * 150) / 100;
@@ -210,7 +214,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
         // Days 21..55 all win at 100% and carry no seed.
         _warpToDay(30);
-        for (uint24 d = 21; d <= 55; ++d) {
+        for (uint24 d = 22; d <= 55; ++d) {
             _setResult(d, 100);
         }
         _setFlipsClaimableDay(55);
@@ -240,9 +244,9 @@ contract CoinflipSeedWindowTest is DeployProtocol {
             assertTrue(logs[i].topics[0] != STAKE_SIG, "deploy emits no stake event");
             if (logs[i].topics[0] == ARMED_SIG) {
                 ++armed;
-                assertEq(uint256(logs[i].topics[1]), 1, "first day 1");
+                assertEq(uint256(logs[i].topics[1]), 2, "first requested day 2");
                 (uint24 dayCount, uint256 perDay) = abi.decode(logs[i].data, (uint24, uint256));
-                assertEq(dayCount, SEED_DAYS);
+                assertEq(dayCount, 20);
                 assertEq(perDay, SEED);
             }
         }
@@ -250,15 +254,15 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
         // Day 1 and day 20 pay the seed; day 21 does not.
         uint256 wwxrp0 = wwxrp.claimable(game.walletIdOf_g3120(VAULT));
-        _warpToDay(1);
-        _resolve(1, true);
-        assertEq(coinflip.previewClaimCoinflips(VAULT), _payout(SEED, 1), "day 1 is seeded");
-        for (uint24 d = 2; d <= 21; ++d) {
+        _warpToDay(2);
+        _resolve(2, true);
+        assertEq(coinflip.previewClaimCoinflips(VAULT), _payout(SEED, 2), "day 1 is seeded");
+        for (uint24 d = 3; d <= 22; ++d) {
             _warpToDay(d);
             _resolve(d, false);
         }
         uint256 before = _vaultClaim(type(uint256).max);
-        assertEq(before, _payout(SEED, 1));
+        assertEq(before, _payout(SEED, 2));
         _warpToDay(22);
         _resolve(22, true);
         _resolve(23, true);

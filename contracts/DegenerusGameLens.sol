@@ -914,7 +914,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
                 o := purchaseStartDay.offset
                 jp := jackpotPhaseFlag.offset
             }
-            q.ticketWei = _loanTicketWei(q.principal, GameTimeLib.currentDayIndex(),
+            q.ticketWei = _loanTicketWei(q.principal, _dailyIdx(game),
                 uint24(w >> (o << 3)), PriceLookupLib.priceForLevel(cl), uint8(w >> (jp << 3)) != 0);
         }
         q.lenderId = _lenderMirror(game, q.principal);

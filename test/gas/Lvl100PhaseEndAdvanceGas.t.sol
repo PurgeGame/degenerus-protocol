@@ -43,7 +43,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         uint8[4] calldata mainTraits,
         uint160 base
     ) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
 
         _seedJackpotDay(lvl, day);
         jackpotCounter = 2; // the third draw ends the standard phase
@@ -79,7 +79,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
     /// @notice The transition-close pre-state: _endPhase already ran, the far-future queue is empty,
     ///         so one advance runs the housekeeping and completes the transition in the same tx.
     function seedTransitionDone(uint24 lvl, uint256 word) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
 
         _seedJackpotDay(lvl, day);
         for (uint256 i = _deityCount(); i < 32; ++i) {
@@ -108,7 +108,10 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         // ran first. Keep the measured call on the requested phase-end/close stage.
         vaultFlipSettledDay = day;
         purchaseStartDay = day - 10;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         jackpotPhaseFlag = true;
         lastPurchaseDay = false;
         jackpotFlags = 0;
@@ -134,7 +137,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
 ///      DailyPhase only for an active, published, not-yet-complete session.
 contract BoundarySessionSeeder is DegenerusGame {
     function openDailyPhase() external {
-        rngRequestDay = _simulatedDayIndex();
+        rngRequestDay = dailyIdx;
         _setRngRequestActive(true);
         _setRngSessionPublished(true);
         _setRngComplete(false);
@@ -185,6 +188,7 @@ abstract contract BoundaryGasFixture is AdvanceStageStream {
 
     function _restore(bytes memory realCode) internal {
         vm.etch(address(game), realCode);
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(address(game), 1000 ether);
         wwxrpBefore = wwxrp.totalSupply();
     }

@@ -138,7 +138,7 @@ contract DegenerusRecordBounty {
         // and the first player to put a mark on a record takes its trophy from
         // there. An unclaimed record parks with the body that owns the protocol's
         // other unassigned property rather than with its deployer.
-        uint24 today = GameTimeLib.currentDayIndex();
+        uint24 today = 1;
         _balances[ContractAddresses.VAULT] = KINDS;
         for (uint256 i; i < KINDS; ++i) {
             _holders[i] = ContractAddresses.VAULT;
@@ -188,7 +188,7 @@ contract DegenerusRecordBounty {
                 _balances[to] += 1;
             }
             _holders[kind] = to;
-            _sinceDays[kind] = GameTimeLib.currentDayIndex();
+            _sinceDays[kind] = GameTimeLib.gameDayIndex();
             emit Transfer(from, to, kind);
         }
     }
@@ -210,7 +210,7 @@ contract DegenerusRecordBounty {
         holder = _holders[tokenId];
         mark = _marks[tokenId];
         sinceDay = _sinceDays[tokenId];
-        uint24 today = GameTimeLib.currentDayIndex();
+        uint24 today = GameTimeLib.gameDayIndex();
         daysHeld = today > sinceDay ? today - sinceDay : 0;
     }
 

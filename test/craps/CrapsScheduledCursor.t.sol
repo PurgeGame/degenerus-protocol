@@ -60,6 +60,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
     ///      tomorrow's separator and nothing can fall behind initialization.
     function testFuzz_OpenedTermsSurviveDailyWordRetirement(uint256 word) public {
         word = bound(word, 2, type(uint256).max);
+        vm.warp(vm.getBlockTimestamp() - ((vm.getBlockTimestamp() - 82_620) % 1 days) + 1);
         uint24 day = craps.currentDayIndex();
         _setDailyWord(day, word);
         vm.prank(ContractAddresses.GAME);
@@ -89,7 +90,9 @@ contract CrapsScheduledCursorTest is CrapsPins {
 
     function test_MinerMaintenancePendingTracksOnlyActionableHead() public {
         assertFalse(craps.minerMaintenancePending_g11976(), "current unopened separator waits for daily hook");
+        vm.warp(vm.getBlockTimestamp() - ((vm.getBlockTimestamp() - 82_620) % 1 days) + 1);
         _openDay();
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
         assertTrue(craps.minerMaintenancePending_g11976(), "opened separator is maintenance work");
         _crank(craps);
         uint64 head = craps.minerSlot();
@@ -108,16 +111,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         CrapsBattle deployed = new CrapsBattle{salt: keccak256("fresh-cursor-constructor")}();
         vm.etch(address(deployed), address(craps).code);
         CursorHarness fresh = CursorHarness(address(deployed));
-        uint24 genesis = fresh.currentDayIndex();
-        assertEq(fresh.minerSlot(), uint64(fresh._daySlotOfPub(genesis + 1)), "the cursor was not born at tomorrow");
-
-        // Genesis is consumed: the Game's open hook is a no-op on the warm-up day, and the
-        // cursor stands in front of tomorrow claiming nothing.
-        vm.prank(ContractAddresses.GAME);
-        fresh.openBonusDay();
-        assertEq(fresh.boostBudgetOf(genesis), 0, "the warm-up day opened windows");
-        (bool progressed,) = _crank(fresh);
-        assertFalse(progressed, "the cursor claimed progress on the warm-up day");
+        assertEq(fresh.minerSlot(), uint64(fresh._daySlotOfPub(3)), "new deployment begins at the first logical table day");
     }
 
     /// @dev THE SEPARATOR IS CROSSED, NEVER PROBED. The fixture clock sits an hour into the day,
@@ -125,7 +119,9 @@ contract CrapsScheduledCursorTest is CrapsPins {
     ///      shuts that window, in cursor order. The call after it is a poll — the armed field is
     ///      wordless, and standing in front of it claims nothing.
     function test_theCursorCrossesTheSeparatorAndArmsTheClosedOpener() public {
+        vm.warp(vm.getBlockTimestamp() - ((vm.getBlockTimestamp() - 82_620) % 1 days) + 1);
         _openDay();
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
         uint24 today = craps.currentDayIndex();
         (bool progressed, uint64 slot) = _crank(craps);
         assertTrue(progressed, "the hop-and-arm was not progress");

@@ -16,8 +16,11 @@ import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGas
 contract BoundedQueueHost is DegenerusGame, WalletSeed {
     function seed(address player) external {
         level = 24;
-        purchaseStartDay = _simulatedDayIndex();
+        purchaseStartDay = _wallDay();
         dailyIdx = purchaseStartDay;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
         rngRequestTime = uint48(block.timestamp);
         degenesisClosed = 7;
         _setPrizePools(100 ether, 100 ether);
@@ -54,6 +57,7 @@ contract BoundedQueueGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(game), vm.getDeployedCode("BoundedQueueGas.t.sol:BoundedQueueHost"));
         host = BoundedQueueHost(payable(address(game)));
         host.seed(PLAYER);
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 1000 ether);
         uint24 day = game.currentDayView();

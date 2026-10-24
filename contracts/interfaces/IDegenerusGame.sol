@@ -153,7 +153,7 @@ interface IDegenerusGame {
     function gameOver() external view returns (bool);
 
     /// @notice Whether the liveness-timeout game-over trigger is currently active.
-    /// @dev Purchase phase: true past the purchase deadline (250 days at level 0, 30
+    /// @dev Purchase phase: true after 30 completed purchase rounds (level-0 baseline is day 9; 30
     ///      after) unless a pre-deadline VRF request is still inside its 14-day grace.
     ///      Jackpot / last-purchase: true only once no day has sealed for 30 days.
     function livenessTriggered() external view returns (bool);
@@ -370,6 +370,10 @@ interface IDegenerusGame {
 
     /// @notice Current day index.
     function currentDayView() external view returns (uint24);
+    function currentWallDayView() external view returns (uint24);
+    function dailySessionState() external view returns (bool complete, uint24 requestWallDay, uint48 completedAt);
+    function latestDailyResultDay() external view returns (uint24);
+    function dailyScheduleOpen() external view returns (bool);
 
     /// @notice Admin-only transport retry of an unanswered request after its 20-hour timeout.
     function retryRng() external;

@@ -51,7 +51,7 @@ abstract contract GamePurchaseBox is DegenerusGameStorage {
         uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
         if (tier == 0) return 0;
 
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _gameDay();
         uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
         if (deityDay != 0 && deityDay != day) {
             bp.slot0 = (s0 & BP_LOOTBOX_CLEAR) | BP_SLOT0_RETAINED;

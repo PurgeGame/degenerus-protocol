@@ -90,10 +90,13 @@ contract JackpotBattle is CrapsBattleStorage {
             uint256 c = _customBattle[slot];
             if (c == 0) revert NoSuchBattle();
             if (block.timestamp >= ((c >> _CB_CLOSE_SHIFT) & _CB_CLOSE_MASK)) revert BonusPeriodSpent();
+        } else if (!_scheduledAdmissionsOpen()) {
+            revert BonusPeriodSpent();
         } else if (_jackpotIsJackpotSlot(slot)) {
             if (slot != _jackpotSlotOf(_bonus - 1, _BONUS_PERIODS_PER_DAY - 1)
                 || IGameCraps(_GAME).rngLocked()) revert BonusPeriodSpent();
         } else {
+            if (!_scheduledAdmissionsOpen()) revert BonusPeriodSpent();
             (,, uint256 live) = _jackpotCurrentBonusSlot();
             if (slot < live) revert BonusPeriodSpent();
         }
@@ -909,7 +912,8 @@ contract JackpotBattle is CrapsBattleStorage {
     function _jackpotCurrentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
         day = _currentDayIndex();
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
-        if (elapsed >= 1 days - 20 minutes) period = 5;
+        if (_scheduleResetPassed()) period = _BONUS_PERIODS_PER_DAY;
+        else if (elapsed >= 1 days - 20 minutes) period = 5;
         else if (elapsed >= 20 minutes) {
             unchecked { period = 1 + (elapsed - 3 minutes) / 6 hours; }
         }
@@ -959,6 +963,13 @@ contract JackpotBattle is CrapsBattleStorage {
             if (cur % _BONUS_SLOTS_PER_DAY > _BONUS_PERIODS_PER_DAY) { ++cur; continue; }
             if (_slotIndexOf(cur) == 0) {
                 if (cur >= open || _jackpotIsJackpotSlot(cur)) { result.done = true; break; }
+                if ((_loadBattle(bytes32(uint256(cur))) >> _BG_TERM_TIER_SHIFT) & _BG_TERMS_SKIPPED != 0) {
+                    (bool refunded, bool moved) = _refundSkippedWindow(cur, meter);
+                    result.progressed = result.progressed || moved;
+                    if (!refunded) break;
+                    ++cur;
+                    continue;
+                }
                 Window memory w = _jackpotWindowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
                 _jackpotArmSlot(cur, w);
                 result.progressed = true;
@@ -977,6 +988,25 @@ contract JackpotBattle is CrapsBattleStorage {
         if (cur != _minerSlot) { _minerSlot = cur; result.progressed = true; MineFlipGas.markProgress(meter); }
         result.rewardBasis = result.progressed ? 1 : 0;
         MineFlipGas.finish(meter);
+    }
+
+    /// @dev A late daily opening never runs expired periods. Refund their prepaid window
+    ///      reservations under the same comp policy as an entirely unopened day.
+    function _refundSkippedWindow(uint64 slot, MineFlipGas.Meter memory meter)
+        private returns (bool doneAll, bool moved)
+    {
+        uint64 n = uint32(_loadBattle(bytes32(uint256(slot))));
+        uint64 done = _bonusCursorOf(slot);
+        uint256 comps;
+        while (done < n && MineFlipGas.canRun(meter, _REFUND_GAS_MAX, _SWEEP_TAIL_GAS)) {
+            uint256 header = _loadBet((uint256(slot) << 64) | ++done);
+            comps += _jackpotWindowAheadPrice(slot % _BONUS_SLOTS_PER_DAY - 1, header & _BET_HIGH_BIT != 0);
+            moved = true;
+            MineFlipGas.markProgress(meter);
+        }
+        if (moved) _setBonusCursor(slot, done);
+        if (comps != 0) _creditComps(comps);
+        return (done == n, moved);
     }
 
     function _jackpotSlotOf(uint256 day, uint256 period) private pure returns (uint256) {

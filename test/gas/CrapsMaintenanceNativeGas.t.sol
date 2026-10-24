@@ -35,7 +35,10 @@ contract CrapsMaintenanceNativeGasTest is CrapsScheduledCursorTest, NativeMeasur
     }
 
     function test_NativeColdScheduledArm() public {
+        // Admit the opener before it expires, then measure arming its closed field.
+        vm.warp(vm.getBlockTimestamp() - ((vm.getBlockTimestamp() - 82_620) % 1 days) + 1);
         _openDay();
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
         _measureMaintenance("craps-maintenance-arm");
         assertGt(craps.slotIndexOf(craps.minerSlot()), 0, "closed field registered");
     }

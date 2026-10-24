@@ -15,10 +15,13 @@ import {Vm} from "forge-std/Vm.sol";
 ///      level the way a later materialization would, so the terminal level reads as retired.
 contract RetiredStampSeeder is DegenerusGame, BucketSeed {
     function seedEnding(address holder) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 10;
         purchaseStartDay = day - 31; // the deadline passed yesterday
-        dailyIdx = day - 1; // caught up: the deadline starts the ending today
+        dailyIdx = day - 1; // thirty completed purchase rounds; next actual reset
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = day - 1;
         _setLevelPrizePool(10, 1000 ether);
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
@@ -75,6 +78,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
     ///      payout runs on a later call.
     function _reachPayout() private {
         _fixture(abi.encodeCall(RetiredStampSeeder.seedEnding, (HOLDER)));
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(address(game), 100 ether);
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
         game.mineFlip(0); // latches the cohort level; VRF alive, so the loan book settles first

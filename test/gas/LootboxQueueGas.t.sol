@@ -19,8 +19,11 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 contract LootboxQueueGasSeeder is DegenerusGamePayoutUtils {
     function seedLevel(uint24 lvl) external {
         level = lvl;
-        purchaseStartDay = _simulatedDayIndex();
+        purchaseStartDay = _wallDay();
         dailyIdx = purchaseStartDay;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         rngRequestTime = uint48(block.timestamp);
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
@@ -92,6 +95,7 @@ contract LootboxQueueGasTest is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 1_000 ether);
         uint24 day = uint24(game.currentDayView());
+        _syncCoinflipFixtureDay(day);
         vm.prank(address(game));
         quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);

@@ -1,3 +1,4 @@
+import { seedLogicalDay } from "../helpers/logicalDayFixture.js";
 import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -30,8 +31,10 @@ describe("DegenerusRecordBounty", function () {
     restoreAddresses();
   });
 
+  async function deployRecordFixture() { return deployFullProtocol({ degenesis: true }); }
+
   async function getFixture() {
-    return loadFixture(deployFullProtocol);
+    return loadFixture(deployRecordFixture);
   }
 
   async function impersonate(address) {
@@ -155,6 +158,8 @@ describe("DegenerusRecordBounty", function () {
       const [, , sinceDay] = await bounty.recordInfo(1);
 
       await time.increase(3 * 86400);
+      expect((await bounty.recordInfo(1))[3]).to.equal(0n, "wall time never ages a logical record");
+      await seedLogicalDay(f.game, sinceDay + 3n, f.coinflip);
       await recordSetViaCoinflip(f, bounty, 1, f.alice.address, 20n);
       const [, mark, sinceAfterSelf, daysHeld] = await bounty.recordInfo(1);
       expect(mark).to.equal(20n);
@@ -266,6 +271,8 @@ describe("DegenerusRecordBounty", function () {
       const bounty = await getBounty(f);
       await recordSetViaCoinflip(f, bounty, 2, f.alice.address, 10n);
       await time.increase(7 * 86400);
+      expect((await bounty.recordInfo(2))[3]).to.equal(0n, "elapsed resets do not count as rounds");
+      await seedLogicalDay(f.game, (await f.game.currentDayView()) + 7n, f.coinflip);
       const json = decodeTokenURI(await bounty.tokenURI(2));
       expect(attr(json, "Days Held")).to.equal(7);
       const [, , , daysHeld] = await bounty.recordInfo(2);

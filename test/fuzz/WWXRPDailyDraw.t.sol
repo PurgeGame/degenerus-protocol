@@ -39,18 +39,26 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
     /// @dev Complete a full day: mineFlip -> VRF fulfill -> drain to unlock.
     function _completeDay(uint256 vrfWord) internal {
-        _finishReadConsumers();
-        game.mineFlip(0);
+        uint24 beforeDay = game.currentDayView();
+        for (uint256 i; i < 200 && game.currentDayView() == beforeDay; ++i) {
+            uint256 old = mockVRF.lastRequestId();
+            if (old != 0 && ! _fulfilled(old)) mockVRF.fulfillRandomWords(old, 777);
+            game.mineFlip(type(uint32).max);
+        }
+        assertEq(game.currentDayView(), beforeDay + 1, "accepted next logical request");
         uint256 reqId = mockVRF.lastRequestId();
-        if (reqId != _lastFulfilledReqId && reqId > 0) {
-            mockVRF.fulfillRandomWords(reqId, vrfWord);
-            _lastFulfilledReqId = reqId;
+        mockVRF.fulfillRandomWords(reqId, vrfWord);
+        _lastFulfilledReqId = reqId;
+        for (uint256 i; i < 200; ++i) {
+            (bool complete,,) = game.dailySessionState();
+            if (complete) return;
+            game.mineFlip(type(uint32).max);
         }
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip(0);
-        }
-        _finishReadConsumers();
+        fail("daily consumers did not complete");
+    }
+
+    function _fulfilled(uint256 id) private view returns (bool result) {
+        (,, result) = mockVRF.pendingRequests(id);
     }
 
     /// @dev Seal the current day (fresh lastVrfProcessed) and fund players.
@@ -411,7 +419,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         wwxrp.claim(day, 0);
     }
 
-    function test_ClaimGraceEndsOnSecondDayWithoutRngOverwrite() public {
+    function test_ClaimGraceUsesPublishedLogicalResults() public {
         _bootstrap();
         uint24 day = game.currentDayView();
         vm.prank(alice);
@@ -425,7 +433,14 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         assertTrue(available, "D+1 grace");
         _warpNextDay();
         (available,,,,,,) = wwxrp.previewOutcome(day);
-        assertFalse(available, "D+2 expires without overwrite");
+        assertTrue(available, "calendar delay does not expire a published result");
+        _completeDay(777);
+        (available,,,,,,) = wwxrp.previewOutcome(day);
+        assertTrue(available, "one later logical result preserves grace");
+        _warpNextDay();
+        _completeDay(779);
+        (available,,,,,,) = wwxrp.previewOutcome(day);
+        assertFalse(available, "two later results expire the claim");
         vm.expectRevert(abi.encodeWithSignature("WordUnavailable()"));
         wwxrp.claim(day, 0);
         assertFalse(wwxrp.dayClaimed(day));

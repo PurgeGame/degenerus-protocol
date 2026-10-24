@@ -6,7 +6,6 @@ library QaSlots {
     uint256 internal constant ACTIVE = QUESTS;
     uint256 internal constant STATE = QUESTS + 1;
     uint256 internal constant LEVEL = QUESTS + 2;
-    uint256 internal constant ROLLED = QUESTS + 3;
     uint256 internal constant AFFILIATE = 0x93b2738aa52d403a1d6cd7cad14e72a7cda308b6a92d312ff0746cbfb7eec800;
     uint256 internal constant CODE = AFFILIATE;
     uint256 internal constant EARNED = AFFILIATE + 1;

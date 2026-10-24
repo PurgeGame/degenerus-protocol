@@ -1,3 +1,4 @@
+import { completeLogicalDay } from "../helpers/logicalDayFixture.js";
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
@@ -37,20 +38,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
   // Settle a day's RNG. Crossing a level boundary can chain a fresh VRF request,
   // so re-fulfill any newly issued request id rather than only the first.
   async function settleRngDay(game, deployer, mockVRF, word) {
-    await advanceToNextDay();
-    await game.connect(deployer).mineFlip(0);
-    let lastFulfilled = -1n;
-    for (let i = 0; i < 80; i++) {
-      if (!(await game.rngLocked())) break;
-      const requestId = await getLastVRFRequestId(mockVRF);
-      if (requestId !== lastFulfilled) {
-        await mockVRF.fulfillRandomWords(requestId, word + BigInt(i));
-        lastFulfilled = requestId;
-      } else {
-        await game.connect(deployer).mineFlip(0);
-      }
-    }
-    expect(await game.rngLocked()).to.equal(false);
+    await completeLogicalDay(game, deployer, mockVRF, word);
   }
 
   it("reverts the 11th boon from one deity to the same recipient", async function () {

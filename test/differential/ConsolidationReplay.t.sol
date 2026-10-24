@@ -544,6 +544,9 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         uint32 id = game.walletIdOf_g3120(cast[0]);
         uint32 issuer = game.walletIdOf_g3120(cast[2]);
         _warpDay(20, 5 minutes);
+        // This synthetic hot-entry day represents recent completed sessions, not a
+        // nineteen-day hard stall from the deployment day.
+        _seedLogicalFixtureDay(20);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), type(ConsolidationSeed).runtimeCode);
         ConsolidationSeed(address(game)).hotEntries(id);
@@ -604,7 +607,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
 contract ConsolidationSeed is DegenerusGameStorage {
     function hotEntries(uint32 id) external {
         level = 10;
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         dailyIdx = day;
         purchaseStartDay = day;
         _recordDailyRng(day - 1, 0xCAFE);

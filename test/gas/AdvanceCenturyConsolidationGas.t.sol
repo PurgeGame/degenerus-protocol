@@ -355,7 +355,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
     ///      48 rounds the far-future queues are four times as deep, so the doubled samples still
     ///      draw distinct wallets.
     function seedRounds(uint256 word, uint128 nextPool, uint128 futurePool, uint256 rounds) public {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 99;
         // Real maximum supply, with prior transition coverage committed.
         for (uint256 i = _deityCount(); i < 32; ++i) {
@@ -363,6 +363,9 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         }
         purchaseStartDay = day - 8; // accelerated skim trough; preserve the fixture's minimum-rate shape
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         lastPurchaseDay = true;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
@@ -587,6 +590,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         positions = 2 * rounds + 3;
         CenturyConsolidationSeeder(payable(address(game))).seedRounds(word, s.nextPool, s.futurePool, rounds);
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(game.currentDayView());
         // Total obligations + 100 ETH of actual surplus. Nonzero stETH forces the
         // mock's full shares-based balanceOf path rather than its empty fast path.
         vm.deal(address(game), uint256(s.nextPool) + s.futurePool + 68.25 ether + uint256(s.nextPool) / 400);
@@ -686,6 +690,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         vm.etch(address(game), type(ProtocolBoonDrawSeeder).runtimeCode);
         ProtocolBoonDrawSeeder(address(game)).seedPools(day, word);
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(game.currentDayView());
     }
 
     /// @dev The real miner composes every admitted checkpoint into a call, so a whole call is not

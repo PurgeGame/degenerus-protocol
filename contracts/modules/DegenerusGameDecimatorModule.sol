@@ -134,7 +134,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             gameOver || !_decWindowOpen() || lvl != level + 1 || round.phase != 0 || playerId == 0
                 || baseAmount == 0 || multBps < 10_000 || multBps > 20_000
         ) revert E();
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _gameDay();
         if (round.openedDay == 0 || day < round.openedDay) revert E();
         // FLIP has already registered the burner and supplies its allocated ID.
         uint256 factor = _dayFactor(day - round.openedDay);

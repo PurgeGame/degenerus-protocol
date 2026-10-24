@@ -30,7 +30,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
         uint8 tier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
         if (tier == 0) return 0;
 
-        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 currentDay = uint24(_gameDay());
         uint24 deityDay = uint24(s0 >> BP_DEITY_COINFLIP_DAY_SHIFT);
         if (deityDay != 0 && deityDay != currentDay) {
             bp.slot0 = (s0 & BP_COINFLIP_CLEAR) | BP_SLOT0_RETAINED;
@@ -56,7 +56,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
         uint256 lane = s1 & BP_LANE_MASK;
         uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
         if (tier == 0) return 0;
-        if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) {
+        if (!_boonLaneLive(lane, uint24(_gameDay()))) {
             bp.slot1 = (s1 & ~BP_LANE_MASK) | BP_SLOT1_RETAINED;
             return 0;
         }
@@ -74,7 +74,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
         uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
         if (tier == 0) return 0;
         bp.slot1 = (s1 & ~(BP_LANE_MASK << BP_WWXRP_LANE_SHIFT)) | BP_SLOT1_RETAINED;
-        if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) return 0;
+        if (!_boonLaneLive(lane, uint24(_gameDay()))) return 0;
         boonBps = uint16(tier) * 400;
         emit BoonConsumed(id, 7, boonBps);
     }
@@ -88,7 +88,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
         uint8 tier = uint8(s0 >> BP_DECIMATOR_TIER_SHIFT);
         if (tier == 0) return 0;
 
-        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 currentDay = uint24(_gameDay());
         uint24 deityDay = uint24(s0 >> BP_DEITY_DECIMATOR_DAY_SHIFT);
         if (deityDay != 0 && deityDay != currentDay) {
             bp.slot0 = (s0 & BP_DECIMATOR_CLEAR) | BP_SLOT0_RETAINED;
@@ -113,7 +113,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
         uint256 lane = (s1 >> shift) & BP_LANE_MASK;
         uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
         if (tier == 0) return 0;
-        if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) {
+        if (!_boonLaneLive(lane, uint24(_gameDay()))) {
             bp.slot1 = (s1 & ~(BP_LANE_MASK << shift)) | BP_SLOT1_RETAINED;
             return 0;
         }
@@ -813,7 +813,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
         if (deityWord >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
         if (deityId == recipientId) revert SelfBoon();
 
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _gameDay();
         uint256 rngWord = _recordedDailyWord(day - 1);
         if (rngWord == 0) revert GameBoxInternals.RngNotReady();
         // Day + used-mask share one slot (deityBoonPacked). On a day rollover the mask

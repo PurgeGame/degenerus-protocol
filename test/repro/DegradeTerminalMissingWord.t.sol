@@ -19,10 +19,13 @@ contract TerminalSinkStub {
 ///      that the word itself is missing. Seeds the state no chain path produces.
 contract MissingWordDrainHarness is DegenerusGameGameOverModule, BucketSeed {
     function seed(uint24 lvl) external returns (uint24 day) {
-        day = _simulatedDayIndex();
+        day = _wallDay();
         level = lvl;
         jackpotPhaseFlag = true;
-        dailyIdx = day - 31;
+        dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = day - 1;
         rngRequestDay = day;
         rngRequestTime = uint48(block.timestamp);
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);

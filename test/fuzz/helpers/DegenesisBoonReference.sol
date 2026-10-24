@@ -14,8 +14,8 @@ library DegenesisBoonReference {
         if (result > 3 * SCALE) result = 3 * SCALE;
     }
 
-    function root(uint256 word, uint256 cohort, uint256 index) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(uint256(113), word, cohort, index)));
+    function root(uint256 word, uint256, uint256 index) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode(uint256(113), word, index)));
     }
 
     function extra(uint256 seed) internal pure returns (uint256) {

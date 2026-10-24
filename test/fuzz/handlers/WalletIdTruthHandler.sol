@@ -776,7 +776,7 @@ contract WalletIdTruthHandler is Test {
     }
 
     function wx_claim(uint256 a, uint256 daySel, uint256 idx) external {
-        uint24 today = GameTimeLib.currentDayIndex();
+        uint24 today = GameTimeLib.gameDayIndex();
         uint24 day = today > 2 ? today - 1 - uint24(daySel % 2) : 0;
         _call(30, _actor(a), WWXRP, 0, abi.encodeWithSignature("claim(uint24,uint32)", day, uint32(idx % 8)), true);
     }
@@ -1624,7 +1624,7 @@ contract WalletIdTruthHandler is Test {
 
     /// @dev Daily draw entries of the live banks and the century incinerator bracket.
     function _checkWwxrp() internal view {
-        uint24 today = GameTimeLib.currentDayIndex();
+        uint24 today = GameTimeLib.gameDayIndex();
         for (uint24 d = today > 2 ? today - 2 : 0; d <= today; ++d) {
             for (uint8 b; b < 10; ++b) {
                 (,, uint32 count) = IWidWwxrp(WWXRP).bucketInfo(d, b);

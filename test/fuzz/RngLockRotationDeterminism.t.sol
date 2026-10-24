@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
@@ -289,7 +290,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     /// @dev The mid-day request through mineFlip, its only door. False (and no call) when the
     ///      request is not the engine's next action, so a run can be filtered.
     function _mineMiddayRequest() internal returns (bool) {
-        if (game.nextMinerAction() != 18) return false;
+        if (game.nextMinerAction() != 17) return false;
         uint256 prior = mockVRF.lastRequestId();
         try game.mineFlip(0) {} catch {
             return false;
@@ -319,7 +320,8 @@ contract RngLockRotationDeterminism is DeployProtocol {
         for (uint256 i; i < 64; i++) {
             if (game.rngLocked()) return;
             uint8 action = game.nextMinerAction();
-            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == uint8(DegenerusGameStorage.MinerAction.Idle)
+                || action == uint8(DegenerusGameStorage.MinerAction.RequestDaily)) return;
             if (action == 2) {
                 MockVRFCoordinator c = _coord();
                 uint256 id = c.lastRequestId();

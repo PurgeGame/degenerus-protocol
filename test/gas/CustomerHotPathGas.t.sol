@@ -17,20 +17,23 @@ contract CustomerHotPathSeeder is DegenerusGameStorage, WalletSeed {
         assembly { hero := dailyHeroWagers.slot meta := lootboxRngPacked.slot }
     }
     function sealToday() external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         _sealHeroWagers(day - 1);
         _sealHeroWagers(day);
         dailyIdx = day;
     }
     function seedBoon(uint32 id, bool craps, bool expired) external {
-        uint256 day = _simulatedDayIndex() - (expired ? 3 : 0);
+        uint256 day = _gameDay() - (expired ? 3 : 0);
         if (craps) boonPacked[id].slot1 = 3 | (day << BP_LANE_DAY_SHIFT);
         else boonPacked[id].slot0 = (uint256(3) << BP_COINFLIP_TIER_SHIFT) | day;
     }
     function seed(address player) external {
         level = 24;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
         rngRequestTime = uint48(block.timestamp);
         lastPurchaseDay = false;
         jackpotPhaseFlag = false;
@@ -71,12 +74,14 @@ contract CustomerHotPathGasTest is DeployProtocol {
         CustomerHotPathSeeder(address(game)).seed(PLAYER);
         (heroRoot, heroMetaSlot) = CustomerHotPathSeeder(address(game)).heroStorageSlots();
         vm.etch(address(game), code);
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(PLAYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
         vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
         uint24 day = uint24(game.currentDayView());
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
+        _seedCrapsFixtureCursor(day);
     }
 
     function _restore(string memory json, string memory name, address target) private {

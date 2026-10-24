@@ -20,7 +20,7 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
     uint256 internal constant UNIT = 0.0001 ether;
     uint8 internal constant ACTION_IDLE = 0;
     uint8 internal constant ACTION_WAIT = 2;
-    uint8 internal constant ACTION_DEGENESIS_SETTLE = 21;
+    uint8 internal constant ACTION_DEGENESIS_SETTLE = 20;
 
     bytes32 internal constant SPLIT_SIG = keccak256("DegenesisCohortSplit(uint8,uint256)");
     bytes32 internal constant PRICED_SIG = keccak256("DegenesisCohortPriced(uint8,uint256,uint256,uint24)");
@@ -46,7 +46,7 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
     /// @dev Warp to `offset` seconds into day index `d`.
     function _warpDay(uint256 d, uint256 offset) internal {
         vm.warp(_dayStart(d) + offset);
-        require(game.currentDayView() == d, "fixture: day mapping");
+        // Calendar movement alone does not accept a logical commitment.
     }
 
     // ------------------------------------------------------------------ engine
@@ -80,28 +80,16 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
         revert("fixture: engine did not go idle");
     }
 
-    uint8 internal constant ACTION_REQUEST_DAILY = 17;
+    uint8 internal constant ACTION_REQUEST_DAILY = 16;
 
-    /// @dev Run the engine one action per call until `action` is next. Each call gets the least
-    ///      gas (to 25k) that completes it, found by trial under a state snapshot, so the miner's
-    ///      admission checks stop it after its first (mandatory) action; every action stays a
-    ///      real, whole engine step.
+    /// @dev The maximum multiplier admits one mandatory action with ample gas and
+    ///      prevents optional work from hiding the action the test wants to observe.
     function _stepTo(uint8 action) internal {
         for (uint256 i; i < 400; ++i) {
             if (game.nextMinerAction() == action) return;
             _fulfillPending();
             if (game.nextMinerAction() == action) return;
-            uint256 lo = 30_000;
-            uint256 hi = 30_000_000;
-            while (hi - lo > 25_000) {
-                uint256 mid = (lo + hi) / 2;
-                uint256 snap = vm.snapshotState();
-                bool ok = _mineWithGas(mid);
-                vm.revertToState(snap);
-                if (ok) hi = mid;
-                else lo = mid;
-            }
-            require(_mineWithGas(hi), "fixture: engine step failed");
+            game.mineFlip{gas: 16_700_000}(type(uint32).max);
         }
         revert("fixture: action never came up");
     }

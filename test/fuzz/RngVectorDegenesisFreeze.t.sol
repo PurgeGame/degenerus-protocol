@@ -17,8 +17,8 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///         at its request: the stored lanes, frozen V and Q, and the word recorded for the bound
 ///         day. Covered: activity inside the request window (Degenesis buys, ordinary boxes, smurf
 ///         buys, AFKing subscribe, nudges, miner calls), the request on the last sale day and on
-///         the main-launch day, a VRF stall with an admin retry, a gap-day request, a gap
-///         backfill that overwrites the bound day's ring slot during a backlog, the pricing
+///         the main-launch day, a VRF stall with an admin retry, a delayed logical request, later logical results
+///         that overwrite the bound day's ring slot during a backlog, the pricing
 ///         being atomic with its request on every day of the week, and a mid-day word never
 ///         binding a cohort.
 contract RngVectorDegenesisFreeze is DegenesisHarness {
@@ -254,12 +254,12 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
 
         // ---- day 8: price cohort 6, buy into cohort 7 while the request is out ----
         _warpTo(8, 1 hours);
-        _buy(buyers[0], 0.0444 ether); // cohort 7 before the request
         vm.recordLogs();
         _requestUnanswered();
         (uint256 priced, uint24 bound) = _pricedIn(vm.getRecordedLogs());
         assertEq(priced, 1 << 6, "day 8 prices cohort 6");
         assertEq(bound, 8, "bound to day 8");
+        _buy(buyers[0], 0.0444 ether); // accepted day 8 opens cohort 7
         uint256 q6 = _activeQ();
         bytes32 digest6 = _frozenDigest(6);
         vm.recordLogs();
@@ -276,14 +276,11 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         _assertMatchesRef(_resolvedOf(logs8, 6), 6, w8, q6, "cohort 6");
         assertEq(_closed(), 6, "cohort 6 closed");
         uint256 n7 = _count(7);
-        assertEq(n7, 7, "cohort 7: one order before and six inside the day-8 window");
+        assertEq(n7, 7, "cohort 7: seven orders inside the day-8 window");
 
-        // ---- day 9: the sale is over; the request prices cohort 7 ----
+        // The calendar reset leaves cohort 7 open until the day-9 request.
         _warpTo(9, 1 hours);
-        vm.deal(buyers[0], 10 ether);
-        vm.prank(buyers[0]);
-        vm.expectRevert();
-        game.buyDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
+        _buy(buyers[0], 0.01 ether);
         vm.recordLogs();
         _requestUnanswered();
         (priced, bound) = _pricedIn(vm.getRecordedLogs());
@@ -361,11 +358,8 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
     // 4. Gap days
     // =====================================================================
 
-    /// @notice Nobody cranks on days 3 and 4; orders keep landing in cohorts 2 and 3. The day-5
-    ///         request is a gap request: it splits cohorts 1-3 and prices cohort 1 bound to day
-    ///         5. The gap backfill records a derived word for day 4; the copy takes day 5's own
-    ///         word, and cohort 1 resolves from it, not from the derived one. Cohort 2 then binds
-    ///         to the next request.
+    /// @notice Missing calendar resets keep orders in cohort 1. The next accepted
+    ///         request is logical day 3, and its own word alone settles that cohort.
     function test_GapDayRequest_BindsTheRequestDaysWord() public {
         _placeOrdersOn(2, 24, 9 minutes);
         uint256 q = _refQ(1, _degPool());
@@ -374,9 +368,10 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         _buy(buyers[2], 0.0555 ether);
         _warpTo(4, 3 hours);
         _buy(buyers[3], 0.0666 ether);
-        assertEq(_buyDays(vm.getRecordedLogs()), (1 << 2) | (1 << 3), "uncranked days keep their own cohorts");
-        assertEq(_count(2), 1, "cohort 2 = day index 3");
-        assertEq(_count(3), 1, "cohort 3 = day index 4");
+        assertEq(_buyDays(vm.getRecordedLogs()), 1 << 1, "uncranked calendar days preserve cohort 1");
+        assertEq(_count(1), 26, "all orders remain in the open cohort");
+        assertEq(_count(2), 0, "no second cohort without a request");
+        assertEq(_count(3), 0, "no third cohort without a request");
 
         uint256 w5 = uint256(keccak256("rv-gap-day5"));
         _warpTo(5, 1 hours);
@@ -385,32 +380,31 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         Vm.Log[] memory reqLogs = vm.getRecordedLogs();
         (uint256 priced, uint24 bound) = _pricedIn(reqLogs);
         assertEq(priced, 1 << 1, "the gap request prices cohort 1 only");
-        assertEq(bound, 5, "bound to the gap request's own day");
-        assertEq(_countSig(reqLogs, SIG_SPLIT), 3, "cohorts 1-3 split together");
+        assertEq(bound, 3, "bound to the next logical request");
+        assertEq(_countSig(reqLogs, SIG_SPLIT), 1, "only the open cohort splits");
         vm.recordLogs();
         _answer(w5);
         _drive(w5);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 gapWord = uint256(keccak256(abi.encode(uint256(68), w5, uint256(4))));
-        assertEq(game.rngWordForDay(4), gapWord, "day 4 carries the derived gap word");
-        assertEq(_appliedWord(logs, 5), w5, "day 5 recorded its own word");
+        uint256 alternative = w5 ^ 1;
+        assertEq(game.rngWordForDay(4), 0, "no fabricated fourth result");
+        assertEq(_appliedWord(logs, 3), w5, "logical day 3 recorded its own word");
         _assertMatchesRef(_resolvedOf(logs, 1), 1, w5, q, "gap request");
-        assertGt(_differing(1, w5, gapWord, q), 5, "the derived gap word would have resolved differently");
+        assertGt(_differing(1, w5, alternative, q), 5, "another word would have resolved differently");
         assertEq(_closed(), 1, "cohort 1 closed");
 
+        _buy(buyers[2], 0.0555 ether);
         _warpTo(6, 1 hours);
         vm.recordLogs();
         _drive(0);
         (priced, bound) = _pricedIn(vm.getRecordedLogs());
         assertEq(priced, 1 << 2, "cohort 2 priced next");
-        assertEq(bound, 6, "bound to the day-6 request");
+        assertEq(bound, 4, "bound to the next logical request");
     }
 
-    /// @notice Cohort 1 binds to day 3 with a long backlog. Days 4 and 5 go uncranked, so the
-    ///         day-6 request backfills day 5, whose ring slot is day 3's: the ring no longer
-    ///         serves day 3 while cohort 1 is still settling. The copy holds day 3's word and the
-    ///         whole cohort resolves from it.
-    function test_GapBackfillOverwritesBoundSlotDuringBacklog() public {
+    /// @notice A copied cohort word survives two later logical results recycling
+    ///         its ring slot while its deterministic settlement remains unfinished.
+    function test_LogicalResultsOverwriteBoundSlotDuringBacklog() public {
         _placeOrdersOn(2, 420, 20);
         uint256 n = _count(1);
         uint256 q = _refQ(1, _degPool());
@@ -428,11 +422,17 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         game.mineFlip(0);
         _fulfillPending(0);
         _driveToSettle();
+        assertEq(game.currentDayView(), 4, "calendar delay admitted only one logical round");
+        _warpTo(7, 1 hours);
+        _stepToRequest();
+        game.mineFlip(0);
+        _fulfillPending(0);
+        _driveToSettle();
         uint256 tags = uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS)));
-        assertEq(uint24(tags >> 24), 5, "day 3's ring slot now holds the backfilled day 5");
+        assertEq(uint24(tags >> 24), 5, "day 3's ring slot now holds logical day 5");
         assertEq(game.rngWordForDay(3), 0, "the ring no longer serves day 3");
         assertEq(_activeDay(), 3, "still bound to day 3");
-        assertEq(_word(), w3, "copy retained across the gap backfill");
+        assertEq(_word(), w3, "copy retained across logical ring reuse");
         assertLt(_activeCursor(), n, "still settling");
         _drive(0);
         Res[] memory got = _resolvedOf(vm.getRecordedLogs(), 1);
@@ -453,7 +453,6 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         _buy(buyers[2], 0.0114 ether);
         for (uint24 d = 3; d <= 9; ++d) {
             _warpTo(d, 1 hours);
-            if (d <= 8) _buy(buyers[d % 5], 0.01 ether + uint256(d) * 0.0007 ether);
             vm.recordLogs();
             _stepToRequest();
             (uint256 before_,) = _pricedIn(vm.getRecordedLogs());
@@ -470,6 +469,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
             assertEq(game.rngWordForDay(d), 0, "bound word unknown at pricing");
             assertEq(_word(), 0, "no copy before the word");
             pricedAll |= cohorts;
+            if (d <= 8) _buy(buyers[d % 5], 0.01 ether + uint256(d) * 0.0007 ether);
             lastFulfilledReq = 0;
             vm.recordLogs();
             _drive(0);

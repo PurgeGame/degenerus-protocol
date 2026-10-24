@@ -305,7 +305,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
                     _setCurrentPrizePool(_getCurrentPrizePool() - unpaid);
                     if (unpaid != 0) _addFuturePrizePool(unpaid);
                 }
-                _emitDailyWinningTraits(dailyIdx + 1, work.traits, lvl, randWord);
+                _emitDailyWinningTraits(rngRequestDay, work.traits, lvl, randWord);
                 dailyJackpotCoinTicketsPending = true;
             }
             _retireJackpotWork();
@@ -339,7 +339,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
             dailyTicketBudgetsPacked = (entries << 8) | DAILY_TICKET_BUDGET_RETAINED;
             if (counter == 0) dailyTicketBudgetsPacked |= _priceEarlyBirdTickets(lvl + 1) << 144;
         } else {
-            _emitDailyWinningTraits(dailyIdx + 1, traits, lvl, word);
+            _emitDailyWinningTraits(rngRequestDay, traits, lvl, word);
             uint256 slice = _getFuturePrizePool() / 25;
             ticketBudget = slice * PURCHASE_REWARD_JACKPOT_TICKET_BPS / 10_000;
             uint256 insurance = slice * PURCHASE_INSURANCE_BPS / 10_000;
@@ -526,8 +526,8 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     /// @notice The ticket leg of the purchase-phase daily, from its own advance stage.
     /// @dev Called by advanceGame after the pricing and battle advances, with
     ///      the same day's recorded word. The main board is the one the pricing stage rolled
-    ///      and recorded in dailyFoilDraw for the day it priced (dailyIdx has not moved: the
-    ///      pricing stage does not seal while this leg is pending), and the winner entropy is
+    ///      and recorded in dailyFoilDraw for the committed request; its index stays fixed
+    ///      across every payout leg. The winner entropy is
     ///      the value the single-tx form used, so the draw is unchanged by the split. Tickets
     ///      queue at the purchase level, which the held lock keeps un-promoted between the two
     ///      stages. Clears the field it consumes; the caller seals the day.
@@ -607,7 +607,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
             // Advance drains the ETH work before any ticket leg; that work records this
             // exact logical day's board before retiring. The lock keeps the tag stable
             // across checkpoints and wall-day stalls, including the final jackpot day.
-            (, uint32 traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
+            (, uint32 traits,) = _foilDrawFor(uint256(rngRequestDay));
             // Keep same-level cohorts, unprepared buffers and Thanos scaling on the
             // ordinary queue path. Latch once: caller gas cannot choose delivery mode.
             _startJackpotWork(
@@ -1153,8 +1153,11 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     /// @param banQuadrant Quadrant the hero may not land in, or `_NO_QUADRANT_BAN`.
     function _rollBoard(uint256 randWord, uint8 banQuadrant) private view returns (uint32) {
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
+        // Normal requests advance dailyIdx before the draw. The frozen hero pool
+        // keeps the preceding logical label; terminal requests use the final live pool.
+        uint24 heroDay = rngRequestDay == 0 ? 0 : rngRequestDay - 1;
         (bool hasHero, uint8 heroQuadrant, uint8 heroSymbol) = _rollHeroSymbol(
-            dailyIdx,
+            heroDay,
             randWord,
             banQuadrant
         );
@@ -1270,7 +1273,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     /// @param minLevel Minimum target level for the coin distribution (inclusive).
     /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) public {
-        (, uint32 traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
+        (, uint32 traits,) = _foilDrawFor(uint256(rngRequestDay));
         awardDailyFlipJackpot(minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord);
     }
 
@@ -1287,8 +1290,8 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
 
     /// @dev Daily processing already runs in the guarded Game storage context.
     function _emitLevelOneWinningTraits(uint256 randWord) internal {
-        // The sealed day, matching runDailyJackpot: dailyIdx + 1, never the wall clock.
-        _emitDailyWinningTraits(dailyIdx + 1, _rollMainTraits(randWord), 1, randWord);
+        // The sealed day, matching runDailyJackpot: rngRequestDay, never the wall clock.
+        _emitDailyWinningTraits(rngRequestDay, _rollMainTraits(randWord), 1, randWord);
     }
 
     /// @dev Records the day's board in the two-slot draw ring for foil claims

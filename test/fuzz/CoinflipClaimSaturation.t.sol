@@ -30,6 +30,7 @@ contract CoinflipClaimSaturation is DeployProtocol {
     }
 
     function _warpToDay(uint24 d) internal {
+        _setRequestedFixtureDay(d);
         vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
     }
 

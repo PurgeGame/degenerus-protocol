@@ -31,7 +31,7 @@ contract DeityTransitionQueueSeeder is DegenerusGameStorage, WalletSeed {
     /// @dev The seeded close is the daily phase of a delivered, published request: the engine
     ///      selects DailyPhase only for an active, published, not-yet-complete session.
     function openDailyPhase() external {
-        rngRequestDay = _simulatedDayIndex();
+        rngRequestDay = _wallDay();
         _setRngRequestActive(true);
         _setRngSessionPublished(true);
         _setRngComplete(false);

@@ -43,7 +43,7 @@ contract BafStageHost is DegenerusGame, BucketSeed {
     ///      certified: the state `runDailyPhase_g2582` requires. `jackpot` selects the jackpot phase
     ///      (BAF stage) or the locked last-purchase day (consolidation).
     function seedSession(uint24 lvl, uint256 word, bool jackpot) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = lvl;
         jackpotPhaseFlag = jackpot;
         lastPurchaseDay = !jackpot;
@@ -53,7 +53,10 @@ contract BafStageHost is DegenerusGame, BucketSeed {
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = day - 3;
         rngRequestDay = day;
         // These fixtures start at consolidation/award work, after the day's
@@ -61,8 +64,10 @@ contract BafStageHost is DegenerusGame, BucketSeed {
         vaultFlipSettledDay = day;
         _recordDailyRng(day, word);
         rngRequestTime = uint48(block.timestamp);
+        rngWordCurrent = word;
         _setRngRequestActive(false);
         _setRngSessionPublished(true);
+        _setRngComplete(false);
         dailyTicketBudgetsPacked = 0;
         dailyJackpotCoinTicketsPending = false;
         delete jackpotWork;
@@ -176,14 +181,14 @@ contract BafStageHost is DegenerusGame, BucketSeed {
             j.directTicketRound, j.directTickets);
     }
 
-    function frozenMainBoard() external view returns (bool present, uint32 board) { (present, board,) = _foilDrawFor(dailyIdx + 1); }
+    function frozenMainBoard() external view returns (bool present, uint32 board) { (present, board,) = _foilDrawFor(rngRequestDay); }
     function seedOneEntry(uint24 lvl, uint8 trait, address player) external { _seedBucket(lvl, trait, player, 1); }
     function clearTrait(uint24 lvl, uint8 trait) external { _seedBucketClear(lvl, trait); }
     function seedBufferLevel(uint24 lvl) external { _setTicketBufferLevel(lvl); }
     function bufferLevel(bool next) external view returns (uint24) { return _ticketBufferLevel(next ? 1 : 0); }
     function seedHero(uint8 q, uint8 symbol, bool banned) external {
         lootboxRngPacked = _recordHeroWager(q, symbol, 1, lootboxRngPacked);
-        _sealHeroWagers(dailyIdx + 1);
+        _sealHeroWagers(rngRequestDay);
         if (banned) goldenTicket = (uint256(1) << 190) | (uint256(q) << 191) | (uint256(dailyIdx) << 193);
     }
 
@@ -289,6 +294,7 @@ abstract contract BafBracketFixture is DeployProtocol {
         vm.etch(address(game), type(BafStageHost).runtimeCode);
         host = BafStageHost(payable(address(game)));
         host.seedSession(lvl, word, jackpot);
+        _syncCoinflipFixtureDay(game.currentDayView());
     }
 
     /// @dev Candidates and scores for bracket `lvl` (the game level of the stage).

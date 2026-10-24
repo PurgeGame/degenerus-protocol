@@ -1,3 +1,4 @@
+import { seedLogicalDay, setPackedField } from "./logicalDayFixture.js";
 import hre from "hardhat";
 import {
   predictAddresses,
@@ -128,6 +129,12 @@ export async function deployFullProtocol({
         `Address mismatch for ${key}: expected ${expectedAddr}, got ${actualAddr}`
       );
     }
+  }
+
+  // A post-Degenesis unit fixture explicitly seeds logical headers; wall time creates no rounds.
+  if (!degenesis) {
+    await seedLogicalDay(contracts.GAME, 9n, contracts.COINFLIP);
+    await setPackedField(contracts.CRAPS, "_minerSlot", 9n * 8n, "CrapsBattle");
   }
 
   // Both protocol passes and their packed ticket queues initialize in one transaction.

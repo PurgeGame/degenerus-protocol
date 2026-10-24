@@ -10,11 +10,15 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract AfkingSectionsHarness is DegenerusGameBoxModule, WalletSeed {
-    constructor() { _seedProtocolWallets(); dailyIdx = _simulatedDayIndex(); }
+    constructor() {
+        _seedProtocolWallets(); dailyIdx = _wallDay();
+        dailyComplete = true; lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
+    }
 
     function put(address owner, bool tickets) external returns (uint32 id) {
         id = _seedWallet(owner);
-        _insertMember(id, uint256(id) | (tickets ? SUB_TICKETS_BIT : 0), _simulatedDayIndex());
+        _insertMember(id, uint256(id) | (tickets ? SUB_TICKETS_BIT : 0), _wallDay());
     }
     function remove(uint32 id) external {
         _removeFromSet(_subPosition1(id));
@@ -25,8 +29,9 @@ contract AfkingSectionsHarness is DegenerusGameBoxModule, WalletSeed {
     function position(uint32 id) external view returns (uint256) { return _subPosition1(id); }
     function owner(uint32 id) external view returns (address) { return _walletKey(id); }
     function setGate(uint8 mode) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         dailyIdx = mode == 1 ? day - 1 : day;
+        lastDailyRequestWallDay = mode == 1 ? day - 1 : day;
         _afkingResetDay = mode == 2 ? day + 1 : day;
         rngLockedFlag = mode == 3;
         _pendingBoxCount = mode == 4 ? 1 : 0;

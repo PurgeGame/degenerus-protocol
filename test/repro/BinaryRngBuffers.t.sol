@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -93,7 +94,8 @@ contract BinaryRngBuffersTest is DeployProtocol {
     function _assertNextRequestBlocked(uint256 id) private {
         vm.prank(buyer);
         uint8 action = game.minerAction();
-        assertTrue(action != 17 && action != 18, "the engine selects no fresh request");
+        assertTrue(action != uint8(DegenerusGameStorage.MinerAction.RequestDaily)
+            && action != uint8(DegenerusGameStorage.MinerAction.RequestMidday), "the engine selects no fresh request");
         bytes32 state = game.extsload_g8132(bytes32(0));
         uint256 credit = game.middayRngCredits(buyer);
         bytes memory production = address(game).code;

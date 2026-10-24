@@ -325,7 +325,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///         to the next bracket.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function beginBaf() external onlyGame {
-        lastBafResolvedDay = GameTimeLib.currentDayIndex();
+        lastBafResolvedDay = GameTimeLib.gameDayIndex();
     }
 
     /// @notice Closes a resolved bracket once every award is paid: empties the board and bumps
@@ -439,7 +439,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         bafLevel[lvl].skipped = true;
         // Day computed locally: identical to game.currentDayView() (pure GameTimeLib
         // wall-clock) without the external call.
-        uint24 today = GameTimeLib.currentDayIndex();
+        uint24 today = GameTimeLib.gameDayIndex();
         lastBafResolvedDay = today;
         emit BafSkipped(lvl, today);
     }

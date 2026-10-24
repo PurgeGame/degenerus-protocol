@@ -40,7 +40,7 @@ contract ChainPinLoanSeeder is SeizureGasSeeder {
 ///         the chain. These pins run the worst reachable families through both stages and assert
 ///         every mineFlip succeeds and the stage completes with the right ownership.
 contract ChainPinLoansTest is LoanSeizureGasBase {
-    uint8 private constant ACTION_SEIZE_LOANS = 20;
+    uint8 private constant ACTION_SEIZE_LOANS = 19;
     uint256 private constant GO_LOAN_STEP_SHIFT = 64;
     uint32 private constant VAULT_ID = 1;
     uint32 private constant SDGNRS_ID = 2;
@@ -231,7 +231,10 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
         _setBalances(edge, 0, 0);
 
         vm.warp(block.timestamp + 31 days);
-        assertTrue(game.livenessTriggered(), "deadman with VRF alive");
+        _etch();
+        _pin().completedDeadline();
+        _unetch();
+        assertTrue(game.livenessTriggered(), "completed purchase deadline");
         game.mineFlip(0);
         assertEq(_loanStep(), 1, "the decision owes settlement");
         game.mineFlip(0);

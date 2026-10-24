@@ -23,7 +23,7 @@ Class meanings (see scripts/rng-window-manifest.tsv header):
 import sys
 
 EXEMPT_ADVANCE = {
-    "applyDailyGap", "applyDailyWord", "runDailyPhase", "prepareRequestBoundary",
+    "applyDailyWord", "runDailyPhase", "prepareRequestBoundary",
     "publishRng", "requestDailyRng", "_requestLootboxRng", "retryRng",
     "_applyDailyRng", "_finalizeLootboxRng", "_backfillGapDays",
     "_handleGameOverAdvance", "_handleGameOverPath", "_handleGameOverDrain",

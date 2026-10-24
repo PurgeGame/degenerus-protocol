@@ -20,11 +20,23 @@ contract SeizureGasSeeder is DegenerusGameStorage {
     /// @dev Record yesterday's word, seal today and complete its subscriber pass, so new runs open
     ///      as on an ordinary day.
     function prime() external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         _recordDailyRng(day - 1, 123456);
         dailyIdx = day;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
         purchaseStartDay = day;
         _afkingEndpointDay = day;
+    }
+    function completedDeadline() external {
+        dailyIdx = purchaseStartDay + 30;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
+        lastPurchaseDay = false;
+        jackpotPhaseFlag = false;
+        _setPrizePools(0, uint128(_getFuturePrizePool()));
     }
     function setBalances(uint32 id, uint128 claimable, uint128 afking) external {
         uint256 old = balancesPacked[id];
@@ -111,7 +123,7 @@ abstract contract LoanSeizureGasBase is DeployProtocol, NativeGasExport {
     }
 
     function _etch() internal { vm.etch(address(game), seeder.code); }
-    function _unetch() internal { vm.etch(address(game), gameRuntime); }
+    function _unetch() internal { vm.etch(address(game), gameRuntime); _syncCoinflipFixtureDay(game.currentDayView()); }
 
     function _sub(uint32 id) internal {
         uint256 seat = _grantSeat(borrower);
@@ -182,7 +194,8 @@ abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
 
     function _decideTerminal() internal {
         vm.warp(block.timestamp + 31 days);
-        assertTrue(game.livenessTriggered(), "deadman with VRF alive");
+        _etch(); SeizureGasSeeder(address(game)).completedDeadline(); _unetch();
+        assertTrue(game.livenessTriggered(), "thirty completed rounds with VRF alive");
         game.mineFlip(0);
         assertEq(_loanStep(), 1, "the decision owes settlement");
     }

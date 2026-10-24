@@ -14,8 +14,11 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
     function seed(uint24 lvl, address buyer, bool frozen) external {
         level = lvl;
-        purchaseStartDay = _simulatedDayIndex();
+        purchaseStartDay = _wallDay();
         dailyIdx = purchaseStartDay;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
         rngRequestTime = uint48(block.timestamp);
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
@@ -30,7 +33,7 @@ contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
     }
 
     function seedAfking(address buyer, bool lapsed) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         uint32 id = _seedWallet(buyer);
         _seedSubscriber(id, false);
         _afkingEndpointDay = today - 1;
@@ -56,6 +59,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.prank(REFERRER);
         affiliate.createAffiliateCode(CODE, 10);
         uint24 day = uint24(game.currentDayView());
+        _syncCoinflipFixtureDay(day);
         vm.prank(address(game));
         quests.rollDailyQuest(day, 123, false, false, false);
     }
@@ -101,6 +105,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         PurchaseHotPathSeeder(address(game)).seedAfking(BUYER, lapsed);
         vm.etch(address(game), code);
         uint24 day = uint24(game.currentDayView());
+        _syncCoinflipFixtureDay(day);
         uint32 buyerId = game.walletIdOf_g3120(BUYER);
         vm.prank(address(game));
         quests.beginAfking(buyerId, day);

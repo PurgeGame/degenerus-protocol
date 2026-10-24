@@ -54,6 +54,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
     }
 
     function setRngWord(uint24 day, uint256 word) external {
+        dailyIdx = day;
         _recordDailyRng(day, word);
         rngWordCurrent = word;
         _setRngSessionPublished(word != 0);

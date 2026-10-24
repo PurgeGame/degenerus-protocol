@@ -104,7 +104,8 @@ contract PeripheralReuseTest is DeployProtocol {
         vm.prank(ALICE); coinflip.depositCoinflip(0, 200);
         bytes32 slot = _map(0, 8);
         vm.store(address(coinflip), slot, bytes32(type(uint256).max));
-        vm.warp(block.timestamp + 1 days);
+        // Deposits target the next logical round: advance the Game-owned request mirror.
+        vm.prank(address(game)); coinflip.onDailyRequest(day);
         vm.prank(address(game)); coinflip.armBafDraw(day + 1);
         vm.prank(ALICE); coinflip.depositCoinflip(0, 100);
         (uint32 owner, uint96 total) = coinflip.bafDrawEntryAt(day + 1, 0);

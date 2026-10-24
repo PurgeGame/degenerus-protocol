@@ -47,7 +47,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
     function seedPurchaseDaily(Shape calldata s, uint8[4] calldata mainTraits, uint8[4] calldata decoyTraits)
         external
     {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         uint24 pl = s.lvl + 1;
         // The synthetic jump models every level below this one as drained: free their recycled
         // queue roots so the day's awards and seeded queues can bind.
@@ -58,7 +58,10 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         // drained, no coin-ticket leg pending, no golden ticket, no hero wagers.
         level = s.lvl;
         purchaseStartDay = day - 10;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         // Isolate the purchase/battle legs with the prior day's Vault checkpoint
         // complete. VaultFlipBackstop separately covers a due stage-22 checkpoint.
         vaultFlipSettledDay = day - 1;
@@ -149,7 +152,12 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
     /// @dev Un-record the day's word: the day is fresh and unlocked, so the next advance fires the
     ///      real VRF request, which also locks the day's jackpot battle.
     function unrecordWord() external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
+        dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = day - 1;
+        rngRequestDay = 0;
         rngLockedFlag = false;
         rngRequestTime = 0;
         rngWordCurrent = RNG_WORD_WAITING;
@@ -401,6 +409,7 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
         vm.etch(address(game), type(PurchaseDailySeeder).runtimeCode);
         PurchaseDailySeeder(payable(address(game))).seedPurchaseDaily(s, mainT, decoyT);
         vm.etch(address(game), realCode);
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(address(game), 10_000 ether);
     }
 
@@ -410,6 +419,7 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
         vm.etch(address(game), type(PurchaseDailySeeder).runtimeCode);
         PurchaseDailySeeder(payable(address(game))).unrecordWord();
         vm.etch(address(game), realCode);
+        _syncCoinflipFixtureDay(game.currentDayView());
     }
 
     Vm.Log[] internal lastLogs;

@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
@@ -67,25 +68,17 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         }
         vm.clearMockedCalls();
         assertEq(game.rngConsumerStage_g379(), 1, "redemption is next after daily work");
-        vm.prank(address(game)); sdgnrs.runRedemptionWork(7419, 200_000);
+        vm.prank(address(game));
+        sdgnrs.runRedemptionWork(7419, MineFlipGas.budget(9_000_000, type(uint32).max, true));
+        assertGt(_batchRoll(burnDay), 0, "batch pricing is complete before individual claims");
     }
 
-    /// @dev One mineFlip at the smallest allowance (25k steps) that settles a beneficiary, probed on
-    ///      snapshots and then applied. Every queued claim here is the same size, so that call's
-    ///      spare allowance cannot admit a second one; callers assert which claim it settled.
+    /// @dev Price resolution is already complete; one mandatory unit retires one FIFO head.
     function _mineOneClaim() private {
-        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
-        for (uint256 g = 800_000; g <= 9_000_000; g += 25_000) {
-            uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-            bool settled = ok && sdgnrs.pendingRedemptionEthValue() != reserved;
-            assertTrue(vm.revertToState(snap));
-            if (settled) {
-                game.mineFlip{gas: g}(0);
-                return;
-            }
-        }
-        revert("harness: no allowance settles a beneficiary");
+        (,, uint32 beforeCursor,) = sdgnrs.redemptionBatchState();
+        game.mineFlip{gas: 16_700_000}(type(uint32).max);
+        (,, uint32 afterCursor,) = sdgnrs.redemptionBatchState();
+        assertEq(afterCursor, beforeCursor + 1, "one beneficiary retires at the checkpoint");
     }
 
     function _owed(address owner) private view returns (uint128 base) {
@@ -106,7 +99,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         assertTrue(game.rngLocked(), "publication precedes daily unlock");
         assertEq(game.rngConsumerStage_g379(), 0);
         bytes32 beforeClaims = _claimsHash();
-        assertTrue(game.nextMinerAction() != 8, "the engine finishes daily work before MinerAction.Redemption");
+        assertTrue(game.nextMinerAction() != 7, "the engine finishes daily work before MinerAction.Redemption");
         // A live game has no self-claim door: the resolved claim waits for the engine.
         vm.expectRevert(_batchRoll(burnDay) == 0 ? sDGNRS.NotResolved.selector : sDGNRS.NotGameOver.selector);
         vm.prank(ALICE);
@@ -121,7 +114,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
 
     function test_KeeperSettlesFifoHeadsAndResumesAtNextBeneficiary() public {
         _ready();
-        assertEq(game.nextMinerAction(), 8, "the cohort is the engine's next work (MinerAction.Redemption)");
+        assertEq(game.nextMinerAction(), 7, "the cohort is the engine's next work (MinerAction.Redemption)");
         uint128 bob = _owed(BOB);
         uint128 carol = _owed(CAROL);
         assertGt(_owed(ALICE), 0); assertGt(bob, 0); assertGt(carol, 0);
@@ -156,7 +149,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         assertTrue(sdgnrs.redemptionSettlementPending(), "the unfinished cohort stays live");
         assertEq(game.rngConsumerStage_g379(), 1, "the cohort keeps its stage until its last claim settles");
         assertFalse(game.rngComplete());
-        assertEq(game.nextMinerAction(), 8, "no request can cut in ahead of MinerAction.Redemption");
+        assertEq(game.nextMinerAction(), 7, "no request can cut in ahead of MinerAction.Redemption");
         vm.prank(address(game));
         bool done = sdgnrs.runRedemptionWork(7419, 11_000).done;
         assertFalse(done);

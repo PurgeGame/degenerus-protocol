@@ -120,7 +120,7 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
     /// @dev Degenesis-only slots of the Game's storage for the given wallet range.
     function _isDegenesisSlot(bytes32 s, uint256 walletCount) internal view returns (bool) {
         uint256 v = uint256(s);
-        if (v == GameSlots.DEGENESIS_VAULT_BUDGET || v == GameSlots.DEGENESIS_ACTIVE || v == GameSlots.DEGENESIS_WORD) {
+        if (v == GameSlots.DEGENESIS_ACTIVE || v == GameSlots.DEGENESIS_WORD) {
             return true;
         }
         for (uint256 c = 1; c <= 8; ++c) {
@@ -163,6 +163,7 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
         for (uint256 c = 1; c <= 7; ++c) {
             uint256 d = GameTimeLib.DEGENESIS_START_DAY + c - 1;
             _warpDay(d, 2 hours);
+            _drain(); // accept this cohort before placing its orders
             _earnCredit(alice, 0.05 ether);
             _buyDegenesis(alice, 0.05 ether);
             orderKeys.push(c << 32);
@@ -192,6 +193,8 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
 
         uint256 purchases;
         for (uint256 d = startDay; d < startDay + 3; ++d) {
+            // The budget shares slot 13 with the daily completion timestamp.
+            uint128 budget = uint128(_slot(GameSlots.DEGENESIS_VAULT_BUDGET));
             vm.record();
             _ordinaryDay(d);
             // A foil pack and a whale pass also run the credit hook.
@@ -204,6 +207,7 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
             }
             (uint256 reads, uint256 writes) = _countDegenesisAccesses();
             vm.stopRecord();
+            assertEq(uint128(_slot(GameSlots.DEGENESIS_VAULT_BUDGET)), budget, "Degenesis budget unchanged");
             purchases += 2;
             assertEq(reads, 0, "after the sale: a Degenesis-only slot was read");
             assertEq(writes, 0, "after the sale: a Degenesis-only slot was written");

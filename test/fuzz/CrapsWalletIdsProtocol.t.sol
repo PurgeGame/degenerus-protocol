@@ -247,6 +247,7 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        _primeCurrentDayRng();
         day = crapsBattle.currentDayIndex();
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);

@@ -1,3 +1,4 @@
+import { setPackedField, seedLogicalDay } from "../helpers/logicalDayFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -65,6 +66,10 @@ async function deposit(coinflip, player, amount) {
  */
 async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonus = 0) {
   const gameAddr = await game.getAddress();
+  if (BigInt(epoch) > (await game.currentDayView())) {
+    await setPackedField(game, "dailyIdx", epoch);
+    await setPackedField(coinflip, "requestedDailyIdx", epoch, "Coinflip");
+  }
   await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
     gameAddr,
@@ -221,7 +226,7 @@ describe("Coinflip", function () {
       const { coinflip, game } = await loadFixture(deployFullProtocol);
       // rngWord & 1 == 1 => win
       const rngWord = 1n;
-      const epoch = 1n;
+      const epoch = 2n;
       const tx = await resolveDay(hre.ethers, game, coinflip, epoch, rngWord);
       const ev = await getEvent(tx, coinflip, "CoinflipDayResolved");
       expect(ev.args.day).to.equal(epoch);
@@ -231,7 +236,7 @@ describe("Coinflip", function () {
     it("emits CoinflipDayResolved with win=false for even rngWord", async function () {
       const { coinflip, game } = await loadFixture(deployFullProtocol);
       const rngWord = 2n;
-      const epoch = 1n;
+      const epoch = 2n;
       const tx = await resolveDay(hre.ethers, game, coinflip, epoch, rngWord);
       const ev = await getEvent(tx, coinflip, "CoinflipDayResolved");
       expect(ev.args.win).to.equal(false);
@@ -281,7 +286,7 @@ describe("Coinflip", function () {
     it("recordPool grows by 2000 FLIP per resolved day", async function () {
       const { coinflip, game } = await loadFixture(deployFullProtocol);
       const before = await coinflip.recordPool();
-      await resolveDay(hre.ethers, game, coinflip, 1n, 2n);
+      await resolveDay(hre.ethers, game, coinflip, 2n, 2n);
       const after = await coinflip.recordPool();
       expect(after - before).to.equal(flip(2000));
     });
@@ -289,7 +294,7 @@ describe("Coinflip", function () {
     it("CoinflipDayResolved carries the post-drip recordPool", async function () {
       const { coinflip, game } = await loadFixture(deployFullProtocol);
       const before = await coinflip.recordPool();
-      const tx = await resolveDay(hre.ethers, game, coinflip, 1n, 1n);
+      const tx = await resolveDay(hre.ethers, game, coinflip, 2n, 1n);
       const ev = await getEvent(tx, coinflip, "CoinflipDayResolved");
       expect(ev.args.recordPoolAfter).to.equal(before + flip(2000));
       expect(await coinflip.recordPool()).to.equal(ev.args.recordPoolAfter);
@@ -448,9 +453,10 @@ describe("Coinflip", function () {
       await f.coinflip.connect(craps).armDiceRunRecord(await giveWalletId(f.game, f.alice.address), FLOOR);
       expect(await f.coinflip.biggestDiceRunEver()).to.equal(FLOOR);
 
-      // A day later, a candidate one basis point above the mark. The other four kinds would pay
+      // A logical day later, a candidate one basis point above the mark. The other four kinds would pay
       // nothing here — a fifth of 1,000,000 is 200,000 — and this one pays its accrued share.
       await time.increase(86400);
+      await setPackedField(f.coinflip, "requestedDailyIdx", (await f.coinflip.requestedDailyIdx()) + 1n, "Coinflip");
       const poolBefore = await f.coinflip.recordPool();
       const tx = await f.coinflip.connect(craps).armDiceRunRecord(await giveWalletId(f.game, f.bob.address), FLOOR + 1n);
       const evs = await getEvents(tx, f.coinflip, "BigRecordUpdated");
@@ -469,6 +475,7 @@ describe("Coinflip", function () {
       const craps = await asCraps(f);
       await f.coinflip.connect(craps).armDiceRunRecord(await giveWalletId(f.game, f.alice.address), 2_000_000n);
       await time.increase(86400);
+      await setPackedField(f.coinflip, "requestedDailyIdx", (await f.coinflip.requestedDailyIdx()) + 1n, "Coinflip");
       const poolBefore = await f.coinflip.recordPool();
       const mark = await f.coinflip.biggestDiceRunEver();
 
@@ -484,6 +491,7 @@ describe("Coinflip", function () {
       const f = await loadFixture(deployFullProtocol);
       const craps = await asCraps(f);
       await time.increase(86400);
+      await setPackedField(f.coinflip, "requestedDailyIdx", (await f.coinflip.requestedDailyIdx()) + 1n, "Coinflip");
       await f.coinflip.connect(craps).armDiceRunRecord(await giveWalletId(f.game, f.alice.address), FLOOR);
       const afterFirst = await f.coinflip.recordPool();
 
@@ -501,6 +509,7 @@ describe("Coinflip", function () {
 
       // And the next day accrues again from that reset.
       await time.increase(86400);
+      await setPackedField(f.coinflip, "requestedDailyIdx", (await f.coinflip.requestedDailyIdx()) + 1n, "Coinflip");
       const poolBefore = await f.coinflip.recordPool();
       const next = await f.coinflip.connect(craps).armDiceRunRecord(await giveWalletId(f.game, f.alice.address), 9_000_001n);
       const paid = (await getEvents(next, f.coinflip, "BigRecordUpdated"))[0].args.paid;
@@ -538,8 +547,9 @@ describe("Coinflip", function () {
     it("caps the accrued share at 75%", async function () {
       const f = await loadFixture(deployFullProtocol);
       const craps = await asCraps(f);
-      // 140 days at half a point a day is 70 points over the 5% floor — past the ceiling.
+      // 140 logical days at half a point per round is 70 points over the 5% floor — past the ceiling.
       await time.increase(200 * 86400);
+      await setPackedField(f.coinflip, "requestedDailyIdx", (await f.coinflip.requestedDailyIdx()) + 200n, "Coinflip");
       const poolBefore = await f.coinflip.recordPool();
       const tx = await f.coinflip.connect(craps).armDiceRunRecord(await giveWalletId(f.game, f.alice.address), FLOOR);
       const paid = (await getEvents(tx, f.coinflip, "BigRecordUpdated"))[0].args.paid;

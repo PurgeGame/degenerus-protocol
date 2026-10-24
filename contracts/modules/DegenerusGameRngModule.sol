@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {DegenerusGameAdvanceModule} from "./DegenerusGameAdvanceModule.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @notice Commitment boundary, publication and transport-only recovery.
@@ -35,7 +36,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
     function requestDailyRng_g8190(uint24 day) external {
         MineFlipGas.Meter memory meter = MineFlipGas.fromCall(36);
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _minerMaintenancePending()
-            || _livenessTriggered() || day != _afkingResetDay || day <= dailyIdx || !subsFullyProcessed) revert RngNotReady();
+            || _livenessTriggered() || day != _afkingResetDay || day != dailyIdx + 1 || !dailyComplete || !_dailyRequestDue() || !subsFullyProcessed) revert RngNotReady();
         prepareRequestBoundary(day);
         _swapTicketSlot();
         _swapFoilSlot();
@@ -43,7 +44,13 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
         _freezePool();
         _sealRngWriteBuffer();
         rngRequestDay = day;
-        rngGapApplied = false;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyRequestWallDay = _wallDay();
+        if (day < GameTimeLib.MAIN_LAUNCH_DAY) degenesisOpenedAt = uint48(block.timestamp);
+        // No external call can observe different Game/Coinflip request indices:
+        // the hook writes its mirror before it can call any other contract.
+        coinflip.onDailyRequest(day);
         rngRequestTime = uint48(block.timestamp);
         _rearmRngRetry();
         rngWordCurrent = RNG_WORD_WAITING;
@@ -76,7 +83,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
     }
 
     function _requestLootboxRng(address caller, MineFlipGas.Meter memory meter) private {
-        if (address(this) != ContractAddresses.GAME || _simulatedDayIndex() != dailyIdx
+        if (address(this) != ContractAddresses.GAME || !dailyComplete || _dailyRequestDue()
             || _minerMaintenancePending() || _livenessTriggered()) revert RngNotReady();
         // Completion already requires no daily lock, active request or mid-day ticket latch.
         if (!_lootboxReadComplete()) revert RngNotReady();
@@ -92,7 +99,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
             }
         }
         uint48 nowTs = uint48(block.timestamp);
-        uint24 currentDay = _simulatedDayIndexAt(nowTs);
+        uint24 currentDay = dailyIdx;
 
         // Block only in the final minute before reset to avoid competing with daily jackpot RNG flow.
         if ((nowTs - 82_620) % 1 days >= 1 days - 1 minutes) revert PreResetWindow();

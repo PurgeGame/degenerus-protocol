@@ -24,31 +24,38 @@ pragma solidity 0.8.38;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /**
  * @title GameTimeLib
- * @notice Shared day index and time calculations for game mechanics
- * @dev Days reset at JACKPOT_RESET_TIME (22:57 UTC), not midnight.
- *      Day 1 = deploy day. Uses ContractAddresses.DEPLOY_DAY_BOUNDARY for reference.
+ * @notice Logical gameplay identities and independent wall-clock reset calculations.
+ * @dev Gameplay advances only on an accepted daily request. Wall windows reset at
+ *      22:57 UTC and use ContractAddresses.DEPLOY_DAY_BOUNDARY as their origin.
  */
 library GameTimeLib {
     /// @notice Daily reset time in seconds from midnight UTC (22:57 UTC = 82620 seconds)
     uint32 internal constant JACKPOT_RESET_TIME = 82620;
 
-    /// @notice Day index of Degenesis day 1, the first full day after the deploy day.
+    /// @notice Logical index of Degenesis cohort 1, opened by the first daily request.
     uint24 internal constant DEGENESIS_START_DAY = 2;
-    /// @notice First post-Degenesis day index. Degenesis day `n` is index DEGENESIS_START_DAY + n - 1.
+    /// @notice First post-Degenesis logical index. Degenesis cohort `n` is index DEGENESIS_START_DAY + n - 1.
     uint24 internal constant MAIN_LAUNCH_DAY = DEGENESIS_START_DAY + 7;
-    /// @notice Timestamp at which day MAIN_LAUNCH_DAY begins.
+    /// @notice Earliest calendar launch boundary with uninterrupted daily requests; fixture reference only.
+    /// @dev Production sale and credit gates use the logical index, never this timestamp.
     uint256 internal constant DEGENESIS_END_TS =
         (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + MAIN_LAUNCH_DAY - 1) * 1 days + JACKPOT_RESET_TIME;
 
     /**
-     * @notice Get current day index relative to deploy time.
-     * @dev Day 1 = deploy day. Days reset at JACKPOT_RESET_TIME (22:57 UTC).
-     * @return Current day index (1-indexed from deploy day).
+     * @notice Read the Game's most recently requested logical daily round.
+     * @dev Bootstrap is day 1. Elapsed wall time does not advance this counter.
+     * @return Current logical index.
      */
+    function gameDayIndex() internal view returns (uint24) {
+        return IDegenerusGame(ContractAddresses.GAME).currentDayView();
+    }
+
+    /// @notice Actual 22:57 reset window relative to deployment, independent of gameplay.
     function currentDayIndex() internal view returns (uint24) {
         return currentDayIndexAt(block.timestamp);
     }

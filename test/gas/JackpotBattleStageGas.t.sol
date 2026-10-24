@@ -46,10 +46,13 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
     function seed(Shape calldata s, uint8[4] calldata mainTraits) external {
         // The synthetic jump models every earlier level as drained: free their recycled roots.
         TQ.retireCompleted(address(this), s.lvl);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = s.lvl;
         purchaseStartDay = day - 10;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         // The pending ticket leg follows earlier daily checkpoints, including
         // any due Vault settlement. Keep this fixture on the ticket/phase-end leg.
         vaultFlipSettledDay = day;
@@ -440,10 +443,13 @@ contract JackpotPhaseSeeder is DegenerusGame {
     function seedFreshPhase(uint24 lvl, uint8 flags) external {
         // The synthetic jump models every earlier level as drained: free their recycled roots.
         TQ.retireCompleted(address(this), lvl);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = lvl;
         purchaseStartDay = day - 10;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         jackpotPhaseFlag = true;
         lastPurchaseDay = false;
         jackpotFlags = flags;

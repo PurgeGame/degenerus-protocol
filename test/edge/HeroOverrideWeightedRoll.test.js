@@ -1,3 +1,4 @@
+import { requestLogicalDay } from "../helpers/logicalDayFixture.js";
 // SPDX-License-Identifier: AGPL-3.0-only
 // Weighted hero selection: statistical oracle checks, frozen-day retention and
 // production DailyWinningTraits replays. Only quadrants 0–2 are eligible.
@@ -178,14 +179,7 @@ async function placeEthBet(game, signer, quadrant, symbol) {
 // then fulfill with the pinned word. Subsequent jackpot-resolution calls
 // inside the mineFlip chain consume rngWordByDay[day] = word.
 async function pinDailyEntropy(game, deployer, mockVRF, word) {
-  await advanceToNextDay();
-  await game.connect(deployer).mineFlip(0);
-  const requestId = await getLastVRFRequestId(mockVRF);
-  try {
-    await mockVRF.fulfillRandomWords(requestId, word);
-  } catch {
-    // Tolerate race where mineFlip already fulfilled in-line.
-  }
+  await requestLogicalDay(game, deployer, mockVRF, word);
 }
 
 // Decode the selected quadrant's byte. Hero selection replaces only that byte's
@@ -201,19 +195,21 @@ function unpackHeroFromTraitsPacked(mainTraitsPacked, heroQuadrant) {
   };
 }
 
-// Seed an already committed pool for the independent weighted-roll oracle.
+// Seed the current accumulating pool; the real daily request seals it.
 async function seedDailyHeroWagersDirect(addr, D, baseSlot, rawAmounts) {
   const day = BigInt(D);
   const packed = packDailyHeroWagers(rawAmounts);
   const metaSlot = await deriveDailyHeroWagersBaseSlot("lootboxRngPacked");
   const meta = BigInt(await hre.ethers.provider.getStorage(addr, metaSlot));
-  const key = ((meta >> 38n) & 1n) ^ 1n;
+  const game = await hre.ethers.getContractAt("DegenerusGame", addr);
+  expect(await game.currentDayView(), "seed belongs to the accumulating logical day").to.equal(day);
+  const key = (meta >> 38n) & 1n;
   for (let q = 0; q < 3; ++q) {
     await hre.network.provider.send("hardhat_setStorageAt", [
       addr, derivedailyHeroWagersSlot(key, q, baseSlot), hre.ethers.toBeHex(packed[q], 32),
     ]);
   }
-  const updated = (meta & ~0xffffffn) | (day + 1n) | (7n << (24n + key * 3n));
+  const updated = meta | (7n << (24n + key * 3n));
   await hre.network.provider.send("hardhat_setStorageAt", [
     addr, hre.ethers.toBeHex(metaSlot, 32), hre.ethers.toBeHex(updated, 32),
   ]);
@@ -546,19 +542,12 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
           const baseSlot = await deriveDailyHeroWagersBaseSlot("dailyHeroWagers");
 
-          // Day D — read dailyIdx from slot 0 byte offset [4:8] per the v41
-          // Phase 288 D-288-FIX-SHAPE-01 layout. (`dailyIdx` is internal; no
-          // public accessor.)
+          // Day D is the current logical index, packed at slot 0 bytes 3..5.
           const dayD = await readDailyIdx(gameAddr);
           expect(dayD, "dailyIdx must be a non-negative uint32 at fixture boot").to.be.gte(0);
 
-          // Place at least 2 hero wagers via the production path
-          // (placeDegeneretteBet). Bets land at
-          // dailyHeroWagers[_simulatedDayIndex()][heroQuadrant] per L486-L499
-          // of DegenerusGameDegeneretteModule.sol. At fixture boot
-          // _simulatedDayIndex() == dailyIdx, so the bets land at slot[D]
-          // which is exactly the slot the operational read at L1609
-          // (`_rollHeroSymbol(dailyIdx, ...)`) targets.
+          // Production wagers accumulate under logical day D; the next
+          // request seals this pool for round D+1.
           await placeEthBet(game, alice, 0, 3); // quadrant 0, symbol 3
           await placeEthBet(game, alice, 2, 5); // quadrant 2, symbol 5
 
@@ -590,12 +579,12 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
           // The real daily request freezes the accumulated pool before its VRF result.
           await advanceToNextDay();
-          for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0);
+          for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0, { gasLimit: 16_777_216 });
           expect(await game.rngLocked(), "daily request seals the hero pool").to.equal(true);
-          const wallDayAfter = Number(await game.currentDayView());
+          const requestedDayAfter = Number(await game.currentDayView());
           expect(
-            wallDayAfter,
-            `wall-clock day must advance from D=${dayD} to D+1=${dayD + 1}`
+            requestedDayAfter,
+            `requested logical day must advance from D=${dayD} to D+1=${dayD + 1}`
           ).to.equal(dayD + 1);
 
           // Post-advance storage capture.
@@ -626,22 +615,14 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           expect(replayOut.winQuadrant).to.equal(refOut.winQuadrant);
           expect(replayOut.winSymbol).to.equal(refOut.winSymbol);
 
-          // D-288-FIX-SHAPE-01 single-writer invariant: dailyIdx is written
-          // only by `_unlockRng` (AdvanceModule). `advanceToNextDay()` warps
-          // wall-clock without firing `_unlockRng`, so `dailyIdx` remains
-          // frozen at its fixture-init value. This is the same structural
-          // anchor TST-HOFIX-01 documents in HeroOverrideDayIndex.test.js
-          // under the v41 Phase 288 closure.
+          // Only the fresh request advances the logical day; publication has not occurred yet.
           const dailyIdxAfter = await readDailyIdx(gameAddr);
-          expect(
-            dailyIdxAfter,
-            `dailyIdx must remain at D=${dayD} after wall-clock warp (no _unlockRng fired; D-288-FIX-SHAPE-01 single-writer invariant)`
-          ).to.equal(dayD);
+          expect(dailyIdxAfter).to.equal(dayD + 1);
 
           console.log(
             `      [TST-HRROLL-03] dayD=${dayD}; slots=[${slotsBeforeAdvance
               .map((s) => "0x" + s.toString(16))
-              .join(", ")}]; oracle output={hasWinner:${refOut.hasWinner}, q:${refOut.winQuadrant}, s:${refOut.winSymbol}}; dailyIdx invariant: dailyIdx==D frozen across wall-clock advance (D-288-FIX-SHAPE-01 single-writer)`
+              .join(", ")}]; oracle output={hasWinner:${refOut.hasWinner}, q:${refOut.winQuadrant}, s:${refOut.winSymbol}}; dailyIdx advanced once at the request boundary`
           );
         }
       );
@@ -824,10 +805,8 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           //   4. Drain queue via repeated mineFlip() until DailyWinningTraits
           //      fires — that's the tx whose gasUsed we capture and whose
           //      fired-event we treat as positive-path proof.
-          //   5. (Optional) seed dailyHeroWagers[dailyIdx] with raw32 RIGHT
-          //      BEFORE the final advance so _rollHeroSymbol reads the
-          //      seeded state. dailyIdx is the dailyHeroWagers key that
-          //      _rollBoard passes to _rollHeroSymbol per L1609.
+          // Seed the accumulating hero pool before the request. The accepted
+          // request advances dailyIdx and freezes that previous logical pool.
           //
           // Returns { gasUsed, dailyWinningTraitsFired } — gasUsed is null
           // and dailyWinningTraitsFired is false when the state machine
@@ -856,6 +835,9 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // Day-warp + mineFlip to issue VRF request, then fulfill
             // with DAILY_ENTROPY. The fulfilled rngWordByDay[D] is consumed
             // by subsequent mineFlip() calls in the drain chain.
+            if (raw32OrNull !== null) {
+              await seedDailyHeroWagersDirect(gameAddr, await readDailyIdx(gameAddr), baseSlot, raw32OrNull);
+            }
             await pinDailyEntropy(game, deployer, mockVRF, DAILY_ENTROPY);
 
             // Drain via repeated mineFlip() until DailyWinningTraits
@@ -864,24 +846,9 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             const MAX_DRAIN_ITERS = 30;
             let finalReceipt = null;
             for (let iter = 0; iter < MAX_DRAIN_ITERS; ++iter) {
-              // Seed dailyHeroWagers[dailyIdx][q] RIGHT BEFORE each
-              // mineFlip call so that whichever call triggers
-              // _emitDailyWinningTraits reads the seeded state. The seed is
-              // re-applied per iteration because intervening _unlockRng
-              // writes to dailyIdx could shift the slot index.
-              if (raw32OrNull !== null) {
-                const curDailyIdx = await readDailyIdx(gameAddr);
-                await seedDailyHeroWagersDirect(
-                  gameAddr,
-                  curDailyIdx,
-                  baseSlot,
-                  raw32OrNull
-                );
-              }
-
               let tx;
               try {
-                tx = await game.connect(deployer).mineFlip(0);
+                tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
               } catch {
                 // Drain ended (NotTimeYet, etc.).
                 break;
@@ -1071,33 +1038,23 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               { value: hre.ethers.parseEther("2") }
             );
 
-            // Day-warp + mineFlip to issue VRF request, then fulfill
-            // with the per-iteration `entropy` so that the downstream
-            // _rollHeroSymbol(dailyIdx, heroEntropy = keccak256(randWord,
-            // dailyIdx)) consumes this exact VRF word.
+            // Seed before commitment, then bind the preceding logical pool to the
+            // accepted request. The oracle uses those exact pre-request bytes.
+            const committedHeroDay = await readDailyIdx(gameAddr);
+            await seedDailyHeroWagersDirect(gameAddr, committedHeroDay, baseSlot, raw);
+            const capturedSlots = await readDailyHeroWagersSlots(gameAddr, committedHeroDay, baseSlot);
             await pinDailyEntropy(game, deployer, mockVRF, entropy);
+            expect(await game.currentDayView(), "request advances beyond its sealed hero pool")
+              .to.equal(BigInt(committedHeroDay + 1));
+            expect(await readDailyHeroWagersSlots(gameAddr, committedHeroDay, baseSlot),
+              "request preserves the committed hero weights").to.deep.equal(capturedSlots);
 
-            // Drain via repeated mineFlip() until DailyWinningTraits
-            // fires. Seed dailyHeroWagers[dailyIdx][q] RIGHT BEFORE each
-            // advance so whichever call reaches _emitDailyWinningTraits
-            // reads the seeded state. Capture the dailyIdx + final-tx
-            // receipt that fires the event.
             const MAX_DRAIN_ITERS = 30;
             let finalReceipt = null;
-            let finalDailyIdx = null;
-            let capturedSlots = null;
             for (let iter = 0; iter < MAX_DRAIN_ITERS; ++iter) {
-              const curDailyIdx = await readDailyIdx(gameAddr);
-              await seedDailyHeroWagersDirect(
-                gameAddr,
-                curDailyIdx,
-                baseSlot,
-                raw
-              );
-
               let tx;
               try {
-                tx = await game.connect(deployer).mineFlip(0);
+                tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
               } catch {
                 break;
               }
@@ -1117,14 +1074,6 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               }
               if (dailyWinningTraitsFired) {
                 finalReceipt = receipt;
-                finalDailyIdx = curDailyIdx;
-                // Re-read the slots after the seed lands so the JS oracle
-                // replays against the exact bytes the contract read.
-                capturedSlots = await readDailyHeroWagersSlots(
-                  gameAddr,
-                  curDailyIdx,
-                  baseSlot
-                );
                 break;
               }
             }
@@ -1163,15 +1112,15 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             //     → _rollBoard(randWord, _goldenTicketBanQuadrant(...))
             //     → base traits = JackpotBucketLib.getRandomTraits(randWord)
             //                     (the unsalted word — no BONUS_TRAITS_TAG salt)
-            //     → hero = _rollHeroSymbol(dailyIdx, randWord, banQuadrant)
+            //     → hero = _rollHeroSymbol(committedHeroDay, randWord, banQuadrant)
             //       (banQuadrant is _NO_QUADRANT_BAN here: the fixture never
             //       arms a golden ticket, so no quadrant is banned)
-            // The keccak `day` is the storage `dailyIdx` (= finalDailyIdx), NOT
-            // the event's questDay (_simulatedDayIndex).
+            // The hero pool is request day minus one; the event names the
+            // requested round. Hero entropy remains the tagged committed word.
             const U256_MASK_LOCAL = (1n << 256n) - 1n;
             const randWord = entropy & U256_MASK_LOCAL;
             const oracleOut = rollHeroSymbolRef({
-              day: Number(finalDailyIdx),
+              day: Number(committedHeroDay),
               entropy: randWord,
               dailyHeroWagers: capturedSlots,
             });
@@ -1228,7 +1177,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // (uncorrelated with oracle's winSymbol).
             expect(
               onChainSymbolAtOracleQuadrant,
-              `i=${i} symbol mismatch at oracle's predicted hero quadrant ${oracleOut.winQuadrant}: oracle.winSymbol=${oracleOut.winSymbol}, onChain symbol at byte ${oracleOut.winQuadrant}=${onChainSymbolAtOracleQuadrant}; mainTraitsPacked=0x${BigInt(mainTraitsPacked).toString(16)}; capturedSlots=[${capturedSlots.map((s) => "0x" + s.toString(16)).join(",")}]; entropy=0x${entropy.toString(16)}; questDay=${questDay}; finalDailyIdx=${finalDailyIdx}`
+              `i=${i} symbol mismatch at oracle's predicted hero quadrant ${oracleOut.winQuadrant}: oracle.winSymbol=${oracleOut.winSymbol}, onChain symbol at byte ${oracleOut.winQuadrant}=${onChainSymbolAtOracleQuadrant}; mainTraitsPacked=0x${BigInt(mainTraitsPacked).toString(16)}; capturedSlots=[${capturedSlots.map((s) => "0x" + s.toString(16)).join(",")}]; entropy=0x${entropy.toString(16)}; questDay=${questDay}; committedHeroDay=${committedHeroDay}`
             ).to.equal(oracleOut.winSymbol);
 
             matchCount += 1;

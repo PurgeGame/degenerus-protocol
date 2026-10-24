@@ -44,8 +44,9 @@ contract FlipDrawHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 
 
-    function today() external view returns (uint24) {
-        return _simulatedDayIndex();
+    function seedRequestedDay(uint24 day) external {
+        dailyIdx = day;
+        rngRequestDay = day;
     }
 
     /// @dev The real JackpotBattle reads the Game's storage (daily words) through this.
@@ -120,6 +121,7 @@ contract LevelOneFlipDrawTest is Test {
     function setUp() public {
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 5) * 1 days + 82_620 + 1 hours);
         h = new FlipDrawHarness();
+        h.seedRequestedDay(5);
         // Advance records the level-one board before entering the FLIP leg.
         vm.prank(ContractAddresses.GAME);
         h.emitDailyWinningTraits(WORD);

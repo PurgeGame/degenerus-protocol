@@ -97,7 +97,7 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
         emit log_named_uint("arm_only_gas", used);
         assertTrue(armed, "maintenance committed as the first unit");
         assertFalse(requested, "the request did not fit the calibrated estimate");
-        assertEq(game.nextMinerAction(), 18, "the request is the next action");
+        assertEq(game.nextMinerAction(), 17, "the request is the next action");
         (armed, requested, used) = _mine(16_000_000);
         emit log_named_uint("request_only_gas", used);
         assertFalse(armed, "the window is not armed twice");

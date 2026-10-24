@@ -163,14 +163,16 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         vm.etch(ContractAddresses.GAME, address(new PariSettleMockGame()).code);
         vm.etch(ContractAddresses.QUESTS, address(new PariSettleMockQuests()).code);
         vm.etch(ContractAddresses.COIN, address(new PariSettleMockCoin()).code);
-        vm.etch(ContractAddresses.COINFLIP, address(new Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0))).code);
+        Coinflip builtFlip = new Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
+        vm.etch(ContractAddresses.COINFLIP, address(builtFlip).code);
+        vm.copyStorage(address(builtFlip), ContractAddresses.COINFLIP);
         DegenerusParimutuel built = new DegenerusParimutuel();
         assertEq(uint256(vm.load(address(built), bytes32(SETTLEMENT_SLOT))), 1, "construction starts the cursor at round 1");
         vm.etch(ContractAddresses.PARIMUTUEL, address(built).code);
         vm.store(ContractAddresses.PARIMUTUEL, bytes32(SETTLEMENT_SLOT), bytes32(uint256(1)));
         pari = DegenerusParimutuel(ContractAddresses.PARIMUTUEL);
         mockGame = PariSettleMockGame(ContractAddresses.GAME);
-        stakeDay = GameTimeLib.currentDayIndex() + 1;
+        stakeDay = Coinflip(ContractAddresses.COINFLIP).requestedDailyIdx() + 1;
     }
 
     // ---------------------------------------------------------------- helpers
@@ -825,8 +827,11 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
 
 contract GrowthSelectorHarness is MinerHarness {
     function seed(MinerAction action) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         dailyIdx = today;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = today;
         _afkingResetDay = today;
         purchaseStartDay = today;
         level = 10;
@@ -837,7 +842,7 @@ contract GrowthSelectorHarness is MinerHarness {
         rngWordCurrent = 1234;
         _setRngSessionPublished(true);
         _setRngComplete(true);
-        _recordDailyRng(today, 1234);
+        if (action != MinerAction.DailyApply) _recordDailyRng(today, 1234);
         if (action >= MinerAction.Publish && action <= MinerAction.CertifyRead) _setRngComplete(false);
         if (action == MinerAction.Terminal) gameOver = true;
         if (action == MinerAction.Wait || action == MinerAction.Publish) {
@@ -847,9 +852,10 @@ contract GrowthSelectorHarness is MinerHarness {
             if (action == MinerAction.Wait) rngWordCurrent = RNG_WORD_WAITING;
         }
         if (action == MinerAction.Tickets) ticketsFullyProcessed = false;
-        if (action >= MinerAction.DailyGap && action <= MinerAction.DailyPhase) {
+        if (action >= MinerAction.DailyApply && action <= MinerAction.DailyPhase) {
             rngLockedFlag = true;
-            rngRequestDay = today + (action == MinerAction.DailyGap ? 2 : 1);
+            rngRequestDay = today;
+            dailyComplete = false;
             if (action == MinerAction.DailyPhase) _recordDailyRng(rngRequestDay, 5678);
         }
         if (action == MinerAction.Afking) _pendingBoxCount = 1;
@@ -859,6 +865,7 @@ contract GrowthSelectorHarness is MinerHarness {
         if (action == MinerAction.Craps) lootboxRngPacked |= uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer());
         if (action == MinerAction.PrepareSubscriptions || action == MinerAction.RequestDaily) {
             dailyIdx = today - 1;
+            lastDailyRequestWallDay = today - 1;
             subsFullyProcessed = action == MinerAction.RequestDaily;
         }
         if (action == MinerAction.RequestMidday) _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1);
@@ -886,7 +893,8 @@ contract GrowthSelectorHarness is MinerHarness {
     }
 
     function seedDeadman() external {
-        dailyIdx = _simulatedDayIndex() - 31;
+        dailyIdx = _wallDay() - 31;
+        lastDailyCompletedAt = uint48(block.timestamp - 14 days);
     }
 
     function seedGameOverPaid() external {
@@ -897,13 +905,15 @@ contract GrowthSelectorHarness is MinerHarness {
     /// @dev Arbitrary flag mix for the region fuzz; every field the selector reads before the
     ///      settlement check is drawn from `f`.
     function poke(uint256 f) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         level = 10;
         purchaseStartDay = today;
         rngRequestTime = uint48(block.timestamp);
         _recordDailyRng(today, 1234);
         dailyIdx = f & 1 != 0 ? today - 1 : today;
-        if (f & (1 << 1) != 0) dailyIdx = today - 31;
+        dailyComplete = true;
+        lastDailyRequestWallDay = f & 1 != 0 ? today - 1 : today;
+        lastDailyCompletedAt = uint48(block.timestamp - (f & (1 << 1) != 0 ? 14 days : 0));
         _afkingResetDay = f & (1 << 2) != 0 ? today + 1 : dailyIdx;
         subsFullyProcessed = f & (1 << 3) != 0;
         _setRngComplete(f & (1 << 4) != 0);
@@ -930,7 +940,7 @@ contract GrowthSelectorHarness is MinerHarness {
         complete = _rngComplete();
         locked = rngLockedFlag;
         requestActive = _rngRequestActive();
-        dailyDue = _afkingResetDay > dailyIdx || _simulatedDayIndex() > dailyIdx;
+        dailyDue = dailyComplete && _dailyRequestDue();
     }
 }
 
@@ -963,8 +973,8 @@ contract ParimutuelSettlementSelectorTest is Test {
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(pending));
     }
 
-    function test_GrowthSettleIsValueNineteen() public pure {
-        assertEq(GROWTH_SETTLE, 19);
+    function test_GrowthSettleIsValueEighteen() public pure {
+        assertEq(GROWTH_SETTLE, 18);
     }
 
     /// Every action ahead of GrowthSettle keeps its slot with the pending bit set; only Idle and
@@ -1073,7 +1083,7 @@ abstract contract PariSettlementProtocolBase is DeployProtocol, PariSettlementSl
     bytes32 internal constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
     bytes32 internal constant MINER_BOUNTY = keccak256("MinerBounty(uint8,address,uint256)");
     uint256 internal constant PENDING_BIT = GameSlots.RNG_FLAGS_AND_NUDGES_OFFSET * 8 + 11;
-    uint8 internal constant GROWTH_SETTLE = 19;
+    uint8 internal constant GROWTH_SETTLE = 18;
 
     uint256 internal simTime;
     uint256 internal bettorNonce;
@@ -1093,7 +1103,7 @@ abstract contract PariSettlementProtocolBase is DeployProtocol, PariSettlementSl
     }
 
     function _stakeDay() internal view returns (uint24) {
-        return GameTimeLib.currentDayIndex() + 1;
+        return coinflip.requestedDailyIdx() + 1;
     }
 
     /// @dev Bets `nWin` winners and `nLose` losers on `round` (registered wallets, the market's
@@ -1177,7 +1187,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
 
     function _driveToLiveJackpotPhase() private returns (uint24 round) {
         for (uint256 i = 0; i < 40 && game.level() < 2; i++) {
-            if (!game.jackpotPhase()) _seedNextPool(50 ether);
+            if (!game.jackpotPhase()) _seedNextPool(51 ether);
             _driveDay();
         }
         for (uint256 i = 0; i < 40; i++) {
@@ -1572,6 +1582,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 20 days);
+        _seedLogicalFixtureDay(29);
         vm.deal(OPERATOR, 10_000 ether);
         vm.deal(DEITY, 10_000 ether);
         vm.prank(DEITY);

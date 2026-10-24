@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
@@ -108,7 +109,8 @@ contract VRFCore is DeployProtocol {
             uint8 action = game.minerAction();
             if (action == 0) return; // Idle
             assertFalse(game.rngLocked(), "only mid-day work is settled here");
-            assertTrue(action != 17, "settling mid-day work must not reach a daily request"); // RequestDaily
+            assertTrue(action != uint8(DegenerusGameStorage.MinerAction.RequestDaily),
+                "settling mid-day work must not reach a daily request");
             if (action == 2) {
                 // Wait: the live mid-day request is unanswered.
                 uint256 rid = _readVrfRequestId();

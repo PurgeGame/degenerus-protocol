@@ -16,7 +16,15 @@ contract CombinedDegenesisBoxFunding is DegenesisDeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        vm.warp(block.timestamp + 1 days); // Degenesis day 1
+        vm.warp(block.timestamp + 1 days);
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 777);
+        for (uint256 i; i < 100; ++i) {
+            (bool done,,) = game.dailySessionState();
+            if (done) break;
+            game.mineFlip(0);
+        }
+        assertEq(game.currentDayView(), 2, "first Degenesis sale cohort");
     }
 
     function _header(uint256 cohort) private view returns (uint256) {

@@ -18,7 +18,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
     function open(uint24 lvl) external {
         level = lvl - 1;
         _setDecWindowOpen(true);
-        decBattleRounds[lvl].openedDay = _simulatedDayIndex();
+        decBattleRounds[lvl].openedDay = _wallDay();
         decEntriesLevel = lvl;
     }
 
@@ -31,7 +31,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
             _setRngRequestActive(false);
             ticketsFullyProcessed = true;
             humanReadComplete = true;
-            dailyIdx = _simulatedDayIndex();
+            dailyIdx = _wallDay();
         }
         returned = this.runDecimatorJackpot(pool, lvl, word);
         claimablePool += pool - uint128(returned);

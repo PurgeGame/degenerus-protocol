@@ -10,7 +10,6 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
-import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @notice Parimutuel settlement stage gas on the real protocol (real Parimutuel, Coinflip and
 ///         Game). Each figure is one call measured with the touched accounts cooled first, so
@@ -100,7 +99,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
     }
 
     function _stake(uint32 id) private view returns (uint256) {
-        return CoinflipStorage.read(address(coinflip), id, GameTimeLib.currentDayIndex() + 1);
+        return CoinflipStorage.read(address(coinflip), id, coinflip.requestedDailyIdx() + 1);
     }
 
     /// @dev One cold runGrowthWork call with a tagged first-unit budget; reports its gas and result.
@@ -213,7 +212,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == MINER_WORK) {
                 (uint8 firstAction, uint256 used, ) = abi.decode(logs[i].data, (uint8, uint256, uint256));
-                assertEq(firstAction, 19);
+                assertEq(firstAction, 18);
                 executionGas = used;
             }
         }
@@ -223,12 +222,12 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
     /// the engine's own MinerWork executionGas and as the caller's total.
     function test_MineFlipStageChunk() public {
         _driveDay();
-        assertTrue(game.nextMinerAction() != 19, "fixture: idle engine");
+        assertTrue(game.nextMinerAction() != 18, "fixture: idle engine");
         _round(1, CHUNK);
         vm.clearMockedCalls();
         bytes32 slot = bytes32(GameSlots.RNG_FLAGS_AND_NUDGES);
         vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) | (uint256(1) << PENDING_BIT)));
-        assertEq(game.nextMinerAction(), 19);
+        assertEq(game.nextMinerAction(), 18);
 
         address keeper = address(0xC1A9);
         _giveWalletId(keeper);

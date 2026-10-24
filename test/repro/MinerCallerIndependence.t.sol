@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -135,7 +136,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         assertFalse(game.advanceDue(), "creditless discovery sees no work");
         assertEq(_actionFor(OUTSIDER), 0, "an outsider sees no work");
         assertEq(_actionFor(OWNER), 0, "vault ownership sees no work");
-        assertEq(_actionFor(DONOR), 18, "the credited donor's mineFlip would request");
+        assertEq(_actionFor(DONOR), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "the credited donor's mineFlip would request");
         bytes32 credits = _creditDigest();
         bytes32 state = _commitmentDigest();
         vm.prank(OUTSIDER);

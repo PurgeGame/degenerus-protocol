@@ -36,7 +36,7 @@ const excluded = {
   COINFLIP: [
     "armBafDraw", "armDiceRunRecord", "armRecord", "claimCoinflipsFromFlip",
     "consumeCoinflipsForBurn", "consumeFlipBacking", "creditFlip", "creditFlipBatch",
-    "creditFlipPair", "creditSdgnrsBacking", "fundRecordPool", "processCoinflipGap",
+    "creditFlipPair", "creditSdgnrsBacking", "fundRecordPool", "onDailyRequest",
     "processCoinflipPayouts", "redeemableFlipBacking", "sweepAccountCoinflips", "withdrawRedeemedFlip",
   ],
   COIN: [

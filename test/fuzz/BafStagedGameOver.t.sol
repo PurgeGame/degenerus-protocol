@@ -73,7 +73,10 @@ contract BafStagedGameOverTest is BafBracketFixture {
         // The latch: one terminal step releases exactly the uncredited reservation.
         vm.recordLogs();
         host.terminal(9_000_000);
-        _assertNoBafAward(vm.getRecordedLogs());
+        Vm.Log[] memory latchLogs = vm.getRecordedLogs();
+        _assertNoBafAward(latchLogs);
+        (bool drained, uint256 available, uint256 reservedAtDrain) = _drainEvent(latchLogs);
+        uint256 fundsAtDrain = address(game).balance + mockStETH.balanceOf(address(game));
         BafStageHost.WorkView memory cleared = host.workView();
         w.kind = 0;
         assertEq(abi.encode(cleared), abi.encode(w), "latch retires the kind and retains the payload");
@@ -82,19 +85,16 @@ contract BafStagedGameOverTest is BafBracketFixture {
         host.daily(9_000_000);
 
         // Run the ending out on the production engine.
-        bool drained;
-        uint256 available;
-        uint256 reservedAtDrain;
-        uint256 fundsAtDrain;
         for (uint256 i; i < 120 && !game.gameOver(); ++i) {
             _answer();
             vm.recordLogs();
             try game.mineFlip(0) {} catch {}
             Vm.Log[] memory logs = vm.getRecordedLogs();
             _assertNoBafAward(logs);
-            for (uint256 j; j < logs.length; ++j) {
-                if (logs[j].emitter != address(game) || logs[j].topics.length == 0 || logs[j].topics[0] != DRAINED_SIG) continue;
-                (, available, reservedAtDrain) = abi.decode(logs[j].data, (uint24, uint256, uint256));
+            (bool found, uint256 pot, uint256 liabilities) = _drainEvent(logs);
+            if (found) {
+                available = pot;
+                reservedAtDrain = liabilities;
                 fundsAtDrain = address(game).balance + mockStETH.balanceOf(address(game));
                 drained = true;
             }
@@ -108,6 +108,15 @@ contract BafStagedGameOverTest is BafBracketFixture {
         for (uint256 k; k < first.length; ++k) {
             assertGe(host.claimableOf(first[k]), credits[k], "credited winners keep their balance");
             assertGe(host.whalePassesOf(first[k]), halves[k], "queued whale halves stay");
+        }
+    }
+
+    /// @dev A mandatory terminal unit may finish the ending in the latch call itself.
+    function _drainEvent(Vm.Log[] memory logs) private view returns (bool found, uint256 pot, uint256 liabilities) {
+        for (uint256 j; j < logs.length; ++j) {
+            if (logs[j].emitter != address(game) || logs[j].topics.length == 0 || logs[j].topics[0] != DRAINED_SIG) continue;
+            (, pot, liabilities) = abi.decode(logs[j].data, (uint24, uint256, uint256));
+            return (true, pot, liabilities);
         }
     }
 

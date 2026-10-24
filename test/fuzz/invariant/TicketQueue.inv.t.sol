@@ -20,9 +20,23 @@ contract TicketQueueInvariant is DeployProtocol {
 
         ticketHandler = new TicketTrackingHandler(game, 10);
         vrfHandler = new VRFHandler(mockVRF, game);
+        _primeTrackedRound();
 
         targetContract(address(ticketHandler));
         targetContract(address(vrfHandler));
+    }
+
+    /// Seed real handler-observed progress before random thirty-day warps can end the game.
+    /// Leave the delivered round open so the campaign checks its queue consumption too.
+    function _primeTrackedRound() internal {
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        uint256 prior = mockVRF.lastRequestId();
+        for (uint256 i; i < 250 && mockVRF.lastRequestId() == prior; ++i) ticketHandler.advance(0);
+        assertGt(mockVRF.lastRequestId(), prior, "fixture: one tracked fresh request");
+        vrfHandler.fulfillVrf(uint256(keccak256("ticket-queue-opening")));
+        assertGt(ticketHandler.ghost_advances(), 0, "fixture: handler drove the request");
+        assertGt(vrfHandler.ghost_vrfFulfillments(), 0, "fixture: handler fulfilled its word");
+        for (uint256 lvl; lvl <= uint256(game.level()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
     }
 
     /// @notice No consistency violations in ticket tracking

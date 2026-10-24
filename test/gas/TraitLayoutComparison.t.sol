@@ -32,7 +32,7 @@ contract TraitLayoutFoilSeeder is BucketSeed {
             for (uint256 t; t < 256; ++t) _bucketAppendRun(_traitBufferBase(lvl), uint8(t), id, 64, lvl);
         }
         foilReadCount = 1;
-        foilGenerationDay = _simulatedDayIndex();
+        foilGenerationDay = _wallDay();
         foilFirstDrawDay = foilGenerationDay;
         rngWordCurrent = uint256(keccak256("trait-layout-foil")) | 1;
         _setRngSessionPublished(true);

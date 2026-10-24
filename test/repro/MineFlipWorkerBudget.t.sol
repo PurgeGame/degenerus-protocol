@@ -22,7 +22,7 @@ contract BudgetReadFixture is DegenerusGame {
         rngLockedFlag = false;
         ticketsFullyProcessed = true;
         _pendingBoxCount = 0;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
     }
     function priorWork(uint8 stage) external {
         ticketsFullyProcessed = stage != 0;
@@ -178,6 +178,12 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
 }
 
 contract BudgetDecimatorFixture is DecimatorBattleHarness {
+    constructor() {
+        dailyIdx = 9;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
+    }
     function priorWork(uint8 stage) external {
         ticketsFullyProcessed = stage != 0;
         _pendingBoxCount = stage == 2 ? 1 : 0;
@@ -215,7 +221,7 @@ contract MineFlipDecimatorBudgetTest is Test {
     /// @dev Every wallet ID starts with an unbacked 1-wei claimable sentinel.
     uint256 private constant SENTINEL = 1;
     function setUp() public {
-        vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 8) * 1 days + 82_621);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         host = new BudgetDecimatorFixture();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(BudgetBoundedEngine).runtimeCode);

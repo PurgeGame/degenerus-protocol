@@ -193,10 +193,13 @@ contract BafTranscriptHost is DegenerusGame, WalletSeed {
 ///      hold several awards.
 contract PlainBafSeeder is DegenerusGame, BucketSeed {
     function seed(uint24 lvl, uint128 nextPool, uint128 futurePool, uint256 count, uint160 base) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = lvl - 1;
         purchaseStartDay = day - 8;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         lastPurchaseDay = true;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
@@ -1261,6 +1264,7 @@ abstract contract CenturyBafTranscript is BafTranscriptFixture {
         vm.etch(address(game), type(CenturyTraitRoundSeeder).runtimeCode);
         CenturyTraitRoundSeeder(payable(address(game))).seed(WORD, _rounds());
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(address(game), uint256(nextPool) + futurePool + 68.25 ether + uint256(nextPool) / 400);
         mockStETH.mint(address(game), 50 ether);
         _armWord(WORD);
@@ -1365,6 +1369,7 @@ abstract contract PlainBafTranscript is BafTranscriptFixture {
         vm.etch(address(game), type(PlainBafSeeder).runtimeCode);
         PlainBafSeeder(payable(address(game))).seed(target, nextPool, futurePool, PLAYERS, PLAYER_BASE);
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(game.currentDayView());
         vm.deal(address(game), uint256(nextPool) + futurePool + 110 ether);
         mockStETH.mint(address(game), 50 ether);
         _armWord(_word());

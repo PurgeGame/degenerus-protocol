@@ -120,6 +120,11 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         crapsEngine = CrapsEngine(payable(address(crapsBattle)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS
+        uint24 fixtureDay = _deployDay();
+        if (fixtureDay != 1) {
+            _seedLogicalFixtureDay(fixtureDay);
+            _seedCrapsFixtureCursor(fixtureDay);
+        }
         if (initializeDeities) game.initProtocolDeity();
     }
 }

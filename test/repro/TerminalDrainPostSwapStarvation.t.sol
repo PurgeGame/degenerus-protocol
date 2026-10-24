@@ -125,9 +125,11 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         uint256 req = mockVRF.lastRequestId();
         assertGt(req, req0, "terminal request sent");
 
+        uint24 normalDay = game.currentDayView();
         mockVRF.fulfillRandomWords(req, word);
         game.mineFlip(0); // applies the terminal word; returns before any drain
-        assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "terminal word recorded");
+        assertEq(game.currentDayView(), normalDay, "terminal publication does not advance the normal day");
+        assertTrue(game.rngWordForDay(normalDay + 1) != 0, "the separate terminal word is recorded");
         assertFalse(game.gameOver(), "not over yet");
         (rl,,) = _queues();
         assertEq(rl, owners, "nothing drained yet");

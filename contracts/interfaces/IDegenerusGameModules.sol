@@ -79,7 +79,7 @@ interface IDegenerusGameAdvanceModule {
 
 
     function applyDailyWord_g1652() external;
-    function applyDailyGap() external;
+
 
 
     function runDailyPhase_g2582(uint256 allowance) external returns (MineFlipGas.Result memory);

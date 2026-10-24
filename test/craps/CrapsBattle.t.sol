@@ -2574,6 +2574,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      both bodies twenty passes and the ladder spends those before it burns, so a seat taken
     ///      out of the bank would burn nothing and the bill below would read zero.
     function test_openingTheDaySeatsTheHouseAndTheVaultEverywhere() public {
+        _warpInto(0, 0);
         address house = ContractAddresses.SDGNRS;
         address vault = ContractAddresses.VAULT;
         craps.setPassCredits(house, 0, 0);

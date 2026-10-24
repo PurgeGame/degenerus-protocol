@@ -67,8 +67,11 @@ contract DecimatorGeneratedWorkMeter {
 
 contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed, GameMiner {
     function primeMiner(bool activePass) external {
-        uint24 day = _simulatedDayIndex();
-        dailyIdx = day - 1;
+        uint24 day = _wallDay();
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         rngRequestDay = day;
         rngRequestTime = uint48(block.timestamp);
         _recordDailyRng(day, rngWordCurrent);

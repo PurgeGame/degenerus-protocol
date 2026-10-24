@@ -119,13 +119,13 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
         for (uint256 b = 0; b < bonuses.length; b++) {
             uint8 bonus = bonuses[b];
             // roll == 0 branch (reward 50, the threshold floor)
-            _assertMatchesMirror(bonus, _wordForRoll(uint24(30 + b), 0, true), uint24(30 + b));
+            _assertMatchesMirror(bonus, _wordForRoll(uint24(30 + 4 * b), 0, true), uint24(30 + 4 * b));
             // roll == 1 branch (reward 150)
-            _assertMatchesMirror(bonus, _wordForRoll(uint24(40 + b), 1, true), uint24(40 + b));
+            _assertMatchesMirror(bonus, _wordForRoll(uint24(31 + 4 * b), 1, true), uint24(31 + 4 * b));
             // normal branch (a representative non-0/1 roll)
-            _assertMatchesMirror(bonus, _wordForRoll(uint24(50 + b), 7, true), uint24(50 + b));
+            _assertMatchesMirror(bonus, _wordForRoll(uint24(32 + 4 * b), 7, true), uint24(32 + 4 * b));
             // a loss in each bonus class (win bit clear -> sentinel)
-            _assertMatchesMirror(bonus, _wordForRoll(uint24(60 + b), 7, false), uint24(60 + b));
+            _assertMatchesMirror(bonus, _wordForRoll(uint24(33 + 4 * b), 7, false), uint24(33 + 4 * b));
         }
     }
 

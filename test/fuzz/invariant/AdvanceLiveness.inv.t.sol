@@ -170,6 +170,13 @@ contract AdvanceLiveness is DeployProtocol {
         }
     }
 
+    /// The liveness probe must actually request and finish a mid-day cycle.
+    function test_donorProbeRequestsMidday() public {
+        handler.actRunToIdle(0);
+        assertEq(handler.ghost_violations(), 0, "liveness violation in donor probe");
+        assertGt(handler.ghost_probeRequests(), 0, "donor probe must issue a request");
+    }
+
     /// Deterministic replay of the biased scenario — a quick regression for the seed bug.
     function test_lastPurchaseDayMiddayScenario() public {
         for (uint256 s = 0; s < 6 && handler.ghost_violations() == 0; s++) {

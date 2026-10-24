@@ -19,7 +19,7 @@ contract CompactOrderGasSeed is DegenerusGame {
     function seedOrders(address player, uint256 input, uint256[] calldata codes, uint256 entropy) external {
         _registerWallet(player, type(uint256).max);
         level = 99;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
         _afkingResetDay = dailyIdx;
         subsFullyProcessed = true;

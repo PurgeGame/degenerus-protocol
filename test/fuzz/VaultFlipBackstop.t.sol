@@ -11,7 +11,10 @@ import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 contract VaultBackstopHost is DegenerusGame {
     function seedPhase(uint24 day, uint24 stamp, uint8 mode) external {
         vaultFlipSettledDay = stamp;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         rngRequestDay = day;
         rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = 123;

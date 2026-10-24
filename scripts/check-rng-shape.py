@@ -33,11 +33,9 @@ def scan(root):
                          'expression': compact(expression)})
     return rows
 
-# One reviewed consumer, with separate ordinary-day and gap entry points. These
-# statements are pinned independently of the editable hash registry.
+# The one raw coinflip bit is pinned independently of the editable hash registry.
 RAW_COIN_BITS = {
     'processCoinflipPayouts': 'boolwin=(rngWord&1)==1;',
-    'processCoinflipGap': 'uint32wins=uint32(root>>(1+uint256(start)-originalStart));',
 }
 
 def validate_raw_coin_bits(root, manifest):
@@ -45,7 +43,7 @@ def validate_raw_coin_bits(root, manifest):
     registered = {(r['file'], r['function'], r['expression']) for r in manifest.get('rawBitExceptions', [])}
     required = {('Coinflip.sol', fn, expression) for fn, expression in RAW_COIN_BITS.items()}
     if registered != required or len(manifest.get('rawBitExceptions', [])) != len(required):
-        errors.append('Raw coin-bit exception registry must contain exactly the two reviewed entries')
+        errors.append('Raw coin-bit exception registry must contain exactly the reviewed ordinary-result entry')
     source = (root / 'Coinflip.sol').read_text()
     masked = strip_comments_and_strings(source)
     for name, statement in RAW_COIN_BITS.items():

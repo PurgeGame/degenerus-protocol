@@ -10,7 +10,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 contract BoundedGameSeeder is DegenerusGameStorage, WalletSeed {
     function seed(address player) external {
         level = 24;
-        dailyIdx = _simulatedDayIndex();
+        dailyIdx = _wallDay();
         purchaseStartDay = dailyIdx;
         rngRequestTime = uint48(block.timestamp);
         lastPurchaseDay = false;
@@ -23,13 +23,18 @@ contract BoundedGameSeeder is DegenerusGameStorage, WalletSeed {
     }
 
     function seedDay() public {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
+        dailyIdx = day;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = day;
         _recordDailyRng(day - 1, 0xCAFE);
         _recordDailyRng(day, 0xBEEF);
     }
 
     function reuseHero() external {
-        uint24 day = _simulatedDayIndex();
+        seedDay();
+        uint24 day = _gameDay();
         _sealHeroWagers(day - 1);
         _sealHeroWagers(day);
         dailyIdx = day;
@@ -64,6 +69,7 @@ contract BoundedMappingGasTest is BoundedDeployProtocol {
         (bool ok, bytes memory reason) = address(game).call(data);
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
         vm.etch(address(game), original);
+        _syncCoinflipFixtureDay(game.currentDayView());
     }
 
     function measured(address sender, uint256 value, bytes calldata data, bool cold,

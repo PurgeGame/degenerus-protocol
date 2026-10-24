@@ -452,7 +452,7 @@ describe("VRF Governance", function () {
       // Advance to next day and call mineFlip to trigger VRF request,
       // which sets rngLockedFlag = true
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0);
+      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
 
       await expect(
         ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, amount])

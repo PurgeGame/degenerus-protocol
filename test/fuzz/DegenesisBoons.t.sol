@@ -15,6 +15,8 @@ contract DegenesisBoonHarness is DegenerusGameBoxModule, WalletSeed {
         return _seedWallet(player);
     }
 
+    function setDay(uint24 day) external { dailyIdx = day; }
+
     function avg() external pure returns (uint256) {
         return _boonAvgMaxValue(1);
     }
@@ -52,6 +54,7 @@ contract DegenesisBoonsTest is Test {
         vm.etch(ContractAddresses.GAME, address(implementation).code);
         host = DegenesisBoonHarness(ContractAddresses.GAME);
         id = host.seed(address(0xB00B));
+        host.setDay(2);
         vm.etch(ContractAddresses.QUESTS, address(new BoonBatchQuestRecorder()).code);
         quests = BoonBatchQuestRecorder(ContractAddresses.QUESTS);
     }
@@ -146,6 +149,7 @@ contract DegenesisBoonsTest is Test {
         _roll(ONE, 39); // type 2
         (uint256 initial,,,) = host.state(id);
         vm.warp(block.timestamp + 1 days);
+        host.setDay(3);
         _roll(ONE, 15); // lower tier 1
         (uint256 ignored,,,) = host.state(id);
         assertEq(ignored, initial, "lower tier keeps original expiry");
@@ -156,6 +160,7 @@ contract DegenesisBoonsTest is Test {
         (uint256 upgraded,,,) = host.state(id);
         assertTrue(upgraded != initial, "upgrade writes stronger tier and new day");
         vm.warp(block.timestamp + 10 days);
+        host.setDay(13);
         _roll(ONE, 15);
         (uint256 renewed,,,) = host.state(id);
         assertTrue(renewed != upgraded, "expired higher tier no longer blocks lower tier");

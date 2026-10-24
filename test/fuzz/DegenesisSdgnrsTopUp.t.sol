@@ -33,7 +33,7 @@ interface IDegenesisTopUp {
 ///         on the Degenesis timeline, with sDGNRS's two balances written in storage (claimablePool
 ///         in tandem) just before the STAGE so the example's numbers are exact.
 contract DegenesisSdgnrsTopUp is DegenesisFixture {
-    uint8 internal constant ACTION_PREPARE_SUBSCRIPTIONS = 15;
+    uint8 internal constant ACTION_PREPARE_SUBSCRIPTIONS = 14;
     bytes32 internal constant WHALE_SIG = keccak256("WhalePassPurchased(uint32,uint256,uint256)");
     bytes32 internal constant CLAIMABLE_SPENT_SIG = keccak256("ClaimableSpent(uint32,uint256,uint256,uint8,uint256)");
     bytes32 internal constant AFKING_SPENT_SIG = keccak256("AfkingSpent(uint32,uint256)");

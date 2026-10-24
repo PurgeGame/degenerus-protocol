@@ -50,6 +50,10 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         uint256 dayStart = vm.getBlockTimestamp() + 1 days - elapsed;
         vm.warp(dayStart);
         uint24 day = table.currentDayIndex();
+        // The table always boots at logical day 3; this isolated fixture begins at 9.
+        bytes32 cursorSlot = bytes32(uint256(11));
+        uint256 cursorWord = uint256(vm.load(address(table), cursorSlot));
+        vm.store(address(table), cursorSlot, bytes32((cursorWord & ~uint256(type(uint64).max)) | uint256(day) * 8));
         _setIndex(0);
         _setDailyWord(day, 123456);
         vm.prank(ContractAddresses.GAME);

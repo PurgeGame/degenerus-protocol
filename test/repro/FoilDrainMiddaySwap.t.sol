@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -376,7 +377,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         // mineFlip is the only door to the mid-day request; call it only when the request is
         // the engine's next action, so the call does nothing but request.
         vm.prank(crank);
-        if (game.minerAction() != 18) return false;
+        if (game.minerAction() != uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return false;
         vm.prank(crank);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature("mineFlip(uint32)", uint32(0))

@@ -14,6 +14,9 @@ contract AfkingFrameHost is AfkingStethHost {
     function pin(uint24 day) external {
         _afkingResetDay = day;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _subCursor = 0;
         subsFullyProcessed = false;
         rngLockedFlag = false;

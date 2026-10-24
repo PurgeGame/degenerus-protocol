@@ -5,8 +5,8 @@ import { eth, advanceToNextDay, getLastVRFRequestId } from "./testUtils.js";
 // MinerAction ordinals (DegenerusGameStorage.MinerAction).
 const IDLE = 0n;
 const WAIT = 2n;
-export const MINER_HUMAN_BOXES = 10n;
-export const MINER_REQUEST_MIDDAY = 18n;
+export const MINER_HUMAN_BOXES = 9n;
+export const MINER_REQUEST_MIDDAY = 17n;
 
 // Name of the custom error a reverted mineFlip carried, if the Game ABI decodes it.
 function minerRefusal(game, error) {
@@ -54,7 +54,7 @@ export async function requestMiddayRng(game, signer, mockVRF) {
     .to.equal(MINER_REQUEST_MIDDAY);
   const credit = await game.middayRngCredits(signer.address);
   const before = await getLastVRFRequestId(mockVRF);
-  await (await game.connect(signer).mineFlip(0)).wait();
+  await (await game.connect(signer).mineFlip(0, { gasLimit: 16_777_216 })).wait();
   const request = await getLastVRFRequestId(mockVRF);
   expect(request, "mid-day request issued").to.be.gt(before);
   expect(await game.middayRngCredits(signer.address), "an at-threshold request charges no credit").to.equal(credit);
@@ -68,14 +68,14 @@ export async function readyDailyFixture() {
   await f.mockVRF.fundSubscription(1, eth(100));
   await advanceToNextDay();
   for (let calls = 0; calls < 50 && !(await f.game.rngLocked()); calls++) {
-    await f.game.connect(f.deployer).mineFlip(0);
+    await f.game.connect(f.deployer).mineFlip(0, { gasLimit: 16_777_216 });
   }
   expect(await f.game.rngLocked(), "daily request must engage").to.equal(true);
   const request = await getLastVRFRequestId(f.mockVRF);
   expect(request, "fresh real VRF request").to.be.gt(0n);
   await f.mockVRF.fulfillRandomWords(request, 0xB007n);
   for (let calls = 0; calls < 100 && await f.game.rngLocked(); calls++) {
-    await f.game.connect(f.deployer).mineFlip(0);
+    await f.game.connect(f.deployer).mineFlip(0, { gasLimit: 16_777_216 });
   }
   expect(await f.game.rngLocked(), "daily work must finish within its bound").to.equal(false);
   // The engine keeps going after the daily seal: read consumers drain, and a shut
@@ -93,7 +93,7 @@ export async function readyDailyFixture() {
       fulfilled = pending;
       continue;
     }
-    await f.game.connect(f.deployer).mineFlip(0);
+    await f.game.connect(f.deployer).mineFlip(0, { gasLimit: 16_777_216 });
   }
   expect(await f.game.nextMinerAction(), "fixture settles to an idle engine").to.equal(IDLE);
   await expect(f.game.connect(f.deployer).mineFlip.staticCall(0), "no box or other engine work remains")

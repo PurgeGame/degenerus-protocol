@@ -1,3 +1,4 @@
+import { completeLogicalDay } from "../helpers/logicalDayFixture.js";
 import { expect } from "chai";
 import { compiledStorageSlot } from "../helpers/storageLayout.js";
 import hre from "hardhat";
@@ -9,8 +10,6 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
-  advanceToNextDay,
-  getLastVRFRequestId,
 } from "../helpers/testUtils.js";
 
 /**
@@ -102,28 +101,13 @@ describe("WhaleBoonDeityLapse", function () {
   }
 
   async function settleRngDay(game, deployer, mockVRF, word) {
-    const previous = await getLastVRFRequestId(mockVRF);
-    await advanceToNextDay();
-    let fulfilled = false;
-    for (let i = 0; i < 100; i++) {
-      const requestId = await getLastVRFRequestId(mockVRF);
-      if (requestId > previous) {
-        const pending = await mockVRF.pendingRequests(requestId);
-        if (!pending.fulfilled) await mockVRF.fulfillRandomWords(requestId, word);
-        fulfilled = true;
-      }
-      if (fulfilled && !(await game.rngLocked()) && !(await game.advanceDue())) break;
-      // The keeper also resolves prior read consumers and pre-request work.
-      await game.connect(deployer).mineFlip(0);
-    }
-    expect(fulfilled, "the day requested and received a fresh word").to.equal(true);
-    expect(await game.rngLocked()).to.equal(false);
+    await completeLogicalDay(game, deployer, mockVRF, word);
   }
 
   /// @dev Settle RNG day by day until the deity's slot menu offers `targetBoonType`,
   ///      then return the matching slot index WITHOUT issuing it -- the caller seeds
   ///      the recipient's lane relative to the now-current day first, then issues in
-  ///      the same day so the contract's `_simulatedDayIndex()` at issuance matches
+  ///      the same day so the contract's logical day at issuance matches
   ///      the day the caller seeded against. Skips any day where currentDayView() < 10
   ///      so a caller seeding `currentDay - N` (N up to 6) never underflows the uint24.
   async function findWhaleTenSlot(game, deity, deployer, mockVRF, seedBase, maxDays) {
@@ -131,7 +115,16 @@ describe("WhaleBoonDeityLapse", function () {
     const viewer = await Viewer.deploy();
 
     for (let dayOffset = 0; dayOffset < maxDays; dayOffset++) {
-      await settleRngDay(game, deployer, mockVRF, BigInt(seedBase + dayOffset));
+      try {
+        await settleRngDay(game, deployer, mockVRF, BigInt(seedBase + dayOffset));
+      } catch (error) {
+        const state = { offset: dayOffset, logical: String(await game.currentDayView()),
+          wall: String(await game.currentWallDayView()), level: String(await game.level()),
+          action: String(await game.nextMinerAction()), complete: (await game.dailySessionState())[0],
+          locked: await game.rngLocked(), over: await game.gameOver() };
+        console.log("Whale menu driver state:", JSON.stringify(state));
+        throw error;
+      }
 
       const currentDay = await game.currentDayView();
       if (currentDay < 10n) continue;
@@ -154,7 +147,8 @@ describe("WhaleBoonDeityLapse", function () {
       .connect(alice)
       .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
-    const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9000, 200);
+    // Fixed menu witness within the thirty-round purchase phase.
+    const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9500, 30);
     const currentDay = await game.currentDayView();
 
     // Seed bob with a lootbox-rolled tier-3 whale discount 6 days stale (>4-day
@@ -181,7 +175,8 @@ describe("WhaleBoonDeityLapse", function () {
       .connect(alice)
       .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
-    const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9500, 200);
+    // Fixed menu witness within the thirty-round purchase phase.
+    const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9500, 30);
     const currentDay = await game.currentDayView();
 
     // Seed bob with a lootbox-rolled tier-3 whale discount from yesterday -- still

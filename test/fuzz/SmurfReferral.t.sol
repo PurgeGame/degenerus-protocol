@@ -433,8 +433,8 @@ contract SmurfReferralTest is DeployProtocol {
         assertEq(coinflip.coinflipAmountById(_fixtureId(s)) - stakeBefore, credit, "the stake sits on the smurf's ID");
 
         // A coinflip claim for the smurf mints to the owner.
-        uint24 d = _today();
-        _warpToDay(d + 1);
+        // The stake rides the next logical round.
+        uint24 d = coinflip.requestedDailyIdx();
         uint256 word = uint256(keccak256(abi.encodePacked("smurf_referral_flip", d + 1))) | 1;
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, word, d + 1);

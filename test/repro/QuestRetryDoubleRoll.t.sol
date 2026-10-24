@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -235,7 +236,8 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         for (uint256 i; i < 64; i++) {
             if (game.rngLocked()) return;
             uint8 action = game.nextMinerAction();
-            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == uint8(DegenerusGameStorage.MinerAction.Idle)
+                || action == uint8(DegenerusGameStorage.MinerAction.RequestDaily)) return;
             if (action == 2) {
                 uint256 id = mockVRF.lastRequestId();
                 (,, bool done) = mockVRF.pendingRequests(id);

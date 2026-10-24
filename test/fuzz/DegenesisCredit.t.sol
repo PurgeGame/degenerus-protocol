@@ -235,8 +235,8 @@ contract DegenesisCredit is DegenesisFixture {
 
     // ------------------------------------------------------------------ window
 
-    /// @notice Credit accrues through the last second before DEGENESIS_END_TS and not from it.
-    function test_CreditClosesAtDegenesisEndTs() public {
+    /// @notice Calendar expiry does not close credit; the logical launch request does.
+    function test_CreditClosesAtLogicalMainLaunch() public {
         _driveThrough(8);
         uint256 price = game.mintPrice();
         vm.warp(GameTimeLib.DEGENESIS_END_TS - 1);
@@ -245,7 +245,12 @@ contract DegenesisCredit is DegenesisFixture {
         assertEq(_credit(alice), price, "open until the last second");
         vm.warp(GameTimeLib.DEGENESIS_END_TS);
         _buyTickets(alice, 4);
-        assertEq(_credit(alice), price, "closed from DEGENESIS_END_TS");
+        assertEq(_credit(alice), 2 * price, "calendar reset does not close logical cohort 7");
+        _driveDay(9);
+        uint256 before = _credit(alice);
+        vm.deal(alice, 1 ether);
+        _buyTickets(alice, 4);
+        assertEq(_credit(alice), before, "logical main launch closes credit");
     }
 
     // ------------------------------------------------------------------ Degenesis buy itself

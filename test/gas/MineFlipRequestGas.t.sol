@@ -25,8 +25,12 @@ contract RequestCloseProbe is DegenerusGameRngUtils {
 
 contract RequestGameSeeder is DegenerusGame {
     function seed(bool daily, bool transition, bool certify) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         dailyIdx = daily ? today - 1 : today;
+        dailyComplete = !certify;
+        rngRequestDay = certify ? dailyIdx : 0;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = daily ? today - 1 : today;
         _afkingResetDay = today;
         purchaseStartDay = daily && !transition ? today - 2 : today;
         lastVrfProcessedTimestamp = uint48(block.timestamp);
@@ -39,7 +43,7 @@ contract RequestGameSeeder is DegenerusGame {
         ticketsFullyProcessed = true;
         humanReadComplete = true;
         subsFullyProcessed = true;
-        _recordDailyRng(today, 1234);
+        _recordDailyRng(dailyIdx, 1234);
         level = 13;
         lastPurchaseDay = transition;
         if (transition) {
@@ -198,6 +202,7 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         vm.etch(address(game), type(RequestGameSeeder).runtimeCode);
         host = RequestGameSeeder(payable(address(game)));
         host.seed(_daily(), _transition(), _certify());
+        _syncCoinflipFixtureDay(game.currentDayView());
         burnerId = _giveWalletId(BURNER);
         if (!_daily() && !_arm()) host.pendingMidday(_shape(), burnerId);
         // Cover populated foil swaps and the costlier first toggle of an empty foil slot.
@@ -247,7 +252,7 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
             vm.prank(BURNER); sdgnrs.burn(burned);
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(RequestFlipSeeder).runtimeCode);
-            RequestFlipSeeder(address(coinflip)).seedBacking(DAY, backingMode);
+            RequestFlipSeeder(address(coinflip)).seedBacking(_daily() ? DAY - 1 : DAY, backingMode);
             vm.etch(address(coinflip), original);
             MockStETH implementation = new MockStETH();
             RequestStethEnvelope proxy = new RequestStethEnvelope(address(implementation));
@@ -301,7 +306,7 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
             // Plus the 1-wei registration sentinel, which the redemption pull never takes.
             assertEq(game.claimableWinningsOf(address(sdgnrs)), 10_000 ether + 1 - payout, "claimable debited");
             uint256 state = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint32(2), uint256(2)))));
-            assertEq(uint24(state >> 128), DAY, "backing remains caught up");
+            assertEq(uint24(state >> 128), _daily() ? DAY - 1 : DAY, "backing remains at the completed result");
     }
     /// @dev All setup is in the preceding transaction. Use --isolate for committed SSTORE
     /// values and cold accounts/slots. gasTotalUsed is gross execution, before refunds.
@@ -390,16 +395,13 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         assertEq(coordinator.requests(address(game)), 0);
         assertTrue(game.rngComplete(), "old read remains certified");
     }
-    function test_MultiplierDefersContinuationAndScaledMinimumRequiresFundedRetry() public {
+    function test_MultiplierDefersOptionalContinuationButFirstRetryUsesAllGas() public {
         this.configure(Scenario.Arm);
         game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(20_000);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0, "caller doubled continuation reserve");
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(type(uint32).max);
-        assertEq(coordinator.requests(address(game)), 0);
-        assertEq(table.binding(slot), 1, "refusal preserves prior arm");
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(0);
+        assertEq(table.binding(slot), 1, "first-unit retry preserves the committed arm");
         _assertRequested();
     }
     function test_ExtremeMultiplierStillArmsFirst() public {
@@ -419,14 +421,12 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         assertEq(settling, 0);
         assertEq(escrow, burned, "unadmitted close cannot mutate escrow");
     }
-    function test_HeavyCloseScaledMinimumRefusesAtomicallyThenResumes() public {
+    function test_HeavyCloseFirstRetryUsesAllGasAtMaximumMultiplier() public {
         this.configure(Scenario.ArmRedeem);
         game.mineFlip{gas: 1_000_000}(0);
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(type(uint32).max);
         (uint32 open, uint32 settling,, uint256 escrow) = sdgnrs.redemptionBatchState();
         assertEq(open, 1); assertEq(settling, 0); assertEq(escrow, burned);
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(0);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(type(uint32).max);
         _assertRequested();
     }
     function test_FundedHeavyContinuationFits() public {
@@ -462,15 +462,15 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         assertEq(game.level(), 13);
     }
 
-    function testFuzz_DailyAndGapKeepSdgnrsCurrent(uint8 daysSeed, uint256 word) public {
+    function testFuzz_ConsecutiveLogicalRoundsKeepSdgnrsCurrent(uint8 daysSeed, uint256 word) public {
         uint24 gap = uint24(bound(daysSeed, 1, 29));
         // The seed window and transition into perpetual auto-rebuy use the real daily path.
         vm.startPrank(address(game));
-        for (uint24 d = 1; d <= 21; ++d) {
+        for (uint24 d = 2; d <= 21; ++d) {
             coinflip.processCoinflipPayouts(0, uint256(keccak256(abi.encode(word, d))), d);
             _assertBackingCursor(d);
         }
-        coinflip.processCoinflipGap(word, 22, 22 + gap);
+        for (uint24 d = 22; d < 22 + gap; ++d) coinflip.processCoinflipPayouts(0, uint256(keccak256(abi.encode(word, d))), d);
         _assertBackingCursor(21 + gap);
         vm.stopPrank();
         // Both close-time methods see start == latest and cannot walk another history.

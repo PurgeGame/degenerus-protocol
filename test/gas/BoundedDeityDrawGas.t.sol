@@ -10,8 +10,12 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
 contract BoundedDeityDrawHost is DegenerusGame, BucketSeed {
     function seed(bool deities) external {
-        uint24 day = _simulatedDayIndex();
-        dailyIdx = day - 1;
+        uint24 day = _wallDay();
+        dailyIdx = day;
+        rngRequestDay = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         level = 0;
         _setLevelPrizePool(0, (12_500 * PriceLookupLib.priceForLevel(level) * 400) / PRICE_COIN_UNIT);
         uint32 traits;
@@ -36,6 +40,7 @@ contract BoundedDeityDrawGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(game), vm.getDeployedCode("BoundedDeityDrawGas.t.sol:BoundedDeityDrawHost"));
         BoundedDeityDrawHost host = BoundedDeityDrawHost(payable(address(game)));
         host.seed(deities);
+        _syncCoinflipFixtureDay(game.currentDayView());
         if (repeat) host.draw();
         _measureBounded(label, address(host), address(this), 0, abi.encodeCall(host.draw, ()), false);
         uint256 total;

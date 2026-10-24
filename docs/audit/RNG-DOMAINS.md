@@ -171,8 +171,9 @@ Repeated calls cannot reroll a completed century.
 ## Daily retention and foil cohorts (2026-10-01)
 
 The game retains two full daily words under `day & 1`, authenticated by two
-absolute uint24 day tags in slot 34. `rngWordForDay` exposes only today and
-yesterday, returning zero for future, expired, or mismatched tags. Internal
+logical uint24 day tags in slot 34. `rngWordForDay` exposes the latest applied
+result and its predecessor, returning zero for future, expired, or mismatched tags.
+An unresolved request does not retire a published result. Internal
 processing readers authenticate the same tags without a calendar cutoff: a
 committed daily advance consumer can finish after midnight. AFKing boxes and
 Decimator settlement use the active published session word instead of historical
@@ -202,15 +203,17 @@ separate tags; they no longer depend on retained daily words. A zero seed is val
 with the flag set; unseeded records are rejected. This is a predeployment format
 change, with no legacy-state migration.
 
-Foil match claims are open on the draw day and following day, and expire on D+2
-even if the record has not yet been overwritten. Internal jackpot processing may
+Foil match retention advances only with published foil draws. Claims on D remain
+open through the published draw frontier D+1 and expire at D+2. Calendar resets
+and outstanding requests cannot expire them. Internal jackpot processing may
 still read an older, exactly tagged logical day while completing a stalled draw.
 Pack readiness, first-eligible draw, and exact level checks still apply. Each
 player's match markers occupy one reusable word: two day-tagged lanes, each with
 four ticket bits. The liveness/game-over cutoff still closes claims. Golden foil claims retain the
-generation-day and next-day window; WWXRP payouts retain resolving day D and D+1
-(where D is participation day plus one). Both expire on D+2. The foil grand remains
-a push during materialization. The initial level-0 idle deadline is 250 days.
+generation-day and next-day window measured against published daily results;
+WWXRP payouts retain resolving day D and D+1 (where D is participation day plus
+one) against that same result frontier. Both expire at published D+2. The foil
+grand remains a push during materialization.
 
 Pack metadata and all four lines share four reusable slots per player, keyed by
 `level & 3` and authenticated by the full level in bits 208–231. Gold-paid state
@@ -231,17 +234,23 @@ level within the claim window can therefore change ETH, sDGNRS, and recirculatio
 proceeds; unclaimed matches do not reserve funds.
 Claims during frozen pools retain the existing pending-pool solvency check.
 
-Recovery takes Coinflip wins directly from bits 1 through 31 of the committed
-raw recovery word, leaving bit 0 for the recovery day's normal flip. Each gap
-bit is anchored to the originally requested start day, even when retrying an
-already-settled prefix. Gap rewards are fixed at 100% profit: double the stake
-on a win, zero on a loss, before the existing auto-rebuy bonus. The recovery day's
-normal reward draw is unchanged. Ordered backing and
-record-pool settlement is unchanged. The eight-bit results are stored in batches
-of 32 days per storage word. Other daily consumers retain only the final gap
-day's derived word, `H(rawRoot, gapDay)`; its parity does not specify that day's
-Coinflip outcome. Coinflip result history continues independently of the two
-full-word slots; old gap words have no archive.
+The logical day starts at 1 and advances exactly once when a fresh daily VRF
+request is accepted, first to 2. Coinflip receives the same requested-day mirror
+atomically. Retry, coordinator replacement, midday requests and elapsed calendar
+windows never increment it. Only one fresh daily request may be accepted in each
+22:57 UTC reset window; unused windows create no rounds or recovery results.
+Coinflip win/loss remains raw word bit 0, and every settled logical round receives
+its ordinary tagged reward-percent draw. There is no gap backfill, bitmap of
+rolled days, recovery-bit allocation, or recovery-word domain.
+
+The full daily certificate follows the final normal read consumer. It records
+the actual completion timestamp independently of word application and jackpot
+unlock. Level 0 uses purchase baseline 9: thirty completed main-game rounds reach
+39, and normal expiry waits for the next real reset after completion. Later
+levels use the same thirty-round rule. A funded target rescues normal expiry.
+Fourteen real days since full daily completion force the hard ending before any
+normal work, including during a broken consumer or funded jackpot. Terminal entry
+never invokes Craps and never follows a normal payout in the same mining call.
 
 Live sDGNRS redemptions pin the final settlement session word for both manual
 claims and the mandatory bounded miner drain. Half the rolled ETH credits
@@ -274,7 +283,7 @@ Every outcome input is fixed before that request:
   balance, writing `degenesisActive` with the bound day. Pricing requires the previous cohort to have
   closed, so a backlog delays the binding word and cannot alter a rate.
 - `_recordDailyRng` copies the word into `degenesisWord` when `degenesisClosed < 7` and the bound day
-  equals the recorded day, on the apply path and on gap backfill. The copy is the only way a word
+  equals the recorded logical day on the daily apply path. The copy is the only way a word
   reaches the module; mid-day words never bind.
 - `_degenesisOutcome` is pure in (`degenesisWord`, cohort day, `V`, `Q`, lane, index): reordering or
   partitioning settlement calls cannot change any order's reward, and the cursor only selects which
@@ -344,7 +353,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Daily / level quests | `H(word, DAILY_QUEST_TAG)` / `H(word, LEVEL_QUEST_TAG)` | Global quests; forced-type policy unchanged |
 | Skim bps / variance | `H(word, SKIM_BPS_TAG)` / `H(word, SKIM_VARIANCE_TAG)` | Second variance draw hashes the first variance word |
 | sDGNRS century refill | `H(word, CENTURY_REFILL_TAG XOR completedLevel) % 51 + 25` | Tag = `H("sdgnrs.century.refill")`; fixed level and transition word; no caller, amount, timestamp or pool balance in seed |
-| Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Normally resolved days only; gap rewards are fixed at 100% profit, with win/loss from raw recovery bits |
+| Coinflip reward percent | `H(REWARD_PERCENT_TAG, word)` | One result per accepted logical daily request; win/loss is raw word bit 0 |
 | Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on immutable packed payout seed | Stored lines bind the buyer's wallet ID, level and line ordinal; payout binds draw day and ticket ordinal |
 | Deity boon menu | `H(dailyWord, deityWalletId, day, slot)` | Protocol issuers use their constant IDs (VAULT 1, SDGNRS 2); `DeityBoonViewer` reads the deity's ID from the Game |
 | Protocol boon winners | `H(PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, winnerWord)` | Issuer-address domain; winner cohort closed before request |

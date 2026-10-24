@@ -93,10 +93,16 @@ contract CoinflipAccountsTest is DeployProtocol {
     }
 
     function _today() internal view returns (uint24) {
-        return uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
+        return game.currentDayView();
     }
 
     function _warpToDay(uint24 d) internal {
+        _setRequestedFixtureDay(d);
+        // Direct settlement fixtures also roll the active quest day, preserving quest types.
+        bytes32 root = bytes32(QaTrace.QUESTS);
+        uint256 pair = uint256(vm.load(address(coinflip), root));
+        uint256 mask = uint256(0xffffff) | (uint256(0xffffff) << 64);
+        vm.store(address(coinflip), root, bytes32((pair & ~mask) | d | (uint256(d) << 64)));
         vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
     }
 

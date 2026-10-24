@@ -32,12 +32,15 @@ contract ChainPinGoHarness is DegenerusGameGameOverModule {
     ///      unanswered past the VRF timeout, 4 purchase phase past its deadline, 5 ending started,
     ///      6 last-purchase day.
     function seedCase(uint256 m) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = m & 1 != 0 ? 5 : 0;
-        purchaseStartDay = m & 16 != 0 ? 1 : day;
-        dailyIdx = m & 4 != 0 ? day - 31 : day - 1;
+        purchaseStartDay = m & 16 != 0 ? day - 30 : day;
+        dailyIdx = day;
+        dailyComplete = true;
+        lastDailyRequestWallDay = day - 1;
+        lastDailyCompletedAt = uint48(block.timestamp - (m & 4 != 0 ? 14 days : 1 days));
         lastPurchaseDay = m & 64 != 0;
-        _setLevelPrizePool(5, 10 ether);
+        _setLevelPrizePool(level, 10 ether);
         _setPrizePools(m & 2 != 0 ? 11 ether : 9 ether, 0);
         if (m & 8 != 0) {
             rngRequestTime = uint48(block.timestamp - 15 days);
@@ -58,7 +61,7 @@ contract ChainPinGoHarness is DegenerusGameGameOverModule {
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _setRngTerminal();
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
-        rngRequestDay = _simulatedDayIndex();
+        rngRequestDay = dailyIdx;
         rngRequestTime = uint48(block.timestamp);
         vrfRequestId = 9;
         _setRngSessionPublished(false);
@@ -77,7 +80,7 @@ contract ChainPinGoHarness is DegenerusGameGameOverModule {
     function liveness() external view returns (bool) { return _livenessTriggered(); }
     function action() external view returns (uint8) { return uint8(_nextMinerAction(address(0))); }
     function vrfDeadView() external view returns (bool) { return _vrfDead(); }
-    function today() external view returns (uint24) { return _simulatedDayIndex(); }
+    function today() external view returns (uint24) { return _wallDay(); }
     function levelNow() external view returns (uint24) { return level; }
     function recorded(uint24 day) external view returns (uint256) { return _recordedDailyWord(day); }
     function waitingWord() external pure returns (uint256) { return RNG_WORD_WAITING; }
@@ -88,6 +91,9 @@ contract ChainPinGoHarness is DegenerusGameGameOverModule {
     }
 }
 
+contract ChainPinFlipClosure {
+}
+
 contract ChainPinRouterTest is Test {
     ChainPinGoHarness private h;
     uint256 private constant LATE = 0xA11CE0DD;
@@ -95,6 +101,7 @@ contract ChainPinRouterTest is Test {
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 400 days);
         h = new ChainPinGoHarness();
+        vm.etch(ContractAddresses.COINFLIP, type(ChainPinFlipClosure).runtimeCode);
     }
 
     function _advance(uint256 allowance) private returns (bool ok, bytes memory ret) {
@@ -106,8 +113,8 @@ contract ChainPinRouterTest is Test {
 
     /// @dev For every liveness cause and combination: whenever the trigger reads true, the handler
     ///      returns shouldReturn=true (or revert RngNotReady in a state the router calls Wait), so
-    ///      the Advance module's `!handled -> E()` is unreachable. A met pool target rescues only
-    ///      the bare purchase deadline of a level above 0 before the ending started.
+    ///      the Advance module's `!handled -> E()` is unreachable. A met pool target rescues
+    ///      the bare purchase deadline at any level before the ending started.
     function test_F1_RescueRuleIsTheExactComplementOfTheLivenessTrigger() public {
         uint256 snap = vm.snapshotState();
         uint256 live;
@@ -126,9 +133,9 @@ contract ChainPinRouterTest is Test {
             bool lastP = m & 64 != 0;
             h.seedCase(m);
             bool isLive = h.liveness();
-            assertEq(isLive, deadman || vdead || (!lastP && deadline && (started || !(lvl5 && met))),
+            assertEq(isLive, deadman || vdead || started || (!lastP && deadline && !met),
                 string.concat("trigger truth table, case ", vm.toString(m)));
-            if (lvl5 && met && deadline && !deadman && !vdead && !started && !lastP) {
+            if (met && deadline && !deadman && !vdead && !started && !lastP) {
                 assertFalse(isLive, "a met target rescues the bare deadline");
                 ++rescued;
             }
@@ -153,7 +160,7 @@ contract ChainPinRouterTest is Test {
             }
             assertTrue(vm.revertToState(snap));
         }
-        assertEq(rescued, 1, "the rescue shape was exercised");
+        assertEq(rescued, 2, "the rescue shape was exercised");
         assertGt(deadmanMet, 0, "deadman with a met target");
         assertGt(vrfDeadMet, 0, "dead VRF with a met target");
         assertGt(startedMet, 0, "started ending with a met target");
@@ -228,7 +235,7 @@ contract ChainPinRouterTest is Test {
         assertEq(h.action(), ACTION_WAIT, "waiting inside the window");
         vm.warp(sent + 14 days - 1);
         assertFalse(h.vrfDeadView());
-        assertEq(h.action(), ACTION_WAIT);
+        assertEq(h.action(), ACTION_TERMINAL, "daily completion deadline precedes the younger request timeout");
         vm.warp(sent + 14 days);
         assertTrue(h.vrfDeadView(), "the window ends 14 days after the send");
         assertEq(h.action(), ACTION_TERMINAL);
@@ -254,7 +261,7 @@ contract ChainPinRouterTest is Test {
     function test_FT4_WordDeliveredInsideTheWindowKeepsTheRequestAlive() public {
         h.seedCase(1 | 16);
         h.armTerminalRequest();
-        vm.warp(block.timestamp + 14 days - 1);
+        vm.warp(vm.getBlockTimestamp() + 12 days);
         h.deliver(LATE);
         assertFalse(h.vrfDeadView());
         assertEq(h.action(), ACTION_TERMINAL, "a delivered word is work, not a wait");
@@ -288,7 +295,7 @@ contract ChainPinDrainStub {
 
 contract ChainPinDrainHarness is DegenerusGameGameOverModule, BucketSeed {
     function seed(bool postSwap) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 10;
         dailyIdx = day - 1;
         purchaseStartDay = 1;
@@ -307,7 +314,7 @@ contract ChainPinDrainHarness is DegenerusGameGameOverModule, BucketSeed {
         }
     }
 
-    function today() external view returns (uint24) { return _simulatedDayIndex(); }
+    function today() external view returns (uint24) { return _wallDay(); }
     function swapLatched() external view returns (uint256) { return _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK); }
 }
 
@@ -390,7 +397,7 @@ contract ChainPinSeeder is DeadVrfSeeder {
     ///      stopped by anything but the liveness trigger.
     function pinSeedDeadMidday(uint24 lvl) external {
         TQ.retireCompleted(address(this), lvl);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         purchaseStartDay = day - 10;
         dailyIdx = day - 1;
         level = lvl;
@@ -610,7 +617,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
     function test_FT4_WordDeliveredInsideTheWindowGivesTheNormalEnding() public {
         uint256 req = _toRequestSent(3, 40);
         Id memory a = _id();
-        vm.warp(uint256(a.reqTime) + 13 days);
+        vm.warp(uint256(a.reqTime) + 12 days);
         mockVRF.fulfillRandomWords(req, LATE);
         vm.recordLogs();
         _finish(mockVRF, 120);

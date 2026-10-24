@@ -155,7 +155,7 @@ contract QueueHost is DegenerusGame {
     function seedBoost(address player, uint8 tier) external {
         uint32 id = _walletIdOf(player);
         boonPacked[id].slot0 = (boonPacked[id].slot0 & BP_LOOTBOX_CLEAR)
-            | (uint256(tier) << BP_LOOTBOX_TIER_SHIFT) | (uint256(_simulatedDayIndex()) << BP_LOOTBOX_DAY_SHIFT);
+            | (uint256(tier) << BP_LOOTBOX_TIER_SHIFT) | (uint256(_wallDay()) << BP_LOOTBOX_DAY_SHIFT);
     }
 
     function boostTier(address player) external view returns (uint256) {
@@ -165,10 +165,10 @@ contract QueueHost is DegenerusGame {
     /// @dev Put today on the purchase deadline (distress) or well before it, keeping the deadman,
     ///      VRF and liveness clocks current.
     function seedDistress(bool on) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         dailyIdx = today;
         rngRequestTime = uint48(block.timestamp);
-        purchaseStartDay = on ? today - uint24(_DEPLOY_IDLE_TIMEOUT_DAYS) : today;
+        purchaseStartDay = on ? today - uint24(_PURCHASE_TIMEOUT_DAYS) : today;
     }
 
     function distress() external view returns (bool) { return _isDistressMode(); }

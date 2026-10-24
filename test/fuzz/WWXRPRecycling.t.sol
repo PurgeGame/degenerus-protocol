@@ -13,6 +13,10 @@ contract WwxrpRecyclingGameMock {
     mapping(uint24 => uint256) public rngWordForDay;
     mapping(uint32 => uint256) public playerActivityScore;
     uint24 public level;
+    uint24 public currentDayView;
+    uint24 public latestDailyResultDay;
+    bool public livenessTriggered;
+    function setDay(uint24 day) external { currentDayView = day; latestDailyResultDay = day; }
     function setWord(uint24 day, uint256 word) external { rngWordForDay[day] = word; }
     function setActivity(address player, uint256 score) external { playerActivityScore[walletIdOf_g3120[player]] = score; }
     mapping(address => uint32) public walletIdOf_g3120;
@@ -25,7 +29,10 @@ contract WwxrpRecyclingGameMock {
         return playerActivityScore[id];
     }
     function setLevel(uint24 value) external { level = value; }
-    function extsload_g8132(bytes32) external pure returns (bytes32) { return bytes32(0); }
+    function extsload_g8132(bytes32 slot) external view returns (bytes32) {
+        if (slot == bytes32(0)) return bytes32(uint256(currentDayView) << 24);
+        return bytes32(0);
+    }
 }
 
 contract WwxrpRecyclingCoinflipMock {
@@ -52,6 +59,7 @@ contract WWXRPRecyclingTest is Test {
     }
 
     function _day(uint24 day) private {
+        game.setDay(day);
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + day - 1) * 1 days + 82620);
     }
 

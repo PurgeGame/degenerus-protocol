@@ -11,7 +11,7 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract RecyclingProgressSeeder is DeadVrfSeeder {
     function seedDeferredFoil(address foilOwner, address ticketOwner) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 202;
         dailyIdx = day;
         purchaseStartDay = day;
@@ -30,8 +30,10 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         _seedQueued(_tqReadKey(203), 203, ticketOwner, uint80(100) << 8);
     }
     function seedWrappedPending(address owner) external {
-        uint24 day = _simulatedDayIndex();
-        level = 202; dailyIdx = day - 1; purchaseStartDay = day;
+        uint24 day = _wallDay();
+        level = 202; dailyIdx = day; purchaseStartDay = day;
+        dailyComplete = false; lastDailyRequestWallDay = day;
+        lastDailyCompletedAt = uint48(block.timestamp);
         earlyTicketLevel = 203;
         _setTicketBufferLevel(201); _setTicketBufferLevel(202);
         ticketsFullyProcessed = false;
@@ -52,6 +54,7 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         else foilReadCount = uint32(i + 1);
     }
     function seedPaidFoil(uint24 lvl, uint24 day, address owner) external {
+        _recordDailyRng(day, 0xB0B5); // the completed daily result backing this retained foil
         foilRecord[lvl & 3][_seedWallet(owner)] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
             | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
         uint256 pos = uint256(_seedWallet(owner));
@@ -135,6 +138,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         RecyclingProgressSeeder s = _overlay();
         s.seedWrappedPending(buyer);
         vm.etch(address(game), realCode);
+        _syncCoinflipFixtureDay(uint24(game.currentDayView()));
         game.mineFlip(0);
         assertEq(RecyclingState.word(address(game), 1), 2, "wrapped nudge normalized before ticket generation");
         s = _overlay();

@@ -29,7 +29,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
     uint256 internal constant DGW_PLAYERS = 18;
     uint8 internal constant DGW_ACTION_IDLE = 0;
     uint8 internal constant DGW_ACTION_WAIT = 2;
-    uint8 internal constant DGW_ACTION_SETTLE = 21;
+    uint8 internal constant DGW_ACTION_SETTLE = 20;
     uint8 internal constant DGW_STAGE_ENTERED_JACKPOT = 7;
     uint8 internal constant DGW_STAGE_JACKPOT_PHASE_ENDED = 9;
     uint8 internal constant DGW_STAGE_DEGENESIS_DAY = 21;
@@ -151,6 +151,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
         uint24 d = uint24(GameTimeLib.DEGENESIS_START_DAY + c - 1);
         _dgwWarp(d, 5 minutes);
         _dgwDrive();
+        require(game.currentDayView() == d, "DegenesisWeekOpening: accepted logical cohort");
         uint256 buyers = 7 + uint256(keccak256(abi.encode(dgwWordSalt, c))) % 5;
         uint256[3] memory driveAt = [uint256(1 hours), 7 hours, 13 hours];
         uint256 drives;
@@ -250,7 +251,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
 
     function _dgwWarp(uint24 d, uint256 secs) internal {
         vm.warp(uint256(d - 1) * 1 days + GameTimeLib.JACKPOT_RESET_TIME + secs);
-        require(game.currentDayView() == d, "DegenesisWeekOpening: day mapping");
+        require(game.currentWallDayView() == d, "DegenesisWeekOpening: wall reset mapping");
     }
 
     // ------------------------------------------------------------------ log scan

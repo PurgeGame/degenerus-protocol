@@ -19,10 +19,13 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract JackpotCommitmentSeeder is DegenerusGame, WalletSeed {
     function seed(address attacker) external returns (uint256 salvagePosition) {
         TQ.retireCompleted(address(this), 7);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 6;
         purchaseStartDay = day - 2;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
         gameOver = false;

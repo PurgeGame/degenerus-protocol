@@ -102,17 +102,17 @@ describe("Deploy Pipeline", function () {
       expect(await f.coin.vaultMintAllowance()).to.equal(0n);
     });
 
-    it("Coinflip: days 1-20 each stake 200k for VAULT and sDGNRS", async function () {
+    it("Coinflip: days 2-21 each stake 200k for VAULT and sDGNRS", async function () {
       const f = await loadFixture(deployFullProtocol);
       const seed = 200000n; // whole FLIP: stake lanes and the seed window carry whole units
       const vaultAddr = await f.vault.getAddress();
       const sdgnrsAddr = await f.sdgnrs.getAddress();
       // The deploy seed is one window, not stake lanes: the constructor announces it with a
-      // single SeedWindowArmed (days 1-20, 200k per day) and emits no
+      // single SeedWindowArmed (days 2-21, 200k per day) and emits no
       // CoinflipStakeUpdated for either recipient.
       const armed = await f.coinflip.queryFilter(f.coinflip.filters.SeedWindowArmed());
       expect(armed.length).to.equal(1);
-      expect(armed[0].args.firstDay).to.equal(1n);
+      expect(armed[0].args.firstDay).to.equal(2n);
       expect(armed[0].args.dayCount).to.equal(20n);
       expect(armed[0].args.amountPerDay).to.equal(seed);
       const staked = await f.coinflip.queryFilter(

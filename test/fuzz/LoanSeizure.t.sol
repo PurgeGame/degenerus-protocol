@@ -58,7 +58,7 @@ contract SeizureSeeder is DegenerusGameStorage {
 contract LoanSeizureTest is DeployProtocol {
     uint256 private constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
     uint8 private constant ACTION_WAIT = 2;
-    uint8 private constant ACTION_SEIZE_LOANS = 20;
+    uint8 private constant ACTION_SEIZE_LOANS = 19;
     bytes32 private constant LOAN_SEIZED_SIG = keccak256("LoanSeized(uint32,uint32)");
     bytes32 private constant LOAN_REPAID_SIG = keccak256("LoanRepaid(uint32,address,uint256)");
 

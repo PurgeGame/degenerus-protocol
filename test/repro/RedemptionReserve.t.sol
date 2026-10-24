@@ -12,6 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionReserveHarness is DegenerusGameRngUtils {
+    function currentDayView() external view returns (uint24) { return _gameDay(); }
     function close() external { _closeRedemptionBatch(); }
     function reserveFromOrdinary(uint256 amount) external {
         _debitClaimable(SDGNRS_WALLET_ID, amount);
@@ -19,8 +20,10 @@ contract RedemptionReserveHarness is DegenerusGameRngUtils {
     }
     function seedBorrower(uint32 id) external {
         level = 1;
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         dailyIdx = day;
+        dailyComplete = true; lastDailyRequestWallDay = day;
+        lastDailyCompletedAt = uint48(block.timestamp);
         purchaseStartDay = day;
         _recordDailyRng(day - 1, 123456);
         _queueEntries(id, _activeTicketLevel() + 6, 3_000_000, false);

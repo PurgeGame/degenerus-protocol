@@ -9,11 +9,9 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
-/// @dev Daily and terminal entropy share identical recording, nudge and gap rules.
+/// @dev Daily and terminal entropy share recording and nudge rules.
 ///      This base declares no storage; both delegate modules inline the same helpers.
 abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
-    uint24 private constant GAP_BACKFILL_MAX_DAYS = _VRF_DEADMAN_DAYS + 1;
-
     /// @notice Finalized daily word and the nudges applied to its raw input.
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
 
@@ -52,29 +50,6 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         if (_rngSessionPublished()) return;
         _setRngSessionPublished(true);
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
-    }
-
-    /// @dev Fill packed coinflip results and settle funding for gap days
-    ///      caused by VRF stall. Coinflip uses double-or-nothing payouts and raw win bits
-    ///      1..31, anchored at startDay;
-    ///      other daily consumers retain the final gap day's keccak256(vrfWord, gapDay).
-    ///      NOTE: Gap days get zero nudges (totalFlipReversals not consumed).
-    ///      NOTE: sDGNRS redemption batches are keyed by request, not by day, so gap days
-    ///      resolve none; the batch the request closed settles on its word.
-    /// @param vrfWord The first post-gap VRF random word.
-    /// @param startDay First gap day (dailyIdx + 1).
-    /// @param endDay Current day (exclusive — not backfilled, handled by normal path).
-    function _backfillGapDays(uint256 vrfWord, uint24 startDay, uint24 endDay) internal {
-        // Bound the number of per-day settlements. A live gap never reaches the bound (the deadman ends the game
-        // first); on the normal ending the days past it hold no ticket or foil entry.
-        if (endDay - startDay > GAP_BACKFILL_MAX_DAYS) endDay = startDay + GAP_BACKFILL_MAX_DAYS;
-        coinflip.processCoinflipGap(vrfWord, startDay, endDay);
-        // Retain just the last derived word in the two-slot ring.
-        if (endDay > startDay) {
-            uint24 yesterday = endDay - 1;
-            uint256 word = uint256(EntropyLib.hash3(RngTags.GAP_DAY, vrfWord, yesterday));
-            _recordDailyRng(yesterday, word == 0 ? 1 : word);
-        }
     }
 
     /// @dev Record the callback-finalized word and clear its frozen nudge receipt. A recorded

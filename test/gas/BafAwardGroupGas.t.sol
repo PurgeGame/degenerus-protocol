@@ -27,14 +27,17 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 ///      pending buffer).
 contract BafGroupGasHost is DegenerusGame, WalletSeed {
     function seedBafStage(uint256 word, uint128 pool, uint32 positions, uint16 cursor, uint128 reserved) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         vaultFlipSettledDay = day; // This fixture begins after the earlier daily backstop checkpoint.
         level = 100;
         jackpotPhaseFlag = true;
         lastPurchaseDay = false;
         jackpotFlags = 0;
         phaseTransitionActive = false;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         ticketsFullyProcessed = true;
         rngLockedFlag = true;
         rngRequestTime = uint48(block.timestamp);

@@ -1,268 +1,67 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
-
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
-/// @title TransientLiveness — past the purchase deadline, liveness never reads true and then false.
-///
-/// @notice The purchase-deadline trigger freezes purchases, burns and afking subscriptions and routes
-///         decimator and redemption claims terminally. It must read exactly what the advance's
-///         game-over path will decide, or a day opens frozen and thaws again:
-///           1  target met — distress buys after the deadline day's seal beat the target: the next
-///                           day is not frozen (the advance will rescue the level).
-///           2  unattended — nobody advances the first day past the deadline: the next day stays
-///                           frozen and the next advance ends the level (no deadline credit).
-///         Controls: a VRF stall straddling the deadline still waits for its credit, a worded day
-///         is finished on its word, and a started ending stays triggered even if the pool recovers.
 contract TransientLivenessHarness is DegenerusGameStorage {
-    function seed(uint24 lvl, uint24 age, uint48 requestTime, uint24 sealedAge) external {
+    function seed(uint24 lvl, uint24 daysComplete, bool complete, uint48 completedAt) external {
         level = lvl;
-        uint24 day = _simulatedDayIndex();
-        purchaseStartDay = day - age;
-        dailyIdx = day - sealedAge;
-        rngRequestTime = requestTime;
-        // The last daily word was applied on the last sealed day (an unattended gap since then).
-        lastVrfProcessedTimestamp = uint48(block.timestamp - uint256(sealedAge) * 1 days);
+        purchaseStartDay = 9;
+        dailyIdx = 9 + daysComplete;
+        dailyComplete = complete;
+        lastDailyCompletedAt = completedAt;
+        lastDailyRequestWallDay = _wallDayAt(completedAt);
+        _setLevelPrizePool(lvl, 10 ether);
+        _setPrizePools(9 ether, 0);
     }
-
-    function setPools(uint256 target, uint256 next) external {
-        _setLevelPrizePool(level, target);
-        _setPrizePools(uint128(next), 0);
+    function pool(uint128 amount) external { _setPrizePools(amount, 0); }
+    function phase(uint8 which) external { lastPurchaseDay = which == 1; jackpotPhaseFlag = which == 2; }
+    function latch() external { _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1); _setRngTerminal(); }
+    function commitment(uint48 time, bool published) external {
+        rngRequestTime = time; rngRequestDay = dailyIdx;
+        _setRngRequestActive(true); _setRngSessionPublished(published);
+        rngWordCurrent = published ? 777 : 1;
     }
-
-    function wordToday() external {
-        _recordDailyRng(_simulatedDayIndex(), 1);
-    }
-
-    function latchEnding() external {
-        _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 2);
-    }
-
-    function gapCheckpoint(bool gapApplied, bool daily, bool active, bool published, uint24 dayAge, uint256 word)
-        external
-    {
-        rngGapApplied = gapApplied;
-        rngLockedFlag = daily;
-        _setRngRequestActive(active);
-        _setRngSessionPublished(published);
-        rngRequestDay = _simulatedDayIndex() - dayAge;
-        rngRequestTime = uint48(block.timestamp);
-        rngWordCurrent = word;
-    }
-
-    function liveness() external view returns (bool) {
-        return _livenessTriggered();
-    }
+    function liveness() external view returns (bool) { return _livenessTriggered(); }
+    function reason() external view returns (EndingReason) { return _endingReason(); }
+    function distress() external view returns (bool) { return _isDistressMode(); }
 }
 
 contract TransientLivenessUnitTest is Test {
     TransientLivenessHarness private h;
-
-    function setUp() public {
-        vm.warp(1000 days + 12 hours);
-        h = new TransientLivenessHarness();
-    }
-
-    function test_LevelZeroHas250DayIdleWindow() public {
-        h.seed(0, 250, 0, 1);
-        assertFalse(h.liveness());
-        h.seed(0, 251, 0, 1);
+    function setUp() public { vm.warp(1000 days + 12 hours); h = new TransientLivenessHarness(); }
+    function test_UnattendedDeadlineCannotThawAtLaterReset() public {
+        h.seed(5, 30, true, uint48(vm.getBlockTimestamp() - 1 days));
+        assertTrue(h.liveness());
+        vm.warp(vm.getBlockTimestamp() + 3 days);
         assertTrue(h.liveness());
     }
-
-    function test_targetMetDayAfterDeadlineIsNotTriggered() public {
-        h.seed(5, 31, 0, 1);
-        h.setPools(10 ether, 9 ether);
-        assertTrue(h.liveness(), "control: an unmet target past the deadline triggers");
-        h.setPools(10 ether, 11 ether);
-        assertFalse(h.liveness(), "a met target is rescued by the advance, so it must not trigger");
+    function test_TargetRescueOnlyBeforeLatch() public {
+        h.seed(5, 30, true, uint48(vm.getBlockTimestamp() - 1 days));
+        assertTrue(h.liveness());
+        h.pool(11 ether); assertFalse(h.liveness());
+        h.latch(); assertTrue(h.liveness());
     }
-
-    function test_gapPastDeadlineWaitsForItsCredit() public {
-        h.seed(5, 31, 0, 1);
-        assertTrue(h.liveness(), "control: a caught-up day past the deadline triggers");
-        h.seed(5, 32, 0, 2);
-        assertFalse(h.liveness(), "a gap behind dailyIdx is a stall of that length: it waits for its credit");
-    }
-
-    function test_stallStraddlingDeadlineStillWaits() public {
-        h.seed(5, 32, uint48(block.timestamp - 1 days), 2);
-        assertFalse(h.liveness(), "a request in flight holds the deadline until its catch-up credit");
-    }
-
-    function test_wordedDayIsFinishedOnItsWord() public {
-        h.seed(5, 31, 0, 1);
-        h.wordToday();
-        assertFalse(h.liveness(), "a day that holds its word is finished on it");
-    }
-
-    function test_currentPublishedDailyGapCheckpointFinishesItsWord() public {
-        _seedPastDeadline();
-        h.gapCheckpoint(true, true, true, true, 0, 777);
-        assertFalse(h.liveness(), "gap credit cannot preempt its owed current-day word");
-    }
-
-    function test_gapCheckpointExceptionRequiresEveryCommitmentGuard() public {
-        _seedPastDeadline();
-        h.gapCheckpoint(false, true, true, true, 0, 777);
-        assertTrue(h.liveness(), "ordinary daily commitment does not create gap credit");
-        h.gapCheckpoint(true, false, true, true, 0, 777);
-        assertTrue(h.liveness(), "midday commitment cannot defer the deadline");
-        h.gapCheckpoint(true, true, false, true, 0, 777);
-        assertTrue(h.liveness(), "inactive commitment cannot defer the deadline");
-        h.gapCheckpoint(true, true, true, false, 0, 777);
-        assertTrue(h.liveness(), "unpublished commitment cannot defer the deadline");
-        h.gapCheckpoint(true, true, true, true, 1, 777);
-        assertTrue(h.liveness(), "yesterday's commitment cannot defer today's ending");
-        h.gapCheckpoint(true, true, true, true, 0, 1);
-        assertTrue(h.liveness(), "waiting sentinel cannot defer the deadline");
-        h.gapCheckpoint(true, true, true, true, 0, 0);
-        assertTrue(h.liveness(), "absent word cannot defer the deadline");
-    }
-
-    function test_gapReceiptDoesNotSuppressEndingAfterMidnight() public {
-        _seedPastDeadline();
-        h.gapCheckpoint(true, true, true, true, 0, 777);
-        assertFalse(h.liveness(), "current day's owed word may finish");
-        // Model that day's completed seal while retaining the receipt as a defensive
-        // negative control. Midnight must invalidate the current-day exemption itself.
-        h.seed(5, 31, uint48(block.timestamp), 0);
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertTrue(h.liveness(), "old gap receipt cannot postpone the next caught-up day's ending");
-    }
-
-    function test_gapCheckpointCannotUndoEndingLatchOrDeadman() public {
-        _seedPastDeadline();
-        h.gapCheckpoint(true, true, true, true, 0, 777);
-        h.latchEnding();
-        assertTrue(h.liveness(), "gap checkpoint cannot undo an ending latch");
-        h = new TransientLivenessHarness();
-        h.seed(5, 100, 0, 100);
-        h.setPools(10 ether, 9 ether);
-        h.gapCheckpoint(true, true, true, true, 0, 777);
-        assertTrue(h.liveness(), "deadman remains higher priority than gap completion");
-    }
-
-    function _seedPastDeadline() private {
-        h.seed(5, 31, 0, 1);
-        h.setPools(10 ether, 9 ether);
-        assertTrue(h.liveness(), "control: caught-up unmet deadline triggers");
-    }
-
-    function test_startedEndingStaysTriggeredEvenIfTargetMet() public {
-        h.seed(5, 31, 0, 1);
-        h.setPools(10 ether, 11 ether);
-        h.latchEnding();
-        assertTrue(h.liveness(), "the drain latch makes the ending irreversible");
-    }
-}
-
-contract TransientLivenessSeeder is DegenerusGame {
-    function seed(uint24 age) external {
-        uint24 day = _simulatedDayIndex();
-        level = 1;
-        purchaseStartDay = day - age;
-        dailyIdx = day - 1;
-        _setLevelPrizePool(1, 10 ether);
-        _setPrizePools(9 ether, 0);
-        currentPrizePool = 0;
-        ticketsFullyProcessed = true;
-        subsFullyProcessed = true;
-        // No preparation has begun for today; an unattended day must remain a gap.
-        _afkingResetDay = dailyIdx;
-    }
-}
-
-contract TransientLivenessIntegrationTest is DeployProtocol {
-    address private constant BUYER = address(0xB077);
-    address private constant BUYER2 = address(0xB078);
-
-    function setUp() public {
-        _deployProtocol();
-        mockVRF.fundSubscription(1, 100e18);
-        vm.warp(block.timestamp + 500 days);
-        vm.deal(BUYER, 10 ether);
-        vm.deal(BUYER2, 10 ether);
-        vm.deal(address(game), 20 ether);
-    }
-
-    function _seed(uint24 age) private {
-        bytes memory original = address(game).code;
-        vm.etch(address(game), type(TransientLivenessSeeder).runtimeCode);
-        TransientLivenessSeeder(payable(address(game))).seed(age);
-        vm.etch(address(game), original);
-    }
-
-    function _advanceWithVrf() private {
-        game.mineFlip{gas: 15_000_000}(0);
-        uint256 id = mockVRF.lastRequestId();
-        if (id != 0) {
-            (, , bool fulfilled) = mockVRF.pendingRequests(id);
-            if (!fulfilled) mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode(id))));
+    function test_HardStallIgnoresTargetRescueAndPhase() public {
+        for (uint8 phase; phase < 3; ++phase) {
+            h.seed(5, 0, false, uint48(vm.getBlockTimestamp() - 14 days));
+            h.pool(100 ether); h.phase(phase);
+            assertEq(uint8(h.reason()), uint8(DegenerusGameStorage.EndingReason.HardStall));
         }
     }
-
-    /// @dev Run today's advance chain until the day seals (the lock releases on a new daily index).
-    function _sealToday() private {
-        uint24 day = game.currentDayView();
-        // The synthetic 500-day jump also leaves one expired scheduled Craps day per
-        // maintenance checkpoint. Drain those real prerequisites before expecting a request.
-        for (uint256 i; i < 750; ++i) {
-            _advanceWithVrf();
-            if (!game.rngLocked() && game.rngWordForDay(day) != 0) return;
-        }
-        revert("fixture: the day never sealed");
+    function test_PendingThirtiethDayFinishesBeforePurchaseEnding() public {
+        h.seed(5, 30, false, uint48(vm.getBlockTimestamp() - 1 days));
+        h.commitment(uint48(vm.getBlockTimestamp()), true);
+        assertFalse(h.liveness());
     }
-
-    function _lastPurchaseDay() private view returns (bool lpd) {
-        (, , lpd, , ) = game.purchaseInfo();
+    function test_PublishedWordCannotExtendHardDeadline() public {
+        h.seed(5, 3, false, uint48(vm.getBlockTimestamp() - 14 days));
+        h.commitment(uint48(vm.getBlockTimestamp()), true);
+        assertTrue(h.liveness());
     }
-
-    function _buyBox(address who, uint256 value) private returns (bool ok) {
-        vm.prank(who);
-        (ok, ) = address(game).call{value: value}(
-            abi.encodeWithSelector(
-                game.purchase.selector, uint32(0), 0, BoxOrderLib.boCustom(value), bytes32(0), MintPaymentKind.DirectEth, false
-            )
-        );
-    }
-
-    /// @notice Window 1: the deadline day seals with the target unmet, then distress buys beat it.
-    function test_distressAfterDeadlineSealKeepsNextDayOpen() public {
-        _seed(30);
-        _sealToday();
-        assertFalse(game.gameOver(), "harness: the deadline day seals");
-        assertFalse(_lastPurchaseDay(), "harness: the target was unmet at the seal");
-        assertTrue(_buyBox(BUYER, 2 ether), "the deadline day is still a rescue day");
-
-        vm.warp(block.timestamp + 1 days);
-        assertFalse(game.livenessTriggered(), "a met target must not freeze the next day");
-        assertTrue(_buyBox(BUYER2, 1 ether), "purchases stay open before that day's advance");
-
-        _sealToday();
-        assertFalse(game.gameOver(), "the advance rescues the level");
-        assertTrue(_lastPurchaseDay() || game.jackpotPhase(), "the rescued level moves on");
-        assertFalse(game.livenessTriggered(), "and liveness stays false");
-    }
-
-    /// @notice Window 2: nobody advances the first day past the deadline. The skipped day is a gap
-    ///         like any other: it is credited, and the next caught-up day ends the level.
-    function test_skippedDayPastDeadlineIsCreditedThenEnds() public {
-        _seed(31);
-        assertTrue(game.livenessTriggered(), "control: the first day past the deadline is frozen");
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertFalse(game.livenessTriggered(), "once skipped, the day is a gap that waits for its credit");
-        assertTrue(_buyBox(BUYER2, 1 ether), "purchases reopen during the gap");
-        _sealToday();
-        assertFalse(game.gameOver(), "the gap is credited and the day seals");
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertTrue(game.livenessTriggered(), "the next caught-up day past the deadline fires");
-        for (uint256 i; i < 30 && !game.gameOver(); ++i) _advanceWithVrf();
-        assertTrue(game.gameOver(), "and its advance ends the level");
+    function test_RequestRetryCannotExtendHardDeadline() public {
+        h.seed(5, 3, false, uint48(vm.getBlockTimestamp() - 14 days));
+        h.commitment(uint48(vm.getBlockTimestamp()), false);
+        assertTrue(h.liveness());
     }
 }

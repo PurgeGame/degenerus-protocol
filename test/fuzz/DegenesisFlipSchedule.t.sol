@@ -132,7 +132,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
             if (ok) break;
         }
         uint256 q = _refQ(c, _degPool());
-        _warpTo(_dayOf(c) + 1, 1 hours);
+        _warpTo(_dayOf(c) + 1, 0);
         vm.recordLogs();
         _drive(word);
         got = _resolved(vm.getRecordedLogs());
@@ -158,6 +158,8 @@ contract DegenesisFlipSchedule is DegenesisHarness {
         uint256[4] memory at = [uint256(0), 3 hours, 6 hours, 9 hours];
         address[4] memory who = [a, b, c3, d4];
         uint32[] memory ids = new uint32[](4);
+        _warpTo(3, 0);
+        _drive(0); // accept cohort 2 before its first order
         vm.recordLogs();
         for (uint256 j; j < 4; ++j) {
             vm.warp(_dayStart(3) + at[j]);
@@ -194,10 +196,9 @@ contract DegenesisFlipSchedule is DegenesisHarness {
         vm.warp(_dayStart(3) - 1);
         _buy(a, 1 ether);
         assertEq(_count(1), 1, "last second of the day is cohort 1");
-        vm.warp(_dayStart(3));
-        _buy(a, 1 ether);
-        assertEq(_count(2), 1, "first second of the next day is cohort 2");
         (Res[] memory r1, uint256 w1) = _driveFlipCohort(1, one);
+        _buy(a, 1 ether);
+        assertEq(_count(2), 1, "accepted request opens cohort 2");
         (Res[] memory r2, uint256 w2) = _driveFlipCohort(2, one);
         uint256 bps1 = _ladderBps(uint256(keccak256(abi.encode(uint256(56), _seed(w1, 1, 0, ida)))));
         uint256 bps2 = _ladderBps(uint256(keccak256(abi.encode(uint256(56), _seed(w2, 2, 0, ida)))));

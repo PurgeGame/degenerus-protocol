@@ -1,3 +1,4 @@
+import { completeLogicalDay, seedLogicalDay } from "../helpers/logicalDayFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -45,15 +46,7 @@ describe("WhaleBundle", function () {
   }
 
   async function settleRngDay(game, deployer, mockVRF, word) {
-    await advanceToNextDay();
-    await game.connect(deployer).mineFlip(0);
-    const requestId = await getLastVRFRequestId(mockVRF);
-    await mockVRF.fulfillRandomWords(requestId, word);
-    for (let i = 0; i < 40; i++) {
-      if (!(await game.rngLocked())) break;
-      await game.connect(deployer).mineFlip(0);
-    }
-    expect(await game.rngLocked()).to.equal(false);
+    await completeLogicalDay(game, deployer, mockVRF, word);
   }
 
   /**
@@ -237,8 +230,8 @@ describe("WhaleBundle", function () {
       }
     });
 
-    it("expired whale boon cannot use stale dailyIdx to get discounted pricing", async function () {
-      const { game, deployer, alice, bob, mockVRF } =
+    it("whale boon expires after five logical-day advances", async function () {
+      const { game, coinflip, deployer, alice, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Alice needs deity status to issue boons.
@@ -256,11 +249,11 @@ describe("WhaleBundle", function () {
         mockVRF
       );
 
-      // Move past the 4-day boon window while dailyIdx remains stale.
+      // Seed five additional completed logical days in this pricing unit fixture.
       await advanceTime(5 * 86400);
+      await seedLogicalDay(game, (await game.currentDayView()) + 5n, coinflip);
 
-      // The boon is expired (validity keys off _simulatedDayIndex, the wall-clock
-      // day — not the stale dailyIdx), so the FULL early price (2.4 ETH) is
+      // The logical boon window has expired, so the FULL early price (2.4 ETH) is
       // required and no discount applies. Paying the would-be discounted early
       // price underpays; bob holds no claimable to settle the shortfall, so the
       // purchase reverts — proving the expired boon grants no discount.
@@ -733,7 +726,7 @@ describe("WhaleBundle", function () {
     this.timeout(120_000);
 
     it("discounted lazy pass at level 0 costs less than 0.24 ETH", async function () {
-      const { game, deployer, alice, bob, mockVRF } =
+      const { game, coinflip, deployer, alice, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Alice needs deity status to issue boons
@@ -763,7 +756,7 @@ describe("WhaleBundle", function () {
     });
 
     it("full-price lazy pass reverts when discount boon active", async function () {
-      const { game, deployer, alice, bob, mockVRF } =
+      const { game, coinflip, deployer, alice, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       await game
@@ -793,7 +786,7 @@ describe("WhaleBundle", function () {
     });
 
     it("expired boon requires full price", async function () {
-      const { game, deployer, alice, bob, mockVRF } =
+      const { game, coinflip, deployer, alice, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       await game
@@ -810,6 +803,7 @@ describe("WhaleBundle", function () {
 
       // Advance past 4-day boon window
       await advanceTime(5 * 86400);
+      await seedLogicalDay(game, (await game.currentDayView()) + 5n, coinflip);
 
       // Discounted price should revert (boon expired)
       const discountedPrice =

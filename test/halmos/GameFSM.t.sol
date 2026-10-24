@@ -113,16 +113,9 @@ contract FSMEmptyDependencies {
         lastSettlementDay = day;
     }
 
-    uint24 public gapStart;
-    uint24 public gapEnd;
+    uint24 public requestedDailyIdx;
+    function onDailyRequest(uint24 day) external { requestedDailyIdx = day; }
 
-    /// @dev Stalled days settle in one compact gap call over [start, end) (60d31f775), one
-    ///      settlement per skipped day.
-    function processCoinflipGap(uint256, uint24 start, uint24 end) external {
-        settlements += end - start;
-        gapStart = start;
-        gapEnd = end;
-    }
 }
 
 /// @dev Test setup and reads only; all daily, RNG and terminal state writers are production code.
@@ -137,11 +130,14 @@ contract FSMAdvanceHarness is MinerHarness {
         level = initialLevel;
         degenesisClosed = 7; // These post-bootstrap FSM carriers have no Degenesis work.
         dailyIdx = initialDay;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay() - 1;
         purchaseStartDay = purchaseDay;
         lastPurchaseDay = lastPurchase;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
-        _afkingResetDay = _simulatedDayIndex();
+        _afkingResetDay = initialDay + 1;
         lootboxRngPacked = 0;
         // vm.etch does not run Storage's inline initializers. Install the same idle
         // genesis authority and nonzero waiting metadata before invoking production transitions.
@@ -168,6 +164,8 @@ contract FSMAdvanceHarness is MinerHarness {
         );
         require(ok, "empty terminal drain failed");
     }
+
+    function complete() external view returns (bool) { return dailyComplete; }
 
     function sealedDay() external view returns (uint24) {
         return dailyIdx;
@@ -278,13 +276,13 @@ contract GameFSMProductionTransitionTest is Test {
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 2);
         assert(retryTime == requestTime && machine.retrySpent());
         assert(machine.level() == uint24(initialLevel) + 1);
-        assert(machine.sealedDay() == 30);
+        assert(machine.sealedDay() == 31);
         assert(FSMEmptyDependencies(ContractAddresses.GNRUS).charityPicks() == 1);
         assert(FSMEmptyDependencies(ContractAddresses.CRAPS).battleLocks() == 1);
     }
 
-    /// @notice Explicit finite boundary scenarios, not a universal calendar proof.
-    /// @dev Covers each gap 0..7 at initial day1 and65535. The full uint16 calendar remains
+    /// @notice Explicit finite reset-delay scenarios with exactly one logical request.
+    /// @dev Covers each reset delay 0..7 at logical day 1 and 65535. The uint16 domain remains
     ///      covered by the separate Foundry fuzz carrier; its wider symbolic attempt is unproved.
     function _dailyIdx_boundaryScenario(uint8 scenario) private {
         vm.assume(scenario < 16);
@@ -303,41 +301,26 @@ contract GameFSMProductionTransitionTest is Test {
 
     function _dailyIdx_gapThenSeal(uint16 initialDay, uint8 gap) private {
         vm.assume(initialDay != 0 && gap <= 7);
-        uint24 day = uint24(initialDay) + uint24(gap) + 1;
-        vm.warp(_dayStart(day) + 120);
+        uint24 requested = uint24(initialDay) + 1;
+        uint24 wall = requested + uint24(gap);
+        vm.warp(_dayStart(wall) + 120);
         machine.seed(1, initialDay, initialDay, false);
         _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
-        assert(machine.sealedDay() == initialDay);
+        assert(machine.sealedDay() == requested);
+        FSMEmptyDependencies deps = FSMEmptyDependencies(ContractAddresses.COINFLIP);
+        assert(deps.requestedDailyIdx() == requested);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
         machine.recordDeliveredWord(42);
         vm.recordLogs();
-        // A due Vault backstop is its own checkpoint after applying the delivered word.
-        // Its continuation then composes battle, purchase daily/seal and read consumers.
-        _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
-        FSMEmptyDependencies deps = FSMEmptyDependencies(ContractAddresses.COINFLIP);
-        uint24 afterGap = gap == 0 ? uint24(initialDay) : day - 1;
-        if (day >= 45) {
-            assert(deps.vaultSettles() == 1);
-            assert(deps.battles() == 0);
-            assert(machine.sealedDay() == afterGap);
+        for (uint256 i; i < 8 && !machine.complete(); ++i)
             _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
-        } else assert(deps.vaultSettles() == 0);
-        assert(afterGap >= initialDay);
-        assert(machine.wordAt(day) == 42);
-        assert(deps.settlements() == uint256(gap) + 1);
-        assert(deps.lastSettlementDay() == day);
-        // The skipped days are exactly the ones between the sealed day and the delivered day.
-        if (gap != 0) assert(deps.gapStart() == uint24(initialDay) + 1 && deps.gapEnd() == day);
-        else assert(deps.gapEnd() == 0);
-        // At the battle checkpoint: the gap was applied, the word recorded, every coinflip day settled.
+        assert(machine.complete());
+        assert(machine.wordAt(requested) == 42);
+        assert(deps.settlements() == 1 && deps.lastSettlementDay() == requested);
         assert(deps.battles() == 1);
-        assert(deps.battleSealedDay() == afterGap);
-        assert(deps.battleDayWord() == 42);
-        assert(deps.settlementsAtBattle() == uint256(gap) + 1);
-        // The empty battle's own checkpoint completes before the purchase daily runs and seals.
+        assert(deps.battleSealedDay() == requested);
+        assert(deps.battleDayWord() == 42 && deps.settlementsAtBattle() == 1);
         assert(!machine.battlePending());
-        // The real daily leg emits its board before sealing. Its day is dailyIdx + 1,
-        // so this also witnesses the pre-seal day without replacing the internal leg.
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 dailyLegs;
         bool battleFinished;
@@ -350,21 +333,17 @@ contract GameFSMProductionTransitionTest is Test {
                 if (stage == 6) { assert(battleFinished && boardRecorded); ++dailyLegs; }
             }
             if (logs[i].topics[0] == keccak256("DailyWinningTraits(uint24,uint32)")) {
-                assert(battleFinished);
-                assert(uint24(uint256(logs[i].topics[1])) == afterGap + 1);
-                assert(!boardRecorded);
+                assert(battleFinished && !boardRecorded);
+                assert(uint24(uint256(logs[i].topics[1])) == requested);
                 boardRecorded = true;
             }
         }
-        assert(dailyLegs == 1);
-        assert(machine.sealedDay() == day);
+        assert(dailyLegs == 1 && machine.sealedDay() == requested);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
         assert(machine.level() == 1);
-        assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).settlements() == uint256(gap) + 1);
         (bool repeated,) = address(machine).call(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
-        assert(!repeated);
-        assert(machine.sealedDay() == day);
+        assert(!repeated && machine.sealedDay() == requested);
     }
 
     function testFuzz_emptyTerminal_latchAndAdvance(uint16 level, uint8 elapsed) public {

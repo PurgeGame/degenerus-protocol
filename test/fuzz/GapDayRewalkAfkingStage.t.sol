@@ -5,11 +5,9 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title GapDayRewalkAfkingStage — skipped days never stage subscriptions or draw seats.
-/// @notice A request committed on R is fulfilled on W = R+3. The engine completes R's
-///         consumers before staging W and requesting its fresh word. The fresh word credits
-///         the intervening gap without purchases or seat draws on either skipped day.
-///         Only the last gap word and W are retained in the tagged two-day word ring.
+/// @title Delayed logical rounds stage subscriptions exactly once per accepted request.
+/// @notice A request completed three calendar days late admits only R+1. No calendar
+///         catch-up creates words, subscription charges, or seat draws.
 contract GapDayRewalkAfkingStage is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -75,8 +73,8 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
 
         _t += 3 days;
         vm.warp(_t);
-        uint24 W = game.currentDayView();
-        assertEq(W, R + 3, "wall day is R+3");
+        assertEq(game.currentDayView(), R, "calendar stall preserves the outstanding day");
+        uint24 W = R + 1;
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
 
         // A crank may both finish R and request W. Observe the request boundary, not
@@ -87,9 +85,9 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         }
         Vm.Log[] memory recoveryLogs = vm.getRecordedLogs();
         _assertNoGapLogs(recoveryLogs, R, W);
-        assertEq(_dailyIdx(), R, "late word sealed the committed day R");
+        assertEq(_dailyIdx(), W, "fresh request commits only R+1");
         _assertAppliedWord(recoveryLogs, R, WORD_LATE);
-        assertEq(game.rngWordForDay(R), 0, "public word view expires history older than yesterday");
+        assertEq(game.rngWordForDay(R), WORD_LATE, "published frontier retains R through the calendar stall");
         assertEq(game.rngWordForDay(R + 1), 0, "R completion did not invent a gap word");
         // The record carries no open marker. R's boxes opened during this recovery: the W stage
         // could only prepare after the cohort count reached zero, so the live count is exactly W's
@@ -104,7 +102,6 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         uint256 reqW = mockVRF.lastRequestId();
         assertTrue(reqW != reqR, "fresh request id");
         mockVRF.fulfillRandomWords(reqW, WORD_FRESH);
-        uint256 predictedG2 = uint256(keccak256(abi.encode(uint256(68), WORD_FRESH, uint256(R + 2))));
 
         // Smaller calls expose the post-gap, pre-jackpot checkpoint without changing
         // the logical word or permitting a subscription change while W remains locked.
@@ -113,10 +110,10 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
             game.mineFlip{gas: 5_000_000}(0);
         }
         assertTrue(game.rngLocked(), "W remains locked before its daily battle finishes");
-        assertEq(game.rngWordForDay(R + 1), 0, "older gap word retired from the two-day ring");
-        assertEq(game.rngWordForDay(R + 2), predictedG2, "last gap word derives from W's fresh word");
+        assertEq(game.rngWordForDay(R), WORD_LATE, "previous logical result remains available");
+        assertEq(game.rngWordForDay(R + 2), 0, "no fabricated calendar result");
         assertEq(game.rngWordForDay(W), WORD_FRESH, "W records its fresh word");
-        assertEq(_dailyIdx(), W - 1, "gap credited without running either skipped day");
+        assertEq(_dailyIdx(), W, "only the accepted logical day advanced");
         uint256 seat = _grantSeat(atk);
         vm.prank(atk);
         vm.expectRevert(RngLocked.selector);
@@ -137,8 +134,8 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         // ---- Positive control: the next day runs the STAGE (uncommitted word) and the drawing. ----
         _t += 1 days;
         vm.warp(_t);
-        uint24 N = game.currentDayView();
-        assertEq(N, W + 1, "next wall day");
+        assertEq(game.currentDayView(), W, "new calendar reset alone does not advance");
+        uint24 N = W + 1;
         assertEq(game.rngWordForDay(N), 0, "N's word uncommitted before its STAGE");
         vm.recordLogs();
         _requestDaily();
@@ -234,7 +231,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
             } else if (logs[i].topics[0] == SUB_DRAW_WON_SIG) {
                 (day,,) = abi.decode(logs[i].data, (uint24, uint24, uint256));
             } else continue;
-            assertTrue(day <= R || day >= W, "no subscription charge or seat draw on a gap day");
+            assertTrue(day == R || day == W, "only the two accepted logical cohorts may charge or draw");
         }
     }
 

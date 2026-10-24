@@ -21,10 +21,13 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev Level-1 purchase phase seeder plus read-backs (etched over the game, then etched back).
 contract StallCreditSeeder is DegenerusGame {
     function seed(uint24 age) external {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         level = 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;
@@ -59,7 +62,7 @@ contract StallCreditSeeder is DegenerusGame {
     }
 
     function dayOf(uint48 t) external pure returns (uint24) {
-        return _simulatedDayIndexAt(t);
+        return _wallDayAt(t);
     }
 }
 
@@ -91,6 +94,8 @@ abstract contract StallCreditBase is DeployProtocol {
     function _seed(uint24 age) internal {
         _seeder().seed(age);
         _restore();
+        _syncCoinflipFixtureDay(game.currentDayView());
+        _seedCrapsFixtureCursor(game.currentDayView());
     }
 
     function _clock() internal returns (uint24 psd, uint24 idx) {
@@ -176,7 +181,8 @@ abstract contract StallCreditBase is DeployProtocol {
         for (uint256 i; i < 750; ++i) {
             _answer();
             (, uint24 idx) = _clock();
-            if (!game.rngLocked() && idx == day && game.rngWordForDay(day) != 0) return;
+            (bool complete,,) = game.dailySessionState();
+            if (complete && idx == day && game.rngWordForDay(day) != 0) return;
             assertFalse(game.gameOver(), "harness: the level ended while sealing");
             _adv();
         }
@@ -208,8 +214,17 @@ abstract contract StallCreditBase is DeployProtocol {
         mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
         vm.prank(ContractAddresses.ADMIN);
         game.creditMiddayRng(donor, 1 ether);
+        // Drain scheduled maintenance before asserting the request boundary.
+        for (uint256 i; i < 64; ++i) {
+            vm.prank(donor);
+            uint8 action = game.minerAction();
+            if (action == 17) break;
+            assertEq(action, 15, "only scheduled maintenance precedes the donor request");
+            vm.prank(donor);
+            game.mineFlip(type(uint32).max);
+        }
         vm.prank(donor);
-        assertEq(game.minerAction(), 18, "harness: the donor's next engine action is the mid-day request");
+        assertEq(game.minerAction(), 17, "harness: the donor's next engine action is the mid-day request");
         vm.prank(donor);
         game.mineFlip(0);
     }
@@ -220,9 +235,9 @@ abstract contract StallCreditBase is DeployProtocol {
 
     /// @dev Warp to a time inside `day` well clear of the pre-reset minute.
     function _warpToDay(uint24 day) internal {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentWallDayView();
         if (day > today) _warpDays(day - today);
-        assertEq(game.currentDayView(), day, "harness: warp");
+        assertEq(game.currentWallDayView(), day, "harness: wall warp");
     }
 
     function _rotate() internal {
@@ -241,7 +256,8 @@ abstract contract StallCreditBase is DeployProtocol {
             assertFalse(game.gameOver(), "the level must not end");
             _answer();
             (, uint24 idx) = _clock();
-            if (!game.rngLocked() && idx == w && game.rngWordForDay(w) != 0) return;
+            (bool complete,,) = game.dailySessionState();
+            if (complete && idx == w && game.rngWordForDay(w) != 0) return;
             // A read-drain step returns mult 0 too; the level state is the real check.
             _adv();
             assertFalse(game.gameOver() || game.livenessTriggered(), "no advance may take the game-over path");
@@ -251,124 +267,91 @@ abstract contract StallCreditBase is DeployProtocol {
 }
 
 contract MidDayStallCreditTest is StallCreditBase {
-    /// @notice Audit A-1. The day before the day before the deadline seals; that evening a mid-day
-    ///         request stalls for five days and its word lands three days past the deadline.
-    ///         The level must survive and the four stalled days must be credited once.
-    function test_middayStallAcrossDeadlineKeepsTheLevel() public {
+    /// @notice A five-calendar-day midday stall consumes no logical purchase rounds.
+    function test_middayStallPreservesThePurchaseBaseline() public {
         _seed(28);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         (uint24 psd0,) = _clock();
-        assertEq(x, psd0 + 28, "harness: X = deadline - 2");
         _middayRequest();
-
-        for (uint256 d = 1; d <= 5; ++d) {
+        for (uint256 d; d < 5; ++d) {
             _warpDays(1);
-            assertFalse(game.livenessTriggered(), "a request in flight waits");
+            assertFalse(game.livenessTriggered());
             _advUntilBlocked();
+            assertEq(game.currentDayView(), x);
         }
-        uint24 w = game.currentDayView();
-        assertEq(w, psd0 + 33, "harness: W = deadline + 3");
-
         _answer();
-        assertFalse(game.livenessTriggered(), "a recovered mid-day stall must not read as an unattended gap");
-        // Today holds no word yet: no second mid-day request can replace the stamp, for an
-        // ordinary caller or for the donor still holding credit.
-        vm.prank(stranger);
-        assertTrue(game.minerAction() != 18, "no mid-day request is selectable for a stranger");
-        vm.prank(makeAddr("midday-donor"));
-        assertTrue(game.minerAction() != 18, "nor for a credited donor");
-
-        _catchUp(w);
-        (uint24 psd1, uint24 idx1) = _clock();
-        assertEq(psd1, psd0 + (w - x - 1), "exactly the stalled days credited");
-        assertEq(idx1, w, "caught up");
-        assertFalse(game.livenessTriggered(), "alive");
-
+        _catchUp(x + 1);
+        (uint24 psd1, uint24 idx) = _clock();
+        assertEq(psd1, psd0, "no calendar stall credit");
+        assertEq(idx, x + 1, "exactly one new daily request");
         _warpDays(1);
-        _sealDay(w + 1);
-        (uint24 psd2,) = _clock();
-        assertEq(psd2, psd1, "no second credit");
+        _sealDay(x + 2);
+        assertFalse(game.livenessTriggered(), "completion's rescue window remains open");
+        _warpDays(1);
+        assertTrue(game.livenessTriggered(), "thirty completed rounds plus next reset");
     }
 
     /// @notice The same timing on the daily request: unchanged behaviour.
-    function test_dailyStallAcrossDeadlineKeepsTheLevel() public {
+    function test_dailyStallPreservesCommitmentAndCreatesNoGapResults() public {
         _seed(28);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         (uint24 psd0,) = _clock();
-        // setUp's synthetic 500-day jump leaves expired scheduled Craps days that the engine
-        // maintains, one checkpoint per call, before the first daily request (see _sealDay).
         for (uint256 i; i < 750 && !game.rngLocked(); ++i) _adv();
-        assertTrue(game.rngLocked(), "day X requested; VRF stalls");
-
+        assertEq(game.currentDayView(), x);
         _warpDays(5);
-        uint24 w = game.currentDayView();
-        assertFalse(game.livenessTriggered(), "a request in flight waits");
+        assertFalse(game.livenessTriggered());
+        assertEq(game.currentDayView(), x);
         _answer();
-        // The call that seals X goes straight on to the wall day's fresh request (the engine
-        // selects it in the same flow, 60d31f775), so the drive stops on X's seal.
-        for (uint256 i; i < 300; ++i) {
-            (, uint24 sealedIdx) = _clock();
-            if (sealedIdx >= x) break;
-            _adv();
-            _answer();
-        }
-        // rngWordForDay retains today and yesterday only (c729ecfc9); X is five days back, so
-        // read its exact-tag ring entry before the wall day's word replaces that parity.
-        assertEq(RecyclingState.dailyWord(address(game), x) != 0, true, "X finished on its late word");
-        assertFalse(game.livenessTriggered(), "a recovered daily stall waits for its credit");
-
-        _catchUp(w);
-        (uint24 psd1, uint24 idx1) = _clock();
-        assertEq(psd1, psd0 + (w - x - 1), "the stalled days credited");
-        assertEq(idx1, w, "caught up");
+        _catchUp(x + 1);
+        (uint24 psd1, uint24 idx) = _clock();
+        assertEq(psd1, psd0);
+        assertEq(idx, x + 1);
+        assertGt(game.rngWordForDay(x), 0);
+        assertEq(game.rngWordForDay(x + 2), 0);
     }
 
     /// @notice The mid-day stall is rescued by a coordinator swap, which re-sends it as a mid-day
     ///         request; its word lands three days past the deadline.
-    function test_rotatedMiddayStallAcrossDeadlineKeepsTheLevel() public {
+    function test_rotatedMiddayStallPreservesTheLogicalClock() public {
         _seed(28);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         (uint24 psd0,) = _clock();
-        uint256 oldId = _middayRequest();
-
+        _middayRequest();
+        (uint48 sent0,) = _stamps();
         _warpDays(2);
         _rotate();
-        (, uint256 reissued) = _stamps();
-        assertTrue(reissued != 0 && vrf.lastRequestId() == reissued, "re-sent on the new coordinator");
-        assertFalse(game.rngLocked(), "still a mid-day request");
-        oldId; // the old coordinator's answer would no longer match
-
+        (uint48 sent1, uint256 id) = _stamps();
+        assertEq(sent1, sent0);
+        assertEq(vrf.lastRequestId(), id);
+        assertFalse(game.rngLocked());
+        assertEq(game.currentDayView(), x);
         _warpDays(3);
-        uint24 w = game.currentDayView();
         _answer();
-        assertFalse(game.livenessTriggered(), "the swap's own answer must not fire the trigger");
-
-        _catchUp(w);
+        _catchUp(x + 1);
         (uint24 psd1,) = _clock();
-        assertEq(psd1, psd0 + (w - x - 1), "the stalled days credited");
+        assertEq(psd1, psd0);
     }
 
     /// @notice G rule: a gap behind dailyIdx past the deadline is a stall of that length, however it
     ///         arose (here nobody advanced for two days). It waits, the next advance credits it,
     ///         and the level ends at the next caught-up day.
-    function test_idleGapAcrossDeadlineIsCreditedThenEndsWhenCaughtUp() public {
+    function test_idleGapDoesNotAgeThePurchaseLevel() public {
         _seed(29);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         (uint24 psd0,) = _clock();
-        _warpToDay(x + 3);
-        assertFalse(game.livenessTriggered(), "a gap waits for its credit");
-        _catchUp(x + 3);
+        _warpDays(3);
+        assertEq(game.currentDayView(), x);
+        assertFalse(game.livenessTriggered());
+        _catchUp(x + 1);
         (uint24 psd1,) = _clock();
-        assertEq(psd1, psd0 + 2, "the gap is credited once");
-        assertFalse(game.livenessTriggered(), "today holds its word");
-        _warpToDay(x + 4);
-        assertTrue(game.livenessTriggered(), "the next caught-up day past the deadline fires");
-        _endsOnTheGameOverPath("and the advance takes the game-over path");
-        (bool goLvl,) = _latches();
-        assertTrue(goLvl, "the ending latched");
+        assertEq(psd1, psd0);
+        assertFalse(game.livenessTriggered());
+        _warpDays(1);
+        assertTrue(game.livenessTriggered());
+        _endsOnTheGameOverPath("normal timeout settles after its final rescue window");
     }
 
     /// @notice The caught-up day after the deadline fires the trigger, and ANY keeper crank latches
@@ -376,7 +359,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         when that advance pays nothing.
     function test_mineFlipOnTheCaughtUpDayLatchesTheEnding() public {
         _seed(30);
-        uint24 s = game.currentDayView();
+        uint24 s = game.currentDayView() + 1;
         _sealDay(s);
         _middayRequest();
         _answer();
@@ -393,41 +376,41 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice G rule, documented: a caught-up day nobody advances reads true, and once it has
     ///         passed the gap reads as a stall again and is credited (accepted: nobody advancing is
     ///         not a case the deadline has to handle; the deadman still bounds it).
-    function test_skippedCaughtUpDayIsCreditedByDesign() public {
+    function test_skippingTheEndingWindowCannotReopenTheLevel() public {
         _seed(30);
-        uint24 s = game.currentDayView();
-        _sealDay(s);
+        uint24 day = game.currentDayView() + 1;
+        _sealDay(day);
         (uint24 psd0,) = _clock();
-        _warpToDay(s + 1);
-        assertTrue(game.livenessTriggered(), "caught-up day past the deadline");
-        _warpToDay(s + 2);
-        assertFalse(game.livenessTriggered(), "skipped: the gap waits");
-        _catchUp(s + 2);
+        _warpDays(1);
+        assertTrue(game.livenessTriggered());
+        _warpDays(1);
+        assertTrue(game.livenessTriggered(), "expiry remains permanent across later resets");
         (uint24 psd1,) = _clock();
-        assertEq(psd1, psd0 + 1, "the skipped day credited once");
+        assertEq(psd1, psd0);
+        _endsOnTheGameOverPath("the normal ending stays reachable");
     }
 
     /// @notice A gap past the deadline that nobody ever closes still ends at the deadman.
-    function test_gapPastTheDeadlineEndsAtTheDeadman() public {
-        _seed(29);
-        uint24 x = game.currentDayView();
-        _sealDay(x);
-        _publishAnswered();
-        _warpToDay(x + 30);
-        assertFalse(game.livenessTriggered(), "a gap waits");
-        _warpToDay(x + 31);
-        assertTrue(game.livenessTriggered(), "deadman");
-        _endsOnTheGameOverPath("the advance takes the game-over path");
+    function test_idleGapEndsAtTheExactCompletionDeadline() public {
+        _seed(5);
+        uint24 day = game.currentDayView() + 1;
+        _sealDay(day);
+        (,, uint48 completed) = game.dailySessionState();
+        vm.warp(uint256(completed) + 14 days - 1);
+        assertFalse(game.livenessTriggered());
+        vm.warp(uint256(completed) + 14 days);
+        assertTrue(game.livenessTriggered());
+        _endsOnTheGameOverPath("hard timeout bypasses normal work");
     }
 
     /// @notice Whatever the last request, a game nobody seals for the deadman window ends.
     function test_answeredMiddayGameEndsAtTheDeadman() public {
         _seed(5);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
-        _warpToDay(x + 31);
+        _warpToDay(x + 14);
         assertTrue(game.livenessTriggered(), "deadman");
         _endsOnTheGameOverPath("the advance takes the game-over path");
     }
@@ -435,7 +418,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice The Admin retry preserves a stalled mid-day request's mode and original timeout.
     function test_middayRetryTimerUnchanged() public {
         _seed(5);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         uint256 id = _middayRequest();
         (uint48 t0,) = _stamps();
@@ -459,7 +442,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         advance sends the fresh daily request, and no retry is needed or offered.
     function test_answeredMiddayIsNotWaitedOn() public {
         _seed(5);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -467,7 +450,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         for (uint256 i; i < 60 && !game.rngLocked(); ++i) _adv();
         assertTrue(game.rngLocked(), "the day's fresh daily request went out");
         (uint48 t,) = _stamps();
-        assertEq(game.currentDayView(), _dayOf(t), "stamped today");
+        assertEq(game.currentWallDayView(), _dayOf(t), "transport stamped at actual wall time");
         // rngFlagsAndNudges bit 10 (slot-0 bit 250) is the request's retry-spent flag.
         assertEq((uint256(vm.load(address(game), bytes32(0))) >> 250) & 1, 0, "its retry unspent");
         _catchUp(x + 1);
@@ -476,7 +459,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice A second mid-day request on the same day after the first was answered.
     function test_secondMiddayRequestSameDay() public {
         _seed(5);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         uint256 a = _middayRequest();
         _answer();
@@ -489,7 +472,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         long nobody advances afterwards.
     function test_publishedMiddayIsNeverVrfDead() public {
         _seed(5);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -502,7 +485,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         though the coordinator answered it.
     function test_unpublishedMiddayWordIsDeadAfterTheWindow() public {
         _seed(5);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -515,7 +498,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         answered, and the deterministic ending takes over once it passes.
     function test_refusedTerminalRequestStartsTheDeadWindow() public {
         _seed(30);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -549,7 +532,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         level's future pool exactly as it does with no earlier request.
     function test_turboAfterAnsweredMiddayActivatesNextTickets() public {
         _seed(0);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -590,13 +573,13 @@ contract MidDayStallCreditGas is StallCreditBase {
 
     function test_gas_middayCallbackSameDay() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         _fulfil(_middayRequest(), "GAS middayCallbackSameDay used/refund");
     }
 
     function test_gas_middayCallbackLate() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         uint256 id = _middayRequest();
         _warpDays(3);
         _fulfil(id, "GAS middayCallbackLate used/refund");
@@ -610,7 +593,7 @@ contract MidDayStallCreditGas is StallCreditBase {
 
     function test_gas_middayRequestFirst() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         _finishReadConsumers();
         _donorRequest();
         _log("GAS middayRequestFirst used/refund");
@@ -618,7 +601,7 @@ contract MidDayStallCreditGas is StallCreditBase {
 
     function test_gas_middayRequestAfterAnswer() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         _middayRequest();
         _answer();
         vm.warp(vm.getBlockTimestamp() + 1 hours); // a later request, not the same second's stamp
@@ -630,7 +613,7 @@ contract MidDayStallCreditGas is StallCreditBase {
     /// @dev The advance that sends the next day's daily request, after an answered mid-day request.
     function test_gas_dailyRequestAdvanceAfterAnsweredMidday() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         _middayRequest();
         _answer();
         _warpDays(1);
@@ -640,7 +623,7 @@ contract MidDayStallCreditGas is StallCreditBase {
     /// @dev The same advance with no mid-day request the day before.
     function test_gas_dailyRequestAdvancePlain() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         _warpDays(1);
         _measureRequestAdvance("GAS dailyRequestAdvancePlain used/refund");
     }
@@ -648,7 +631,7 @@ contract MidDayStallCreditGas is StallCreditBase {
     /// @dev The advance that sends the daily request after a mid-day stall recovered late.
     function test_gas_dailyRequestAdvanceAfterLateMidday() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         _middayRequest();
         _warpDays(3);
         _answer();
@@ -657,9 +640,9 @@ contract MidDayStallCreditGas is StallCreditBase {
     }
 
     /// @dev The backfill advance that credits the stalled days after a late mid-day recovery.
-    function test_gas_backfillAdvanceAfterLateMidday() public {
+    function test_gas_dailyApplyAfterLateMidday() public {
         _seed(5);
-        _sealDay(game.currentDayView());
+        _sealDay(game.currentDayView() + 1);
         _middayRequest();
         _warpDays(3);
         _answer();
@@ -669,7 +652,7 @@ contract MidDayStallCreditGas is StallCreditBase {
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(stranger);
         game.mineFlip(0);
-        _log("GAS backfillAdvanceAfterLateMidday used/refund");
+        _log("GAS dailyApplyAfterLateMidday used/refund");
     }
 
     function _measureRequestAdvance(string memory label) private {

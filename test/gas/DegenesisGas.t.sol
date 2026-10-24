@@ -110,7 +110,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
     function hostAfkingBoonMember(uint32 id) external {
         _seedSubscriber(id,true);
         uint256 position = _subPosition1(id)-1;
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         _afkingEndpointDay = day-1;
         _setSubLaneAt(position,_withSubCheckpoint(_subLaneAt(position),day-1,65530));
         _setSubRunStart(id,day-1);
@@ -159,8 +159,11 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
     ///      level 0 with `nextPool` in the next pool (above the level-1 target latches the
     ///      early turbo, which increments the level in the same request).
     function hostRequestSeed(uint256 nextPool) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         dailyIdx = today - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         _afkingResetDay = today;
         purchaseStartDay = today - 1;
         lastVrfProcessedTimestamp = uint48(block.timestamp);
@@ -862,7 +865,7 @@ contract DegenesisTerminalGas is DegenesisGasBase {
 ///         RNG completion.
 contract DegenesisDayCloseGas is DegenesisGasBase {
     uint8 internal constant ACTION_WAIT = 2;
-    uint8 internal constant ACTION_DAILY_PHASE = 7;
+    uint8 internal constant ACTION_DAILY_PHASE = 6;
 
     function setUp() public {
         _deployProtocol();
@@ -878,7 +881,7 @@ contract DegenesisDayCloseGas is DegenesisGasBase {
             require(action != 0, "fixture: idle before the daily phase");
             // The external VRF request retains its forwarding minimum. Other
             // actions use extreme calibration to stop after mandatory progress.
-            game.mineFlip{gas: 16_000_000}(action == 17 ? 10_000 : type(uint32).max);
+            game.mineFlip{gas: 16_000_000}(action == uint8(DegenerusGameStorage.MinerAction.RequestDaily) ? 10_000 : type(uint32).max);
         }
         require(game.nextMinerAction() == ACTION_DAILY_PHASE, "fixture: daily phase");
         _etchHost();
@@ -951,6 +954,8 @@ abstract contract DegenesisDayNineRequestGas is DegenesisGasBase {
         uint32 winnerId = _giveWalletId(WINNER);
         _etchHost();
         host.hostRequestSeed(_turbo() ? 1000 ether : 0);
+        _syncCoinflipFixtureDay(8);
+        _quietCrapsTable();
         if (_degenesis()) {
             host.hostClosed(6);
             host.hostCohort(7, 1_000_000, 100, false);
@@ -1025,10 +1030,18 @@ contract DegenesisDayNineClosedGas is DegenesisDayNineRequestGas {
 /// @dev Storage construction for the battle shortcut; the measured worker is production code
 ///      (Game -> Jackpot -> Draw -> JackpotBattle).
 contract DegenesisBattleGameSeed is DegenerusGameStorage, WalletSeed {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+        assembly ("memory-safe") { value := sload(slot) }
+    }
+    function currentDayView() external view returns (uint24) { return dailyIdx; }
+    function dailyScheduleOpen() external view returns (bool) { return true; }
     function seedSession(uint24 day, uint256 word) external {
         level = 0;
         purchaseStartDay = day - 1;
-        dailyIdx = day - 1;
+        dailyIdx = day;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay();
         rngRequestDay = day;
         rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = word;

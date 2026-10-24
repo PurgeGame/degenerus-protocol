@@ -19,18 +19,22 @@ import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.s
 
 contract MinerProgressHarness is MinerHarness {
     function seed(MinerAction action) external {
-        uint24 today = _simulatedDayIndex();
+        uint24 today = _wallDay();
         dailyIdx = today;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = today;
         _afkingResetDay = today;
         purchaseStartDay = today;
         level = 10;
+        degenesisClosed = 7;
         ticketsFullyProcessed = true;
         humanReadComplete = true;
         rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = 1234;
         _setRngSessionPublished(true);
         _setRngComplete(true);
-        _recordDailyRng(today, 1234);
+        if (action != MinerAction.DailyApply) _recordDailyRng(today, 1234);
         if (action >= MinerAction.Publish && action <= MinerAction.CertifyRead) _setRngComplete(false);
         if (action == MinerAction.Terminal) gameOver = true;
         if (action == MinerAction.Wait || action == MinerAction.Publish) {
@@ -40,9 +44,10 @@ contract MinerProgressHarness is MinerHarness {
             if (action == MinerAction.Wait) rngWordCurrent = RNG_WORD_WAITING;
         }
         if (action == MinerAction.Tickets) ticketsFullyProcessed = false;
-        if (action >= MinerAction.DailyGap && action <= MinerAction.DailyPhase) {
+        if (action >= MinerAction.DailyApply && action <= MinerAction.DailyPhase) {
             rngLockedFlag = true;
-            rngRequestDay = today + (action == MinerAction.DailyGap ? 2 : 1);
+            rngRequestDay = today;
+            dailyComplete = false;
             if (action == MinerAction.DailyPhase) _recordDailyRng(rngRequestDay, 5678);
         }
         if (action == MinerAction.Afking) _pendingBoxCount = 1;
@@ -52,6 +57,7 @@ contract MinerProgressHarness is MinerHarness {
         if (action == MinerAction.Craps) lootboxRngPacked |= uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer());
         if (action == MinerAction.PrepareSubscriptions || action == MinerAction.RequestDaily) {
             dailyIdx = today - 1;
+            lastDailyRequestWallDay = today - 1;
             subsFullyProcessed = action == MinerAction.RequestDaily;
         }
         if (action == MinerAction.RequestMidday) _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1);
@@ -88,7 +94,11 @@ contract MinerProgressHarness is MinerHarness {
         else lootboxRngPacked &= ~mask;
     }
     function seedTerminalWait(bool latched, bool dead) external {
-        dailyIdx = _simulatedDayIndex() - 31;
+        dailyIdx = _wallDay() - 1;
+        purchaseStartDay = dailyIdx - 30;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay() - 1;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
         _setRngComplete(false);
         _setRngRequestActive(true);
         _setRngSessionPublished(false);
@@ -97,7 +107,11 @@ contract MinerProgressHarness is MinerHarness {
         if (latched) { _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 2); _setRngTerminal(); }
     }
     function seedTerminalRequestRefusal() external {
-        dailyIdx = _simulatedDayIndex() - 31;
+        dailyIdx = _wallDay() - 1;
+        purchaseStartDay = dailyIdx - 30;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay() - 1;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
         _setRngComplete(false);
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 2);
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
@@ -210,7 +224,7 @@ contract MinerNoProgressTest is Test {
         vm.mockCall(ContractAddresses.CRAPS, selector, abi.encode(false, true, uint256(0)));
         vm.expectCall(ContractAddresses.CRAPS, selector, uint64(1));
         assertLt(_expectFailure(GameMiner.NoWork.selector, 16_700_000), 200_000);
-        assertEq(game.minerAction(), 16);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Maintenance));
     }
 
     function _worker(DegenerusGameStorage.MinerAction action) private pure returns (address, bytes memory) {
@@ -228,7 +242,7 @@ contract MinerNoProgressTest is Test {
     }
 
     function test_EveryResultWorkerStopsOnUnchangedDoneOrGasCheckpoint() public {
-        uint8[11] memory actions = [uint8(1), 7, 8, 9, 10, 11, 12, 13, 15, 16, 20];
+        uint8[11] memory actions = [uint8(1), 6, 7, 8, 9, 10, 11, 12, 14, 15, 19];
         for (uint256 i; i < actions.length; ++i) {
             uint256 snap = vm.snapshotState();
             DegenerusGameStorage.MinerAction action = DegenerusGameStorage.MinerAction(actions[i]);
@@ -246,7 +260,7 @@ contract MinerNoProgressTest is Test {
     }
 
     function test_IndivisibleActionsAttemptFirstWorkerDespiteExtremeEstimate() public {
-        uint8[3] memory actions = [uint8(5), 6, 17];
+        uint8[3] memory actions = [uint8(5), 16, 17];
         for (uint256 i; i < actions.length; ++i) {
             uint256 snap = vm.snapshotState();
             _seed(DegenerusGameStorage.MinerAction(actions[i]));
@@ -255,19 +269,14 @@ contract MinerNoProgressTest is Test {
         }
     }
 
-    function test_MiddayPreflightRetainsItsScaledDependencyMinimum() public {
+    function test_MiddayPreflightAttemptsFirstUnitDespiteExtremeEstimate() public {
         _seed(DegenerusGameStorage.MinerAction.RequestMidday);
-        vm.recordLogs();
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        game.mineFlip{gas: 500_000}(type(uint32).max);
-        assertEq(vm.getRecordedLogs().length, 0, "a refused dependency read commits no work or reward");
-        assertEq(game.minerAction(), 18, "the request remains eligible at the default multiplier");
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector));
-        game.mineFlip{gas: 500_000}(0);
+        game.mineFlip{gas: 500_000}(type(uint32).max);
     }
 
     function test_SeizeLoansOutranksWaitAndEveryConsumerButNotTerminal() public {
-        assertEq(uint8(DegenerusGameStorage.MinerAction.SeizeLoans), 20, "appended value");
+        assertEq(uint8(DegenerusGameStorage.MinerAction.SeizeLoans), 19, "appended value");
         DegenerusGameStorage.MinerAction[5] memory behind = [DegenerusGameStorage.MinerAction.Wait,
             DegenerusGameStorage.MinerAction.Publish, DegenerusGameStorage.MinerAction.Tickets,
             DegenerusGameStorage.MinerAction.DailyPhase, DegenerusGameStorage.MinerAction.RequestDaily];
@@ -275,7 +284,7 @@ contract MinerNoProgressTest is Test {
             uint256 snap = vm.snapshotState();
             _seed(behind[i]);
             game.setLoansDue(true);
-            assertEq(game.minerAction(), 20, "seizure first");
+            assertEq(game.minerAction(), 19, "seizure first");
             vm.revertToState(snap);
         }
         _seed(DegenerusGameStorage.MinerAction.Terminal);
@@ -285,11 +294,11 @@ contract MinerNoProgressTest is Test {
 
     function test_GrowthSettleSelectedAfterRequestDailyAndBeforeRequestMidday() public {
         _seed(DegenerusGameStorage.MinerAction.GrowthSettle);
-        assertEq(uint8(DegenerusGameStorage.MinerAction.GrowthSettle), 19, "appended value");
-        assertEq(game.minerAction(), 19, "pending settlement is selected");
+        assertEq(uint8(DegenerusGameStorage.MinerAction.GrowthSettle), 18, "appended value");
+        assertEq(game.minerAction(), 18, "pending settlement is selected");
         game.pendingMidday();
         _fundCoordinator(100 ether);
-        assertEq(game.minerAction(), 19, "settlement runs ahead of the mid-day request");
+        assertEq(game.minerAction(), 18, "settlement runs ahead of the mid-day request");
         game.seed(DegenerusGameStorage.MinerAction.RequestDaily);
         game.setGrowthPending(true);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestDaily), "the daily request runs first");
@@ -306,7 +315,7 @@ contract MinerNoProgressTest is Test {
         vm.expectCall(ContractAddresses.PARIMUTUEL, selector);
         game.mineFlip{gas: 16_700_000}(0);
         assertTrue(game.growthPending(), "unfinished settlement stays armed");
-        assertEq(game.minerAction(), 19, "and is selected again");
+        assertEq(game.minerAction(), 18, "and is selected again");
         vm.mockCall(ContractAddresses.PARIMUTUEL, selector, abi.encode(true, true, uint256(1)));
         game.mineFlip{gas: 16_700_000}(0);
         assertFalse(game.growthPending(), "a finished settlement clears the bit");

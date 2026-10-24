@@ -59,10 +59,11 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     // =====================================================================
 
     function _today() internal view returns (uint24) {
-        return uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
+        return game.currentDayView();
     }
 
     function _warpToDay(uint24 d) internal {
+        _setRequestedFixtureDay(d);
         vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
     }
 

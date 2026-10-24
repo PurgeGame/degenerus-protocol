@@ -52,19 +52,26 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         uint16[4] memory bucketCounts,
         uint160 base
     ) private {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = dailyIdx + 30;
 
         // Reaching `lvl` means every level through it has materialized its queues. Queue slots recycle
         // 1..100 under a level tag (c729ecfc9), so an unretired genesis queue would refuse the seeded
         // level-(lvl + 1) binding with E().
         TicketQueueStorage.retireCompleted(address(this), lvl);
 
-        // --- Liveness game-over pre-state ---
-        // lvl != 0 + target never met; the 200-day warp after seeding also fires the no-seal
-        // deadman, so the ending's terminal word derives the capped 31 skipped days as well.
+        // Thirty completed purchase days select the normal terminal jackpot at the next
+        // reset. A published midday cohort may still own committed ticket work. Keep the
+        // daily completion recent so this measures the 305-award path, not hard-stall tallying.
         level = lvl;
-        purchaseStartDay = 0;
-        dailyIdx = day - 1;
+        purchaseStartDay = day - 30;
+        dailyIdx = day;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = _wallDay();
+        rngRequestDay = 0;
+        rngRequestTime = uint48(block.timestamp);
+        rngLockedFlag = false;
+        _setRngRequestActive(true);
         // A reachable large target remains unmet by the empty next pool.
         _setLevelPrizePool(lvl, 100_000 ether);
         _recordDailyRng(day, rngWord); // the last sealed day's word; the ending requests its own
@@ -160,11 +167,11 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
 
     /// @notice (a) Etch the GameSeeder overlay, write a worst-case mineFlip pre-state from the given
     ///         parameters, restore the REAL production code (so the measured tx runs production
-    ///         mineFlip bytecode), fund the pool, and warp past the 120-day liveness threshold.
+    ///         mineFlip bytecode), fund the pool, and reach the next reset after completion.
     /// @param lvl       game level for the seeded pre-state (>=10)
     /// @param rngWord   the word the winning buckets are seeded for; it answers the terminal request
     /// @param readOwed  committed read-slot owed size — bound near the cold write budget by the caller
-    /// @param writeOwed write-slot owed size — swapped in before the terminal request
+    /// @param writeOwed later write-slot owed size, excluded from the committed terminal draw
     /// @param base      disjoint synthetic-holder address base
     function _etchSeedRestore(uint24 lvl, uint256 rngWord, uint256 readOwed, uint256 writeOwed, uint160 base) internal {
         uint256 word = rngWord | 1;
@@ -176,12 +183,14 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         GameSeeder(payable(address(game)))
             .seedAdvanceWorstCase(lvl, word, readOwed, writeOwed, traitIds, bucketCounts, base);
         vm.etch(address(game), realGameCode);
+        _syncCoinflipFixtureDay(game.currentDayView());
 
         // Fund the contract so the terminal jackpot pool reaches the 305-winner geometry.
         vm.deal(address(game), GAME_FUNDS);
 
-        // Warp past the 120-day liveness threshold (psd was seeded to 0).
-        vm.warp(block.timestamp + 200 days);
+        // Purchase timeout is due, while the independent fourteen-day deadline remains fresh.
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(game.livenessTriggered(), "thirty completed purchase days select the ending");
     }
 
     /// @notice (b) Drive the REAL game.mineFlip(0) in a bounded loop at a realistic 10M allowance per call.
@@ -212,8 +221,8 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
             }
             emit log_named_uint("advance_tx_gas[i]", used);
             if (used > maxTxGas) maxTxGas = used;
-            if (game.gameOver()) {
-                reachedHeavy = true; // terminal jackpot ran -> the heavy branch was exercised
+            if (game.gameOver() && winners == DAILY_ETH_MAX_WINNERS) {
+                reachedHeavy = true; // the latch alone does not certify the payout finished
                 break;
             }
             // The ending requests its own terminal word after the one swap; answer it with the

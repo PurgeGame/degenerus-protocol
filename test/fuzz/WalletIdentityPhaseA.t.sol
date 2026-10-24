@@ -21,8 +21,11 @@ contract WalletIdentityProbe is DegenerusGameStorage {
     function takeHalf(uint32 id) external returns (uint256) { return _takeHalfPasses(id); }
     function seedLevel(uint24 lvl) external {
         level = lvl;
-        purchaseStartDay = _simulatedDayIndex();
+        purchaseStartDay = _wallDay();
         dailyIdx = purchaseStartDay;
+        dailyComplete = true;
+        lastDailyRequestWallDay = _wallDay();
+        lastDailyCompletedAt = uint48(block.timestamp);
         rngRequestTime = uint48(block.timestamp);
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
@@ -42,6 +45,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 20 days);
+        _seedLogicalFixtureDay(29);
         gameCode = address(game).code;
     }
 

@@ -10,7 +10,7 @@ import {BucketSeed} from "../../helpers/BucketSeed.sol";
 contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     function seedDeadStall(uint24 lvl) external {
         TQ.retireCompleted(address(this), lvl);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         purchaseStartDay = day - 10;
         dailyIdx = day - 15;
         level = lvl;
@@ -77,10 +77,13 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     /// @dev Day `s` (30 days ago) is stuck in processing with its word delivered (and, if
     ///      `applied`, already recorded); nothing has sealed since, so the deadman has fired.
     function seedStuckDay(uint24 lvl, uint256 word, bool applied) external returns (uint24 s) {
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         s = day - 30;
         purchaseStartDay = s - 5;
-        dailyIdx = s - 1;
+        dailyIdx = s;
+        dailyComplete = false;
+        lastDailyCompletedAt = uint48(block.timestamp - 30 days);
+        rngRequestDay = s;
         level = lvl;
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
@@ -109,9 +112,12 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     ///      A mid-day request committed the read side and its lootbox word has landed.
     function seedDeadlineWithLandedCohort(uint24 lvl, uint256 boxWord) external {
         TQ.retireCompleted(address(this), lvl);
-        uint24 day = _simulatedDayIndex();
+        uint24 day = _wallDay();
         purchaseStartDay = day - 31;
         dailyIdx = day - 1;
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp - 1 days);
+        lastDailyRequestWallDay = _wallDay() - 1;
         level = lvl;
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;

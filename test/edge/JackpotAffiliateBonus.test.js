@@ -56,14 +56,14 @@ describe("JackpotAffiliateBonus", function () {
   }
 
   async function driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, word) {
-    await game.connect(deployer).mineFlip(0);
+    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
     const requestId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(requestId, word);
     } catch {}
     for (let i = 0; i < 200; i++) {
       try {
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       } catch {
         break;
       }

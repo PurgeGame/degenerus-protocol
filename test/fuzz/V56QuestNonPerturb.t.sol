@@ -296,6 +296,10 @@ contract V56QuestNonPerturb is DeployProtocol {
     }
 
     function _rollDay(uint32 day) internal returns (uint32) {
+        uint256 clockWord = uint256(vm.load(address(game), bytes32(uint256(0))));
+        vm.store(address(game), bytes32(uint256(0)), bytes32((clockWord & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24)));
+        uint256 flipClock = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
+        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((flipClock & ~(uint256(0xffffff) << 176)) | (uint256(day) << 176)));
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))), false, false, false);
         return day;

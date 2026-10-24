@@ -25,7 +25,7 @@ contract ChainPinStageHarness is DegenerusGame {
         bool midDay;
         bool lastPurchase;
         bool jackpot;
-        bool gapApplied;
+        bool hardStall;
         bool goLatch;
         bool goDead;
         bool wordRecorded;
@@ -57,7 +57,9 @@ contract ChainPinStageHarness is DegenerusGame {
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, s.goDead ? 1 : 0);
         lastPurchaseDay = s.lastPurchase;
         jackpotPhaseFlag = s.jackpot;
-        rngGapApplied = s.gapApplied;
+        dailyComplete = s.complete;
+        lastDailyCompletedAt = uint48(block.timestamp - (s.hardStall ? 14 days : 1 days));
+        lastDailyRequestWallDay = _wallDay() - 1;
         level = s.level;
         purchaseStartDay = s.purchaseStart;
         dailyIdx = s.dailyIdx;
@@ -65,7 +67,7 @@ contract ChainPinStageHarness is DegenerusGame {
         rngRequestTime = s.requestTime;
         rngWordCurrent = s.word;
         _setPrizePools(s.nextPoolMet ? type(uint128).max : 0, 0);
-        if (s.wordRecorded) _recordDailyRng(_simulatedDayIndex(), 0x1234);
+        if (s.wordRecorded) _recordDailyRng(s.dailyIdx, 0x1234);
         _pendingBoxCount = s.boxesPending ? 1 : 0;
         degeneretteReadCount = s.degPending ? 1 : 0;
         degeneretteCursor = 0;
@@ -99,6 +101,7 @@ contract ChainPinConsumerStage is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 400 days);
+        _seedLogicalFixtureDay(409);
     }
 
     function _bit(uint256 h, uint256 k, uint256 oneIn) private pure returns (bool) {
@@ -120,7 +123,7 @@ contract ChainPinConsumerStage is DeployProtocol {
         s.midDay = _bit(h, 8, oneIn);
         s.lastPurchase = _bit(h, 9, 4);
         s.jackpot = _bit(h, 10, 4);
-        s.gapApplied = _bit(h, 11, 2);
+        s.hardStall = _bit(h, 11, oneIn * 2);
         s.goLatch = _bit(h, 12, oneIn * 2);
         s.goDead = _bit(h, 13, oneIn * 2);
         s.wordRecorded = _bit(h, 14, 3);
@@ -130,8 +133,8 @@ contract ChainPinConsumerStage is DeployProtocol {
         s.crapsRead = _bit(g, 2, oneIn);
         s.boxesPending = _bit(g, 3, oneIn);
         s.level = uint24((g >> 40) % 3 == 0 ? 0 : 1 + (g >> 48) % 150);
-        // The purchase deadline day (start + 30, or + 250 at level 0) lands on today - 2 .. today + 2.
-        uint24 span = s.level == 0 ? 250 : 30;
+        // Thirty completed logical rounds at every level; place the boundary near today.
+        uint24 span = 30;
         s.purchaseStart = uint24(uint256(today) + (g >> 64) % 5 - 2 - span);
         uint256 idxPick = (g >> 72) % 6;
         s.dailyIdx = idxPick < 3 ? today - 1 : idxPick == 3 ? today : idxPick == 4 ? today - 2 : today - 31;
@@ -153,15 +156,15 @@ contract ChainPinConsumerStage is DeployProtocol {
         vm.mockCall(address(sdgnrs), abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(pending));
         uint8 action = game.nextMinerAction();
         uint8 stage = game.rngConsumerStage_g379();
-        // Redemption = 8 ... CertifyRead = 14: the consumer branch maps stage n to action n + 7.
-        if (action >= 8 && action <= 14) assertEq(stage, action - 7, "selected consumer action != Game stage");
+        // Redemption = 7 ... CertifyRead = 13: the consumer branch maps stage n to action n + 6.
+        if (action >= 7 && action <= 13) assertEq(stage, action - 6, "selected consumer action != Game stage");
         // A Game stage 1 must have been selected as Redemption (no loan seizure is pending in these states).
-        if (stage == 1) assertEq(action, 8, "Game stage 1 not selected as Redemption");
-        redemption = action == 8;
+        if (stage == 1) assertEq(action, 7, "Game stage 1 not selected as Redemption");
+        redemption = action == 7;
         if (redemption) {
             assertEq(stage, 1, "selected Redemption would hit RedemptionStageBlocked");
             ++redemptionHits;
-            if (game.currentDayView() > uint256(s.purchaseStart) + (s.level == 0 ? 250 : 30)) ++deadlineHits;
+            if (game.currentDayView() > uint256(s.purchaseStart) + 30) ++deadlineHits;
         }
     }
 
@@ -186,7 +189,7 @@ contract ChainPinConsumerStage is DeployProtocol {
             for (uint256 variant; variant < 4; ++variant) {
                 ChainPinStageHarness.Seed memory s = _readySeed(today);
                 s.level = variant == 0 ? 0 : 7;
-                uint24 span = s.level == 0 ? 250 : 30;
+                uint24 span = 30;
                 s.purchaseStart = today + 2 - offset - span; // deadline = today + 2 - offset
                 s.wordRecorded = variant == 2; // a day that holds its word is finished on it
                 s.nextPoolMet = variant == 3; // a met target rescues the level
@@ -199,11 +202,11 @@ contract ChainPinConsumerStage is DeployProtocol {
     function test_readyStateSelectsRedemption() public {
         assertTrue(_check(_readySeed(_today()), true), "ready state selects Redemption");
         ChainPinStageHarness.Seed memory s = _readySeed(_today());
-        s.dailyIdx = _today() - 31; // VRF deadman edge: more than 30 days unsealed
+        s.hardStall = true; // Fourteen real days without completing a round
         assertFalse(_check(s, true), "deadman fired: no stage 1");
         s = _readySeed(_today());
-        s.dailyIdx = _today() - 30; // exactly 30 is still alive
-        assertTrue(_check(s, true), "30 days unsealed is not yet the deadman");
+        s.dailyIdx = _today() - 30; // A logical gap alone has no hard-deadline meaning
+        assertTrue(_check(s, true), "logical distance alone cannot trigger the hard deadline");
     }
 
     /// @notice Non-vacuity: the fuzz generator reaches Redemption, and the past-deadline region, in volume.

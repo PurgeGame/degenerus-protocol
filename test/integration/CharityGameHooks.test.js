@@ -79,7 +79,7 @@ describe("CharityGameHooks", function () {
    *   3. mineFlip repeatedly until RNG unlocked
    */
   async function driveVRFCycle(game, deployer, mockVRF) {
-    await game.connect(deployer).mineFlip(0);
+    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
@@ -89,7 +89,7 @@ describe("CharityGameHooks", function () {
     // so the first advance cycle needs many batch-processing calls.
     for (let i = 0; i < 200; i++) {
       if (!(await game.rngLocked())) break;
-      await game.connect(deployer).mineFlip(0);
+      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
     }
   }
 
@@ -101,14 +101,14 @@ describe("CharityGameHooks", function () {
    */
   async function driveVRFCycleCapturing(game, deployer, mockVRF) {
     const txs = [];
-    txs.push(await game.connect(deployer).mineFlip(0));
+    txs.push(await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }));
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
     }
     for (let i = 0; i < 200; i++) {
       if (!(await game.rngLocked())) break;
-      txs.push(await game.connect(deployer).mineFlip(0));
+      txs.push(await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }));
     }
     return txs;
   }
@@ -128,7 +128,7 @@ describe("CharityGameHooks", function () {
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0);
+        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       } catch {
         /* may revert mid-sequence; keep driving */
       }
@@ -193,7 +193,7 @@ describe("CharityGameHooks", function () {
       // Day 2: Level transition day -- capture LevelSkipped event.
       // No setCharity() calls before transition -> currentActiveBitmap == 0 -> skip-path A.
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0);
+      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
 
@@ -201,7 +201,7 @@ describe("CharityGameHooks", function () {
       let levelSkippedFound = false;
       for (let i = 0; i < 200; i++) {
         if (!(await game.rngLocked())) break;
-        const tx = await game.connect(deployer).mineFlip(0);
+        const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
         const events = await getEvents(tx, charity, "LevelSkipped");
         if (events.length > 0) {
           expect(events[0].args.level).to.equal(0);
@@ -405,7 +405,7 @@ describe("CharityGameHooks", function () {
         const reqBefore = await getLastVRFRequestId(mockVRF);
         let tx = null;
         try {
-          tx = await game.connect(deployer).mineFlip(0);
+          tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
         } catch {
           /* may revert mid-sequence */
         }

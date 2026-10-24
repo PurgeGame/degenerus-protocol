@@ -248,7 +248,7 @@ async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
   await advanceToNextDay();
 
   // Step 2: request VRF.
-  await game.connect(deployer).mineFlip(0);
+  await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
   expect(await game.rngLocked()).to.equal(true);
 
   // Step 3: fulfill VRF with the named seed.
@@ -260,7 +260,7 @@ async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
   const receipts = [];
   for (let i = 0; i < 100; i++) {
     if (!(await game.rngLocked())) break;
-    const tx = await game.connect(deployer).mineFlip(0);
+    const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
     const receipt = await tx.wait();
     receipts.push({ tx, receipt });
   }
@@ -432,8 +432,8 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
       );
 
       // The jackpot battle's award draw appends its entries on the craps table, one event each.
-      // No round exists before the first window day, so the deploy day's first request carries
-      // none; the next purchase-day draw runs the battle over the future queues.
+      // This fixture starts at logical day 9, after the fixed first window day (3).
+      // Both purchase-day draws therefore run the battle over future queues.
       const BATTLE_RUN_TOPIC = hre.ethers.id("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
       const countBattleRuns = (rs) => {
         let runs = 0;
@@ -444,7 +444,7 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
         }
         return runs;
       };
-      expect(countBattleRuns(receipts), "no battle runs before the first window day").to.equal(0);
+      expect(countBattleRuns(receipts), "logical day 9 already has a battle window").to.be.greaterThan(0);
       const nextDayReceipts = await driveOneFullDay(game, deployer, mockVRF, advanceModule, seed + 1n);
       expect(
         countBattleRuns(nextDayReceipts),
