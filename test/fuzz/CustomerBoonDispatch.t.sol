@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameBoonActions} from "../../contracts/modules/GameBoonActions.sol";
+
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -28,6 +30,12 @@ contract CustomerBoonReferenceFacade {
 
 }
 
+/// @dev Test-only external seams retain the former delegate interface.
+contract CustomerBoonReferenceModule is GameBoonActions {
+    function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16) { return _consumeActionBoon(id); }
+    function consumeDecimatorBoost(uint32 id) external returns (uint16) { return _consumeDecimatorBoost(id); }
+}
+
 contract CustomerBoonDispatchTest is DeployProtocol {
     function setUp() public { _deployProtocol(); }
 
@@ -50,6 +58,7 @@ contract CustomerBoonDispatchTest is DeployProtocol {
         vm.store(address(game), slot, bytes32(slot0));
         vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(slot1));
         uint256 snap = vm.snapshotState();
+        vm.etch(ContractAddresses.GAME_BOON_MODULE, type(CustomerBoonReferenceModule).runtimeCode);
         vm.etch(address(game), type(CustomerBoonReferenceFacade).runtimeCode);
         bytes32 expected = _run(caller, player, slot);
         assertTrue(vm.revertToState(snap));
@@ -75,6 +84,7 @@ contract CustomerBoonDispatchTest is DeployProtocol {
         vm.store(address(game), slot, bytes32(slot0));
         vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(slot1));
         uint256 snap = vm.snapshotState();
+        vm.etch(ContractAddresses.GAME_BOON_MODULE, type(CustomerBoonReferenceModule).runtimeCode);
         vm.etch(address(game), type(CustomerBoonReferenceFacade).runtimeCode);
         bytes32 expected = _decimator(caller, player, slot);
         assertTrue(vm.revertToState(snap));

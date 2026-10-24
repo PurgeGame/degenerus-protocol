@@ -87,7 +87,7 @@ contract SeatTenureDraw is DeployProtocol {
 
     /// @dev The draw's selection formula, mirrored: 1 + H("SEATDRAW", word) % (len-1).
     function _expectedIdx(uint256 word, uint256 len) internal pure returns (uint256) {
-        return 1 + (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1));
+        return 1 + (uint256(keccak256(abi.encode(uint256(97), word))) % (len - 1));
     }
 
     /// @dev Collect SubDrawWon events recorded since the last vm.recordLogs().
@@ -306,7 +306,7 @@ contract SeatTenureDraw is DeployProtocol {
             assertEq(n, 3);
             for (uint256 rank; rank < 3; ++rank) {
                 uint256 word = 2;
-                while (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % 3 != rank) ++word;
+                while (uint256(keccak256(abi.encode(uint256(97), word))) % 3 != rank) ++word;
                 uint256 drawSnapshot = vm.snapshotState();
                 vm.recordLogs();
                 _completeDay(word);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameBoonActions} from "../../contracts/modules/GameBoonActions.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
@@ -20,6 +21,13 @@ contract BoonGameExt is DegenerusGame {
         bool ok;
         (ok, r) = module.delegatecall(data);
         if (!ok) assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
+    }
+
+    // Exercise the actual internal consumers after their consolidation into Game.
+    function x_consumeActionBoon(uint32 id) external returns (uint16) { return _consumeActionBoon(id); }
+    function x_consumeDecimatorBoost(uint32 id) external returns (uint16) { return _consumeDecimatorBoost(id); }
+    function x_consumeDegeneretteBoon(uint32 id, uint8 currency) external returns (uint16) {
+        return _consumeDegeneretteBoon(id, currency);
     }
 
     function x_seedWallet(address a) external returns (uint32 id) {
@@ -238,7 +246,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         uint24 today = uint24(_today());
         RecyclingState.seedDailyWord(address(game), today - 1, 123);
         vm.prank(last);
-        vm.expectRevert(DegenerusGameBoonModule.RecipientBoonCapReached.selector);
+        vm.expectRevert(GameBoonActions.RecipientBoonCapReached.selector);
         game.issueDeityBoon(lastId, rid, 0);
         vm.prank(first);
         game.issueDeityBoon(firstId, rid, 0);
@@ -622,12 +630,12 @@ contract BoonPackedWalletIds is DeployProtocol {
         vm.prank(ContractAddresses.COIN);
         assertEq(game.consumeDecimatorBoon(0), 0, "decimator");
 
-        // The module bodies themselves (past the façade's tier early-out).
+        // The internal bodies themselves (past the façade's tier early-out).
         address boon = ContractAddresses.GAME_BOON_MODULE;
-        assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeCoinflipBoon_g2902, (0))), (uint16)), 0);
-        assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDecimatorBoost, (0))), (uint16)), 0);
-        assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDegeneretteBoon, (0, 0))), (uint16)), 0);
-        assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDegeneretteBoon, (0, 1))), (uint16)), 0);
+        assertEq(ext.x_consumeActionBoon(0), 0);
+        assertEq(ext.x_consumeDecimatorBoost(0), 0);
+        assertEq(ext.x_consumeDegeneretteBoon(0, 0), 0);
+        assertEq(ext.x_consumeDegeneretteBoon(0, 1), 0);
         assertFalse(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.checkAndClearExpiredBoon, (0))), (bool)));
 
         _assertNoWritesTo(s0Slot, s1Slot);

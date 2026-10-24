@@ -107,7 +107,7 @@ contract CrapsOracle {
 
     /// @notice Domain tag for the table's survival coin (see `_slip`). Held independently from the
     ///         production engine, at the same value, so the differential proves the two agree.
-    uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
+    uint256 internal constant SURVIVAL_TAG = 42; // CRAPS_SURVIVAL
 
     /// @dev The six totals that can be a point, for grading `Outcome.pointsMade`.
     uint256 internal constant _POINT_TOTALS_MASK = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10);
@@ -736,13 +736,8 @@ contract CrapsOracle {
     /// @dev Exposed so a single hand of a session can be pulled out and replayed on its own through
     ///      `resolveHand`, and so a session can be checked off-chain from the one word.
     function handSeed(bytes32 seed, uint256 i) public pure returns (bytes32 h) {
-        // keccak256(abi.encodePacked(seed, i)) computed over the EVM scratch space: the 64-byte
-        // preimage fits in 0x00..0x3F exactly, so the digest is identical and nothing is allocated.
-        assembly ("memory-safe") {
-            mstore(0x00, seed)
-            mstore(0x20, i)
-            h := keccak256(0x00, 0x40)
-        }
+        // Fixed-width reference preimage: RngTags.CRAPS_HAND, seed, hand index.
+        return keccak256(abi.encode(uint256(31), seed, i));
     }
 
     /// @notice The dice for roll `i` of the hand seeded by `seed`.
@@ -754,14 +749,8 @@ contract CrapsOracle {
     /// @return d1 First die, 1..6.
     /// @return d2 Second die, 1..6.
     function diceAt(bytes32 seed, uint256 i) public pure returns (uint256 d1, uint256 d2) {
-        // Same scratch-space keccak as `handSeed` — this is the hottest line in the resolver, run
-        // once per roll, and the digest is unchanged from the abi.encodePacked form.
-        uint256 w;
-        assembly ("memory-safe") {
-            mstore(0x00, seed)
-            mstore(0x20, i)
-            w := keccak256(0x00, 0x40)
-        }
+        // Independent raw ABI encoding of the CRAPS_ROLL domain (36).
+        uint256 w = uint256(keccak256(abi.encode(uint256(36), seed, i)));
         d1 = (uint256(uint32(w)) % 6) + 1;
         d2 = (uint256(uint32(w >> 32)) % 6) + 1;
     }
@@ -846,13 +835,7 @@ contract CrapsOracle {
                     d1 = script[2 * i];
                     d2 = script[2 * i + 1];
                 } else {
-                    // diceAt, inlined: one scratch-space keccak per roll is the loop's hottest line.
-                    uint256 w;
-                    assembly ("memory-safe") {
-                        mstore(0x00, seed)
-                        mstore(0x20, i)
-                        w := keccak256(0x00, 0x40)
-                    }
+                    uint256 w = uint256(keccak256(abi.encode(uint256(36), seed, i)));
                     d1 = (uint256(uint32(w)) % 6) + 1;
                     d2 = (uint256(uint32(w >> 32)) % 6) + 1;
                 }
@@ -1008,7 +991,7 @@ contract CrapsOracle {
     ///      keyed on the table seed, the run-length `n` and the slip's OWNER. The owner is what
     ///      keeps one player's second chance off the rest of the field.
     function _survived(bytes32 seed, uint256 n, address player) private pure returns (bool) {
-        return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n, player))) & 1 == 1;
+        return uint256(keccak256(abi.encode(uint256(42), seed, n, uint256(uint160(player))))) & 1 == 1;
     }
 
     /// @dev Copy one hand's summary into a ledger slot. Split out of the session loops so their

@@ -2449,8 +2449,8 @@ contract TicketLifecycleTest is DeployProtocol {
             if (BoxOrderLib.boId(RecyclingState.boxEntry(address(game), buffer, position)) == id) break;
         }
         require(position < n, "harness: player has no entry in the buffer");
-        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, uint256(buffer), position)));
-        return uint256(keccak256(abi.encode(root, uint256(id), BOX_OPEN_TAG, nonce)));
+        uint256 root = uint256(keccak256(abi.encode(uint256(20), word, position)));
+        return uint256(keccak256(abi.encode(uint256(19), root, nonce)));
     }
 
     /// @notice Pick a word whose FIRST box for `player` takes the ticket path and lands at offset 0

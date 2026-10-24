@@ -420,6 +420,9 @@ abstract contract CrapsPins is Test {
     uint256 internal constant DAY_WORD_SLOT = GameSlots.RNG_WORD_BY_DAY;
 
     function _installPins() internal {
+        // The protocol pins occupy this test deployer's early CREATE addresses.
+        // Reserve that prefix before creating mocks or standalone table subclasses.
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         vm.etch(ContractAddresses.GAME, address(new MockGame()).code);
         vm.etch(ContractAddresses.COIN, address(new MockFlip()).code);
         MockFlip(ContractAddresses.COIN).setCompLane(1);

@@ -15,6 +15,7 @@ import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {VaultHistorySeeder} from "./AdvanceNestedSettlementGas.t.sol";
@@ -481,7 +482,7 @@ contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
     }
 }
 
-abstract contract CenturyConsolidationFixture is FreshWordLeg {
+abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
     uint256 internal constant CAP = 10_000_000;
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
@@ -493,7 +494,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         + GasBounds.DAILY_PHASE_TAIL + MineFlipGas.CHECK_RESERVE + 100_000;
     /// @dev The allowance the native daily phase runs at elsewhere in this fixture.
     uint256 internal constant COMPOSED_ALLOWANCE = 9_000_000;
-    uint256 internal constant WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
+    uint256 internal constant WORD = 4;
     /// @dev The history variants' vault walk: one full claim window, the seeded backlog plus the
     ///      century day the apply resolves.
     uint24 internal constant VAULT_HISTORY_DAYS = 90;
@@ -789,6 +790,12 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         host.applyOnly{gas: 12_000_000}();
         VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used - 21_192, acc, address(game));
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snap));
+            string memory label = string.concat("century-apply-", vm.toString(address(this)), "-", vm.toString(used));
+            this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(host.applyOnly, ()));
+            host.applyOnly{gas: 12_000_000}();
+        }
         emit log_named_uint("osaka_gas_including_intrinsic", used);
         emit log_named_uint("glamsterdam_exec_gas_including_intrinsic", r.glamsterdamExec + 21_192);
         emit log_named_uint("glamsterdam_state_gas", r.stateGas);
@@ -842,13 +849,13 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     function _checkConsolidation(bool measureComposition) private {
         CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
         (uint8 stage, uint256 used, Vm.Log[] memory logs) = _nativePhaseTx();
+        assertEq(stage, STAGE_ENTERED_JACKPOT, "century consolidation must finish");
         assertEq(host.bafPool(), expectedPool, "the armed BAF pool is the fixture's");
         Tally memory c = _newTally();
         _tally(c, logs);
         emit log_named_uint("century_consolidation_including_intrinsic", used);
         emit log_named_uint("BAF_pool_wei", expectedPool);
         emit log_named_uint("house_high_passes", c.highPasses);
-        assertEq(stage, STAGE_ENTERED_JACKPOT, "century consolidation must finish");
         assertEq(c.ethAwards + c.ticketAwards + c.whaleAwards, 0, "arming pays no award");
         assertEq(c.decimator, 1, "nonempty decimator must resolve");
         assertEq(c.yieldEvents, 1, "surplus must distribute");
@@ -1172,31 +1179,31 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
 contract AdvanceCenturyConsolidationGas is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(3500 ether, 100 ether, 158_126_247_524_580_441_470, 100, 1, true);
+        return Shape(3500 ether, 25_372_163_398_292_257_697, 158_126_247_524_580_441_470, 100, 1, true);
     }
 }
 
 contract AdvanceCenturyAtHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 475_485_053_530_434_780_923, 100 ether, 102, 0, false);
+        return Shape(100 ether, 477_954_620_213_945_795_466, 100 ether, 102, 0, false);
     }
 }
 
 contract AdvanceCenturyAboveHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 475_485_053_530_434_781_933, 100 ether + 200, 100, 1, false);
+        return Shape(100 ether, 477_954_620_213_945_796_476, 100 ether + 200, 100, 1, false);
     }
 }
 
 contract AdvanceCenturyFarDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 880_838_588_883_970_134_458, 180 ether, 100, 1, false);
+        return Shape(100 ether, 883_277_852_537_178_118_698, 180 ether, 100, 1, false);
     }
 }
 
 contract AdvanceCenturyLargeDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 1_486_899_194_944_576_195_064, 300 ether, 96, 3, false);
+        return Shape(100 ether, 1_489_338_458_597_784_179_305, 300 ether, 96, 3, false);
     }
 }
 
@@ -1204,7 +1211,7 @@ contract AdvanceCenturyLargeDeferred is CenturyConsolidationFixture {
 ///      3.06 ETH leg rolls twice.
 contract AdvanceCenturyFirstScatterDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 2_446_495_154_540_535_791_024, 490 ether, 48, 27, false);
+        return Shape(100 ether, 2_448_934_418_193_743_775_264, 490 ether, 48, 27, false);
     }
 }
 
@@ -1212,7 +1219,7 @@ contract AdvanceCenturyFirstScatterDeferred is CenturyConsolidationFixture {
 ///      head lootbox half defer to whale passes.
 contract AdvanceCenturyAllTicketsDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 9_062_656_770_702_151_952_640, 1800 ether, 0, 99, false);
+        return Shape(100 ether, 9_065_096_034_355_359_936_880, 1800 ether, 0, 99, false);
     }
 }
 
@@ -1220,15 +1227,15 @@ contract AdvanceCenturyAllTicketsDeferred is CenturyConsolidationFixture {
 ///      the doubled schedule's most roll-heavy shape.
 contract AdvanceCenturyDoubledRounds is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 3_002_050_710_096_091_346_579, 600 ether, 192, 3, false);
+        return Shape(100 ether, 3_004_489_973_749_299_330_820, 600 ether, 192, 3, false);
     }
 }
 
-/// @dev Word 158931: its ticket legs reach 98 distinct recipient/level pairs and 15 far-future
-///      rolls, the widest spread at 98 pairs among the odd words below 200,001.
+/// @dev Word 222303: independently searched current domains yield 98 distinct
+///      recipient/level pairs and 16 far-future rolls; all thresholds remain pinned.
 contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     function _rngWord() internal pure override returns (uint256) {
-        return 158_931;
+        return 222_303;
     }
 
     function _shape() internal pure override returns (Shape memory) {
@@ -1236,7 +1243,7 @@ contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
         // 178.04 ETH, inside the (100, 200) ETH band with the destination-heavy award shape:
         // 2-roll scatter legs and head halves, the top award's half deferred to whale passes.
         // This pool's level cut falls short of one whole high pass: no house pass.
-        return Shape(3000 ether, 38_181_818_181_818_181_818, 178_035_451_782_491_666_369, 100, 1, false);
+        return Shape(3000 ether, 397_359_325_926_647_615_319, 178_035_451_782_491_666_369, 100, 1, false);
     }
 }
 

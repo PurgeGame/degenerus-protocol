@@ -391,7 +391,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         _answer(w5);
         _drive(w5);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 gapWord = uint256(keccak256(abi.encodePacked(w5, uint24(4))));
+        uint256 gapWord = uint256(keccak256(abi.encode(uint256(68), w5, uint256(4))));
         assertEq(game.rngWordForDay(4), gapWord, "day 4 carries the derived gap word");
         assertEq(_appliedWord(logs, 5), w5, "day 5 recorded its own word");
         _assertMatchesRef(_resolvedOf(logs, 1), 1, w5, q, "gap request");

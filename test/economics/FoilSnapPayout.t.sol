@@ -53,6 +53,7 @@ contract FoilSnapPayout is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        mockVRF.fundSubscription(1, 1000 ether);
         vm.warp(vm.getBlockTimestamp() + 1 days);
     }
 
@@ -65,7 +66,7 @@ contract FoilSnapPayout is DeployProtocol {
     }
 
     function _completeDay(uint256 vrfWord) internal {
-        _finishReadConsumers();
+        if (!game.rngLocked()) _finishReadConsumers();
         _advance();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -153,6 +154,7 @@ contract FoilSnapPayout is DeployProtocol {
             }
             _completeDay(_seed(_wordSeries(), d));
             _endDay = game.currentDayView();
+            _seedMatchesOnSealedBoard();
             uint256 snapshot = vm.snapshotState();
             (, uint256 paidFlip,, uint256 claims) = _claimAll();
             vm.revertToStateAndDelete(snapshot);
@@ -169,6 +171,24 @@ contract FoilSnapPayout is DeployProtocol {
         emit log_named_uint("endDay", _endDay);
         emit log_named_uint("days with a sealed word in window", worded);
         emit log_named_uint("end level", game.level());
+    }
+
+    /// @dev The property compares payout state, so give it a guaranteed matching line
+    ///      after real purchases, generation and a real daily board. The production draw
+    ///      seed, price, activity and boosts are preserved. Natural RNG/line conservation
+    ///      is covered by the generation suites; neither comparison arm re-seeds state.
+    function _seedMatchesOnSealedBoard() private {
+        uint256 draw = uint256(vm.load(address(game), bytes32(GameSlots.DAILY_FOIL_DRAW + (_endDay & 1))));
+        if (uint24(draw >> 217) != _endDay || draw & (uint256(1) << 216) == 0) return;
+        uint24 lvl = uint24(draw >> 64);
+        for (uint256 i; i < FOIL_BUYERS; ++i) {
+            bytes32 slot = keccak256(abi.encode(uint256(_fid[i]), GameSlots.FOIL_RECORD + (lvl & 3)));
+            uint256 record = uint256(vm.load(address(game), slot));
+            if (record >> 255 == 0 || uint24(record >> 208) != lvl || uint24(record) > _endDay) continue;
+            record &= ~(uint256(type(uint128).max) << 56);
+            for (uint256 line; line < 4; ++line) record |= uint256(uint32(draw)) << (56 + 32 * line);
+            vm.store(address(game), slot, bytes32(record));
+        }
     }
 
     function _tally() internal view returns (uint256 eth, uint256 flip, uint256 wx) {

@@ -7,6 +7,7 @@ import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract CrapsGlobalWorkOrderTest is CrapsPins {
@@ -81,9 +82,12 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
         MineFlipGas.Result memory result = _worker(1_000_000);
         assertFalse(result.progressed);
         assertEq(table.bonusCursorOf(first), 0);
+        // Fund the entire recalibrated seat and both workers' retained caller reserves.
+        uint256 allowance = GasBounds.CRAPS_SEAT_GAS_MAX + GasBounds.CRAPS_SETTLE_TAIL_GAS
+            + GasBounds.CRAPS_CREDIT_GAS_MAX + GasBounds.CRAPS_WORK_TAIL_GAS + 500_000;
         uint256 before = gasleft();
-        result = _worker(3_000_000);
-        assertLt(before - gasleft(), 3_000_000);
+        result = _worker(allowance);
+        assertLt(before - gasleft(), allowance);
         assertTrue(result.progressed);
         assertEq(result.rewardBasis, 1);
         assertEq(table.bonusCursorOf(first), 1);

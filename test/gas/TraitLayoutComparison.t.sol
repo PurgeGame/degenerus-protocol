@@ -79,6 +79,7 @@ contract TraitLayoutComparisonTest is Test {
     DeadTallyCheckpointHarness private tally;
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         vm.warp(30 days);
         meter = new TraitLayoutMeter();
         reader = new TraitLayoutReadHarness();

@@ -10,7 +10,7 @@
 //     was:  uint256 flipAmount = (flipOut / 1 ether) * 1 ether;
 //     now:  uint256 flipAmount = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
 //               ? FlipRoundLib.roundFlipToHundreds(
-//                     flipOut, EntropyLib.hash2(rollSeed, FLIP_ROUND_TAG))
+//                     flipOut, EntropyLib.hash2(RngTags.BOX_ROUND, rollSeed))
 //               : FlipRoundLib.floorWholeFlip(flipOut);
 //
 //   SITE 4 — `_degenesisOutcome` (`DegenerusGameDegenesisModule.sol`, the 50% FLIP branch)
@@ -123,10 +123,10 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
         "`flipAmount` must be gated on `flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD`"
       ).to.equal(true);
       expect(
-        /FlipRoundLib\.roundFlipToHundreds\(\s*flipOut\s*,\s*EntropyLib\.hash2\(\s*rollSeed\s*,\s*FLIP_ROUND_TAG\s*\)\s*\)/.test(
+        /FlipRoundLib\.roundFlipToHundreds\(\s*flipOut\s*,\s*EntropyLib\.hash2\(\s*RngTags\.BOX_ROUND\s*,\s*rollSeed\s*\)\s*\)/.test(
           body
         ),
-        "the collapse must key on `EntropyLib.hash2(rollSeed, FLIP_ROUND_TAG)` — a domain-separated hash, not a bit-slice"
+        "the collapse must key on `EntropyLib.hash2(RngTags.BOX_ROUND, rollSeed)` — a domain-separated hash, not a bit-slice"
       ).to.equal(true);
       expect(
         /:\s*FlipRoundLib\.floorWholeFlip\(\s*flipOut\s*\)\s*;/.test(body),
@@ -214,10 +214,10 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
         "the Degenesis FLIP branch must gate on `flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD`"
       ).to.equal(true);
       expect(
-        /\?\s*FlipRoundLib\.roundFlipToHundreds\(\s*flipOut\s*,\s*EntropyLib\.hash2\(\s*seed\s*,\s*FLIP_ROUND_TAG\s*\)\s*\)/.test(
+        /\?\s*FlipRoundLib\.roundFlipToHundreds\(\s*flipOut\s*,\s*EntropyLib\.hash2\(\s*RngTags\.DEGENESIS_ROUND\s*,\s*seed\s*\)\s*\)/.test(
           body
         ),
-        "the collapse must key on `EntropyLib.hash2(seed, FLIP_ROUND_TAG)` — the order's own committed seed"
+        "the collapse must key on `EntropyLib.hash2(RngTags.DEGENESIS_ROUND, seed)` — the order's own committed seed"
       ).to.equal(true);
       expect(
         /:\s*FlipRoundLib\.floorWholeFlip\(\s*flipOut\s*\)\s*;/.test(body),

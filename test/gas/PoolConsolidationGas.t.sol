@@ -10,6 +10,7 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {CenturyBafScores, CenturyNativeGasHost} from "./AdvanceCenturyConsolidationGas.t.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 
 /// @dev Last-purchase-day state one level below `lvl`; the real request pre-increments the level.
 ///      A Decimator event of `decEntrants` entrants is open for `lvl` (sealing is constant work
@@ -47,14 +48,14 @@ contract ConsolidationLevelSeeder is DegenerusGame {
 ///         battle through the production modules, then measures the consolidation call alone with
 ///         every engine account cold. The three yield surplus recipients hold the claimable
 ///         sentinel from deployment, so no surplus credit is a zero-to-nonzero write.
-abstract contract PoolConsolidationFixture is FreshWordLeg {
+abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
     uint24 internal constant DAY = 400;
     uint128 internal constant NEXT_POOL = 3500 ether;
     uint128 internal constant FUTURE_POOL = 100 ether;
-    uint256 internal constant WIN_WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
-    uint256 internal constant SKIP_WORD = WIN_WORD ^ 1;
+    uint256 internal constant WIN_WORD = 4;
+    uint256 internal constant SKIP_WORD = 2;
     // WWXRP incinerator storage: `_incinHeader` slot 6, `_incinEntry` slot 7 (cum, player).
     uint256 internal constant INCIN_HEADER_SLOT = PeripheralSlots.WW_INCIN_HEADER;
     uint256 internal constant INCIN_ENTRY_SLOT = PeripheralSlots.WW_INCIN_ENTRY;
@@ -129,7 +130,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
             bytes32(total | (uint256(count) << 192) | (uint256(bracket) << 224))
         );
         uint256 roll = uint256(
-            keccak256(abi.encodePacked(bytes32("WWXRP_INCIN_WINNER"), address(wwxrp), bracket, rngWord))
+            keccak256(abi.encode(uint256(110), rngWord))
         ) % total;
         uint32 lo;
         uint32 hi = count - 1;
@@ -203,8 +204,9 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     function test_ConsolidationCold() public {
         uint24 lvl = _level();
         bool x0 = lvl % 10 == 0;
-        bool win = _word() & 1 == 1;
+        bool win = uint256(keccak256(abi.encode(uint256(61), _word()))) & 1 == 1;
         assertEq(_emptyRecipientSlots(), 0, "protocol recipients keep their claimable sentinel");
+        uint256 nativeSnapshot = vm.snapshotState();
         _coolAll();
         vm.recordLogs();
         MineFlipGas.Result memory result = host.dailyWith{gas: 12_000_000}(9_000_000);
@@ -233,6 +235,12 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         assertEq(_countTopic(logs, keccak256("LevelQuestRolled(uint24,uint8,uint8,uint256)")), 1, "level quest rolls");
         assertEq(_dailyLegLogs(logs), 0, "consolidation pays no award");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(nativeSnapshot));
+            this.exportNativeFixture(string.concat("pool-consolidation-", _label()), address(this), address(host),
+                abi.encodeCall(host.dailyWith, (uint256(9_000_000))));
+        }
+        vm.deleteStateSnapshot(nativeSnapshot);
     }
 
     function _checkIncinerator(Vm.Log[] memory logs) private {

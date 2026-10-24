@@ -100,6 +100,24 @@ def write_json(path, value):
     temporary.replace(path)
 
 
+def requires_debug_trace(sources):
+    """Only trace batches whose selected fixtures actually use the debug tracer."""
+    pending = list(sources)
+    seen = set()
+    while pending:
+        path = pending.pop().resolve()
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        source = path.read_text()
+        if re.search(r"\.startDebugTraceRecording\s*\(", source):
+            return True
+        for imported in re.findall(r'import\s+(?:[^;]*?from\s+)?[\"\']([^\"\']+)[\"\']\s*;', source):
+            if imported.startswith("."):
+                pending.append(path.parent / imported)
+    return False
+
+
 def captured_files(folder):
     """Follow dependency-directory links, retaining aliases and stopping cycles."""
     pending = [(Path(folder), frozenset())]
@@ -326,9 +344,11 @@ def main():
             fresh = [] if "--force" in forge_args else ["--force"]
             # Forge adds repeated verbosity flags. Appending -vvv to a default
             # -vv enables level-five tracing and can exhaust the hosted runner.
+            # Level three is required by gas fixtures using startDebugTraceRecording;
+            # tracing long simulations otherwise adds substantial execution overhead.
             verbosity = [] if os.environ.get("FOUNDRY_VERBOSITY") or any(
                 arg == "--verbosity" or re.fullmatch(r"-v+", arg) for arg in forge_args
-            ) else ["-vv"]
+            ) else ["-vvv" if requires_debug_trace(keep) else "-vv"]
             command = ["forge", "test", *verbosity, *skip, *fresh, *forge_args]
             identity = source_identity()
             input_path = run_dir / f"{name}-inputs.json"

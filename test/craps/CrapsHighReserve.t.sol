@@ -50,8 +50,8 @@ contract CrapsHighReserveTest is CrapsPins {
         multiple = h;
         uint256 word = 1;
         while (table.highMultOfWord(word) != h
-            || uint256(keccak256(abi.encode(word, uint256(0x43726170735363686564756c65), uint256(5)))) & 3 == 0
-            || uint256(keccak256(abi.encode(word, uint256(0x43726170735363686564756c65), uint256(5)))) & 3 == 3) ++word;
+            || uint256(keccak256(abi.encode(uint256(39), word, uint256(5)))) & 3 == 0
+            || uint256(keccak256(abi.encode(uint256(39), word, uint256(5)))) & 3 == 3) ++word;
         _setDailyWord(day, word);
         vm.prank(ContractAddresses.GAME);
         table.openBonusDay();
@@ -96,7 +96,7 @@ contract CrapsHighReserveTest is CrapsPins {
 
     function _word(bool win) internal view returns (uint256 word) {
         for (word = 1; ; ++word) {
-            if ((uint256(keccak256(abi.encode(word, DRAW_TAG, uint256(slot)))) % 10 == 0) == win) return word;
+            if ((uint256(keccak256(abi.encode(uint256(34), word, uint256(slot)))) % 10 == 0) == win) return word;
         }
     }
 
@@ -126,7 +126,7 @@ contract CrapsHighReserveTest is CrapsPins {
             if (j != 0) { vm.revertToState(snap); snap = vm.snapshotState(); }
             uint256 word;
             for (word = 1; ; ++word) {
-                uint256 roll = uint256(keccak256(abi.encode(word, uint256(0x436f696e447261774d756c7469706c696572)))) % 1000;
+                uint256 roll = uint256(keccak256(abi.encode(uint256(33), word))) % 1000;
                 if ((roll < 900 ? 5000 : roll < 990 ? 30000 : roll < 999 ? 200000 : 1000000) == wanted[j]) break;
             }
             _start(word, 15);
@@ -259,7 +259,7 @@ contract CrapsHighReserveTest is CrapsPins {
         assertEq(one.eligible, heads);
         assertTrue(one.resolved);
         assertGe(uint160(game.ownerOfId(one.nominee)), 0x1000); assertLt(uint160(game.ownerOfId(one.nominee)), 0x1000 + heads);
-        assertEq(one.won, uint256(keccak256(abi.encode(seed == 0 ? 1 : seed, DRAW_TAG, uint256(slot)))) % 10 == 0);
+        assertEq(one.won, uint256(keccak256(abi.encode(uint256(34), seed == 0 ? 1 : seed, uint256(slot)))) % 10 == 0);
         vm.revertToState(snap);
         _finish(1);
         assertEq(keccak256(abi.encode(CrapsLensReader.highRollerDrawOf(address(cold), slot))), keccak256(abi.encode(one)));

@@ -45,13 +45,13 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
         targetContract(address(handler));
     }
 
-    function _assertCoverage() private view {
+    function _assertCoverage() internal view {
         assertGt(handler.ghost_dailyDrainBranchEntered(), 0, "ordinary drain was never checked");
         assertGt(handler.ghost_entriesChecked(), 0, "no persisted entries were checked");
         assertGe(handler.ghost_buyerEntriesChecked(), 20, "paid buyer entries never reached the oracle");
     }
 
-    function _assertBinding() private view {
+    function _assertBinding() internal view {
         assertEq(handler.ghost_bindingMismatches(), 0, "persisted traits/owners differ from committed-word replay");
         assertEq(handler.ghost_unsupportedConsumers(), 0, "fixture entered a trait consumer outside this oracle");
         assertEq(handler.ghost_drainBeforeSwapViolations(), 0, "index changed during a ticket-materializing call");
@@ -86,6 +86,44 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
     function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
+    }
+
+    /// @dev Call sequence from the deep campaign that reaches a repeated natural gold six: the independent
+    /// oracle must replace it using the committed numeric domain.
+    function _replayGoldSixCounterexample() internal {
+        handler.fulfillVrf(438283144491947435312461);
+        handler.advance();
+        handler.warpTime(115651955875362229857941445212139178433166013695);
+        handler.advance();
+        handler.advance();
+        handler.advance();
+        handler.purchase(17833);
+        handler.advance();
+        handler.warpTime(25217355840405407495934704602712554674695321266726248404902075851862397);
+        handler.purchase(649551339414811309385862790305989359195237978233780825491233004751472);
+        handler.advance();
+        handler.advance();
+        handler.advance();
+        handler.purchase(31012);
+        handler.advance();
+        handler.purchase(4096082689);
+        handler.advance();
+        handler.advance();
+        handler.fulfillVrf(2096683609362009316760078521489823205379);
+        handler.advance();
+        handler.advance();
+        handler.advance();
+        handler.advance();
+    }
+
+    /// @dev Found on the ordinary timeline, where the replay checks new persisted entries; that
+    /// non-vacuity gate is asserted here.
+    function test_goldSixReplacementUsesCommittedDomain() public virtual {
+        uint256 before = handler.ghost_entriesChecked();
+        _replayGoldSixCounterexample();
+        assertGt(handler.ghost_entriesChecked(), before, "replay must check new persisted entries");
+        _assertCoverage();
+        _assertBinding();
     }
 
     function test_anchorChecksPersistedEntries() public view {

@@ -340,24 +340,24 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             assertEq(uint8(packed >> 216), 3);
             uint256 expectedTotal;
             for (uint8 i; i < 3; ++i) {
-                uint256 ss = uint256(keccak256(abi.encode(seed, uint256(i))));
+                uint256 ss = uint256(keccak256(abi.encode(uint256(88), seed, uint256(i))));
                 uint8 hero = symbol == 32 ? Ref.randomHero(ss) : symbol;
                 uint32 p = uint32(packed >> (i * 72));
                 uint32 r = uint32(packed >> (i * 72 + 32));
                 assertEq((p >> ((hero >> 3) * 8)) & 0xFF, 0x40 | (hero & 7), "hero lane carries the wild");
                 assertEq(p, math.ticket(ss, hero));
-                assertEq(r, Ref.traits(uint256(keccak256(abi.encode(ss, uint256(0x446567656e526573756c74))))));
+                assertEq(r, Ref.traits(uint256(keccak256(abi.encode(uint256(90), ss)))));
                 (uint8 score, uint8 wilds) = Ref.score(p, r);
                 assertEq(uint8(packed >> (i * 72 + 64)), score);
                 expectedTotal += math.payout(score, wilds, 1, 1000e18, 305);
             }
             bool survived =
-                expectedTotal != 0 && uint256(keccak256(abi.encode(seed, uint256(0x537572766976616c)))) & 1 == 1;
+                expectedTotal != 0 && uint256(keccak256(abi.encode(uint256(96), seed))) & 1 == 1;
             assertEq((packed >> 224) & 1, survived ? 1 : 0);
             expectedTotal = survived ? expectedTotal * 2 / 1e18 : 0;
             expectedTotal = expectedTotal > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
-                    expectedTotal, uint256(keccak256(abi.encode(seed, uint256(0x466c6970526f756e64))))
+                    expectedTotal, uint256(keccak256(abi.encode(uint256(95), seed)))
                 )
                 : FlipRoundLib.floorWholeFlip(expectedTotal);
             assertEq(payout, expectedTotal);
@@ -380,9 +380,9 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             uint8 symbol = math.hero(wwSeed, chosen);
             uint32 p = uint32(packed);
             uint32 r = uint32(packed >> 32);
-            uint32 natural = Ref.traits(uint256(keccak256(abi.encode(wwSeed, uint256(0x446567656e526573756c74)))));
+            uint32 natural = Ref.traits(uint256(keccak256(abi.encode(uint256(90), wwSeed))));
             uint32 rigged =
-                math.rig(p, natural, symbol >> 3, uint256(keccak256(abi.encode(wwSeed, uint256(0x52494721)))));
+                math.rig(p, natural, symbol >> 3, uint256(keccak256(abi.encode(uint256(93), wwSeed))));
             assertEq(p, math.ticket(wwSeed, symbol));
             assertEq(r, rigged);
             assertEq(packed >> 225, 0, "no hero-quadrant metadata: the player lane marks the hero");
@@ -398,18 +398,18 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
 
     /// @notice A natural WWXRP jackpot pays its token prize through the ordinary payout path.
     /// @dev Pinned from an off-chain Keccak search (.planning/wild-color/find_box_jackpot.py):
-    ///      seed 359696, hero 15 gives a natural S9 with two house wilds, before the rig.
+    ///      seed 1292767, hero 15 gives a natural S9 with two house wilds, before the rig.
     function testNaturalWwxrpJackpotPaysTokens() public {
-        uint256 seed = 359_696;
+        uint256 seed = 1_292_767;
         uint8 symbol = 15;
         uint256 drawSeed = Ref.drawWord(seed, true);
         uint32 ticket = math.ticket(drawSeed, symbol);
         uint32 natural = Ref.traits(
-            uint256(keccak256(abi.encode(drawSeed, uint256(0x446567656e526573756c74))))
+            uint256(keccak256(abi.encode(uint256(90), drawSeed)))
         );
         (uint8 naturalScore, uint8 wilds) = Ref.score(ticket, natural);
-        assertEq(ticket, 0x3031473d, "pinned player ticket");
-        assertEq(natural, 0x3041473d, "pinned natural house ticket");
+        assertEq(ticket, 0x1b1f4736, "pinned player ticket");
+        assertEq(natural, 0x1b474736, "pinned natural house ticket");
         assertEq(naturalScore, 9, "jackpot must be natural, before the rig");
         assertEq(wilds, 2);
 
@@ -429,7 +429,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     /// @notice Exercise a real jackpot through ETH's cash cap and lootbox recirculation.
     function testNaturalEthJackpotCapsCashAndResolvesOverflow() public {
         // Reuse the natural WWXRP jackpot's inner seed on the ordinary ETH stream.
-        uint256 seed = Ref.drawWord(359_696, true);
+        uint256 seed = Ref.drawWord(1_292_767, true);
         _place(alice, 1, 1, 0, 100); // registers alice's wallet ID
         uint256 claimableBefore = game.claimableWinningsOf(alice);
         bytes memory facade = address(game).code;

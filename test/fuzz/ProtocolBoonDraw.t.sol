@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -125,7 +126,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
     function _score(address who, uint256 score) private {
         uint32 id = _giveWalletId(who);
-        vm.mockCall(address(quests), abi.encodeWithSelector(quests.effectiveBaseStreakAndAfking.selector, id), abi.encode(uint32(score * 2), false));
+        vm.mockCall(address(quests), abi.encodeWithSelector(quests.effectiveBaseStreakAndAfking_g2654.selector, id), abi.encode(uint32(score * 2), false));
     }
     function _ready() private {
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, uint256(12345))));
@@ -253,7 +254,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         uint256 total = lens.protocolBoonPool(address(game), address(vault), day).totalWeight;
         for (uint8 slot; slot < 3; ++slot) {
             uint256 expectedRoll = uint256(keccak256(abi.encode(
-                keccak256("degenerus.protocol.boon.winner"), address(vault), day, slot, uint256(987654321)
+                RngTags.PROTOCOL_BOON_WINNER, uint256(987654321), uint256(game.walletIdOf_g3120(address(vault))), uint256(slot)
             ))) % total;
             assertEq(rolls[slot], expectedRoll);
             uint256 cumulative;
@@ -355,8 +356,11 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.expectRevert(DegenerusGameStorage.Unauthorized.selector);
         vm.prank(address(sdgnrs));
         game.issueDeityBoon(0, bettorId, 0);
-        vm.expectRevert(DegenerusGameStorage.OnlyDelegatecall.selector);
-        boonModule.issueDeityBoon(vaultId, bettorId, 0);
+        // Issuance is now internal to Game: the Box bundle must expose no bypass.
+        (bool ok,) = address(boonModule).call(
+            abi.encodeWithSelector(game.issueDeityBoon.selector, vaultId, bettorId, uint8(0))
+        );
+        assertFalse(ok, "removed module issuance selector must not be callable");
     }
     function testRecipientContractCannotRejectAutomaticDelivery() public {
         RejectingBoonRecipient receiver = new RejectingBoonRecipient();
@@ -821,7 +825,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             assertEq(uint256(logs[i].topics[3]), d, "award for the wrong day");
             (uint8 slot, uint32 index, ) = abi.decode(logs[i].data, (uint8, uint32, uint8));
             uint256 roll = uint256(keccak256(abi.encode(
-                keccak256("degenerus.protocol.boon.winner"), issuer, d, slot, w
+                RngTags.PROTOCOL_BOON_WINNER, w, uint256(issuerId), uint256(slot)
             ))) % totals[side];
             uint32 lo;
             uint32 hi = uint32(entries[side].length);

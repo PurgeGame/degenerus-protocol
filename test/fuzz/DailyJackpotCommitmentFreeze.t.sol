@@ -47,9 +47,9 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
         _seedHalfPasses(attacker, 2);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
 
-        // Word 2's raw board is [12,98,134,215]; the committed hero changes 98 to 101.
+        // Word 2600 has raw board [42,99,182,201]; the committed hero changes 99 to 101.
         // Distinct source-level owners make an early-bird/main source swap observable.
-        uint8[4] memory traits = [uint8(12), 101, 134, 215];
+        uint8[4] memory traits = [uint8(42), 101, 182, 201];
         for (uint24 lvl = 4; lvl <= 5; ++lvl) {
             for (uint8 q; q < 4; ++q) {
                 _seedBucket(lvl, traits[q], address(uint160(0x1000 + (lvl - 4) * 16 + q)), 128);
@@ -57,7 +57,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
                 // day's rival hero, must select a different persisted owner and fail.
                 _seedBucket(lvl, uint8(q * 64 + 1), address(uint160(0x2000 + (lvl - 4) * 16 + q)), 128);
             }
-            _seedBucket(lvl, 98, address(uint160(0x3000 + lvl)), 128);
+            _seedBucket(lvl, 99, address(uint160(0x3000 + lvl)), 128);
             _seedBucket(lvl, 103, address(uint160(0x4000 + lvl)), 128);
         }
     }
@@ -67,8 +67,8 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
 /// early-bird tickets and main tickets. Uses public mineFlip, the real VRF callback,
 /// and separate bounded stages; it never calls a privileged jackpot payout directly.
 ///
-/// Independent word-2 oracle: raw traits [12,98,134,215], sealed hero -> [12,101,134,215],
-/// hash(2,4)&3 == 3 -> solo q0; daily bps = 765. With 80 ETH current and 100 ETH future,
+/// Independent word-2600 oracle: raw traits [42,99,182,201], sealed hero -> [42,101,182,201],
+/// hash(71,2600,4)&3 == 3 -> solo q0; daily bps = 765. With 80 ETH current and 100 ETH future,
 /// freeze removes 1 ETH to pending, daily budgets are 4.896 ETH / 1.224 ETH tickets,
 /// early bird is 2.97 ETH. Price(5)=.02, entry unit=.005: ETH pays [2.296,.9,.9,.8] (whole 0.1 ETH
 /// units, non-solo leftovers to the solo);
@@ -80,7 +80,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
 /// bucket is covered elsewhere. Pending revenues are reconciled, not assumed immutable.
 contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
     address private constant ATTACKER = address(0xA771);
-    uint256 private constant WORD = 2;
+    uint256 private constant WORD = 2600;
     bytes32 private constant ADVANCE = keccak256("Advance(uint8,uint24)");
     bytes4 private constant RNG_LOCKED = bytes4(keccak256("RngLocked()"));
     uint24 private day;

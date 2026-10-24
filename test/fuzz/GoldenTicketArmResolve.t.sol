@@ -8,7 +8,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -189,9 +189,10 @@ contract GoldenTicketArmResolve is Test {
 
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         h = new GoldenTicketHarness();
         vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameDailyModule()).code);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGamePassModule()).code);
 
         CoinflipRecorder fr = new CoinflipRecorder();
         vm.etch(ContractAddresses.COINFLIP, address(fr).code);
@@ -738,7 +739,7 @@ contract GoldenTicketArmResolve is Test {
         assertTrue(present, "the day's foil record was written");
         assertEq(mainPacked, recordedMain, "the event's board equals the one recorded for foil claims");
         uint256 draw = uint256(vm.load(address(h), bytes32(GameSlots.DAILY_FOIL_DRAW + uint256(day & 1))));
-        assertEq(uint128(draw >> 88), uint128(uint256(keccak256(abi.encode(word, day, keccak256("foil-payout-seed"))))), "seed binds logical day");
+        assertEq(uint128(draw >> 88), uint128(uint256(keccak256(abi.encode(uint256(64), word)))), "word-only payout seed; packed record independently binds the day");
         assertTrue(draw & (uint256(1) << 216) != 0);
         assertEq(uint24(draw >> 217), day, "draw ring authenticates the logical day");
 

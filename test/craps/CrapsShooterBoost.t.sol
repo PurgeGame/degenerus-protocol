@@ -105,10 +105,10 @@ contract BoostHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         uint256 identity = header >> 72 == 0
             ? uint32(header)
-            : uint160(uint256(keccak256(abi.encode(word, JACKPOT_AWARDED_TAG, betId))));
+            : uint160(uint256(keccak256(abi.encode(uint256(27), word, betId))));
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(word, SCATTER_TAG, identity))),
+            uint256(keccak256(abi.encode(uint256(28), word, identity))),
             chipFlip,
             _BONUS_CHIPS - placed
         );
@@ -126,7 +126,7 @@ contract CrapsShooterBoostTest is CrapsPins {
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
 
-    uint256 internal constant _SURVIVAL_TAG = 0x537572766976616c; // "Survival"
+    uint256 internal constant _SURVIVAL_TAG = 42; // CRAPS_SURVIVAL
 
     /// @dev A word whose period-1 window is a routine table, and the day driver's default.
     uint256 internal constant PLAIN_WORD = 40 << 8;
@@ -338,9 +338,14 @@ contract CrapsShooterBoostTest is CrapsPins {
         Craps.Bets memory b;
         b.place6 = 5;
         b.passLine = 5;
-        bytes32 seed = keccak256("floor");
-        uint256 right = _replay(b, seed, 900_000e18, 40, alice, 12, 40, false);
-        uint256 wrong = _replay(b, seed, 900_000e18, 40, alice, 12, 40, true);
+        bytes32 seed;
+        uint256 right;
+        uint256 wrong;
+        for (uint256 witness; witness < 256 && right == wrong; ++witness) {
+            seed = keccak256(abi.encode("floor", witness));
+            right = _replay(b, seed, 900_000e18, 40, alice, 12, 40, false);
+            wrong = _replay(b, seed, 900_000e18, 40, alice, 12, 40, true);
+        }
         assertTrue(right != wrong, "the two flooring orders agree, so the order is untested");
         assertEq(craps.slip(b, seed, 900_000e18, 0, 40, alice, _terms(12, 40)).bankrollOut, right, "wrong order");
     }
@@ -795,7 +800,7 @@ contract CrapsShooterBoostTest is CrapsPins {
     // The rotating shooter
     // ════════════════════════════════════════════════════════════════════════
 
-    uint256 internal constant _ROTATION_TAG = 0x526f746174696e6753686f6f746572; // "RotatingShooter"
+    uint256 internal constant _ROTATION_TAG = 40; // CRAPS_SHOOTER
 
     /// @dev The published derivation, restated: one start per field off the slot-keyed seed, then
     ///      the seat's distance from it. Returns the packed one-based turn, or zero past the bound.

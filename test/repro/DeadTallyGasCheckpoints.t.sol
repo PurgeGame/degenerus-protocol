@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
@@ -57,7 +58,7 @@ contract DeadTallyCheckpointHarness is DegenerusGameGameOverModule, BucketSeed {
     }
 }
 
-contract DeadTallyGasCheckpointsTest is Test {
+contract DeadTallyGasCheckpointsTest is NativeGasExport {
     uint256 private constant EXPECTED_TALLY_FINAL = 2_300_000; // Independent assertion of the protocol limit
     uint256 private constant EXPECTED_TALLY_TAIL = 250_000; // Independent assertion of the protocol limit
     uint256 private constant ENGINE_MARGIN = 2_000; // Independent assertion of the protocol limit
@@ -95,6 +96,7 @@ contract DeadTallyGasCheckpointsTest is Test {
     function _checkCreated(uint256 live, uint256 salt) private {
         DeadTallyCheckpointHarness h = _harness();
         (uint256 expectedCreated, uint256 expectedTraits) = h.seedCreated(110, live, salt);
+        uint256 snapshot = vm.snapshotState();
         vm.cool(address(h));
         uint256 start = gasleft();
         assertTrue(_tally(h, 110, FULL_SCAN_ALLOWANCE));
@@ -102,6 +104,12 @@ contract DeadTallyGasCheckpointsTest is Test {
         (uint64 created, uint16 traits) = h.createdState();
         assertEq(created, expectedCreated, "counts ignore dead backing words and upper header bits");
         assertEq(traits, expectedTraits, "live zero-count bucket is not a populated trait");
+        if ((live == 0 || live == type(uint256).max) && bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            this.exportNativeFixture(live == 0 ? "terminal-final-scan-empty" : "terminal-final-scan-full",
+                address(this), address(h), abi.encodeCall(h.runGameOverAdvance, (uint24(0), uint24(110), FULL_SCAN_ALLOWANCE)));
+        }
+        vm.deleteStateSnapshot(snapshot);
     }
 
     function test_CreatedTallyCountsNothingForRetiredLevelAndIgnoresFutureAlias() public {
@@ -125,12 +133,19 @@ contract DeadTallyGasCheckpointsTest is Test {
         bool done;
         uint256 calls;
         while (!done && calls++ < 20) {
+            uint256 beforeCall = vm.snapshotState();
             vm.cool(address(h));
             uint256 start = gasleft();
             done = _tally(h, 110, 10_000_000);
             uint256 used = start - gasleft() + 21_000;
             emit log_named_uint("cold deterministic tally including intrinsic", used);
             assertLt(used, 10_000_000);
+            if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+                assertTrue(vm.revertToState(beforeCall));
+                this.exportNativeFixture(string.concat("terminal_tally_", vm.toString(calls)), address(this), address(h),
+                    abi.encodeCall(h.runGameOverAdvance, (uint24(0), uint24(110), uint256(10_000_000))));
+                _tally(h, 110, 10_000_000);
+            }
         }
         assertTrue(done);
         assertGt(calls, 1, "cold backlog spans checkpoints");

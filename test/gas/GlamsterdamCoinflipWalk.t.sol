@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {CoinflipDeepClaimWorstCaseGas} from "./CoinflipDeepClaimWorstCaseGas.t.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
@@ -9,7 +10,7 @@ import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 ///         schedule (EIP-8037 / EIP-8038) from their recorded storage and account accesses;
 ///         see GlamsterdamReprice for the schedule delta. Execution gas must stay under 10M,
 ///         and so must execution plus state gas, as if no reservoir were supplied.
-contract GlamsterdamCoinflipWalk is CoinflipDeepClaimWorstCaseGas {
+contract GlamsterdamCoinflipWalk is CoinflipDeepClaimWorstCaseGas, NativeGasExport {
     function test_glamsterdam_claim90_rebuyOff() public {
         _reprice(regularPlayer, _claimData(), "claim90_rebuyOff");
     }
@@ -45,5 +46,15 @@ contract GlamsterdamCoinflipWalk is CoinflipDeepClaimWorstCaseGas {
         emit log_named_uint("glamsterdam_total_if_no_reservoir", r.glamsterdamExec + r.stateGas);
         assertLt(r.glamsterdamExec, GAS_TARGET, "90-day walk execution under Glamsterdam stays under 10M");
         assertLt(r.glamsterdamExec + r.stateGas, GAS_TARGET, "and with its state gas");
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snap));
+            string memory nativeLabel = string.concat("coinflip-window-", label);
+            vm.serializeUint(nativeLabel, "fixedCalleeBudget", GAS_TARGET);
+            vm.serializeBool(nativeLabel, "enforceBudget", true);
+            this.exportNativeFixture(nativeLabel, p, address(coinflip), data);
+            _call(p, data);
+            _assertWholeWindow(p);
+        }
+        vm.deleteStateSnapshot(snap);
     }
 }

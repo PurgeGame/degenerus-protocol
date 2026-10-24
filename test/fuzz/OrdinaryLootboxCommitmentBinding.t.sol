@@ -37,10 +37,10 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     address private constant BOB = address(0xB0B);
     address private constant KEEPER_ONE = address(0xC0DE);
     address private constant KEEPER_TWO = address(0xD00D);
-    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
-    uint256 private constant BOX_TAG = 0x426f784f70656e;
-    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64;
-    uint256 private constant PASS_ROUND_TAG = 0x50617373526f756e64;
+    uint256 private constant QUEUED_ORDER_DOMAIN = 20;
+    uint256 private constant BOX_TAG = 19;
+    uint256 private constant FLIP_ROUND_TAG = 23;
+    uint256 private constant PASS_ROUND_TAG = 21;
     uint256 private constant NORMAL_PASS_VALUE = 24_800 ether;
     bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
 
@@ -293,8 +293,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         pure
         returns (uint256)
     {
-        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, uint256(index), position)));
-        return uint256(keccak256(abi.encode(root, uint256(id), BOX_TAG, nonce)));
+        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, position)));
+        return uint256(keccak256(abi.encode(BOX_TAG, root, nonce)));
     }
 
     function _target(uint256 seed) private pure returns (uint256) {
@@ -355,7 +355,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
                 if (amount > 1000 ether) {
                     uint256 hundreds = amount / 100 ether;
                     uint256 rem = amount % 100 ether / 1 ether;
-                    uint256 entropy = uint256(keccak256(abi.encode(seed, FLIP_ROUND_TAG)));
+                    uint256 entropy = uint256(keccak256(abi.encode(FLIP_ROUND_TAG, seed)));
                     if (uint32(entropy) % 100 < rem) ++hundreds;
                     expected.flip += hundreds * 100;
                 } else {
@@ -366,7 +366,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
                 if (budget > 22 * NORMAL_PASS_VALUE) return (expected, false); // high-pass conversion
                 uint256 passes = budget / NORMAL_PASS_VALUE;
                 if (
-                    uint256(keccak256(abi.encode(seed, PASS_ROUND_TAG))) % NORMAL_PASS_VALUE
+                    uint256(keccak256(abi.encode(PASS_ROUND_TAG, seed))) % NORMAL_PASS_VALUE
                         < budget % NORMAL_PASS_VALUE
                 ) {
                     ++passes;

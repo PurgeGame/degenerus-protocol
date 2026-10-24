@@ -73,41 +73,46 @@ contract DegenesisCohortMath is DegenesisHarness {
     ///         left after the previous cohort settled, T switching to 10B from day 4; each pays
     ///         at most L = 1.5Q; every order matches the reference.
     function test_QAcrossSaleUsesTargetAndInventory() public {
-        for (uint256 c = 1; c <= 7; ++c) {
-            uint24 d = _dayOf(c);
-            if (c > 1) _warpTo(d, 2 hours);
-            _buy(a, 0.37 ether + c * 0.0001 ether);
-            _buy(b, 1.2 ether);
-            _buy(c3, 0.01 ether * c);
-            _buy(a, 2 ether);
-            uint256 r = _degPool();
-            uint256 word = uint256(keccak256(abi.encode("cm-sale", c)));
-            uint256 expQ = _refQ(c, r);
-            assertEq(expQ, c <= 3 ? _min(T_EARLY * 5 / 2, r * 2 / 3) : _min(T_LATE * 5 / 2, r * 2 / 3), "ref Q");
-            _warpTo(d + 1, 1 hours);
-            vm.recordLogs();
-            _drive(word);
-            Vm.Log[] memory logs = vm.getRecordedLogs();
-            Priced memory p = _pricedOf(logs);
-            assertEq(p.c, c, "cohort priced");
-            assertEq(p.q, expQ, "Q");
-            assertEq(p.volume, _volumeUnits(c) * UNIT, "V");
-            assertEq(p.bound, d + 1, "bound day");
-            Res[] memory got = _resolved(logs);
-            Res[] memory want = _refCohort(c, word, expQ);
-            uint256 sum;
-            for (uint256 i; i < got.length; ++i) {
-                _assertRes(got[i], want[i], "sale order");
-                sum += got[i].dgnrs;
-            }
-            (uint256 paid, bool found) = _closedPaid(logs, c);
-            assertTrue(found, "closed");
-            assertEq(paid, sum, "paid total = sum of awards");
-            assertLe(paid, expQ * 3 / 2, "paid <= L");
-            if (c < 7) assertEq(r - _degPool(), paid, "inventory fell by paid");
-        }
+        for (uint256 c = 1; c <= 7; ++c) this.checkCohortPricing(c);
         assertEq(_closed(), 7, "sale closed");
         assertEq(_degPool(), 0, "inventory burned");
+    }
+
+    /// @dev Keep the independent per-order reference in its own frame so the
+    /// via-IR optimizer does not inline it into the seven-cohort driver loop.
+    function checkCohortPricing(uint256 c) external {
+        require(msg.sender == address(this), "cohort assertion self-call");
+        uint24 d = _dayOf(c);
+        if (c > 1) _warpTo(d, 2 hours);
+        _buy(a, 0.37 ether + c * 0.0001 ether);
+        _buy(b, 1.2 ether);
+        _buy(c3, 0.01 ether * c);
+        _buy(a, 2 ether);
+        uint256 r = _degPool();
+        uint256 word = uint256(keccak256(abi.encode("cm-sale", c)));
+        uint256 expQ = _refQ(c, r);
+        assertEq(expQ, c <= 3 ? _min(T_EARLY * 5 / 2, r * 2 / 3) : _min(T_LATE * 5 / 2, r * 2 / 3), "ref Q");
+        _warpTo(d + 1, 1 hours);
+        vm.recordLogs();
+        _drive(word);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        Priced memory p = _pricedOf(logs);
+        assertEq(p.c, c, "cohort priced");
+        assertEq(p.q, expQ, "Q");
+        assertEq(p.volume, _volumeUnits(c) * UNIT, "V");
+        assertEq(p.bound, d + 1, "bound day");
+        Res[] memory got = _resolved(logs);
+        Res[] memory want = _refCohort(c, word, expQ);
+        uint256 sum;
+        for (uint256 i; i < got.length; ++i) {
+            _assertRes(got[i], want[i], "sale order");
+            sum += got[i].dgnrs;
+        }
+        (uint256 paid, bool found) = _closedPaid(logs, c);
+        assertTrue(found, "closed");
+        assertEq(paid, sum, "paid total = sum of awards");
+        assertLe(paid, expQ * 3 / 2, "paid <= L");
+        if (c < 7) assertEq(r - _degPool(), paid, "inventory fell by paid");
     }
 
     /// @notice Check 3: a single order holding the whole volume and rolling the maximum

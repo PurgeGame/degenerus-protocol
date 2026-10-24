@@ -172,12 +172,16 @@ contract AfkingStethGasTest is DeployProtocol {
         uint256 gameShares = mockStETH.sharesOf(address(game));
         uint256 allowanceBefore = mockStETH.allowance(PLAYER, address(game));
         (MineFlipGas.Result memory result,) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
-        assertTrue(result.done);
+        assertTrue(result.progressed, "the failed funding attempt commits its eviction");
         assertEq(host.memberCount(), 1, "unfunded member expires");
-        _assertDelivered(PLAYER_TWO, true);
         assertEq(mockStETH.sharesOf(PLAYER), sourceShares);
         assertEq(mockStETH.sharesOf(address(game)), gameShares);
         assertEq(mockStETH.allowance(PLAYER, address(game)), allowanceBefore);
+        // A gas-burning external frame can consume the remaining item allowance.
+        // The funded following member must remain reachable at the next checkpoint.
+        if (!result.done) (result,) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
+        assertTrue(result.done, "the following funded member cannot be stranded");
+        _assertDelivered(PLAYER_TWO, true);
 
     }
 

@@ -335,22 +335,22 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     }
 
     function _seed(uint256 word, uint256 day, uint256 index, uint32 id) internal pure returns (uint256) {
-        return EntropyLib.hash4(ORDER_DOMAIN, word, (day << 32) | index, id);
+        return EntropyLib.hash3(52, word, index);
     }
 
     /// @dev Category of an order: 0 = FLIP-valued, 1 = sDGNRS, 2 = WWXRP.
     function _refCategory(uint256 word, uint256 day, uint256 index, uint32 id) internal pure returns (uint256) {
-        uint256 cat = EntropyLib.hash2(_seed(word, day, index, id), CATEGORY_TAG) % 100;
+        uint256 cat = EntropyLib.hash2(51, _seed(word, day, index, id)) % 100;
         return cat < 50 ? 0 : cat < 90 ? 1 : 2;
     }
 
     function _refMultBps(uint256 word, uint256 day, uint256 index, uint32 id) internal pure returns (uint256) {
-        return 5000 + EntropyLib.hash2(_seed(word, day, index, id), SIZE_TAG) % 10_001;
+        return 5000 + EntropyLib.hash2(56, _seed(word, day, index, id)) % 10_001;
     }
 
     /// @dev Pass-side bit of an order: 1 = a FLIP result denominates into Craps passes.
     function _passBit(uint256 word, uint256 day, uint256 index, uint32 id) internal pure returns (uint256) {
-        return EntropyLib.hash2(_seed(word, day, index, id), PASS_TAG) & 1;
+        return EntropyLib.hash2(53, _seed(word, day, index, id)) & 1;
     }
 
     /// @dev A word under which order (day c, index) of `id` rolls FLIP and keeps it as coin credit.
@@ -391,16 +391,16 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         o.index = uint32(index);
         o.amount = units * UNIT;
         uint256 seed = _seed(word, day, index, id);
-        uint256 cat = EntropyLib.hash2(seed, CATEGORY_TAG) % 100;
-        uint256 size = EntropyLib.hash2(seed, SIZE_TAG);
+        uint256 cat = EntropyLib.hash2(51, seed) % 100;
+        uint256 size = EntropyLib.hash2(56, seed);
         if (cat < 50) {
             uint256 flipOut = _refFlipRaw(units, _ladderBps(size), day, secs, volumeUnits);
             flipOut = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
-                ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(seed, FLIP_ROUND_TAG))
+                ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(55, seed))
                 : flipOut;
             if (flipOut == 0) {
                 o.wwxrp = 1;
-            } else if (EntropyLib.hash2(seed, PASS_TAG) & 1 == 1) {
+            } else if (EntropyLib.hash2(53, seed) & 1 == 1) {
                 bool highPass = flipOut > CrapsPriceLib.HIGH_SWITCH;
                 uint256 passUnit = highPass ? CrapsPriceLib.HIGH_VALUE : CrapsPriceLib.NORMAL_VALUE;
                 uint256 passCount = flipOut / passUnit;
@@ -410,7 +410,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
                     rest = flipOut - HIGH_PASS_CAP * CrapsPriceLib.HIGH_VALUE;
                 } else {
                     uint256 rem = flipOut % passUnit;
-                    if (rem != 0 && EntropyLib.hash2(seed, BOX_PASS_ROUND_TAG) % passUnit < rem) ++passCount;
+                    if (rem != 0 && EntropyLib.hash2(54, seed) % passUnit < rem) ++passCount;
                 }
                 flipOut = rest;
                 if (passCount == 0) o.wwxrp = 1;

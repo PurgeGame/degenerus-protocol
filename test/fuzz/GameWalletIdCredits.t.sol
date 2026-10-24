@@ -164,13 +164,8 @@ contract GameWalletIdCredits is DeployProtocol {
         uint256 score = 1_000;
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.affiliateScore.selector, uint24(1), id),
-            abi.encode(score)
-        );
-        vm.mockCall(
-            address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.totalAffiliateScore.selector, uint24(1)),
-            abi.encode(score * 10)
+            abi.encodeWithSelector(IDegenerusAffiliate.affiliateScoreAndTotal_g4013.selector, uint24(1), id),
+            abi.encode(score, score * 10)
         );
         uint256 expected = (score * 2_000) / 10_000;
         uint256 before = _lane(id);

@@ -15,11 +15,13 @@ with gzip.open(a.out/'calls.jsonl.gz','wt') as output:
   for address,account in state.items():
    address=address.lower();code=account['code'].lower();assert address not in codes or codes[address]==code
    codes[address]=code
-   converted[address]={'balance':hex(int(account['balance'],16)),'nonce':hex(account['nonce']),
-    'state':{k.lower():v.lower() for k,v in account['storage'].items()}}
-  row={'seq':seq,'label':path.name.removesuffix('.call.json'),'payer':'player','success':None,
-   'number':call['number'],'timestamp':call['timestamp'],'from_':call['from'].lower(),'to':call['to'].lower(),
-   'data':call['input'],'value':'0x0','state':converted}
+   nonce=account['nonce'];nonce=int(nonce,16) if isinstance(nonce,str) else nonce
+   converted[address]={'balance':hex(int(account['balance'],16)),'nonce':hex(nonce),
+    'state':{k.lower():v.lower() for k,v in account.get('storage',account.get('state',{})).items()}}
+  row={'seq':call.get('seq',seq),'label':call.get('label',path.name.removesuffix('.call.json')),
+   'payer':call.get('payer','player'),'success':call.get('success'),
+   'number':call['number'],'timestamp':call['timestamp'],'from_':call.get('from',call.get('from_')).lower(),'to':call['to'].lower(),
+   'data':call.get('input',call.get('data')),'value':hex(int(call.get('value','0x0'),16)),'state':converted}
   output.write(json.dumps(row,separators=(',',':'))+'\n')
   for f in (path,sp):hashes[f.name]=hashlib.sha256(f.read_bytes()).hexdigest()
 (a.out/'codes.json').write_text(json.dumps(codes)+'\n')

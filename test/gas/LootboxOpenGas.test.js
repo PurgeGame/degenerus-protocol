@@ -53,9 +53,9 @@ async function read(game, position) {
 async function indexOf(game) { return ((await read(game, 0)) >> 252n) & 1n; }
 // Queue entry `position` of write buffer `index`: boxQueue is manually addressed (the array
 // length slot is never written), three 85-bit entries per word: entry p is lane p % 3 of word
-// keccak(keccak(index . boxQueue.slot)) + p / 3.
+// keccak(boxQueue.slot + index) + p / 3.
 async function entryAt(game, index, position) {
-  const base = BigInt(hre.ethers.keccak256(slot(BigInt(index) & 1n, (await root("boxQueue")).slot)));
+  const base = BigInt(hre.ethers.keccak256(hre.ethers.toBeHex(BigInt((await root("boxQueue")).slot) + (BigInt(index) & 1n), 32)));
   return boLane(await read(game, base + BigInt(position) / 3n), position);
 }
 // Entries are never marked processed: the sealed read buffer's boxCursor is the only progress.

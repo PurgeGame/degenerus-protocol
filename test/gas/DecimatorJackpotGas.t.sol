@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DecimatorJackpotHarness} from "../fuzz/DecimatorJackpotIntegration.t.sol";
@@ -129,7 +130,7 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed, GameMiner {
         uint256[200] memory keys;
         for (uint256 i; i < 200; ++i) {
             uint64 id = uint64(i + 1);
-            uint256 key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), word, uint24(5), id)))
+            uint256 key = (uint256(keccak256(abi.encode(uint256(50), word, uint256(id))))
                 & ~uint256(type(uint64).max)) | id;
             uint256 at = i;
             while (at != 0 && keys[at - 1] > key) { keys[at] = keys[at - 1]; --at; }
@@ -139,7 +140,12 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed, GameMiner {
     }
 }
 
-contract DecimatorJackpotGasTest is Test {
+contract DecimatorJackpotNativeViews {
+    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function balanceOf(address) external pure returns (uint256) { return 0; }
+}
+
+contract DecimatorJackpotGasTest is NativeGasExport {
     uint256 private constant PLAN_FRAME_GAS = 20_000;
 
     DecimatorGasHost private h;
@@ -157,13 +163,20 @@ contract DecimatorJackpotGasTest is Test {
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGamePassModule).runtimeCode);
         vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
         vm.etch(ContractAddresses.COINFLIP, type(DecimatorGasCoinflip).runtimeCode);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)"), abi.encode(uint256(0)));
+        vm.etch(ContractAddresses.SDGNRS, type(DecimatorJackpotNativeViews).runtimeCode);
+        vm.etch(ContractAddresses.STETH_TOKEN, type(DecimatorJackpotNativeViews).runtimeCode);
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         h = DecimatorGasHost(ContractAddresses.GAME);
         h.seedProtocolWallets();
         vm.etch(address(0xDEC18), type(DecimatorGeneratedWorkMeter).runtimeCode);
         workMeter = DecimatorGeneratedWorkMeter(address(0xDEC18));
+    }
+
+    function _exportGenerated(uint256 snapshot, string memory label, DecimatorJackpotTerms memory terms, uint256 allowance) private {
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) return;
+        assertTrue(vm.revertToState(snapshot));
+        this.exportNativeFixture(label, address(workMeter), address(h), abi.encodeCall(h.runDecimatorJackpotAwards, (terms, allowance)));
+        h.runDecimatorJackpotAwards(terms, allowance);
     }
 
     function test_FullMatchEightThousandThroughRealMiner() public {
@@ -190,6 +203,7 @@ contract DecimatorJackpotGasTest is Test {
         terms.targets = [uint16(256), 128, 32, 1];
         terms.solo = 3;
         vm.cool(address(h));
+        uint256 nativeSnapshot = vm.snapshotState();
         (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms,
             GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + PLAN_FRAME_GAS);
         assertTrue(r.progressed);
@@ -199,6 +213,7 @@ contract DecimatorJackpotGasTest is Test {
         assertEq(h.round(5).poolWei, 280 ether);
         assertLt(used, GasBounds.DECIMATOR_PLAN_GAS_MAX);
         emit log_named_uint("cold plan initialization and worker frame", used);
+        _exportGenerated(nativeSnapshot, "generated-plan", terms, GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + PLAN_FRAME_GAS);
     }
 
     function test_ColdSoloPassAndGoldResumeFitExistingAdmission() public {
@@ -280,6 +295,7 @@ contract DecimatorJackpotGasTest is Test {
         terms.word = word;
         vm.cool(address(h)); vm.cool(ContractAddresses.CRAPS);
         vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g8132(bytes32)"), hex"12345678");
+        uint256 nativeBeforeSkip = vm.snapshotState();
         vm.recordLogs();
         (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, 150_000);
         assertEq(vm.getRecordedLogs().length, 0, "natural strata do not emit generated receipts");
@@ -287,6 +303,7 @@ contract DecimatorJackpotGasTest is Test {
         assertFalse(r.done);
         assertEq(h.plan(5).cursor, 1, "natural stratum skipped below generated admission");
         assertEq(h.ownerSlot(1), address(0), "natural stratum does not store a generated owner");
+        uint256 nativeBeforeRefusal = vm.snapshotState();
         vm.cool(address(h));
         uint256 refusedFrame;
         (refusedFrame, r) = workMeter.run(h, terms, 150_000);
@@ -296,11 +313,15 @@ contract DecimatorJackpotGasTest is Test {
         assertLt(used - refusedFrame, GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX);
         emit log_named_uint("cold skipped natural stratum and worker frame", used);
         emit log_named_uint("incremental skipped stratum gas", used - refusedFrame);
+        _exportGenerated(nativeBeforeSkip, "generated-skip", terms, 150_000);
+        _exportGenerated(nativeBeforeRefusal, "generated-refused", terms, 150_000);
+        vm.deleteStateSnapshot(nativeBeforeSkip);
+        vm.deleteStateSnapshot(nativeBeforeRefusal);
     }
 
     function test_ScaleItemCeilingsKeepGeneratedAdmission() public {
         uint40[4] memory ns = [uint40(1000),10_000,100_000,1_000_000];
-        uint256[4] memory words = [uint256(765),228,346,347];
+        uint256[4] memory words = [uint256(25),2,6,29];
         uint256 engine = _engineCeiling();
         uint256 clean = vm.snapshotState();
         for (uint256 k; k < ns.length; ++k) {
@@ -339,9 +360,11 @@ contract DecimatorJackpotGasTest is Test {
             assertEq(h.plan(5).cursor, 1000);
             assertEq(h.round(5).winners, 200);
             assertTrue(h.ownerSlot(id - n) != address(0));
+            _exportGenerated(snap, string.concat("generated-tied-", vm.toString(n)), terms, GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000);
             assertTrue(vm.revertToStateAndDelete(snap));
             h.seedFillingHeap();
             _coolGenerated();
+            uint256 fillSnapshot = vm.snapshotState();
             (uint256 fillingFrame,) = workMeter.run(h, terms,
                 GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000);
             assertEq(h.round(5).winners, 200);
@@ -356,6 +379,7 @@ contract DecimatorJackpotGasTest is Test {
             emit log_named_uint("scale item original count", n);
             emit log_named_uint("scale largest generated item ceiling", item);
             emit log_named_uint("scale cold item including worker frame ceiling", frame + engine);
+            _exportGenerated(fillSnapshot, string.concat("generated-fill-", vm.toString(n)), terms, GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000);
         }
     }
 
@@ -375,6 +399,11 @@ contract DecimatorJackpotGasTest is Test {
             if (rolls == 511) {
                 ++witnesses;
                 if (used > engine) engine = used;
+                if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+                    bytes32 seed = keccak256(abi.encode("ceiling", i));
+                    this.exportNativeFixture(string.concat("engine-511-", vm.toString(i)), meterAddress, ContractAddresses.CRAPS_ENGINE,
+                        abi.encodeCall(CrapsEngine.settleSlipBounded, (uint256(3 | 3 << 9 | 1 << 24), uint256(60), uint256(keccak256(abi.encode("board", seed))), uint256(3), seed, uint256(1e45), uint256(0xD1CE), uint256(0x050c), uint256((511 << 16) | 48))));
+                }
             }
         }
         assertGt(witnesses, 0);
@@ -431,7 +460,7 @@ contract DecimatorJackpotGasTest is Test {
                 if (logs[j].topics[0] == keccak256("DecimatorGenerated(uint24,uint64,uint32,uint8,uint32,uint256,uint256)")) {
                     (uint8 q,,,) = abi.decode(logs[j].data, (uint8,uint32,uint256,uint256));
                     uint64 id = uint64(uint256(logs[j].topics[2]));
-                    uint256 index = uint256(keccak256(abi.encode(keccak256("decimator.battle.generated.recipient.v1"), uint256(777), uint24(5), id, q, uint8(q * 64)))) % 250;
+                    uint256 index = uint256(keccak256(abi.encode(uint256(47), uint256(777), uint256(id)))) % 250;
                     assertEq(h.keyOf(uint32(uint256(logs[j].topics[3]))), address(uint160(0xb000 + uint256(q) * 250 + index)));
                     ++receivedEntries;
                 }

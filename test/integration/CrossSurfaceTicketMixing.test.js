@@ -166,21 +166,24 @@ describe("Cross-surface ticket events and remainder preservation", function () {
           extractCallArgs(src.slice(m.index), "emit JackpotTicketWin(")
         );
         const preamble = src.slice(0, m.index);
-        const queueIdx = preamble.lastIndexOf("_queueEntries(");
+        const queueName = preamble.lastIndexOf("_queueJackpotEntries(") > preamble.lastIndexOf("_queueEntries(")
+          ? "_queueJackpotEntries(" : "_queueEntries(";
+        const queueIdx = preamble.lastIndexOf(queueName);
         expect(
           queueIdx,
           "every JackpotTicketWin emit must be preceded by a _queueEntries call"
         ).to.be.greaterThan(-1);
         const queueArgs = splitTopLevelArgs(
-          extractCallArgs(src.slice(queueIdx), "_queueEntries(")
+          extractCallArgs(src.slice(queueIdx), queueName)
         );
         // _queueEntries(winner, level, <entries>, rngBypass) — 3rd arg is the
         // entries count; JackpotTicketWin's 4th arg (`ticketCount`) carries the
         // same entries value (emit == queue on the entries basis).
+        const queuedEntries = queueArgs[queueName === "_queueJackpotEntries(" ? 3 : 2];
         expect(
           emitArgs[3],
           `JackpotTicketWin 4th arg \`${emitArgs[3]}\` must equal the entries value \`${queueArgs[2]}\` passed to the adjacent _queueEntries call`
-        ).to.equal(queueArgs[2]);
+        ).to.equal(queuedEntries);
       }
     });
 

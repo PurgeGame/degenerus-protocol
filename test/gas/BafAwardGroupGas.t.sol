@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -109,7 +110,7 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
 ///      round pair on the state it starts from (`BafPairDraw`); the state is restored and the engine
 ///      accounts cooled, so the measured call starts on a cold access list. The call is checked
 ///      position by position against that draw (BafSchedule.checkGroupR).
-abstract contract BafAwardGroupFixture is DeployProtocol {
+abstract contract BafAwardGroupFixture is DeployProtocol, NativeGasExport {
     uint256 internal constant CAP = 10_000_000;
     uint8 internal constant STAGE_JACKPOT_BAF_AWARDS = 19;
     uint256 internal constant BAF_TICKET_TAG = 0x4261665469636b6574;
@@ -299,11 +300,18 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         internal
         returns (uint256 used, MineFlipGas.Result memory result, Vm.Log[] memory logs)
     {
+        uint256 snapshot = vm.snapshotState();
         _coolEngine();
         vm.recordLogs();
         result = host.dailyWith{gas: 12_000_000}(allowance);
         used = _coldCallGas();
         logs = vm.getRecordedLogs();
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            string memory label = string.concat("baf-", vm.toString(address(this)), "-", vm.toString(allowance), "-", vm.toString(used));
+            this.exportNativeFixture(label, address(this), address(host), abi.encodeCall(host.dailyWith, (allowance)));
+            host.dailyWith{gas: 12_000_000}(allowance);
+        }
     }
 
     function _lastStage(Vm.Log[] memory logs) internal pure returns (uint8 stage) {

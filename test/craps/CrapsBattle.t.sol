@@ -35,7 +35,13 @@ contract BattleHarness is CrapsViews {
     ///      ticket sits in all seven, so the terms and the word are the WINDOW's, not the id's —
     ///      the very pair settlement hands `_resolve` for a seat in the day tail.
     function settlementIn(uint256 betId, uint64 slot) external view returns (Settlement memory) {
-        return _settlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
+        Window memory w = _slotWindow(slot);
+        (uint256 dayBase, uint64 dayN) = _dayField(slot);
+        uint64 ownN = uint64(w.entrants) - dayN - uint64(w.drawn);
+        uint64 local = uint64(betId);
+        w.seat = betId >> 64 == slot ? (local <= ownN ? local : local + dayN) : ownN + local;
+        require(betId >> 64 == slot || (betId & ~uint256(type(uint64).max)) == dayBase, "preview field");
+        return _settlementOf(betId, _loadBet(betId), w, _slotWord(slot));
     }
 
     /// @dev The fold takes the whole WINDOW now, because the boost it announces at finalization
@@ -561,7 +567,7 @@ contract CrapsBattleTest is CrapsPins {
     /// @dev The coin the fold reaches for on a dead-level score: the larger tag leads. Restated
     ///      from the rule rather than read off the contract, so the suite grades the rule.
     function _tag(uint256 word, uint256 betId) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(word, uint256(0x4372617073546965), betId)));
+        return uint256(keccak256(abi.encode(uint256(43), word, betId)));
     }
 
     function _beatsFully(bool gA, uint256 pA, uint256 wA, bool gB, uint256 pB, uint256 wB)
@@ -2548,7 +2554,7 @@ contract CrapsBattleTest is CrapsPins {
             assertEq(a,b); assertEq(ab,bb);
             (uint128 pending,,,uint256 fee,,) = craps.bonusTermsFor(day,5);
             assertEq(pending,0);
-            uint256 priceBucket = uint256(keccak256(abi.encode(uint256(keccak256(abi.encode("mix", day))), uint256(0x43726170735363686564756c65), uint256(5)))) & 3;
+            uint256 priceBucket = uint256(keccak256(abi.encode(uint256(39), uint256(keccak256(abi.encode("mix", day))), uint256(5)))) & 3;
             assertEq(fee, priceBucket == 0 ? 6_000 : priceBucket == 3 ? 10_000 : 8_000);
         }
         // Routine odds are 55/25/20; bookend odds are 20/30/50.

@@ -18,6 +18,7 @@ import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {RequestCostCoordinator} from "../helpers/RequestCostCoordinator.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
@@ -49,6 +50,16 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
 
     // ---- seeding ----
     function hostWallet(address who) external returns (uint32) { return _seedWallet(who); }
+    function hostReserveWalletIds(uint256 count) external {
+        assembly ("memory-safe") { sstore(wallets.slot, count) }
+    }
+    /// @dev Install valid sparse wallet records without warming any payout ledger.
+    function hostSparseWallet(uint32 id, address owner) external {
+        uint256 slot = _walletSlot(id);
+        assembly ("memory-safe") { sstore(slot, owner) }
+        walletIds[owner] = (uint64(id) << 32) | id;
+        balancesPacked[id] = 1;
+    }
     function hostOwner(uint32 id, uint32 owner) external {
         uint256 slot = _walletSlot(id);
         uint256 e;
@@ -164,7 +175,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         uint256 word = _recordedDailyWord(rngRequestDay);
         uint256 len = _subscribers.length;
         uint256 boxes = _subBoxCount;
-        uint256 idx = 1 + uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1);
+        uint256 idx = 1 + uint256(keccak256(abi.encode(uint256(97), word))) % (len - 1);
         uint256 position = idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes);
         winner = _seedWallet(address(uint160(0x5EA7F000)));
         _setSubLaneAt(position, uint256(winner));
@@ -199,9 +210,9 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         returns (uint256 flipOut, uint256 dgnrsOut, uint256 normal, uint256 high, bool wwxrpOut)
     {
         uint256 units = (lane >> DEGENESIS_AMOUNT_SHIFT) & DEGENESIS_AMOUNT_MASK;
-        uint256 seed = EntropyLib.hash4(H_DOMAIN, word, (day << 32) | index, uint32(lane));
-        uint256 category = EntropyLib.hash2(seed, H_CATEGORY) % 100;
-        uint256 size = EntropyLib.hash2(seed, H_SIZE);
+        uint256 seed = uint256(keccak256(abi.encode(uint256(52), word, index)));
+        uint256 category = uint256(keccak256(abi.encode(uint256(51), seed))) % 100;
+        uint256 size = uint256(keccak256(abi.encode(uint256(56), seed)));
         if (category < 50) {
             uint256 roll = size % 20;
             uint256 bps = roll < 16 ? H_LOW_BASE + roll * H_LOW_STEP : H_HIGH_BASE + (roll - 16) * H_HIGH_STEP;
@@ -209,11 +220,11 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
                 * (H_BONUS - (lane >> DEGENESIS_SECONDS_SHIFT)) * H_K)
                 / (H_DEN * (H_K + volume) * PriceLookupLib.priceForLevel(1));
             out = out > FlipRoundLib.FLIP_ROUND_THRESHOLD
-                ? FlipRoundLib.roundFlipToHundreds(out, EntropyLib.hash2(seed, H_FLIP_ROUND))
+                ? FlipRoundLib.roundFlipToHundreds(out, uint256(keccak256(abi.encode(uint256(55), seed))))
                 : FlipRoundLib.floorWholeFlip(out);
             if (out == 0) {
                 wwxrpOut = true;
-            } else if (EntropyLib.hash2(seed, H_PASS_SIDE) & 1 == 1) {
+            } else if (uint256(keccak256(abi.encode(uint256(53), seed))) & 1 == 1) {
                 bool highPass = out > CrapsPriceLib.HIGH_SWITCH;
                 uint256 unit = highPass ? HIGH_ROLLER_DAY_PASS_VALUE : NORMAL_DAY_PASS_VALUE;
                 uint256 count = out / unit;
@@ -223,7 +234,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
                     rest = out - H_PASS_CAP * HIGH_ROLLER_DAY_PASS_VALUE;
                 } else {
                     uint256 rem = out % unit;
-                    if (rem != 0 && EntropyLib.hash2(seed, H_PASS_ROUND) % unit < rem) ++count;
+                    if (rem != 0 && uint256(keccak256(abi.encode(uint256(54), seed))) % unit < rem) ++count;
                 }
                 out = rest;
                 if (count == 0) wwxrpOut = true;
@@ -247,7 +258,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
 ///         an uninstrumented call; a recorded replay supplies the accesses for
 ///         GlamsterdamReprice (EIP-8037 / EIP-8038, no state reservoir: new-slot state gas is
 ///         reported separately and the admission bounds must cover execution plus state).
-abstract contract DegenesisGasBase is DegenesisDeployProtocol {
+abstract contract DegenesisGasBase is DegenesisDeployProtocol, NativeGasExport {
     DegenesisGasHost internal host;
 
     struct Measured {
@@ -315,6 +326,14 @@ abstract contract DegenesisGasBase is DegenesisDeployProtocol {
         m.exec = r.glamsterdamExec;
         m.state = r.stateGas;
         m.slots = r.newSlots;
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            string memory label = string.concat("degenesis-", vm.toString(address(this)), "-", vm.toString(keccak256(abi.encode(data, m))));
+            vm.serializeUint(label, "osakaFrameGas", m.osaka);
+            vm.serializeUint(label, "projectedExec", m.exec);
+            vm.serializeUint(label, "projectedState", m.state);
+            this.exportNativeFixture(label, sender == address(0) ? address(this) : sender, target, data);
+            emit log_named_string("native_calibration", label);
+        }
     }
 
     function _total(Measured memory m) internal pure returns (uint256) {
@@ -358,7 +377,7 @@ abstract contract DegenesisGasBase is DegenesisDeployProtocol {
 abstract contract DegenesisSettleGas is DegenesisGasBase {
     enum Kind { Wwxrp, Credit, Pass, PassCap, Dgnrs, DgnrsEmpty }
 
-    uint256 internal constant WORD = uint256(keccak256("degenesis-gas-word")) | 1;
+    uint256 internal WORD = uint256(keccak256("degenesis-gas-word")) | 1;
     uint32 internal constant SYNTHETIC_BASE = 3_000_000;
     /// @dev Schedule floor of a cold zero-to-nonzero write: Osaka 2,100 + 20,000; Glamsterdam
     ///      2,100 + 10,100 plus the new slot's state gas.
@@ -392,25 +411,27 @@ abstract contract DegenesisSettleGas is DegenesisGasBase {
         q = cap < target ? cap : target;
         require(q != 0, "fixture: Degenesis pool");
         _etchHost();
-        uint32 synthetic = _syntheticBase();
-        uint256 probe;
+        // The current RNG commits each outcome by order index. Search a session word,
+        // never a wallet ID. Short resumed probes pin every remaining order; long
+        // chunks keep the real mixed transcript and validate every predicted outcome.
+        uint256 forceCount = n - _cursor() <= 4 ? n - _cursor() : 1;
+        for (;;) {
+            bool matches = true;
+            for (uint256 j; j < forceCount; ++j) {
+                if (!_matches(c, _syntheticBase(), _cursor() + j)) { matches = false; break; }
+            }
+            if (matches) break;
+            ++WORD;
+        }
+        host.hostReserveWalletIds(uint256(_syntheticBase()) + n);
         for (uint256 i; i < n; ++i) {
-            uint32 id;
-            for (;;) {
-                if (_kind() == Kind.Dgnrs || _kind() == Kind.DgnrsEmpty) {
-                    id = host.hostWallet(address(uint160(0xD6E0000000 + probe++)));
-                } else {
-                    id = synthetic++;
-                }
-                if (_matches(c, id, i)) break;
-            }
-            if (_kind() == Kind.Dgnrs || _kind() == Kind.DgnrsEmpty) {
-                // Two owner links: child -> main -> root, payee = root's fresh address.
-                uint32 main = host.hostWallet(address(uint160(0xD6F0000000 + 2 * i)));
-                uint32 root = host.hostWallet(address(uint160(0xD6F0000000 + 2 * i + 1)));
-                host.hostOwner(id, main);
-                host.hostOwner(main, root);
-            }
+            uint32 id = _syntheticBase() + uint32(i);
+            host.hostSparseWallet(id, address(uint160(0xD6E0000000 + i)));
+            // Every potential sDGNRS winner has the full two-link payee walk.
+            uint32 main = host.hostWallet(address(uint160(0xD6F0000000 + 2 * i)));
+            uint32 root = host.hostWallet(address(uint160(0xD6F0000000 + 2 * i + 1)));
+            host.hostOwner(id, main);
+            host.hostOwner(main, root);
             orderIds.push(id);
             host.hostOrder(c, i, id, _units(), 0);
         }
@@ -477,16 +498,17 @@ abstract contract DegenesisSettleGas is DegenesisGasBase {
             (, uint32 index,, uint256 f, uint256 d, uint256 w, uint32 normal, uint32 high) =
                 abi.decode(logs[i].data, (uint8, uint32, uint256, uint256, uint256, uint256, uint32, uint32));
             assertEq(uint32(uint256(logs[i].topics[1])), orderIds[index], "order identity");
-            Kind k = _kind();
-            if (k == Kind.Wwxrp) assertTrue(w == 1 && f == 0 && d == 0 && normal == 0 && high == 0, "wwxrp branch");
-            if (k == Kind.Credit) assertTrue(f != 0 && w == 0 && d == 0 && normal == 0 && high == 0, "credit branch");
-            if (k == Kind.Pass) assertTrue(normal + high != 0 && f == 0 && w == 0, "pass branch");
-            if (k == Kind.PassCap) assertTrue(high == 12 && f != 0 && w == 0, "capped pass branch");
-            if (k == Kind.Dgnrs) assertTrue(d != 0 && w == 0, "sDGNRS branch");
-            if (k == Kind.DgnrsEmpty) assertTrue(d == 0 && w == 1, "empty-pool fallback");
+            (uint256 ef, uint256 ed, uint256 en, uint256 eh, bool ew) =
+                host.hostOutcome(WORD, _cohort(), volume, q, _lane(orderIds[index]), index);
+            if (_kind() == Kind.DgnrsEmpty && ed != 0) { ed = 0; ew = true; }
+            assertEq(f, ef, "independent FLIP outcome");
+            assertEq(d, ed, "independent sDGNRS outcome");
+            assertEq(w, ew ? 1 : 0, "independent WWXRP outcome");
+            assertEq(normal, en, "independent normal passes");
+            assertEq(high, eh, "independent high passes");
             ++seen;
         }
-        assertEq(seen, _orders() - _cursor(), "every order resolved on its forced branch");
+        assertEq(seen, _orders() - _cursor(), "every committed order resolved on its independently predicted branch");
     }
 
     function test_SettlementAdmission() public {
@@ -516,8 +538,14 @@ abstract contract DegenesisSettleGas is DegenesisGasBase {
             emit log_named_uint("  later orders, osaka per order", rest.osaka / (n - 1));
             emit log_named_uint("  later orders, no-reservoir total per order", _total(rest) / (n - 1));
         }
-        uint256 admitted = n * _branchBound() + GasBounds.DEGENESIS_TAIL_GAS
-            + credits * GasBounds.DEGENESIS_FLUSH_PER_CREDIT;
+        uint256 admitted = GasBounds.DEGENESIS_TAIL_GAS + credits * GasBounds.DEGENESIS_FLUSH_PER_CREDIT;
+        for (uint256 i = cur; i < cur + n; ++i) {
+            (uint256 f, uint256 d, uint256 normal, uint256 high,) =
+                host.hostOutcome(WORD, c, volume, q, _lane(orderIds[i]), i);
+            admitted += d != 0 ? GasBounds.DEGENESIS_DGNRS_GAS
+                : normal + high != 0 ? GasBounds.DEGENESIS_FLIP_PASS_GAS
+                : f != 0 ? GasBounds.DEGENESIS_FLIP_CREDIT_GAS : GasBounds.DEGENESIS_WWXRP_GAS;
+        }
         emit log_named_uint("orders", n);
         emit log_named_uint("coin credits", credits);
         emit log_named_uint("admitted reserve n x branch + tail + credits x flush", admitted);
@@ -832,7 +860,9 @@ contract DegenesisDayCloseGas is DegenesisGasBase {
                 continue;
             }
             require(action != 0, "fixture: idle before the daily phase");
-            game.mineFlip(type(uint32).max);
+            // The external VRF request retains its forwarding minimum. Other
+            // actions use extreme calibration to stop after mandatory progress.
+            game.mineFlip{gas: 16_000_000}(action == 17 ? 10_000 : type(uint32).max);
         }
         require(game.nextMinerAction() == ACTION_DAILY_PHASE, "fixture: daily phase");
         _etchHost();

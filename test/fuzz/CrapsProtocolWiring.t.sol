@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameMiner} from "../../contracts/modules/GameMiner.sol";
 
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
@@ -522,7 +523,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertEq(game.nextMinerAction(), 0, "fixture: the engine is idle (MinerAction.Idle)");
         uint256 before = coinflip.coinflipAmount(KEEPER);
         vm.prank(KEEPER);
-        vm.expectRevert(DegenerusGame.NoWork.selector);
+        vm.expectRevert(GameMiner.NoWork.selector);
         game.mineFlip(0);
         assertEq(coinflip.coinflipAmount(KEEPER), before, "an idle table still paid the crank");
     }

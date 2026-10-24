@@ -422,7 +422,7 @@ contract LensParityTest is Test {
         DegenerusGameLens.DecWinner memory w = lens.decWinnerAt(game, lvl, index);
         assertEq(w.score, score);
         assertEq(w.owner, owner, "winner resolves the correct original or generated owner source");
-        uint256 tie = uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), word, lvl, id)));
+        uint256 tie = uint256(keccak256(abi.encode(uint256(50), word, uint256(id))));
         assertEq(w.key, (tie & ~uint256(type(uint64).max)) | id);
         vm.expectRevert(); lens.decWinnerAt(game, lvl, index + 1);
         harness.setDecActiveWord(word, false);

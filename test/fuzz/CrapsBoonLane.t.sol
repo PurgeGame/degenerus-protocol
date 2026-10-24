@@ -8,6 +8,10 @@ import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoon
 import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
 
 contract CrapsBoonModuleHarness is DegenerusGameBoxModule {
+    function consumeDegeneretteBoon(uint32 id, uint8 currency) external returns (uint16) {
+        return _consumeDegeneretteBoon(id, currency);
+    }
+    function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16) { return _consumeActionBoon(id); }
     function tree(uint256 roll) external pure returns (uint8) {
         return _boonFromRoll(roll);
     }

@@ -170,6 +170,18 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.assertTrue(all(row["command"].count("--force") == 1 for row in rows))
         self.assertEqual(len(rows), 2)
 
+    def test_imported_gas_probe_enables_tracing_only_for_its_batch(self):
+        fixtures = self.sources("gas", 2)
+        helper = self.root / "test/helpers/TraceProbe.sol"
+        helper.parent.mkdir(parents=True, exist_ok=True)
+        helper.write_text("function probe() { vm.startDebugTraceRecording(); }\n")
+        (self.root / fixtures[0]).write_text('import "../helpers/TraceProbe.sol";\n')
+        result = self.run_driver("--group", "integration-gas", "--max-files", "1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        rows = self.rows()
+        self.assertIn("-vvv", rows[0]["command"])
+        self.assertIn("-vv", rows[1]["command"])
+
     def test_requested_verbosity_does_not_stack_with_default(self):
         self.sources("gas", 1)
         for requested in ([], ["-vvv"], ["-v", "-v", "-v"], ["--verbosity"] * 3):

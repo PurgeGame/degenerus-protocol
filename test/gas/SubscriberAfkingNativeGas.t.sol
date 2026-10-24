@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -192,7 +193,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     }
 }
 
-contract SubscriberAfkingNativeGasTest is DeployProtocol {
+contract SubscriberAfkingNativeGasTest is DeployProtocol, NativeGasExport {
     // Benchmark guideline only; runtime admission uses the caller's remaining gas.
     uint256 private constant STEP_GAS_TARGET = 10_000_000;
     SubscriberNativeGasHost private host;
@@ -211,6 +212,13 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         vm.cool(ContractAddresses.GAME_AFKING_MODULE); vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE);
         vm.cool(ContractAddresses.GAME_BOON_MODULE); vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
     }
+    function exportSubscriber(string calldata label, bool opening) external {
+        require(msg.sender == address(this), "export self-call");
+        bytes memory input = opening ? abi.encodeCall(host.openWork, (uint256(12_000_000)))
+            : abi.encodeCall(host.subWork, (uint256(12_000_000)));
+        this.exportNativeFixture(label, address(this), address(host), input);
+    }
+
     function _lastGas() private returns (uint256 used) {
         used = vm.lastCallGas().gasTotalUsed;
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
@@ -266,6 +274,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         host.prepare(true);
         uint256[100] memory beforeEntries;
         for (uint24 i; i < 100; ++i) beforeEntries[i] = host.pendingEntries(ContractAddresses.SDGNRS, i + 5);
+        uint256 snapshot = vm.snapshotState();
         vm.recordLogs();
         MineFlipGas.Result memory result = host.subWork{gas: 12_000_000}(12_000_000);
         uint256 used = _lastGas();
@@ -294,6 +303,10 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
             assertGt(host.pendingEntries(ContractAddresses.SDGNRS, i + 5), beforeEntries[i],
                 "purchase must deliver every level in the100-level span");
         }
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            this.exportSubscriber("subscriber_whale_100", false);
+        }
     }
     function test_ColdSubscriberFundingAndRemovalBranchesFitSavedBound() public {
         uint256 base = vm.snapshotState();
@@ -301,6 +314,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         for (uint8 mode; mode <= 5; ++mode) {
             host.prepare(false);
             host.add(PLAYER, mode);
+            uint256 snapshot = vm.snapshotState();
             MineFlipGas.Result memory result = host.subWork{gas: 12_000_000}(12_000_000);
             uint256 used = _lastGas();
             emit log_named_uint("subscriber_branch_mode", mode);
@@ -317,6 +331,10 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
                 assertEq(opened, mode == 5 ? bought - 1 : bought);
             }
             if (used > peak) peak = used;
+            if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+                assertTrue(vm.revertToState(snapshot));
+                this.exportSubscriber(string.concat("subscriber_branch_", vm.toString(mode)), false);
+            }
             vm.revertToState(base);
         }
         emit log_named_uint("native_subscriber_branch_peak", peak);
@@ -330,12 +348,17 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         for (uint256 i; i < 256; ++i) {
             address player = i & 1 == 0 ? PLAYER : ContractAddresses.SDGNRS;
             host.openFixture(player, uint256(keccak256(abi.encode("afking grant", i))));
+            uint256 snapshot = vm.snapshotState();
             _cool();
             MineFlipGas.Result memory result = host.openWork{gas: 12_000_000}(12_000_000);
             uint256 used = _lastGas();
             assertTrue(result.progressed && result.done);
             total += used;
             if (used > peak) peak = used;
+            if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+                assertTrue(vm.revertToState(snapshot));
+                this.exportSubscriber(string.concat("afking_saturated_", vm.toString(i)), true);
+            }
             assertTrue(vm.revertToState(base));
         }
         emit log_named_uint("saturated AFKing grant worker incl. intrinsic, mean", total / 256);

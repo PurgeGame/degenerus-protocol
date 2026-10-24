@@ -16,13 +16,13 @@ import sha3
 
 OUT = Path(__file__).resolve().parents[2] / "test/fixtures/degenerette-wild-vectors.json"
 
-PLAYER_TICKET_TAG = 0x446567656E506C61796572  # DegenPlayer
-RESULT_TICKET_TAG = 0x446567656E526573756C74  # DegenResult
-HERO_PICK_TAG = 0x446567656E4865726F  # DegenHero
+PLAYER_TICKET_TAG = 91  # RngTags.SPIN_PLAYER
+RESULT_TICKET_TAG = 90  # RngTags.SPIN_HOUSE
+HERO_PICK_TAG = 89  # RngTags.SPIN_HERO
 WWXRP_DRAW_TAG = 0x575758525044726177  # WWXRPDraw
-WWXRP_RIG_SALT = 0x52494721  # RIG!
-BET_SURVIVAL_TAG = 0x446567656E537572766976616C  # DegenSurvival
-BOX_SURVIVAL_TAG = 0x537572766976616C  # Survival
+WWXRP_RIG_SALT = 93  # RngTags.SPIN_RIG
+BET_SURVIVAL_TAG = 12  # RngTags.BET_SURVIVAL
+BOX_SURVIVAL_TAG = 96  # RngTags.SPIN_SURVIVAL
 QUICK_PLAY_SALT = 0x51
 RANDOM_HERO = 32
 
@@ -51,6 +51,10 @@ def hash2(a, b):
     return keccak(word32(a) + word32(b))
 
 
+def hash3(a, b, c):
+    return keccak(word32(a) + word32(b) + word32(c))
+
+
 def hash4(a, b, c, d):
     return keccak(word32(a) + word32(b) + word32(c) + word32(d))
 
@@ -73,11 +77,11 @@ def house_lanes(rand):
 
 
 def spin_symbol(seed, symbol):
-    return hash2(seed, HERO_PICK_TAG) % 24 if symbol == RANDOM_HERO else symbol
+    return hash2(HERO_PICK_TAG, seed) % 24 if symbol == RANDOM_HERO else symbol
 
 
 def player_ticket(seed, symbol):
-    t = ordinary_lanes(hash2(seed, PLAYER_TICKET_TAG))
+    t = ordinary_lanes(hash2(PLAYER_TICKET_TAG, seed))
     shift = (symbol >> 3) * 8
     return (t & ~(0xFF << shift) & 0xFFFFFFFF) | ((0x40 | (symbol & 7)) << shift)
 
@@ -108,7 +112,7 @@ def rig(p, r, hero_quadrant, rig_seed):
             eligible.append(0x38 << (8 * q))
         if q != hero_quadrant and a & 7 != b & 7:
             eligible.append(7 << (8 * q))
-    mask = eligible[hash2(rig_seed, 1) % len(eligible)]
+    mask = eligible[hash2(94, rig_seed) % len(eligible)]
     return (r & ~mask & 0xFFFFFFFF) | (p & mask), True
 
 
@@ -135,8 +139,7 @@ def payout(s, w, currency, stake, activity):
 
 
 def bet_house_seed(word, index, spin):
-    pre = word32(word) + index.to_bytes(4, "big") + (bytes([spin]) if spin else b"")
-    return keccak(pre + bytes([QUICK_PLAY_SALT]))
+    return hash3(8, word, spin)  # RngTags.BET_HOUSE
 
 
 def roll(seed, house_seed, symbol, currency):
@@ -145,7 +148,7 @@ def roll(seed, house_seed, symbol, currency):
     natural = house_lanes(house_seed)
     r, helped = natural, False
     if currency == CURRENCY_WWXRP:
-        r, helped = rig(p, natural, sym >> 3, hash2(seed, WWXRP_RIG_SALT))
+        r, helped = rig(p, natural, sym >> 3, hash2(WWXRP_RIG_SALT, seed))
     s, w = score(p, r)
     return {"hero": sym, "player": p, "natural_house": natural, "house": r, "help_applied": helped,
             "score": s, "wilds": w}
@@ -156,7 +159,7 @@ def h(x, n=8):
 
 
 def bet_vector(word, index, symbol, spin, stake_eth, stake_flip, activity):
-    seed = hash4(word, index, symbol, spin)
+    seed = hash4(9, word, symbol, spin)
     v = roll(seed, bet_house_seed(word, index, spin), symbol, CURRENCY_ETH)
     return {
         "word": h(word, 64), "index": index, "symbol": symbol, "spin": spin,
@@ -170,7 +173,7 @@ def bet_vector(word, index, symbol, spin, stake_eth, stake_flip, activity):
 
 def find_bet(index, symbol, spin, want):
     for word in range(1, 10**8):
-        seed = hash4(word, index, symbol, spin)
+        seed = hash4(9, word, symbol, spin)
         p = player_ticket(seed, symbol)
         s, w = score(p, house_lanes(bet_house_seed(word, index, spin)))
         if want(s, w):
@@ -196,16 +199,21 @@ def main():
     survival = []
     for want in (1, 0):
         for word in range(1, 1000):
-            if hash4(word, player_id, 1, BET_SURVIVAL_TAG) & 1 == want:
+            if hash3(BET_SURVIVAL_TAG, word, 1) & 1 == want:
                 survival.append({"word": h(word, 64), "player_id": h(player_id), "bet_id": 1, "survives": bool(want)})
                 break
 
     boxes = []
     # Natural S9 with two house wilds through the WWXRP and ETH box paths (pinned contract tests).
-    jackpot_seed = 359696
-    draw = hash2(jackpot_seed, WWXRP_DRAW_TAG)
+    for jackpot_seed in range(1, 100_000_000):
+        v = roll(jackpot_seed, hash2(RESULT_TICKET_TAG, jackpot_seed), 15, CURRENCY_ETH)
+        if v["score"] == 9 and v["wilds"] == 2:
+            break
+    else:
+        raise RuntimeError("no natural S9 witness")
+    draw = jackpot_seed
     for currency, seed in ((CURRENCY_WWXRP, draw), (CURRENCY_ETH, draw)):
-        v = roll(seed, hash2(seed, RESULT_TICKET_TAG), 15, currency)
+        v = roll(seed, hash2(RESULT_TICKET_TAG, seed), 15, currency)
         boxes.append({"currency": currency, "award_seed": h(jackpot_seed, 64) if currency == CURRENCY_WWXRP else None,
                       "spin_seed": h(seed, 64), "symbol": 15, **{k: h(v[k]) if k in ("player", "natural_house", "house") else v[k] for k in v},
                       "activity": 0 if currency == CURRENCY_WWXRP else 30000,
@@ -215,9 +223,9 @@ def main():
     # WWXRP help applied and not applied, including a random hero.
     found = {True: 0, False: 0}
     for k in range(1, 100000):
-        draw = hash2(k, WWXRP_DRAW_TAG)
+        draw = k
         symbol = RANDOM_HERO if k % 2 else k % 24
-        v = roll(draw, hash2(draw, RESULT_TICKET_TAG), symbol, CURRENCY_WWXRP)
+        v = roll(draw, hash2(RESULT_TICKET_TAG, draw), symbol, CURRENCY_WWXRP)
         if v["score"] < 3 or found[v["help_applied"]] >= 2:
             continue
         found[v["help_applied"]] += 1
@@ -232,15 +240,15 @@ def main():
         chain_seed = hash2(0xF11F, k)
         chain = []
         for i in range(3):
-            ss = hash2(chain_seed, i)
-            v = roll(ss, hash2(ss, RESULT_TICKET_TAG), RANDOM_HERO, CURRENCY_FLIP)
+            ss = hash3(88, chain_seed, i)
+            v = roll(ss, hash2(RESULT_TICKET_TAG, ss), RANDOM_HERO, CURRENCY_FLIP)
             chain.append({"spin_seed": h(ss, 64), **{k: h(v[k]) if k in ("player", "natural_house", "house") else v[k] for k in v}})
         if any(c["score"] >= 3 for c in chain):
             break
     packed = 0
     for i, v in enumerate(chain):
         packed |= (int(v["player"], 16) | (int(v["house"], 16) << 32) | (v["score"] << 64)) << (72 * i)
-    survived = hash2(chain_seed, BOX_SURVIVAL_TAG) & 1 == 1
+    survived = hash2(BOX_SURVIVAL_TAG, chain_seed) & 1 == 1
     packed |= (3 << 216) | ((1 << 224) if survived else 0)
     flip_chain = {"box_seed": h(chain_seed, 64), "spins": chain, "survived": survived, "packed_spins": h(packed, 64)}
 

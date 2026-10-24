@@ -54,8 +54,8 @@ contract TurboBafTicketFloor is DeployProtocol {
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
 
     /// @dev Clock offset folded into every fulfillment word (word = keccak(simTime, reqId)).
-    ///      Chosen so the level-10 BAF's daily-flip bit lands 1 (a skipped BAF would leave
-    ///      the floor path unexercised; the epoch reachability assert guards against that).
+    ///      The fulfillment helper separately chooses a winning numeric BAF domain;
+    ///      the epoch reachability assertion guards the floor path's non-vacuity.
     uint256 private constant WORD_NUDGE = 1;
 
     /// @dev Calls per driven day. Each call takes the smallest admitting allowance and runs only the
@@ -318,8 +318,9 @@ contract TurboBafTicketFloor is DeployProtocol {
         if (reqId == 0) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
-        // Bit 0 set: every daily flip wins, so the level-10 BAF resolves instead of skipping.
-        uint256 word = uint256(keccak256(abi.encode(simTime, reqId))) | 1;
+        // Independently select the winning BAF domain so the floor path cannot be skipped.
+        uint256 word = uint256(keccak256(abi.encode(simTime, reqId)));
+        while (word < 2 || uint256(keccak256(abi.encode(uint256(61), word))) & 1 == 0) ++word;
         try mockVRF.fulfillRandomWords(reqId, word) {} catch {}
     }
 

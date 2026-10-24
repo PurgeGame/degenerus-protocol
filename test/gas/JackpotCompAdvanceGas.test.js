@@ -98,7 +98,7 @@ const holder = (n) => ethers.getAddress("0x" + n.toString(16).padStart(40, "0"))
 
 // JS mirror of JackpotBucketLib.getRandomTraits (hashes the word with TRAIT_BOARD_TAG first).
 function traitsOf(entropy) {
-  const r = hash2(entropy, BigInt(TRAIT_BOARD_TAG));
+  const r = hash2(72n, entropy);
   return [
     Number(r & 0x3fn),
     64 + Number((r >> 6n) & 0x3fn),
@@ -167,7 +167,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
     await setSlot(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), BigInt(FF_HOLDERS) | (lvl << 32n));
   }
   const recordedPool = ethers.parseEther(prevPoolEth);
-  await setSlot(gameAddr, mapSlot(0n, poolRoot), (1n << 128n) | recordedPool);
+  await setSlot(gameAddr, poolRoot, (1n << 128n) | recordedPool);
   await (await game.connect(alice).purchase(0, 200n, 0n, ethers.ZeroHash, 0, false, {
     value: ethers.parseEther("2"),
   })).wait();

@@ -109,7 +109,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
             uint8 score = uint8(packed >> 64);
             uint32 ticket = uint32(packed);
             uint256 drawSeed = Ref.drawWord(word, true);
-            uint32 honestReel = Ref.traits(uint256(keccak256(abi.encode(drawSeed, uint256(0x446567656e526573756c74)))));
+            uint32 honestReel = Ref.traits(uint256(keccak256(abi.encode(uint256(90), drawSeed))));
             (uint8 honestScore, uint8 honestWilds) = Ref.score(ticket, honestReel);
             (, uint8 wilds) = Ref.score(ticket, uint32(packed >> 32));
             assertLe(score, 9, "score outside valid range");

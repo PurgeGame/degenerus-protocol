@@ -314,7 +314,7 @@ export function ticketCheckpointTraits({ baseKey, entropyWord, count }) {
   let goldSixTaken = decoded.goldSixTaken;
   for (let i = start; i < end;) {
     const seed = BigInt(keccak256(abiCoder.encode(
-      ["uint256", "uint256", "uint256"], [decoded.identity, BigInt(entropyWord), i / 16n]
+      ["uint256", "uint256", "uint256", "uint256"], [105n, BigInt(entropyWord), decoded.identity & ~(U32_MASK << 32n), i / 16n]
     )));
     let s = ((seed & U64_MASK) | 1n) * TICKET_LCG_MULT & U64_MASK;
     for (let j = 0; j < 16 && i < end; ++j, ++i) {
@@ -322,8 +322,8 @@ export function ticketCheckpointTraits({ baseKey, entropyWord, count }) {
       let trait = traitFromWord(s) | (Number(i & 3n) << 6);
       if (trait === 253) {
         if (goldSixTaken) {
-          const tag = keccak256(new TextEncoder().encode("GOLD_SIX_REPLACEMENT_V1"));
-          const pick = Number(BigInt(keccak256(abiCoder.encode(["uint256", "bytes32"], [s, tag]))) % 7n);
+          const tag = 70n;
+          const pick = Number(BigInt(keccak256(abiCoder.encode(["uint256", "uint256"], [tag, s]))) % 7n);
           trait = 248 + pick + (pick >= 5 ? 1 : 0);
         } else goldSixTaken = true;
       }

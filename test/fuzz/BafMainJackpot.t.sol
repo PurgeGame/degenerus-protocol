@@ -33,7 +33,7 @@ contract BafMainJackpotTest is BafBracketFixture {
     function test_BafAndMainUseTheSameThreeTraits() public { _sharedBoard(WORD, false, false); }
     function test_SharedBoardIncludesHeroOverride() public { _sharedBoard(WORD, true, false); }
     function test_SharedBoardHonorsGoldenTicketHeroBan() public { _sharedBoard(WORD, true, true); }
-    function test_SurvivingGoldSixIsExcludedFromBothBafLevels() public { _sharedBoard(843, false, false); }
+    function test_SurvivingGoldSixIsExcludedFromBothBafLevels() public { _sharedBoard(1005, false, false); }
 
     function test_ArmingPreparesEmptyBuffersInsteadOfSamplingOldLevels() public {
         // With no new entries, either physical buffer can still hold an older level.
@@ -89,7 +89,7 @@ contract BafMainJackpotTest is BafBracketFixture {
         }
         (, uint32 board) = host.frozenMainBoard();
         if (hero) assertEq(uint8(board >> (uint256(heroQuadrant) * 8)) & 7, banned ? baseTrait & 7 : heroSymbol);
-        if (word == 843) assertEq(uint8(board >> 24), 253, "fixture retains Gold Six");
+        if (word == 1005) assertEq(uint8(board >> 24), 253, "fixture retains Gold Six");
         // Hero changes symbols only, so the reference board's gold/solo choice remains valid.
         uint256 actual = (context & ~uint256(type(uint32).max)) | board;
         for (uint256 r; r < 24; ++r) assertEq(drawnTraits[r], BafBoardSeed.trait(r, 48, actual), "same main non-solo trait");

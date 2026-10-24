@@ -154,7 +154,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     function _refDrawWinner(uint24 day, uint256 rngWord) internal view returns (uint32) {
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         if (total == 0) return 0;
-        uint256 roll = uint256(keccak256(abi.encodePacked(BAF_DRAW_TAG, address(coinflip), day, rngWord))) % total;
+        uint256 roll = uint256(keccak256(abi.encode(uint256(3), rngWord))) % total;
         for (uint32 i; i < count; ++i) {
             uint256 e = _drawEntryRaw(day, i);
             if (uint96(e) > roll) return uint32(e >> 96);

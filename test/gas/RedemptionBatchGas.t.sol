@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {AutomaticRedemptionSettlementTest} from "../fuzz/AutomaticRedemptionSettlement.t.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -8,7 +9,7 @@ import {GameFunding} from "../helpers/GameFunding.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
-contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
+contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasExport {
     function _coolSettlementState() internal {
         vm.cool(address(game));
         vm.cool(address(sdgnrs));
@@ -93,9 +94,10 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         return GasBounds.REDEMPTION_BASE_GAS + GasBounds.REDEMPTION_TAIL_GAS
             + (boxes == 0 ? 0 : GasBounds.HUMAN_ENTRY_GAS + boxes * GasBounds.HUMAN_BOX_GAS);
     }
-    function _coldSingleClaim(uint256 base, uint16 roll, uint256 word, bool withEscrow)
-        private returns (uint256 used, uint256 boxes)
+    function coldSingleClaim(uint256 base, uint16 roll, uint256 word, bool withEscrow)
+        external returns (uint256 used, uint256 boxes)
     {
+        require(msg.sender == address(this), "calibration self-call");
         uint32 day = _openBatchId();
         uint256 supply = sdgnrs.totalSupply();
         if (withEscrow) {
@@ -103,9 +105,8 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         }
         _burnAtMaximumActivity(base * supply / 10_000 ether);
         if (withEscrow) {
-            while (_synthReward(((word % (type(uint256).max / 155 / 256)) * 155 + roll - 21) * 256 + 2, day) == 0) {
-                ++word;
-            }
+            word = _wordForRollFrom(roll, word);
+            while (_synthReward(word, day) == 0) word = _wordForRollFrom(roll, word + 1);
         }
         _resolve(day, roll, word);
         if (withEscrow) {
@@ -115,6 +116,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint256 rolled = _claimBase(alice, day) * roll / 100;
         boxes = _boxes(rolled - rolled / 2);
         uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
+        uint256 snapshot = vm.snapshotState();
         _coolSettlementState();
         vm.recordLogs();
         vm.prank(address(game));
@@ -123,6 +125,13 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         used = beforeGas - gasleft() + 21_000;
         _assertPaid(day, rolled, beneficiaryBefore, withEscrow);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            string memory label = string.concat("redemption-", vm.toString(boxes), "-", vm.toString(withEscrow), "-", vm.toString(used));
+            this.exportNativeFixture(label, address(game), address(sdgnrs), abi.encodeCall(sdgnrs.runRedemptionWork, (settlementWord, uint256(9_000_000))));
+            vm.prank(address(game)); sdgnrs.runRedemptionWork(settlementWord, 9_000_000);
+        }
+        vm.deleteStateSnapshot(snapshot);
     }
 
     /// @dev Per-order calibration: the cold maximum over words and the won-escrow
@@ -137,13 +146,13 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             for (uint256 w; w < words; ++w) {
                 for (uint256 e; e < 2; ++e) {
                     uint256 snap = vm.snapshotState();
-                    (uint256 used, uint256 chunks) = _coldSingleClaim(
+                    (uint256 used, uint256 chunks) = this.coldSingleClaim(
                         bases[s], 175, uint256(keccak256(abi.encode("chunk shape", s, w))), e == 1
                     );
                     assertEq(chunks, expect[s], "shape box count");
                     assertLe(used, _declared(chunks), "cold beneficiary fits its admission");
                     if (used > worst) worst = used;
-                    vm.revertToState(snap);
+                    vm.revertToStateAndDelete(snap);
                 }
             }
             emit log_named_uint(string.concat("REDEEM cold max, boxes=", vm.toString(expect[s])), worst);

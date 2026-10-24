@@ -7,7 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
@@ -73,8 +73,9 @@ contract DailyJackpotDayShapes is Test {
     bytes32 private constant _BPS_TAG = keccak256("daily-current-bps");
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         h = new DayShapeHarness();
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGamePassModule()).code);
         vm.etch(ContractAddresses.COINFLIP, address(new CoinflipRecorder()).code);
         vm.etch(ContractAddresses.WWXRP, address(new WwxrpRecorder()).code);
         ReturnZeroSink sink = new ReturnZeroSink();
@@ -85,7 +86,7 @@ contract DailyJackpotDayShapes is Test {
         h.setJackpotFlags(0);
         h.setCurrentPool(CUR_POOL);
         h.setPools(NEXT_POOL, FUT_POOL);
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGamePassModule()).code);
     }
 
     /// @dev The ETH the jackpot-phase quadrants converted to full whale passes: it is booked
@@ -131,7 +132,7 @@ contract DailyJackpotDayShapes is Test {
             bps = 10_000;
         } else {
             uint16 range = _BPS_MAX - _BPS_MIN + 1;
-            uint256 seed = uint256(keccak256(abi.encodePacked(word, _BPS_TAG, counterVal)));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(73), word)));
             bps = uint16(_BPS_MIN + (seed % range));
             if (counterVal != 0) bps *= 2;
         }

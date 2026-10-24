@@ -180,8 +180,8 @@ const DEITY_SENTINEL_TICKET_IDX =
 // Storage slot indices for `lvlTraitEntry` + `deityBySymbol`, validated at
 // test runtime via `forge inspect storageLayout`. These match Phase 294 §2
 // EMPTY-diff attestation against the v41 close pin.
-const FALLBACK_TRAIT_BURN_TICKET_SLOT = 84n;
-const FALLBACK_DEITY_BY_SYMBOL_SLOT = 24n;
+const FALLBACK_TRAIT_BURN_TICKET_SLOT = 71n;
+const FALLBACK_DEITY_BY_SYMBOL_SLOT = 597n;
 
 // -----------------------------------------------------------------------------
 // Module-level helpers

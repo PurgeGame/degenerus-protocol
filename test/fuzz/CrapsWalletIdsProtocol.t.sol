@@ -220,7 +220,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         uint32 id = _giveWalletId(alice);
         uint64 slot = uint64(uint256(t.currentDayIndex()) * 8 + 6);
         uint256 word = 1;
-        while (uint256(keccak256(abi.encode(word, DRAW_TAG, uint256(slot)))) % 10 != 0) ++word;
+        while (uint256(keccak256(abi.encode(uint256(34), word, uint256(slot)))) % 10 != 0) ++word;
         uint256 reserve = 4_200;
         uint256 stakeBefore = coinflip.coinflipAmount(alice);
         vm.expectCall(address(coinflip), abi.encodeWithSignature("creditFlip_g317(uint32,uint256)", id, reserve), 1);

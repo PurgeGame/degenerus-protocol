@@ -139,7 +139,7 @@ describe("BackfillIdempotency", function () {
     expect(await game.rngWordForDay(resumeDayW), "daily application is still owed at the gap checkpoint").to.equal(0n);
     const expectedWords = new Map([[requestDayR, requestWord]]);
     for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
-      const derived = BigInt(hre.ethers.solidityPackedKeccak256(["uint256", "uint24"], [resumeWord, day]));
+      const derived = BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256", "uint256"], [68n, resumeWord, day])));
       expectedWords.set(day, derived === 0n ? 1n : derived);
     }
     const expectedResults = new Map();

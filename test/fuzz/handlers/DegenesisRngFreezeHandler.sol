@@ -27,12 +27,6 @@ library DegenesisOrderRef {
     uint256 internal constant UNIT = 0.0001 ether;
     uint256 internal constant K_UNITS = 460_000;
     uint256 internal constant BONUS_WINDOW = 6 hours;
-    uint256 internal constant ORDER_DOMAIN = 0x446567656e657369734f72646572;
-    uint256 internal constant CATEGORY_TAG = 0x44656743617465676f7279;
-    uint256 internal constant SIZE_TAG = 0x44656753697a65;
-    uint256 internal constant PASS_TAG = 0x5061737353696465;
-    uint256 internal constant FLIP_ROUND_TAG = 0x466c6970526f756e64;
-    uint256 internal constant BOX_PASS_ROUND_TAG = 0x50617373526f756e64;
     uint256 internal constant MAX_UNITS = (uint256(1) << 38) - 1;
 
     struct Out {
@@ -55,20 +49,20 @@ library DegenesisOrderRef {
         uint256 secs = lane >> 70;
         if (secs > BONUS_WINDOW) secs = BONUS_WINDOW;
         o.amount = units * UNIT;
-        uint256 seed = EntropyLib.hash4(ORDER_DOMAIN, word, (day << 32) | index, o.id);
-        uint256 cat = EntropyLib.hash2(seed, CATEGORY_TAG) % 100;
-        uint256 size = EntropyLib.hash2(seed, SIZE_TAG);
+        uint256 seed = EntropyLib.hash3(52, word, index);
+        uint256 cat = EntropyLib.hash2(51, seed) % 100;
+        uint256 size = EntropyLib.hash2(56, seed);
         if (cat < 50) {
             uint256 roll = size % 20;
             uint256 bps = roll < 16 ? 14_098 + roll * 1158 : 74_534 + (roll - 16) * 22_890;
             uint256 flipOut = (units * UNIT * 1000 * bps * (21 - day) * (453_600 - secs) * K_UNITS)
                 / (uint256(10_000) * 16 * 432_000 * (K_UNITS + volumeUnits) * PriceLookupLib.priceForLevel(1));
             if (flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD) {
-                flipOut = FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(seed, FLIP_ROUND_TAG));
+                flipOut = FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(55, seed));
             }
             if (flipOut == 0) {
                 o.wwxrp = 1;
-            } else if (EntropyLib.hash2(seed, PASS_TAG) & 1 == 1) {
+            } else if (EntropyLib.hash2(53, seed) & 1 == 1) {
                 bool highPass = flipOut > CrapsPriceLib.HIGH_SWITCH;
                 uint256 passUnit = highPass ? CrapsPriceLib.HIGH_VALUE : CrapsPriceLib.NORMAL_VALUE;
                 uint256 passCount = flipOut / passUnit;
@@ -78,7 +72,7 @@ library DegenesisOrderRef {
                     rest = flipOut - 12 * CrapsPriceLib.HIGH_VALUE;
                 } else {
                     uint256 rem = flipOut % passUnit;
-                    if (rem != 0 && EntropyLib.hash2(seed, BOX_PASS_ROUND_TAG) % passUnit < rem) ++passCount;
+                    if (rem != 0 && EntropyLib.hash2(54, seed) % passUnit < rem) ++passCount;
                 }
                 flipOut = rest;
                 if (passCount == 0) o.wwxrp = 1;

@@ -145,6 +145,11 @@ abstract contract VaultBafRig is DeployProtocol {
         uint256 word = uint256(keccak256(abi.encode(simTime, reqId)));
         if (forceBit == 1) word |= 1;
         else if (forceBit == 2) word &= ~uint256(1);
+        // Coinflip uses the raw parity; the independently tagged BAF gate must agree.
+        if (forceBit != 0) {
+            uint256 wanted = forceBit == 1 ? 1 : 0;
+            while (uint256(keccak256(abi.encode(uint256(61), word))) & 1 != wanted) word += 2;
+        }
         try mockVRF.fulfillRandomWords(reqId, word) {} catch {}
     }
 

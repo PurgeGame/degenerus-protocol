@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -17,7 +18,7 @@ import {DeityBoonViewerTreeHarness} from "./BoonRollTreeParity.t.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Ticket worker in the Game context: queues by wallet ID, commits a cohort word, drains.
-contract WalletIdEntropyHarness is DegenerusGameTicketModule, WalletSeed {
+contract WalletIdEntropyHarness is DegenerusGamePassModule, WalletSeed {
     function initialize(uint24 lvl) external { level = lvl; }
 
     /// @dev The next registered wallet takes ID `next`.
@@ -145,6 +146,7 @@ contract WalletIdEntropyTest is Test {
     WalletIdEntropyHarness private h;
 
     function setUp() public {
+        vm.setNonce(address(this), 1024);
         vm.warp(10 days);
         vm.etch(ContractAddresses.GAME, address(new WalletIdEntropyHarness()).code);
         h = WalletIdEntropyHarness(ContractAddresses.GAME);
@@ -206,7 +208,7 @@ contract WalletIdEntropyTest is Test {
         uint256 i = uint32(keyed);
         uint256 end = i + take;
         while (i < end) {
-            uint64 s = uint64(uint256(keccak256(abi.encode(stream, entropy, i >> 4)))) | 1;
+            uint64 s = uint64(uint256(keccak256(abi.encode(uint256(105), entropy, stream & ~(uint256(type(uint32).max) << 32), i >> 4)))) | 1;
             uint64 offset = uint64(i & 15);
             unchecked { s = s * (LCG + offset) + offset; }
             for (uint256 j = offset; j < 16 && i < end; ++j) {
@@ -277,14 +279,15 @@ contract WalletIdEntropyTest is Test {
         assertEq(entries, SOLO_FIXTURE_ENTRIES);
         assertEq(replayedEntries, entries);
         assertEq(replayed, inv, "replay of the ID stream equals the stored inventory");
-        // Non-vacuity: the address-keyed stream would have generated a different inventory.
+        // Identity bits select the credited wallet, but final ticket randomness excludes them.
+        // Replacing the low-32-bit address identity therefore preserves the random stream.
         uint256 addressStream = _addressIdentity(h.readKey(1), 1, 0, _player(0));
         uint256[] memory addressKeyed = new uint256[](keyed.length);
         for (uint256 r; r < keyed.length; ++r) {
             addressKeyed[r] = addressStream | uint256(uint32(keyed[r])) | (keyed[r] & TicketEntropy.GOLD_SIX_TAKEN);
         }
         (uint256 addressReplayed,) = _replayRuns(id, addressKeyed, take, entropy);
-        assertTrue(addressReplayed != inv, "address stream differs");
+        assertEq(addressReplayed, inv, "identity replacement cannot grind the solo draw");
     }
 
     function test_SoloRunStreamIsWalletId1() public { _checkSolo(1); }
@@ -382,12 +385,15 @@ contract WalletIdEntropyTest is Test {
         // The commit makes the queue the entries were written to the read queue.
         uint24 key = future ? h.futureKey(lvl) : h.writeKey(lvl);
         uint256 entropy = uint256(keccak256(abi.encode("fractions", lvl, future)));
-        for (bool differs; !differs; ++entropy) {
-            for (uint256 i; i < n && !differs; ++i) {
-                differs = TicketEntropy.remainder(TicketEntropy.identity(key, lvl, i, ids[i]), entropy, fractions[i])
-                    != TicketEntropy.remainder(_addressIdentity(key, lvl, i, _player(i)), entropy, fractions[i]);
-            }
-            if (differs) break;
+        // Wallet IDs identify the reveal beneficiary, but cannot grind the draw.
+        // Assert the independently hashed queue-position draw is ID-independent.
+        for (uint256 i; i < n; ++i) {
+            uint256 stream = TicketEntropy.identity(key, lvl, i, ids[i]);
+            uint256 neutral = stream & ~(uint256(type(uint32).max) << 32);
+            bool expected = uint256(keccak256(abi.encode(uint256(100), entropy, neutral))) % 100 < fractions[i];
+            assertEq(TicketEntropy.remainder(stream, entropy, fractions[i]), expected);
+            assertEq(TicketEntropy.remainder(TicketEntropy.identity(key, lvl, i, ids[i] ^ 0xffffffff), entropy, fractions[i]), expected,
+                "changing the beneficiary ID cannot grind a fractional draw");
         }
         h.commit(entropy, future);
         assertEq(h.word(), entropy, "committed cohort word");
@@ -399,20 +405,20 @@ contract WalletIdEntropyTest is Test {
         uint256[] memory counts = _countReveals(vm.getRecordedLogs(), ids, lvl);
         for (uint256 i; i < n; ++i) {
             bool win = TicketEntropy.remainder(TicketEntropy.identity(key, lvl, i, ids[i]), entropy, fractions[i]);
-            assertEq(counts[i], uint256(wholes[i]) + (win ? 1 : 0), "whole entries plus the ID-keyed fraction");
+            assertEq(counts[i], uint256(wholes[i]) + (win ? 1 : 0), "whole entries plus the committed queue fraction");
             assertEq(h.owedOf(key, ids[i]), 0, "entry fully drained");
         }
     }
 
     /// @dev Eight seated owners exhaust their whole entries in round one and resolve their
     ///      fractions on the seat path.
-    function test_SeatFractionsUseWalletIdentity() public { _remainders(1, false, 8, 4); }
+    function test_SeatFractionsCreditWalletIdWithoutIdGrinding() public { _remainders(1, false, 8, 4); }
 
     /// @dev Two owners stay on the solo path; the final tail resolves each fraction.
-    function test_SoloFractionsUseWalletIdentity() public { _remainders(1, false, 2, 5); }
+    function test_SoloFractionsCreditWalletIdWithoutIdGrinding() public { _remainders(1, false, 2, 5); }
 
     /// @dev A far-future pool: `_readOwed` resolves each fraction to a whole entry on read.
-    function test_FarFutureFractionsUseWalletIdentity() public { _remainders(3, true, 9, 4); }
+    function test_FarFutureFractionsCreditWalletIdWithoutIdGrinding() public { _remainders(3, true, 9, 4); }
 
     /// @dev The same queue drained in one call and in many small calls stores the same ordered
     ///      wallet-ID lanes; budgets never enter the stream.
@@ -471,8 +477,8 @@ contract WalletIdEntropyTest is Test {
         bool goldTaken;
         bool differs;
         for (uint256 i; i < 4; ++i) {
-            uint256 seed = uint256(keccak256(abi.encode(entropy, uint256(id), uint24(3), keccak256("foil-seed"), i)));
-            uint256 addressSeed = uint256(keccak256(abi.encode(entropy, address(0xF011), uint24(3), keccak256("foil-seed"), i)));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(63), entropy, (uint256(id) << 24) | 3, i)));
+            uint256 addressSeed = uint256(keccak256(abi.encode(uint256(63), entropy, (uint256(uint160(address(0xF011))) << 24) | 3, i)));
             uint8 tD = DegenerusTraitUtils.foilTrait(uint64(seed >> 192), cut) | 192;
             if (tD == GoldSixLib.TRAIT) {
                 if (goldTaken) tD = GoldSixLib.replacement(seed);
@@ -496,7 +502,7 @@ contract WalletIdEntropyTest is Test {
         private view returns (uint8[3] memory slots)
     {
         for (uint8 i; i < 3; ++i) {
-            uint256 roll = uint256(keccak256(abi.encode(seed, uint256(id), day, i))) % (2856 - 50 - 40);
+            uint256 roll = uint256(keccak256(abi.encode(uint256(57), seed, (uint256(id) << 24) | day, uint256(i)))) % (2856 - 50 - 40);
             if (roll >= 982) roll += 50;
             if (roll >= 1072) roll += 40;
             slots[i] = tree.tree(roll);
@@ -544,7 +550,7 @@ contract WalletIdEntropyTest is Test {
         ];
         for (uint256 k; k < 4; ++k) {
             for (uint256 n; n < 24; ++n) {
-                bool expected = uint256(keccak256(abi.encode(uint256(0x537572766976616c), seed, n, salts[k]))) & 1 == 1;
+                bool expected = uint256(keccak256(abi.encode(uint256(42), seed, n, salts[k]))) & 1 == 1;
                 assertEq(probe.survived(seed, n, salts[k]), expected, "keccak(SURVIVAL_TAG, seed, round, salt)");
             }
         }
@@ -553,7 +559,7 @@ contract WalletIdEntropyTest is Test {
         for (uint256 n; n < 24; ++n) {
             assertEq(
                 probe.survived(seed, n, salts[2]),
-                uint256(keccak256(abi.encode(uint256(0x537572766976616c), seed, n, a))) & 1 == 1
+                uint256(keccak256(abi.encode(uint256(42), seed, n, a))) & 1 == 1
             );
         }
     }

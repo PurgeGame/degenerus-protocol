@@ -8,6 +8,7 @@ import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
@@ -21,6 +22,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     uint64 private slot;
     uint48 private index;
     uint256 private constant FIELD = 160;
+    // Preserve the original funded remainder above one whole-seat admission.
+    uint256 private constant SMALL_ALLOWANCE = GasBounds.CRAPS_SEAT_GAS_MAX + 1_350_000;
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
 
     function setUp() public {
@@ -75,10 +78,10 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertFalse(result.progressed);
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
         uint256 used;
-        (result, used) = _work(3_000_000);
+        (result, used) = _work(SMALL_ALLOWANCE);
         assertTrue(result.progressed);
         assertGt(crapsBattle.bonusCursorOf(slot), 0);
-        assertLt(used, 3_000_000, "complete worker call fits parent remainder");
+        assertLt(used, SMALL_ALLOWANCE, "complete worker call fits parent remainder");
     }
 
     function test_AllowanceAboveFormerBodyCapCanMakeProgress() public {
@@ -342,7 +345,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
     function test_ColdRemainderPartitionsPreserveFieldAndEveryPlayerPayment() public {
         uint256 snap = vm.snapshotState();
-        bytes32 small = _finish(3_000_000, true);
+        bytes32 small = _finish(SMALL_ALLOWANCE, true);
         vm.revertToState(snap);
         assertEq(_finish(14_000_000, false), small);
     }

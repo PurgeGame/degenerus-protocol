@@ -24,7 +24,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///           bet, available to anyone, on bets they do not even own.
 ///
 ///         The defence is that the collapse runs PER BET on a `betId`-keyed word
-///         (`EntropyLib.hash4(rngWord, playerId, betId, FLIP_ROUND_TAG)`), so the outcome of every bet is
+///         (`EntropyLib.hash3(BET_ROUND, rngWord, betId)`), so the outcome of every bet is
 ///         determined the moment the VRF word lands and how many bets one call's budget happens
 ///         to flush together is a pure no-op on value.
 ///
@@ -59,9 +59,6 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     /// @dev Degenerette bet currencies (DegeneretteModule).
     uint8 private constant CURRENCY_FLIP = 1;
 
-    /// @dev Salt used in degenerette bet resolution for the first spin.
-    bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
-
     /// @dev Enough bets that a partition search would have real freedom, few enough that
     ///      the one-per-tx leg stays cheap.
     uint256 private constant BET_COUNT = 6;
@@ -71,7 +68,8 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     ///      minimum would sit under the threshold and only be floored, making the test vacuous.
     uint128 private constant FLIP_PER_SPIN = 5_000;
     uint8 private constant SPINS = 3;
-    uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
+    /// @dev Numeric RNG domain of the FLIP survival flip (RngTags BET_SURVIVAL): hash(tag, rngWord, betId).
+    uint256 private constant BET_SURVIVAL_TAG = 12;
 
     address private player;
     uint32 private playerId;
@@ -116,7 +114,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         // Spin 0 must pay and the first bet must win its survival flip, so FLIP mints.
         while (
             !_spin0Pays(index, word)
-                || uint256(keccak256(abi.encode(word, uint256(playerId), uint256(1), BET_SURVIVAL_TAG))) & 1 == 0
+                || uint256(keccak256(abi.encode(BET_SURVIVAL_TAG, word, uint256(1)))) & 1 == 0
         ) ++word;
 
         _placeWinningFlipBets(index, word);
@@ -272,28 +270,14 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         return _resultTicketForSpin(index, word, 0);
     }
 
-    /// @dev Reproduce the on-chain per-spin result ticket (`_resolveBet` derivation).
-    ///      Byte-faithful copy of `DegeneretteResolveRepeg.t.sol` so the fixtures stay in lockstep.
+    /// @dev Reproduce the on-chain per-spin result ticket (`_resolveBet` derivation) through the
+    ///      independent reference's house reel (BET_HOUSE domain).
     function _resultTicketForSpin(
         uint48 index,
         uint256 word,
         uint8 spinIdx
     ) internal pure returns (uint32) {
-        uint256 resultSeed = spinIdx == 0
-            ? uint256(
-                keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT))
-            )
-            : uint256(
-                keccak256(
-                    abi.encodePacked(
-                        word,
-                        uint32(index),
-                        spinIdx,
-                        QUICK_PLAY_SALT
-                    )
-                )
-            );
-        return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
+        return Ref.house(word, uint32(index), spinIdx, false);
     }
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {

@@ -159,8 +159,11 @@ contract BafDrawArming is DeployProtocol {
         if (reqId == 0) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
-        // Bit 0 set: every daily flip wins, so the level-10 BAF resolves instead of skipping.
+        // Exercise both the daily flip win and the independently tagged BAF gate.
         uint256 word = uint256(keccak256(abi.encode(simTime, reqId))) | 1;
+        while (uint256(keccak256(abi.encode(uint256(61), word))) & 1 == 0) {
+            unchecked { word += 2; }
+        }
         try mockVRF.fulfillRandomWords(reqId, word) {} catch {}
     }
 

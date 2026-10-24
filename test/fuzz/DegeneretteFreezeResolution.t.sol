@@ -74,13 +74,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev lootboxRngPacked at slot 34 (post Stage-B game-storage repack: was 35); lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
 
-    /// @dev Salt used in degenerette bet resolution for the first spin.
-    bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
-
-    /// @dev Mirrors `DegenerusGameDegeneretteModule.FLIP_ROUND_TAG` (private there), the
-    ///      domain separator the 100-FLIP award collapse is keyed under.
-    uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
-    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
+    /// @dev Numeric RNG domains of the FLIP survival flip and the 100-FLIP award collapse
+    ///      (RngTags BET_SURVIVAL / BET_ROUND); both are hash(tag, rngWord, betId).
+    uint256 private constant BET_SURVIVAL_TAG = 12;
+    uint256 private constant FLIP_ROUND_TAG = 11;
 
     // --- DGAS-05 same-results constants ---
 
@@ -255,14 +252,28 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         assertEq(secondResultTraits, pick, "shared spin-0 house board matches the picked ticket");
         assertEq(firstSpins.length, 3 * 5, "first bet ran 3 spins");
         assertEq(secondSpins.length, 3 * 5, "second bet ran 3 spins");
+        _assertSpinsShareBoard(firstSpins, secondSpins);
+        player = firstPlayer;
+    }
+
+    /// @dev Separate frame, one decoded field per pass: all six decoded values together do not fit beside the
+    ///      test's locals under solc 0.8.38 via-IR. The per-spin assertions are unchanged.
+    function _assertSpinsShareBoard(bytes memory firstSpins, bytes memory secondSpins) private pure {
         for (uint8 s; s < 3; ++s) {
-            (uint32 pt1, uint8 sc1, uint8 w1) = DQ.spinAt(firstSpins, s);
-            (uint32 pt2, uint8 sc2, uint8 w2) = DQ.spinAt(secondSpins, s);
+            (uint32 pt1,,) = DQ.spinAt(firstSpins, s);
+            (uint32 pt2,,) = DQ.spinAt(secondSpins, s);
             assertEq(pt1, pt2, "same symbol -> identical player traits regardless of owner/currency/order");
+        }
+        for (uint8 s; s < 3; ++s) {
+            (, uint8 sc1,) = DQ.spinAt(firstSpins, s);
+            (, uint8 sc2,) = DQ.spinAt(secondSpins, s);
             assertEq(sc1, sc2, "every spin uses the shared board (score identical across bets)");
+        }
+        for (uint8 s; s < 3; ++s) {
+            (,, uint8 w1) = DQ.spinAt(firstSpins, s);
+            (,, uint8 w2) = DQ.spinAt(secondSpins, s);
             assertEq(w1, w2, "house wild counts identical across bets");
         }
-        player = firstPlayer;
     }
 
     function testBatchedPayoutEqualsPerSpinExpectation_Tier1() public {
@@ -271,11 +282,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Both bets share the seeded lootbox index 1 (placement requires word==0).
         // Word chosen so the FLIP bet (betId 2) WINS its bet-keyed survival flip
-        // (keccak(word, playerId, betId, BET_SURVIVAL_TAG) & 1 == 1) — the doubled-mint path is exercised
+        // (keccak(BET_SURVIVAL_TAG, word, betId) & 1 == 1) — the doubled-mint path is exercised
         // non-vacuously below.
         uint48 index = 1;
         uint256 word = uint256(keccak256("tier1_mixed_batch_word_v3"));
-        while (!_spin0Pays(index, word) || EntropyLib.hash4(word, uint256(playerId), 2, BET_SURVIVAL_TAG) & 1 == 0) {
+        while (!_spin0Pays(index, word) || EntropyLib.hash3(BET_SURVIVAL_TAG, word, 2) & 1 == 0) {
             ++word;
         }
 
@@ -336,17 +347,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // the raw mint is 2x the per-spin sum on a winning flip, 0 on a losing one. The
         // chosen word wins the flip for this bet, so the doubled path is live.
         uint256 rawFlipMint = (uint256(
-            keccak256(abi.encode(word, uint256(playerId), flipBet, BET_SURVIVAL_TAG))
+            keccak256(abi.encode(BET_SURVIVAL_TAG, word, flipBet))
         ) & 1 == 1) ? expectedFlip * 2 : 0;
         assertGt(rawFlipMint, 0, "Tier-1: word must win the FLIP survival flip");
 
         // The award granule then collapses the SURVIVED total onto a whole 100-FLIP
         // multiple. Replicated here from the same inputs the module uses, so this stays a
         // byte-identical amount assertion rather than a tolerance: the collapse is keyed on
-        // hash4(rngWord, playerId, betId, FLIP_ROUND_TAG), all fixed at fulfillment.
+        // hash3(FLIP_ROUND_TAG, rngWord, betId), all fixed at fulfillment.
         uint256 expectedFlipMint = _gateFlipAward(
             rawFlipMint,
-            EntropyLib.hash4(word, uint256(playerId), flipBet, FLIP_ROUND_TAG)
+            EntropyLib.hash3(FLIP_ROUND_TAG, word, flipBet)
         );
         // Non-vacuity for the collapse itself: this batch must actually cross the
         // threshold, or the assertion below degrades to the pre-granule behaviour.
@@ -386,7 +397,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @notice FLIP survival-flip LOSS path: a bet whose bet-keyed flip
-    ///         (keccak(word, playerId, betId, BET_SURVIVAL_TAG) & 1 == 0) loses mints NOTHING, even though its
+    ///         (keccak(BET_SURVIVAL_TAG, word, betId) & 1 == 0) loses mints NOTHING, even though its
     ///         raw spins paid (recomputed per-spin payout sum > 0).
     function testFlipSurvivalFlipLossZeroesMint() public {
         _seedFuturePrizePool(1_000_000 ether);
@@ -395,7 +406,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // per-spin payouts are nonzero.
         uint48 index = 1;
         uint256 word = uint256(keccak256("survival_flip_loss_word_v3"));
-        while (!_spin0Pays(index, word) || EntropyLib.hash4(word, uint256(playerId), 1, BET_SURVIVAL_TAG) & 1 == 1) {
+        while (!_spin0Pays(index, word) || EntropyLib.hash3(BET_SURVIVAL_TAG, word, 1) & 1 == 1) {
             ++word;
         }
         uint32 ticket = _winningTicketFor(index, word);
@@ -403,7 +414,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _fundFlip(player, 1_000);
         uint64 betId = _placeBet(CURRENCY_FLIP, 200, 3, ticket);
         assertEq(
-            uint256(keccak256(abi.encode(word, uint256(playerId), betId, BET_SURVIVAL_TAG))) & 1,
+            uint256(keccak256(abi.encode(BET_SURVIVAL_TAG, word, betId))) & 1,
             0,
             "precondition: the chosen word loses the survival flip for this bet"
         );
@@ -608,13 +619,14 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @notice Two independently replayed score-7 ETH spins must debit successively smaller
     ///      Reward balances. Nested box awards are accounted separately, including other pools.
-    /// @dev Offline Keccak search (.planning/wild-color/find_dgnrs_word.py): index 1, word 116141,
-    ///      symbol 0, 25 spins have S7 at spin 12 and spin 17, with every other score below 7. The
+    /// @dev Offline Keccak search over the numeric-domain derivation (house hash(8,word,spin), player
+    ///      hash(91,hash(9,word,symbol,spin))): index 1, word 184006, symbol 0, 25 spins have S7 at spin 0
+    ///      and spin 7, with every other score below 7. The
     ///      reference checks all 25 emitted player tickets, scores and wild counts, so the vector
     ///      cannot silently become vacuous.
     function testDgnrsAwardStaysPerSpin() public {
         uint48 index = 1;
-        uint256 word = 116_141;
+        uint256 word = 184_006;
         uint8 symbol = 0;
         uint8 spinCount = 25;
         uint64 betId = _placeBet(CURRENCY_ETH, 1 ether, spinCount, symbol);
@@ -646,7 +658,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             assertEq(actualScore, score, "independent composite score for every spin");
             assertEq(actualWilds, wilds, "independent house wild count for every spin");
             if (score >= 7) {
-                assertTrue(i == 12 || i == 17, "the deterministic high-score positions remain pinned");
+                assertTrue(i == 0 || i == 7, "the deterministic high-score positions remain pinned");
                 assertEq(score, 7, "both qualifying spins use the S7 tier");
                 ++qualifiers;
             }
@@ -844,10 +856,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         pure
         returns (uint32)
     {
-        uint256 resultSeed = spinIdx == 0
-            ? uint256(keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT)))
-            : uint256(keccak256(abi.encodePacked(word, uint32(index), spinIdx, QUICK_PLAY_SALT)));
-        return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
+        return Ref.house(word, uint32(index), spinIdx, false);
     }
 
     /// @dev The 3-tier ETH split (_distributePayout:778-794), cap-free. The cap is
@@ -1118,10 +1127,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         for (uint256 attempt; attempt < 1000; attempt++) {
             rngWord = uint256(keccak256(abi.encode("freeze_test_rng", attempt)));
 
-            // Replicate the result seed derivation from _resolveBet (spin 0)
-            // Contract uses uint32 index in encodePacked (v24.1 change)
-            uint256 resultSeed = uint256(keccak256(abi.encodePacked(rngWord, uint32(index), QUICK_PLAY_SALT)));
-            uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
+            // Replicate the result ticket derivation from _resolveBet (spin 0)
+            uint32 resultTicket = Ref.house(rngWord, uint32(index), 0, false);
 
             // Use the result ticket AS the custom ticket -- guarantees 8/8 matches (jackpot).
             // This is valid because custom ticket format matches result ticket format.

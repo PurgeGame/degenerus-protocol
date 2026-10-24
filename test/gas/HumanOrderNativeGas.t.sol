@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -103,7 +104,7 @@ contract HumanOrderGasSeed is DegenerusGame {
     }
 }
 
-contract HumanOrderNativeGasTest is DeployProtocol {
+contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
     uint256 private constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
 
     address private constant PLAYER = address(0xB0A100);
@@ -131,8 +132,6 @@ contract HumanOrderNativeGasTest is DeployProtocol {
 
     function test_RepricedFreshCapEntryBounds() public {
         require(vm.envOr("FOUNDRY_ISOLATE", false), "requires isolated transactions");
-        HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
-        HumanOrderRepricer repricer = new HumanOrderRepricer();
         uint256[5] memory orders = [BoxOrderLib.boSmalls(1), BoxOrderLib.boSmalls(100),
             BoxOrderLib.boLarges(100),
             BoxOrderLib.boCustoms(100, 10 ether),
@@ -143,29 +142,48 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         for (uint256 i; i < orders.length; ++i) {
             for (uint256 w = 1; w <= 16; ++w) {
                 uint256 fixture = vm.snapshotState();
-                host.seedOrder(PLAYER, orders[i], uint256(keccak256(abi.encode("ev-open", w))));
-                uint256 count = BoxOrderLib.boCount(host.entry());
-                uint256 bound = _entryBound(count);
-                uint256 snap = vm.snapshotState();
-                host.rawAtomic();
-                uint256 measured = vm.lastCallGas().gasTotalUsed;
-                assertTrue(vm.revertToState(snap));
-                vm.startStateDiffRecording();
-                host.rawAtomic();
-                VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
-                GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(host));
-                assertLe(measured, bound, "fresh-cap Osaka admission");
-                assertLe(r.glamsterdamExec + r.stateGas, bound, "fresh-cap state-inclusive admission");
-                if (r.glamsterdamExec > peakExec) peakExec = r.glamsterdamExec;
-                if (r.glamsterdamExec + r.stateGas > peakTotal) peakTotal = r.glamsterdamExec + r.stateGas;
-                if (bound - r.glamsterdamExec - r.stateGas < minimumHeadroom)
-                    minimumHeadroom = bound - r.glamsterdamExec - r.stateGas;
-                assertTrue(vm.revertToState(fixture));
+                (uint256 execution, uint256 total, uint256 headroom) = this.freshCapCase(
+                    orders[i], uint256(keccak256(abi.encode("ev-open", w))),
+                    string.concat("human_fresh_", vm.toString(i), "_", vm.toString(w)));
+                if (execution > peakExec) peakExec = execution;
+                if (total > peakTotal) peakTotal = total;
+                if (headroom < minimumHeadroom) minimumHeadroom = headroom;
+                assertTrue(vm.revertToStateAndDelete(fixture));
             }
         }
         emit log_named_uint("repriced fresh-cap peak execution", peakExec);
         emit log_named_uint("repriced fresh-cap peak including state", peakTotal);
         emit log_named_uint("repriced fresh-cap minimum entry headroom", minimumHeadroom);
+    }
+
+    /// @dev Each sweep case owns its temporary log and state-diff allocations.
+    function freshCapCase(uint256 input, uint256 word, string calldata label)
+        external returns (uint256 execution, uint256 total, uint256 headroom)
+    {
+        require(msg.sender == address(this), "fresh-cap self-call");
+        HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
+        HumanOrderRepricer repricer = new HumanOrderRepricer();
+        host.seedOrder(PLAYER, input, word);
+        uint256 bound = _entryBound(BoxOrderLib.boCount(host.entry()));
+        uint256 snap = vm.snapshotState();
+        _cool();
+        host.rawAtomic();
+        uint256 measured = vm.lastCallGas().gasTotalUsed;
+        assertTrue(vm.revertToState(snap));
+        vm.startStateDiffRecording();
+        host.rawAtomic();
+        VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(host));
+        execution = r.glamsterdamExec;
+        total = execution + r.stateGas;
+        assertLe(measured, bound, "fresh-cap Osaka admission");
+        assertLe(total, bound, "fresh-cap state-inclusive admission");
+        headroom = bound - total;
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snap));
+            this.exportAtomic(label);
+        }
+        assertTrue(vm.deleteStateSnapshot(snap));
     }
 
     function _probe(uint256 input, uint256 word) private {
@@ -232,11 +250,13 @@ contract HumanOrderNativeGasTest is DeployProtocol {
     }
 
     /// @dev Cold atomic gas of one seeded entry, plus the number of winning ETH spins it ran.
-    function _coldAtomic(uint256 input, uint256 word)
-        private returns (uint256 used, uint256 ethWins)
+    function coldAtomic(uint256 input, uint256 word)
+        external returns (uint256 used, uint256 ethWins)
     {
+        require(msg.sender == address(this), "cold-atomic self-call");
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
         host.seedOrder(PLAYER, input, word);
+        uint256 snapshot = vm.snapshotState();
         _cool();
         vm.recordLogs();
         uint256 beforeGas = gasleft();
@@ -248,6 +268,18 @@ contract HumanOrderNativeGasTest is DeployProtocol {
             (,,, uint256 ethShare) = abi.decode(entries[i].data, (uint64, uint256, uint256, uint256));
             if (ethShare != 0) ++ethWins;
         }
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            this.exportAtomic(string.concat("human-", vm.toString(input), "-", vm.toString(word)));
+        }
+        assertTrue(vm.deleteStateSnapshot(snapshot));
+    }
+
+    function exportAtomic(string calldata label) external {
+        require(msg.sender == address(this), "atomic export self-call");
+        HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
+        this.exportNativeFixture(label, address(this), address(host), abi.encodeCall(host.rawAtomic, ()));
+        host.rawAtomic{gas: 25_000_000}();
     }
 
     /// @dev Cold atomic gas of the same entry over `runs` independent committed words. Every
@@ -260,12 +292,13 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         uint256 peakWins;
         uint256 mostWins;
         for (uint256 i; i < runs; ++i) {
-            (uint256 used, uint256 wins) = _coldAtomic(input, uint256(keccak256(abi.encode(label, i))));
+            (uint256 used, uint256 wins) = this.coldAtomic(input, uint256(keccak256(abi.encode(label, i))));
             total += used;
             if (used > peak) (peak, peakWins) = (used, wins);
             if (wins > mostWins) mostWins = wins;
             assertTrue(vm.revertToState(base));
         }
+        assertTrue(vm.deleteStateSnapshot(base));
         uint256 count = BoxOrderLib.boCount(_seededWord(input));
         emit log_named_uint(string.concat(label, ": boxes"), count);
         emit log_named_uint(string.concat(label, ": cold atomic mean"), total / runs);
@@ -283,7 +316,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
         host.seedOrder(PLAYER, input, 1);
         word = host.entry();
-        assertTrue(vm.revertToState(snapshot));
+        assertTrue(vm.revertToStateAndDelete(snapshot));
     }
 
     /// @dev One 10 ETH box over many words: the per-entry peak includes the heaviest single box
@@ -324,14 +357,17 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         uint256 peakTail;
         for (uint256 i; i < 16; ++i) {
             uint256 word = uint256(keccak256(abi.encode("worker envelope", i)));
-            (uint256 atomic,) = _coldAtomic(BoxOrderLib.boCustoms(100, 10 ether), word);
+            (uint256 atomic,) = this.coldAtomic(BoxOrderLib.boCustoms(100, 10 ether), word);
             assertTrue(vm.revertToState(base));
             host.seedOrder(PLAYER, BoxOrderLib.boCustoms(100, 10 ether), word);
             _cool();
             (bool done, uint256 worker) = host.measuredWork{gas: 25_000_000}(20_000_000);
             assertTrue(done, "single-entry queue completes");
             assertLe(worker, _entryBound(100) + GasBounds.HUMAN_TAIL_GAS, "worker exceeds entry plus tail");
-            if (worker - atomic > peakTail) peakTail = worker - atomic;
+            // The consolidated worker can save an external atomic-call frame.
+            // Measure only positive overhead; the envelope remains an upper bound.
+            uint256 tail = worker > atomic ? worker - atomic : 0;
+            if (tail > peakTail) peakTail = tail;
             assertTrue(vm.revertToState(base));
         }
         emit log_named_uint("worker gas outside the atomic entry (loop, completion) peak", peakTail);

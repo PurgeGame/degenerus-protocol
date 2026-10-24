@@ -118,23 +118,24 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
         assertTrue(complete);
     }
 
-    /// @dev Same fixtures on b80dab839, solc 0.8.34/via-IR/1000 runs/Osaka, isolated calls.
-    ///      These ceilings include purchase AND opening; the opener itself is bounded separately
-    ///      by HumanOrderNativeGas. Slot counts are exact for the compact queue (three orders per
-    ///      word). See docs/VERIFICATION.md for the comparison and commands.
+    /// @dev Recalibrated on frozen P7B 824d757cf, solc 0.8.38/via-IR/1000/Osaka,
+    ///      isolated transactions. P6b changed RNG domains and therefore the realized
+    ///      award branches and new-slot counts. The 0.8.34 b80dab839 measurements remain
+    ///      historical evidence in docs/VERIFICATION.md; these pins protect the final
+    ///      workload with the original 1% / 1000-per-order regression limits.
     function _baseline(bytes32 label) private pure returns (uint256, uint256, uint256) {
-        if (label == keccak256("cover")) return (178930, 467390, 3);
-        if (label == keccak256("distinct_wallets")) return (1405538, 4847478, 31);
-        if (label == keccak256("exhausted")) return (439092, 1440912, 10);
-        if (label == keccak256("existing_bonus")) return (442997, 1452017, 10);
-        if (label == keccak256("fresh_bonus")) return (460154, 1549994, 11);
-        if (label == keccak256("low_score")) return (445969, 1528609, 11);
-        if (label == keccak256("manual_with_afk")) return (485140, 1589780, 11);
-        if (label == keccak256("100_boxes")) return (1498143, 3384523, 18);
-        if (label == keccak256("nested_eth_spin")) return (460708, 1550148, 11);
-        if (label == keccak256("pass_grant")) return (250986, 729886, 5);
-        if (label == keccak256("same_wallet")) return (993701, 2915681, 16);
-        if (label == keccak256("taper")) return (443155, 1452175, 10);
+        if (label == keccak256("cover")) return (173112, 474372, 3);
+        if (label == keccak256("distinct_wallets")) return (1259368, 4303608, 32);
+        if (label == keccak256("exhausted")) return (395695, 1320695, 10);
+        if (label == keccak256("existing_bonus")) return (399625, 1331825, 10);
+        if (label == keccak256("fresh_bonus")) return (416782, 1429802, 11);
+        if (label == keccak256("low_score")) return (405626, 1411446, 11);
+        if (label == keccak256("manual_with_afk")) return (457874, 1573314, 12);
+        if (label == keccak256("100_boxes")) return (1500450, 3486450, 20);
+        if (label == keccak256("nested_eth_spin")) return (492350, 1695810, 13);
+        if (label == keccak256("pass_grant")) return (365714, 1297914, 10);
+        if (label == keccak256("same_wallet")) return (849278, 2411578, 15);
+        if (label == keccak256("taper")) return (399823, 1332023, 10);
         revert("missing lifecycle baseline");
     }
 
@@ -157,8 +158,8 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
         uint32 id = host.walletIdOf_g3120(PLAYER);
         uint48 buffer = host.writeBuffer();
         for (uint256 w = 2; ; ++w) {
-            uint256 root = EntropyLib.hash4(0x5175657565644f72646572, w, buffer, 0);
-            uint256 seed = EntropyLib.hash4(root, id, 0x426f784f70656e, 1);
+            uint256 root = uint256(keccak256(abi.encode(uint256(20), w, uint256(0))));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(19), root, uint256(1))));
             if (uint16(seed >> 40) % 20 == 19) { openWord = w; break; }
         }
         _cycle("nested_eth_spin", BoxOrderLib.boCustom(1 ether), 1, false, 0, true, false);

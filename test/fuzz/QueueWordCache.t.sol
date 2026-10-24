@@ -241,22 +241,22 @@ contract QueueWordCacheTest is QueueWordCacheBase {
     }
 
     function test_UnalignedEightOwners_TwoQueueReads() public {
-        h.seed(3, 3, 16, 0xffffff00, 99, 1);
+        h.seed(3, 3, 16, 0xffffff00, 17, 1);
         // Rotation start 13 of 16: logical 5..12 sit at physical 2..9, straddling two words.
-        assertEq(TicketEntropy.queueStart(3, 16, 99), 13, "fixture: canonical rotation");
-        Observation memory o = _observe(3, 3, 5, 16, 99, 0, REALISTIC_GAS);
-        _assertCache(o, 3, 3, 16, 99, 0, 5);
+        assertEq(TicketEntropy.queueStart(3, 16, 17), 13, "fixture: canonical rotation");
+        Observation memory o = _observe(3, 3, 5, 16, 17, 0, REALISTIC_GAS);
+        _assertCache(o, 3, 3, 16, 17, 0, 5);
         assertEq(o.nextIdx, 13, "eight seats taken from the frontier");
         assertEq(o.queueReads, 2);
         assertEq(o.distinctWords, 2, "each word loaded exactly once");
     }
 
     function test_ScatteredResumedSeats_AndFrontier() public {
-        h.seed(3, 3, 40, 0xf0000000, 99, 1);
+        h.seed(3, 3, 40, 0xf0000000, 51, 1);
         uint256 resumed = uint256(1) | (uint256(8) << 32) | (uint256(18) << 64) | (uint256(24) << 96);
         h.resume(resumed);
-        Observation memory o = _observe(3, 3, 24, 40, 99, 0, REALISTIC_GAS);
-        _assertCache(o, 3, 3, 40, 99, resumed, 24);
+        Observation memory o = _observe(3, 3, 24, 40, 51, 0, REALISTIC_GAS);
+        _assertCache(o, 3, 3, 40, 51, resumed, 24);
         // Four resumed seats keep their queue order; four more join from the frontier.
         assertEq(o.nextIdx, 28, "frontier advances by the four free seats");
         uint256 expectedSeats = resumed | (uint256(25) << 128) | (uint256(26) << 160) | (uint256(27) << 192)

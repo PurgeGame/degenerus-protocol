@@ -154,7 +154,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(count, n, "every deposit appended");
 
         uint256 roll = uint256(
-            keccak256(abi.encodePacked(TAG, address(coinflip), uint24(3), word))
+            keccak256(abi.encode(uint256(3), word))
         ) % uint256(total);
 
         uint32 expected;
@@ -424,7 +424,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         for (uint256 i; i < 200_000; ++i) {
             word = uint256(keccak256(abi.encode("roll_scan", i)));
             uint256 roll = uint256(
-                keccak256(abi.encodePacked(TAG, address(coinflip), day, word))
+                keccak256(abi.encode(uint256(3), word))
             ) % total;
             if (roll == target) return word;
         }

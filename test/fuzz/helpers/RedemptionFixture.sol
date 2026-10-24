@@ -158,11 +158,11 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
 
     function _roll(uint256 word) internal pure returns (uint16) {
-        return uint16(((word >> 8) % 155) + 21);
+        return uint16((uint256(keccak256(abi.encode(uint256(84), word))) % 155) + 21);
     }
 
     function _synthReward(uint256 word, uint32 id) internal pure returns (uint16) {
-        uint256 synth = uint256(keccak256(abi.encodePacked(SYNTH_FLIP_TAG, word, id)));
+        uint256 synth = uint256(keccak256(abi.encode(uint256(86), word)));
         return (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth, uint24(id)) : 0;
     }
 
@@ -223,7 +223,14 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
     function _wordForRoll(uint16 roll) internal pure returns (uint256) {
         require(roll >= 21 && roll <= 175, "roll range");
-        return (uint256(roll - 21) << 8) | 2;
+        return _wordForRollFrom(roll, 2);
+    }
+
+    /// @dev Search the independent raw ABI domain preimage; preserve the requested roll.
+    function _wordForRollFrom(uint16 roll, uint256 start) internal pure returns (uint256 word) {
+        require(roll >= 21 && roll <= 175, "roll range");
+        word = start > 1 ? start : 2;
+        while (_roll(word) != roll) { unchecked { ++word; } if (word < 2) word = 2; }
     }
     /// @dev Isolated worker fixture. Uses production close and resolution; only the Game's
     /// stage view is mocked. Engine integration tests use real requests instead.

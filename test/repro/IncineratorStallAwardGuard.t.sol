@@ -136,8 +136,8 @@ contract IncineratorStallAwardGuard is DeployProtocol {
     function _grindWord(uint24 armedDay) internal pure returns (uint256 word) {
         for (uint256 i = 1; i < 4096; ++i) {
             uint256 w = uint256(keccak256(abi.encode("incin_stall", i))) & ~uint256(1);
-            if (w == 0) continue;
-            if (uint256(keccak256(abi.encodePacked(w, armedDay))) & 1 == 1) return w;
+            if (w < 2 || uint256(keccak256(abi.encode(uint256(61), w))) & 1 != 0) continue;
+            if (uint256(keccak256(abi.encode(uint256(68), w, uint256(armedDay)))) & 1 == 1) return w;
         }
         revert("no word found");
     }
@@ -276,7 +276,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         // resolveIncinerator's zero-award guard for a winning book stays as a backstop.
         assertEq(found, 1, "the incinerator resolved");
         assertTrue(
-            game.rngWordForDay(armedDay) != uint256(keccak256(abi.encodePacked(word, armedDay))),
+            game.rngWordForDay(armedDay) != uint256(keccak256(abi.encode(uint256(68), word, uint256(armedDay)))),
             "the armed day was not backfilled with a derived word"
         );
         assertFalse(armedWin, "the armed day resolves on the stalled word and loses with the transition");
@@ -403,7 +403,8 @@ contract IncineratorStallAwardGuard is DeployProtocol {
             keccak256(abi.encode("incin_word", block.timestamp, game.level(), reqId))
         );
         randomWord = odd ? (randomWord | 1) : (randomWord & ~uint256(1));
-        if (randomWord == 0) randomWord = 2;
+        if (randomWord < 2) randomWord = 2;
+        while ((uint256(keccak256(abi.encode(uint256(61), randomWord))) & 1 == 1) != odd) randomWord += 2;
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 }

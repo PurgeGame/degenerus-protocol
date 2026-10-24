@@ -5,6 +5,7 @@ import {StorageCensusLongRunTest} from "../census/StorageCensusLongRun.t.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {console} from "forge-std/console.sol";
 
 /// @dev Optional native fixtures. Each sample records the UNION of accesses by two
 /// runtime variants at exactly the same prestate, including zero-valued slots.
@@ -14,6 +15,8 @@ contract OptNativePairsTest is StorageCensusLongRunTest {
     address[] private priorTargets;
     bytes[] private priorCode;
     mapping(bytes32 => uint256) private sampled;
+    string[] private categories;
+    bool[] private protocolPayers;
     uint256 private sequence;
 
     function setUp() public override {
@@ -42,11 +45,25 @@ contract OptNativePairsTest is StorageCensusLongRunTest {
                 if (lvl == 0 && block.timestamp >= GameTimeLib.DEGENESIS_END_TS) category = string.concat(category, ":level-one");
                 if (lvl >= 10 && lvl % 10 == 0) category = string.concat(category, ":baf");
             }
-            if (sampled[keccak256(bytes(category))]++ < 4) {
+            uint256 occurrence = sampled[keccak256(bytes(category))]++;
+            if (occurrence == 0) {
+                categories.push(category);
+                protocolPayers.push(protocolPaid);
+            }
+            if (occurrence < 4) {
                 this.exportPair(++sequence, category, protocolPaid, from, to, value, data);
             }
         }
         return super._ctx(label, protocolPaid, from, to, value, data);
+    }
+
+    function _censusEnd() internal override {
+        super._censusEnd();
+        for (uint256 i; i < categories.length; ++i) {
+            console.log(string.concat("NATIVECOUNT|", categories[i], "|",
+                protocolPayers[i] ? "protocol" : "player", "|",
+                vm.toString(sampled[keccak256(bytes(categories[i]))])));
+        }
     }
 
     function _capture(address from, address to, uint256 value, bytes memory data)
@@ -102,7 +119,7 @@ contract OptNativePairsTest is StorageCensusLongRunTest {
             if (seen) continue;
             string memory key = string.concat("pair-storage-", vm.toString(account));
             vm.serializeJson(key, "{}");
-            _slots(key, account, current); _slots(key, account, previous);
+            this.serializeSlots(key, account, current); this.serializeSlots(key, account, previous);
             if (account == address(game)) {
                 // Amsterdam can cross the miner compensation gas threshold or finish
                 // at a different boundary and reach caller-credit eligibility. Export
@@ -130,7 +147,8 @@ contract OptNativePairsTest is StorageCensusLongRunTest {
         vm.writeJson(vm.serializeUint(key, "timestamp", block.timestamp), string.concat(name, ".call.json"));
     }
 
-    function _slots(string memory key, address account, Vm.AccountAccess[] memory accesses) private {
+    function serializeSlots(string memory key, address account, Vm.AccountAccess[] memory accesses) external {
+        require(msg.sender == address(this));
         for (uint256 i; i < accesses.length; ++i) {
             Vm.StorageAccess[] memory slots = accesses[i].storageAccesses;
             for (uint256 j; j < slots.length; ++j) if (slots[j].account == account) {

@@ -182,7 +182,7 @@ contract PurchaseBattleWithoutTicketsTest is PurchaseBattleStagesBase {
             abi.encodeWithSelector(
                 IJackpotBattle.prepareJackpotBattle.selector,
                 uint24(1),
-                uint256(keccak256(abi.encode(word, uint24(1), keccak256("far-future-coin"))))
+                uint256(keccak256(abi.encode(uint256(66), word)))
             )
         );
         _battle();

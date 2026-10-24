@@ -93,17 +93,17 @@ library DegenesisReference {
         uint256 units = (lane >> 32) & AMOUNT_MASK;
         uint256 secs = (lane & LANE_MASK) >> 70;
         o.amount = units * UNIT;
-        uint256 seed = EntropyLib.hash4(ORDER_DOMAIN, word, (day << 32) | index, o.id);
-        uint256 cat = EntropyLib.hash2(seed, CATEGORY_TAG) % 100;
-        uint256 size = EntropyLib.hash2(seed, SIZE_TAG);
+        uint256 seed = EntropyLib.hash3(52, word, index);
+        uint256 cat = EntropyLib.hash2(51, seed) % 100;
+        uint256 size = EntropyLib.hash2(56, seed);
         if (cat < 50) {
             uint256 flipOut = flipRaw(units, ladderBps(size), day, secs, volumeUnits);
             if (flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD) {
-                flipOut = FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(seed, FLIP_ROUND_TAG));
+                flipOut = FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(55, seed));
             }
             if (flipOut == 0) {
                 o.wwxrp = 1;
-            } else if (EntropyLib.hash2(seed, PASS_TAG) & 1 == 1) {
+            } else if (EntropyLib.hash2(53, seed) & 1 == 1) {
                 bool highPass = flipOut > CrapsPriceLib.HIGH_SWITCH;
                 uint256 passUnit = highPass ? CrapsPriceLib.HIGH_VALUE : CrapsPriceLib.NORMAL_VALUE;
                 uint256 passCount = flipOut / passUnit;
@@ -113,7 +113,7 @@ library DegenesisReference {
                     rest = flipOut - HIGH_PASS_CAP * CrapsPriceLib.HIGH_VALUE;
                 } else {
                     uint256 rem = flipOut % passUnit;
-                    if (rem != 0 && EntropyLib.hash2(seed, BOX_PASS_ROUND_TAG) % passUnit < rem) ++passCount;
+                    if (rem != 0 && EntropyLib.hash2(54, seed) % passUnit < rem) ++passCount;
                 }
                 flipOut = rest;
                 if (passCount == 0) o.wwxrp = 1;

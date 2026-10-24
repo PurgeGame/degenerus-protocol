@@ -85,7 +85,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
         playerId = probe.walletId(player);
         // Ticket rolls emit LootBoxOpened even for a cold bust. Spin rolls use BoxSpin.
         for (uint256 word = 1; ; ++word) {
-            uint256 seed = uint256(keccak256(abi.encode(word, uint256(playerId))));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(16), word)));
             if (uint16(seed >> 40) % 20 < 8) { directWord = word; break; }
         }
         vm.deal(player, 10_000 ether);
@@ -195,8 +195,8 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
             if (score < 6) continue;
             bool tickets = true;
             for (uint256 betId = 1; betId <= 2; ++betId) {
-                uint256 boxWord = uint256(keccak256(abi.encode(word, betId)));
-                uint256 seed = uint256(keccak256(abi.encode(boxWord, uint256(playerId))));
+                uint256 boxWord = uint256(keccak256(abi.encode(uint256(7), word, betId)));
+                uint256 seed = uint256(keccak256(abi.encode(uint256(16), boxWord)));
                 if (uint16(seed >> 40) % 20 >= 8) tickets = false;
             }
             if (tickets) return word;

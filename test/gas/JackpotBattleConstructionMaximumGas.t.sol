@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
 import {BattlePaidMinerProbe, BattleConstructionGameSeed,
@@ -47,7 +48,7 @@ contract BattleMaximumTableSeed is BattleConstructionTableSeed {
 /// @notice Adversarial maximum search using production construction and full mineFlip calls.
 /// Gas comes from physically cold isolated calls; all seeding/search/assertions are outside
 /// the measured call. Run with FOUNDRY_ISOLATE=true. A search maximum is not a universal proof.
-contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
+contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExport {
     uint256 private constant WORKER_FRAME_GAS = 100_000;
     // Fund both delegatecall hops and their EIP-150 retention above the logical allowance.
     uint256 private constant WORKER_CALL_GAS = 6_000_000;
@@ -84,7 +85,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
     }
 
     function _battleWord(uint256 word) private pure returns (uint256) {
-        return uint256(keccak256(abi.encode(word, CEILING, keccak256("far-future-coin"))));
+        return uint256(keccak256(abi.encode(uint256(66), word)));
     }
 
     /// @dev Before the first repeated level, fill small queues with distinct wallets, then
@@ -98,7 +99,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         uint256[99] memory order;
         uint256 count;
         while (count < 99) {
-            uint256 offset = uint256(keccak256(abi.encode(word, count))) % 99;
+            uint256 offset = uint256(keccak256(abi.encode(uint256(67), word, count))) % 99;
             uint256 bit = uint256(1) << offset;
             if (seen & bit != 0) break;
             order[count++] = offset;
@@ -208,7 +209,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
     function test_MaxSearchDistinctPrefixesAndQueueWidths() public {
         // Long-prefix witnesses plus the best seed for all four multiplier branches,
         // from search-jackpot-battle-gas.py, seeds 1..1,000,000.
-        uint256[8] memory words = [uint256(151899), 662565, 817362, 174625, 295278, 40394, 420953, 301129];
+        uint256[8] memory words = [uint256(375906), 402703, 683165, 132695, 231013, 392095, 728309, 106207];
         uint8[11] memory widths = [uint8(1), 2, 3, 4, 7, 8, 9, 15, 16, 17, 31];
         uint256 pristine = vm.snapshotState();
         uint256 maximum;
@@ -226,6 +227,42 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         emit log_named_uint("search_max_queue_width", width);
     }
 
+    /// @dev Export the original independently searched cold construction units.
+    /// Keep recording in its own test so the Osaka cold-search measurements above
+    /// cannot inherit access warmth from a prior export.
+    function test_NativeBattleConstructionWitnesses() public {
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) return;
+        uint256[8] memory words = [uint256(375906), 402703, 683165, 132695, 231013, 392095, 728309, 106207];
+        uint8[11] memory widths = [uint8(1), 2, 3, 4, 7, 8, 9, 15, 16, 17, 31];
+        uint256 pristine = vm.snapshotState();
+        uint256 allowance = GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + WORKER_FRAME_GAS;
+        for (uint256 i; i < words.length; ++i) {
+            for (uint256 j; j < widths.length; ++j) {
+                Case memory c = _case(words[i], widths[j]);
+                _seed(c);
+                this.exportNativeFixture(string.concat("battle-native-", vm.toString(words[i]), "-", vm.toString(widths[j])),
+                    address(this), address(game), abi.encodeCall(BattleConstructionGameSeed.runDraw, (CEILING, c.word, allowance)));
+                (, bool progressed) = _worker(c, allowance, WORKER_CALL_GAS);
+                assertTrue(progressed);
+                assertEq(_round().drawnCount, 50, "the full fixed field unit executed");
+                assertTrue(_round().started, "the first full field sealed");
+                assertTrue(vm.revertToState(pristine));
+            }
+        }
+        Case memory resumed = _case(402703, 2);
+        resumed.target = 150;
+        _seed(resumed);
+        for (uint256 i; i < 3; ++i) {
+            this.exportNativeFixture(string.concat("battle-native-resume-", vm.toString(i)), address(this), address(game),
+                abi.encodeCall(BattleConstructionGameSeed.runDraw, (CEILING, resumed.word, allowance)));
+            (, bool progressed) = _worker(resumed, allowance, WORKER_CALL_GAS);
+            assertTrue(progressed);
+            assertEq(_round().drawnCount, (i + 1) * 50);
+            assertEq(_round().started, i == 2);
+        }
+        vm.deleteStateSnapshot(pristine);
+    }
+
     function _mine(uint256 supplied) private returns (bool ok, uint256 transactionGas) {
         _cool();
         bytes memory reason;
@@ -233,12 +270,19 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         (ok, used, reason) = paidProbe.run(address(game), MINER, supplied);
         transactionGas = used.gasTotalUsed + 21_192;
         if (ok) assertEq(used.gasRefunded, 0, "gross transaction measurement");
-        else assertEq(bytes4(reason), MineFlipGas.InsufficientExecutionGas.selector,
-            "low-gas call must refuse before work, not exhaust gas midway");
+        else {
+            // The first mandatory checkpoint bypasses estimates (AUDIT-READINESS.md).
+            // Too little physical gas may exhaust the first worker or its caller-credit tail.
+            // It must revert atomically; every probe below verifies that rollback.
+            assertTrue(reason.length == 0
+                || bytes4(reason) == MineFlipGas.InsufficientExecutionGas.selector
+                || bytes4(reason) == MineFlipGas.EmptyRevert.selector,
+                "only a physical-gas refusal is expected at this boundary");
+        }
     }
 
     function test_MaxProductionTransactionsPayMinerAndStopBeforeSimulation() public {
-        uint256[4] memory words = [uint256(151899), 662565, 817362, 40394];
+        uint256[4] memory words = [uint256(375906), 402703, 683165, 392095];
         uint256 pristine = vm.snapshotState();
         uint256 largest;
         for (uint256 i; i < words.length; ++i) {
@@ -265,10 +309,13 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
     }
 
     function test_MaxPhysicalAdmissionBoundaryPreservesThenCommitsOneCheckpoint() public {
-        Case memory c = _case(662565, 2);
+        Case memory c = _case(402703, 2);
         c.target = 150;
         _seed(c);
         vm.etch(address(game), gameCode);
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            this.exportBattleNativeFixture();
+        }
         uint256 initial = vm.snapshotState();
         uint256 low = 1_000_000;
         uint256 high = 8_000_000;
@@ -276,7 +323,14 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
             uint256 supplied = (high + low) / 2;
             (bool ok,) = _mine(supplied);
             if (ok) high = supplied;
-            else low = supplied;
+            else {
+                low = supplied;
+                (CrapsBattleStorage.JackpotRound memory rolledBack,,) =
+                    CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
+                assertEq(rolledBack.drawWord, 0, "failed call rolls back construction");
+                assertEq(rolledBack.drawnCount, 0, "failed call rolls back every seat");
+                assertEq(coinflip.coinflipAmount(MINER), 0, "failed call grants no reward");
+            }
             assertTrue(vm.revertToState(initial));
         }
         (bool refused,) = _mine(low);
@@ -298,10 +352,18 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         emit log_named_uint("boundary_transaction_gas_used", used);
     }
 
+    /// @dev Set basefee inside an isolated adapter so the exported prestate includes
+    /// the actual positive miner-credit branch and every account it accesses.
+    function exportBattleNativeFixture() external {
+        require(msg.sender == address(this));
+        vm.fee(1 gwei);
+        _nativeFixture("battle_first_checkpoint", MINER, address(game), abi.encodeCall(game.mineFlip, (0)));
+    }
+
     function test_MaxProductionMinerPassBranches() public {
         uint256 pristine = vm.snapshotState();
         for (uint256 mode; mode < 5; ++mode) {
-            Case memory c = _case(662565, 2);
+            Case memory c = _case(402703, 2);
             c.target = 150;
             _seed(c);
             uint256 packed;
@@ -337,7 +399,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
     function test_MaxSealAndPreferenceBranches() public {
         uint256 pristine = vm.snapshotState();
         for (uint8 mode; mode < 7; ++mode) {
-            Case memory c = _case(40394, 2);
+            Case memory c = _case(392095, 2);
             if (mode < 4) c.paidMode = mode;
             if (mode == 4) c.fullBoard = false;
             if (mode == 5) c.collide = false;
@@ -352,7 +414,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         uint16[4] memory targets = [uint16(51), 100, 150, 500];
         uint256 pristine = vm.snapshotState();
         for (uint256 t; t < targets.length; ++t) {
-            Case memory c = _case(40394, 2);
+            Case memory c = _case(392095, 2);
             c.target = targets[t];
             _seed(c);
             for (uint256 n; n < c.target; n += 50) {
@@ -392,7 +454,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
     }
 
     function _checkpointCase(uint256 shape, uint16 target) private pure returns (Case memory c) {
-        c = _case(662565, 2);
+        c = _case(402703, 2);
         c.target = target;
         if (shape == 1) c.collide = false;
         if (shape == 2) { c.prefix = false; c.smallQueue = 1; c.fullBoard = false; }

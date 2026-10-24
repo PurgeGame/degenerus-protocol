@@ -267,9 +267,9 @@ contract V61RngFreezeIntact is DeployProtocol {
     function testStaticNoRngWordInV61Bodies() public view {
         // GameAfkingModule: maybeCurse / decurse / smite share a region; assert no rngWord between the SET
         // function and the end-of-file (the afking-BOX rngWord refs are ABOVE maybeCurse, out of v61 scope).
-        string memory afking = vm.readFile("./contracts/modules/GameAfkingModule.sol");
+        string memory afking = vm.readFile("./contracts/modules/GameAfkingClaims.sol");
         assertFalse(
-            _regionContains(afking, "function maybeCurse", "", "rngWord"),
+            _regionContains(afking, "function _maybeCurse", "", "rngWord"),
             "maybeCurse/decurse/smite region must contain NO rngWord token"
         );
 
@@ -278,7 +278,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         // ABOVE, in the streak-entropy helpers, out of the curse path).
         string memory streak = vm.readFile("./contracts/modules/DegenerusGameMintStreakUtils.sol");
         assertFalse(
-            _regionContains(streak, "Cashout / smite curse counter", "function curseCountOf", "rngWord"),
+            _regionContains(streak, "Cashout / smite curse counter", "function _recordLootboxUnits", "rngWord"),
             "the curse counter region (_applyCurseStack/_clearCurse) must contain NO rngWord token"
         );
 

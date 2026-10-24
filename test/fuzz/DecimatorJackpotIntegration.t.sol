@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -214,7 +215,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         (current,, reserved) = h.pools();
         assertEq(current, 0);
         assertEq(reserved, 731.5 ether);
-        uint8 solo = uint8(3 - (uint256(keccak256(abi.encode(WORD, LVL))) & 3));
+        uint8 solo = uint8(3 - (uint256(keccak256(abi.encode(RngTags.JACKPOT_ALLOCATION, WORD, uint256(LVL)))) & 3));
         assertEq(h.balance(address(uint160(0xa100 + solo))), 451.5 ether);
         assertEq(h.passes(address(uint160(0xa100 + solo))), 66);
         (, uint256 future,) = h.pools();
@@ -275,7 +276,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         uint256 nonSolo = 2 * (uint256(budget) * 1333 / 10000) + uint256(budget) * 1334 / 10000;
         uint256 soloShare = budget - nonSolo;
         assertEq(conversionBudget, uint256(budget) - uint256(budget) * 35 / 100);
-        uint8 solo = uint8(3 - (uint256(keccak256(abi.encode(WORD, LVL))) & 3));
+        uint8 solo = uint8(3 - (uint256(keccak256(abi.encode(RngTags.JACKPOT_ALLOCATION, WORD, uint256(LVL)))) & 3));
         assertEq(uint16(weights >> (solo * 16)), 0);
         DegenerusGameStorage.DecJackpotPlan memory p = h.plan(LVL);
         uint256 m = nonSolo == 0 ? 0 : conversionBudget * n / pot;
@@ -431,7 +432,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         uint40 n = uint40(bound(population, 1, type(uint40).max));
         h.prepare(LVL, n, pot, uint128(budget), word, false);
         for (uint8 q; q < 4; ++q) if (emptyMask & (1 << q) != 0) h.setDeity(q, address(0));
-        uint8 offset = uint8(uint256(keccak256(abi.encode(word, LVL))) & 3);
+        uint8 offset = uint8(uint256(keccak256(abi.encode(RngTags.JACKPOT_ALLOCATION, word, uint256(LVL)))) & 3);
         uint8 solo = 3 - offset;
         uint256 soloShare = budget - 2 * (budget * 1333 / 10000) - budget * 1334 / 10000;
         uint256 activeNonSolo;
@@ -566,12 +567,12 @@ contract DecimatorJackpotIntegrationTest is Test {
         DecimatorJackpotPreferenceProbe(ContractAddresses.CRAPS).set(owner, chips);
         h.prepare(LVL, 101, 60 ether, 1000 ether, word, true);
         for (uint8 q; q < 4; ++q) h.setDeity(q, owner);
-        address player = address(uint160(uint256(keccak256(abi.encode(keccak256("decimator.battle.generated.player.v1"), word, LVL, id)))));
+        address player = address(uint160(uint256(keccak256(abi.encode(RngTags.DECIMATOR_GENERATED, word, uint256(id))))));
         assertTrue(player != owner);
         vm.expectCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSignature(
             "settleSlipBounded(uint256,uint256,uint256,uint256,bytes32,uint256,uint256,uint256,uint256)",
-            uint256(chips), uint256(60), uint256(keccak256(abi.encode(keccak256("decimator.battle.board.v1"),word,LVL,id))),
-            uint256(3), keccak256(abi.encode(keccak256("decimator.battle.dice.v1"),word,LVL)),
+            uint256(chips), uint256(60), uint256(keccak256(abi.encode(RngTags.DECIMATOR_BOARD,word,uint256(id)))),
+            uint256(3), keccak256(abi.encode(RngTags.DECIMATOR_DICE,word)),
             uint256(3000e18), uint256(uint160(player)), uint256(0x050c), uint256(511 << 16 | 48)
         ), 1);
         vm.recordLogs();
@@ -660,8 +661,8 @@ contract DecimatorJackpotIntegrationTest is Test {
             assertEq(node.score, raw >> 64);
             uint64 id = uint64(raw);
             assertEq(node.owner, id > 401 ? h.ownerSlot(id - 401) : address(uint160(0x1000 + id)));
-            assertEq(node.key, (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"),
-                WORD, LVL, uint64(raw)))) & ~uint256(type(uint64).max)) | uint64(raw));
+            assertEq(node.key, (uint256(keccak256(abi.encode(RngTags.DECIMATOR_TIE,
+                WORD, uint256(uint64(raw))))) & ~uint256(type(uint64).max)) | uint64(raw));
         }
         _settle(1_000_000);
         _assertField(401, WORD, _concat(kept, vm.getRecordedLogs()));
@@ -781,9 +782,9 @@ contract DecimatorJackpotIntegrationTest is Test {
 
     function _better(uint256 word, uint256 a, uint256 b) private pure returns (bool) {
         if (a >> 64 != b >> 64) return a >> 64 > b >> 64;
-        bytes32 tag = keccak256("decimator.battle.tie.v1");
-        uint256 ka = (uint256(keccak256(abi.encode(tag,word,LVL,uint64(a)))) & ~uint256(type(uint64).max)) | uint64(a);
-        uint256 kb = (uint256(keccak256(abi.encode(tag,word,LVL,uint64(b)))) & ~uint256(type(uint64).max)) | uint64(b);
+        uint256 tag = RngTags.DECIMATOR_TIE;
+        uint256 ka = (uint256(keccak256(abi.encode(tag,word,uint256(uint64(a))))) & ~uint256(type(uint64).max)) | uint64(a);
+        uint256 kb = (uint256(keccak256(abi.encode(tag,word,uint256(uint64(b))))) & ~uint256(type(uint64).max)) | uint64(b);
         return ka > kb;
     }
 

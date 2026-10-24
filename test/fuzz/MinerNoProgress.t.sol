@@ -246,13 +246,24 @@ contract MinerNoProgressTest is Test {
     }
 
     function test_IndivisibleActionsAttemptFirstWorkerDespiteExtremeEstimate() public {
-        uint8[4] memory actions = [uint8(5), 6, 17, 18];
+        uint8[3] memory actions = [uint8(5), 6, 17];
         for (uint256 i; i < actions.length; ++i) {
             uint256 snap = vm.snapshotState();
             _seed(DegenerusGameStorage.MinerAction(actions[i]));
             game.mineFlip{gas: 500_000}(type(uint32).max);
             vm.revertToState(snap);
         }
+    }
+
+    function test_MiddayPreflightRetainsItsScaledDependencyMinimum() public {
+        _seed(DegenerusGameStorage.MinerAction.RequestMidday);
+        vm.recordLogs();
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        game.mineFlip{gas: 500_000}(type(uint32).max);
+        assertEq(vm.getRecordedLogs().length, 0, "a refused dependency read commits no work or reward");
+        assertEq(game.minerAction(), 18, "the request remains eligible at the default multiplier");
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector));
+        game.mineFlip{gas: 500_000}(0);
     }
 
     function test_SeizeLoansOutranksWaitAndEveryConsumerButNotTerminal() public {

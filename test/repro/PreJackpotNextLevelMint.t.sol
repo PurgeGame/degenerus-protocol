@@ -581,9 +581,9 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     }
 
     /// @dev Each call gets the smallest rung of a realistic allowance ladder that admits work.
-    ///      Maximum calibration defers every continuation after first progress, so the sealing
-    ///      call cannot also compose the miner's own mid-day request: the seal is observed
-    ///      before any later request.
+    ///      Tenfold calibration prices a new mid-day request above every ladder rung
+    ///      (2.2M x 10 > 16,777,216), while leaving bounded reads and return reserves
+    ///      feasible. The seal is therefore observed before any later request.
     function _finishOrdinaryPurchaseDaily() private {
         uint256[9] memory ladder = [uint256(1_500_000), 2_000_000, 2_500_000, 3_000_000, 3_500_000, 4_000_000,
             6_000_000, 10_000_000, 16_777_216];
@@ -593,7 +593,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         for (uint256 i; i < 4000 && (game.rngLocked() || !game.rngComplete() || _dailyWorkPending()); ++i) {
             assertEq(mockVRF.lastRequestId(), requestId, "no request composes into the daily chain");
             for (uint256 r; r < ladder.length; ++r) {
-                try game.mineFlip{gas: ladder[r]}(type(uint32).max) {
+                try game.mineFlip{gas: ladder[r]}(100_000) {
                     break;
                 } catch (bytes memory err) {
                     assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "only an allowance refusal retries");

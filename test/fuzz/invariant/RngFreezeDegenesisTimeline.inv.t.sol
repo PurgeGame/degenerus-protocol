@@ -23,6 +23,14 @@ contract RngIndexDrainOrderingDegenesis is RngIndexDrainOrderingInvariants {
         return DEPLOY_TS_DEGENESIS;
     }
 
+    /// @dev The sequence was found on the ordinary timeline; on this one it adds no new checked entries,
+    /// so only the binding and coverage floors are asserted here (the non-vacuity gate is the parent's).
+    function test_goldSixReplacementUsesCommittedDomain() public override {
+        _replayGoldSixCounterexample();
+        _assertCoverage();
+        _assertBinding();
+    }
+
     /// @dev Own counter keys, so the non-vacuity floor counts this suite's runs, not the parent's.
     function _acc(string memory k, uint256 v) internal override returns (uint256) {
         return super._acc(string.concat("DGT_", k), v);

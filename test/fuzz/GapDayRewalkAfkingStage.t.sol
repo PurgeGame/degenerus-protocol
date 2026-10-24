@@ -104,7 +104,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         uint256 reqW = mockVRF.lastRequestId();
         assertTrue(reqW != reqR, "fresh request id");
         mockVRF.fulfillRandomWords(reqW, WORD_FRESH);
-        uint256 predictedG2 = uint256(keccak256(abi.encodePacked(WORD_FRESH, uint24(R + 2))));
+        uint256 predictedG2 = uint256(keccak256(abi.encode(uint256(68), WORD_FRESH, uint256(R + 2))));
 
         // Smaller calls expose the post-gap, pre-jackpot checkpoint without changing
         // the logical word or permitting a subscription change while W remains locked.
@@ -149,7 +149,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         assertTrue(game.rngLocked(), "N: request outstanding");
         // Pick a fulfil word whose seat draw lands on a player slot (ring: VAULT, sDGNRS, atk, bystander).
         uint256 wordN = WORD_FRESH ^ 0x5EA7;
-        while (1 + (uint256(keccak256(abi.encodePacked("SEATDRAW", wordN))) % 3) == 1) wordN++;
+        while (1 + (uint256(keccak256(abi.encode(uint256(97), wordN))) % 3) == 1) wordN++;
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), wordN);
         vm.recordLogs();
         _advanceUntilUnlocked();

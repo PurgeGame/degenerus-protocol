@@ -598,7 +598,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 word
     ) internal pure returns (uint32) {
         uint256 resultSeed = uint256(
-            keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT))
+            keccak256(abi.encode(uint256(8), word, uint256(0)))
         );
         return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
     }

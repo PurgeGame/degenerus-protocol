@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
+import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {QueueHost} from "../helpers/BoxQueueHost.sol";
@@ -50,16 +52,20 @@ contract EvOpenHost is QueueHost {
     }
 }
 
-contract EvNestedProbe is DegenerusGameStorage {
+/// @dev Preserve the folded production parent while observing the child seam.
+/// The child stops here, just as the original external resolver probe did, so
+/// its own recirculated box cannot consume a second independent EV allowance.
+contract EvNestedProbe is DegenerusGameLootboxModule, DegenerusGameBoonModule {
     uint256 private immutable EXPECTED;
     event CapSeen(uint256 used);
     constructor(uint256 expected) { EXPECTED = expected; }
-    function resolveEthSpinFromBox(uint32 id, uint256, uint16, uint256, uint8) external payable {
+    function _boxResolveEthSpinFromBox(uint32 id, uint256, uint16, uint256, uint8) internal override {
         uint256 used = _lootboxEvUsedFor(id, level + 1);
         require(used == EXPECTED, "parent must draw before child");
         emit CapSeen(used);
     }
-    fallback() external payable { assembly ("memory-safe") { return(0, 64) } }
+    function _boxResolveFlipSpinsFromBox(uint32, uint256, uint16, uint256, uint8) internal pure override returns (uint256) { return 0; }
+    function _boxResolveWwxrpSpinFromBox(uint32, uint256, uint16, uint256, uint8) internal pure override returns (uint256) { return 0; }
 }
 
 contract EvBoonFailure {
@@ -75,6 +81,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.setNonce(address(this), 1024);
         vm.etch(address(game), type(EvOpenHost).runtimeCode);
         host = EvOpenHost(payable(address(game)));
         key = host.level() + 1;
@@ -91,8 +98,8 @@ contract LootboxEvAtOpenTest is DeployProtocol {
 
     function _word(uint48 b, uint256 p, bool nested) private view returns (uint256 w) {
         for (w = 2; ; ++w) {
-            uint256 root = EntropyLib.hash4(0x5175657565644f72646572, w, b, p);
-            uint256 seed = EntropyLib.hash4(root, id, 0x426f784f70656e, 1);
+            uint256 root = EntropyLib.hash3(20, w, p);
+            uint256 seed = EntropyLib.hash3(19, root, 1);
             uint256 roll = uint16(seed >> 40) % 20;
             if (nested ? roll == 19 : roll < 8) return w;
         }
@@ -204,7 +211,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
             uint48 b = host.writeBuffer();
             uint256 entry = host.entryAt(b, 0);
             uint256 nominal = BoxOrderLib.boNominal(entry);
-            vm.etch(ContractAddresses.GAME_DEGENERETTE_MODULE, address(new EvNestedProbe(nominal)).code);
+            vm.etch(ContractAddresses.GAME_LOOTBOX_MODULE, address(new EvNestedProbe(nominal)).code);
             host.sealAndPublish(_word(b, 0, true));
             vm.recordLogs();
             vm.startStateDiffRecording();
@@ -283,7 +290,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
 
     function test_RedemptionDrawsOnceAndProtocolAfkStaysExempt() public {
         uint256 word = 2;
-        while (uint16(EntropyLib.hash4(word, id, 0x426f784f70656e, 1) >> 40) % 20 >= 8) ++word;
+        while (uint16(EntropyLib.hash3(19, word, 1) >> 40) % 20 >= 8) ++word;
         GameFunding.reserve(1 ether);
         vm.startStateDiffRecording();
         vm.prank(address(sdgnrs));
@@ -293,7 +300,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
         uint32 protocolId = host.walletIdOf_g3120(address(sdgnrs));
         uint256 before = host.evUsed(protocolId, key);
         word = 2;
-        while (uint16(EntropyLib.hash4(word, protocolId, 0x41666b696e67426f78, 1) >> 40) % 20 >= 8) ++word;
+        while (uint16(EntropyLib.hash3(13, word, protocolId) >> 40) % 20 >= 8) ++word;
         vm.recordLogs();
         host.scoredSingle(protocolId, 1 ether, 30_000, word, true);
         assertEq(_openedAmount(vm.getRecordedLogs()), 1.45 ether);

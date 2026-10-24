@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -20,7 +21,7 @@ import {
 /// are the engine's own (mineFlip's Decimator and RequestMidday stages), delegatecalled here in
 /// the Game's storage as the engine dispatches them. All unrelated consumers start complete,
 /// isolating Decimator.
-contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
+contract UnpushedDecimatorSessionSeeder is DegenerusGame {
     function prime(uint24 lvl, uint256 word, uint128 pool) external {
         level = lvl - 1;
         dailyIdx = _simulatedDayIndex();
@@ -77,6 +78,21 @@ contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
 /// @dev Equal stacks have equal scores, making every retained ordering decision
 /// depend on the session's independently derived tiebreak key.
 contract UnpushedDecimatorFlatEngine {
+    address private immutable TABLE;
+    constructor(address table) { TABLE = table; }
+    // The engine and table share one deployed address. Preserve all table views
+    // and maintenance behavior while replacing only the deterministic dice seam.
+    fallback() external payable {
+        address target = TABLE;
+        assembly ("memory-safe") {
+            let data := mload(0x40)
+            calldatacopy(data, 0, calldatasize())
+            let ok := delegatecall(gas(), target, data, calldatasize(), 0, 0)
+            returndatacopy(data, 0, returndatasize())
+            if iszero(ok) { revert(data, returndatasize()) }
+            return(data, returndatasize())
+        }
+    }
     function settleSlipBounded(uint256, uint256, uint256, uint256, bytes32,
         uint256 bankroll, uint256, uint256, uint256) external pure returns (Craps.SlipResult memory r)
     {
@@ -97,6 +113,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.setNonce(address(this), 1024);
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 2 days);
         mockVRF.fundSubscription(1, 1000e18);
         lens = new DegenerusGameLens();
@@ -108,7 +125,9 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         // keeper while the primed session is complete, so every refusal below answers to the
         // Decimator read consumer alone.
         _quietCrapsTable();
-        vm.etch(ContractAddresses.CRAPS_ENGINE, address(new UnpushedDecimatorFlatEngine()).code);
+        address tableRuntime = address(0xDEC1A470CAFE);
+        vm.etch(tableRuntime, ContractAddresses.CRAPS.code);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, address(new UnpushedDecimatorFlatEngine(tableRuntime)).code);
         for (uint64 id = 1; id <= COUNT; ++id) {
             uint32 playerId = _giveWalletId(address(uint160(0xD000 + id)));
             vm.prank(ContractAddresses.COIN);
@@ -152,7 +171,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
     }
 
     function _key(uint64 id) private pure returns (uint256) {
-        return (uint256(keccak256(abi.encode(TIE, WORD, LVL, id))) & ~uint256(type(uint64).max)) | id;
+        return (uint256(keccak256(abi.encode(uint256(50), WORD, uint256(id)))) & ~uint256(type(uint64).max)) | id;
     }
 
     // The Decimator worker runs under the allowance it is given, admitting each step by its

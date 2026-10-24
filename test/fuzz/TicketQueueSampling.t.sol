@@ -22,7 +22,7 @@ contract TicketQueueSamplingTest is DeployProtocol {
         uint32[] memory tickets = game.sampleFarFutureTickets(entropy, TARGET, TARGET);
         assertEq(tickets.length, 8);
         for (uint256 p; p < 4; ++p) {
-            entropy = EntropyLib.hash2(entropy, p);
+            entropy = EntropyLib.hash3(2, entropy, p);
             uint256 a = (entropy >> 64) % COUNT;
             uint256 b = (a + 1 + (entropy >> 128) % 7) % COUNT;
             assertEq(tickets[p], game.walletIdOf_g3120(address(uint160(1000 + a))));

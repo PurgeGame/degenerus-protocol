@@ -393,7 +393,7 @@ contract DecimatorBattleTest is Test {
         h.seal(LVL, 10 ether, word);
         _drain(h);
         DegenerusGameStorage.DecBattleRound memory round = h.roundOf(LVL);
-        bytes32 seed = keccak256(abi.encode(DICE, word, LVL));
+        bytes32 seed = keccak256(abi.encode(uint256(45), word));
         for (uint8 i; i < round.winners; ++i) {
             DecimatorBattleHarness.Node memory node = h.nodeOf(LVL, i);
             uint64 id = uint64(node.key);
@@ -402,7 +402,7 @@ contract DecimatorBattleTest is Test {
                 .settleSlipBounded(
                     0,
                     60,
-                    uint256(keccak256(abi.encode(BOARD, word, LVL, id))),
+                    uint256(keccak256(abi.encode(uint256(44), word, uint256(id)))),
                     10,
                     seed,
                     3000e18,
@@ -451,7 +451,7 @@ contract DecimatorBattleTest is Test {
         }
         for (uint64 id = 1; id <= 2000; ++id) {
             if (!_sampled(777, LVL, id, h.roundOf(LVL).count) || _bal(h, address(uint160(id))) != 0 || id == round.champion) continue;
-            uint256 peak = 3000 + uint256(keccak256(abi.encode(BOARD, uint256(777), LVL, id))) % (1_000_000);
+            uint256 peak = 3000 + uint256(keccak256(abi.encode(uint256(44), uint256(777), uint256(id)))) % (1_000_000);
             assertLe(h.entryOf(LVL, id).stack / 1 * peak, root.score);
         }
     }
@@ -507,7 +507,7 @@ contract DecimatorBattleTest is Test {
     }
 
     function _tieKey(uint256 word, uint24 lvl, uint64 id) internal pure returns (uint256) {
-        return (uint256(keccak256(abi.encode(TIE, word, lvl, id))) & ~uint256(type(uint64).max)) | id;
+        return (uint256(keccak256(abi.encode(uint256(50), word, uint256(id)))) & ~uint256(type(uint64).max)) | id;
     }
 
     /// @dev Equal scores: two higher stacks and 38 sampled equal-stack entries contest 20 places.
@@ -602,8 +602,8 @@ contract DecimatorBattleTest is Test {
     function test_RunBoundsCapRollsAndShooters() public {
         CrapsEngine engine = CrapsEngine(ContractAddresses.CRAPS_ENGINE);
         uint256 word = uint256(keccak256(abi.encode("round200k", uint256(404))));
-        bytes32 seed = keccak256(abi.encode(DICE, word, LVL));
-        uint256 board = uint256(keccak256(abi.encode(BOARD, word, LVL, uint64(200))));
+        bytes32 seed = keccak256(abi.encode(uint256(45), word));
+        uint256 board = uint256(keccak256(abi.encode(uint256(44), word, uint256(200))));
         uint256 owner = 200 + 0x1000;
         uint256 boost = 0x050c070c0a0c0e0c120c140c190c1e0c & 0xFFFF;
         Craps.SlipResult memory free = engine.settleSlip(0, 60, board, 10, seed, 1e40, 0, owner, boost);

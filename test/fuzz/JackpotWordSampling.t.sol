@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Test} from "forge-std/Test.sol";
@@ -50,7 +51,8 @@ contract JackpotWordSamplingTest is Test {
     WordScatterHarness private scatter;
 
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.setNonce(address(this), 1024);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGamePassModule()).code);
         h = new WordJackpotHarness();
         scatter = new WordScatterHarness();
     }
@@ -60,7 +62,7 @@ contract JackpotWordSamplingTest is Test {
         if (len <= 8) return (seed % len + lane) % len;
         uint256 selected = seed % (((len + 7) / 8) * 8);
         idx = (selected / 8) * 8 + ((selected % 8 + lane) % 8);
-        if (idx >= len) idx = uint256(keccak256(abi.encode(seed, lane))) % len;
+        if (idx >= len) idx = uint256(keccak256(abi.encode(uint256(87), seed, lane))) % len;
     }
 
     struct ExpectedDraw {
@@ -76,7 +78,7 @@ contract JackpotWordSamplingTest is Test {
         private view returns (uint256 ownerIndex)
     {
         assertGt(expected.effectiveLength, 0, "empty bucket must never pay");
-        uint256 seed = uint256(keccak256(abi.encode(expected.entropy, expected.trait, uint8(239), (paid / 8) * 8)));
+        uint256 seed = uint256(keccak256(abi.encode(uint256(25), expected.entropy, uint256(239), (paid / 8) * 8)));
         uint256 idx = _index(seed, expected.effectiveLength, paid % 8);
         uint32 winner = uint32(uint256(entry.topics[1]));
         (uint32 entries, uint24 source, uint256 ticketIndex, bool rounded) =
@@ -125,7 +127,7 @@ contract JackpotWordSamplingTest is Test {
         if (cap >= 8) cap = (cap / 8) * 8;
         expected.entriesEach = cap == 0 ? 0 : (awards / cap) * 4;
         expected.entropy = uint256(keccak256(abi.encode(
-            uint256(keccak256(abi.encode(word, uint24(42)))), uint8(0)
+            uint256(75), uint256(keccak256(abi.encode(uint256(71), word, uint256(42)))), uint256(0)
         )));
         h.seed(word, expected.trait, len, expected.deity, awards);
         vm.recordLogs();

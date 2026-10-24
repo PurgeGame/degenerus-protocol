@@ -249,23 +249,23 @@ contract GoldenTicketFoilPack is Test {
 
     /// @dev Searched pair: at multBps 60000 (max boost) the pack of BUYER (wallet ID 1, the
     ///      lines' seed key) for level LVL resolving against word ALL_GOLD_WORD derives line 0
-    ///      as four gold quadrants — traits [56, 123, 190, 249] — and lines 1-3 with none.
+    ///      as four gold quadrants — traits [57, 127, 190, 252] — and lines 1-3 with none.
     address internal constant BUYER =
         address(0x00000000000000000000000000000000000000B0);
     uint24 internal constant LVL = 3;
     uint32 internal buyerId;
-    uint256 internal constant ALL_GOLD_WORD = 304535; // 4 golds, all in ticket 0
+    uint256 internal constant ALL_GOLD_WORD = 874934; // 4 golds, all in ticket 0
     uint256 internal constant NO_GOLD_WORD = 2; // 0 golds
-    uint256 internal constant TWO_GOLD_WORD = 1; // 2 golds, under the floor
-    uint256 internal constant THREE_GOLD_WORD = 12; // 3 golds, the floor rung
-    uint256 internal constant FIVE_GOLD_WORD = 1487; // 5 golds, none aligned
+    uint256 internal constant TWO_GOLD_WORD = 7; // 2 golds, under the floor
+    uint256 internal constant THREE_GOLD_WORD = 78; // 3 golds, the floor rung
+    uint256 internal constant FIVE_GOLD_WORD = 3675; // 5 golds, none aligned
     uint24 internal constant RESOLVE_DAY = 7;
     uint16 internal constant MAX_MULT = 60000;
 
-    uint8 internal constant GOLD_A = 56;
-    uint8 internal constant GOLD_B = 123;
+    uint8 internal constant GOLD_A = 57;
+    uint8 internal constant GOLD_B = 127;
     uint8 internal constant GOLD_C = 190;
-    uint8 internal constant GOLD_D = 249;
+    uint8 internal constant GOLD_D = 252;
 
     /// @dev The searched pack holds exactly four golds, all inside ticket 0 — so it
     ///      pays the ladder's 4-gold rung plus the single-all-gold-ticket kicker.

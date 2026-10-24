@@ -55,6 +55,7 @@ contract AnyInputSafety is DeployProtocol {
     uint256[12] internal baseline;
     address[] internal tracked;
     uint256 internal startTotal;
+    uint256 internal custodyCount;
 
     uint256 internal constant N_ACTORS = 8;
     uint256 internal constant N_SEEDED = 6; // actors 6 and 7 stay fresh: no purchase, no referral lock
@@ -482,15 +483,20 @@ contract AnyInputSafety is DeployProtocol {
             address(affiliate), address(jackpots), address(quests), address(deityPass), address(vault),
             address(sdgnrs), address(dgnrs), address(admin), address(gnrus), dgve
         ];
-        for (uint256 i; i < c.length; ++i) tracked.push(c[i]);
-        tracked.push(dgvf);
-        uint256 custodyCount = tracked.length;
-        custodyCount;
-        for (uint256 i; i < actors.length; ++i) tracked.push(actors[i]);
-        tracked.push(BYSTANDER);
-        tracked.push(address(handler));
-        tracked.push(address(this));
-        tracked.push(ContractAddresses.CREATOR);
+        for (uint256 i; i < c.length; ++i) _trackUnique(c[i]);
+        _trackUnique(dgvf);
+        custodyCount = tracked.length;
+        for (uint256 i; i < actors.length; ++i) _trackUnique(actors[i]);
+        _trackUnique(BYSTANDER);
+        _trackUnique(address(handler));
+        _trackUnique(address(this));
+        _trackUnique(ContractAddresses.CREATOR);
+    }
+
+    /// @dev Consolidated module names can alias the same custody account. Count each wei once.
+    function _trackUnique(address account) private {
+        for (uint256 i; i < tracked.length; ++i) if (tracked[i] == account) return;
+        tracked.push(account);
     }
 
     function _trackedTotal() internal view returns (uint256 total) {
@@ -500,7 +506,7 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _custody() internal view returns (uint256 total) {
-        for (uint256 i; i < 41; ++i) total += tracked[i].balance + mockStETH.balanceOf(tracked[i]);
+        for (uint256 i; i < custodyCount; ++i) total += tracked[i].balance + mockStETH.balanceOf(tracked[i]);
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -30,7 +31,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     bytes32 private constant DGNRS_BATCH = keccak256("LootBoxDgnrsBatch(uint32,uint256,uint256)");
     bytes32 private constant CAPPED = keccak256("PayoutCapped(uint32,uint256,uint256)");
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
-    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
+    uint256 private constant QUEUED_ORDER_DOMAIN = 20;
     /// @dev PLAYER's committed entry position, recorded at its purchase.
     uint256 private position;
 
@@ -153,7 +154,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     }
 
     function _hash(uint256 a, uint256 b) private pure returns (uint256) {
-        return uint256(keccak256(abi.encode(a, b)));
+        return EntropyLib.hash2(a, b);
     }
 
     function _traits(uint256 entropy) private pure returns (uint32 packed) {
@@ -182,26 +183,26 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     /// @dev Independent oracle for the ordinary ETH-spin carrier at `word_`: `ok` is false unless the
     ///      word is an ordinary ETH spin whose win reaches the quarter-cash band, binds the live cash
     ///      cap at `future` and whose recirculated child pays sDGNRS. The box seed is the queued
-    ///      entry's: H(H(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, BOX_OPEN_TAG, 1); the
-    ///      recirculated child's is H(H(spinSeed, "Recir"), walletId).
+    ///      entry's: H(19, H(20, word, position), 1); the
+    ///      recirculated child's is H(16, H(92, spinSeed)).
     function _reference(uint256 word_, uint48 index, uint256 pos, uint32 id, uint256 future, uint256 inventory)
         private
         pure
         returns (Expected memory e, bool ok)
     {
-        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word_, uint256(index), pos)));
-        uint256 seed = uint256(keccak256(abi.encode(root, uint256(id), uint256(0x426f784f70656e), uint256(1))));
+        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word_, pos)));
+        uint256 seed = uint256(keccak256(abi.encode(uint256(19), root, uint256(1))));
         if (uint16(seed >> 40) % 20 != 19) return (e, false);
         // Frozen score 1 gives 90.16% box EV; 10% is reserved for the boon draw.
         uint256 budget = 0.811_44 ether * 19_678 / 10_000;
         budget = budget * (_target(seed) >= 6 ? 15_000 : 8750) / 10_000;
         e.stake = budget * _variance(seed) / 10_000;
-        e.spinSeed = _hash(seed, 0x4574685370696e);
+        e.spinSeed = _hash(17, seed);
         uint256 hero = Ref.randomHero(e.spinSeed);
-        uint32 playerTraits = Ref.ordinary(_hash(e.spinSeed, 0x446567656e506c61796572));
+        uint32 playerTraits = Ref.ordinary(_hash(91, e.spinSeed));
         uint256 shift = (hero / 8) * 8;
         playerTraits = (playerTraits & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (hero & 7)) << shift);
-        uint32 resultTraits = Ref.traits(_hash(e.spinSeed, 0x446567656e526573756c74));
+        uint32 resultTraits = Ref.traits(_hash(90, e.spinSeed));
         (uint256 score, uint256 wilds) = Ref.score(playerTraits, resultTraits);
         if (score < 6) return (e, false);
         e.packedSpin = uint256(playerTraits) | (uint256(resultTraits) << 32) | (score << 64) | (uint256(1) << 216);
@@ -212,7 +213,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         if (e.gross <= e.stake * 10 || e.gross / 4 <= future / 10) return (e, false);
         e.cash = future / 10;
         e.recirculated = e.gross - e.cash;
-        uint256 childSeed = _hash(_hash(e.spinSeed, 0x5265636972), uint256(id));
+        uint256 childSeed = _hash(16, _hash(92, e.spinSeed));
         uint256 path = uint16(childSeed >> 40) % 20;
         if (path < 8 || path >= 11) return (e, false);
         e.childTarget = _target(childSeed);
@@ -250,14 +251,14 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         for (uint256 k = 1;; ++k) {
             // abi.encode("eth-spin-carrier", k): string offset, k, length 16, the padded bytes.
             w = _h4(0x40, k, 16, uint256(bytes32("eth-spin-carrier")));
-            uint256 seed = _h4(_h4(QUEUED_ORDER_DOMAIN, w, index, position), id, 0x426f784f70656e, 1);
+            uint256 seed = EntropyLib.hash3(19, EntropyLib.hash3(20, w, position), 1);
             if (uint16(seed >> 40) % 20 != 19) continue;
-            uint256 spinSeed = _hash(seed, 0x4574685370696e);
+            uint256 spinSeed = _hash(17, seed);
             uint256 hero = Ref.randomHero(spinSeed);
-            uint32 playerTraits = Ref.ordinary(_hash(spinSeed, 0x446567656e506c61796572));
+            uint32 playerTraits = Ref.ordinary(_hash(91, spinSeed));
             uint256 shift = (hero / 8) * 8;
             playerTraits = (playerTraits & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (hero & 7)) << shift);
-            (uint256 score,) = Ref.score(playerTraits, Ref.traits(_hash(spinSeed, 0x446567656e526573756c74)));
+            (uint256 score,) = Ref.score(playerTraits, Ref.traits(_hash(90, spinSeed)));
             if (score < 6) continue;
             (, bool ok) = _reference(w, index, position, id, future + 3 ether, inventory);
             if (ok) return w;

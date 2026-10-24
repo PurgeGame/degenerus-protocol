@@ -27,10 +27,10 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     bytes32 private constant INCIN_RESOLVED = keccak256("IncineratorResolved(uint24,uint32,uint256,uint256,uint256)");
 
     bytes32 private constant DOM_BUCKET = "WWXRP_DRAW_BUCKET";
-    bytes32 private constant DOM_BIG = "WWXRP_DRAW_BIG";
-    bytes32 private constant DOM_SMALL = "WWXRP_DRAW_SMALL";
-    bytes32 private constant DOM_WIN_BUCKET = "WWXRP_DRAW_WIN_BUCKET";
-    bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
+    uint256 private constant DOM_BIG = 108;
+    uint256 private constant DOM_SMALL = 111;
+    uint256 private constant DOM_WIN_BUCKET = 109;
+    uint256 private constant DOM_INCIN_WINNER = 110;
 
     /// @dev WWXRP storage roots (scripts/layout/golden/WWXRP.json).
     uint256 private constant DRAW_ENTRY_ROOT = PeripheralSlots.WW_DRAW_ENTRY;
@@ -94,8 +94,8 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         vm.store(address(game), s, bytes32((v & ~(uint256(0xFFFFFF) << WWXRP_LANE_SHIFT)) | (lane << WWXRP_LANE_SHIFT)));
     }
 
-    function _h(bytes32 dom, uint24 day, uint256 word) internal view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(dom, address(wwxrp), day, word)));
+    function _h(uint256 dom, uint24, uint256 word) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode(dom, word)));
     }
 
     /// @dev A next-day word whose SMALL gate hits (BIG misses) in `bucket` for participation `day`.
@@ -366,7 +366,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint256 word = uint256(keccak256("incinerator_word"));
         (uint256 total,) = wwxrp.incineratorInfo(200);
         assertEq(total, c2);
-        uint256 roll = uint256(keccak256(abi.encodePacked(DOM_INCIN_WINNER, address(wwxrp), uint24(200), word))) % total;
+        uint256 roll = uint256(keccak256(abi.encode(DOM_INCIN_WINNER, word))) % total;
         uint32 expected = c1 > roll ? id1 : id2;
 
         vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip_g317, (expected, 100_000)), 1);

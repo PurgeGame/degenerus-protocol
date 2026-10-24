@@ -172,7 +172,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
         uint256 v = _volumeUnits(2) * UNIT;
         (Res[] memory got, uint256 word) = _driveFlipCohort(2, ids);
         for (uint256 j; j < 4; ++j) {
-            uint256 bps = _ladderBps(uint256(keccak256(abi.encode(_seed(word, 2, j, ids[j]), SIZE_TAG))));
+            uint256 bps = _ladderBps(uint256(keccak256(abi.encode(uint256(56), _seed(word, 2, j, ids[j])))));
             uint256 spec = _specFlip(0.5 ether, bps, 2, secs[j], v);
             assertApproxEqAbs(got[j].flip, spec, 101, "FLIP = spec within the collapse");
             assertEq(got[j].flip % 100, 0, "collapsed to whole hundreds");
@@ -199,8 +199,8 @@ contract DegenesisFlipSchedule is DegenesisHarness {
         assertEq(_count(2), 1, "first second of the next day is cohort 2");
         (Res[] memory r1, uint256 w1) = _driveFlipCohort(1, one);
         (Res[] memory r2, uint256 w2) = _driveFlipCohort(2, one);
-        uint256 bps1 = _ladderBps(uint256(keccak256(abi.encode(_seed(w1, 1, 0, ida), SIZE_TAG))));
-        uint256 bps2 = _ladderBps(uint256(keccak256(abi.encode(_seed(w2, 2, 0, ida), SIZE_TAG))));
+        uint256 bps1 = _ladderBps(uint256(keccak256(abi.encode(uint256(56), _seed(w1, 1, 0, ida)))));
+        uint256 bps2 = _ladderBps(uint256(keccak256(abi.encode(uint256(56), _seed(w2, 2, 0, ida)))));
         assertApproxEqAbs(r1[0].flip, _specFlip(1 ether, bps1, 1, 86_399, 1 ether), 101, "day 1, no bonus");
         assertApproxEqAbs(r2[0].flip, _specFlip(1 ether, bps2, 2, 0, 1 ether), 101, "day 2, full bonus");
 
@@ -210,7 +210,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
             if (c == 7) {
                 _buy(a, 1 ether);
                 (Res[] memory r7, uint256 w7) = _driveFlipCohort(7, one);
-                uint256 bps7 = _ladderBps(uint256(keccak256(abi.encode(_seed(w7, 7, 0, ida), SIZE_TAG))));
+                uint256 bps7 = _ladderBps(uint256(keccak256(abi.encode(uint256(56), _seed(w7, 7, 0, ida)))));
                 assertApproxEqAbs(r7[0].flip, _specFlip(1 ether, bps7, 7, 21_600, 1 ether), 101, "day 7 schedule");
                 assertApproxEqAbs(_refFlipRaw(10_000, bps7, 7, 21_600, 10_000) * 20, _refFlipRaw(10_000, bps7, 1, 21_600, 10_000) * 14, 20, "0.7x of day 1");
             } else {
@@ -232,7 +232,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
             _warpTo(_dayOf(c), 7 hours);
             _buy(a, vols[k]);
             (Res[] memory r, uint256 w) = _driveFlipCohort(c, one);
-            uint256 bps = _ladderBps(uint256(keccak256(abi.encode(_seed(w, c, 0, ida), SIZE_TAG))));
+            uint256 bps = _ladderBps(uint256(keccak256(abi.encode(uint256(56), _seed(w, c, 0, ida)))));
             uint256 spec = _specFlip(vols[k], bps, c, 21_600, vols[k]);
             uint256 tol = 101 + spec / 1e12; // WAD-route rounding on the largest orders
             assertApproxEqAbs(r[0].flip, spec, tol, "FLIP x K/(K+V)");

@@ -2,7 +2,7 @@
 // node scripts/consolidation/native-deploy.js prepare|deploy RPC_URL EVIDENCE_DIRECTORY
 import fs from 'node:fs';
 import path from 'node:path';
-import { JsonRpcProvider, ContractFactory, getCreateAddress } from 'ethers';
+import { JsonRpcProvider, Contract, ContractFactory, getCreateAddress, keccak256, encodeBytes32String } from 'ethers';
 import { DEPLOYMENTS } from '../lib/deploymentManifest.js';
 import { predictAddresses, computeDeployDayBoundary, reserveDeploymentNonces } from '../lib/predictAddresses.js';
 import { patchContractAddresses } from '../lib/patchContractAddresses.js';
@@ -21,7 +21,8 @@ const deployer = await signer.getAddress();
 const client = await provider.send('web3_clientVersion', []);
 const chain = await provider.getNetwork();
 if (chain.chainId !== 1337n) throw new Error('Expected the local Geth dev chain (1337)');
-const mocks = ['MockVRFCoordinator','MockStETH','MockLinkToken','MockLinkEthFeed'];
+const optional = process.env.NATIVE_DEPLOY_OPTIONS === 'true';
+const mocks = ['MockVRFCoordinator','MockStETH','MockLinkToken','MockLinkEthFeed', ...(optional ? ['NativeEnsRegistrar'] : [])];
 fs.mkdirSync(directory, { recursive: true });
 if (mode === 'prepare') {
   const nonce = await provider.getTransactionCount(deployer, 'pending');
@@ -31,16 +32,26 @@ if (mode === 'prepare') {
   const predicted = predictAddresses(deployer, nonce + mocks.length);
   const pin = path.join(directory,'contracts/ContractAddresses.sol');
   const external = { CREATOR: deployer, VRF_COORDINATOR:mockAddresses.MockVRFCoordinator, STETH_TOKEN:mockAddresses.MockStETH, LINK_TOKEN:mockAddresses.MockLinkToken, LINK_ETH_FEED:mockAddresses.MockLinkEthFeed };
+  if (optional) external.ENS_REVERSE_REGISTRAR = mockAddresses.NativeEnsRegistrar;
   patchContractAddresses(predicted, external, computeDeployDayBoundary(block.timestamp), '0x'+'ab'.repeat(32), pin);
   function sources(dir, prefix) {
     return Object.fromEntries(fs.readdirSync(dir,{withFileTypes:true}).flatMap(e => e.isDirectory() ? Object.entries(sources(path.join(dir,e.name),`${prefix}/${e.name}`)) : e.name.endsWith('.sol') ? [[`${prefix}/${e.name}`,{content:fs.readFileSync(path.join(dir,e.name),'utf8')}]] : []));
   }
   const input = {language:'Solidity',sources:sources(path.join(directory,'contracts'),'contracts'),settings:{viaIR:true,optimizer:{enabled:true,runs:1000},evmVersion:'osaka',outputSelection:{'*':{'*':['abi','evm.bytecode.object','evm.deployedBytecode.object']}}}};
+  if (optional) input.sources['test/NativeEnsRegistrar.sol'] = {content: `// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity 0.8.38;
+contract NativeEnsRegistrar {
+  mapping(address => string) public names;
+  function setName(string calldata name) external returns (bytes32) {
+    names[msg.sender] = name; return keccak256(bytes(name));
+  }
+}`};
   fs.writeFileSync(path.join(directory,'input.json'),JSON.stringify(input));
-  fs.writeFileSync(path.join(directory,'deployment.json'),JSON.stringify({client,chainId:chain.chainId.toString(),deployer,nonce,external,predicted:Object.fromEntries(predicted),mockAddresses},null,2));
+  fs.writeFileSync(path.join(directory,'deployment.json'),JSON.stringify({client,chainId:chain.chainId.toString(),deployer,nonce,external,predicted:Object.fromEntries(predicted),mockAddresses,optional},null,2));
   console.log('Prepared pinned native-client compiler input; no transactions submitted.');
 } else {
   const manifest = JSON.parse(fs.readFileSync(path.join(directory,'deployment.json')));
+  if (Boolean(manifest.optional) !== optional) throw new Error('Deployment option differs from prepared compiler input');
   if (manifest.deployer !== deployer || await provider.getTransactionCount(deployer,'pending') !== manifest.nonce) throw new Error('Deployer/nonce changed after compilation');
   const raw = JSON.parse(fs.readFileSync(path.join(directory,'output.json')));
   const errors = (raw.errors || []).filter(e=>e.severity==='error');
@@ -58,7 +69,11 @@ if (mode === 'prepare') {
     const address=await contract.getAddress();
     if(address.toLowerCase()!==expected.toLowerCase()) throw new Error(`Address divergence: ${key}`);
     const native=await provider.send('eth_getTransactionReceipt',[receipt.hash]);
-    receipts.push({key,name,address,runtimeBytes:(await provider.getCode(address)).length/2-1,initcodeBytes:(initcode.length-2)/2,receipt:native});
+    const runtime = await provider.getCode(address);
+    const trace = await provider.send('debug_traceTransaction', [receipt.hash, {tracer:'callTracer'}]);
+    if (trace.output?.toLowerCase() !== runtime.toLowerCase()) throw new Error(`Constructor runtime divergence: ${key}`);
+    receipts.push({key,name,address,predicted:expected,runtimeCodeHash:keccak256(runtime),initcodeHash:keccak256(initcode),
+      runtimeBytes:runtime.length/2-1,initcodeBytes:(initcode.length-2)/2,constructorReturnMatches:true,receipt:native});
     fs.writeFileSync(path.join(directory,'receipts.json'),JSON.stringify({client,chainId:chain.chainId.toString(),receipts},null,2));
     contracts[key]=contract;
     console.log(`${key}: gasUsed=${receipt.gasUsed} ${address}`);
@@ -66,9 +81,30 @@ if (mode === 'prepare') {
   for(const name of mocks) await deploy(name,name,name==='MockLinkEthFeed'?[4_000_000_000_000_000n]:[],manifest.mockAddresses[name]);
   for(const row of DEPLOYMENTS) {
     await reserveDeploymentNonces(signer,row.key,manifest.nonce+mocks.length);
-    await deploy(row.key,row.contract,row.key==='ICONS_32'?[true]:row.key==='COINFLIP'?[[],[],[],[],[]]:[],manifest.predicted[row.key]);
+    const affiliateArgs = optional ? [[deployer],[encodeBytes32String('P7B')],[10],['0x000000000000000000000000000000000000b007'],[encodeBytes32String('P7B')]] : [[],[],[],[],[]];
+    await deploy(row.key,row.contract,row.key==='ICONS_32'?[true]:row.key==='COINFLIP'?affiliateArgs:[],manifest.predicted[row.key]);
   }
   for(const row of DEPLOYMENTS) for(const alias of row.aliases) contracts[alias]=contracts[row.key];
+  const shares=[];
+  for (const [nonce,symbol] of [[1,'DGVF'],[2,'DGVE']]) {
+    const address=getCreateAddress({from:manifest.predicted.VAULT,nonce});
+    const share=new Contract(address,artifacts.DegenerusVaultShare.abi,signer);
+    const supply=await share.totalSupply();
+    if (await share.symbol()!==symbol || supply===0n || await share.balanceOf(deployer)!==supply) throw new Error(`Vault share bootstrap: ${symbol}`);
+    shares.push({address,symbol,supply:supply.toString(),runtimeCodeHash:keccak256(await provider.getCode(address))});
+  }
+  fs.writeFileSync(path.join(directory,'vault-shares.json'),JSON.stringify(shares,null,2));
+  if (optional) {
+    const code=await contracts.COINFLIP.affiliateCode(encodeBytes32String('P7B'));
+    if (code[0]!==deployer || code[1]===0n || code[2]!==10n) throw new Error('Affiliate bootstrap mismatch');
+    const ens=[];
+    for (const [address,expected] of [[manifest.predicted.VAULT,'vault.degenerus.eth'],[shares[0].address,'dgvf.degenerus.eth'],[shares[1].address,'dgve.degenerus.eth'],[manifest.predicted.ADMIN,'admin.degenerus.eth']]) {
+      const actual=await contracts.NativeEnsRegistrar.names(address);
+      if(actual!==expected) throw new Error(`ENS bootstrap mismatch: ${address}`);
+      ens.push({address,expected,actual});
+    }
+    fs.writeFileSync(path.join(directory,'optional-bootstrap.json'),JSON.stringify({affiliate:{owner:code[0],ownerId:code[1].toString(),kickback:code[2].toString()},ens},null,2));
+  }
   stage = 'deity-bootstrap';
   const genesis=await (await contracts.GAME.initProtocolDeity({gasLimit:500_000_000})).wait();
   fs.writeFileSync(path.join(directory,'bootstrap-receipt.json'),JSON.stringify(await provider.send('eth_getTransactionReceipt',[genesis.hash]),null,2));
@@ -89,6 +125,6 @@ if (mode === 'prepare') {
     console.log(`${label}: gasUsed=${sample.gasUsed}`);
   }
   stage = 'complete';
-  fs.writeFileSync(path.join(directory,'complete.json'), JSON.stringify({stage, client, chainId:chain.chainId.toString(),deployed:receipts.length,purchases:purchases.length},null,2));
+  fs.writeFileSync(path.join(directory,'complete.json'), JSON.stringify({stage, client, chainId:chain.chainId.toString(),deployed:receipts.length,purchases:purchases.length,vaultShares:shares.length,optional},null,2));
   console.log('Native deployment, deity bootstrap, production icons and purchase passed.');
 }

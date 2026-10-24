@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -41,7 +42,7 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
 ///      third sends the ending's own terminal request; once answered, the next applies the
 ///      word and settles capped coinflip backfill; later calls finish the payout checkpoints.
 ///      setUp runs everything before the measured step, so the test body starts cold.
-abstract contract ColdTerminalFixture is DeployProtocol {
+abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
     uint256 internal constant WORD = uint256(keccak256("cold-terminal-full-payout")) | 1;
     bytes32 private terminalStateSlot;
 
@@ -83,11 +84,13 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         uint256 calls;
         while (!_terminalPaid() && calls < 8) {
             _coolTerminal();
+            uint256 nativeSnapshot = vm.snapshotState();
             vm.recordLogs();
             uint256 before = gasleft();
             game.mineFlip{gas: 11_500_000 - 21_192}(0);
             uint256 used = before - gasleft() + 21_192;
             Vm.Log[] memory logs = vm.getRecordedLogs();
+            _exportTerminal(nativeSnapshot, string.concat("payout-", vm.toString(calls)));
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics.length == 0) continue;
                 bytes32 topic = logs[i].topics[0];
@@ -117,6 +120,14 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         assertApproxEqAbs(awarded, 4400 ether, 305, "the terminal cohort receives the pot after refunds");
     }
 
+    function _exportTerminal(uint256 snapshot, string memory stage) private {
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) return;
+        assertTrue(vm.revertToState(snapshot));
+        string memory label = string.concat("terminal-", vm.toString(_sealedAge()), "-", _fresh() ? "fresh-" : "recorded-", stage);
+        this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
+        game.mineFlip{gas: 11_500_000 - 21_192}(0);
+    }
+
     function _terminalPaid() private view returns (bool) {
         return (uint256(vm.load(address(game), terminalStateSlot)) >> 48) & 0xff != 0;
     }
@@ -142,11 +153,21 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         game.mineFlip(0); // decision
         game.mineFlip(0); // the (empty) loan book
         assertEq(mockVRF.lastRequestId(), before, "no request before the loan book is settled");
+        uint256 requestSnapshot = vm.snapshotState();
         game.mineFlip(0);
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, before, "the ending sends its own terminal request");
         assertFalse(game.gameOver(), "the payout waits for the terminal word");
         assertEq(game.rngWordForDay(game.currentDayView()), 0, "no word before the request is answered");
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            uint256 post = vm.snapshotState();
+            assertTrue(vm.revertToState(requestSnapshot));
+            this.exportNativeFixture(string.concat("terminal-request-", vm.toString(_sealedAge()), _fresh() ? "-fresh" : "-recorded"),
+                address(this), address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
+            assertTrue(vm.revertToState(post));
+            vm.deleteStateSnapshot(post);
+        }
+        vm.deleteStateSnapshot(requestSnapshot);
         mockVRF.fulfillRandomWords(id, WORD);
     }
 
@@ -158,11 +179,19 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         // persisted setup state. The recorded fixture starts its measured work in the test body;
         // only fresh-word fixtures need explicit cooling before this application measurement.
         if (_fresh()) _coolTerminal();
+        uint256 nativeSnapshot = vm.snapshotState();
         vm.recordLogs();
         uint256 before = gasleft();
         game.mineFlip{gas: 11_500_000 - 21_192}(0);
         uint256 used = before - gasleft() + 21_192;
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        if (_fresh()) _exportTerminal(nativeSnapshot, "apply");
+        this.assertTerminalApplication(logs, day, used);
+        assertTrue(vm.deleteStateSnapshot(nativeSnapshot));
+    }
+
+    function assertTerminalApplication(Vm.Log[] calldata logs, uint24 day, uint256 used) external {
+        require(msg.sender == address(this), "terminal assertion self-call");
         uint256 applied;
         uint256 gapResults;
         uint24 gap = _sealedAge() - 1;

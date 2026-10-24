@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Test} from "forge-std/Test.sol";
@@ -34,7 +35,8 @@ contract EightWinnerHarness is DegenerusGameJackpotModule, BucketSeed {
 
 contract JackpotEightWinnerGroupsTest is Test {
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.setNonce(address(this), 1024);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGamePassModule()).code);
     }
 
     bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");

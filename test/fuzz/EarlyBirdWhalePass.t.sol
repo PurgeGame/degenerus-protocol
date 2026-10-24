@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
+import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
@@ -74,10 +74,11 @@ contract EarlyBirdWhalePassTest is Test {
     }
 
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGamePassModule()).code);
         vm.warp(101 days);
         h = new EarlyBirdWhaleHarness();
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGamePassModule()).code);
     }
 
     /// @dev The day's main board with no hero wagers: the raw roll, then the gold-six daily rule.
@@ -352,10 +353,11 @@ contract EarlyBirdWhalePassTest is Test {
         h.deity(trait, deity);
         h.price(TARGET, 512 ether, word, false);
         Awards memory a = _draw(word, 100);
-        uint256 seed = uint256(keccak256(abi.encode(uint256(keccak256(abi.encode(word, uint256(TARGET)))), uint256(0))));
-        uint256 root = uint256(keccak256(abi.encode(seed, keccak256("ticket-jackpot-whale"), uint256(100), uint256(TARGET))));
+        uint256 allocation = uint256(keccak256(abi.encode(uint256(71), word, uint256(TARGET))));
+        uint256 seed = uint256(keccak256(abi.encode(uint256(75), allocation, uint256(0))));
+        uint256 root = uint256(keccak256(abi.encode(uint256(107), seed)));
         uint256 virtuals = ((trait >> 3) & 7) >= 5 ? 1 : 2;
-        uint256 index = uint256(keccak256(abi.encode(root, uint256(1)))) % (64 + virtuals);
+        uint256 index = root % (64 + virtuals);
         address expected = index < 64 ? address(uint160(0x100001 + index)) : deity;
         assertEq(a.winner, expected, "fresh entry-weighted sample including virtual deity entries");
         assertEq(a.passEvents, 1);
@@ -368,7 +370,7 @@ contract EarlyBirdWhalePassTest is Test {
     ///      level (not lvl + 1): the same value runEarlyBirdTickets feeds both the ticket
     ///      draw's exclusion and the surplus whale pass.
     function _soloQuadrant(uint256 word) private view returns (uint8) {
-        return h.pickSoloQuadrant(_traits(word), EntropyLib.hash2(word, uint256(TARGET - 1)));
+        return h.pickSoloQuadrant(_traits(word), uint256(keccak256(abi.encode(uint256(71), word, uint256(TARGET - 1)))));
     }
 
     function test_earlyBirdTicketsNeverLandInTheSoloQuadrantUnlessItIsTheOnlyActiveBucket() public {
@@ -438,7 +440,7 @@ contract EarlyBirdWhalePassTest is Test {
         h.creditPasses(a.winner, 2);
         uint32 wid = h.idOf(a.winner);
         bytes memory original = address(h).code;
-        bytes memory whaleCode = address(new DegenerusGameWhaleModule()).code;
+        bytes memory whaleCode = address(new DegenerusGamePassModule()).code;
         vm.etch(address(h), whaleCode);
         vm.expectRevert(bytes4(keccak256("RngLocked()")));
         DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);

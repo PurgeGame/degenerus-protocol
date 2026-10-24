@@ -178,8 +178,9 @@ library MineFlipGasBounds {
     uint256 internal constant BAF_AWARD_GROUP = 2_400_000;
     // 60k cursor/frame plus five changed-slot repricing deltas (35.5k), with margin.
     uint256 internal constant BAF_AWARD_TAIL = 120_000;
-    // Conservative seat frame 369.7k plus full dice engine 823.0k, with margin.
-    uint256 internal constant CRAPS_SEAT_GAS_MAX = 1_650_000;
+    // Cold final-seat body, 1,111-roll engine and real award/record callees:
+    // native no-reservoir component envelope 2.298M, with >20% margin.
+    uint256 internal constant CRAPS_SEAT_GAS_MAX = 2_800_000;
     // R90 live-collision recipient: native cold marginal 129,647, state gas included.
     // Shared by Craps, jackpot-battle and growth flush admission; >23% margin.
     uint256 internal constant CRAPS_CREDIT_GAS_MAX = 160_000;

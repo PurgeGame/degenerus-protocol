@@ -147,11 +147,11 @@ contract CrapsArithmeticSymbolicTest is Test {
 
     /// @dev Concrete keccak replays accompany the symbolic hash abstraction. The original
     ///      solver model selected word 0, but its abstract hash values are not a real preimage:
-    ///      actual word 0 has weight 9. Word 36 really reaches the former bound's violation.
+    ///      numeric-domain witnesses attain both bounds; word zero remains a concrete interior case.
     function test_routineWeightConcreteBoundaries() public view {
-        assertEq(craps.routineWeightOf(0), 9);
-        assertEq(craps.routineWeightOf(36), 5);
-        assertEq(craps.routineWeightOf(537), 20);
+        assertEq(craps.routineWeightOf(0), 10);
+        assertEq(craps.routineWeightOf(7), 5);
+        assertEq(craps.routineWeightOf(106), 20);
     }
 
     function test_shooterBoostAllRows() public view {

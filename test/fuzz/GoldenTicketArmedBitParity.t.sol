@@ -6,7 +6,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
@@ -26,11 +26,12 @@ contract GoldenTicketArmedBitParity is Test {
     uint24 internal constant ARM_IDX = 10;
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         h = new GoldenTicketParityHarness();
         // The golden-ticket payout is delegated to the draw module; an empty address would
         // succeed silently and pay nothing.
         vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameDailyModule()).code);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGamePassModule()).code);
         vm.etch(ContractAddresses.COINFLIP, address(new CoinflipRecorder()).code);
         vm.etch(ContractAddresses.WWXRP, address(new WwxrpRecorder()).code);
         ReturnZeroSink sink = new ReturnZeroSink();

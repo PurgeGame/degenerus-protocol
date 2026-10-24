@@ -148,8 +148,8 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         BattleConstructionTableSeed ts = BattleConstructionTableSeed(address(crapsBattle));
         gs.seedSession(CEILING, day, WORD);
         ts.seedPaidField(day - 1);
-        uint256 battleWord = uint256(keccak256(abi.encode(WORD, CEILING, keccak256("far-future-coin"))));
-        uint256 first = uint256(keccak256(abi.encode(battleWord, uint256(0)))) % 99;
+        uint256 battleWord = uint256(keccak256(abi.encode(uint256(66), WORD)));
+        uint256 first = uint256(keccak256(abi.encode(uint256(67), battleWord, uint256(0)))) % 99;
         for (uint24 offset; offset < 99; ++offset) {
             // Shape 0 combines all 99 cold eligibility reads with a complete unique-wallet
             // chunk. Shape 1 maximizes singleton visits; shape 2 exercises circular fragments.
@@ -291,7 +291,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             _seed(150, shapes[i]);
             vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, probe);
             _cool();
-            uint256 word = uint256(keccak256(abi.encode(WORD, CEILING, keccak256("far-future-coin"))));
+            uint256 word = uint256(keccak256(abi.encode(uint256(66), WORD)));
             uint256 start = gasleft();
             uint32[] memory players = BattleConstructionGameSeed(address(game)).collectProbe(CEILING, word);
             uint256 used = start - gasleft();

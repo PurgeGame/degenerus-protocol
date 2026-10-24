@@ -104,7 +104,7 @@ contract CrapsSlipHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(_wordAt(_indexOf(betId >> 64)), SCATTER_TAG, address(uint160(uint32(header)))))),
+            uint256(keccak256(abi.encode(uint256(28), _wordAt(_indexOf(betId >> 64)), uint256(uint32(header))))),
             chipFlip,
             BONUS_CHIPS - placed
         );
@@ -239,7 +239,7 @@ contract CrapsSlipTest is CrapsPins {
     ///      client replay hardcodes this tag ("Survival"), the seed, the round and the OWNER. The
     ///      dice are the table's, so every slip at one table watches the same shooter; the coin is
     ///      the owner's, so no two of them take the same second chance. Mirrors `Craps._survived`.
-    uint256 internal constant _SURVIVAL_TAG = 0x537572766976616c; // "Survival"
+    uint256 internal constant _SURVIVAL_TAG = 42; // CRAPS_SURVIVAL
 
     function _survivalCoin(bytes32 seed, uint256 n, address player) internal pure returns (bool) {
         return uint256(keccak256(abi.encode(_SURVIVAL_TAG, seed, n, player))) & 1 == 1;

@@ -123,9 +123,19 @@ contract TerminalRngCheckpointsTest is Test {
         assertTrue(active && published);
     }
 
-    function test_ExtremeCalibrationCannotPreventFirstTerminalRequest() public {
-        (,,, bool progressed) = h.runGameOverAdvance{gas: 4_000_000}(
+    function test_ExtremeCalibrationRetainsTheExternalRequestMinimum() public {
+        // First mandatory progress bypasses the worker estimate, while the
+        // external coordinator call still requires its scaled forwarding minimum.
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        h.runGameOverAdvance{gas: 4_000_000}(
             priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
+        (uint24 day, uint48 at, bool active,) = h.identity();
+        assertEq(day, 0);
+        assertEq(at, 0);
+        assertFalse(active);
+        assertEq(vrf.calls(), 0);
+        (,,, bool progressed) = h.runGameOverAdvance{gas: 4_000_000}(
+            priorDay, 10, MineFlipGas.budget(4_000_000, 0, true));
         assertTrue(progressed);
         assertEq(vrf.calls(), 1);
     }

@@ -58,7 +58,8 @@ interface IWidOwnerOf {
 ///      the contract-specific ID suites and this suite's non-vacuity test pin them at runtime.
 ///      Two reachability shortcuts, both confined to one call: the Decimator window opens only at
 ///      levels x4/x99, so the burn doors open it for `level + 1` the way the advance does (window
-///      flag and the round's `openedDay`) and shut the flag after the burn; the growth market opens
+///      flag, round's `openedDay` and shared entry-buffer level) and shut the flag after the burn.
+///      A queued battle must drain before that buffer can be reused. The growth market opens
 ///      only in a jackpot phase at level >= 1, so the bet doors mock `growthState(0)` as open for
 ///      that one bet when the real market is shut. Neither touches an ID path.
 ///      The handler never pranks as a smurf key and never transfers anything to one: user
@@ -622,6 +623,9 @@ contract WalletIdTruthHandler is Test {
 
     function _openDecWindow() internal returns (bool forced) {
         if (game.decWindow() || game.gameOver()) return false;
+        // Production drains sealed battles before opening the next window. The
+        // reachability shortcut must not overwrite a queued battle's entries.
+        if (uint256(vm.load(GAME, bytes32(GameSlots.DEC_BATTLE_QUEUE))) != 0) return false;
         uint24 lvl = game.level() + 1;
         bytes32 roundSlot = keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS));
         uint256 round = uint256(vm.load(GAME, roundSlot));
@@ -630,6 +634,12 @@ contract WalletIdTruthHandler is Test {
             uint256 day = game.currentDayView();
             vm.store(GAME, roundSlot, bytes32(round | (day << 200)));
         }
+        // Entries now reuse a single buffer. Opening only the flag/day leaves
+        // the prior level's tag attached to freshly overwritten owner lanes.
+        uint256 tagged = uint256(vm.load(GAME, bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
+        uint256 shift = 8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET;
+        vm.store(GAME, bytes32(GameSlots.DEC_ENTRIES_LEVEL),
+            bytes32((tagged & ~(uint256(type(uint24).max) << shift)) | (uint256(lvl) << shift)));
         uint256 w = uint256(vm.load(GAME, bytes32(GameSlots.DECIMATOR_FLAGS)));
         vm.store(GAME, bytes32(GameSlots.DECIMATOR_FLAGS), bytes32(w | (uint256(1) << DEC_WINDOW_BIT)));
         return true;

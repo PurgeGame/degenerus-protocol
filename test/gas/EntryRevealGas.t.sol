@@ -82,6 +82,7 @@ contract EntryRevealGas is Test {
     struct Observation { uint256 gasUsed; uint256 inventory; uint256 entries; uint256 reveals; }
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         h = new EntryRevealHarness();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
@@ -149,7 +150,7 @@ contract EntryRevealGas is Test {
         uint256 i = uint32(keyed);
         uint256 end = i + take;
         while (i < end) {
-            uint64 s = uint64(uint256(keccak256(abi.encode(stream, entropy, i >> 4)))) | 1;
+            uint64 s = uint64(uint256(keccak256(abi.encode(uint256(105), entropy, stream & ~(uint256(type(uint32).max) << TicketEntropy.ID_SHIFT), i >> 4)))) | 1;
             uint64 offset = uint64(i & 15);
             unchecked { s = s * (TICKET_LCG_MULT + offset) + offset; }
             for (uint256 j = offset; j < 16 && i < end; ++j) {

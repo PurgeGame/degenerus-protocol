@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
+
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
@@ -27,19 +30,21 @@ contract DailyEthBucketTable is Test {
     bytes32 internal constant TICKET_WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameDailyModule()).code);
         h = new GoldenTicketHarness();
         vm.etch(ContractAddresses.COINFLIP, address(new CoinflipRecorder()).code);
         vm.etch(ContractAddresses.WWXRP, address(new WwxrpRecorder()).code);
         ReturnZeroSink sink = new ReturnZeroSink();
         vm.etch(ContractAddresses.STETH_TOKEN, address(sink).code);
         vm.etch(ContractAddresses.JACKPOTS, address(sink).code);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGamePassModule()).code);
         h.setLevel(LVL);
         h.setJackpotCounter(1);
         h.setDailyIdx(10);
         h.setCurrentPool(1000 ether);
         h.setPools(200 ether, FUT_POOL);
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGamePassModule()).code);
     }
 
     /// @dev A mixed-colour board whose four trait buckets are seeded deep enough for any count.

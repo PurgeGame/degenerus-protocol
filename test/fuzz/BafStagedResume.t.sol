@@ -26,7 +26,7 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 ///         same reservation.
 abstract contract BafStagedResumeFixture is BafBracketFixture {
     uint24 internal constant LVL = 20;
-    uint256 internal constant WORD = uint256(keccak256("baf-staged-resume")) | 1;
+    uint256 internal constant WORD = 4;
 
     /// @dev runDailyPhase_g2582 keeps DAILY_PHASE_TAIL for itself; the stage then needs one group plus
     ///      its tail. This allowance leaves strictly less than that for the stage.

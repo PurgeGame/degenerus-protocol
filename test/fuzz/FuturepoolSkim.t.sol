@@ -128,14 +128,14 @@ contract FuturepoolSkimTest is DeployProtocol {
                 // actual consolidation call, while independently pinning the time curve.
                 uint256 ratio = futureBefore * 100 / nextBefore;
                 uint256 bps = expectedBase + (200 - ratio) * 2;
-                bps += uint256(keccak256(abi.encode(word, keccak256("degenerus.skim.bps")))) % 1001;
+                bps += uint256(keccak256(abi.encode(uint256(78), word))) % 1001;
                 uint256 nominal = nextBefore * bps / 10_000;
                 uint256 halfWidth = nominal / 4;
                 if (halfWidth < nextBefore / 10) halfWidth = nextBefore / 10;
                 if (halfWidth > nominal) halfWidth = nominal;
-                uint256 variance = uint256(keccak256(abi.encode(word, keccak256("degenerus.skim.variance"))));
+                uint256 variance = uint256(keccak256(abi.encode(uint256(79), word)));
                 uint256 range = halfWidth * 2 + 1;
-                uint256 draw = (variance % range + uint256(keccak256(abi.encode(variance))) % range) / 2;
+                uint256 draw = (variance % range + uint256(keccak256(abi.encode(uint256(80), word))) % range) / 2;
                 uint256 expected = nominal + draw - halfWidth;
                 if (expected > nextBefore * 80 / 100) expected = nextBefore * 80 / 100;
                 assertEq(take, expected, "live consolidation uses the unshifted purchase age");

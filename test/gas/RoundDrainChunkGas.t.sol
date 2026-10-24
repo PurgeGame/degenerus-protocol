@@ -6,6 +6,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 
 
@@ -244,7 +245,7 @@ contract ChunkHarness is MintBucketSeed {
 ///      indivisible step (a round, or a full-size solo run) stays below the 10M chunk target
 ///      while the call at exactly that allowance completes inside it (an overrun of a declared
 ///      MineFlipGasBounds step would revert WorkGasBound or run out of gas).
-abstract contract TicketChunkProbe is Test {
+abstract contract TicketChunkProbe is NativeGasExport {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     uint256 internal constant GAS_TARGET = 10_000_000;
     // Search precision and replay cushion at an admission boundary.
@@ -339,6 +340,17 @@ abstract contract TicketChunkProbe is Test {
         assertTrue(vm.revertToStateAndDelete(snap));
     }
 
+    // Recording affects later cold probes even across state restores. Call only
+    // after every cold measurement for this test has finished.
+    function _exportChunk(uint24 anchor, uint256 allowance, Step step, uint256 used) internal {
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) return;
+        string memory label = string.concat("ticket-", vm.toString(address(this)), "-", vm.toString(uint256(step)), "-", vm.toString(allowance), "-", vm.toString(used));
+        vm.serializeUint(label, "osakaFrameGas", used);
+        vm.serializeUint(label, "workerAllowance", allowance);
+        this.exportNativeFixture(label, address(this), address(h), abi.encodeCall(h.runTicketWork_g1150, (anchor, allowance)));
+        emit log_named_string("native_calibration", label);
+    }
+
     /// @dev Cold gas of one admitted step in isolation: the call at the smallest admitting
     ///      allowance minus the call 100 gas below it, which runs the same prefix and stops.
     ///      The difference also carries the tail writes the admitted step adds.
@@ -416,6 +428,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(h));
         total = r.glamsterdamExec + r.stateGas;
         assertTrue(vm.revertToStateAndDelete(snap));
+        _exportChunk(anchor, allowance, step, measured);
     }
 
     function _measure(string memory tag, Step step) internal returns (uint256 g) {
@@ -428,7 +441,8 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         assertTrue(vm.revertToState(snap));
         _chunkCall(lvl, EIP7825_TX_GAS_CAP, string.concat(tag, "_16p7m"));
         assertTrue(vm.revertToStateAndDelete(snap));
-        _oneChunk(lvl + 1, tag, step);
+        (uint256 allowance, uint256 used) = _oneChunk(lvl + 1, tag, step);
+        _exportChunk(lvl + 1, allowance, step, used);
     }
 
     /// @dev One metered ticket-worker chunk on a bounded gas limit, the call given that limit as
@@ -596,7 +610,8 @@ contract RoundDrainChunkGas is TicketChunkProbe {
     function test_Chunk_PerEntry_MaxSoloRun_Cold() public {
         uint256 entries = GasBounds.TICKET_SOLO_MAX_ENTRIES;
         h.seed(LVL, 1, uint32(entries), uint160(0x51000), false);
-        (, uint256 used) = _oneChunk(LVL + 1, "chunk_per_entry_max_solo_run_cold", Step.Solo);
+        (uint256 allowance, uint256 used) = _oneChunk(LVL + 1, "chunk_per_entry_max_solo_run_cold", Step.Solo);
+        _exportChunk(LVL + 1, allowance, Step.Solo, used);
         // One solo trait run: SOLO_BASE + 32 x ENTRY_MAX + TAIL stays below 10M (MineFlipGasBounds).
         uint256 declared = GasBounds.TICKET_SOLO_BASE + entries * GasBounds.TICKET_ENTRY_MAX + GasBounds.TICKET_TAIL;
         emit log_named_uint("chunk_per_entry_max_solo_run_declared_bound", declared);
@@ -608,11 +623,11 @@ contract RoundDrainChunkGas is TicketChunkProbe {
 
     /// @dev Round index whose seed (level 11, the fixture entropy) rolls colour 6 in all four
     ///      quadrants: every seat splits into its own symbol bucket, 32 single appends.
-    uint32 internal constant ALL_RARE_ROUND = 8_244_874;
+    uint32 internal constant ALL_RARE_ROUND = 1_581_037;
 
     function _assertAllRareRound() internal pure {
         uint256 entropy = uint256(keccak256("chunk-gas-entropy")) | 1;
-        uint256 seed = uint256(keccak256(abi.encode(LVL, ALL_RARE_ROUND, entropy)));
+        uint256 seed = uint256(keccak256(abi.encode(uint256(102), entropy, LVL, ALL_RARE_ROUND)));
         for (uint256 q; q < 4; ++q) {
             uint256 scaled = (uint64(seed >> (64 * q)) & 0xffffffff) >> 24;
             assertTrue(scaled >= 248 && scaled < 254, "fixture: colour 6 in every quadrant");
@@ -627,7 +642,8 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seed(LVL, 1, uint32(entries), uint160(0x52000), false);
         h.seedHeaderTails(LVL);
         (uint256 item,) = _stepGas(LVL + 1, Step.Solo);
-        (, uint256 used) = _oneChunk(LVL + 1, "chunk_per_entry_max_solo_run_header_tails_cold", Step.Solo);
+        (uint256 allowance, uint256 used) = _oneChunk(LVL + 1, "chunk_per_entry_max_solo_run_header_tails_cold", Step.Solo);
+        _exportChunk(LVL + 1, allowance, Step.Solo, used);
         uint256 declared = GasBounds.TICKET_SOLO_BASE + entries * GasBounds.TICKET_ENTRY_MAX;
         emit log_named_uint("solo_32_header_tails_step_gas", item);
         emit log_named_uint("solo_32_declared_step_bound", declared);
@@ -658,7 +674,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         assertEq(take, 16);
         assertTrue(vm.revertToState(snap));
         h.seed(LVL, 1, 1, uint160(0x51000), false);
-        (uint256 freshRun,) = _stepGas(LVL + 1, Step.Solo);
+        (uint256 freshRun, uint256 freshFloor) = _stepGas(LVL + 1, Step.Solo);
         // All three cold observations are complete before either recording pass starts.
         assertTrue(vm.revertToState(snap));
         h.seed(LVL, 1, 1, uint160(0x51000), false);
@@ -668,6 +684,9 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seed(LVL, 1, DISTINCT_SOLO_ENTRIES, uint160(0x51000), false);
         h.seedHeaderTails(LVL);
         uint256 sixteenGlam = _repricedAt(LVL + 1, EIP7825_TX_GAS_CAP, Step.Solo, sixteen);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 1, 1, uint160(0x51000), false);
+        _exportChunk(LVL + 1, freshFloor + ADMISSION_PROBE_TOLERANCE_GAS, Step.Solo, freshRun);
         assertTrue(vm.revertToStateAndDelete(snap));
         uint256 perEntry = (sixteen - one) / (DISTINCT_SOLO_ENTRIES - 1);
         emit log_named_uint("solo_per_entry_cold_worst", perEntry);
@@ -688,7 +707,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         uint24 rk = h.readKey(LVL);
         for (id = 1; ; ++id) {
             uint256 stream = TicketEntropy.identity(rk, LVL, 0, uint32(id));
-            uint64 s = uint64(uint256(keccak256(abi.encode(stream, entropy, uint256(0))))) | 1;
+            uint64 s = uint64(uint256(keccak256(abi.encode(uint256(105), entropy, stream & ~(uint256(type(uint32).max) << 32), uint256(0))))) | 1;
             uint256 seen0;
             uint256 seen1;
             bool distinct = true;
@@ -770,6 +789,12 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         assertTrue(vm.revertToState(snap));
         h.seed(LVL, 16, 0, uint160(0xC0000), false);
         (uint256 sixteen,) = _whole(LVL + 1);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 8, 0, uint160(0xC0000), false);
+        _exportChunk(LVL + 1, EIP7825_TX_GAS_CAP, Step.Seat, eight);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 16, 0, uint160(0xC0000), false);
+        _exportChunk(LVL + 1, EIP7825_TX_GAS_CAP, Step.Seat, sixteen);
         assertTrue(vm.revertToStateAndDelete(snap));
         uint256 perSeat = (sixteen - eight) / 8;
         uint256 worst = perSeat + 2 * 2_100;
@@ -797,6 +822,8 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         uint256 selectOnly = _usedAt(LVL + 1, _selectOnlyAllowance(), Step.Round);
         emit log_named_uint("reload_eight_seats_cold", withReload - selectOnly);
         assertLe(withReload - selectOnly, GasBounds.TICKET_RELOAD_MAX, "cold reload exceeds RELOAD_MAX");
+        _exportChunk(LVL + 1, lo, Step.Round, withReload);
+        _exportChunk(LVL + 1, _selectOnlyAllowance(), Step.Round, selectOnly);
     }
 
     /// @dev Selection on a fresh level: a first buffer preparation and a fresh control-slot
@@ -811,5 +838,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         uint256 empty = _usedAt(LVL + 1, 60_000, Step.Solo);
         emit log_named_uint("select_fresh_level_cold", selected - empty);
         assertLe(selected - empty, GasBounds.TICKET_SELECT_MAX, "cold selection exceeds SELECT_MAX");
+        _exportChunk(LVL + 1, _selectOnlyAllowance(), Step.Solo, selected);
+        _exportChunk(LVL + 1, 60_000, Step.Solo, empty);
     }
 }

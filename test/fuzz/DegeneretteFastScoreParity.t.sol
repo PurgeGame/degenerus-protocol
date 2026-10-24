@@ -10,8 +10,9 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 contract DegeneretteFastScoreParityTest is Test {
     DegeneretteMathHarness private h;
 
-    uint256 private constant PLAYER_TICKET_TAG = 0x446567656e506c61796572; // DegenPlayer
-    uint256 private constant WWXRP_RIG_SALT = 0x52494721; // RIG!
+    /// @dev Numeric RNG domains (RngTags SPIN_PLAYER / SPIN_RIG); seeds are hash(tag, seed).
+    uint256 private constant PLAYER_TICKET_TAG = 91;
+    uint256 private constant WWXRP_RIG_SALT = 93;
     uint8 private constant CURRENCY_WWXRP = 3;
 
     function setUp() public {
@@ -52,7 +53,7 @@ contract DegeneretteFastScoreParityTest is Test {
     }
 
     function _refTicket(uint256 seed, uint8 symbol) private pure returns (uint32 traits) {
-        traits = _refOrdinary(EntropyLib.hash2(seed, PLAYER_TICKET_TAG));
+        traits = _refOrdinary(EntropyLib.hash2(PLAYER_TICKET_TAG, seed));
         uint32 shift = uint32(symbol >> 3) * 8;
         traits = (traits & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (symbol & 7)) << shift);
     }
@@ -198,7 +199,7 @@ contract DegeneretteFastScoreParityTest is Test {
         uint32 refPt = _refTicket(seed, sym);
         uint32 refRt = _refHouse(houseSeed);
         if (currency == CURRENCY_WWXRP) {
-            refRt = h.rig(refPt, refRt, sym >> 3, EntropyLib.hash2(seed, WWXRP_RIG_SALT));
+            refRt = h.rig(refPt, refRt, sym >> 3, EntropyLib.hash2(WWXRP_RIG_SALT, seed));
         }
         (uint8 refS, uint8 refW) = _refScore(refPt, refRt);
         assertEq(pt, refPt, "player traits");

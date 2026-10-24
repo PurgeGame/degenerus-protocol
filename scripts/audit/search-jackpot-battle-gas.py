@@ -25,20 +25,20 @@ def main():
     parser.add_argument("--start", type=int, default=1)
     parser.add_argument("--level", type=int, default=40)
     args = parser.parse_args()
-    tag = digest(b"far-future-coin")
-    mult_tag = word(0x436F696E447261774D756C7469706C696572)
+    tag = word(66)  # RngTags.FUTURE_BATTLE
+    mult_tag = word(33)  # RngTags.CRAPS_JACKPOT_MULT
     ordinals = [word(i) for i in range(100)]
     best = {}
     top = []
     for seed in range(args.start, args.start + args.seeds):
-        battle = digest(word(seed) + word(args.level) + tag)
+        battle = digest(tag + word(seed))
         seen = set()
         for ordinal in ordinals:
-            offset = int.from_bytes(digest(battle + ordinal), "big") % 99
+            offset = int.from_bytes(digest(word(67) + battle + ordinal), "big") % 99
             if offset in seen:
                 break
             seen.add(offset)
-        roll = int.from_bytes(digest(battle + mult_tag), "big") % 1000
+        roll = int.from_bytes(digest(mult_tag + battle), "big") % 1000
         multiplier = 5000 if roll < 900 else 30000 if roll < 990 else 200000 if roll < 999 else 1000000
         row = {"seed": seed, "distinct_prefix": len(seen), "roll": roll,
                "multiplier_bps": multiplier}

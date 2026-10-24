@@ -109,7 +109,13 @@ contract ProgHarness is CrapsViews {
     }
 
     function settlementIn(uint256 betId, uint64 slot) external view returns (Settlement memory) {
-        return _settlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
+        Window memory w = _slotWindow(slot);
+        (uint256 dayBase, uint64 dayN) = _dayField(slot);
+        uint64 ownN = uint64(w.entrants) - dayN - uint64(w.drawn);
+        uint64 local = uint64(betId);
+        w.seat = betId >> 64 == slot ? (local <= ownN ? local : local + dayN) : ownN + local;
+        require(betId >> 64 == slot || (betId & ~uint256(type(uint64).max)) == dayBase, "preview field");
+        return _settlementOf(betId, _loadBet(betId), w, _slotWord(slot));
     }
 
     /// @dev The RAW scoreboard word, and a raw writer for it. The packing claim — a 105-bit

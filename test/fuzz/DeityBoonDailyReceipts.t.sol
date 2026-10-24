@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameBoonActions} from "../../contracts/modules/GameBoonActions.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -63,7 +64,7 @@ contract DeityBoonDailyReceiptsTest is DeployProtocol {
 
     function test_SlotReuseStillFailsAndNextDayResetsIt() public {
         _give(DEITY_A, a, recipient, 0);
-        vm.expectRevert(DegenerusGameBoonModule.SlotAlreadyUsed.selector);
+        vm.expectRevert(GameBoonActions.SlotAlreadyUsed.selector);
         _give(DEITY_A, a, other, 0);
         _give(DEITY_A, a, recipient, 1);
         _day(42);
@@ -71,7 +72,7 @@ contract DeityBoonDailyReceiptsTest is DeployProtocol {
     }
 
     function test_SelfBoonStillFails() public {
-        vm.expectRevert(DegenerusGameBoonModule.SelfBoon.selector);
+        vm.expectRevert(GameBoonActions.SelfBoon.selector);
         _give(DEITY_A, a, a, 0);
     }
 
@@ -82,12 +83,12 @@ contract DeityBoonDailyReceiptsTest is DeployProtocol {
         }
         _day(44);
         _give(DEITY_A, a, recipient, 0);
-        vm.expectRevert(DegenerusGameBoonModule.RecipientBoonCapReached.selector);
+        vm.expectRevert(GameBoonActions.RecipientBoonCapReached.selector);
         _give(DEITY_A, a, recipient, 1);
         _give(DEITY_A, a, other, 1);
         _give(DEITY_B, b, recipient, 0);
         _day(45);
-        vm.expectRevert(DegenerusGameBoonModule.RecipientBoonCapReached.selector);
+        vm.expectRevert(GameBoonActions.RecipientBoonCapReached.selector);
         _give(DEITY_A, a, recipient, 0);
     }
 }

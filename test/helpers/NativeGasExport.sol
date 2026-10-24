@@ -8,19 +8,88 @@ import {Vm} from "forge-std/Vm.sol";
 /// @dev Opt-in export of an independently seeded local prestate for read-only native RPC replay.
 ///      Include every accessed slot and codec-specific sibling slots for translated baselines.
 abstract contract NativeGasExport is Test {
+    /// @dev The serializer returns its entire growing JSON object. Keep that temporary
+    /// allocation in a separate frame so large heap fixtures do not accumulate it.
+    function nativeSerializeSlot(string calldata key, address account, bytes32 slot) external {
+        require(msg.sender == address(this), "serializer self-call");
+        vm.serializeBytes32(key, vm.toString(slot), vm.load(account, slot));
+    }
+
+    /// @dev Keep export allocations out of subsequent measurements in the caller.
+    function exportNativeFixture(string calldata label, address sender, address target, bytes calldata input) external {
+        require(msg.sender == address(this), "export self-call");
+        _nativeFixture(label, sender, target, input);
+    }
+
+    function exportNativeFixture(string calldata label, address sender, address target, uint256 value, bytes calldata input) external {
+        require(msg.sender == address(this), "export self-call");
+        _nativeFixture(label, sender, target, value, input);
+    }
+
+    function nativeExpectedStorage(string calldata label, VmSafe.AccountAccess[] calldata accesses)
+        external returns (string memory state)
+    {
+        require(msg.sender == address(this), "poststate self-call");
+        state = "{";
+        for (uint256 i; i < accesses.length; ++i) {
+            address account = accesses[i].account;
+            bool seen;
+            for (uint256 j; j < i; ++j) if (accesses[j].account == account) { seen = true; break; }
+            if (seen) continue;
+            string memory key = string.concat(label, "-post-", vm.toString(account));
+            vm.serializeJson(key, "{}");
+            bool written;
+            for (uint256 j; j < accesses.length; ++j) {
+                for (uint256 k; k < accesses[j].storageAccesses.length; ++k) {
+                    VmSafe.StorageAccess calldata slot = accesses[j].storageAccesses[k];
+                    if (slot.account == account && slot.isWrite && !slot.reverted) {
+                        this.nativeSerializeSlot(key, account, slot.slot);
+                        written = true;
+                    }
+                }
+            }
+            if (!written) continue;
+            string memory slots = vm.serializeBytes32(key, vm.toString(bytes32(0)), vm.load(account, 0));
+            state = string.concat(state, bytes(state).length == 1 ? "" : ",", '"', vm.toString(account), '":', slots);
+        }
+        return string.concat(state, "}");
+    }
+
+    /// @dev A native profile may touch additional checkpoint slots. A replay
+    /// discovery manifest supplies only their addresses/keys; their actual values
+    /// are always read here from the original Foundry prestate, never guessed.
+    function nativeReplayCoverage(string calldata key, address account, string calldata dir) external {
+        require(msg.sender == address(this), "coverage self-call");
+        string memory path = string.concat(dir, "/replay-extra-slots.json");
+        if (!vm.exists(path)) return;
+        string memory json = vm.readFile(path);
+        address[] memory accounts = vm.parseJsonAddressArray(json, ".accounts");
+        bytes32[] memory slots = vm.parseJsonBytes32Array(json, ".slots");
+        require(accounts.length == slots.length, "coverage manifest shape");
+        for (uint256 i; i < slots.length; ++i) {
+            if (accounts[i] == account) this.nativeSerializeSlot(key, account, slots[i]);
+        }
+    }
+
     function _nativeExtraStorage(string memory, address) internal virtual {}
 
     function _nativeFixture(string memory label, address sender, address target, bytes memory input) internal {
+        _nativeFixture(label, sender, target, 0, input);
+    }
+
+    function _nativeFixture(string memory label, address sender, address target, uint256 value, bytes memory input) internal {
         string memory dir = vm.envOr("STORAGE_REUSE_EXPORT", string(""));
         uint256 snapshot = vm.snapshotState();
         vm.startStateDiffRecording();
         vm.recordLogs();
         vm.prank(sender);
-        (bool ok, bytes memory output) = target.call(input);
+        (bool ok, bytes memory output) = target.call{value: value}(input);
         VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         if (!ok) assembly ("memory-safe") { revert(add(output, 32), mload(output)) }
-        assertTrue(vm.revertToState(snapshot));
+        string memory expectedStorage;
+        if (bytes(dir).length != 0) expectedStorage = this.nativeExpectedStorage(label, accesses);
+        assertTrue(vm.revertToStateAndDelete(snapshot));
         if (bytes(dir).length != 0) {
             address[] memory accounts = new address[](accesses.length + 2);
             accounts[0] = sender;
@@ -30,8 +99,11 @@ abstract contract NativeGasExport is Test {
             vm.serializeAddress(label, "from", sender);
             vm.serializeAddress(label, "to", target);
             vm.serializeBytes(label, "input", input);
+            vm.serializeUint(label, "value", value);
             vm.serializeBytes(label, "expectedReturn", output);
+            vm.serializeString(label, "expectedStorage", expectedStorage);
             vm.serializeUint(label, "baseFee", block.basefee);
+            vm.serializeUint(label, "number", block.number);
             string memory logsJson = "[";
             for (uint256 i; i < logs.length; ++i) {
                 string memory logKey = string.concat(label, "-log-", vm.toString(i));
@@ -54,9 +126,10 @@ abstract contract NativeGasExport is Test {
                 for (uint256 j; j < accesses.length; ++j) {
                     VmSafe.StorageAccess[] memory slots = accesses[j].storageAccesses;
                     for (uint256 k; k < slots.length; ++k) if (slots[k].account == account) {
-                        vm.serializeBytes32(key, vm.toString(slots[k].slot), vm.load(account, slots[k].slot));
+                        this.nativeSerializeSlot(key, account, slots[k].slot);
                     }
                 }
+                this.nativeReplayCoverage(key, account, dir);
                 _nativeExtraStorage(key, account);
                 string memory storageJson = vm.serializeBytes32(key, vm.toString(bytes32(uint256(0))), vm.load(account, 0));
                 if (bytes(state).length > 1) state = string.concat(state, ",");

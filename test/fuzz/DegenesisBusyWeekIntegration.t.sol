@@ -61,6 +61,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     struct Books {
         uint256 claimablePool;
         uint256 future;
+        uint256 insurance;
         uint256 vaultBudget;
         uint256 sdgnrsAfking;
     }
@@ -729,6 +730,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     function _books() internal view returns (Books memory b) {
         b.claimablePool = game.claimablePoolView();
         b.future = _futureTotal();
+        b.insurance = game.yieldAccumulatorView();
         b.vaultBudget = _vaultBudget();
         b.sdgnrsAfking = _sdgnrsAfking();
     }
@@ -767,7 +769,8 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
             assertEq(q * 4, splitVol, "split volume divides into exact quarters");
             assertEq(afkFunded, q, "sDGNRS AFKing funded a quarter (event)");
             assertEq(b0.claimablePool - game.claimablePoolView(), 2 * q, "split: claimablePool -V/2");
-            assertEq(_futureTotal() - b0.future, 2 * q, "split: future pool +V/2");
+            assertEq(_futureTotal() - b0.future, q, "split: future pool +V/4");
+            assertEq(game.yieldAccumulatorView() - b0.insurance, q, "split: insurance +V/4");
             assertEq(_vaultBudget() - b0.vaultBudget, q, "split: Vault budget +V/4");
             assertEq(_sdgnrsAfking() - b0.sdgnrsAfking, q, "split: sDGNRS AFKing +V/4");
             splitsMeasured += splitVol;

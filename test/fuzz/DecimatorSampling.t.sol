@@ -40,9 +40,9 @@ contract DecimatorSamplingTest is Test {
 
     function test_BoundariesAndIndependentPythonKeccakVectors() public view {
         uint64[8] memory totals = [uint64(1),2,3,1999,2000,2001,2500,2199023255550];
-        uint64[8] memory first = [uint64(1),2,1,745,994,137,494,477487092165];
-        uint64[8] memory middle = [uint64(1),2,2,1744,1993,1136,1743,1574978174598];
-        uint64[8] memory last = [uint64(1),2,2,744,992,133,490,475176567688];
+        uint64[8] memory first = [uint64(1),2,3,1363,1690,741,690,1696706740795];
+        uint64[8] memory middle = [uint64(1),2,2,364,691,1742,1941,595945608994];
+        uint64[8] memory last = [uint64(1),2,2,1361,1688,738,687,1693949254452];
         for (uint256 i; i < totals.length; ++i) {
             uint64 total = totals[i];
             uint16 count = Ref.count(total);

@@ -11,13 +11,14 @@ def digest(data):
     return h.digest()
 
 
-TAG = digest(b'decimator.battle.sample.v1')
+ROTATION_TAG = (48).to_bytes(32, 'big')
+SAMPLE_TAG = (49).to_bytes(32, 'big')
 
 
 def survivor_positions(word, level, total):
     count = min(1000, (total + 1) // 2)
-    prefix = TAG + word.to_bytes(32, 'big') + level.to_bytes(32, 'big')
-    rotation = int.from_bytes(digest(prefix), 'big') % total
+    prefix = SAMPLE_TAG + word.to_bytes(32, 'big')
+    rotation = int.from_bytes(digest(ROTATION_TAG + word.to_bytes(32, 'big')), 'big') % total
     positions = []
     for stratum in range(count):
         lo, hi = stratum * total // count, (stratum + 1) * total // count

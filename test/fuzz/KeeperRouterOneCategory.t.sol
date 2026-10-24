@@ -111,7 +111,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     string private constant AFKING_SRC = "contracts/modules/GameAfkingModule.sol";
     /// @dev The single permissionless engine (60d31f775): one dispatcher, one credit site.
-    string private constant MINER_SRC = "contracts/modules/DegenerusGameMinerModule.sol";
+    string private constant MINER_SRC = "contracts/modules/GameMiner.sol";
 
     bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
     /// @dev Distinct human-box owners in the rewarded open test: enough opens that the call
@@ -182,6 +182,14 @@ contract KeeperRouterOneCategory is DeployProtocol {
     ///         one action at a time from storage and pays once per call, CEI-last, on the call's measured
     ///         gas above an unpaid first MIN_REWARDED_GAS (72fc06f6c). Composing actions therefore cannot
     ///         stack bounties.
+    function paidMine() external {
+        require(msg.sender == address(this), "paid mine self-call");
+        // Isolation starts a new transaction at this adapter; set BASEFEE inside it.
+        vm.fee(1 gwei);
+        vm.prank(keeper);
+        game.mineFlip(0);
+    }
+
     function testAdvanceBranchCreditsExactlyOnce() public {
         // Settle the deploy-day advance so we start from a clean, not-due, not-locked state.
         _settleGame(0xADADADAD0001);
@@ -204,8 +212,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         // The day's request is its own call: a request commits the next cohort and ends the call.
         vm.recordLogs();
-        vm.prank(keeper);
-        game.mineFlip(0);
+        this.paidMine();
         Vm.Log[] memory requestLogs = vm.getRecordedLogs();
         assertTrue(game.rngLocked(), "pre: the day's request took the daily lock");
         (, , uint256 requestReward) = _minerWork(requestLogs);
@@ -215,8 +222,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertEq(game.rngWordForDay(newDay), 0, "pre: the new day's word is not yet applied");
 
         vm.recordLogs();
-        vm.prank(keeper);
-        game.mineFlip(0);
+        this.paidMine();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (, uint256 measured, uint256 reward) = _minerWork(logs);
@@ -296,10 +302,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
         string memory miner = _stripComments(vm.readFile(MINER_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-        string memory dispatch = _extractFunctionBody(miner, "function mineFlip(uint32 gasMultiplierBps) external {");
+        string memory dispatch = _extractFunctionBody(miner, "function _mineFlip(uint32 gasMultiplierBps) internal {");
         assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
         assertEq(_countOccurrences(dispatch, "for (uint256 transitions; transitions < 32; ++transitions) {"), 1, "one bounded dispatch loop");
-        assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);"), 1, "every dispatch reselects from storage");
+        assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender, meter);"), 1, "every dispatch reselects from storage");
         assertEq(_countOccurrences(dispatch, "coinflip.creditFlip_g317(minerId, reward);"), 1, "single credit in the dispatcher");
         assertEq(_countOccurrences(miner, "creditFlip_g317("), 1, "sole keeper-credit site in the engine");
         assertEq(_countOccurrences(afking, "creditFlip_g317(minerId,"), 0, "the retired router credit site stays gone");
@@ -361,8 +367,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.fee(1 gwei);
 
         vm.recordLogs();
-        vm.prank(keeper);
-        game.mineFlip(0);
+        this.paidMine();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Every human box opened via mineFlip (first-deposit signal zeroed).

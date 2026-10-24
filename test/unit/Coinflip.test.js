@@ -239,14 +239,13 @@ describe("Coinflip", function () {
 
     it("rewardPercent is 50 when roll == 0 (seedWord % 20 == 0)", async function () {
       const { coinflip, game } = await loadFixture(deployFullProtocol);
-      // Find an rngWord such that keccak256(REWARD_PERCENT_TAG, rngWord, epoch) % 20 == 0
+      // Find an rngWord such that keccak256(abi.encode(uint256(60), rngWord)) % 20 == 0
       const epoch = 5n;
       let found = false;
       for (let i = 0n; i < 10000n; i++) {
-        const seed = hre.ethers.solidityPackedKeccak256(
-          ["bytes32", "uint256", "uint24"],
-          [hre.ethers.id("degenerus.coinflip.reward-percent"), i, epoch]
-        );
+        const seed = hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
+          ["uint256", "uint256"], [60n, i] // RngTags.FLIP_REWARD
+        ));
         const seedBig = BigInt(seed);
         if (seedBig % 20n === 0n) {
           const tx = await resolveDay(hre.ethers, game, coinflip, epoch, i);
@@ -264,10 +263,9 @@ describe("Coinflip", function () {
       const epoch = 7n;
       let found = false;
       for (let i = 0n; i < 10000n; i++) {
-        const seed = hre.ethers.solidityPackedKeccak256(
-          ["bytes32", "uint256", "uint24"],
-          [hre.ethers.id("degenerus.coinflip.reward-percent"), i, epoch]
-        );
+        const seed = hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
+          ["uint256", "uint256"], [60n, i] // RngTags.FLIP_REWARD
+        ));
         const seedBig = BigInt(seed);
         if (seedBig % 20n === 1n) {
           const tx = await resolveDay(hre.ethers, game, coinflip, epoch, i);

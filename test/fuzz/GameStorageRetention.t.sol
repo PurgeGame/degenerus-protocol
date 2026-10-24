@@ -54,6 +54,7 @@ contract GameRetentionHarness is DegenerusGameRngUtils {
 }
 
 contract RetainedBoonHarness is DegenerusGameBoxModule {
+    function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16) { return _consumeActionBoon(id); }
     function seed(uint256 s0) external { boonPacked[7].slot0 = s0; }
     function today() external view returns (uint24) { return _simulatedDayIndex(); }
 }

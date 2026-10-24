@@ -252,12 +252,7 @@ abstract contract StorageCensus is DeployProtocol {
             }
             (bytes32 root, string memory path, bool attributed) = _censusAttribute(t.account[h], t.slot[h], t, acc);
             if (!attributed) ++counts[3];
-            console.log(string.concat(
-                head, censusNames[censusIndex[t.account[h]] - 1], "|", vm.toString(t.account[h]), "|",
-                vm.toString(t.slot[h]), "|",
-                uint256(root) < DIRECT_SLOT_LIMIT ? vm.toString(uint256(root)) : vm.toString(root), "|", path, "|", kind,
-                tail
-            ));
+            this.censusLogSlot(head, tail, t.account[h], t.slot[h], root, path, kind);
         }
         console.log(string.concat(
             "CENSUSTX|", censusScenario, "|", label, "|", vm.toString(seq), "|", protocolPaid ? "protocol" : "player", "|",
@@ -270,6 +265,17 @@ abstract contract StorageCensus is DeployProtocol {
         ++censusTxs;
         if (!ok) ++censusFailedTxs;
         vm.stopMappingRecording();
+    }
+
+    /// @dev Separate formatting frame keeps the 0.8.38 optimizer's stack bounded.
+    function censusLogSlot(string calldata head, string calldata tail, address account, bytes32 slot,
+        bytes32 root, string calldata path, string calldata kind) external view
+    {
+        require(msg.sender == address(this), "census: self only");
+        string memory identity = string.concat(head, censusNames[censusIndex[account] - 1], "|",
+            vm.toString(account), "|", vm.toString(slot), "|");
+        string memory location = uint256(root) < DIRECT_SLOT_LIMIT ? vm.toString(uint256(root)) : vm.toString(root);
+        console.log(string.concat(identity, location, "|", path, "|", kind, tail));
     }
 
     /// @dev Walk a written slot up to its root: mapping hops through the recorded 64-byte keccak

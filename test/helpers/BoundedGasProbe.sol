@@ -4,10 +4,11 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {GlamsterdamReprice} from "./GlamsterdamReprice.sol";
+import {NativeGasExport} from "./NativeGasExport.sol";
 
 /// @dev One measurement per test. Cold execution precedes state-diff recording;
 ///      the warmed replay must reproduce its exact cold-access surcharge.
-abstract contract BoundedGasProbe is Test {
+abstract contract BoundedGasProbe is NativeGasExport {
     function boundedMeasured(address target, address sender, uint256 value, bytes calldata data) external returns (uint256 gasUsed, int64 refund)
     {
         require(msg.sender == address(this), "measurement self-call");
@@ -89,6 +90,14 @@ abstract contract BoundedGasProbe is Test {
             + (warm ? 0 : coldAccounts * 400) + extcodes * 100 + valueCalls * 2300
             - (warm ? 0 : firstWrites * 100) - newAccounts * 25_000;
         uint256 projectedState = g.stateGas + newAccounts * 183600;
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            // The native replay starts from the same prestate as the cold-first
+            // measurement, never the post-measurement state or a warm access list.
+            assertTrue(vm.revertToState(snapshot));
+            this.exportNativeFixture(label, sender, target, value, data);
+            // Retain the measured call's final state for the caller's assertions.
+            this.boundedMeasured(target, sender, value, data);
+        }
         emit log_named_string("bounded_case", label);
         emit log_named_uint("osaka_frame_gross", used);
         emit log_named_int("refund_counter", refund);
@@ -102,6 +111,7 @@ abstract contract BoundedGasProbe is Test {
         emit log_named_uint("new_accounts", newAccounts);
         emit log_named_uint("new_slots", g.newSlots);
         emit log_named_uint("sstores", g.sstores);
+
     }
 
     function _surcharge(VmSafe.AccountAccess[] memory acc, address sender, address target) private view returns (uint256 charge, uint256 accountCount, uint256 firstWrites) {

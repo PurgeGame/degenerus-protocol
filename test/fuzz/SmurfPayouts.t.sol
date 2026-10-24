@@ -37,8 +37,6 @@ contract SmurfPayoutsTest is SmurfFixture {
     uint256 private constant FOIL_DRAW_DAY_SHIFT = 217;
     bytes32 private constant FOIL_CCY_TAG = keccak256("foil-currency");
 
-    uint256 private constant PLAYER_TICKET_TAG = 0x446567656e506c61796572; // "DegenPlayer"
-    uint256 private constant RESULT_TICKET_TAG = 0x446567656e526573756c74; // "DegenResult"
     uint8 private constant HERO = 3;
 
     enum Box {
@@ -212,13 +210,8 @@ contract SmurfPayoutsTest is SmurfFixture {
         uint256 score = 1_000;
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.affiliateScore.selector, uint24(1), id),
-            abi.encode(score)
-        );
-        vm.mockCall(
-            address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.totalAffiliateScore.selector, uint24(1)),
-            abi.encode(score * 10)
+            abi.encodeWithSelector(IDegenerusAffiliate.affiliateScoreAndTotal_g4013.selector, uint24(1), id),
+            abi.encode(score, score * 10)
         );
         uint256 before = sdgnrs.balanceOf(payee);
 
@@ -446,10 +439,10 @@ contract SmurfPayoutsTest is SmurfFixture {
 
     /// @dev Score of a box spin on `seed` for HERO, from the independent reference.
     function _boxSpinScore(uint256 seed) private pure returns (uint8 s) {
-        uint32 p = Ref.ordinary(uint256(keccak256(abi.encode(seed, PLAYER_TICKET_TAG))));
+        uint32 p = Ref.ordinary(uint256(keccak256(abi.encode(uint256(91), seed))));
         uint32 shift = uint32(HERO >> 3) * 8;
         p = (p & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (HERO & 7)) << shift);
-        (s,) = Ref.score(p, Ref.traits(uint256(keccak256(abi.encode(seed, RESULT_TICKET_TAG)))));
+        (s,) = Ref.score(p, Ref.traits(uint256(keccak256(abi.encode(uint256(90), seed)))));
     }
 
     /// @dev An ETH box spin scoring 7+ awards Reward-pool DGNRS to `payee`.

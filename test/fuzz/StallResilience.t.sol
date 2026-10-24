@@ -164,7 +164,7 @@ contract StallResilience is DeployProtocol {
 
         // Gap words derive from the raw VRF word (backfill runs before _applyDailyRng), with
         // the day packed as uint24 (the backfill loop counter type).
-        uint256 expectedDay5 = uint256(keccak256(abi.encodePacked(resumeWord, _relDay(5))));
+        uint256 expectedDay5 = uint256(keccak256(abi.encode(uint256(68), resumeWord, uint256(_relDay(5)))));
         if (expectedDay5 == 0) expectedDay5 = 1;
         assertEq(game.rngWordForDay(_relDay(5)), expectedDay5, "Day 5 word is keccak256(vrfWord, 5)");
     }

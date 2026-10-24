@@ -71,7 +71,7 @@ contract JackpotBattleDrawTest is Test {
         expected = new address[](count);
         uint256 used;
         for (uint256 visit; used < count; ++visit) {
-            uint256 entropy = uint256(keccak256(abi.encode(word, visit)));
+            uint256 entropy = uint256(keccak256(abi.encode(uint256(67), word, visit)));
             address[] memory owners = levels[entropy % levels.length];
             uint256 start = (entropy >> 128) % owners.length;
             for (uint256 j; j < owners.length && used < count; ++j) {
@@ -129,7 +129,7 @@ contract JackpotBattleDrawTest is Test {
         levels[0] = _owners(0x1000, 17);
         h.seed(CEILING + 1, levels[0], true);
         uint256 word = 1;
-        while ((uint256(keccak256(abi.encode(word, uint256(0)))) >> 128) % 17 != 15) ++word;
+        while ((uint256(keccak256(abi.encode(uint256(67), word, uint256(0)))) >> 128) % 17 != 15) ++word;
         (address[] memory seats,) = _draw(word, 17, JackpotBattleFieldLib.MAX_CHUNK);
         assertEq(seats, _oracle(levels, word, 17));
         for (uint256 i; i < 17; ++i) assertEq(seats[i], levels[0][(15 + i) % 17]);
@@ -143,8 +143,8 @@ contract JackpotBattleDrawTest is Test {
         h.seed(CEILING + 1, levels[0], false);
         h.seed(CEILING + 99, levels[1], false);
         uint256 word = 1;
-        while (uint256(keccak256(abi.encode(word, uint256(0)))) % 2 != 0
-            || uint256(keccak256(abi.encode(word, uint256(1)))) % 2 != 0) ++word;
+        while (uint256(keccak256(abi.encode(uint256(67), word, uint256(0)))) % 2 != 0
+            || uint256(keccak256(abi.encode(uint256(67), word, uint256(1)))) % 2 != 0) ++word;
         (address[] memory seats,) = _draw(word, 6, 2);
         assertEq(seats, _oracle(levels, word, 6));
         uint256[3] memory counts;

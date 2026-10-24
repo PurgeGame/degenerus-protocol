@@ -53,12 +53,8 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-// FLIP_LEVEL_TAG = keccak256("coin-level"). The contract declares this as
-// `bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");`
-// at contracts/modules/DegenerusGameJackpotModule.sol:171. The value is
-// computed once here from the same UTF-8 input; STAT-04 sanity test below
-// asserts equality with the recomputed digest as a structural pin.
-const FLIP_LEVEL_TAG = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("coin-level"));
+// Independent numeric domain pin for COIN_LEVEL.
+const FLIP_LEVEL_TAG = 59n;
 
 const PULLS_PER_CALL = 50; // Up to COIN_DRAW_SHARES=50 equal-share pull positions.
 
@@ -114,8 +110,8 @@ function wilsonHilfertyZ(chi2, df) {
 function jsLvlPrime(randomWord, minLevel, maxLevel, i) {
   const range = BigInt(maxLevel) - BigInt(minLevel) + 1n;
   const encoded = hre.ethers.AbiCoder.defaultAbiCoder().encode(
-    ["uint256", "bytes32", "uint256"],
-    [BigInt(randomWord), FLIP_LEVEL_TAG, BigInt(i)],
+    ["uint256", "uint256", "uint256"],
+    [FLIP_LEVEL_TAG, BigInt(randomWord), BigInt(i)],
   );
   const digest = BigInt(hre.ethers.keccak256(encoded));
   return Number(BigInt(minLevel) + (digest % range));
@@ -136,7 +132,7 @@ function jsLvlPrime(randomWord, minLevel, maxLevel, i) {
 //   w[3] = 192 + uint8((rw >> 18) & 0x3F)// 192..255
 function jsGetRandomTraits(rw) {
   const r = BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
-    ["uint256", "bytes32"], [rw, hre.ethers.id("degenerus.jackpot.trait-board")]
+    ["uint256", "uint256"], [72n, rw]
   )));
   return [
     Number(r & 0x3Fn),

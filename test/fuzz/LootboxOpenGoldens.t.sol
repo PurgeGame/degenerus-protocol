@@ -116,11 +116,10 @@ contract LootboxOpenGoldens is DeployProtocol {
 
     /// @dev The golden fixture: on buffer 0, the whale's order of twelve 0.15 ETH boxes is entry 0.
     ///      Every
-    ///      queued seed is H(H(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, tag, n), so the
-    ///      pinned figures belong to this wallet ID and position; the fixture asserts both. The
-    ///      purchase completes the MINT_ETH quest alongside a secondary, which records the level
-    ///      mint streak, so the order freezes score 2: a 90.33% multiplier, below neutral, so no EV
-    ///      allowance is drawn and every box scales by exactly 9033 bps.
+    ///      queued seed is H(19, H(20, word, position), n), so the
+    ///      pinned figures use the final domains and position; the fixture also asserts the owner. The
+    ///      purchase freezes score 1: a 90.16% multiplier, below neutral, so no EV
+    ///      allowance is drawn and every box scales by exactly 9016 bps.
     function _goldenFixture() internal returns (address whale) {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
@@ -135,11 +134,11 @@ contract LootboxOpenGoldens is DeployProtocol {
         game.purchase{value: 12 * 0.15 ether + priceWei + 1 ether}(0, 400, BoxOrderLib.boCustoms(12, 0.15 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(RecyclingState.boxCount(address(game), 0), 1, "golden fixture: one entry");
         assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
-        assertEq(BoxOrderLib.boScore(RecyclingState.boxEntry(address(game), 0, 0)), 2, "golden fixture: whale's frozen score");
+        assertEq(BoxOrderLib.boScore(RecyclingState.boxEntry(address(game), 0, 0)), 1, "golden fixture: whale's frozen score");
     }
 
     /// @dev Fixed word ("golden_word", 28): nine plain boxes of twelve (the same target levels the
-    ///      first nine nonces always rolled), three queued levels, one DGNRS batch.
+    ///      first nine nonces always rolled), five queued levels, one DGNRS batch.
     ///      Values are pinned below.
     function test_goldensUnderOneWord() public {
         address whale = _goldenFixture();
@@ -184,46 +183,47 @@ contract LootboxOpenGoldens is DeployProtocol {
         }
 
         assertEq(nOpened, 9, "nine boxes opened plainly on this word");
-        uint24[9] memory levels = [uint24(5), 4, 4, 3, 3, 2, 4, 19, 2];
-        uint32[9] memory tickets = [uint32(716), 2257, 0, 0, 927, 0, 3295, 0, 0];
-        uint256[9] memory flips = [uint256(0), 0, 8400, 0, 0, 0, 0, 0, 0];
+        uint24[9] memory levels = [uint24(4), 3, 2, 2, 6, 5, 49, 4, 2];
+        uint32[9] memory tickets = [uint32(1977), 0, 1103, 3245, 1249, 1251, 1205, 1960, 1222];
+        uint256[9] memory flips = [uint256(0), 0, 0, 0, 0, 0, 0, 0, 0];
         for (uint256 k; k < 9; k++) {
-            assertEq(opened[k].amount, 135_495e12, "box amount: 0.15 ETH at 9033 bps");
+            assertEq(opened[k].amount, 135_240e12, "box amount: 0.15 ETH at 9016 bps");
             assertEq(opened[k].level, levels[k], "target level");
             assertEq(opened[k].tickets, tickets[k], "ticket variance roll");
             assertEq(opened[k].flip, flips[k], "FLIP branch");
-            assertEq(opened[k].up, k == 4 || k == 6, "Bernoulli round-up");
+            assertEq(opened[k].up, k == 3 || k == 4, "Bernoulli round-up");
         }
-        assertEq(nQueued, 3, "three lanes queued");
-        uint24[3] memory expectedLevels = [uint24(3), 4, 5];
-        uint32[3] memory expectedEntries = [uint32(40), 220, 28];
-        for (uint256 k; k < 3; ++k) {
+        assertEq(nQueued, 5, "five lanes queued");
+        uint24[5] memory expectedLevels = [uint24(2), 4, 5, 6, 49];
+        uint32[5] memory expectedEntries = [uint32(224), 152, 48, 52, 48];
+        for (uint256 k; k < 5; ++k) {
             assertEq(qLevel[k], expectedLevels[k], "queued target");
             assertEq(qEntries[k], expectedEntries[k], "whole-ticket entries");
         }
         assertEq(nDgnrs, 1, "one DGNRS batch");
-        assertEq(dReq[0], 20_229e15, "DGNRS requested");
-        assertEq(dPaid[0], 20_229e15, "DGNRS paid in full");
+        assertEq(dReq[0], 243e15, "DGNRS requested");
+        assertEq(dPaid[0], 243e15, "DGNRS paid in full");
         assertEq(nPasses, 0, "no craps passes rolled on this word");
     }
 
-    /// @dev Second fixed word: eight plain parent boxes (tickets and FLIP), no recirculated child
+    /// @dev Word 68 was selected independently from the raw domain hashes to include
+    ///      two flat FLIP rolls and eight plain parent boxes, with no recirculated child
     ///      box, and four flushed levels.
-    function _checkWordThreeBox(uint256 k, uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) internal pure {
-        uint24[8] memory level = [uint24(5), 5, 3, 3, 18, 3, 9, 2];
-        uint32[8] memory tickets = [uint32(0), 633, 0, 1797, 718, 0, 792, 0];
-        uint256[8] memory flip = [uint256(0), 0, 9300, 0, 0, 11500, 0, 10100];
-        assertEq(a, 135_495e12, "box amount");
+    function _checkWord68Box(uint256 k, uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) internal pure {
+        uint24[8] memory level = [uint24(1), 2, 4, 5, 4, 5, 22, 2];
+        uint32[8] memory tickets = [uint32(3042), 1209, 0, 1349, 0, 627, 687, 0];
+        uint256[8] memory flip = [uint256(0), 0, 6200, 0, 9700, 0, 0, 0];
+        assertEq(a, 135_240e12, "box amount");
         assertEq(lvl, level[k], "target level");
         assertEq(sc, tickets[k], "ticket variance roll");
         assertEq(fl, flip[k], "FLIP branch");
-        assertEq(u, k == 3 || k == 6, "Bernoulli round-up");
+        assertEq(u, k == 6, "Bernoulli round-up");
     }
 
-    function test_goldensUnderWordThree() public {
+    function test_goldensUnderWord68() public {
         address whale = _goldenFixture();
         _mineMiddayRequest(actor);
-        Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(3)))) | 1);
+        Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(68)))) | 1);
         assertTrue(game.boxIndexComplete(0), "opened");
 
         uint32 whaleId = game.walletIdOf_g3120(whale);
@@ -238,13 +238,13 @@ contract LootboxOpenGoldens is DeployProtocol {
                 assertEq(uint256(logs[i].topics[2]), WHALE_REF, "a parent box, never a recirculated child");
                 assertLt(nO, 8, "eight parent boxes");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
-                _checkWordThreeBox(nO, a, lvl, sc, fl, u);
+                _checkWord68Box(nO, a, lvl, sc, fl, u);
                 nO++;
             } else if (t == QUEUED && uint32(uint256(logs[i].topics[1])) == whaleId) {
                 assertLt(nQ, 4, "four lanes");
                 (uint24 lvl, uint32 e) = abi.decode(logs[i].data, (uint24, uint32));
-                uint24[4] memory lanes = [uint24(3), 5, 9, 18];
-                uint32[4] memory entries = [uint32(72), 24, 32, 28];
+                uint24[4] memory lanes = [uint24(1), 2, 5, 22];
+                uint32[4] memory entries = [uint32(120), 48, 76, 28];
                 assertEq(lvl, lanes[nQ], "flushed lane level");
                 assertEq(e, entries[nQ], "flushed lane entries");
                 nQ++;

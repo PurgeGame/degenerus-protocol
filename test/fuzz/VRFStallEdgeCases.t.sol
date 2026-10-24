@@ -217,10 +217,10 @@ contract VRFStallEdgeCases is DeployProtocol {
         // _backfillGapDays retains only the final gap day's derived word in the two-day ring
         // (6d0e64b09/c729ecfc9); the earlier gap days keep no word and settle through their
         // coinflip days. The day is packed as uint24 (3-byte preimage width).
-        uint256 expected = uint256(keccak256(abi.encodePacked(delivered, _relDay(7))));
+        uint256 expected = uint256(keccak256(abi.encode(uint256(68), delivered, uint256(_relDay(7)))));
         if (expected == 0) expected = 1;
         uint256 gapWord = game.rngWordForDay(_relDay(7));
-        assertEq(gapWord, expected, "Gap day word must match keccak256(vrfWord, day)");
+        assertEq(gapWord, expected, "Gap day word must match domain-68 keccak256(vrfWord, day)");
         for (uint32 d = _relDay(4); d <= _relDay(6); d++) {
             assertEq(game.rngWordForDay(uint24(d)), 0, "earlier gap days keep no word in the two-day ring");
             (uint16 reward,) = coinflip.getCoinflipDayResult(uint24(d));
@@ -283,9 +283,9 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Gap day 4 is derived from day 5's word. _backfillGapDays packs the gap day as uint24
         // (its loop counter type), so the preimage day width is 3 bytes, not 4.
-        uint256 expected = uint256(keccak256(abi.encodePacked(resumeWord, _relDay(4))));
+        uint256 expected = uint256(keccak256(abi.encode(uint256(68), resumeWord, uint256(_relDay(4)))));
         if (expected == 0) expected = 1;
-        assertEq(game.rngWordForDay(_relDay(4)), expected, "Single gap day backfill matches keccak256");
+        assertEq(game.rngWordForDay(_relDay(4)), expected, "Single gap day backfill matches domain-68 keccak256");
 
         // Day 5 (current day) should be processed normally (not a gap day)
         assertTrue(game.rngWordForDay(_relDay(5)) != 0, "Current day 5 processed");

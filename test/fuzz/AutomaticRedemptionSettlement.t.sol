@@ -50,7 +50,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
     function _resolve(uint32 batchId, uint16 roll, uint256 entropy) internal {
         assertEq(batchId, _openBatchId());
         _closeAsGame();
-        settlementWord = ((entropy % (type(uint256).max / 155 / 256)) * 155 + roll - 21) * 256 + 2;
+        settlementWord = _wordForRollFrom(roll, entropy);
         bytes memory original = address(game).code;
         vm.etch(address(game), type(RedemptionTerminalSeeder).runtimeCode);
         RedemptionTerminalSeeder(payable(address(game))).seedLiveRedemptionWord(settlementWord);
@@ -125,10 +125,8 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         _burn(bob, sdgnrs.totalSupply() / 1000);
         day = _openBatchId();
         _closeAsGame();
-        for (uint256 k;; ++k) {
-            settlementWord = ((uint256(100 - 21) + 155 * k) << 8) | 2;
-            if (_synthReward(settlementWord, day) != 0) break;
-        }
+        settlementWord = _wordForRoll(100);
+        while (_synthReward(settlementWord, day) == 0) settlementWord = _wordForRollFrom(100, settlementWord + 1);
         _mockSettlingStage();
         vm.prank(address(game));
         sdgnrs.runRedemptionWork(settlementWord, RESOLVE_ONLY_ALLOWANCE);

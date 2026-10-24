@@ -84,7 +84,7 @@ function bingoClaimLeaf(_level, playerId) {
 
 async function bingoAtGame(game) {
   return hre.ethers.getContractAt(
-    "DegenerusGameBingoModule",
+    "DegenerusGame",
     await game.getAddress()
   );
 }

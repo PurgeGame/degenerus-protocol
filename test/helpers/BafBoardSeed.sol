@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
@@ -11,7 +12,7 @@ library BafBoardSeed {
     function context(uint24 lvl, uint256 word, uint256 rounds) internal pure returns (uint256 c) {
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
-        uint256 entropy = EntropyLib.hash2(word, lvl);
+        uint256 entropy = EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, lvl);
         uint8 solo = uint8(3 - (entropy & 3));
         uint8[4] memory golds;
         uint256 n;

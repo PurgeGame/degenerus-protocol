@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -16,7 +17,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// the actual generated-ticket score, cap count, settlement and 30M gas budget.
 /// The candidate search supplies a reproducible stress case, not an exhaustive
 /// upper bound over every possible ticket sequence.
-contract KeeperResolveBetWorstCaseGas is DeployProtocol {
+contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     // -------------------------------------------------------------------------
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------
@@ -597,12 +598,19 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         uint256 readSlot = uint256(vm.load(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT)));
         vm.store(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT),
             bytes32(readSlot & ~(uint256(type(uint32).max) << (GameSlots.DEGENERETTE_READ_COUNT_OFFSET * 8))));
+        uint256 emptySnap = vm.snapshotState();
         _cool();
         vm.prank(cranker);
         uint256 g = gasleft();
         game.mineFlip(0);
         uint256 baseline = g - gasleft();
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(emptySnap));
+            this.exportNativeFixture(string.concat("degenerette-empty-", vm.toString(baseline)), cranker,
+                address(game), abi.encodeCall(game.mineFlip, (0)));
+        }
         vm.revertToStateAndDelete(snap);
+        uint256 fullSnap = vm.snapshotState();
         _cool();
         vm.recordLogs();
         vm.prank(cranker);
@@ -610,6 +618,13 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         game.mineFlip(0);
         gasUsed = g - gasleft();
         stageGas = gasUsed - baseline;
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(fullSnap));
+            this.exportNativeFixture(string.concat("degenerette-full-", vm.toString(gasUsed)), cranker,
+                address(game), abi.encodeCall(game.mineFlip, (0)));
+            vm.recordLogs();
+            vm.prank(cranker); game.mineFlip(0);
+        }
         emit log_named_uint("cold mineFlip gas", gasUsed);
         emit log_named_uint("Degenerette stage gas (mineFlip minus empty-queue baseline)", stageGas);
     }

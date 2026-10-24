@@ -269,7 +269,7 @@ contract LootboxCrapsTest is CrapsPins {
         assertTrue(seed != bytes32(word), "seed is the raw word");
         assertEq(
             seed,
-            keccak256(abi.encode(craps.CRAPS_SEED_DOMAIN(), word, uint48(0))),
+            keccak256(abi.encode(uint256(30), word, uint256(0))),
             "seed derivation"
         );
 

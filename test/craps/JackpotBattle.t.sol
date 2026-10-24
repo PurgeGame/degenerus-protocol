@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
@@ -142,7 +143,10 @@ contract JackpotBattleTest is CrapsPins {
         day = table.currentDayIndex();
         slot = uint64(uint256(day) * 8 + 6);
         _setIndex(1);
-        _setDailyWord(day, 123456);
+        uint256 openingWord = 2;
+        while (table.highMultOfWord(openingWord) != 10
+            || CrapsPriceLib.jackpotPrice(uint256(keccak256(abi.encode(uint256(39), openingWord, uint256(5))))) != 8_000) ++openingWord;
+        _setDailyWord(day, openingWord);
         vm.prank(ContractAddresses.GAME);
         table.openBonusDay();
         table.clearDayBodies(day);
@@ -176,7 +180,7 @@ contract JackpotBattleTest is CrapsPins {
     }
     /// @dev A tight per-call allowance: enough to admit one atomic seat and its tails, so a
     ///      chunked run settles the field a seat or two per call.
-    uint256 internal constant TIGHT_CHUNK = 2_500_000;
+    uint256 internal constant TIGHT_CHUNK = GasBounds.CRAPS_SEAT_GAS_MAX + 850_000;
 
     /// @dev Drive the daily battle worker — mineFlip's jackpot-battle stage, called as the Game —
     ///      until the field completes, `allowance` gas per call (zero means all available gas).
@@ -212,8 +216,9 @@ contract JackpotBattleTest is CrapsPins {
         while (!result.done && iterations++ < 20) {
             vm.prank(ContractAddresses.GAME);
             uint256 before = gasleft();
-            result = table.runDailyBattleWork(3_000_000);
-            assertLt(before - gasleft(), 3_000_000, "full native call respects parent remainder");
+            uint256 allowance = GasBounds.CRAPS_SEAT_GAS_MAX + 1_350_000;
+            result = table.runDailyBattleWork(allowance);
+            assertLt(before - gasleft(), allowance, "full native call respects parent remainder");
             assertTrue(result.progressed, "funded daily continuation must move while game remains locked");
         }
         assertTrue(result.done);
@@ -327,7 +332,7 @@ contract JackpotBattleTest is CrapsPins {
         uint256 field = (uint256(20) << 64) | 9;
         // The award's own key replaces its wallet for scatter, survival coin and boost; the dice
         // seed is the field's. So it is exactly a paid seat played by that key on the same word.
-        uint256 key = uint160(uint256(keccak256(abi.encode(word, uint256(0x4a61636b706f7441776172646564), betId))));
+        uint256 key = uint160(uint256(keccak256(abi.encode(uint256(27), word, betId))));
         Craps.SlipResult memory awarded = engine.settleBattle(
             betId, uint32(uint160(bob)) | (chips << 32) | (uint256(1) << 72), 30, 1_500, 7_500, uint48(slot), field, word);
         Craps.SlipResult memory paid = legacyEngine.settleBattle(
@@ -635,7 +640,7 @@ contract JackpotBattleTest is CrapsPins {
         multiple = tail ? 100 : 10;
         for (uint256 word = 1; ; ++word) {
             if (table.highMultOfWord(word) == multiple
-                && CrapsPriceLib.jackpotPrice(uint256(keccak256(abi.encode(word, uint256(0x43726170735363686564756c65), uint256(5))))) == 8_000) {
+                && CrapsPriceLib.jackpotPrice(uint256(keccak256(abi.encode(uint256(39), word, uint256(5))))) == 8_000) {
                 _setDailyWord(day, word);
                 vm.prank(ContractAddresses.GAME);
                 table.openBonusDay();
@@ -653,7 +658,7 @@ contract JackpotBattleTest is CrapsPins {
 
     function _wordForMultiplier(uint256 bps) private pure returns (uint256 word) {
         for (word = 1; ; ++word) {
-            uint256 roll = uint256(keccak256(abi.encode(word, uint256(0x436f696e447261774d756c7469706c696572)))) % 1000;
+            uint256 roll = uint256(keccak256(abi.encode(uint256(33), word))) % 1000;
             uint256 got = roll < 900 ? 5000 : roll < 990 ? 30000 : roll < 999 ? 200000 : 1000000;
             if (got == bps) return word;
         }
@@ -799,8 +804,11 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(extra, 18_000);
         assertEq(flip.compLane() - before, baseAction / 50 + 6_912, "sole bounty risk omitted or comped twice");
         _mockRun(true);
+        uint256 reserve = CrapsLensReader.highRollerReserve(address(cold));
         _finish();
-        assertEq(coinflip.staked(alice), _mainPot(r) + 5 * (uint256(r.bankroll) + 2 * extra));
+        uint256 reservePaid = reserve - CrapsLensReader.highRollerReserve(address(cold));
+        assertEq(reservePaid, 2_500, "independent reserve draw pays its funded amount");
+        assertEq(coinflip.staked(alice), _mainPot(r) + 5 * (uint256(r.bankroll) + 2 * extra) + reservePaid);
     }
 
     function test_HighExtraReceivesNoMultipliedProtocolBoon() public {
@@ -811,10 +819,13 @@ contract JackpotBattleTest is CrapsPins {
         CrapsBattleStorage.JackpotRound memory r = _round();
         uint256 extra = table.jackpotTerms(slot).highExtra;
         _mockRun(true);
+        uint256 reserve = CrapsLensReader.highRollerReserve(address(cold));
         _finish();
+        uint256 reservePaid = reserve - CrapsLensReader.highRollerReserve(address(cold));
+        assertEq(reservePaid, 2_500, "independent reserve draw pays its funded amount");
         uint256 baseBoon = uint256(r.bankroll) * 5 * 15 / 100;
         assertLt(baseBoon, 9_000, "fixture must distinguish base boon from the high cap");
-        assertEq(coinflip.totalCredited(), _mainPot(r) + 2 * extra + 10 * (uint256(r.bankroll) + extra) + baseBoon);
+        assertEq(coinflip.totalCredited(), _mainPot(r) + 2 * extra + 10 * (uint256(r.bankroll) + extra) + baseBoon + reservePaid);
     }
 
     function test_HighDayTicketUsesTheSameFeeOnlyAllocation() public {

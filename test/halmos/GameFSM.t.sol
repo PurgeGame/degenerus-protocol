@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameMiner} from "../../contracts/modules/GameMiner.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {DegenerusGameEndgameModule} from "../../contracts/modules/DegenerusGameEndgameModule.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -47,24 +49,15 @@ contract FSMEmptyDependencies {
     // Checkpoint witnesses written by the empty jackpot legs at the moment each runs, so a single
     // composed mineFlip (60d31f775) still proves what the day looked like at each checkpoint.
     uint256 public battles;
-    uint256 public dailies;
     uint24 public battleSealedDay;
     uint256 public battleDayWord;
     uint256 public settlementsAtBattle;
-    uint256 public battlesAtDaily;
-    uint24 public dailySealedDay;
 
     function noteBattle(uint24 sealedDay, uint256 dayWord) external {
         ++battles;
         battleSealedDay = sealedDay;
         battleDayWord = dayWord;
         settlementsAtBattle = settlements;
-    }
-
-    function noteDaily(uint24 sealedDay) external {
-        ++dailies;
-        battlesAtDaily = battles;
-        dailySealedDay = sealedDay;
     }
 
     function balanceOf(address) external pure returns (uint256) {
@@ -92,7 +85,21 @@ contract FSMEmptyDependencies {
 
     function lockJackpotBattle(uint24, uint256, uint24) external returns (bool) {
         ++battleLocks;
+        battleComplete = false;
         return true;
+    }
+    bool private battleComplete;
+    function jackpotProgress() external view returns (uint64, uint256, bool, bool) {
+        return (0, 0, true, battleComplete);
+    }
+    function runDailyBattleWork(uint256) external returns (MineFlipGas.Result memory result) {
+        FSMAdvanceHarness machine = FSMAdvanceHarness(ContractAddresses.GAME);
+        FSMEmptyDependencies(ContractAddresses.COINFLIP).noteBattle(
+            machine.sealedDay(), machine.wordAt(machine.requestDay())
+        );
+        battleComplete = true;
+        result.progressed = true;
+        result.done = true;
     }
     function openBonusDay() external pure {}
 
@@ -118,26 +125,7 @@ contract FSMEmptyDependencies {
     }
 }
 
-/// @dev Empty battle/daily legs only, at the engine's current checkpointed selectors (60d31f775).
-///      This stub changes no field being proved; the actual Advance module performs the dailyIdx
-///      write and request unlock after this leg returns. Each leg reports the sealed day (and the
-///      battle the day's word) to the dependency witness at the moment it runs.
-contract FSMEmptyJackpotModule is DegenerusGameStorage {
-    function runPurchaseJackpotBattle(uint24, uint256, uint256) external returns (MineFlipGas.Result memory result) {
-        FSMEmptyDependencies(ContractAddresses.COINFLIP).noteBattle(dailyIdx, _recordedDailyWord(rngRequestDay));
-        dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
-        result.progressed = true;
-        result.done = true;
-    }
-    function runDailyJackpot(bool, uint24, uint256, uint256) external returns (MineFlipGas.Result memory result) {
-        FSMEmptyDependencies(ContractAddresses.COINFLIP).noteDaily(dailyIdx);
-        result.progressed = true;
-        result.done = true;
-    }
-}
-
-/// @dev Test setup and read access only; all three claimed state transitions execute production
-///      Advance/GameOver bytecode. Recording a delivered word models the VRF callback input.
+/// @dev Test setup and reads only; all daily, RNG and terminal state writers are production code.
 contract FSMAdvanceHarness is DegenerusGameMinerModule {
     /// @dev Mirrors only the Game retry forwarding stub; Admin ownership is covered by
     ///      DailyRngStallRecovery using the actual Admin contract.
@@ -147,6 +135,7 @@ contract FSMAdvanceHarness is DegenerusGameMinerModule {
     }
     function seed(uint24 initialLevel, uint24 initialDay, uint24 purchaseDay, bool lastPurchase) external {
         level = initialLevel;
+        degenesisClosed = 7; // These post-bootstrap FSM carriers have no Degenesis work.
         dailyIdx = initialDay;
         purchaseStartDay = purchaseDay;
         lastPurchaseDay = lastPurchase;
@@ -188,6 +177,7 @@ contract FSMAdvanceHarness is DegenerusGameMinerModule {
         return (rngLockedFlag, rngRequestTime, vrfRequestId);
     }
 
+    function requestDay() external view returns (uint24) { return rngRequestDay; }
     function requestActive() external view returns (bool) { return _rngRequestActive(); }
     function retrySpent() external view returns (bool) { return _rngRetrySpent(); }
 
@@ -215,14 +205,14 @@ contract GameFSMProductionTransitionTest is Test {
         machine = FSMAdvanceHarness(ContractAddresses.GAME);
         vm.etch(address(machine), type(FSMAdvanceHarness).runtimeCode);
         vm.deal(address(machine), 0);
-        vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(DegenerusGameGameOverModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(DegenerusGameEndgameModule).runtimeCode);
+        // RNG, Advance and jackpot code share Daily. Stub only the external empty
+        // Craps dependency; run the actual consolidated daily state writers.
         vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameDailyModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_RNG_MODULE, type(DegenerusGameDailyModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(FSMEmptyJackpotModule).runtimeCode);
         // The engine drains the (empty) ticket queues and the delivered cohort's (empty) human
         // boxes on its own path (60d31f775); both run production bytecode.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGameTicketModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_AFKING_MODULE, type(GameAfkingModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_AFKING_MODULE, type(DegenerusGameBoxModule).runtimeCode);
         bytes memory deps = type(FSMEmptyDependencies).runtimeCode;
         vm.etch(ContractAddresses.VRF_COORDINATOR, deps);
         vm.etch(ContractAddresses.VAULT, deps);
@@ -230,11 +220,12 @@ contract GameFSMProductionTransitionTest is Test {
         vm.etch(ContractAddresses.SDGNRS, deps);
         vm.etch(ContractAddresses.AFFILIATE, deps);
         vm.etch(ContractAddresses.GNRUS, deps);
+        vm.etch(ContractAddresses.DGNRS, deps);
         vm.etch(ContractAddresses.COIN, deps);
         vm.etch(ContractAddresses.COINFLIP, deps);
         vm.etch(ContractAddresses.CRAPS, deps);
         vm.etch(ContractAddresses.QUESTS, deps);
-        vm.etch(ContractAddresses.GAME_MINT_MODULE, deps);
+        // Mint aliases Endgame; do not overwrite the production terminal worker.
     }
 
     function _dayStart(uint24 day) private pure returns (uint256) {
@@ -262,7 +253,7 @@ contract GameFSMProductionTransitionTest is Test {
         // changes nothing (an idle engine refuses the call instead of returning, be793ed7c).
         (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         assert(!ok);
-        assert(result.length == 4 && bytes4(result) == DegenerusGameMinerModule.NoWork.selector);
+        assert(result.length == 4 && bytes4(result) == GameMiner.NoWork.selector);
         assert(machine.gameOver());
         assert(machine.sealedDay() == 10);
         assert(machine.level() == initialLevel);
@@ -319,6 +310,7 @@ contract GameFSMProductionTransitionTest is Test {
         assert(machine.sealedDay() == initialDay);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
         machine.recordDeliveredWord(42);
+        vm.recordLogs();
         // A due Vault backstop is its own checkpoint after applying the delivered word.
         // Its continuation then composes battle, purchase daily/seal and read consumers.
         _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
@@ -344,9 +336,27 @@ contract GameFSMProductionTransitionTest is Test {
         assert(deps.settlementsAtBattle() == uint256(gap) + 1);
         // The empty battle's own checkpoint completes before the purchase daily runs and seals.
         assert(!machine.battlePending());
-        assert(deps.dailies() == 1);
-        assert(deps.battlesAtDaily() == 1);
-        assert(deps.dailySealedDay() == afterGap);
+        // The real daily leg emits its board before sealing. Its day is dailyIdx + 1,
+        // so this also witnesses the pre-seal day without replacing the internal leg.
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 dailyLegs;
+        bool battleFinished;
+        bool boardRecorded;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) {
+                (uint8 stage,) = abi.decode(logs[i].data, (uint8, uint24));
+                if (stage == 17) battleFinished = true;
+                if (stage == 6) { assert(battleFinished && boardRecorded); ++dailyLegs; }
+            }
+            if (logs[i].topics[0] == keccak256("DailyWinningTraits(uint24,uint32)")) {
+                assert(battleFinished);
+                assert(uint24(uint256(logs[i].topics[1])) == afterGap + 1);
+                assert(!boardRecorded);
+                boardRecorded = true;
+            }
+        }
+        assert(dailyLegs == 1);
         assert(machine.sealedDay() == day);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);

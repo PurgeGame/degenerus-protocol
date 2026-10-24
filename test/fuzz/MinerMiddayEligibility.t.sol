@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameMiner} from "../../contracts/modules/GameMiner.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -45,7 +46,7 @@ contract MinerMiddayEligibilityTest is Test {
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle));
         assertFalse(game.advanceDue());
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
-        vm.expectRevert(DegenerusGameMinerModule.NoWork.selector);
+        vm.expectRevert(GameMiner.NoWork.selector);
         game.mineFlip{gas: 16_700_000}(0);
     }
 

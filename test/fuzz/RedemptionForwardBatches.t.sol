@@ -469,12 +469,12 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         for (uint256 i; i < 4; ++i) {
             uint256 snap = vm.snapshotState();
             vm.prank(address(game));
-            sdgnrs.runRedemptionWork((steps[i] << 8) | 2, 200_000);
+            sdgnrs.runRedemptionWork(_wordForRoll(expected[i]), 200_000);
             (,,, uint16 roll,) = _batch(id);
             assertEq(roll, expected[i], "roll at the range edges");
             assertTrue(vm.revertToState(snap));
         }
-        for (uint256 v; v < 155; ++v) sum += _roll(v << 8);
+        for (uint256 v; v < 155; ++v) sum += _roll(_wordForRoll(uint16(v + 21)));
         assertEq(sum, 98 * 155, "mean roll is exactly 98");
     }
 

@@ -97,10 +97,19 @@ contract MinerKeeperRegistration is DeployProtocol {
         assertEq(address(uint160(_element(id))), who, "wallet-table element holds the key");
     }
 
-    function _mine(address who) private returns (Outcome memory o) {
-        vm.recordLogs();
+    uint256 private fixtureBaseFee = 1 gwei;
+
+    function mineWithFee(address who, uint256 fee) external {
+        require(msg.sender == address(this), "fixture self-call");
+        vm.fee(fee);
         vm.prank(who);
         game.mineFlip(0);
+    }
+
+    function _mine(address who) private returns (Outcome memory o) {
+        uint256 fee = fixtureBaseFee;
+        vm.recordLogs();
+        this.mineWithFee(who, fee);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 works;
         for (uint256 i; i < logs.length; ++i) {
@@ -117,7 +126,8 @@ contract MinerKeeperRegistration is DeployProtocol {
                     o.registeredOwner = who;
                 }
                 ++o.registrations;
-            } else if (logs[i].emitter == address(coinflip) && t0 == STAKE_UPDATED) {
+            } else if (logs[i].emitter == address(coinflip) && t0 == STAKE_UPDATED
+                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(who)) {
                 ++o.stakeEvents;
                 o.stakeId = uint32(uint256(logs[i].topics[1]));
                 (o.stakeAmount,) = abi.decode(logs[i].data, (uint256, uint256));
@@ -215,6 +225,7 @@ contract MinerKeeperRegistration is DeployProtocol {
     function test_ZeroRewardRegistersNobody() public {
         vm.revertToState(snapshot);
         vm.fee(0);
+        fixtureBaseFee = 0;
         uint256 lengthBefore = _walletsLength();
 
         Outcome memory o = _mine(keeper);

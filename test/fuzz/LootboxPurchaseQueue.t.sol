@@ -62,10 +62,10 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     bytes32 internal constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 internal constant BOX_BUY = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");
 
-    uint256 internal constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
-    uint256 internal constant BOX_OPEN_TAG = 0x426f784f70656e;
-    uint256 internal constant BOX_BOON_TAG = 0x426f78426f6f6e;
-    uint256 internal constant AFKING_BOX_TAG = 0x41666b696e67426f78;
+    uint256 internal constant QUEUED_ORDER_DOMAIN = 20;
+    uint256 internal constant BOX_OPEN_TAG = 19;
+    uint256 internal constant BOX_BOON_TAG = 14;
+    uint256 internal constant AFKING_BOX_TAG = 13;
     uint48 internal constant QUEUED_ENTRY_TAG = uint48(1) << 46;
     uint48 internal constant REDEMPTION_INDEX_TAG = uint48(1) << 47;
 
@@ -115,7 +115,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     }
 
     function _root(uint256 word, uint48 buffer, uint256 position) internal pure returns (uint256) {
-        return EntropyLib.hash4(QUEUED_ORDER_DOMAIN, word, buffer, position);
+        return EntropyLib.hash3(QUEUED_ORDER_DOMAIN, word, position);
     }
 
     /// @dev Whether box seed `seed` emits LootBoxOpened (every branch except the spins), and its
@@ -138,7 +138,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         targets = new uint24[](boxes);
         for (uint256 i = 1; i <= boxes; ++i) {
             (bool emits, uint24 target) =
-                _rollOf(EntropyLib.hash4(rootWord, uint256(id), BOX_OPEN_TAG, i), currentLevel);
+                _rollOf(EntropyLib.hash3(BOX_OPEN_TAG, rootWord, i), currentLevel);
             if (emits) targets[n++] = target;
         }
     }
@@ -456,8 +456,8 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     // Seeds
     // =========================================================================
 
-    /// @notice Queued box seeds are hash4(root, walletId, BOX_OPEN_TAG, n) with root =
-    ///         hash4(domain, word, buffer, position): two entries by one wallet in one cohort roll
+    /// @notice Queued box seeds are hash3(19, root, n) with root =
+    ///         hash3(20, word, position): two entries by one wallet in one cohort roll
     ///         from different roots, and every emitted box matches its predicted seed.
     function test_Seeds_QueuedRootsAtTwoPositions() public {
         (uint48 b, uint256 p0) = _buy(alice, BoxOrderLib.boCustoms(12, 1 ether));
@@ -547,10 +547,9 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         }
     }
 
-    /// @notice The single-box resolvers mix the wallet ID with their existing commitments: direct
-    ///         hash2(word, id); AFKing hash4(word, id, AFKING_BOX_TAG, day); the redemption order
-    ///         hash4(word, id, BOX_OPEN_TAG, n) under its tagged batch.
-    function test_Seeds_SingleBoxResolversUseWalletId() public {
+    /// @notice Direct boxes use hash2(16, word), AFKing uses hash3(13, word, id),
+    ///         and redemption uses hash3(19, word, n) under its tagged batch.
+    function test_Seeds_SingleBoxResolverDomains() public {
         _buy(alice, BoxOrderLib.boSmalls(1));
         uint32 id = _id(alice);
         uint24 cur = host.level() + 1;
@@ -560,24 +559,24 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         vm.recordLogs();
         host.direct(alice, id, 1 ether, w);
         (uint24[] memory seen, uint256 n) = _openedTargets(vm.getRecordedLogs(), 0);
-        (, uint24 target) = _rollOf(EntropyLib.hash2(w, uint256(id)), cur);
+        (, uint24 target) = _rollOf(EntropyLib.hash2(16, w), cur);
         assertEq(n, 1);
-        assertEq(seen[0], target, "direct seed = hash2(word, walletId)");
+        assertEq(seen[0], target, "direct seed = hash2(16, word)");
 
         // AFKing stamped box.
         uint24 day = 7;
         uint256 aw;
         for (uint256 k = 1; ; ++k) {
             aw = uint256(keccak256(abi.encode("afk", k)));
-            (bool emits,) = _rollOf(EntropyLib.hash4(aw, uint256(id), AFKING_BOX_TAG, day), cur);
+            (bool emits,) = _rollOf(EntropyLib.hash3(AFKING_BOX_TAG, aw, uint256(id)), cur);
             if (emits) break;
         }
         vm.recordLogs();
         host.afkingBox(alice, id, 1 ether, day, aw);
         (seen, n) = _openedTargets(vm.getRecordedLogs(), 0);
-        (, target) = _rollOf(EntropyLib.hash4(aw, uint256(id), AFKING_BOX_TAG, day), cur);
+        (, target) = _rollOf(EntropyLib.hash3(AFKING_BOX_TAG, aw, uint256(id)), cur);
         assertEq(n, 1);
-        assertEq(seen[0], target, "AFKing seed = hash4(word, walletId, AFKING_BOX_TAG, day)");
+        assertEq(seen[0], target, "AFKing seed = hash3(13, word, walletId)");
 
         // Redemption order: three ~1 ETH customs off the ID-mixed redemption word.
         uint256 rw = uint256(keccak256("redemption-word"));
@@ -592,7 +591,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     function _nonSpinWord(uint32 id, uint24 cur, uint256 salt) internal pure returns (uint256 w) {
         for (uint256 k = 1; ; ++k) {
             w = uint256(keccak256(abi.encode("direct", salt, k)));
-            uint256 seed = EntropyLib.hash2(w, uint256(id));
+            uint256 seed = EntropyLib.hash2(16, w);
             uint256 path = uint16(seed >> 40) % 20;
             // Direct boxes never ETH-spin: their roll 19 pays tickets.
             if (path <= 10 || path == 14 || path == 15 || path == 16 || path == 19) return w;

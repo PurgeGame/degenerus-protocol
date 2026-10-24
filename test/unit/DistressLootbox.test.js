@@ -22,15 +22,11 @@ import { compiledStorageSlot } from "../helpers/storageLayout.js";
 
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
-// These purchases remain in the live write buffer, one queue entry per purchase. boxQueue is
-// manually addressed (its array length slot is never written), three 85-bit entries per word:
-// entry p of buffer b is lane p % 3 of word keccak(keccak(b . boxQueue.slot)) + p / 3.
+// The fixed pair of manually addressed queues has one header per buffer.
+// Entry p is lane p % 3 of word keccak256(boxQueue.slot + buffer) + p / 3.
 async function boxEntryAt(gameAddress, buffer, position) {
-  const abi = hre.ethers.AbiCoder.defaultAbiCoder();
-  const inner = hre.ethers.keccak256(
-    abi.encode(["uint256", "uint256"], [BigInt(buffer), await compiledStorageSlot("boxQueue")])
-  );
-  const base = BigInt(hre.ethers.keccak256(inner));
+  const header = (await compiledStorageSlot("boxQueue")) + BigInt(buffer);
+  const base = BigInt(hre.ethers.keccak256(hre.ethers.toBeHex(header, 32)));
   return boLane(await hre.ethers.provider.getStorage(gameAddress, base + BigInt(position) / 3n), position);
 }
 

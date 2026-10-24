@@ -10,6 +10,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
@@ -81,8 +82,10 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
     uint256 private paidBet;
     uint256 private salvagePosition;
     uint24 private paidDay;
-    /// @dev Admits one 50-entry field group (JACKPOT_BATTLE_DRAW 3.3M + tails) but not a second.
-    uint256 private constant ONE_GROUP_GAS = 4_600_000;
+    /// @dev Admits one 50-entry field group (JACKPOT_BATTLE_DRAW 3.3M + tails) but not a second, and one
+    ///      atomic seat after the keeper prelude (seat admission bound CRAPS_SEAT_GAS_MAX; the former 4.6M
+    ///      allowance was sized for a 1.65M bound and no longer admits settlement).
+    uint256 private constant ONE_GROUP_GAS = GasBounds.CRAPS_SEAT_GAS_MAX + 2_950_000;
 
     struct Result {
         bytes32 transcript;
@@ -261,8 +264,8 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         // Zero and one are reserved callback values, so use a publishable VRF word.
         uint256 word = 2;
         while (true) {
-            uint256 battleWord = uint256(keccak256(abi.encode(word, uint24(7), keccak256("far-future-coin"))));
-            bool wins = uint256(keccak256(abi.encode(battleWord, keccak256("CrapsHighReserveDraw"), uint256(slot)))) % 10 == 0;
+            uint256 battleWord = uint256(keccak256(abi.encode(uint256(66), word)));
+            bool wins = uint256(keccak256(abi.encode(uint256(34), battleWord, uint256(slot)))) % 10 == 0;
             if (wins == reserveWin) break;
             ++word;
         }

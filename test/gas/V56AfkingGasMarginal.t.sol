@@ -489,7 +489,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 k; found < m; ++k) {
             require(k < 50_000, "fixture: ETH-spin players");
             address who = makeAddr(string(abi.encodePacked(prefix, _u(k))));
-            uint256 seed = uint256(keccak256(abi.encode(word, uint256(_giveWalletId(who)), uint256(0x41666b696e67426f78), uint256(day))));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(13), word, uint256(_giveWalletId(who)))));
             if (uint16(seed >> 40) % 20 == 19) subs[found++] = who;
         }
         for (uint256 i; i < m; ++i) {
@@ -509,8 +509,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
                 (uint64 betId, , , ) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
                 // Count only the forced stamp's spin ID, excluding the unrelated human boxes.
                 uint32 playerId = uint32(uint256(logs[i].topics[1]));
-                uint256 seed = uint256(keccak256(abi.encode(word, uint256(playerId), uint256(0x41666b696e67426f78), uint256(day))));
-                uint256 spinSeed = uint256(keccak256(abi.encode(seed, uint256(0x4574685370696e))));
+                uint256 seed = uint256(keccak256(abi.encode(uint256(13), word, uint256(playerId))));
+                uint256 spinSeed = uint256(keccak256(abi.encode(uint256(17), seed)));
                 uint64 expected = uint64((uint256(1) << 63) | (uint256(2) << 60) | (spinSeed & ((uint256(1) << 60) - 1)));
                 if (betId == expected) ++ethSpins;
             }
@@ -526,7 +526,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         for (uint256 k; k < 8000; ++k) {
             w = uint256(keccak256(abi.encodePacked("r3ethspin", salt, k))) | 1;
-            uint256 seed = uint256(keccak256(abi.encode(w, uint256(playerId), uint256(0x41666b696e67426f78), uint256(day))));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(13), w, uint256(playerId))));
             if (uint16(seed >> 40) % 20 == 19) return w;
         }
         revert("no eth-spin word found");

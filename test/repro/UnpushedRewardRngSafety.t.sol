@@ -9,6 +9,9 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
+import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
+import {GameBoxInternals} from "../../contracts/modules/GameBoxInternals.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
@@ -47,12 +50,25 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
     }
 }
 
+/// @dev Observe the folded resolver through its virtual boon seam; all real reward work runs.
+contract StampedBoxObserver is DegenerusGameBoxModule {
+    event StampedBoxResolved(uint32 id, uint256 amount, uint256 seed);
+    function _boxRollBoxBoons(
+        uint32 id, uint256 perBoxBudget, uint256 boxCount, uint256 originalAmount,
+        uint24 currentLevel, uint256 seed, uint256 nonceBase
+    ) internal override(DegenerusGameBoonModule, GameBoxInternals) {
+        emit StampedBoxResolved(id, originalAmount, seed);
+        super._boxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase);
+    }
+}
+
 contract UnpushedRewardRngSafetyTest is DeployProtocol {
     address private constant PLAYER = address(0xB0A);
     uint256 private constant SESSION_WORD = 0xC0FFEE;
 
     function setUp() public {
         _deployProtocol();
+        vm.etch(ContractAddresses.GAME_LOOTBOX_MODULE, type(StampedBoxObserver).runtimeCode);
         vm.warp(vm.getBlockTimestamp() + 5 days);
         vm.deal(address(game), 5000 ether);
         vm.deal(PLAYER, 100 ether);
@@ -81,13 +97,28 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         return uint8(uint256(game.extsload_g8132(bytes32(GameSlots.HUMAN_READ_COMPLETE))) >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) != 0;
     }
 
-    function _expectStampedResolve(uint24 day) private {
-        vm.expectCall(
-            ContractAddresses.GAME_LOOTBOX_MODULE,
-            abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.resolveAfkingBox.selector, game.walletIdOf_g3120(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1140)
-            )
-        );
+    event StampedBoxResolved(uint32 id, uint256 amount, uint256 seed);
+
+    function _expectStampedResolve(uint24) private {
+        // The daily worker can yield before AFKing. Record across the complete drain.
+        vm.recordLogs();
+    }
+
+    function _assertStampedResolve(Vm.Log[] memory logs) private view {
+        uint32 id = game.walletIdOf_g3120(PLAYER);
+        uint256 seed = uint256(keccak256(abi.encode(uint256(13), SESSION_WORD, uint256(id))));
+        uint256 bps = 14_390 + (uint256(1140) - 500) * 110 / (30_000 - 500);
+        uint256 matched;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0 ||
+                logs[i].topics[0] != keccak256("StampedBoxResolved(uint32,uint256,uint256)")) continue;
+            (uint32 actualId, uint256 amount, uint256 actualSeed) = abi.decode(logs[i].data, (uint32, uint256, uint256));
+            if (actualId != id) continue;
+            assertEq(amount, uint256(0.01 ether) * bps / 10_000, "frozen score amount");
+            assertEq(actualSeed, seed, "active session word and wallet ID");
+            ++matched;
+        }
+        assertEq(matched, 1, "stamped box resolved exactly once across the drain");
     }
 
     /// @dev Fund the mandatory next open; extreme calibration prevents later requests.
@@ -134,6 +165,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _expectStampedResolve(day);
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         _finishRead();
+        _assertStampedResolve(vm.getRecordedLogs());
         assertEq(mockVRF.lastRequestId(), requestId, "final-drain call did not request new entropy");
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day, "the stamped box opened");
@@ -167,6 +199,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip(0);
         assertFalse(game.rngLocked(), "daily work reaches unlock");
         _mineAll(64);
+        _assertStampedResolve(vm.getRecordedLogs());
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day);
     }
@@ -181,6 +214,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
         _expectStampedResolve(stampDay);
         game.mineFlip(0);
+        _assertStampedResolve(vm.getRecordedLogs());
         assertEq(_pending(), 0, "delayed fulfillment needs no retained stamp-day word");
         assertEq(_openedDay(), stampDay, "frozen day remains the reward domain input");
         assertTrue(game.rngComplete());
@@ -213,12 +247,13 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertEq(_dailyIdx(), requestDay, "delayed request applied and unlocked");
         assertEq(RecyclingState.dailyWord(address(game), stampDay), SESSION_WORD, "the delayed request retains its pinned day");
         _mineAll(64);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        _assertStampedResolve(logs);
         assertEq(_pending(), 0, "request-day stamp survived the gap");
         // The same composed call may go on to prepare the next wall day's subscriptions, where
         // this unfunded fixture subscription expires (its record is deleted); otherwise the
         // record must show the stamp opened with its original day.
         if (_openedDay() != stampDay) {
-            Vm.Log[] memory logs = vm.getRecordedLogs();
             bool expired;
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics.length > 1 && logs[i].topics[0] == keccak256("SubscriptionExpired(uint32,uint8)")
@@ -246,6 +281,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _expectStampedResolve(day);
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         _finishRead();
+        _assertStampedResolve(vm.getRecordedLogs());
         assertEq(_pending(), 0);
         assertTrue(game.rngComplete(), "only the sealed read session must finish");
         assertGt(RecyclingState.boxCount(address(game), write), 0, "new write orders remain queued");

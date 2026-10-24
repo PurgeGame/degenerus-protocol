@@ -5,8 +5,8 @@
 // Post-ENT-05-refactor statistical invariant of the jackpot ticket-roll.
 //
 // `DegenerusGameJackpotModule._jackpotTicketRoll` evolves the per-roll entropy
-// word on entry via `entropy = EntropyLib.hash2(entropy, entropy)` — a
-// scratch-slot keccak self-mix. The low-bit path/level consumers and the
+// word on entry via `entropy = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy)` — a
+// domain-separated keccak mix. The low-bit path/level consumers and the
 // bits[200..215] Bernoulli sub-roll all read this full-diffusion keccak word:
 //   - `entropy % 100`        — the 0..99 path roll (30%/65%/5% branch)
 //   - `(entropy / 100) % 4`  — the 65%-branch near level offset (+1..+4)
@@ -20,7 +20,7 @@
 //   1. Chi-square UNIFORMITY (one-way goodness-of-fit) of the 30/65/5 path roll
 //      and the near/far offset distributions under the keccak word.
 //   2. Per-roll seed-uniqueness across the 2-roll medium-amount-branch pattern.
-//      `_jackpotTicketRoll` does `entropy = hash2(entropy, entropy)` then returns
+//      `_jackpotTicketRoll` does `entropy = hash2(RngTags.JACKPOT_TICKET_ROLL, entropy)` then returns
 //      it; `_awardJackpotTickets` rethreads, so roll 1 sees `rollEvolve(E)` and
 //      roll 2 sees `rollEvolve(rollEvolve(E))`. The two rolls' (path, offset)
 //      pairs are asserted independent via the contingency chi-square infra.
@@ -29,7 +29,7 @@
 //      disjoint slices of a keccak output word are pairwise independent).
 //
 // DRIFT GATE: greps `DegenerusGameJackpotModule.sol` for the production
-// evolution line and asserts it reads `entropy = EntropyLib.hash2(entropy, entropy);`
+// evolution line and asserts it reads `entropy = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy);`
 // — any drift of the chosen second-arg fails the gate BEFORE the stat assertions
 // run, so the JS `rollEvolve` replica can never silently test the wrong word.
 //
@@ -37,7 +37,7 @@
 //
 // CROSS-CITES:
 //   - D-278-ENT05-01 / D-278-ENT05-CHAIN-01 / D-278-ENT05-TEST-01 (278-CONTEXT.md)
-//   - 278-01-SUMMARY.md (hash2(entropy, entropy) self-mix is the landed evolution)
+//   - 278-01-SUMMARY.md (hash2(RngTags.JACKPOT_TICKET_ROLL, entropy) self-mix is the landed evolution)
 //   - audit/FINDINGS-v39.0.md §4 (b) (disjoint keccak bit-slices pairwise independent)
 //   - test/stat/JackpotTicketRollSeedUniqueness.test.js (chi² + Wilson-Hilferty infra)
 //   - feedback_rng_backward_trace.md (per-roll entropy unknown at VRF-commitment time)
@@ -74,15 +74,15 @@ function makeRng(seedHex) {
 }
 
 // JS replica of the `_jackpotTicketRoll` entropy evolution: the on-chain
-// `EntropyLib.hash2(entropy, entropy)` scratch-slot keccak self-mix
-// (`mstore(0x00, a); mstore(0x20, a); keccak256(0x00, 0x40)`), which is
-// equivalent to `solidityPackedKeccak256(["uint256","uint256"], [state, state])`.
+// `EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy)` domain-separated keccak mix
+// (`mstore(0x00, 76); mstore(0x20, a); keccak256(0x00, 0x40)`), which is
+// equivalent to `solidityPackedKeccak256(["uint256","uint256"], [76n, state])`.
 function rollEvolve(state) {
   return (
     BigInt(
       hre.ethers.solidityPackedKeccak256(
         ["uint256", "uint256"],
-        [state & U256_MASK, state & U256_MASK]
+        [76n, state & U256_MASK]
       )
     ) & U256_MASK
   );
@@ -156,16 +156,16 @@ describe("Ent05KeccakRefactorInvariant (stat-suite, heavy-MC) — TST-CLEAN-01 p
   this.timeout(600_000);
 
   // Drift gate — runs first. If the production evolution line drifts from the
-  // chosen `hash2(entropy, entropy)` self-mix, this fails BEFORE any stat test
+  // chosen `hash2(RngTags.JACKPOT_TICKET_ROLL, entropy)` self-mix, this fails BEFORE any stat test
   // runs, so the JS `rollEvolve` replica can never silently model the wrong word.
-  describe("Drift gate — production `_jackpotTicketRoll` evolves entropy via `EntropyLib.hash2(entropy, entropy)`", function () {
-    it("[00a] production source contains the canonical keccak self-mix evolution `entropy = EntropyLib.hash2(entropy, entropy);`", function () {
+  describe("Drift gate — production `_jackpotTicketRoll` evolves entropy via `EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy)`", function () {
+    it("[00a] production source contains the canonical keccak self-mix evolution `entropy = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy);`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       expect(
-        /entropy\s*=\s*EntropyLib\.hash2\(\s*entropy\s*,\s*entropy\s*\)\s*;/.test(
+        /entropy\s*=\s*EntropyLib\.hash2\(\s*RngTags\.JACKPOT_TICKET_ROLL\s*,\s*entropy\s*\)\s*;/.test(
           source
         ),
-        "production _jackpotTicketRoll must evolve `entropy = EntropyLib.hash2(entropy, entropy);` — the keccak self-mix the JS rollEvolve replica mirrors"
+        "production _jackpotTicketRoll must evolve `entropy = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy);` — the keccak self-mix the JS rollEvolve replica mirrors"
       ).to.equal(true);
       // The deleted xorshift primitive must not reappear.
       expect(

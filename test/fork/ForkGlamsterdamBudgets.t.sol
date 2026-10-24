@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {ForkDeployProtocol} from "./ForkDeployProtocol.sol";
 import {ForkPins} from "./ForkPins.sol";
@@ -26,7 +27,7 @@ interface ICoordinatorExtra {
 ///         slot, +183,600 per account created by a value call, +2,300 per value-bearing CALL inside the
 ///         frame, +100 per EXTCODESIZE/EXTCODECOPY inside the frame. Refunds are ignored (conservative).
 ///         Every budget must cover the Glamsterdam total.
-abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
+abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol, NativeGasExport {
     struct Probe {
         address sender;
         address target;
@@ -277,6 +278,14 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
         if (enforce) {
             assertTrue(r.ok, string.concat(name, ": call failed"));
             assertGe(budget, r.total, string.concat(name, ": budget below Glamsterdam total"));
+        }
+        if (r.ok && bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            string memory label = string.concat("mainnet-budget-", vm.toString(keccak256(abi.encode(name, r))));
+            vm.serializeString(label, "calibrationName", name);
+            vm.serializeUint(label, "fixedCalleeBudget", budget);
+            vm.serializeBool(label, "enforceBudget", enforce);
+            vm.serializeUint(label, "osakaFrameGas", r.osaka);
+            this.exportNativeFixture(label, p.sender, p.target, p.value, p.data);
         }
     }
 

@@ -115,12 +115,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         return
             uint256(
                 keccak256(
-                    abi.encodePacked(
-                        DOM_INCIN_WINNER,
-                        address(wwxrp),
-                        bracket,
-                        word
-                    )
+                    abi.encode(uint256(110), word)
                 )
             ) % total;
     }

@@ -29,7 +29,7 @@ contract BoundedSupplementGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(crapsBattle), vm.getDeployedCode("CrapsBattle.sol:CrapsBattle"));
         vm.warp(block.timestamp + 20 days);
         bytes memory original = address(game).code;
-        vm.etch(address(game), vm.getDeployedCode("BoundedPublicPathGas.t.sol:BoundedPublicSeeder"));
+        vm.etch(address(game), type(BoundedPublicSeeder).runtimeCode);
         BoundedPublicSeeder(address(game)).seed(PLAYER);
         vm.etch(address(game), original);
         vm.deal(PLAYER, 1000 ether);
@@ -56,13 +56,13 @@ contract BoundedSupplementGasTest is BoundedDeployProtocol, BoundedGasProbe {
     }
     function _clear(uint48 index) private {
         bytes memory original = address(crapsBattle).code;
-        vm.etch(address(crapsBattle), vm.getDeployedCode("BoundedSupplementGas.t.sol:BoundedRngQueueSeeder"));
+        vm.etch(address(crapsBattle), type(BoundedRngQueueSeeder).runtimeCode);
         BoundedRngQueueSeeder(address(crapsBattle)).clearQueue(index);
         vm.etch(address(crapsBattle), original);
     }
     function _pending(uint48 index) private returns (uint256 count) {
         bytes memory original = address(crapsBattle).code;
-        vm.etch(address(crapsBattle), vm.getDeployedCode("BoundedSupplementGas.t.sol:BoundedRngQueueSeeder"));
+        vm.etch(address(crapsBattle), type(BoundedRngQueueSeeder).runtimeCode);
         count = BoundedRngQueueSeeder(address(crapsBattle)).pending(index);
         vm.etch(address(crapsBattle), original);
     }
@@ -70,7 +70,7 @@ contract BoundedSupplementGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, period, BOARD, 1);
         slot = uint64(uint256(game.currentDayView()) * 8 + period + 1);
         bytes memory original = address(crapsBattle).code;
-        vm.etch(address(crapsBattle), vm.getDeployedCode("BoundedSupplementGas.t.sol:BoundedRngQueueSeeder"));
+        vm.etch(address(crapsBattle), type(BoundedRngQueueSeeder).runtimeCode);
         assertGt(BoundedRngQueueSeeder(address(crapsBattle)).entrants(slot), 0, "real field is populated");
         vm.etch(address(crapsBattle), original);
     }

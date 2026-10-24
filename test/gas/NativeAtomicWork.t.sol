@@ -13,6 +13,7 @@ import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {Test} from "forge-std/Test.sol";
 
 contract NativeAtomicReadFixture is BudgetReadFixture {
@@ -21,7 +22,7 @@ contract NativeAtomicReadFixture is BudgetReadFixture {
 }
 
 /// @notice Whole bets remain indivisible even though a transaction can now process >10M gas.
-contract NativeAtomicDegeneretteTest is DeployProtocol {
+contract NativeAtomicDegeneretteTest is DeployProtocol, NativeGasExport {
     NativeAtomicReadFixture private host;
     address private constant PLAYER = address(0xA7051C);
 
@@ -61,6 +62,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         vm.cool(address(sdgnrs)); vm.cool(address(crapsBattle));
         vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
         vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE); vm.cool(ContractAddresses.GAME_BOON_MODULE);
+        uint256 nativeSnapshot = vm.snapshotState();
         uint256 beforeGas = gasleft();
         MineFlipGas.Result memory result = host.workBet{gas: 15_000_000}(14_000_000);
         used = beforeGas - gasleft();
@@ -69,6 +71,12 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         assertEq(host.bet(), packed, "resolution does not write the bet");
         assertEq(host.betCursor(), 1, "whole bet completed atomically");
         assertLt(used, 10_000_000, "one immutable bet meets the chunk sizing guideline");
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(nativeSnapshot));
+            this.exportNativeFixture(string.concat("atomic-degenerette-", vm.toString(currency)), address(this), address(host), abi.encodeCall(host.workBet, (uint256(14_000_000))));
+            host.workBet{gas: 15_000_000}(14_000_000);
+        }
+        vm.deleteStateSnapshot(nativeSnapshot);
     }
 
     function test_Max25EthSpinsWithHighScoreAndWinBoxFitOneStep() public {
@@ -86,7 +94,11 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
 }
 
 /// @notice A long real dice run, including its live heap insertion, remains one checkpoint step.
-contract NativeAtomicDecimatorTest is Test {
+contract NativeAtomicRedemptionState {
+    function redemptionSettlementPending() external pure returns (bool) { return false; }
+}
+
+contract NativeAtomicDecimatorTest is NativeGasExport {
     function _board(uint64 id) private pure returns (uint32 chips, uint256 named) {
         uint32[8] memory boards = [uint32(0), 1, 2, 3, uint32(3 | 1 << 9),
             uint32(3 << 27 | 2 << 9), uint32(3 | 3 << 9), uint32(3 | 3 << 9 | 1 << 24)];
@@ -96,23 +108,29 @@ contract NativeAtomicDecimatorTest is Test {
 
     function test_LongRealDiceRunWithHeapInsertionFitsOneStep() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.etch(ContractAddresses.SDGNRS, type(NativeAtomicRedemptionState).runtimeCode);
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
         DecimatorBattleHarness host = new DecimatorBattleHarness();
-        uint256 word = uint256(keccak256(abi.encode("round200k", uint256(259))));
-        bytes32 seed = keccak256(abi.encode(keccak256("decimator.battle.dice.v1"), word, uint24(5)));
+        uint256 word;
         uint64 longest;
         uint64 longestStratum;
         uint256 rolls;
-        for (uint64 i; i < 99; ++i) {
+        // Search outside the measured call after the domain migration, preserving
+        // the original >300-roll worst-case requirement and genuine production dice.
+        for (uint256 candidate = 259; candidate < 323 && rolls <= 300; ++candidate) {
+          word = uint256(keccak256(abi.encode("round200k", candidate)));
+          bytes32 seed = keccak256(abi.encode(uint256(45), word));
+          rolls = 0;
+          for (uint64 i; i < 99; ++i) {
             uint64 id = Sample.at(word, 5, 200, i);
             (uint32 chips, uint256 named) = _board(id);
             Craps.SlipResult memory run = CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
-                chips, 60, uint256(keccak256(abi.encode(keccak256("decimator.battle.board.v1"), word, uint24(5), id))),
-                10 - named, seed, 3000 ether, uint256(id) + 0x1000,
+                chips, 60, uint256(keccak256(abi.encode(uint256(44), word, uint256(id)))),
+                10 - named, seed, 3000 ether, uint256(id),
                 (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF, (511 << 16) | 48
             );
             if (run.totalRolls > rolls) { rolls = run.totalRolls; longest = id; longestStratum = i; }
+        }
         }
         assertGt(rolls, 300, "fixture exercises a long real dice run");
         // Leave another sampled stratum after the measured run so ranking cannot chain.
@@ -130,6 +148,7 @@ contract NativeAtomicDecimatorTest is Test {
         assertEq(host.roundOf(5).cursor, longestStratum);
         assertEq(Sample.at(word, 5, 200, longestStratum), longest);
         vm.cool(address(host)); vm.cool(ContractAddresses.CRAPS_ENGINE);
+        uint256 nativeSnapshot = vm.snapshotState();
         uint256 beforeGas = gasleft();
         MineFlipGas.Result memory result = host.runDecimatorWork{gas: 15_000_000}(runAllowance);
         uint256 used = beforeGas - gasleft();
@@ -140,5 +159,9 @@ contract NativeAtomicDecimatorTest is Test {
         assertLt(used, 10_000_000, "one real dice run meets the chunk sizing guideline");
         emit log_named_uint("atomic_decimator_long_run_rolls", rolls);
         emit log_named_uint("cold_atomic_decimator_run_and_heap", used);
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(nativeSnapshot));
+            this.exportNativeFixture("atomic-decimator-long-real-run", address(this), address(host), abi.encodeCall(host.runDecimatorWork, (runAllowance)));
+        }
     }
 }

@@ -106,7 +106,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
     }
 
     function _root(uint256 word, uint48 buffer, uint256 position) internal pure returns (uint256) {
-        return EntropyLib.hash4(QUEUED_ORDER_DOMAIN, word, buffer, position);
+        return EntropyLib.hash3(20, word, position);
     }
 
     function _rollOf(uint256 seed, uint24 currentLevel) internal pure returns (bool emits, uint24 target) {
@@ -118,15 +118,16 @@ contract LootboxCompactQueueTest is DeployProtocol {
         emits = path <= 10 || path == 14 || path == 15 || path == 16;
     }
 
-    function _assertSeeded(Vm.Log[] memory logs, uint48 tag, uint256 rootWord, uint32 id, uint256 boxes)
-        internal
+    function assertSeeded(Vm.Log[] memory logs, uint48 tag, uint256 rootWord, uint32 id, uint256 boxes)
+        external
         returns (bytes32 sequence)
     {
+        require(msg.sender == address(this), "assertion self-call");
         uint24 cur = host.level() + 1;
         uint24[] memory expected = new uint24[](boxes);
         uint256 en;
         for (uint256 i = 1; i <= boxes; ++i) {
-            uint256 seed = EntropyLib.hash4(rootWord, uint256(id), BOX_OPEN_TAG, i);
+            uint256 seed = EntropyLib.hash3(19, rootWord, i);
             sequence = keccak256(abi.encode(sequence, seed));
             (bool emits, uint24 target) = _rollOf(seed, cur);
             if (emits) expected[en++] = target;
@@ -358,7 +359,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
         uint32 id = _id(alice);
         bytes32[3] memory seq;
         for (uint256 p; p < 3; ++p) {
-            seq[p] = _assertSeeded(logs, _ref(b, p), _root(WORD, b, p), id, 10);
+            seq[p] = this.assertSeeded(logs, _ref(b, p), _root(WORD, b, p), id, 10);
         }
         assertTrue(_root(WORD, b, 0) != _root(WORD, b, 1) && _root(WORD, b, 1) != _root(WORD, b, 2));
         assertTrue(seq[0] != seq[1] && seq[1] != seq[2] && seq[0] != seq[2], "distinct box seed sequences");
@@ -376,7 +377,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
             assertEq(lvl, host.level() + 1, "drawn at the open level");
             assertEq(nonceBase, 0, "each order's boxes number from its own start");
             assertLt(calls, 3, "one boon draw per order");
-            assertEq(seed, EntropyLib.hash4(_root(WORD, b, calls), uint256(id), BOX_BOON_TAG, b),
+            assertEq(seed, EntropyLib.hash2(14, _root(WORD, b, calls)),
                 "the order's boon seed binds its logical position");
             boon[calls++] = seed;
         }

@@ -288,7 +288,19 @@ contract CrapsHighRollerTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 7 hours);
         uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("granule")));
-        PaidOut[] memory lane = _resolveForLane(craps, slot, WHOLE_FIELD, false);
+        vm.recordLogs();
+        craps.settleSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        PaidOut[] memory lane = _lanePaymentsIn(logs, false);
+        uint256 banked;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(craps) && logs[i].topics.length == 4
+                && logs[i].topics[0] == keccak256("CrapsProtocolAwardSplit(bytes32,uint32,uint8,uint256,uint256)")
+                && uint256(logs[i].topics[3]) == 2) {
+                (uint256 gross, uint256 liquid) = abi.decode(logs[i].data, (uint256, uint256));
+                banked += gross - liquid;
+            }
+        }
         assertEq(lane.length, 1, "the contested lane paid other than once");
 
         (,, uint64 seat,,) = craps.highFieldOf(craps.battleKeyOf((uint256(slot) << 64) | 1));
@@ -311,7 +323,9 @@ contract CrapsHighRollerTest is CrapsPins {
         assertGt(units, 40, "the fixture's lane boost is below the rounding threshold");
         assertTrue(units % 10 != 0, "the fixture's lane boost is already round: rounding is untested");
         assertEq(
-            lane[0].amount,
+            // Include the separately emitted pass value: the rounded gross award
+            // splits into liquid FLIP and passes after the granule rounding.
+            lane[0].amount + banked,
             principal + craps.roundBoost(units) * granule,
             "the lane did not round in granules before widening to wei"
         );

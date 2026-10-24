@@ -9,7 +9,7 @@ import path from "node:path";
 
 const MINT_MODULE_PATH = path.resolve(
   process.cwd(),
-  "contracts/modules/DegenerusGameMintModule.sol"
+  "contracts/modules/GamePurchase.sol"
 );
 const STORAGE_PATH = path.resolve(
   process.cwd(),
@@ -23,18 +23,18 @@ const LOOTBOX_MODULE_PATH = path.resolve(
 describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-06", function () {
   this.timeout(30_000);
 
-  describe("Mint-boost callsite at MintModule:1142 still calls `_queuePurchaseEntries` (D-40N-MINTBOOST-OUT-01)", function () {
+  describe("Mint-boost callsite at GamePurchase still calls `_queuePurchaseEntries` (D-40N-MINTBOOST-OUT-01)", function () {
 
 
-    it("[01b] mint-boost callsite uses the boost-derived `adjustedQty` argument (boostBps drives the scaled fractional quantity)", function () {
+    it("[01b] mint-boost callsite uses the boost-derived `adjustedQty32` argument (boostBps drives the scaled fractional quantity)", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       // The pre-Phase-275 callsite at L1142 is:
-      //   _queuePurchaseEntries(buyerId, targetLevel, adjustedQty);
-      // Match by argument shape (boost-derived fractional adjustedQty).
-      const callPattern = /_queuePurchaseEntries\(buyerId,\s*targetLevel,\s*adjustedQty\)/;
+      //   _queuePurchaseEntries(buyerId, targetLevel, adjustedQty32);
+      // Match by argument shape (boost-derived fractional adjustedQty32).
+      const callPattern = /_queuePurchaseEntries\(buyerId,\s*targetLevel,\s*adjustedQty32\)/;
       expect(
         mint.match(callPattern),
-        "MintModule mint-boost callsite `_queuePurchaseEntries(buyerId, targetLevel, adjustedQty)` missing"
+        "MintModule mint-boost callsite `_queuePurchaseEntries(buyerId, targetLevel, adjustedQty32)` missing"
       ).to.not.be.null;
     });
 
@@ -74,7 +74,7 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       expect(body("_drainQueue")).to.include("_solo(");
       expect(body("_drainQueue")).to.include("_roundPhase(");
       expect(entropy).to.include("DEGENERUS_TICKET_REMAINDER_V2");
-      expect(entropy).to.include("abi.encode(REMAINDER_DOMAIN, stream, entropy)");
+      expect(entropy).to.include("EntropyLib.hash3(RngTags.TICKET_REMAINDER, entropy, stream & ~(uint256(type(uint32).max) << ID_SHIFT))");
       expect(entropy).to.include("% 100 < fraction");
     });
 

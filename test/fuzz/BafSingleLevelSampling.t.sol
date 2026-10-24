@@ -55,7 +55,7 @@ contract BafSingleLevelSamplingTest is Test {
         uint256 span = uint256(toLevel - fromLevel) + 1;
         uint256 packs;
         for (uint256 attempt; packs < 4 && attempt < 12; ++attempt) {
-            entropy = EntropyLib.hash2(entropy, attempt);
+            entropy = uint256(keccak256(abi.encode(uint256(2), entropy, attempt)));
             uint24 target = fromLevel + uint24(entropy % span);
             uint256 length = target == selected ? len : fallbackLength;
             if (length == 0) continue;
@@ -68,7 +68,7 @@ contract BafSingleLevelSamplingTest is Test {
     }
 
     function _check(uint256 entropy, uint256 len, uint256 fallbackLength, uint24 fromLevel, uint24 toLevel) private {
-        uint24 selected = fromLevel + uint24(EntropyLib.hash2(entropy, 0) % (uint256(toLevel - fromLevel) + 1));
+        uint24 selected = fromLevel + uint24(uint256(keccak256(abi.encode(uint256(2), entropy, uint256(0)))) % (uint256(toLevel - fromLevel) + 1));
         h.seedRange(fromLevel, toLevel, fallbackLength);
         h.seed(selected, len);
         uint32[] memory players = h.sampleFarFutureTickets(entropy, fromLevel, toLevel);

@@ -116,7 +116,7 @@ for path in sorted(a.fixtures.glob(a.pattern)):
                 boundary['passed'] = boundary['passed'] and boundary['workerRollbackVerified']
         row = dict(fixture=path.stem, profile=profile, status=result['status'],
                    gas=int(result['gasUsed'], 16), maxUsedGas=int(result['maxUsedGas'], 16),
-                   executionGas=int(block['gasUsed'], 16), missingSlots=missing, storageMismatches=mismatches,
+                   blockGasUsedMaxDimension=int(block['gasUsed'], 16), missingSlots=missing, storageMismatches=mismatches,
                    returnMatches=result.get('returnData', '0x').lower() == call['expectedReturn'].lower(),
                    logsMatch=logs_normalized(result.get('logs', [])) == logs_normalized(expected_logs),
                    boundary=boundary,

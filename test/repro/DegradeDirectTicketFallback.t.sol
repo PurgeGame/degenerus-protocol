@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import {Test, Vm} from "forge-std/Test.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
@@ -70,10 +70,11 @@ contract DegradeDirectTicketFallbackTest is Test {
     DegradeDirectFallbackHarness private h;
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         vm.warp(30 days);
         h = new DegradeDirectFallbackHarness();
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGamePassModule()).code);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGamePassModule()).code);
     }
 
     function _count(Vm.Log[] memory logs) private pure returns (uint256 direct, uint256 queued) {

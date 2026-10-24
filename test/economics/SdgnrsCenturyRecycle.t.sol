@@ -26,7 +26,7 @@ contract CenturyRedemptionSessionFixture is DegenerusGame {
 
 contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     uint256 private constant INITIAL = 1e24;
-    uint256 private constant RNG_WORD = 53; // 50% at level 100; other centuries use separate draws.
+    uint256 private constant RNG_WORD = 13; // 50%; each century consumes its own fresh committed VRF word.
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
 
@@ -59,7 +59,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
 
     function _refillPercent(uint24 lvl, uint256 rngWord) private pure returns (uint256) {
         return 25 + uint256(keccak256(abi.encode(
-            rngWord, uint256(keccak256("sdgnrs.century.refill")) ^ uint256(lvl)
+            uint256(26), rngWord
         ))) % 51;
     }
 
@@ -214,30 +214,30 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
 
     function testMinimumRollMints25Percent() public {
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
-        _assertRefill(100, 100e12, 8);
+        _assertRefill(100, 100e12, 108);
         assertEq(sdgnrs.totalSupply(), INITIAL - 75e12);
     }
 
     function testMaximumRollMints75PercentAndCannotReroll() public {
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
-        _assertRefill(100, 100e12, 119);
+        _assertRefill(100, 100e12, 51);
         assertEq(sdgnrs.totalSupply(), INITIAL - 25e12);
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
         vm.warp(block.timestamp + 3 days);
         vm.recordLogs();
-        _recycle(100, 8);
+        _recycle(100, 108);
         _recycle(100, type(uint256).max);
         assertEq(vm.getRecordedLogs().length, 0, "replays emit no new roll or mint");
         assertEq(sdgnrs.totalSupply(), INITIAL - 125e12);
         assertEq(sdgnrs.centurySupplyCheckpoint(), INITIAL - 25e12);
     }
 
-    function testSameWordSeparatesCenturies() public {
+    function testDistinctCommittedWordsSeparateCenturies() public {
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
-        _assertRefill(100, 100e12, 8);
+        _assertRefill(100, 100e12, 108);
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
-        _assertRefill(200, 100e12, 8);
-        assertEq(sdgnrs.totalSupply(), INITIAL - 114e12, "25% then 61% for the same word");
+        _assertRefill(200, 100e12, 20);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 114e12, "25% then 61% from distinct century commitments");
     }
 
     function testTinyRawUnitSplits() public {

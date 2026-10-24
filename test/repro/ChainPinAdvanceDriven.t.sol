@@ -121,7 +121,8 @@ abstract contract ChainPinBase is DeployProtocol {
     uint256 internal simTime;
     uint256 internal constant MAX_MINE_CALLS = 20_000;
     uint256 internal maxDayCalls;
-    /// @dev Folded into every fulfillment word (word = keccak(simTime, reqId) | 1: every daily flip wins).
+    /// @dev Nudges the initial simulated time; fulfillment witnesses keep both
+    ///      the daily coinflip and the independently tagged BAF gate winning.
     uint256 internal constant WORD_NUDGE = 1;
 
     bytes4 private constant NO_WORK = bytes4(keccak256("NoWork()"));
@@ -247,6 +248,9 @@ abstract contract ChainPinBase is DeployProtocol {
         (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
         uint256 word = uint256(keccak256(abi.encode(simTime, reqId))) | 1;
+        while (uint256(keccak256(abi.encode(uint256(61), word))) & 1 == 0) {
+            unchecked { word += 2; }
+        }
         try mockVRF.fulfillRandomWords(reqId, word) {} catch {}
     }
 
@@ -271,12 +275,18 @@ abstract contract ChainPinBase is DeployProtocol {
         vm.pauseGasMetering();
         vm.recordLogs();
         _settle();
-        _scan(vm.getRecordedLogs());
+        this.scanRecordedLogs();
     }
 
     /// @dev Cross the day boundary and run the whole advance chain. With `crossAt` set, the clock moves past
     ///      the next midnight the moment the request that promotes the game to level `crossAt` is in flight.
     function _runDay(uint24 crossAt) internal {
+        this.runDayFrame(crossAt);
+    }
+
+    /// @dev Release the driver's temporary ABI arrays between simulated days.
+    function runDayFrame(uint24 crossAt) external {
+        require(msg.sender == address(this), "driver self-call");
         simTime += 1 days + 1;
         vm.warp(simTime);
         for (uint256 i;; ++i) {
@@ -287,13 +297,13 @@ abstract contract ChainPinBase is DeployProtocol {
                 vm.warp(simTime);
             }
             _fulfillPending();
-            if (i % 1000 == 999) _scan(vm.getRecordedLogs());
+            if (i % 1000 == 999) this.scanRecordedLogs();
             if (!_mine()) {
                 if (i > maxDayCalls) maxDayCalls = i;
                 break;
             }
         }
-        _scan(vm.getRecordedLogs());
+        this.scanRecordedLogs();
     }
 
     function _runFullDay() internal {
@@ -369,6 +379,12 @@ abstract contract ChainPinBase is DeployProtocol {
     // ---------------------------------------------------------------------
     // Log scan
     // ---------------------------------------------------------------------
+
+    /// @dev Release decoded log memory between driven days while retaining every observation.
+    function scanRecordedLogs() external {
+        require(msg.sender == address(this), "log scan self-call");
+        _scan(vm.getRecordedLogs());
+    }
 
     function _scan(Vm.Log[] memory logs) internal {
         for (uint256 i; i < logs.length; ++i) {
@@ -465,7 +481,7 @@ abstract contract ChainPinBase is DeployProtocol {
                 require(latched, "harness: the x0 latch must be set");
                 _middayRequest();
                 _settle();
-                _scan(vm.getRecordedLogs());
+                this.scanRecordedLogs();
             }
         }
         revert("harness: never completed level 10");

@@ -46,7 +46,7 @@ contract StorageReuseNativeDailyContext is DeployProtocol, NativeGasExport {
     }
 }
 
-contract StorageReuseNativeCenturyContext is AdvanceCenturyDiverseDestinations, NativeGasExport {
+contract StorageReuseNativeCenturyContext is AdvanceCenturyDiverseDestinations {
     function _centuryDay() internal pure override returns (uint24) { return 21_000; }
     function _vaultHistoryMode() internal pure override returns (uint8) { return 1; }
 

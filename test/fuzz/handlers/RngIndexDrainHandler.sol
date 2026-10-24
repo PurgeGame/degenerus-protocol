@@ -29,7 +29,7 @@ abstract contract RngIndexDrainOracle is Test {
     uint8 private constant DOMAIN_ORDINARY_ZERO = 0x20;
     uint8 private constant DOMAIN_FUTURE = 0x22;
     uint8 private constant GOLD_SIX_TRAIT = 253;
-    uint256 private constant GOLD_SIX_REPLACEMENT_TAG = uint256(keccak256("GOLD_SIX_REPLACEMENT_V1"));
+    uint256 private constant GOLD_SIX_REPLACEMENT_TAG = 70;
 
     struct DrainSnapshot {
         uint24 firstLevel;
@@ -117,7 +117,11 @@ abstract contract RngIndexDrainOracle is Test {
         uint256 end = uint256(start) + take;
         uint256 i = start;
         while (i < end) {
-            uint64 state = uint64(uint256(keccak256(abi.encode(stream, word, i / 16)))) | 1;
+            // The receipt retains wallet identity for ownership checks. The
+            // trait stream hashes tag 105, the commitment, and the identity
+            // with only its wallet-ID lane cleared.
+            uint256 traitStream = stream & ~(uint256(type(uint32).max) << 32);
+            uint64 state = uint64(uint256(keccak256(abi.encode(uint256(105), word, traitStream, i / 16)))) | 1;
             uint64 offset = uint64(i % 16);
             unchecked { state = state * (6364136223846793005 + offset) + offset; }
             for (uint256 j = offset; j < 16 && i < end; ++j) {
@@ -128,7 +132,7 @@ abstract contract RngIndexDrainOracle is Test {
                 uint8 trait = uint8((i % 4) * 64) | (color << 3) | (uint8(state >> 32) & 7);
                 if (trait == GOLD_SIX_TRAIT) {
                     if (goldSixTaken) {
-                        uint8 symbol = uint8(uint256(keccak256(abi.encode(uint256(state), GOLD_SIX_REPLACEMENT_TAG))) % 7);
+                        uint8 symbol = uint8(uint256(keccak256(abi.encode(GOLD_SIX_REPLACEMENT_TAG, uint256(state)))) % 7);
                         trait = 248 + symbol + (symbol >= 5 ? 1 : 0);
                     } else {
                         goldSixTaken = true;

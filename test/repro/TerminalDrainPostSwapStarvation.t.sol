@@ -198,7 +198,10 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
     }
 
     function _sweep(uint256 owners, uint32 entries, uint256 preBatches, bool expectAwards) private {
-        uint256 word = uint256(keccak256(abi.encode("w", uint256(0))));
+        // Independently searched against the final trait domains. Candidate 42
+        // leaves every winning bucket empty for the 24-by-60 cohort; candidate
+        // zero retains actual awards for the larger populated-cohort probe.
+        uint256 word = uint256(keccak256(abi.encode("w", uint256(expectAwards ? 0 : 42))));
         _toPostSwapWorded(owners, entries, word, preBatches);
         uint256 base = vm.snapshotState();
         vm.recordLogs();

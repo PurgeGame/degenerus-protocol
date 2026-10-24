@@ -74,7 +74,7 @@ contract QuadrantWhalePassTest is Test {
         private pure returns (uint8[4] memory traits, uint16[4] memory counts, uint256[4] memory shares, uint256 entropy)
     {
         traits = _board(word);
-        entropy = EntropyLib.hash2(word, LVL);
+        entropy = EntropyLib.hash3(71, word, LVL);
         uint8[4] memory gold;
         uint8 n;
         for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) gold[n++] = q;
@@ -161,7 +161,7 @@ contract QuadrantWhalePassTest is Test {
         bool finalDay = turbo || counter == 2;
         uint256 bps = 10_000;
         if (!finalDay) {
-            bps = 600 + uint256(keccak256(abi.encodePacked(word, keccak256("daily-current-bps"), counter))) % 801;
+            bps = 600 + EntropyLib.hash2(73, word) % 801;
             if (counter != 0) bps *= 2;
         }
         uint256 budget = current * bps / 10_000;
@@ -193,12 +193,10 @@ contract QuadrantWhalePassTest is Test {
             }
             if (full != 0) {
                 assertGe(h.whalePassOf(d.passWinner[q]), full * 2, "pass claim credited");
-                uint256 root = uint256(keccak256(abi.encode(
-                    EntropyLib.hash2(entropy, q), keccak256("jackpot-quadrant-whale"), uint256(100), uint256(LVL)
-                )));
+                uint256 root = EntropyLib.hash2(106, EntropyLib.hash3(75, entropy, q));
                 uint8 color = (traits[q] >> 3) & 7;
                 uint256 virtuals = deity == address(0) ? 0 : color >= 5 ? 1 : 2;
-                uint256 index = uint256(keccak256(abi.encode(root, uint256(1)))) % (len + virtuals);
+                uint256 index = root % (len + virtuals);
                 address expected = index < len ? address(BASE + uint160(q) * 0x10000 + uint160(index) + 1) : deity;
                 assertEq(d.passWinner[q], expected, "fresh entry draw with real and deity weights");
             }
@@ -221,7 +219,7 @@ contract QuadrantWhalePassTest is Test {
     }
 
     function test_goldSixSoloPriorityCounterexampleReplay() public {
-        uint256 word = 641518955479923548691900238103279543832;
+        uint256 word = 1005;
         uint8[4] memory traits = _board(word);
         assertEq(traits[3], GoldSixLib.TRAIT, "replay includes a surviving gold six");
         (,,, uint256 entropy) = _geometry(word, 100_000 ether, false);
@@ -275,7 +273,7 @@ contract QuadrantWhalePassTest is Test {
     function test_originalEthDrawMatchesUnconvertedDraw() public {
         uint256 word = 1337;
         _seed(word, 15, 512);
-        uint256 bps = 2 * (600 + uint256(keccak256(abi.encodePacked(word, keccak256("daily-current-bps"), uint8(1)))) % 801);
+        uint256 bps = 2 * (600 + EntropyLib.hash2(73, word) % 801);
         uint256 current = 52.5 ether * 10_000 / bps;
         uint256 snap = vm.snapshotState();
         Draw memory ordinary = _run(current, word, 1, false);

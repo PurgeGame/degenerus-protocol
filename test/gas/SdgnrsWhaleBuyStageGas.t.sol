@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
@@ -24,7 +25,7 @@ import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 ///         gas through the real keeper call must stay inside that bound, itself inside the 10M
 ///         realistic chunk limit. Whole keeper calls are budgeted by their allowance and only
 ///         reported. Test-only: ZERO contracts/*.sol mutation.
-contract SdgnrsWhaleBuyStageGas is DeployProtocol {
+contract SdgnrsWhaleBuyStageGas is DeployProtocol, NativeGasExport {
     uint256 private constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
     uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;
@@ -38,7 +39,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
 
     uint256 private _t;
     /// @dev State-inclusive Glamsterdam total of the last measured call.
-    uint256 private _lastRepriced;
+    uint256 internal _lastRepriced;
 
     function setUp() public {
         _deployProtocol();
@@ -122,6 +123,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         require(_sdgnrsBonusLevel() == 0, "fixture: level 4's attempt not yet spent");
         uint256 claimable0 = _claimableOf(ContractAddresses.SDGNRS);
 
+        uint256 snapshot = vm.snapshotState();
         vm.cool(address(game));
         vm.cool(address(sdgnrs));
         vm.cool(address(affiliate));
@@ -147,6 +149,14 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
             require(debit == topUp + passes * 4 ether, "fixture: the exact purchase fired in the measured call");
         } else {
             require(debit < 1 ether, "fixture: no purchase in the baseline (daily box only)");
+        }
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            uint256 repriced = _lastRepriced;
+            assertTrue(vm.revertToState(snapshot));
+            this.exportNativeFixture(string.concat("subscriber_whale_", vm.toString(passes)), address(this),
+                address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
+            game.mineFlip{gas: KEEPER_ALLOWANCE}(0);
+            _lastRepriced = repriced;
         }
     }
 

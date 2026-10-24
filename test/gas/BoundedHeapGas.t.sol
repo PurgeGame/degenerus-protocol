@@ -7,6 +7,10 @@ import {DecimatorSamplingLib as Sampling} from "../../contracts/libraries/Decima
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
+contract BoundedHeapRedemptionState {
+    function redemptionSettlementPending() external pure returns (bool) { return false; }
+}
+
 contract BoundedHeapSeeder is DecimatorBattleHarness {
     /// @dev A valid ascending min-heap. Its entries were all recorded normally.
     ///      The pending final sampled entry is settled by the real Craps engine.
@@ -26,7 +30,7 @@ contract BoundedHeapGasTest is BoundedGasProbe {
     BoundedHeapSeeder private host;
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82621);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.etch(ContractAddresses.SDGNRS, type(BoundedHeapRedemptionState).runtimeCode);
         host = new BoundedHeapSeeder();
         vm.etch(ContractAddresses.CRAPS_ENGINE, vm.getDeployedCode("CrapsEngine.sol:CrapsEngine"));
         host.open(5);

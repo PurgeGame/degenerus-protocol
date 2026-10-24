@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
@@ -150,7 +151,8 @@ contract CrapsResolveBudgetTest is CrapsPins {
             } else if (mode == 1) {
                 for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSeats(slot, 1);
             } else {
-                for (uint256 i = 0; i < 12; ++i) craps.settleGas(slot, 3_000_000);
+                // Preserve the original 1.35M spending headroom above the seat admission.
+                for (uint256 i = 0; i < 12; ++i) craps.settleGas(slot, GasBounds.CRAPS_SEAT_GAS_MAX + 1_350_000);
             }
 
             CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
@@ -189,7 +191,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             bookedBefore = booked;
 
             vm.recordLogs();
-            craps.settleGas(slot, 4_000_000);
+            craps.settleGas(slot, GasBounds.CRAPS_SEAT_GAS_MAX + 2_350_000);
             uint256 settled = _countSig(vm.getRecordedLogs(), keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)"));
             uint64 after_ = craps.bonusCursorOf(slot);
             // EXACTLY the seats that settled, and every one of them contiguous with the last.
@@ -287,7 +289,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         for (uint256 i = 0; i < 64; ++i) {
             (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256(abi.encode("allbust", i))));
             vm.recordLogs();
-            craps.settleGas(slot, 2_250_000);
+            craps.settleGas(slot, GasBounds.CRAPS_SEAT_GAS_MAX + 600_000);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint256 settled = _countSig(logs, keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)"));
             uint256 paidSeats = _paidIn(logs);

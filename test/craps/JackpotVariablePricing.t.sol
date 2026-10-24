@@ -56,7 +56,7 @@ contract JackpotVariablePricingTest is CrapsPins {
     }
 
     function _price(uint256 word) private pure returns (uint256) {
-        uint256 b = uint256(keccak256(abi.encode(word, uint256(0x43726170735363686564756c65), uint256(5)))) & 3;
+        uint256 b = uint256(keccak256(abi.encode(uint256(39), word, uint256(5)))) & 3;
         return b == 0 ? 6000 : b == 3 ? 10000 : 8000;
     }
 
@@ -94,8 +94,8 @@ contract JackpotVariablePricingTest is CrapsPins {
     function _words() private view returns (uint256[16] memory words) {
         uint256 found;
         for (uint256 word = 1; found != 0xffff; ++word) {
-            uint256 s = uint256(keccak256(abi.encode(word, uint256(slot), SUBSIDY_TAG))) % 100;
-            uint256 m = uint256(keccak256(abi.encode(word, MULT_TAG))) % 1000;
+            uint256 s = uint256(keccak256(abi.encode(uint256(41), word))) % 100;
+            uint256 m = uint256(keccak256(abi.encode(uint256(33), word))) % 1000;
             uint256 i = (s < 60 ? 0 : s < 90 ? 1 : s < 99 ? 2 : 3) * 4
                 + (m < 900 ? 0 : m < 990 ? 1 : m < 999 ? 2 : 3);
             if (words[i] == 0) { words[i] = word; found |= uint256(1) << i; }

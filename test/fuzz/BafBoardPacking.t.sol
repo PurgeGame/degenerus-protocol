@@ -127,8 +127,7 @@ contract BafBoardPackingTest is Test {
     }
 
     function _headPick(uint256 rngWord) private pure returns (uint8) {
-        uint256 base = EntropyLib.hash2(rngWord, uint256(keccak256("degenerus.baf.winners")));
-        return uint8(2 + (EntropyLib.hash2(base, 1 << 17) & 1));
+        return uint8(2 + (EntropyLib.hash2(4, rngWord) & 1));
     }
 
     /// @dev The packed board, its length, every lane and the head slots equal the reference.

@@ -427,7 +427,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         word = host.btDailyWord();
         lvl = game.level();
         assertTrue(word != 0, "the day's word is recorded");
-        assertEq(word & 1, _expectBaf() ? 1 : 0, "the flip bit selects the fixture's branch");
+        assertEq(uint256(keccak256(abi.encode(uint256(61), word))) & 1, _expectBaf() ? 1 : 0, "the tagged BAF gate selects the fixture's branch");
         _score();
 
         // The bracket slots read here are the ones the digests and closure checks use.
@@ -735,7 +735,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
                 continue;
             }
             p = _expectAward(logs, p, host.btKeyOf(w), amount, threshold, ethLeg,
-                EntropyLib.hash4(word, lvl, BAF_TICKET_TAG, i), st.floorLvl, t);
+                uint256(keccak256(abi.encode(uint256(6), word, i))), st.floorLvl, t);
         }
         assertEq(_nextKey(logs, p), logs.length, "the award stage emits nothing beyond the award set");
         assertEq(st.residue, d.emptyTerm, "the residue is the ETH term of the unfilled slots");
@@ -773,13 +773,13 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         uint256 band = (q * 8) / rounds;
         if (band < 2) {
             uint256 context = BafBoardSeed.context(lvl, word, rounds);
-            uint32[] memory a = game.sampleTraitEntries(band == 1, BafBoardSeed.trait(2 * q, rounds, context), EntropyLib.hash2(base, 2 * q));
+            uint32[] memory a = game.sampleTraitEntries(band == 1, BafBoardSeed.trait(2 * q, rounds, context), uint256(keccak256(abi.encode(uint256(5), word, 2 * q))));
             (d[0], d[1]) = _rankRef(a, 0, epoch);
-            a = game.sampleTraitEntries(band == 1, BafBoardSeed.trait(2 * q + 1, rounds, context), EntropyLib.hash2(base, 2 * q + 1));
+            a = game.sampleTraitEntries(band == 1, BafBoardSeed.trait(2 * q + 1, rounds, context), uint256(keccak256(abi.encode(uint256(5), word, 2 * q + 1))));
             (d[2], d[3]) = _rankRef(a, 0, epoch);
         } else {
             (uint24 from, uint24 to) = _bandLevels(band);
-            uint32[] memory lanes = game.sampleFarFutureTickets(EntropyLib.hash2(base, BAF_FAR_PAIR_KEY | q), from, to);
+            uint32[] memory lanes = game.sampleFarFutureTickets(uint256(keccak256(abi.encode(uint256(1), word, q))), from, to);
             (d[0], d[1]) = _rankRef(lanes, 0, epoch);
             (d[2], d[3]) = _rankRef(lanes, 4, epoch);
         }
@@ -867,7 +867,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         for (uint256 j; j < 2; ++j) {
             uint256 round = 2 * pair + j;
             uint8 trait = BafBoardSeed.trait(round, rounds, board);
-            uint32[] memory candidates = game.sampleTraitEntries(next, trait, EntropyLib.hash2(base, round));
+            uint32[] memory candidates = game.sampleTraitEntries(next, trait, uint256(keccak256(abi.encode(uint256(5), word, round))));
             assertLt(p, logs.length, "candidate event present");
             assertEq(logs[p].emitter, address(game), "candidate event emitter");
             assertEq(logs[p].topics[0], keccak256("BafCandidates(uint24,uint24,uint16,uint24,uint8,uint32[])"));
@@ -956,7 +956,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         internal
         returns (uint256, uint256)
     {
-        entropy = EntropyLib.hash2(entropy, entropy);
+        entropy = uint256(keccak256(abi.encode(uint256(76), entropy)));
         uint256 roll = entropy % 100;
         uint256 div = entropy / 100;
         uint24 target;
@@ -1241,7 +1241,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
 ///      owner scored, so every award slot fills whatever lanes earlier awards add.
 abstract contract CenturyBafTranscript is BafTranscriptFixture {
     /// @dev The century fixture's word (bit 0 set: winning flip).
-    uint256 internal constant WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
+    uint256 internal constant WORD = 4;
 
     function _pools() internal pure virtual returns (uint128 nextPool, uint128 futurePool);
 
@@ -1282,7 +1282,7 @@ abstract contract CenturyBafTranscript is BafTranscriptFixture {
         uint256 context = BafBoardSeed.context(100, WORD, _rounds());
         for (uint256 r; r < _rounds() / 2; ++r) {
             uint32[] memory candidates = game.sampleTraitEntries(r >= _rounds() / 4,
-                BafBoardSeed.trait(r, _rounds(), context), EntropyLib.hash2(EntropyLib.hash2(WORD, uint256(BAF_WINNERS_TAG)), r));
+                BafBoardSeed.trait(r, _rounds(), context), uint256(keccak256(abi.encode(uint256(5), WORD, r))));
             assertEq(candidates.length, 4, "each trait round samples four entries");
             for (uint256 i; i < candidates.length; ++i) {
                 vm.prank(ContractAddresses.COINFLIP);
@@ -1335,7 +1335,7 @@ contract BafStagedTranscriptCenturyAllDeferred is CenturyBafTranscript {
 abstract contract PlainBafTranscript is BafTranscriptFixture {
     uint256 internal constant PLAYERS = 40;
     uint160 internal constant PLAYER_BASE = 0xBA5E0000;
-    uint256 internal constant PLAIN_WORD = uint256(keccak256("baf-staged-transcript")) | 1;
+    uint256 internal constant PLAIN_WORD = 4;
 
     function _level() internal pure virtual returns (uint24);
 
@@ -1392,7 +1392,7 @@ contract BafStagedTranscriptLevel20 is PlainBafTranscript {
 
     function _word() internal pure override returns (uint256) {
         // Retain an intra-pair queue change with the main board's three trait buckets.
-        return 5;
+        return 8;
     }
 
     function _expectFarDrift() internal pure override returns (bool) {
@@ -1439,7 +1439,7 @@ contract BafStagedTranscriptSkip is PlainBafTranscript {
     }
 
     function _word() internal pure override returns (uint256) {
-        return PLAIN_WORD & ~uint256(1);
+        return 2;
     }
 
     function _expectBaf() internal pure override returns (bool) {

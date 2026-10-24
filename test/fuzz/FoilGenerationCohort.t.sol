@@ -39,7 +39,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint256 buyerId = _seedWallet(who);
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(20_000);
         for (word = 2; ; ++word) {
-            uint256 seed = uint256(keccak256(abi.encode(word, buyerId, uint24(1), FOIL_SEED_TAG, uint256(0))));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(63), word, (uint256(buyerId) << 24) | 1, uint256(0))));
             if (DegenerusTraitUtils.foilTrait(uint64(seed >> 192), cut) == 61) return word;
         }
     }

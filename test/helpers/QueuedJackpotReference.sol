@@ -455,7 +455,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         d.terminal = work.kind == 3;
         d.jackpotPhase = work.kind == 2;
         d.traits = JackpotBucketLib.unpackWinningTraits(work.traits);
-        uint256 entropy = _soloAdjustedEntropy(d.traits, EntropyLib.hash2(word, work.lvl));
+        uint256 entropy = _soloAdjustedEntropy(d.traits, EntropyLib.hash3(71, word, work.lvl));
         if (work.budget != 0) {
             d.counts = d.terminal
                 ? JackpotBucketLib.terminalWinnerCounts(entropy)
@@ -483,7 +483,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
                 uint256 liability;
                 (pos, paid, liability) = _payEthQuadrant(
                     d.lvl, q, d.traits[q], count, perWinner, converts ? d.shares[q] : 0,
-                    EntropyLib.hash2(entropy, q), armGold && q == d.solo, pos, meter
+                    EntropyLib.hash3(75, entropy, q), armGold && q == d.solo, pos, meter
                 );
                 if (pos != start) result.progressed = true;
                 if (paid != 0) {
@@ -677,7 +677,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         plan.sourceLvl = work.lvl;
         plan.queueLvl = work.kind == 6 ? work.lvl + 1 : work.lvl;
         plan.salt = work.kind == 4 ? 242 : work.kind == 5 ? 239 : 241;
-        plan.entropy = EntropyLib.hash2(word, work.lvl);
+        plan.entropy = EntropyLib.hash3(71, word, work.lvl);
         plan.traits = JackpotBucketLib.unpackWinningTraits(work.traits);
         uint256 tickets = work.budget / ENTRIES_PER_TICKET;
         if (tickets == 0) return plan;
@@ -696,7 +696,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
                 plan.fullPasses = fullPasses;
             }
         }
-        uint256 soloEntropy = work.kind == 5 ? EntropyLib.hash2(word, level) : plan.entropy;
+        uint256 soloEntropy = work.kind == 5 ? EntropyLib.hash3(71, word, level) : plan.entropy;
         uint8 active;
         (plan.counts, active, plan.lens, plan.deities) = _computeBucketCounts(
             work.lvl, plan.traits, uint16(cap), plan.entropy, _pickSoloQuadrant(plan.traits, soloEntropy)
@@ -724,7 +724,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         }
         for (uint8 q; q < 4; ++q) {
             if (passes[q] != 0) {
-                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash2(plan.entropy, q), true);
+                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(75, plan.entropy, q), true);
             }
         }
     }
@@ -751,7 +751,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             uint256 len = plan.lens[q];
             uint32 deity = plan.deities[q];
             uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
-            uint256 seed = EntropyLib.hash2(plan.entropy, q);
+            uint256 seed = EntropyLib.hash3(75, plan.entropy, q);
             uint8 salt = uint8(plan.salt + q);
             PackedTicketSampleLib.Cursor memory cursor;
             while (i < count) {
@@ -1331,7 +1331,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ///      amounts, accumulates the total, and tracks
     ///      the largest-amount slot (first-seen on ties to match the scan order).
     ///      Pass 2 walks the cached weights with a cumulative cursor against
-    ///      `pick = uint64(uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal)`
+    ///      `pick = uint64(EntropyLib.hash2(74, entropy) % effectiveTotal)`
     ///      and applies a `leaderBonus = maxAmount / 2` add at the largest-amount slot —
     ///      effective ×1.5 weight on the leader, no min-wager floor on any other slot.
     ///      Returns `(false, 0, 0)` when no slot has any wagers.
@@ -1392,7 +1392,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         uint64 leaderBonus = uint64(maxAmount) / 2;
         uint64 effectiveTotal = total + leaderBonus;
         uint64 pick = uint64(
-            uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal
+            EntropyLib.hash2(74, entropy) % effectiveTotal
         );
 
         uint64 cumulative;
@@ -1493,11 +1493,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         uint256 randWord
     ) private pure returns (uint16 bps) {
         uint16 range = DAILY_CURRENT_BPS_MAX - DAILY_CURRENT_BPS_MIN + 1;
-        uint256 seed = uint256(
-            keccak256(
-                abi.encodePacked(randWord, DAILY_CURRENT_BPS_TAG, counter)
-            )
-        );
+        uint256 seed = EntropyLib.hash2(73, randWord);
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
@@ -45,7 +46,7 @@ contract ProtocolDailyGasHost is DegenerusGame {
     }
 }
 
-contract ProtocolBoonAdvanceGasTest is DeployProtocol {
+contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 2 days);
@@ -88,6 +89,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         vm.etch(address(game), type(ProtocolDailyGasHost).runtimeCode);
         ProtocolDailyGasHost host = ProtocolDailyGasHost(payable(address(game)));
         host.publishOnly();
+        uint256 snapshot = vm.snapshotState();
         vm.recordLogs();
         host.applyOnly{gas: 12_000_000}();
         uint256 used = vm.lastCallGas().gasTotalUsed;
@@ -105,6 +107,10 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         assertEq(awards, 6, "all maximum-depth draws must run inside the measured phase");
         assertEq(applies, 1, "phase must consume a fresh daily word exactly once");
         assertTrue(game.rngLocked(), "native application leaves the later daily phases locked");
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            this.exportNativeFixture("daily_six_maximum_boons", address(this), address(game), abi.encodeCall(host.applyOnly, ()));
+        }
     }
 
     function testInsufficientGasCannotDiscardOrSealAwards() public {

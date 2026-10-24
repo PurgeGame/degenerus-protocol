@@ -8,7 +8,7 @@ import {DegenesisHarness} from "./helpers/DegenesisHarness.sol";
 /// @notice Spec §6 / §9 and plan §3.3: cohort c (protocol day index c + 1) is sealed exactly from
 ///         the first daily request after its own day. The opening day's request (index 2) leaves
 ///         cohort 1 open. A request after a stretch with no requests splits every sealed cohort at
-///         once, exact in wei: claimablePool -2q, future pool +2q, Vault budget +q, sDGNRS AFKing +q.
+///         once, exact in wei: claimablePool -2q, future pool +q, insurance +q, Vault budget +q, sDGNRS AFKing +q.
 ///         Days are driven through mineFlip with mock VRF; credit comes from real lootbox buys.
 contract DegenesisDayMapping is DegenesisHarness {
     address internal a;
@@ -164,6 +164,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         _stepToRequest();
         uint256 claimable0 = game.claimablePoolView();
         uint256 future0 = _futureTotal();
+        uint256 insurance0 = game.yieldAccumulatorView();
         uint256 vault0 = _vaultBudget();
         uint256 afk0 = _sdgnrsAfking();
         vm.recordLogs();
@@ -171,7 +172,8 @@ contract DegenesisDayMapping is DegenesisHarness {
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(claimable0 - game.claimablePoolView(), 2 * q, "claimablePool -2q");
-        assertEq(_futureTotal() - future0, 2 * q, "future pool (live + frozen pending) +2q");
+        assertEq(_futureTotal() - future0, q, "future pool (live + frozen pending) +q");
+        assertEq(game.yieldAccumulatorView() - insurance0, q, "insurance +q");
         assertEq(_vaultBudget() - vault0, q, "Vault budget +q");
         assertEq(_sdgnrsAfking() - afk0, q, "sDGNRS AFKing +q");
         assertEq(_splitDays(logs), (1 << 1) | (1 << 2) | (1 << 3), "every sealed cohort split");
@@ -220,13 +222,15 @@ contract DegenesisDayMapping is DegenesisHarness {
         assertEq(q * 4, 1.5 ether + 0.0707 ether, "quarters exact");
         uint256 claimable0 = game.claimablePoolView();
         uint256 future0 = _futureTotal();
+        uint256 insurance0 = game.yieldAccumulatorView();
         uint256 vault0 = _vaultBudget();
         uint256 afk0 = _sdgnrsAfking();
         game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_splitDays(logs), (1 << 2) | (1 << 3), "cohorts 2 and 3 split together");
         assertEq(claimable0 - game.claimablePoolView(), 2 * q, "claimablePool -2q");
-        assertEq(_futureTotal() - future0, 2 * q, "future pool +2q");
+        assertEq(_futureTotal() - future0, q, "future pool +q");
+        assertEq(game.yieldAccumulatorView() - insurance0, q, "insurance +q");
         assertEq(_vaultBudget() - vault0, q, "Vault budget +q");
         assertEq(_sdgnrsAfking() - afk0, q, "sDGNRS AFKing +q");
         assertFalse(_split(4), "cohort 4 open");

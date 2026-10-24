@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {NativeMeasuredGasExport} from "../helpers/NativeMeasuredGasExport.sol";
 
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {Test, Vm} from "forge-std/Test.sol";
@@ -231,7 +232,7 @@ contract TicketGasHarness is TicketChunkHarness {
 
     /// @dev Replays positions [0, count) as `_resumeTicketWork` draws them; returns internal gas.
     function drawGas(uint24 lvl, uint256 entropy, uint8 trait, uint8 count, uint8 salt)
-        external view returns (uint256 used, address[] memory winners)
+        public view returns (uint256 used, address[] memory winners)
     {
         uint256 g = gasleft();
         uint256 len = _bucketLength(lvl, trait);
@@ -250,7 +251,7 @@ contract TicketGasHarness is TicketChunkHarness {
 
     /// @dev Replays the award loop body of `_resumeTicketWork`; returns internal gas.
     function awardGas(address[] calldata winners, uint24 queueLvl, uint32 entries, uint16 traitId, uint24 sourceLvl)
-        external returns (uint256 used)
+        public returns (uint256 used)
     {
         uint256 g = gasleft();
         for (uint256 i; i < winners.length; ++i) {
@@ -262,6 +263,14 @@ contract TicketGasHarness is TicketChunkHarness {
             }
         }
         used = g - gasleft();
+    }
+
+    function nativeDraw(uint24 lvl, uint256 entropy, uint8 trait, uint8 count, uint8 salt)
+        external view returns (address[] memory winners)
+    { (, winners) = drawGas(lvl, entropy, trait, count, salt); }
+
+    function nativeAward(address[] calldata winners, uint24 queueLvl, uint32 entries, uint16 traitId, uint24 sourceLvl) external {
+        awardGas(winners, queueLvl, entries, traitId, sourceLvl);
     }
 
     /// @dev `live` leaves an owed lane at the write key (a top-up); otherwise only the pending
@@ -292,7 +301,7 @@ contract TicketGasHarness is TicketChunkHarness {
 ///      pending word at the queue level is fresh (zero to nonzero) and the queue grows by fresh
 ///      words. Theoretical: additionally a deep distinct bucket, an unregistered deity winner,
 ///      and a padding redraw (one more cold word) for every draw but a group's first.
-contract JackpotTicketChunkGasTest is Test {
+contract JackpotTicketChunkGasTest is NativeMeasuredGasExport {
     TicketGasHarness private h;
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
@@ -333,20 +342,50 @@ contract JackpotTicketChunkGasTest is Test {
             vm.cool(address(h));
             (uint256 used,) = h.drawGas(LVL, uint256(keccak256(abi.encode(WORD, s))), trait, count, 239);
             if (used > maxDraw) maxDraw = used;
+            if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+                this.exportNativeFixture(string.concat("jackpot-ticket-draw-", vm.toString(count), "-", vm.toString(s), "-", vm.toString(used)), address(this), address(h),
+                    abi.encodeCall(h.nativeDraw, (LVL, uint256(keccak256(abi.encode(WORD, s))), trait, count, uint8(239))));
+            }
         }
     }
 
-    function _award(address[] memory winners) private returns (uint256) {
+    function _award(address[] memory winners) private returns (uint256 used) {
         vm.cool(address(h));
-        return h.awardGas(winners, LVL, 180, trait, LVL);
+        uint256 snapshot = vm.snapshotState();
+        used = h.awardGas(winners, LVL, 180, trait, LVL);
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            uint256 n = winners.length < CHUNK ? winners.length : CHUNK;
+            address[] memory group = new address[](n);
+            for (uint256 i; i < n; ++i) group[i] = winners[i == n - 1 ? winners.length - 1 : i];
+            this.exportNativeFixture(string.concat("jackpot-ticket-award-", vm.toString(winners.length), "-", vm.toString(used)), address(this), address(h),
+                abi.encodeCall(h.nativeAward, (group, LVL, uint32(180), uint16(trait), LVL)));
+            h.awardGas(winners, LVL, 180, trait, LVL);
+        }
+        vm.deleteStateSnapshot(snapshot);
     }
 
     /// @return used Cold call gas including the transaction intrinsic.
     function _tx(uint256 allowance) private returns (uint256 used, MineFlipGas.Result memory r) {
         vm.cool(address(h));
+        uint256 snapshot = vm.snapshotState();
+        vm.recordLogs();
         uint256 g = gasleft();
         r = h.runEarlyBirdTickets{gas: allowance + 1_000_000}(WORD, allowance);
         used = g - gasleft() + INTRINSIC;
+        Vm.Log[] memory coldLogs = vm.getRecordedLogs();
+        uint256 coldPost = vm.snapshotState();
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0 && r.rewardBasis <= CHUNK) {
+            assertTrue(vm.revertToState(snapshot));
+            string memory label = string.concat("jackpot-ticket-step-", vm.toString(allowance), "-", vm.toString(used));
+            vm.serializeUint(label, "workerAllowance", allowance);
+            vm.serializeUint(label, "allowanceWord", 1);
+            this.exportNativeFixture(label, address(this), address(h), abi.encodeCall(h.runEarlyBirdTickets, (WORD, allowance)));
+            assertTrue(vm.revertToState(coldPost));
+            this.finalizeMeasuredFixture(label, abi.encode(r), coldLogs);
+        }
+        vm.deleteStateSnapshot(snapshot);
+        vm.deleteStateSnapshot(coldPost);
     }
 
     /// @dev Smallest allowance that pays one group from the current checkpoint.
@@ -455,7 +494,7 @@ contract JackpotTicketChunkGasTest is Test {
 ///      jackpot day (hundreds of winners), every winner's claimable fresh, with pass conversions.
 ///      Quadrants pay in fixed eight-winner groups; a quadrant's first group carries its pass
 ///      conversion. Every partition reproduces the single-call transcript.
-contract JackpotEthQuadrantGasTest is Test {
+contract JackpotEthQuadrantGasTest is NativeMeasuredGasExport {
     TicketGasHarness private h;
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
@@ -483,16 +522,33 @@ contract JackpotEthQuadrantGasTest is Test {
     function _call(uint256 allowance) private returns (uint256 used, uint256 wins, bool done, bool progressed) {
         vm.cool(address(h));
         vm.cool(ContractAddresses.GAME_WHALE_MODULE);
+        uint256 snapshot = vm.snapshotState();
         vm.recordLogs();
         uint256 g = gasleft();
         MineFlipGas.Result memory r = h.runDailyJackpot{gas: allowance + 1_000_000}(true, LVL, WORD, allowance);
         used = g - gasleft() + INTRINSIC;
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 coldPost = vm.snapshotState();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == ETH_WIN) ++wins;
             stream = keccak256(abi.encode(stream, logs[i].topics, logs[i].data));
         }
         (done, progressed) = (r.done, r.progressed);
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0 && wins <= CHUNK) {
+            bytes32 postStream = stream;
+            assertTrue(vm.revertToState(snapshot));
+            string memory label = string.concat("jackpot-eth-step-", vm.toString(allowance), "-", vm.toString(used));
+            vm.serializeUint(label, "workerAllowance", allowance);
+            vm.serializeUint(label, "allowanceWord", 3);
+            this.exportNativeFixture(label, address(this), address(h), abi.encodeCall(h.runDailyJackpot, (true, LVL, WORD, allowance)));
+            assertTrue(vm.revertToState(coldPost));
+            this.finalizeMeasuredFixture(label, abi.encode(r), logs);
+            // Restore this test's transcript, which was intentionally updated after
+            // the measured call and before returning the metrics.
+            stream = postStream;
+        }
+        vm.deleteStateSnapshot(snapshot);
+        vm.deleteStateSnapshot(coldPost);
     }
 
     /// @dev Smallest allowance that pays a group from the current checkpoint.

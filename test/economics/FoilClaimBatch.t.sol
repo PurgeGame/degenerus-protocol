@@ -622,7 +622,7 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 word = game.rngWordForDay(_endDay);
         assertGt(word, 1, "real daily word");
         assertTrue(draw & SEEDED != 0);
-        uint128 expected = uint128(uint256(keccak256(abi.encode(word, _endDay, keccak256("foil-payout-seed")))));
+        uint128 expected = uint128(uint256(keccak256(abi.encode(uint256(64), word))));
         assertEq(uint128(draw >> 88), expected);
         assertEq(uint32(draw >> 32), 0, "reserved board gap");
         assertEq(uint24(draw >> 217), _endDay, "exact retained draw day");

@@ -105,7 +105,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         "a seat's payment must be gated on the 1,000-FLIP threshold"
       ).to.equal(true);
       expect(
-        /FlipRoundLib\.roundFlipToHundreds\(\s*paid\s*,\s*_hash3\(\s*word\s*,\s*CRAPS_ROUND_TAG\s*,\s*betId\s*\)\s*\)/.test(body),
+        /FlipRoundLib\.roundFlipToHundreds\(\s*paid\s*,\s*EntropyLib\.hash3\(\s*RngTags\.CRAPS_ROUND\s*,\s*word\s*,\s*betId\s*\)\s*\)/.test(body),
         "a seat's payment must go through the collapse keyed per bet id"
       ).to.equal(true);
       expect(/FlipRoundLib\.floorWholeFlip\(\s*paid\s*\)/.test(body), "below the threshold the whole-FLIP floor applies").to.equal(true);
@@ -150,19 +150,19 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
   describe("§3c small-award sites carry the threshold-gated collapse", function () {
     const SITES = [
-      { n: 4, file: DEGENESIS, sig: "function _degenesisOutcome(", seed: "seed" },
+      { n: 4, file: DEGENESIS, sig: "function _degenesisOutcome(", seed: "seed", tag: "DEGENESIS_ROUND" },
       {
         n: 5,
         file: LOOTBOX,
         sig: "function _settleLootboxRoll(",
-        seed: "rollSeed",
+        seed: "rollSeed", tag: "BOX_ROUND",
       },
-      { n: 6, file: DEGENERETTE, sig: "function _resolveBet(", seed: "rngWord" },
+      { n: 6, file: DEGENERETTE, sig: "function _resolveBet(", seed: "rngWord", tag: "BET_ROUND" },
       // Site 7's collapse lives in `_flipSpinChain`, the helper both FLIP-spin entry
       // points delegate to (`resolveFlipSpinsFromBox` for the lootbox roll and the
       // biggest-spin record bounty for its replay). The entry points carry no award
       // arithmetic of their own, so the chain IS the award site.
-      { n: 7, file: DEGENERETTE, sig: "function _flipSpinChain(", seed: "seed" },
+      { n: 7, file: DEGENERETTE, sig: "function _flipSpinChain(", seed: "seed", tag: "SPIN_ROUND" },
     ];
 
     for (const site of SITES) {
@@ -184,7 +184,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         ).to.equal(true);
         expect(
           new RegExp(
-            `EntropyLib\\.hash[24]\\(\\s*${site.seed}\\s*[,)]`
+            `EntropyLib\\.hash[23]\\(\\s*RngTags\\.${site.tag}\\s*,\\s*${site.seed}\\s*[,)]`
           ).test(body),
           `site ${site.n} must key the collapse on a domain-separated hash of \`${site.seed}\``
         ).to.equal(true);
@@ -203,7 +203,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       ).to.equal(true);
       // Ordering: the survival flip settles first, so the threshold reads against the
       // number the player actually receives and a lost flip never reaches it.
-      const survivalIdx = body.indexOf("EntropyLib.hash4(rngWord, playerId, betId, BET_SURVIVAL_TAG)");
+      const survivalIdx = body.indexOf("EntropyLib.hash3(RngTags.BET_SURVIVAL, rngWord, betId)");
       const roundIdx = body.indexOf("FlipRoundLib.roundFlipToHundreds(");
       expect(survivalIdx).to.be.greaterThan(-1);
       expect(roundIdx).to.be.greaterThan(-1);
@@ -243,10 +243,10 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     it("[04b] the collapse at site 6 keys on the immutable `betId`, not on anything the caller chose", function () {
       const body = bodyOf(DEGENERETTE, "function _resolveBet(");
       expect(
-        /EntropyLib\.hash4\(\s*rngWord\s*,\s*playerId\s*,\s*betId\s*,\s*FLIP_ROUND_TAG\s*\)/.test(
+        /EntropyLib\.hash3\(\s*RngTags\.BET_ROUND\s*,\s*rngWord\s*,\s*betId\s*\)/.test(
           body
         ),
-        "the collapse seed must be `hash4(rngWord, playerId, betId, FLIP_ROUND_TAG)` — all inputs immutable at fulfillment"
+        "the collapse seed must be `hash3(RngTags.BET_ROUND, rngWord, betId)` — all inputs immutable at fulfillment"
       ).to.equal(true);
     });
   });

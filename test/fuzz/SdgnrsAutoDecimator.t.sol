@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
@@ -11,7 +12,7 @@ import {FLIP} from "../../contracts/FLIP.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 
 /// @dev Expose the production RNG gate; settlement, quests, burn and craps are all real.
-contract AutoDecimatorAdvanceHarness is DegenerusGameAdvanceModule {
+contract AutoDecimatorAdvanceHarness is DegenerusGameDailyModule {
     function applyOpeningWord(uint24 day) external {
         if (_recordedDailyWord(day) != 0) return;
         (bool ok, bytes memory err) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(

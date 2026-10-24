@@ -17,8 +17,8 @@ contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
     /// @dev A settlement word with roll `roll` whose synthetic flip for `batchId` wins.
     function _winningWord(uint16 roll, uint32 batchId) private pure returns (uint256 word) {
         for (uint256 k;; ++k) {
-            word = ((k * 155 + roll - 21) << 8) | 2;
-            if (_synthReward(word, batchId) != 0) return word;
+            word = k + 2;
+            if (_roll(word) == roll && _synthReward(word, batchId) != 0) return word;
         }
     }
 

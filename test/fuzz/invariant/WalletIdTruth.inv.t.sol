@@ -260,6 +260,29 @@ contract WalletIdTruthInvariant is DeployProtocol {
         handler.checkAll();
     }
 
+    function test_decimatorShortcutTracksEntryBufferOwner() public {
+        uint256 before = handler.decEntryCount();
+        handler.f_decimatorBurn(0, 5_000, 5);
+        assertGt(handler.decEntryCount(), before, "burn must populate a real entry");
+        uint256 tagged = uint256(vm.load(address(game), bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
+        assertEq(uint24(tagged >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET)), game.level() + 1,
+            "shortcut must perform the production entry-buffer takeover");
+        handler.checkAll();
+
+        // A new synthetic level reuses the same physical entry lanes. The old
+        // event remains in the ghost history and must be excluded by its tag.
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LEVEL)));
+        uint256 shift = 8 * GameSlots.LEVEL_OFFSET;
+        vm.store(address(game), bytes32(GameSlots.LEVEL),
+            bytes32((packed & ~(uint256(type(uint24).max) << shift)) | (uint256(game.level() + 1) << shift)));
+        before = handler.decEntryCount();
+        handler.f_decimatorBurn(0, 5_000, 5);
+        assertGt(handler.decEntryCount(), before, "second window must accept a real burn");
+        tagged = uint256(vm.load(address(game), bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
+        assertEq(uint24(tagged >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET)), game.level() + 1);
+        handler.checkAll();
+    }
+
     function test_ClaimAndExistingAccountDoorsNeverRegister() public {
         uint256 before = handler.regCount();
         handler.g_depositAfking(0, 0, 0.1 ether);

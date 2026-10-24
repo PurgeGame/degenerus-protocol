@@ -17,6 +17,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUtils.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 
 contract RequestCloseProbe is DegenerusGameRngUtils {
     function closeOnly() external { _closeRedemptionBatch(); }
@@ -138,7 +139,7 @@ contract RequestMaintenanceSeeder is CrapsBattle {
     function frozenPaidCount() external view returns (uint256) { return _jackpotRounds[(_activeJackpotSlot) & 511].paidCount; }
 }
 
-contract MineFlipRequestGasTest is DeployProtocol {
+contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
     // Dispatcher, caller credit and prerequisite stage work outside the request itself.
     uint256 private constant REQUEST_FRAME_GAS = 1_000_000;
 
@@ -306,6 +307,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     /// values and cold accounts/slots. gasTotalUsed is gross execution, before refunds.
     function _measureRequest(Scenario scenario) private {
         this.configure(scenario);
+        uint256 nativeSnapshot = vm.snapshotState();
         uint256 used = this.measureRequestAtBasefee();
         emit log_named_uint("cold_request_operation", used);
         uint256 bound = _daily() ? Bounds.RNG_DAILY_REQUEST : Bounds.RNG_MIDDAY_REQUEST;
@@ -313,6 +315,20 @@ contract MineFlipRequestGasTest is DeployProtocol {
         assertLe(used, bound, "complete cold request fits its operation bound");
         if (_shape() == 3) assertLt(host.credit(burnerId), 100 ether, "nonzero donor charge executes");
         _assertRequested();
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(nativeSnapshot));
+            this.exportRequestAtBasefee(string.concat("request-shape-", vm.toString(uint256(scenario))));
+        }
+        vm.deleteStateSnapshot(nativeSnapshot);
+    }
+
+    function exportRequestAtBasefee(string calldata label) external {
+        require(msg.sender == address(this), "export self-call");
+        vm.fee(1 gwei);
+        // Native transactions must fund the maximum gas purchase as well as the donor credit.
+        if (_shape() == 3) vm.deal(BURNER, 1 ether);
+        _nativeFixture(label, _shape() == 3 ? BURNER : address(this), address(host),
+            abi.encodeCall(host.requestOnly, (_daily())));
     }
 
     /// @dev Keep the priced block and the request in the same isolated outer transaction.
@@ -341,11 +357,17 @@ contract MineFlipRequestGasTest is DeployProtocol {
     function test_ColdRedemptionCloseAlone() public {
         this.configure(Scenario.RedeemMixed);
         vm.etch(ContractAddresses.GAME_RNG_MODULE, type(RequestCloseProbe).runtimeCode);
+        uint256 snapshot = vm.snapshotState();
         host.closeOnly();
         uint256 used = _isolatedExecutionGas(abi.encodeWithSignature("closeOnly()"));
         emit log_named_uint("cold_redemption_close", used);
         assertLe(used, Bounds.RNG_REDEMPTION_CLOSE);
         _assertClosed();
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            assertTrue(vm.revertToState(snapshot));
+            this.exportNativeFixture("request-redemption-close-only", address(this), address(host), abi.encodeCall(host.closeOnly, ()));
+        }
+        vm.deleteStateSnapshot(snapshot);
     }
     // Fund the calibrated request plus cold arming/certification, parent tails and forwarding.
     function test_ArmAndRequestFitsCalibratedAllowance() public {

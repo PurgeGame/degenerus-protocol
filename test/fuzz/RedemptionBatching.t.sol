@@ -399,12 +399,12 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         revert("no allowance up to 9.5M admits the next chunk");
     }
     function test_RedemptionThenAffordableHumanBoxSharesOneCall() public {
-        uint256 pos = _buyHuman(address(0xB0C1), 20);
+        uint256 pos = _buyHuman(address(0xB0C1), 40);
         uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000); _resolve(day, 175, 99); _commitWord(99);
         // The keeper is paid only the engine's measured-gas reward for the shared call; the claim
-        // and the affordable 20-box order are sized so the call clears the unpaid first 1M
-        // whatever their committed rolls draw.
+        // and this affordable 40-box order clear the unpaid first 1M with the
+        // fixture's committed rolls on the consolidated implementation.
         vm.fee(1 gwei);
         (uint256 reward, uint256 used) = _keeperMine(10_000_000);
         emit log_named_uint("redemption_plus_human_box_miner_execution_gas", used);

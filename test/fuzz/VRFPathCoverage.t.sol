@@ -17,7 +17,7 @@ import {Vm} from "forge-std/Vm.sol";
 ///
 /// @dev A stalled request keeps the day it was sent for: its late word finishes that day, and
 ///      the wall day's fresh request derives every skipped day in between as
-///      keccak256(abi.encodePacked(word, uint24(day))). The stalled day's word is fixed here;
+///      keccak256(abi.encode(uint256(68), word, uint256(day))). The stalled day's word is fixed here;
 ///      the fuzzed word is the wall day's, the one every gap day derives from.
 contract VRFPathCoverage is DeployProtocol {
 
@@ -66,10 +66,10 @@ contract VRFPathCoverage is DeployProtocol {
         return uint24(uint256(vm.load(address(game), bytes32(0))) >> 24) + 1 - _deployDay();
     }
 
-    /// @dev The word _backfillGapDays derives for a skipped day. The day is packed as uint24
-    ///      (its loop counter type), so the preimage day width is 3 bytes.
+    /// @dev The word _backfillGapDays derives for a skipped day. Domain 68 and both inputs
+    ///      occupy full words in the consolidated entropy preimage.
     function _derived(uint256 word, uint256 day) internal pure returns (uint256 w) {
-        w = uint256(keccak256(abi.encodePacked(word, _relDay(day))));
+        w = uint256(keccak256(abi.encode(uint256(68), word, uint256(_relDay(day)))));
         if (w == 0) w = 1;
     }
 
@@ -220,7 +220,7 @@ contract VRFPathCoverage is DeployProtocol {
         // Only the final gap day keeps its derived word in the two-day ring (6d0e64b09 /
         // c729ecfc9); every gap day still settles through its coinflip day.
         uint256 w = game.rngWordForDay(_relDay(wallDay - 1));
-        assertEq(w, _derived(vrfWord, wallDay - 1), "Gap day word must match keccak256(word, day)");
+        assertEq(w, _derived(vrfWord, wallDay - 1), "Gap day word must match domain-68 keccak256(word, day)");
         assertTrue(w != game.rngWordForDay(_relDay(wallDay)), "Gap day words must be unique");
         for (uint256 d = lastSealed + 1; d < wallDay; d++) {
             if (d + 1 < wallDay) assertEq(game.rngWordForDay(_relDay(d)), 0, "earlier gap days keep no word");
@@ -362,7 +362,7 @@ contract VRFPathCoverage is DeployProtocol {
     // TEST-03e: Gap Backfill Entropy Uniqueness
     // ══════════════════════════════════════════════════════════════════════
 
-    /// @notice Fuzz: gap backfill produces unique per-day entropy via keccak256(word, day).
+    /// @notice Fuzz: gap backfill produces unique per-day entropy via domain-68 keccak256(word, day).
     ///         Day 3 stalls into day 13; day 13's fuzzed word derives gap days 4..12.
     function test_gapBackfillEntropyUnique_fuzz(uint256 vrfWord) public {
         vm.assume(vrfWord > 1);
@@ -372,7 +372,7 @@ contract VRFPathCoverage is DeployProtocol {
         // The final gap day's retained word (the two-day ring keeps only it, 6d0e64b09 /
         // c729ecfc9) matches the derivation and differs from both delivered words around it.
         uint256 w = game.rngWordForDay(_relDay(12));
-        assertEq(w, _derived(vrfWord, 12), "Gap day word must match keccak256(word, day)");
+        assertEq(w, _derived(vrfWord, 12), "Gap day word must match domain-68 keccak256(word, day)");
         assertTrue(w != 0xDEAD0003, "Gap words differ from the stalled day's word");
         assertTrue(w != game.rngWordForDay(_relDay(13)), "Gap day words must be pairwise distinct (keccak256 uniqueness)");
         for (uint32 d = 4; d <= 11; d++) {

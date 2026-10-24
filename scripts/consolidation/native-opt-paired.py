@@ -112,7 +112,7 @@ for line in gzip.open(a.dataset/'calls.jsonl.gz','rt'):
             block=rpc('eth_simulateV1',[{'blockStateCalls':[{'blockOverrides':bo,'stateOverrides':state,'calls':[call]}],'validation':False},'0x0'])[0]
             result=block['calls'][0];effect[side]=effects(result)
             pair[side]={'gas':int(result['gasUsed'],16),'maxUsedGas':int(result['maxUsedGas'],16),
-                'blockExecutionGas':int(block['gasUsed'],16),'status':result['status'],
+                'blockGasUsedMaxDimension':int(block['gasUsed'],16),'status':result['status'],
                 'effectHash':hashlib.sha256(json.dumps(effect[side],sort_keys=True).encode()).hexdigest(),
                 'missingPrestateSlots':missing}
             if a.frames:
@@ -138,7 +138,7 @@ for profile in ['no-reservoir','reservoir']:
         for (payer,label),pairs in sorted(groups.items())]
 report={'client':client,'changedRuntimes':changed,'inputMethod':__doc__,'rngOutcomeChangesAllowed':a.rng_change,
         'profiles':summary,'samples':results,'counts':counts,
-        'gasNote':'gas is native simulated receipt total; blockExecutionGas is the one-call block execution dimension. Refund/state decomposition is not inferred from gasleft().'}
+        'gasNote':'gas is the native simulated receipt total. blockGasUsedMaxDimension is max(execution gas, state gas), not execution alone. Refund/state decomposition is not inferred from gasleft().'}
 (a.out/'paired.json').write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps({'samples':len(results),'covered':{p:sum(r['profiles'][p]['covered'] for r in results) for p in summary},'seconds':round(time.monotonic()-start,1)}),flush=True)
 assert results and all(pair['covered'] for row in results for pair in row['profiles'].values()), 'Uncovered native prestate'

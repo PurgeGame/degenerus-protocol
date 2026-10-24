@@ -343,7 +343,9 @@ contract BafRebuyReconciliationTest is DeployProtocol {
             reqId
         )));
         // The level-10 transition word decides the BAF flip: force the winning branch.
-        if (game.level() == 10 && !game.jackpotPhase()) randomWord |= 1;
+        if (game.level() == 10 && !game.jackpotPhase()) {
+            while (uint256(keccak256(abi.encode(uint256(61), randomWord))) & 1 == 0) ++randomWord;
+        }
 
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }

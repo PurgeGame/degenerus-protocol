@@ -69,7 +69,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
         uint256 stored = decBattleHeap[i];
         uint64 id = uint64(stored);
         n.score = stored >> 64;
-        n.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), _currentRngWord(), lvl, id)))
+        n.key = (uint256(keccak256(abi.encode(uint256(50), _currentRngWord(), uint256(id))))
             & ~uint256(type(uint64).max)) | id;
     }
 

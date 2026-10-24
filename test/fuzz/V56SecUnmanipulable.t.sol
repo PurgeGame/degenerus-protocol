@@ -115,7 +115,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint32 subscriberId = game.walletIdOf_g3120(p);
         vm.prank(makeAddr("not_affiliate"));
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
-        IGameAfkingModule(address(game)).drainAffiliateBases(subscriberId, 0);
+        game.drainAffiliateBases(subscriberId, 0);
         assertEq(_owed(p).owedAffiliateBase, owedBefore, "rejected non-affiliate drain left the base owed");
         assertEq(_checkpointDayOf(p), cpBefore, "and the checkpoint unmoved");
     }

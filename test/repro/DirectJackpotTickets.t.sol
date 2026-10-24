@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {QueuedJackpotReference} from "../helpers/QueuedJackpotReference.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -104,8 +105,8 @@ contract DirectJackpotTicketsTest is Test {
     function setUp() public {
         h = new DirectJackpotHarness();
         queued = new QueuedJackpotHarness();
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
+        // Ticket and whale workers share the final Pass runtime.
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGamePassModule).runtimeCode);
     }
     function _wins(bytes32 digest, Vm.Log[] memory logs) private view returns (bytes32, uint256 entries) {
         for (uint256 i; i < logs.length; ++i) {
@@ -354,7 +355,7 @@ contract DirectRoundRepricer {
 ///      colours (sixteen split appends each) and one with one rare group.
 ///      The theoretical round has two rare groups of distinct colours in every quadrant:
 ///      common + 8 x (rare group - common group), extrapolated from the two measurements.
-contract DirectRoundGasTest is Test {
+contract DirectRoundGasTest is NativeGasExport {
     uint256 private constant ROUND_WINNERS = 32;
     uint256 private constant CHECKPOINT_TARGET_GAS = 10_000_000;
     uint256 private constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
@@ -363,7 +364,7 @@ contract DirectRoundGasTest is Test {
     DirectRoundRepricer private repricer;
     uint24 private constant TARGET = 42;
     uint256 private constant COMMON_SEED = 1;
-    uint256 private constant RARE_SEED = 35607;
+    uint256 private constant RARE_SEED = 2_510_510;
     uint256 private constant RARE_GROUPS = 5;
     uint256 private constant MAX_RARE_GROUPS = 8;
 
@@ -385,6 +386,14 @@ contract DirectRoundGasTest is Test {
         h.materialize(TARGET, lanes, ROUND_WINNERS, seed);
         used = g0 - gasleft();
         assertTrue(vm.revertToStateAndDelete(snap));
+        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
+            string memory label = string.concat("direct-round-", vm.toString(seed));
+            vm.serializeUint(label, "osakaFrameGas", used);
+            vm.serializeUint(label, "rareGroups", seed == COMMON_SEED ? 0 : RARE_GROUPS);
+            vm.serializeUint(label, "maximumRareGroups", MAX_RARE_GROUPS);
+            vm.serializeUint(label, "declaredRoundBound", h.roundMax());
+            this.exportNativeFixture(label, address(this), address(h), abi.encodeCall(h.materialize, (TARGET, lanes, ROUND_WINNERS, seed)));
+        }
     }
 
     function _repricedRound(uint256 seed, uint256 measured) private returns (uint256 glam) {
@@ -397,7 +406,36 @@ contract DirectRoundGasTest is Test {
         assertTrue(vm.revertToStateAndDelete(snap));
     }
 
+    /// @dev Independent domain/trait decoder keeps the marginal-cost fixtures
+    /// non-vacuous when protocol RNG encodings change.
+    function _assertShape(uint256 seed, uint256 expectedRare, uint256 expectedDoubles) private pure {
+        uint256 rare;
+        uint256 doubled;
+        for (uint256 q; q < 4; ++q) {
+            uint256 seen;
+            uint256 rareColors;
+            for (uint256 group; group < 4; ++group) {
+                uint256 word = uint256(keccak256(abi.encode(uint256(99), seed, group))) >> (64 * q);
+                uint256 scaled = (word >> 24) & 255;
+                uint256 color = scaled < 64 ? 0 : scaled < 128 ? 1 : scaled < 192 ? 2 : scaled < 224 ? 3 : scaled < 240 ? 4 : scaled < 248 ? 5 : scaled < 254 ? 6 : 7;
+                uint256 trait = color * 8 + ((word >> 32) & 7);
+                assertEq(seen & (uint256(1) << trait), 0, "four distinct traits in each quadrant");
+                seen |= uint256(1) << trait;
+                if (color >= 6) {
+                    assertEq(rareColors & (uint256(1) << color), 0, "split groups have distinct rare colors");
+                    rareColors |= uint256(1) << color;
+                    ++rare;
+                }
+            }
+            if (rareColors == (uint256(3) << 6)) ++doubled;
+        }
+        assertEq(rare, expectedRare, "priced number of rare groups");
+        assertEq(doubled, expectedDoubles, "priced number of double-rare quadrants");
+    }
+
     function test_DirectRoundColdWorstFitsItsBound() public {
+        _assertShape(COMMON_SEED, 0, 0);
+        _assertShape(RARE_SEED, RARE_GROUPS, 2);
         uint256 common = _round(COMMON_SEED);
         uint256 rare = _round(RARE_SEED);
         // Neither recording pass may warm the other seed's cold measurement.

@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../../../contracts/storage/DegenerusGameStorage.sol";
+import {RngTags} from "../../../contracts/libraries/RngTags.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {WalletSeed} from "../../helpers/WalletSeed.sol";
 
@@ -20,7 +21,7 @@ contract ProtocolBoonDrawSeeder is DegenerusGameStorage, WalletSeed {
             // pool searches. All three walks have 32 nodes and genuine distinct
             // final players; no shortcut or warm setup reads in the measured tx.
             for (uint8 slot; slot < 3; ++slot) {
-                uint256 roll = uint256(keccak256(abi.encode(PROTOCOL_BOON_WINNER_TAG, issuer, day - 1, slot, winnerWord))) % total;
+                uint256 roll = uint256(keccak256(abi.encode(RngTags.PROTOCOL_BOON_WINNER, winnerWord, uint256(_walletIdOf(issuer)), uint256(slot)))) % total;
                 uint32 lo;
                 uint32 hi = count;
                 while (lo < hi) {

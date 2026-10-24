@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
+import {GameBoxInternals} from "../../contracts/modules/GameBoxInternals.sol";
+import {GameBoonActions} from "../../contracts/modules/GameBoonActions.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -55,7 +58,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     }
 
     function _expected(uint256 word, uint24 day, uint8 slot) private view returns (uint8) {
-        uint256 roll = uint256(keccak256(abi.encode(word, uint256(game.walletIdOf_g3120(DEITY)), day, slot))) % 2766;
+        uint256 roll = uint256(keccak256(abi.encode(RngTags.DEITY_MENU, word, (uint256(game.walletIdOf_g3120(DEITY)) << 24) | day, uint256(slot)))) % 2766;
         if (roll >= 982) roll += 50;
         if (roll >= 1072) roll += 40;
         return viewer.tree(roll);
@@ -155,7 +158,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         _seed(TODAY - 1, 0, false);
         (uint8[3] memory slots,,) = viewer.deityBoonSlots(address(game), DEITY);
         for (uint8 i; i < 3; ++i) assertEq(slots[i], 0);
-        vm.expectRevert(DegenerusGameBoonModule.RngNotReady.selector);
+        vm.expectRevert(GameBoxInternals.RngNotReady.selector);
         vm.prank(DEITY);
         game.issueDeityBoon(deityId, recipientId, 0);
     }
@@ -166,7 +169,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         (uint256 word, uint24 day,,,) = game.deityBoonData(DEITY);
         assertEq(word, 0);
         assertEq(day, 1);
-        vm.expectRevert(DegenerusGameBoonModule.RngNotReady.selector);
+        vm.expectRevert(GameBoxInternals.RngNotReady.selector);
         vm.prank(DEITY);
         game.issueDeityBoon(deityId, recipientId, 0);
         (uint8[3] memory tomorrow, uint24 tomorrowDay) = viewer.deityBoonSlotsTomorrow(address(game), DEITY);
@@ -177,7 +180,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     function test_RecipientCanUseAnotherSlotButUsedSlotStillReverts() public {
         _issue(RECIPIENT, 0, TODAY, _expected(YESTERDAY_WORD, TODAY, 0));
         uint32 otherId = game.walletIdOf_g3120(address(0xB002));
-        vm.expectRevert(DegenerusGameBoonModule.SlotAlreadyUsed.selector);
+        vm.expectRevert(GameBoonActions.SlotAlreadyUsed.selector);
         vm.prank(DEITY);
         game.issueDeityBoon(deityId, otherId, 0);
         _issue(RECIPIENT, 1, TODAY, _expected(YESTERDAY_WORD, TODAY, 1));
@@ -192,7 +195,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         }
         _warp(TODAY + 10);
         _seed(TODAY + 9, TODAY_WORD, false);
-        vm.expectRevert(DegenerusGameBoonModule.RecipientBoonCapReached.selector);
+        vm.expectRevert(GameBoonActions.RecipientBoonCapReached.selector);
         vm.prank(DEITY);
         game.issueDeityBoon(deityId, recipientId, 0);
     }

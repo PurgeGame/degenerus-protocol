@@ -71,7 +71,7 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
 contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
     uint256 private constant RNG_WORD = uint256(keccak256("century-transition-test")) | 1;
     uint256 private constant REFILL_PERCENT = 25 + uint256(keccak256(abi.encode(
-        RNG_WORD, uint256(keccak256("sdgnrs.century.refill")) ^ uint256(100)
+        uint256(26), RNG_WORD
     ))) % 51;
     function setUp() public {
         _deployProtocol();

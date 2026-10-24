@@ -41,7 +41,7 @@ contract GoldSixRulesTest is Test {
     function setUp() public { h = new GoldSixHarness(); }
 
     function naturalRun(uint256 stream, uint256 word) private pure returns (uint8[16] memory traits) {
-        uint64 s = uint64(uint256(keccak256(abi.encode(stream, word, uint256(0))))) | 1;
+        uint64 s = uint64(uint256(keccak256(abi.encode(uint256(105), word, stream & ~(uint256(type(uint32).max) << 32), uint256(0))))) | 1;
         unchecked {
             s *= 6364136223846793005;
             for (uint256 i; i < 16; ++i) {
@@ -115,7 +115,7 @@ contract GoldSixRulesTest is Test {
     }
     function roundWord() private pure returns (uint256 word) {
         for (word = 2; ; ++word) {
-            uint256 seed = uint256(keccak256(abi.encode(uint24(1), uint32(0), word)));
+            uint256 seed = uint256(keccak256(abi.encode(uint256(102), word, uint256(1), uint256(0))));
             if ((DegenerusTraitUtils.traitFromWord(uint64(seed >> 192)) >> 3) == 7) return word;
         }
     }
@@ -140,7 +140,7 @@ contract GoldSixRulesTest is Test {
             assertEq(gold, 8 + preclaimed);
             if (preclaimed != 0) assertEq(h.first(1, 253), A);
             else {
-                uint256 seed = uint256(keccak256(abi.encode(uint24(1), uint32(0), word)));
+                uint256 seed = uint256(keccak256(abi.encode(uint256(102), word, uint256(1), uint256(0))));
                 uint256 rot = (seed >> 232) & 7;
                 uint256 seat = (13 - rot) & 7;
                 uint256 physical = TicketEntropy.queueIndex(seat, TicketEntropy.queueStart(1, 8, word), 8);
@@ -180,7 +180,7 @@ contract GoldSixRulesTest is Test {
     }
     function testFuzzRotationHashMatchesOriginalAbiEncoding(uint24 key, uint32 count, uint256 word) public pure {
         uint256 expected = count < 2 ? 0 : uint256(keccak256(abi.encode(
-            keccak256("DEGENERUS_TICKET_ROTATION_V1"), key, uint256(count), word
+            uint256(101), word, uint256(key)
         ))) % count;
         assertEq(TicketEntropy.queueStart(key, count, word), expected);
     }

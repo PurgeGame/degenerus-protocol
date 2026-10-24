@@ -948,9 +948,9 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     // ── 14. Replay golden ────────────────────────────────────────────────────
 
-    uint256 internal constant GOLDEN_NONCE = 10;
-    uint256 internal constant GOLDEN_PAID = 36_000;
-    uint256 internal constant GOLDEN_WON = 35_970;
+    uint256 internal constant GOLDEN_NONCE = 38;
+    uint256 internal constant GOLDEN_PAID = 32000;
+    uint256 internal constant GOLDEN_WON = 32010;
 
     function _engineRun(uint256 betId, uint256 owner, CrapsBattleStorage.Window memory w, uint256 word)
         internal
@@ -994,7 +994,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         Craps.SlipResult memory byAddress = _engineRun(betId, uint160(alice), w, word);
         assertEq(paid, byId.bankrollIn, "table paid == engine(betId, N | chips << 32)");
         assertEq(won, byId.bankrollOut, "table won == engine(betId, N | chips << 32)");
-        assertEq(byAddress.bankrollIn, 32_900, "golden: the same header salted with the address");
+        assertEq(byAddress.bankrollIn, 33900, "golden: the same header salted with the address");
         assertTrue(byAddress.bankrollIn != paid, "the address-salted header pays differently");
         assertEq(paid, GOLDEN_PAID, "golden paid");
         assertEq(won, GOLDEN_WON, "golden won");

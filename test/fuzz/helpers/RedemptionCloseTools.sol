@@ -25,7 +25,8 @@ abstract contract RedemptionCloseTools is DeployProtocol {
     }
     function _resolveTestBatch(uint32 id, uint16 roll) internal {
         if (_openBatch() == id) _closeFunded();
-        batchWord = (uint256(roll - 21) << 8) | 2;
+        batchWord = 2;
+        while (21 + uint256(keccak256(abi.encode(uint256(84), batchWord))) % 155 != roll) ++batchWord;
         RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(batchWord));
         uint256 state = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(state | (uint256(1) << 192)));
