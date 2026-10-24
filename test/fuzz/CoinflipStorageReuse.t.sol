@@ -2,12 +2,12 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
+import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CoinflipReuseReference} from "../../scripts/audit/fixtures/CoinflipReuseReference.sol";
 
-contract CoinflipReuseHarness is Coinflip {
-    constructor() Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)) {}
+contract CoinflipReuseHarness is CoinflipStakeSetter {
     function credit(uint32 id, uint24 day, uint256 amount, bool manual) external returns (uint256) {
         return _addFlipStake(id, day, amount, manual);
     }

@@ -8,6 +8,10 @@ pragma solidity 0.8.38;
 ///      Continuations use caller calibration; first mandatory progress bypasses estimates.
 ///      Revalidate after operation, compiler or gas-schedule changes.
 library MineFlipGasBounds {
+    // Fixed 32-winner direct-round geometry; includes fresh-slot state gas.
+    uint256 internal constant TICKET_DIRECT_ROUND_GAS_MAX = 12_000_000;
+    // Eight packed winner draws, padding redraws, deity cache and batch event.
+    uint256 internal constant TICKET_DIRECT_GROUP_GAS = 65_000;
     // Dispatch, decoding and checkpoint normalization; selection is admitted separately.
     uint256 internal constant ENGINE_BOUNDARY = 200_000;
     // Selection plus LINK admission: 50k + 200k reserve + 794 EIP-150

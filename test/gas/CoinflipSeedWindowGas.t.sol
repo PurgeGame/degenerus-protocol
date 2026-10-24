@@ -74,7 +74,7 @@ contract CoinflipSeedWindowGas is DegenesisDeployProtocol {
     /// @dev Deploying Coinflip, constructor included.
     function test_DeployGas() public {
         uint256 g0 = gasleft();
-        new Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
+        deployCode("Coinflip.sol:Coinflip", abi.encode(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)));
         uint256 used = g0 - gasleft();
         emit log_named_uint("coinflip_deploy_gas", used);
     }

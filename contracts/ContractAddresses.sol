@@ -29,8 +29,9 @@ pragma solidity 0.8.38;
 /// @notice Compile-time constant addresses for every Degenerus Protocol contract. The deploy
 ///         pipeline predicts addresses and patches this file before compilation.
 library ContractAddresses {
-    address internal constant GAME_ACTIONS_MODULE = address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
-    address internal constant GAME_PURCHASE_MODULE = address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
+    address internal constant CRAPS_LIFECYCLE_MODULE = address(0xE194aA6b80fFd71989dd196c7f84fa624b8d7D5d);
+    address internal constant GAME_ACTIONS_MODULE = address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+    address internal constant GAME_PURCHASE_MODULE = address(0x1d1499e622D69689cdf9004d05Ec547d650Ff211);
     uint48 internal constant DEPLOY_DAY_BOUNDARY = 0;
     bytes32 internal constant VRF_KEY_HASH =
         0xabababababababababababababababababababababababababababababababab;
@@ -38,68 +39,68 @@ library ContractAddresses {
     address internal constant ICONS_32 =
         address(0xc7183455a4C133Ae270771860664b6B7ec320bB1);
     address internal constant GAME_MINT_MODULE =
-        address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
-    address internal constant GAME_ADVANCE_MODULE =
-        address(0x1d1499e622D69689cdf9004d05Ec547d650Ff211);
-    address internal constant GAME_WHALE_MODULE =
         address(0xA4AD4f68d0b91CFD19687c881e50f3A00242828c);
-    address internal constant GAME_JACKPOT_MODULE =
-        address(0x1d1499e622D69689cdf9004d05Ec547d650Ff211);
-    address internal constant GAME_DECIMATOR_MODULE =
-        address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
-    address internal constant GAME_GAMEOVER_MODULE =
-        address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
-    address internal constant GAME_LOOTBOX_MODULE =
-        address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
-    address internal constant GAME_BOON_MODULE =
-        address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
-    address internal constant GAME_DEGENERETTE_MODULE =
-        address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
-    address internal constant GAME_BINGO_MODULE =
-        address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
-    address internal constant GAME_AFKING_MODULE =
-        address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
-    address internal constant COIN =
+    address internal constant GAME_ADVANCE_MODULE =
         address(0xD6BbDE9174b1CdAa358d2Cf4D57D1a9F7178FBfF);
-    address internal constant COINFLIP =
-        address(0x2a07706473244BC757E10F2a9E86fB532828afe3);
-    address internal constant VAULT =
-        address(0x13aa49bAc059d709dd0a18D6bb63290076a702D7);
-    address internal constant AFFILIATE =
-        address(0x2a07706473244BC757E10F2a9E86fB532828afe3);
-    address internal constant JACKPOTS =
+    address internal constant GAME_WHALE_MODULE =
         address(0x3D7Ebc40AF7092E3F1C81F2e996cbA5Cae2090d7);
-    address internal constant QUESTS =
-        address(0x2a07706473244BC757E10F2a9E86fB532828afe3);
-    address internal constant GAME =
+    address internal constant GAME_JACKPOT_MODULE =
         address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
-    address internal constant SDGNRS =
-        address(0xDB25A7b768311dE128BBDa7B8426c3f9C74f3240);
-    address internal constant DGNRS =
-        address(0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f);
-    address internal constant ADMIN =
+    address internal constant GAME_DECIMATOR_MODULE =
+        address(0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6);
+    address internal constant GAME_GAMEOVER_MODULE =
         address(0x756e0562323ADcDA4430d6cb456d9151f605290B);
-    address internal constant DEITY_PASS =
+    address internal constant GAME_LOOTBOX_MODULE =
         address(0x96d3F6c20EEd2697647F543fE6C08bC2Fbf39758);
-    address internal constant WWXRP =
+    address internal constant GAME_BOON_MODULE =
+        address(0x13aa49bAc059d709dd0a18D6bb63290076a702D7);
+    address internal constant GAME_DEGENERETTE_MODULE =
+        address(0xDB25A7b768311dE128BBDa7B8426c3f9C74f3240);
+    address internal constant GAME_BINGO_MODULE =
+        address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+    address internal constant GAME_AFKING_MODULE =
+        address(0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f);
+    address internal constant COIN =
+        address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
+    address internal constant COINFLIP =
+        address(0x796f2974e3C1af763252512dd6d521E9E984726C);
+    address internal constant VAULT =
+        address(0x89CA9F4f77B267778EB2eA0Ba1bEAdEe8523af36);
+    address internal constant AFFILIATE =
+        address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
+    address internal constant JACKPOTS =
+        address(0x886D6d1eB8D415b00052828CD6d5B321f072073d);
+    address internal constant QUESTS =
         address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
+    address internal constant GAME =
+        address(0x27cc01A4676C73fe8b6d0933Ac991BfF1D77C4da);
+    address internal constant SDGNRS =
+        address(0xe54a55121A47451c5727ADBAF9b9FC1643477e25);
+    address internal constant DGNRS =
+        address(0x94771550282853f6E0124c302F7dE1Cf50aa45CA);
+    address internal constant ADMIN =
+        address(0x8227724C33C1748A42d1C1cD06e21AB8Deb6eB0A);
+    address internal constant DEITY_PASS =
+        address(0x3C4293F66941ECa00f4950C10d4255d5c271bAeF);
+    address internal constant WWXRP =
+        address(0x688B74D1C43f65C2236A81bdaADF85671Dfe8072);
     address internal constant STETH_TOKEN =
         address(0x2e234DAe75C793f67A35089C9d99245E1C58470b);
     address internal constant LINK_TOKEN =
         address(0xF62849F9A0B5Bf2913b396098F7c7019b51A820a);
     address internal constant GNRUS =
-        address(0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6);
+        address(0x883816205341a6ba3C32AE8dAdCEbDD9d59BC2C4);
     // Foil pack module — appended, so it shifts no prior address (AFKING_SUB_TOKEN follows).
     address internal constant GAME_FOILPACK_MODULE =
-        address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+        address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
     address internal constant AFKING_SUB_TOKEN =
-        address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
+        address(0xe916cadb12C49389E487eB1e8194B1459b29B0eC);
     // Growth-bet parimutuel — appended, so it shifts no prior address.
     address internal constant PARIMUTUEL =
-        address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
+        address(0x83898D1F3C03189fF03B471dd3456908FCA4423d);
     // Record-bounty trophy — appended, so it shifts no prior address.
     address internal constant RECORD_BOUNTY =
-        address(0x27cc01A4676C73fe8b6d0933Ac991BfF1D77C4da);
+        address(0x6AFc743aa4E9D98D0F53Ff111996E9817d79D301);
     address internal constant CREATOR =
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =
@@ -116,26 +117,26 @@ library ContractAddresses {
     // nonce N+29), so a clean checkout tests craps unpatched; the deploy
     // pipeline overwrites it with the real prediction.
     address internal constant CRAPS =
-        address(0x796f2974e3C1af763252512dd6d521E9E984726C);
+        address(0x98E53ecDDd253E5A7f845a713D7fc8853CF47EDE);
     // The dice engine is hosted by CrapsBattle. This alias consumes no deployment nonce.
     address internal constant CRAPS_ENGINE =
-        address(0x796f2974e3C1af763252512dd6d521E9E984726C);
+        address(0x3450a15Dc9cbDD5C0e28cC22474D88AD7e2695A3);
     // Jackpot lifecycle entries share the CrapsBattle host and storage; no separate deployment.
     address internal constant JACKPOT_BATTLE =
-        address(0x796f2974e3C1af763252512dd6d521E9E984726C);
+        address(0x98E53ecDDd253E5A7f845a713D7fc8853CF47EDE);
     // State-engine modules append to the CREATE sequence; all prior identities stay fixed.
     address internal constant GAME_TICKET_MODULE =
-        address(0xA4AD4f68d0b91CFD19687c881e50f3A00242828c);
+        address(0xD16d567549A2a2a2005aEACf7fB193851603dd70);
     address internal constant GAME_MINER_MODULE =
-        address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
+        address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
     address internal constant GAME_RNG_MODULE =
-        address(0x1d1499e622D69689cdf9004d05Ec547d650Ff211);
+        address(0x15cF58144EF33af1e14b5208015d11F9143E27b9);
     address internal constant GAME_JACKPOT_DRAW_MODULE =
-        address(0x1d1499e622D69689cdf9004d05Ec547d650Ff211);
+        address(0x2a07706473244BC757E10F2a9E86fB532828afe3);
     address internal constant GAME_DEGENESIS_MODULE =
-        address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+        address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
     // Owner escrow appended after all existing CREATEs.
-    address internal constant OWNER_GOVERNANCE = address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
+    address internal constant OWNER_GOVERNANCE = address(0xe98c2E73E40560f5795a62f67e479927Af573340);
     // Chainlink LINK/ETH aggregator that values LINK donations. Optional:
     // address(0) leaves DegenerusAdmin's feed slot empty, so the reward lane
     // stays dark until the feed-swap governance path installs one. Patched per

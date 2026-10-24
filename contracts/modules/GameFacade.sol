@@ -860,7 +860,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
+            .GAME_JACKPOT_DRAW_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertGameDelegate(data);
         return abi.decode(data, (uint256));

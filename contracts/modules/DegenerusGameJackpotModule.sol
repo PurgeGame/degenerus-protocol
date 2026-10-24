@@ -363,6 +363,12 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
 
     /// @dev One ETH draw, rederived from the frozen leg on every call.
     struct EthDraw {
+        uint256 entropy;
+        uint8[4] order;
+        bool armGold;
+        uint8 cursor;
+        uint256 pos;
+
         uint24 lvl;
         bool terminal;
         bool jackpotPhase;
@@ -385,41 +391,41 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         d.terminal = work.kind == 3;
         d.jackpotPhase = work.kind == 2;
         d.traits = JackpotBucketLib.unpackWinningTraits(work.traits);
-        uint256 entropy = _soloAdjustedEntropy(d.traits, EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, work.lvl));
+        d.entropy = _soloAdjustedEntropy(d.traits, EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, work.lvl));
         if (work.budget != 0) {
             d.counts = d.terminal
-                ? JackpotBucketLib.terminalWinnerCounts(entropy)
-                : JackpotBucketLib.ethWinnerTargets(work.budget, entropy);
+                ? JackpotBucketLib.terminalWinnerCounts(d.entropy)
+                : JackpotBucketLib.ethWinnerTargets(work.budget, d.entropy);
         }
         uint16[4] memory bps = JackpotBucketLib.shareBpsByBucket(
-            work.finalDay ? FINAL_DAY_SHARES_PACKED : DAILY_JACKPOT_SHARES_PACKED, uint8(entropy & 3)
+            work.finalDay ? FINAL_DAY_SHARES_PACKED : DAILY_JACKPOT_SHARES_PACKED, uint8(d.entropy & 3)
         );
-        d.solo = JackpotBucketLib.soloBucketIndex(entropy);
+        d.solo = JackpotBucketLib.soloBucketIndex(d.entropy);
         d.shares = JackpotBucketLib.bucketShares(work.budget, bps, d.counts, d.solo);
         if (d.jackpotPhase && decJackpotPlans[d.lvl].mode != 0) {
-            _resumeDecimatorEth(work, d, entropy, word, meter, result);
+            _resumeDecimatorEth(work, d, d.entropy, word, meter, result);
             return;
         }
-        uint8[4] memory order = d.terminal
+        d.order = d.terminal
             ? JackpotBucketLib.bucketOrderLargestFirst(d.counts)
             : JackpotBucketLib.bucketOrderSoloLast(d.counts, d.solo);
-        bool armGold = d.jackpotPhase && _allGold(d.traits);
-        uint8 cursor = work.quadrant;
-        uint256 pos = work.winner;
-        while (cursor < 4) {
-            uint8 q = order[cursor];
+        d.armGold = d.jackpotPhase && _allGold(d.traits);
+        d.cursor = work.quadrant;
+        d.pos = work.winner;
+        while (d.cursor < 4) {
+            uint8 q = d.order[d.cursor];
             (uint256 count, uint256 perWinner, bool converts) = _ethTerms(d, q);
             if (perWinner == 0) {
                 if (!MineFlipGas.canRun(meter, 10_000, JACKPOT_TAIL_GAS)) break;
             } else {
-                uint256 start = pos;
+                uint256 start = d.pos;
                 uint256 paid;
                 uint256 liability;
-                (pos, paid, liability) = _payEthQuadrant(
+                (d.pos, paid, liability) = _payEthQuadrant(
                     d.lvl, q, d.traits[q], count, perWinner, converts ? d.shares[q] : 0,
-                    EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, entropy, q), armGold && q == d.solo, pos, meter
+                    EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, d.entropy, q), d.armGold && q == d.solo, d.pos, meter
                 );
-                if (pos != start) { result.progressed = true; MineFlipGas.markProgress(meter); }
+                if (d.pos != start) { result.progressed = true; MineFlipGas.markProgress(meter); }
                 if (paid != 0) {
                     work.paid += uint128(paid);
                     if (liability != 0) claimablePool += uint128(liability);
@@ -429,17 +435,17 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
                         _setPrizePools(next, future - uint128(paid));
                     }
                 }
-                if (pos < count) break;
+                if (d.pos < count) break;
             }
-            pos = 0;
-            ++cursor;
+            d.pos = 0;
+            ++d.cursor;
             ++result.rewardBasis;
             result.progressed = true;
             MineFlipGas.markProgress(meter);
         }
-        if (cursor != work.quadrant) work.quadrant = cursor;
-        if (pos != work.winner) work.winner = uint16(pos);
-        result.done = cursor == 4;
+        if (d.cursor != work.quadrant) work.quadrant = d.cursor;
+        if (d.pos != work.winner) work.winner = uint16(d.pos);
+        result.done = d.cursor == 4;
     }
 
     /// @dev Generated awards own their funding debit; only solo is credited/debited here.
@@ -1095,6 +1101,18 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     /// @return next First unpaid position; `count` when the quadrant is finished.
     /// @return paid ETH credited plus any pass cost, for this call only.
     /// @return liability Claimable liability added in this call.
+    struct EthAwardWork {
+        uint24 lvl;
+        uint8 q;
+        uint8 trait;
+        uint256 count;
+        uint256 perWinner;
+        uint256 passShare;
+        uint256 seed;
+        bool armGold;
+        uint256 pos;
+    }
+
     function _payEthQuadrant(
         uint24 lvl,
         uint8 q,
@@ -1107,41 +1125,47 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         uint256 pos,
         MineFlipGas.Meter memory meter
     ) private returns (uint256 next, uint256 paid, uint256 liability) {
+        EthAwardWork memory c = EthAwardWork(lvl, q, trait, count, perWinner, passShare, seed, armGold, pos);
+        return _payEthAwardWork(c, meter);
+    }
+
+    function _payEthAwardWork(EthAwardWork memory c, MineFlipGas.Meter memory meter)
+        private returns (uint256 next, uint256 paid, uint256 liability) {
         // A retired buffer holds no cohort for this level: the quadrant pays nobody, not even
         // a deity, and its share stays in the pool like any empty quadrant's.
-        if (_ticketLevelRetired(lvl)) return (count, 0, 0);
-        uint256 len = _bucketLengthUnchecked(lvl, trait);
-        uint32 deity = _traitDeity(trait);
-        uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
+        if (_ticketLevelRetired(c.lvl)) return (c.count, 0, 0);
+        uint256 len = _bucketLengthUnchecked(c.lvl, c.trait);
+        uint32 deity = _traitDeity(c.trait);
+        uint256 effectiveLen = len + _deityVirtualCount(c.trait, len, deity);
         PackedTicketSampleLib.Cursor memory cursor;
-        while (pos < count) {
-            uint256 end = pos + ETH_AWARD_CHUNK;
-            if (end > count) end = count;
-            uint256 bound = (end - pos) * ETH_WINNER_GAS_MAX;
-            if (pos == 0) bound += GasBounds.JACKPOT_ETH_FIRST_GROUP_GAS;
+        while (c.pos < c.count) {
+            uint256 end = c.pos + ETH_AWARD_CHUNK;
+            if (end > c.count) end = c.count;
+            uint256 bound = (end - c.pos) * ETH_WINNER_GAS_MAX;
+            if (c.pos == 0) bound += GasBounds.JACKPOT_ETH_FIRST_GROUP_GAS;
             if (!MineFlipGas.canRun(meter, bound, JACKPOT_TAIL_GAS)) break;
             uint32 first;
-            if (pos == 0) {
-                if (effectiveLen == 0) return (count, 0, 0);
-                if (passShare != 0) paid = _awardWhalePass(lvl, trait, passShare, seed, false);
+            if (c.pos == 0) {
+                if (effectiveLen == 0) return (c.count, 0, 0);
+                if (c.passShare != 0) paid = _awardWhalePass(c.lvl, c.trait, c.passShare, c.seed, false);
             }
-            for (uint256 i = pos; i < end; ++i) {
+            for (uint256 i = c.pos; i < end; ++i) {
                 (uint32 w, uint256 index) = _drawBucketEntry(
-                    lvl, trait, len, effectiveLen, deity, seed, uint8(200 + q), i, cursor
+                    c.lvl, c.trait, len, effectiveLen, deity, c.seed, uint8(200 + c.q), i, cursor
                 );
                 if (i == 0) first = w;
                 if (w != 0) {
-                    _creditClaimable(w, perWinner);
-                    emit JackpotEthWin(w, lvl, trait, perWinner, index);
-                    paid += perWinner;
-                    liability += perWinner;
+                    _creditClaimable(w, c.perWinner);
+                    emit JackpotEthWin(w, c.lvl, c.trait, c.perWinner, index);
+                    paid += c.perWinner;
+                    liability += c.perWinner;
                 }
             }
-            if (armGold && first != 0) _armGoldenTicket(first, lvl, trait);
-            pos = end;
+            if (c.armGold && first != 0) _armGoldenTicket(first, c.lvl, c.trait);
+            c.pos = end;
             MineFlipGas.markProgress(meter);
         }
-        return (pos, paid, liability);
+        return (c.pos, paid, liability);
     }
 
     // =========================================================================

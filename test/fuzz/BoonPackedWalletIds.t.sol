@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameDegeneretteBet} from "../../contracts/modules/GameDegeneretteBet.sol";
 import {GameBoonActions} from "../../contracts/modules/GameBoonActions.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
@@ -16,7 +17,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @dev The production Game plus test doors (module delegatecall, boon and window seeders).
 ///      Every production function is unchanged.
-contract BoonGameExt is DegenerusGame {
+contract BoonGameExt is GameDegeneretteBet, DegenerusGame {
     function x_delegate(address module, bytes calldata data) external payable returns (bytes memory r) {
         bool ok;
         (ok, r) = module.delegatecall(data);

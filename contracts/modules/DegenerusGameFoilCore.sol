@@ -918,6 +918,13 @@ abstract contract DegenerusGameFoilCore is
     /// @return units Four fixed bookkeeping units plus three per zero-valued slot write
     ///         and one per nonzero slot write. Includes bitmap initialization, the header
     ///         and completed data words; stale headers are priced before resetting their value.
+    struct FoilBuyerWork {
+        uint32 buyerId;
+        uint24 lvl;
+        bool retired;
+        uint32[4] lines;
+    }
+
     function _resolveFoilBuyer(
         uint256 packedLvlBuyer,
         uint256 entropy,
@@ -925,34 +932,37 @@ abstract contract DegenerusGameFoilCore is
         uint32[256] memory counts,
         uint8[16] memory touchedTraits
     ) private returns (bool grandPaid, uint32 units) {
-        uint32 buyerId = uint32(packedLvlBuyer >> 192);
-        uint24 lvl = uint24(packedLvlBuyer >> 160);
+        FoilBuyerWork memory c;
+        c.buyerId = uint32(packedLvlBuyer >> 192);
+        c.lvl = uint24(packedLvlBuyer >> 160);
         // Only the terminal payout level needs generated traits after the ending latches.
         // Consuming unrelated packs must not reassign the frozen terminal payout buffer.
-        if (terminal && lvl != _gameOverTicketLevel(level)) return (false, 3);
+        if (terminal && c.lvl != _gameOverTicketLevel(level)) return (false, 3);
         // Retired levels have no live inventory to authenticate an unclaimed slot.
         // Their delayed claim records redirect every gold six, preserving uniqueness.
-        bool retired = _ticketLevelRetired(lvl);
-        uint32[4] memory lines = _deriveFoilLines(
-            buyerId,
-            lvl,
+        c.retired = _ticketLevelRetired(c.lvl);
+        c.lines = _deriveFoilLines(
+            c.buyerId,
+            c.lvl,
             entropy,
-            _foilMultFor(buyerId, lvl),
-            retired
+            _foilMultFor(c.buyerId, c.lvl),
+            c.retired
         );
 
-        uint256 record = _foilRecordWord(buyerId, lvl);
+        {
+        uint256 record = _foilRecordWord(c.buyerId, c.lvl);
         record |= uint256(foilFirstDrawDay) | (uint256(_gameDay()) << _FOIL_GENERATED_DAY_SHIFT) | _FOIL_READY;
-        for (uint256 i; i < 4; ++i) record |= uint256(lines[i]) << (_FOIL_LINES_SHIFT + i * 32);
-        foilRecord[lvl & 3][buyerId] = record;
-        units = 4; // record, cursor and stored lines
-        // Tomorrow's word can land after a turbo transition retired this pack's
+        for (uint256 i; i < 4; ++i) record |= uint256(c.lines[i]) << (_FOIL_LINES_SHIFT + i * 32);
+        foilRecord[c.lvl & 3][c.buyerId] = record;
+        }
+        units = 4; // record, cursor and stored c.lines
+        // Tomorrow's word can land after a turbo transition c.retired this pack's
         // inventory. Claims still use its retained record and daily word; never
         // reassign a newer buffer or let this old generation queue block progress.
-        if (!retired) {
+        if (!c.retired) {
             uint16 touchedLen;
             for (uint256 i; i < 4; ++i) {
-                uint32 line = lines[i];
+                uint32 line = c.lines[i];
                 uint8 tA = uint8(line);
                 uint8 tB = uint8(line >> 8);
                 uint8 tC = uint8(line >> 16);
@@ -963,26 +973,26 @@ abstract contract DegenerusGameFoilCore is
                 if (counts[tD]++ == 0) touchedTraits[touchedLen++] = tD;
             }
 
-            // Batch-write the sixteen entries into lvlTraitEntry[(lvl) & 1][traitId] as packed
+            // Batch-write the sixteen entries into lvlTraitEntry[(c.lvl) & 1][traitId] as packed
             // lanes naming the buyer's wallet ID, one length update per distinct trait.
             // Mirrors the mint module's batch writer; re-zeroes the shared scratch so
             // the next buyer starts clean.
-            uint256 levelSlot = _traitBatchBase(lvl);
-            uint256 ownerIdx = buyerId;
+            uint256 levelSlot = _traitBatchBase(c.lvl);
+            uint256 ownerIdx = c.buyerId;
             for (uint16 u; u < touchedLen; ) {
                 uint8 traitId = touchedTraits[u];
                 uint32 occurrences = counts[traitId];
                 counts[traitId] = 0;
-                (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, lvl);
+                (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, c.lvl);
                 unchecked {
                     units += uint32(f * 3 + d);
                     ++u;
                 }
             }
 
-            uint256 baseKey = (uint256(TicketEntropy.FOIL) << 248) | (uint256(lvl) << 224) |
-                (uint256(buyerId) << TicketEntropy.ID_SHIFT);
-            emit TraitsGenerated(buyerId, baseKey, FOIL_PACK_ENTRIES);
+            uint256 baseKey = (uint256(TicketEntropy.FOIL) << 248) | (uint256(c.lvl) << 224) |
+                (uint256(c.buyerId) << TicketEntropy.ID_SHIFT);
+            emit TraitsGenerated(c.buyerId, baseKey, FOIL_PACK_ENTRIES);
 
         }
 
@@ -991,9 +1001,9 @@ abstract contract DegenerusGameFoilCore is
         // bought are in the buckets the draw this drain gates will read — the pack wins
         // the grand and still plays the board it paid for.
         if (!terminal) {
-            (uint8 golds, uint8 allGold) = _packGold(lines);
+            (uint8 golds, uint8 allGold) = _packGold(c.lines);
             if (allGold >= 2) {
-                _pushFoilGrand(buyerId, lvl, golds, allGold);
+                _pushFoilGrand(c.buyerId, c.lvl, golds, allGold);
                 grandPaid = true;
             }
         }

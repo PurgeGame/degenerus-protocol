@@ -23,6 +23,7 @@ TOTALS = re.compile(
     r"Ran (\d+) test suites? in .*?: (\d+) tests? passed, (\d+) failed, (\d+) skipped"
 )
 ENV_KEYS = (
+    "PROFILE",
     "FOUNDRY_PROFILE", "FOUNDRY_ISOLATE", "FOUNDRY_FUZZ_RUNS", "FOUNDRY_FUZZ_SEED",
     "FOUNDRY_INVARIANT_RUNS", "FOUNDRY_INVARIANT_DEPTH", "FOUNDRY_INVARIANT_FAIL_ON_REVERT",
     "FOUNDRY_SOLC", "FOUNDRY_SOLC_VERSION", "FOUNDRY_VIA_IR", "FOUNDRY_OPTIMIZER",
@@ -262,6 +263,9 @@ def main():
     env.setdefault("FOUNDRY_DISABLE_NIGHTLY_WARNING", "1")
     pins = ROOT / "contracts/ContractAddresses.sol"
     original_pins = pins.read_bytes()
+    profile_files = json.loads(subprocess.check_output(["node", "--input-type=module", "-e",
+        "import {PROFILE_FILES} from './scripts/lib/selectProfile.js'; console.log(JSON.stringify(PROFILE_FILES));"], text=True))
+    profile_originals = {ROOT / file: (ROOT / file).read_bytes() for file in profile_files}
     current = []
     metadata = {
         "run_id": run_id, "cwd": str(ROOT), "base_commit": command_output(["git", "rev-parse", "HEAD"]),
@@ -402,6 +406,8 @@ def main():
         record(failure)
     finally:
         pins.write_bytes(original_pins)
+        for file, original in profile_originals.items():
+            file.write_bytes(original)
         for sig, handler in previous_handlers.items():
             signal.signal(sig, handler)
     return int(not current or any(row["exit_code"] for row in current))

@@ -653,6 +653,10 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         uint256 boxEthAccrued;
         uint256 ticketEthAccrued;
         uint24 resumeDay;
+        uint24 currentLevel;
+        bool swept;
+        uint24 ticketTargetLevel;
+        uint24 endpoint;
     }
 
     function _runSubscriberWork(uint24 processDay, uint256 gasAllowance)
@@ -666,19 +670,19 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
         c.mp = _mintPriceInContext();
         // Hoist the level read once.
-        uint24 currentLevel = level;
+        c.currentLevel = level;
         // Chunk-invariant global reads, hoisted once: the GO_SWEPT flag (written only by
         // the one-time game-over sweep, unreachable from this loop) and the ticket target
         // level (jackpotPhaseFlag is fixed across the pre-RNG stage). Quest finalization
         // writes only quests-side storage; the pinned Lido stETH funding path has no
         // sender or recipient callbacks that could change these game-phase inputs.
-        bool swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
-        uint24 ticketTargetLevel = jackpotPhaseFlag
-            ? currentLevel
-            : currentLevel + 1;
+        c.swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
+        c.ticketTargetLevel = jackpotPhaseFlag
+            ? c.currentLevel
+            : c.currentLevel + 1;
         // While this pass runs, rewards accrue through the last completed pass; a protocol seat
         // resuming in this pass earns from this day on.
-        uint24 endpoint = _afkingEndpoint();
+        c.endpoint = _afkingEndpoint();
         c.resumeDay = processDay - 1;
 
         // sDGNRS level-start whale purchase, attempted ONCE per level here at the start of
@@ -698,9 +702,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         // stamps it. A real purchase's operation consumes first-progress permission; subsequent
         // items use the remaining caller budget. The attempted-level latch makes even a no-buy
         // probe resumable.
-        if (!swept && currentLevel > _sdgnrsBonusLevel) {
+        if (!c.swept && c.currentLevel > _sdgnrsBonusLevel) {
             if (!MineFlipGas.canRun(c.meter, SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS)) return result;
-            _sdgnrsBonusLevel = currentLevel;
+            _sdgnrsBonusLevel = c.currentLevel;
             // Before the whale module sizes its budget, sDGNRS AFKing funding is topped up to its
             // target, kept whether or not a group is bought. The STAGE gate above already
             // excludes every state the whale module refuses.
@@ -769,7 +773,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
             uint256 balances = balancesPacked[element];
             (uint256 ethValue, uint256 amount, bool isTicket, uint256 claimableUse) =
-                _resolveBuy(lane, c.mp, swept ? 0 : uint128(balances));
+                _resolveBuy(lane, c.mp, c.swept ? 0 : uint128(balances));
             uint256 funding = balances >> 128;
             if (funding < ethValue) {
                 funding = _tryFundAfkingSteth(element, ethValue, funding, c.meter);
@@ -799,7 +803,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
             if (protocolSeat) {
                 uint8 unfunded = element == VAULT_WALLET_ID ? AFK_VAULT_UNFUNDED : AFK_SDGNRS_UNFUNDED;
-                // Funded again: resume, with this pass's endpoint as its checkpoint day.
+                // Funded again: resume, with this pass's c.endpoint as its checkpoint day.
                 if (_afkingProtocolFlags & unfunded != 0) {
                     lane = _resumeProtocolSeat(element, position + 1, unfunded, c.resumeDay);
                 }
@@ -814,9 +818,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                 position,
                 lane,
                 processDay,
-                endpoint,
-                currentLevel,
-                ticketTargetLevel,
+                c.endpoint,
+                c.currentLevel,
+                c.ticketTargetLevel,
                 balances,
                 ethValue,
                 claimableUse,

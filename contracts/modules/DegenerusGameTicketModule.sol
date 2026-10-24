@@ -43,11 +43,11 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
     uint256 private constant DIRECT_TICKET_DOMAIN = uint256(keccak256("DEGENERUS_DIRECT_JACKPOT_TICKETS_V1"));
     // Eight packed draws (3.4k each cold) with seven padding redraws (2.5k each), cached
     // deity ID, batch award event and loop work: 52k. Trait writes have the round bound.
-    uint256 internal constant DIRECT_GROUP_GAS = 65_000;
+    uint256 internal constant DIRECT_GROUP_GAS = GasBounds.TICKET_DIRECT_GROUP_GAS;
     // Forced full 32-winner cold worker: 9.768M including fresh-slot state gas.
     // Near the 10M checkpoint target; reserve includes margin. Keep the canonical
     // 32-winner sampler/shuffle geometry so transaction boundaries cannot change outcomes.
-    uint256 internal constant DIRECT_ROUND_GAS_MAX = 12_000_000;
+    uint256 internal constant DIRECT_ROUND_GAS_MAX = GasBounds.TICKET_DIRECT_ROUND_GAS_MAX;
 
 
 
@@ -71,15 +71,27 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
     /// @dev Direct L -> L+1 delivery. The jackpot worker owns pricing, passes
     ///      and completion. Source buckets remain frozen; the target is already live.
     ///      Each checkpoint completes all four quadrants, with one reveal per ticket.
+    struct DirectAwardWork {
+        DirectTicketGroup group;
+        uint8 q;
+        uint256 i;
+        uint32 round;
+        uint256 rounds;
+        uint256 count;
+        uint256 n;
+        uint256 roundBound;
+    }
+
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
         external returns (MineFlipGas.Result memory result)
     {
+        DirectAwardWork memory c;
         JackpotWork storage work = jackpotWork;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         // The direct lane needs a live target buffer and unscaled entries; otherwise the
         // queued path finishes the draw from the same cursor. Both
         // paths draw winner i of quadrant q from the same seed, so completed groups are not
-        // drawn again. A group whose rounds were only partly materialized is skipped: its
+        // drawn again. A c.group whose rounds were only partly materialized is skipped: its
         // winners keep the rounds they received and the rest stays as nextPrizePool backing.
         // Every input here is state, so caller gas never chooses the delivery mode.
         if (work.directTickets && (work.kind != 6 || plan.sourceLvl != work.lvl
@@ -107,56 +119,56 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
             MineFlipGas.finish(meter);
             return result;
         }
-        uint8 q = work.quadrant;
-        uint256 i = work.winner;
-        uint32 round = work.directTicketRound;
-        uint256 rounds = plan.entriesEach / 4;
-        while (q < 4) {
-            uint256 count = plan.counts[q];
-            if (count == 0) {
+        c.q = work.quadrant;
+        c.i = work.winner;
+        c.round = work.directTicketRound;
+        c.rounds = plan.entriesEach / 4;
+        while (c.q < 4) {
+            c.count = plan.counts[c.q];
+            if (c.count == 0) {
                 if (!MineFlipGas.canRun(meter, 10_000, TAIL)) break;
-                ++q;
+                ++c.q;
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);
                 continue;
             }
-            while (i < count) {
-                uint256 n = count - i;
-                if (n > 32) n = 32;
+            while (c.i < c.count) {
+                c.n = c.count - c.i;
+                if (c.n > 32) c.n = 32;
                 // Four source words at a time. Preserve fixed batch geometry across
                 // checkpoints; caller gas never chooses how players are mixed.
-                uint256 roundBound = DIRECT_ROUND_GAS_MAX + ((n + 7) / 8) * DIRECT_GROUP_GAS;
-                if (!MineFlipGas.canRun(meter, roundBound, TAIL)) break;
+                c.roundBound = DIRECT_ROUND_GAS_MAX + ((c.n + 7) / 8) * DIRECT_GROUP_GAS;
+                if (!MineFlipGas.canRun(meter, c.roundBound, TAIL)) break;
                 _assertReadableTicketLevel(plan.sourceLvl);
-                DirectTicketGroup memory group = _directTicketGroup(plan, q, i, n);
-                // All randomness keys off the frozen word, source group and award round.
+                c.group = _directTicketGroup(plan, c.q, c.i, c.n);
+                // All randomness keys off the frozen word, source c.group and award round.
                 // In particular neither the global queue round nor caller gas is an input.
                 do {
-                    uint256 seed = EntropyLib.hash4(RngTags.TICKET_DIRECT, plan.entropy, (uint256(q) << 32) | i, round);
+                    uint256 seed = EntropyLib.hash4(RngTags.TICKET_DIRECT, plan.entropy, (uint256(c.q) << 32) | c.i, c.round);
                     // The round retains no allocated memory and makes no external calls.
                     uint256 free;
                     assembly ("memory-safe") { free := mload(0x40) }
-                    _materializeJackpotRound(plan.queueLvl, group.lanes, group.count, seed);
+                    _materializeJackpotRound(plan.queueLvl, c.group.lanes, c.group.count, seed);
                     assembly ("memory-safe") { mstore(0x40, free) }
-                    ++round;
+                    ++c.round;
                     result.progressed = true;
                     MineFlipGas.markProgress(meter);
-                } while (round < rounds && MineFlipGas.canRun(meter, roundBound, TAIL));
-                if (round < rounds) break;
-                emit JackpotTicketBatchWin(plan.sourceLvl, plan.queueLvl, plan.traits[q],
-                    uint16(i), uint8(group.count), uint32(plan.entriesEach), group.lanes, group.indices);
-                result.rewardBasis += n;
-                round = 0;
-                i += n;
+                } while (c.round < c.rounds && MineFlipGas.canRun(meter, c.roundBound, TAIL));
+                if (c.round < c.rounds) break;
+                emit JackpotTicketBatchWin(plan.sourceLvl, plan.queueLvl, plan.traits[c.q],
+                    uint16(c.i), uint8(c.group.count), uint32(plan.entriesEach), c.group.lanes, c.group.indices);
+                result.rewardBasis += c.n;
+                c.round = 0;
+                c.i += c.n;
             }
-            if (i < count) break;
-            i = 0;
-            ++q;
+            if (c.i < c.count) break;
+            c.i = 0;
+            ++c.q;
         }
-        if (q != work.quadrant) work.quadrant = q;
-        if (i != work.winner) work.winner = uint16(i);
-        if (round != work.directTicketRound) work.directTicketRound = round;
-        result.done = q == 4;
+        if (c.q != work.quadrant) work.quadrant = c.q;
+        if (c.i != work.winner) work.winner = uint16(c.i);
+        if (c.round != work.directTicketRound) work.directTicketRound = c.round;
+        result.done = c.q == 4;
         MineFlipGas.finish(meter);
     }
 
@@ -432,9 +444,17 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         return (0, true, true);
     }
 
+    struct QueueDrainWork {
+        uint256 total;
+        uint256 idx;
+        uint8 shift;
+        uint256 start;
+    }
+
     function _drainQueue(uint24 rk, uint24 lvl, uint256 entropy, MineFlipGas.Meter memory meter)
         private returns (bool progressed, bool done, uint256 emitted)
     {
+        QueueDrainWork memory c;
         uint24 marker = lvl | (rk & (TICKET_FAR_FUTURE_BIT | TICKET_SLOT_BIT));
         if (ticketLevel != marker) {
             // Terminal selection may intentionally abandon another level; never
@@ -444,23 +464,23 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
             ticketSeats = 0;
             ticketSoloOffset = 0;
         }
-        uint256 total = _ticketQueueLength(rk);
-        uint256 idx = ticketCursor;
-        uint8 shift = _snapShiftFor(lvl);
-        if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
-            (idx, progressed, emitted) = _roundPhase(rk, lvl, idx, total, entropy, shift, meter);
-            if (idx != total || _seatCount(ticketSeats) >= ROUND_MIN_SEATS) {
-                ticketCursor = uint32(idx);
+        c.total = _ticketQueueLength(rk);
+        c.idx = ticketCursor;
+        c.shift = _snapShiftFor(lvl);
+        if (ticketSeats != 0 || c.total - c.idx >= ROUND_MIN_SEATS) {
+            (c.idx, progressed, emitted) = _roundPhase(rk, lvl, c.idx, c.total, entropy, c.shift, meter);
+            if (c.idx != c.total || _seatCount(ticketSeats) >= ROUND_MIN_SEATS) {
+                ticketCursor = uint32(c.idx);
                 return (progressed, false, emitted);
             }
         }
-        uint256 start = TicketEntropy.queueStart(rk, total, entropy);
+        c.start = TicketEntropy.queueStart(rk, c.total, entropy);
         uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
-        while (ticketSeats != 0 || idx < total) {
+        while (ticketSeats != 0 || c.idx < c.total) {
             uint256 seats = ticketSeats;
-            uint256 qi = TicketEntropy.queueIndex(seats != 0 ? (seats & 0xffffffff) - 1 : idx, start, total);
+            uint256 qi = TicketEntropy.queueIndex(seats != 0 ? (seats & 0xffffffff) - 1 : c.idx, c.start, c.total);
             (bool moved, bool complete, uint256 count) = _solo(
-                _tqPositionAt(queue, qi), rk, lvl, qi, entropy, shift, meter
+                _tqPositionAt(queue, qi), rk, lvl, qi, entropy, c.shift, meter
             );
             if (!moved) break;
             progressed = true;
@@ -468,62 +488,73 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
             emitted += count;
             if (complete) {
                 if (seats != 0) ticketSeats = seats >> 32;
-                else ++idx;
+                else ++c.idx;
             }
         }
-        done = idx == total && ticketSeats == 0;
+        done = c.idx == c.total && ticketSeats == 0;
         if (done) {
             _releaseTicketQueue(rk);
             ticketCursor = 0;
             ticketLevel = 0;
             ticketSoloOffset = 0;
-        } else ticketCursor = uint32(idx);
+        } else ticketCursor = uint32(c.idx);
     }
 
     function _seatCount(uint256 seats) private pure returns (uint256 n) {
         while (seats != 0) { ++n; seats >>= 32; }
     }
 
+    struct SoloWork {
+        uint80 packed;
+        uint80 snapDone;
+        uint32 owed;
+        uint8 rem;
+        uint256 stream;
+        uint256 whole;
+        bool finalTail;
+        uint32 offset;
+    }
+
     function _solo(uint32 ownerPos, uint24 rk, uint24 lvl, uint256 qi, uint256 entropy, uint8 shift,
         MineFlipGas.Meter memory meter) private returns (bool moved, bool complete, uint256 emitted)
     {
+        SoloWork memory c;
         if (!MineFlipGas.canRun(meter, SOLO_BASE + ENTRY_MAX, TAIL)) return (false, false, 0);
-        uint80 packed = _entryPacked(rk, ownerPos);
-        uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        uint32 owed;
-        uint8 rem;
-        (packed, owed, rem) = _readOwed(packed, snapDone, shift, rk, lvl, qi, ownerPos, entropy);
-        uint256 stream = TicketEntropy.identity(rk, lvl, qi, ownerPos);
-        uint256 available = MineFlipGas.remaining(meter);
+        c.packed = _entryPacked(rk, ownerPos);
+        c.snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
+
+        (c.packed, c.owed, c.rem) = _readOwed(c.packed, c.snapDone, shift, rk, lvl, qi, ownerPos, entropy);
+        c.stream = TicketEntropy.identity(rk, lvl, qi, ownerPos);
+        {
+        uint256 available = MineFlipGas.available(meter);
         // A low-gas miner may commit a shorter aligned prefix. Never consume
         // any of the reserve needed to write its complete continuation state.
-        uint256 actual = gasleft();
-        if (actual < available) available = actual;
         uint256 overhead = MineFlipGas.scale(meter, TAIL + SOLO_BASE + MineFlipGas.CHECK_RESERVE);
         uint256 entryGas = MineFlipGas.scale(meter, ENTRY_MAX);
         uint256 maxCount = available > overhead ? (available - overhead) / entryGas : 0;
         // Sixteen aligned entries, or the indivisible last group plus its fraction.
         // An obsolete estimate may reduce throughput but cannot refuse this unit.
         if (meter.mustProgress) {
-            uint256 minimum = owed <= 16 ? uint256(owed) + (rem == 0 ? 0 : 1) : 16;
+            uint256 minimum = c.owed <= 16 ? uint256(c.owed) + (c.rem == 0 ? 0 : 1) : 16;
             if (maxCount < minimum) maxCount = minimum;
         }
         // Larger supplied gas resumes more aligned runs, never one larger chunk.
         if (maxCount > SOLO_MAX_ENTRIES) maxCount = SOLO_MAX_ENTRIES;
-        uint256 whole = owed;
-        bool finalTail = whole + (rem == 0 ? 0 : 1) <= maxCount;
-        if (!finalTail) {
-            whole = maxCount < whole ? maxCount : whole;
-            whole &= ~uint256(15);
-            if (whole == owed && rem != 0) whole = whole >= 16 ? whole - 16 : 0;
-            if (whole == 0) return (false, false, 0);
+        c.whole = c.owed;
+        c.finalTail = c.whole + (c.rem == 0 ? 0 : 1) <= maxCount;
+        if (!c.finalTail) {
+            c.whole = maxCount < c.whole ? maxCount : c.whole;
+            c.whole &= ~uint256(15);
+            if (c.whole == c.owed && c.rem != 0) c.whole = c.whole >= 16 ? c.whole - 16 : 0;
+            if (c.whole == 0) return (false, false, 0);
+        }
         }
         // Reserve the possible fractional occurrence before examining its result.
-        uint256 maximum = whole + (finalTail && rem != 0 ? 1 : 0);
+        uint256 maximum = c.whole + (c.finalTail && c.rem != 0 ? 1 : 0);
         if (!MineFlipGas.canRun(meter, SOLO_BASE + maximum * ENTRY_MAX, TAIL)) return (false, false, 0);
-        emitted = whole;
-        if (finalTail && rem != 0 && TicketEntropy.remainder(stream, entropy, rem)) ++emitted;
-        uint32 offset = ticketSoloOffset;
+        emitted = c.whole;
+        if (c.finalTail && c.rem != 0 && TicketEntropy.remainder(c.stream, entropy, c.rem)) ++emitted;
+        c.offset = ticketSoloOffset;
         if (emitted != 0) {
             bool goldSixTaken = _goldSixTaken(lvl);
             uint256 replayFlag = goldSixTaken ? TicketEntropy.GOLD_SIX_TAKEN : 0;
@@ -532,18 +563,18 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
             // Solidity zero-initializes the scratch arrays again on the next run.
             uint256 free;
             assembly ("memory-safe") { free := mload(0x40) }
-            _generateTraitRun(stream, offset, uint32(emitted), entropy, ownerPos, goldSixTaken);
+            _generateTraitRun(c.stream, c.offset, uint32(emitted), entropy, ownerPos, goldSixTaken);
             assembly ("memory-safe") { mstore(0x40, free) }
-            emit TraitsGenerated(ownerPos, stream | uint256(offset) | replayFlag, uint32(emitted));
+            emit TraitsGenerated(ownerPos, c.stream | uint256(c.offset) | replayFlag, uint32(emitted));
         }
-        complete = finalTail;
+        complete = c.finalTail;
         if (complete) {
             _setEntryOwed(rk, ownerPos, 0);
             ticketSoloOffset = 0;
         } else {
-            uint80 remaining = (uint80(owed - uint32(whole)) << 8) | uint80(rem) | snapDone | (packed & OWNER_IDX_MASK);
+            uint80 remaining = (uint80(c.owed - uint32(c.whole)) << 8) | uint80(c.rem) | c.snapDone | (c.packed & OWNER_IDX_MASK);
             _setEntryOwed(rk, ownerPos, remaining);
-            ticketSoloOffset = uint32(uint256(offset) + whole);
+            ticketSoloOffset = uint32(uint256(c.offset) + c.whole);
         }
         MineFlipGas.markProgress(meter);
         return (true, complete, emitted);
@@ -580,6 +611,9 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
     ///      the next entry and the seated set is always the first unexhausted entries from
     ///      the cursor — the property a budget-split resume rebuilds from storage alone.
     struct RoundSeats {
+        uint80 snapDone;
+        uint256 levelSlot;
+        uint32 round;
         uint32[8] queueIdx;
         uint32[8] owed;
         uint8[8] rem;
@@ -602,6 +636,16 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
     ///      A versioned immutable identity seeds each aligned group of sixteen. The caller
     ///      reserves generation plus the complete bucket flush, prepares the full level and
     ///      validates ownerIdx. This writer makes no external calls.
+    struct TraitRunWork {
+        uint32[256] counts;
+        uint8[256] touchedTraits;
+        uint16 touchedLen;
+        uint256 endIndex;
+        uint256 i;
+        uint24 lvl;
+        bool goldSixTaken;
+    }
+
     function _generateTraitRun(
         uint256 baseKey,
         uint32 startIndex,
@@ -610,19 +654,18 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         uint256 ownerIdx,
         bool goldSixTaken
     ) private returns (uint256 writes) {
-        uint32[256] memory counts;
-        uint8[256] memory touchedTraits;
-        uint16 touchedLen;
+        TraitRunWork memory c;
+        c.goldSixTaken = goldSixTaken;
 
         if (uint32(baseKey) != 0 || startIndex & 15 != 0) revert E();
-        uint256 endIndex = uint256(startIndex) + count;
-        if (endIndex > uint256(type(uint32).max) + 1) revert E();
-        uint256 i = startIndex;
-        uint24 lvl = uint24(baseKey >> 224);
+        c.endIndex = uint256(startIndex) + count;
+        if (c.endIndex > uint256(type(uint32).max) + 1) revert E();
+        c.i = startIndex;
+        c.lvl = uint24(baseKey >> 224);
 
         // Generate traits in groups of 16, using LCG for deterministic randomness.
-        while (i < endIndex) {
-            uint256 groupIdx = i >> 4;
+        while (c.i < c.endIndex) {
+            uint256 groupIdx = c.i >> 4;
 
             // The tag, committed word, wallet-free batch key and group index fix the traits.
             // Mask the wallet ID out of baseKey; LCG iteration expands the same group seed
@@ -631,42 +674,42 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
                 EntropyLib.hash4(RngTags.TICKET_TRAITS, entropyWord, baseKey & ~(uint256(type(uint32).max) << TicketEntropy.ID_SHIFT), groupIdx)
             );
             uint64 s = uint64(seed) | 1;
-            uint8 offset = uint8(i & 15);
+            uint8 offset = uint8(c.i & 15);
             unchecked {
                 s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset);
             }
 
-            for (uint8 j = offset; j < 16 && i < endIndex; ) {
+            for (uint8 j = offset; j < 16 && c.i < c.endIndex; ) {
                 unchecked {
                     s = s * TICKET_LCG_MULT + 1; // LCG step
 
                     // Generate trait using weighted distribution, add quadrant offset.
                     uint8 traitId = DegenerusTraitUtils.traitFromWord(s) +
-                        (uint8(i & 3) << 6);
+                        (uint8(c.i & 3) << 6);
 
                     if (traitId == GoldSixLib.TRAIT) {
-                        if (goldSixTaken) traitId = GoldSixLib.replacement(s);
-                        else goldSixTaken = true;
+                        if (c.goldSixTaken) traitId = GoldSixLib.replacement(s);
+                        else c.goldSixTaken = true;
                     }
 
                     // Track first occurrence of each trait for batch writing.
-                    if (counts[traitId]++ == 0) {
-                        touchedTraits[touchedLen++] = traitId;
+                    if (c.counts[traitId]++ == 0) {
+                        c.touchedTraits[c.touchedLen++] = traitId;
                     }
-                    ++i;
+                    ++c.i;
                     ++j;
                 }
             }
         }
 
         // Trait headers are contiguous inside the selected parity buffer.
-        uint256 levelSlot = _traitBufferBase(lvl);
+        uint256 levelSlot = _traitBufferBase(c.lvl);
 
         // Batch-write the packed lanes, one run per distinct trait.
-        for (uint16 u; u < touchedLen; ) {
-            uint8 traitId = touchedTraits[u];
-            uint32 occurrences = counts[traitId];
-            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, lvl);
+        for (uint16 u; u < c.touchedLen; ) {
+            uint8 traitId = c.touchedTraits[u];
+            uint32 occurrences = c.counts[traitId];
+            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, c.lvl);
             unchecked {
                 writes += f * 3 + d;
                 ++u;
@@ -693,18 +736,18 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         }
         st.queueBase = queueBase;
         st.queueWordIndex = type(uint256).max;
-        uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        uint256 levelSlot = _traitBufferBase(lvl);
-        uint32 round = ticketRound;
+        st.snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
+        st.levelSlot = _traitBufferBase(lvl);
+        st.round = ticketRound;
         uint256 seats = ticketSeats;
         while (seats != 0) {
-            _seatEntry(st, (seats & 0xffffffff) - 1, lvl, entropy, snapDone, shift);
+            _seatEntry(st, (seats & 0xffffffff) - 1, lvl, entropy, st.snapDone, shift);
             seats >>= 32;
         }
         while (true) {
             while (st.seated < ROUND_SEATS && st.cur < total) {
                 if (!MineFlipGas.canRun(meter, SEAT_MAX, TAIL)) break;
-                _seatEntry(st, st.cur, lvl, entropy, snapDone, shift);
+                _seatEntry(st, st.cur, lvl, entropy, st.snapDone, shift);
                 ++st.cur;
                 progressed = true;
                 MineFlipGas.markProgress(meter);
@@ -714,17 +757,17 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
             if (st.cur < total && st.seated < ROUND_SEATS) break;
             if (st.seated < ROUND_MIN_SEATS || !MineFlipGas.canRun(meter, ROUND_MAX, TAIL)) break;
             for (uint256 j; j < st.seated; ++j) emitted += st.owed[j] > 4 ? 4 : st.owed[j];
-            _runRound(st, lvl, levelSlot, round, entropy);
-            unchecked { ++round; }
+            _runRound(st, lvl, st.levelSlot, st.round, entropy);
+            unchecked { ++st.round; }
             progressed = true;
             MineFlipGas.markProgress(meter);
         }
-        if (ticketRound != round) ticketRound = round;
+        if (ticketRound != st.round) ticketRound = st.round;
         uint256 word;
         for (uint256 j; j < st.seated; ++j) {
             _setEntryOwed(rk, uint32(st.ownerIdx[j]),
                 uint80(st.ownerIdx[j] << OWNER_IDX_SHIFT) |
-                (uint80(st.owed[j]) << 8) | uint80(st.rem[j]) | snapDone);
+                (uint80(st.owed[j]) << 8) | uint80(st.rem[j]) | st.snapDone);
             word |= (uint256(st.queueIdx[j]) + 1) << (32 * j);
         }
         if (word != ticketSeats) ticketSeats = word;

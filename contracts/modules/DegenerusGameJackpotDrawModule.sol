@@ -172,6 +172,15 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     ///      unfilled share nor the sub-share remainder is minted, so no share can be short.
     ///      Per-trait deity addresses are cached at loop entry. Each (level, trait) owns an
     ///      independent eight-lane cursor.
+    struct CoinAwardWork {
+        uint32[] players;
+        uint256[] amounts;
+        uint256 cap;
+        uint256 amount;
+        uint24 range;
+        uint256 paid;
+    }
+
     function _awardDailyCoinToTraitWinners(
         uint24 minLevel,
         uint24 maxLevel,
@@ -179,10 +188,11 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         uint256 coinBudget,
         uint256 randomWord
     ) private {
+        CoinAwardWork memory c;
         uint256 units = coinBudget / FlipRoundLib.FLIP_ROUND_UNIT;
         if (units == 0) return;
-        uint256 cap = units < COIN_DRAW_SHARES ? units : COIN_DRAW_SHARES;
-        uint256 amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
+        c.cap = units < COIN_DRAW_SHARES ? units : COIN_DRAW_SHARES;
+        c.amount = (units / c.cap) * FlipRoundLib.FLIP_ROUND_UNIT;
 
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
@@ -197,32 +207,35 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
             unchecked { ++t; }
         }
 
-        uint24 range = maxLevel - minLevel + 1;
-        PackedTicketSampleLib.Cursor[] memory cursors = new PackedTicketSampleLib.Cursor[](uint256(range) * 4);
+        c.range = maxLevel - minLevel + 1;
+        PackedTicketSampleLib.Cursor[] memory cursors = new PackedTicketSampleLib.Cursor[](uint256(c.range) * 4);
 
-        uint32[] memory players = new uint32[](cap);
-        uint256[] memory amounts = new uint256[](cap);
-        uint256 paid;
-        for (uint256 i; i < cap; ) {
+        c.players = new uint32[](c.cap);
+        c.amounts = new uint256[](c.cap);
+
+        for (uint256 i; i < c.cap; ) {
             uint8 traitIdx = uint8(i & 3);
             uint8 trait_i = traitIds[traitIdx];
             (uint32 winner, uint24 lvlPrime, uint256 ticketIdx) = _drawCoinEntry(
-                minLevel, range, trait_i, deityCache[traitIdx], randomWord, i, cursors
+                minLevel, c.range, trait_i, deityCache[traitIdx], randomWord, i, cursors
             );
             if (winner != 0) {
-                emit JackpotFlipWin(winner, lvlPrime, trait_i, amount, ticketIdx);
-                players[paid] = winner;
-                amounts[paid] = amount;
-                unchecked { ++paid; }
+                emit JackpotFlipWin(winner, lvlPrime, trait_i, c.amount, ticketIdx);
+                c.players[c.paid] = winner;
+                c.amounts[c.paid] = c.amount;
+                unchecked { ++c.paid; }
             }
             unchecked { ++i; }
         }
-        if (paid != 0) {
+        if (c.paid != 0) {
+            uint256 paid = c.paid;
+            uint32[] memory players = c.players;
+            uint256[] memory amounts = c.amounts;
             assembly ("memory-safe") {
                 mstore(players, paid)
                 mstore(amounts, paid)
             }
-            coinflip.creditFlipBatch(players, amounts);
+            coinflip.creditFlipBatch(c.players, c.amounts);
         }
     }
 
@@ -472,76 +485,89 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     ///      `work.paid` tracks the reserved ETH not yet credited; the last group returns what no
     ///      candidate took to the pending future pool, closes the bracket and retires the work
     ///      record. The game-over latch releases the reservation instead.
+    struct BafAwardWork {
+        uint256 word;
+        uint8[3] traits;
+        MineFlipGas.Meter meter;
+        uint256 n;
+        uint256 i;
+        uint24 lvl;
+        uint256 pool;
+        uint256 rounds;
+        uint24 floorLvl;
+        uint256 credited;
+        uint32[4] drawn;
+    }
+
     function runBafAwards(uint256 word, uint256 allowance, uint8[3] memory traits)
         public returns (MineFlipGas.Result memory result)
     {
-        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        BafAwardWork memory c;
+        c.word = word;
+        c.traits = traits;
+        c.meter = MineFlipGas.start(allowance);
         JackpotWork storage work = jackpotWork;
         if (work.kind != 7) {
             result.done = true;
             return result;
         }
-        uint256 n = work.traits;
-        uint256 i = work.winner;
-        uint24 lvl = work.lvl;
-        uint256 pool = work.budget;
-        uint256 rounds = (n - 3) / 2;
-        uint24 floorLvl = lvl + work.quadrant;
-        uint256 credited;
-        uint32[4] memory drawn;
-        while (i < n) {
-            if (!MineFlipGas.canRun(meter, GasBounds.BAF_AWARD_GROUP, GasBounds.BAF_AWARD_TAIL)) break;
-            uint256 end = i + GasBounds.JACKPOT_ETH_AWARD_CHUNK;
-            if (end > n) end = n;
-            for (; i < end; ) {
+        c.n = work.traits;
+        c.i = work.winner;
+        c.lvl = work.lvl;
+        c.pool = work.budget;
+        c.rounds = (c.n - 3) / 2;
+        c.floorLvl = c.lvl + work.quadrant;
+
+        while (c.i < c.n) {
+            if (!MineFlipGas.canRun(c.meter, GasBounds.BAF_AWARD_GROUP, GasBounds.BAF_AWARD_TAIL)) break;
+            uint256 end = c.i + GasBounds.JACKPOT_ETH_AWARD_CHUNK;
+            if (end > c.n) end = c.n;
+            for (; c.i < end; ) {
                 uint32 winner;
                 uint256 amount;
-                if (i < 2 * rounds) {
-                    if (i & 3 == 0) drawn = _drawBafPair(work, word, i, traits);
-                    winner = drawn[i & 3];
-                    amount = i & 1 == 0 ? (pool / 2) / rounds : ((pool * 30) / 100) / rounds;
+                if (c.i < 2 * c.rounds) {
+                    if (c.i & 3 == 0) _drawBafPair(c);
+                    winner = c.drawn[c.i & 3];
+                    amount = c.i & 1 == 0 ? (c.pool / 2) / c.rounds : ((c.pool * 30) / 100) / c.rounds;
                 } else {
-                    uint8 slot = uint8(i - 2 * rounds);
-                    winner = jackpots.bafHeadWinner(lvl, word, slot);
-                    amount = slot == 0 ? pool / 10 : pool / 20;
+                    uint8 slot = uint8(c.i - 2 * c.rounds);
+                    winner = jackpots.bafHeadWinner(c.lvl, c.word, slot);
+                    amount = slot == 0 ? c.pool / 10 : c.pool / 20;
                 }
-                credited += _payBafAward(winner, amount, i, lvl, pool / 20, floorLvl, word);
+                c.credited += _payBafAward(winner, amount, c.i, c.lvl, c.pool / 20, c.floorLvl, c.word);
                 unchecked {
-                    ++i;
+                    ++c.i;
                 }
             }
             ++result.rewardBasis;
-            MineFlipGas.markProgress(meter);
+            MineFlipGas.markProgress(c.meter);
         }
-        if (i != work.winner) {
-            work.paid -= uint128(credited);
-            work.winner = uint16(i);
+        if (c.i != work.winner) {
+            work.paid -= uint128(c.credited);
+            work.winner = uint16(c.i);
             result.progressed = true;
-            MineFlipGas.markProgress(meter);
+            MineFlipGas.markProgress(c.meter);
         }
-        if (i == n) {
+        if (c.i == c.n) {
             uint256 residue = work.paid;
             if (residue != 0) _releaseBafReserve(residue);
-            jackpots.finalizeBaf(lvl);
+            jackpots.finalizeBaf(c.lvl);
             _retireJackpotWork();
             result.done = true;
             result.progressed = true;
-            MineFlipGas.markProgress(meter);
+            MineFlipGas.markProgress(c.meter);
         }
-        MineFlipGas.finish(meter);
+        MineFlipGas.finish(c.meter);
     }
 
     /// @dev Draw and record each near-level pair once, when its first award executes.
-    function _drawBafPair(JackpotWork storage work, uint256 word, uint256 i, uint8[3] memory traits)
-        private returns (uint32[4] memory winners)
-    {
-        uint256 rounds = (work.traits - 3) / 2;
+    function _drawBafPair(BafAwardWork memory c) private {
         IDegenerusJackpots.BafRound[2] memory draws;
-        (winners, draws) = jackpots.bafPairWinners(work.lvl, word, i >> 2, rounds, traits);
-        if (i < rounds) {
-            uint24 sourceLevel = work.lvl + (i >= rounds / 2 ? 1 : 0);
+        (c.drawn, draws) = jackpots.bafPairWinners(c.lvl, c.word, c.i >> 2, c.rounds, c.traits);
+        if (c.i < c.rounds) {
+            uint24 sourceLevel = c.lvl + (c.i >= c.rounds / 2 ? 1 : 0);
             for (uint256 j; j < 2; ++j) {
-                emit BafCandidates(work.lvl, rngRequestDay, uint16((i >> 1) + j), sourceLevel,
+                emit BafCandidates(c.lvl, rngRequestDay, uint16((c.i >> 1) + j), sourceLevel,
                     draws[j].trait, draws[j].candidates);
             }
         }

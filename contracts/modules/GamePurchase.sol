@@ -684,6 +684,15 @@ abstract contract GamePurchase is
     ///      that read and this frame, so the values cannot have changed). `payerId` is the
     ///      ledger the claimable/AFKing legs debit: the buyer's own (0 = the buyer), or a smurf's
     ///      owner on its creation ticket.
+    struct PurchaseWork {
+        uint256 lootboxFreshEth;
+        uint256 lootboxClaimableUsed;
+        uint256 lootboxPoolDraw;
+        uint256 lbShares;
+        uint256 lootBoxAmount;
+        uint256 totalCost;
+    }
+
     function _purchaseForWithCached(
         uint32 buyerId,
         uint256 entryQuantityScaled,
@@ -694,6 +703,7 @@ abstract contract GamePurchase is
         PurchaseQuote memory quote,
         uint32 payerId
     ) private returns (uint256 boxWord) {
+        PurchaseWork memory c;
         if (_livenessTriggered()) revert E();
         // Every caller registered the buyer before this frame; the mint word is warm.
 
@@ -724,20 +734,20 @@ abstract contract GamePurchase is
         // Builds this purchase's entry in flight before the payment split, which needs its
         // cost. The caller appends the finished word once; every effect here unwinds with the
         // rest of the purchase if anything below reverts.
-        uint256 lootBoxAmount;
-        uint256 lbShares; // (future << 128) | next
+
+
         if (boxOrder != 0) {
             uint256 lbCredit;
-            (lootBoxAmount, lbShares, lbCredit, boxWord) = _beginBoxOrder(buyerId, boxOrder);
+            (c.lootBoxAmount, c.lbShares, lbCredit, boxWord) = _beginBoxOrder(buyerId, boxOrder);
             lootboxFlipCredit += lbCredit;
             // Box spend joins the minted-units tally (400 units = one ticket-price), combining
             // with the ticket leg so cumulative spend of either kind crosses the whole-ticket
             // participation floor (mint day / streak / quest gate).
-            _recordLootboxUnits(buyerId, lootBoxAmount);
+            _recordLootboxUnits(buyerId, c.lootBoxAmount);
         }
 
-        uint256 totalCost = quote.ticketCost + lootBoxAmount;
-        if (totalCost == 0) revert E();
+        c.totalCost = quote.ticketCost + c.lootBoxAmount;
+        if (c.totalCost == 0) revert E();
 
         // Ticket-leg ETH-in (any funding source). The lootbox leg is carried by LootBoxBuy, so
         // the two events stay disjoint for off-chain ETH-in totals.
@@ -746,22 +756,22 @@ abstract contract GamePurchase is
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
         // explicit-value ticket-buy slice for Foil purchases and smurf creation).
         uint256 remainingEth = ethValue;
-        uint256 lootboxFreshEth = 0;
-        uint256 lootboxClaimableUsed = 0;
+        c.lootboxFreshEth = 0;
+        c.lootboxClaimableUsed = 0;
         // Lootbox-leg claimable + afking drawn here; folded with the ticket leg's draw into one
         // claimablePool decrement below.
-        uint256 lootboxPoolDraw = 0;
-        if (lootBoxAmount != 0) {
+        c.lootboxPoolDraw = 0;
+        if (c.lootBoxAmount != 0) {
             // Lootbox payment uses msg.value first; afking covers any shortfall, and
             // claimable too unless the buyer insisted on DirectEth.
-            if (remainingEth >= lootBoxAmount) {
-                lootboxFreshEth = lootBoxAmount;
+            if (remainingEth >= c.lootBoxAmount) {
+                c.lootboxFreshEth = c.lootBoxAmount;
                 unchecked {
-                    remainingEth -= lootBoxAmount;
+                    remainingEth -= c.lootBoxAmount;
                 }
             } else {
-                lootboxFreshEth = remainingEth;
-                uint256 shortfall = lootBoxAmount - remainingEth;
+                c.lootboxFreshEth = remainingEth;
+                uint256 shortfall = c.lootBoxAmount - remainingEth;
                 remainingEth = 0;
 
                 // Draw the shortfall from claimable (live balance == the entry snapshot
@@ -772,9 +782,9 @@ abstract contract GamePurchase is
                     shortfall,
                     payKind != MintPaymentKind.DirectEth
                 );
-                lootboxFreshEth += aUsed;
-                lootboxClaimableUsed = cUsed;
-                lootboxPoolDraw = cUsed + aUsed;
+                c.lootboxFreshEth += aUsed;
+                c.lootboxClaimableUsed = cUsed;
+                c.lootboxPoolDraw = cUsed + aUsed;
             }
         }
 
@@ -804,8 +814,8 @@ abstract contract GamePurchase is
         // observer ever sees a half-applied contribution, and prizePoolFrozen never flips
         // mid-purchase, so both legs route to the same accumulator.
         _addPrizeContribution(
-            uint128(ticket.ticketNextShare + uint128(lbShares)),
-            uint128(ticket.ticketFutureShare + (lbShares >> 128))
+            uint128(ticket.ticketNextShare + uint128(c.lbShares)),
+            uint128(ticket.ticketFutureShare + (c.lbShares >> 128))
         );
 
         // --- One combined claimablePool decrement for both legs ---
@@ -815,7 +825,7 @@ abstract contract GamePurchase is
         // only external interaction in this deferral window is a read-only affiliate staticcall,
         // so no observer ever sees a half-applied pool, and the solvency identity holds at every
         // tx boundary.
-        uint256 totalClaimableDraw = ticket.ticketClaimableDraw + lootboxPoolDraw;
+        uint256 totalClaimableDraw = ticket.ticketClaimableDraw + c.lootboxPoolDraw;
         if (totalClaimableDraw != 0) {
             claimablePool -= uint128(totalClaimableDraw);
         }
@@ -834,9 +844,9 @@ abstract contract GamePurchase is
                 bool afking
             ) = quests.handlePurchase_g4831(
                     buyerId,
-                    totalCost,
+                    c.totalCost,
                     0, // This body funds tickets with ETH, claimable or AFKing balances.
-                    lootBoxAmount,
+                    c.lootBoxAmount,
                     quote.priceWei,
                     // During the purchase phase the purchase level IS quote.cachedLevel + 1,
                     // so quote.priceWei already equals priceForLevel(quote.cachedLevel + 1); only
@@ -858,7 +868,7 @@ abstract contract GamePurchase is
 
         // --- Cure: any buy worth >= 1 ticket clears the cashout/smite curse, so the curing
         //     buy already scores un-penalized (cleared before the score read below). ---
-        if (totalCost >= quote.priceWei) {
+        if (c.totalCost >= quote.priceWei) {
             _clearCurse(buyerId);
         }
 
@@ -866,7 +876,7 @@ abstract contract GamePurchase is
         //     EV/taper consume it, so a ticket-only non-x00 buy skips the score and its
         //     affiliate staticcall entirely. ---
         uint256 cachedScore;
-        if (lootBoxAmount != 0 || targetLevel % 100 == 0) {
+        if (c.lootBoxAmount != 0 || targetLevel % 100 == 0) {
             // The quest handler already knows whether the buyer has an afking run.
             // Ordinary ticket buys need no score; non-afkers need no Sub lookup even
             // when buying boxes/century tickets. Lapsed runs retain the manual fallback.
@@ -902,7 +912,7 @@ abstract contract GamePurchase is
         }
 
         // --- Freeze the box-order score; the opener draws its EV allowance. ---
-        if (lootBoxAmount != 0) {
+        if (c.lootBoxAmount != 0) {
             boxWord = _applyBoxOrderScore(boxWord, cachedScore);
         }
 
@@ -913,11 +923,11 @@ abstract contract GamePurchase is
         uint32 affWinnerId;
         uint256 affWinnerCredit;
         {
-            uint256 lbFreshFlip = lootboxFreshEth != 0
-                ? _ethToFlipValue(lootboxFreshEth, quote.priceWei)
+            uint256 lbFreshFlip = c.lootboxFreshEth != 0
+                ? _ethToFlipValue(c.lootboxFreshEth, quote.priceWei)
                 : 0;
-            uint256 lbRecycledFlip = lootboxClaimableUsed != 0
-                ? _ethToFlipValue(lootboxClaimableUsed, quote.priceWei)
+            uint256 lbRecycledFlip = c.lootboxClaimableUsed != 0
+                ? _ethToFlipValue(c.lootboxClaimableUsed, quote.priceWei)
                 : 0;
             uint256 affKickback;
             (affWinnerId, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined_g978(
@@ -935,14 +945,14 @@ abstract contract GamePurchase is
 
         // Degenesis credit on the whole ticket + lootbox spend: every leg of this body is ETH,
         // claimable or AFKing funded (FLIP-paid tickets route through redeemFlip instead).
-        _accruePurchaseDegenesisCredit(buyerId, totalCost);
+        _accruePurchaseDegenesisCredit(buyerId, c.totalCost);
 
         // Recycle bonus: spending at least 3 whole tickets' worth of claimable
         // winnings (quote.priceWei is the per-whole-ticket cost) earns 10% of the
         // recycled value back as FLIP flip credit, regardless of any remaining
         // claimable balance. Sum the exact tier debits returned by the payment legs;
         // DirectEth contributes zero and afking principal never earns a recycle bonus.
-        uint256 totalClaimableUsed = ticket.ticketClaimableUsed + lootboxClaimableUsed;
+        uint256 totalClaimableUsed = ticket.ticketClaimableUsed + c.lootboxClaimableUsed;
         if (totalClaimableUsed >= quote.priceWei * 3) {
             lootboxFlipCredit +=
                 (totalClaimableUsed * PRICE_COIN_UNIT) /
@@ -959,7 +969,7 @@ abstract contract GamePurchase is
                 affWinnerCredit
             );
         }
-        _accrueAdapterDegenesisCredit(buyerId, totalCost, adapterPayerId);
+        _accrueAdapterDegenesisCredit(buyerId, c.totalCost, adapterPayerId);
     }
 
     function _accrueAdapterDegenesisCredit(uint32, uint256, uint32) internal virtual {}

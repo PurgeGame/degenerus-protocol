@@ -60,7 +60,7 @@ contract StampedBoxObserver is DegenerusGameBoxModule {
     function _boxRollBoxBoons(
         uint32 id, uint256 perBoxBudget, uint256 boxCount, uint256 originalAmount,
         uint24 currentLevel, uint256 seed, uint256 nonceBase
-    ) internal override(DegenerusGameBoxModule) {
+    ) internal override {
         emit StampedBoxResolved(id, originalAmount, seed);
         super._boxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase);
     }

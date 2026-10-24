@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {CrapsPins} from "../craps/CrapsPins.sol";
+import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
@@ -110,7 +111,7 @@ contract CrapsPreferenceGasTest is CrapsPins {
         for (uint256 b; b < boards.length; ++b) {
             for (uint256 t; t < chip.length; ++t) {
                 uint256 start = gasleft();
-                Craps.SlipResult memory r = table.settleSlip(
+                Craps.SlipResult memory r = CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlip(
                     boards[b],
                     chip[t],
                     123,

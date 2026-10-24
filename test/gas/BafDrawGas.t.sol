@@ -3,10 +3,10 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 
-contract BafDrawSlotProbe is Coinflip {
-    constructor() Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)) {}
+contract BafDrawSlotProbe is CoinflipStakeSetter {
     function roots() external pure returns (uint256 header, uint256 entry) {
         assembly { header := bafDrawHeader.slot entry := bafDrawEntry.slot }
     }

@@ -1281,6 +1281,25 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Shared purchase-path quest legs (mint ETH/FLIP + lootbox). Modifier-less core
     ///      behind handlePurchase (COIN-gated) and handleFoilPurchase (GAME-gated).
+    struct PurchaseQuestResult {
+        uint256 ethMintReward;
+        uint256 flipMintReward;
+        uint256 lootboxReward;
+        bool anyCompleted;
+        bool primaryCompleted;
+        uint8 outQuestType;
+        uint32 outStreak;
+    }
+
+    struct PurchaseQuestInputs {
+        uint32 id;
+        uint256 ethMintSpendWei;
+        uint32 flipMintQty;
+        uint256 lootBoxAmount;
+        uint256 mintPrice;
+        uint256 levelQuestPrice;
+    }
+
     function _handlePurchase(
         uint32 id,
         uint256 ethMintSpendWei,
@@ -1293,94 +1312,97 @@ contract DegenerusQuests is IDegenerusQuests {
         private
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
+        PurchaseQuestInputs memory p = PurchaseQuestInputs(id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice);
+        return _purchaseQuestWork(p, quests);
+    }
+
+    function _purchaseQuestWork(PurchaseQuestInputs memory p, DailyQuest[QUEST_SLOT_COUNT] memory quests)
+        private returns (uint256 reward, uint8 questType, uint32 streak, bool completed) {
         uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = _questsStorage().questPlayerState[id];
+        PlayerQuestState storage state = _questsStorage().questPlayerState[p.id];
         if (currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        if (ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0) {
+        if (p.ethMintSpendWei == 0 && p.flipMintQty == 0 && p.lootBoxAmount == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
 
-        _questSyncState(state, id, currentDay);
+        _questSyncState(state, p.id, currentDay);
 
-        uint256 ethMintReward;
-        uint256 flipMintReward;
-        uint256 lootboxReward;
-        bool anyCompleted;
         // The Game records the level mint streak on a MINT_ETH completion; a secondary completing
         // in the same call must not mask it in the returned type.
-        bool primaryCompleted;
-        uint8 outQuestType;
-        uint32 outStreak = state.streak;
+        PurchaseQuestResult memory purchaseResult;
+        purchaseResult.outStreak = state.streak;
 
         // --- ETH mint quest progress ---
         // Gross ETH spend on tickets + lootboxes (fresh + recycled) is credited to the
         // MINT_ETH quest (daily progress accumulates in milli-ETH, level progress in wei).
         // Slot 0 is always the MINT_ETH quest, so only that slot can match.
-        if (ethMintSpendWei != 0) {
+        if (p.ethMintSpendWei != 0) {
             DailyQuest memory quest = quests[0];
             if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_ETH) {
-                outQuestType = QUEST_TYPE_MINT_ETH;
-                uint256 target = _questTargetValue(quest, 0, mintPrice);
+                purchaseResult.outQuestType = QUEST_TYPE_MINT_ETH;
+                uint256 target = _questTargetValue(quest, 0, p.mintPrice);
                 (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
-                    id, state, quests, quest, 0,
-                    ethMintSpendWei, target, currentDay, mintPrice,
-                    QUEST_TYPE_MINT_ETH, ethMintSpendWei,
-                    levelQuestPrice
+                    p.id, state, quests, quest, 0,
+                    p.ethMintSpendWei, target, currentDay, p.mintPrice,
+                    QUEST_TYPE_MINT_ETH, p.ethMintSpendWei,
+                    p.levelQuestPrice
                 );
                 if (c) {
-                    ethMintReward += r;
-                    outQuestType = qt;
-                    outStreak = s;
-                    anyCompleted = true;
-                    primaryCompleted = true;
+                    purchaseResult.ethMintReward += r;
+                    purchaseResult.outQuestType = qt;
+                    PurchaseQuestResult memory purchaseResult;
+        purchaseResult.outStreak = s;
+                    purchaseResult.anyCompleted = true;
+                    purchaseResult.primaryCompleted = true;
                 }
             } else {
-                _handleLevelQuestProgress(id, QUEST_TYPE_MINT_ETH, ethMintSpendWei, levelQuestPrice);
+                _handleLevelQuestProgress(p.id, QUEST_TYPE_MINT_ETH, p.ethMintSpendWei, p.levelQuestPrice);
             }
         }
 
         // --- FLIP mint quest progress ---
         // The slot-1 bonus roll excludes the primary MINT_ETH type, so MINT_FLIP
         // can only ever be the slot-1 quest.
-        if (flipMintQty != 0) {
+        if (p.flipMintQty != 0) {
             DailyQuest memory quest = quests[1];
             if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_FLIP) {
-                outQuestType = QUEST_TYPE_MINT_FLIP;
+                purchaseResult.outQuestType = QUEST_TYPE_MINT_FLIP;
                 uint256 target = _questTargetValue(quest, 1, 0);
                 (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
-                    id, state, quests, quest, 1,
-                    flipMintQty, target, currentDay, 0,
-                    QUEST_TYPE_MINT_FLIP, flipMintQty,
-                    levelQuestPrice
+                    p.id, state, quests, quest, 1,
+                    p.flipMintQty, target, currentDay, 0,
+                    QUEST_TYPE_MINT_FLIP, p.flipMintQty,
+                    p.levelQuestPrice
                 );
                 if (c) {
-                    flipMintReward += r;
-                    outQuestType = qt;
-                    outStreak = s;
-                    anyCompleted = true;
-                    if (qt == QUEST_TYPE_MINT_ETH) primaryCompleted = true;
+                    purchaseResult.flipMintReward += r;
+                    purchaseResult.outQuestType = qt;
+                    PurchaseQuestResult memory purchaseResult;
+        purchaseResult.outStreak = s;
+                    purchaseResult.anyCompleted = true;
+                    if (qt == QUEST_TYPE_MINT_ETH) purchaseResult.primaryCompleted = true;
                 }
             } else {
-                _handleLevelQuestProgress(id, QUEST_TYPE_MINT_FLIP, flipMintQty, levelQuestPrice);
+                _handleLevelQuestProgress(p.id, QUEST_TYPE_MINT_FLIP, p.flipMintQty, p.levelQuestPrice);
             }
         }
 
         // --- Lootbox quest progress ---
-        if (lootBoxAmount != 0) {
-            _handleLevelQuestProgress(id, QUEST_TYPE_LOOTBOX, lootBoxAmount, levelQuestPrice);
+        if (p.lootBoxAmount != 0) {
+            _handleLevelQuestProgress(p.id, QUEST_TYPE_LOOTBOX, p.lootBoxAmount, p.levelQuestPrice);
 
             (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
             if (slotIndex != type(uint8).max) {
                 uint16 progressAfter = _clampedAddU16(
                     _questSyncProgress(state, slotIndex, currentDay),
-                    _toStoredProgress(quest.questType, lootBoxAmount)
+                    _toStoredProgress(quest.questType, p.lootBoxAmount)
                 );
                 _setProgressOf(state, slotIndex, progressAfter);
-                uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
+                uint256 target = _questTargetValue(quest, slotIndex, p.mintPrice);
                 emit QuestProgressUpdated(
-                    id, currentDay, slotIndex, quest.questType,
+                    p.id, currentDay, slotIndex, quest.questType,
                     uint128(_toNativeProgress(quest.questType, progressAfter)),
                     _toNativeProgress(quest.questType, target)
                 );
@@ -1389,14 +1411,15 @@ contract DegenerusQuests is IDegenerusQuests {
                     bool canComplete = !_secondaryLocked(state, slotIndex);
                     if (canComplete) {
                         (uint256 r, uint8 qt, uint32 s, bool c) = _questCompleteWithPair(
-                            id, state, quests, slotIndex, quest, currentDay, mintPrice
+                            p.id, state, quests, slotIndex, quest, currentDay, p.mintPrice
                         );
                         if (c) {
-                            lootboxReward += r;
-                            outQuestType = qt;
-                            outStreak = s;
-                            anyCompleted = true;
-                            if (qt == QUEST_TYPE_MINT_ETH) primaryCompleted = true;
+                            purchaseResult.lootboxReward += r;
+                            purchaseResult.outQuestType = qt;
+                            PurchaseQuestResult memory purchaseResult;
+        purchaseResult.outStreak = s;
+                            purchaseResult.anyCompleted = true;
+                            if (qt == QUEST_TYPE_MINT_ETH) purchaseResult.primaryCompleted = true;
                         }
                     }
                 }
@@ -1407,11 +1430,11 @@ contract DegenerusQuests is IDegenerusQuests {
         // payout currencies — every quest reward is paid as a FLIP flip stake.
         // No reward is credited here; the full earned amount is returned to the
         // caller, which adds it to lootboxFlipCredit and credits it exactly once.
-        uint256 totalReturned = ethMintReward + lootboxReward + flipMintReward;
-        if (anyCompleted) {
-            return (totalReturned, primaryCompleted ? QUEST_TYPE_MINT_ETH : outQuestType, outStreak, true);
+        uint256 totalReturned = purchaseResult.ethMintReward + purchaseResult.lootboxReward + purchaseResult.flipMintReward;
+        if (purchaseResult.anyCompleted) {
+            return (totalReturned, purchaseResult.primaryCompleted ? QUEST_TYPE_MINT_ETH : purchaseResult.outQuestType, purchaseResult.outStreak, true);
         }
-        return (0, outQuestType != 0 ? outQuestType : quests[0].questType, outStreak, false);
+        return (0, purchaseResult.outQuestType != 0 ? purchaseResult.outQuestType : quests[0].questType, purchaseResult.outStreak, false);
     }
 
     /**

@@ -1,3 +1,4 @@
+import { usesAffiliateBootstrap } from "./lib/deploymentManifest.js";
 import hre from "hardhat";
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -351,15 +352,8 @@ function getConstructorArgs(
   affiliateBootstrap,
   affiliatePreReferrals
 ) {
-  if (key === "COINFLIP") {
-    // Frozen Coinflip has a no-arg constructor (v73 tree d6615306) — it reads its
-    // peers (COIN/GAME/JACKPOTS/WWXRP) from the patched ContractAddresses
-    // constants at compile time, not via constructor args. The old 4-arg list
-    // predates that refactor and reverted "incorrect number of arguments".
-    return [];
-  }
   if (key === "ICONS_32") return [process.env.ICONS32_FINALIZE === "1"];
-  if (key === "COINFLIP") {
+  if (usesAffiliateBootstrap(key)) {
     return [
       affiliateBootstrap.owners,
       affiliateBootstrap.codes,

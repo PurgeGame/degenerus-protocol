@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { selectProfile } from "./selectProfile.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CONTRACT_FILE = resolve(
@@ -27,6 +28,7 @@ export function patchContractAddresses(
   vrfKeyHash,
   contractFilePath
 ) {
+  selectProfile();
   const CONTRACT_FILE = contractFilePath || DEFAULT_CONTRACT_FILE;
 
   // ContractAddresses.sol is regenerated on demand — predicted addresses are

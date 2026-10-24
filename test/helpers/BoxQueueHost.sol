@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GamePurchaseBox} from "../../contracts/modules/GamePurchaseBox.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -8,7 +9,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 /// @dev The live Game with fixture doors onto the box queue. Every measured or asserted path still
 ///      runs the production purchase entry points and module code; the extras only read storage,
 ///      seal/publish a word the way the request path does, and call the module workers directly.
-contract QueueHost is DegenerusGame {
+contract QueueHost is GamePurchaseBox, DegenerusGame {
     function entryAt(uint48 buffer, uint256 position) external view returns (uint256) {
         return _boxEntryAt(buffer, position);
     }

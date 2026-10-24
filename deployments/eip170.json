@@ -1,0 +1,364 @@
+{
+  "profile": "eip170",
+  "deployments": [
+    {
+      "key": "ICONS_32",
+      "contract": "Icons32Data",
+      "aliases": [
+        "ICONS_32"
+      ],
+      "fixtureField": "icons32",
+      "fixtureType": "Icons32Data"
+    },
+    {
+      "key": "GAME_ACTIONS_MODULE",
+      "contract": "Eip170Actions",
+      "aliases": [
+        "GAME_ACTIONS_MODULE",
+        "GAME_BINGO_MODULE"
+      ],
+      "fixtureField": "bingoModule",
+      "fixtureType": "DegenerusGame"
+    },
+    {
+      "key": "GAME_PURCHASE_MODULE",
+      "contract": "Eip170Purchase",
+      "aliases": [
+        "GAME_PURCHASE_MODULE"
+      ],
+      "fixtureField": "purchaseModule",
+      "fixtureType": "GamePurchaseEntries"
+    },
+    {
+      "key": "GAME_MINT_MODULE",
+      "contract": "Eip170Mint",
+      "aliases": [
+        "GAME_MINT_MODULE"
+      ],
+      "fixtureField": "mintModule",
+      "fixtureType": "DegenerusGameMintModule"
+    },
+    {
+      "key": "GAME_FOILPACK_MODULE",
+      "contract": "Eip170DegenesisFoil",
+      "aliases": [
+        "GAME_FOILPACK_MODULE",
+        "GAME_DEGENESIS_MODULE"
+      ],
+      "fixtureField": "foilModule",
+      "fixtureType": "DegenerusGameFoilPackModule",
+      "fixtureAliases": {
+        "GAME_DEGENESIS_MODULE": {
+          "field": "degenesisModule",
+          "type": "DegenerusGameDegenesisModule"
+        }
+      }
+    },
+    {
+      "key": "GAME_ADVANCE_MODULE",
+      "contract": "Eip170Advance",
+      "aliases": [
+        "GAME_ADVANCE_MODULE"
+      ],
+      "fixtureField": "advanceModule",
+      "fixtureType": "DegenerusGameAdvanceModule"
+    },
+    {
+      "key": "GAME_RNG_MODULE",
+      "contract": "Eip170Rng",
+      "aliases": [
+        "GAME_RNG_MODULE"
+      ],
+      "fixtureField": "rngModule",
+      "fixtureType": "DegenerusGameRngModule"
+    },
+    {
+      "key": "GAME_JACKPOT_MODULE",
+      "contract": "Eip170Jackpot",
+      "aliases": [
+        "GAME_JACKPOT_MODULE"
+      ],
+      "fixtureField": "jackpotModule",
+      "fixtureType": "DegenerusGameJackpotModule"
+    },
+    {
+      "key": "GAME_JACKPOT_DRAW_MODULE",
+      "contract": "Eip170JackpotDraw",
+      "aliases": [
+        "GAME_JACKPOT_DRAW_MODULE"
+      ],
+      "fixtureField": "jackpotDrawModule",
+      "fixtureType": "DegenerusGameJackpotDrawModule"
+    },
+    {
+      "key": "GAME_WHALE_MODULE",
+      "contract": "Eip170Whale",
+      "aliases": [
+        "GAME_WHALE_MODULE"
+      ],
+      "fixtureField": "whaleModule",
+      "fixtureType": "DegenerusGameWhaleModule"
+    },
+    {
+      "key": "GAME_TICKET_MODULE",
+      "contract": "Eip170TicketFoil",
+      "aliases": [
+        "GAME_TICKET_MODULE"
+      ],
+      "fixtureField": "ticketModule",
+      "fixtureType": "DegenerusGameTicketModule"
+    },
+    {
+      "key": "GAME_LOOTBOX_MODULE",
+      "contract": "Eip170Lootbox",
+      "aliases": [
+        "GAME_LOOTBOX_MODULE"
+      ],
+      "fixtureField": "lootboxModule",
+      "fixtureType": "DegenerusGameLootboxModule"
+    },
+    {
+      "key": "GAME_BOON_MODULE",
+      "contract": "Eip170Boon",
+      "aliases": [
+        "GAME_BOON_MODULE"
+      ],
+      "fixtureField": "boonModule",
+      "fixtureType": "DegenerusGameBoonModule"
+    },
+    {
+      "key": "GAME_DEGENERETTE_MODULE",
+      "contract": "Eip170Degenerette",
+      "aliases": [
+        "GAME_DEGENERETTE_MODULE"
+      ],
+      "fixtureField": "degeneretteModule",
+      "fixtureType": "DegenerusGameDegeneretteModule"
+    },
+    {
+      "key": "GAME_AFKING_MODULE",
+      "contract": "Eip170Afking",
+      "aliases": [
+        "GAME_AFKING_MODULE"
+      ],
+      "fixtureField": "afkingModule",
+      "fixtureType": "GameAfkingModule"
+    },
+    {
+      "key": "GAME_GAMEOVER_MODULE",
+      "contract": "Eip170Endgame",
+      "aliases": [
+        "GAME_GAMEOVER_MODULE"
+      ],
+      "fixtureField": "gameOverModule",
+      "fixtureType": "DegenerusGameGameOverModule"
+    },
+    {
+      "key": "GAME_DECIMATOR_MODULE",
+      "contract": "Eip170Decimator",
+      "aliases": [
+        "GAME_DECIMATOR_MODULE"
+      ],
+      "fixtureField": "decimatorModule",
+      "fixtureType": "DegenerusGameDecimatorModule"
+    },
+    {
+      "key": "GAME_MINER_MODULE",
+      "contract": "Eip170Miner",
+      "aliases": [
+        "GAME_MINER_MODULE"
+      ],
+      "fixtureField": "minerModule",
+      "fixtureType": "DegenerusGame"
+    },
+    {
+      "key": "COIN",
+      "contract": "FLIP",
+      "aliases": [
+        "COIN"
+      ],
+      "fixtureField": "coin",
+      "fixtureType": "FLIP"
+    },
+    {
+      "key": "GAME",
+      "contract": "DegenerusGame",
+      "aliases": [
+        "GAME"
+      ],
+      "fixtureField": "game",
+      "fixtureType": "DegenerusGame"
+    },
+    {
+      "key": "COINFLIP",
+      "contract": "Coinflip",
+      "aliases": [
+        "COINFLIP"
+      ],
+      "fixtureField": "coinflip",
+      "fixtureType": "Coinflip"
+    },
+    {
+      "key": "QUESTS",
+      "contract": "Eip170Quests",
+      "aliases": [
+        "QUESTS"
+      ],
+      "fixtureField": "quests",
+      "fixtureType": "DegenerusQuests"
+    },
+    {
+      "key": "AFFILIATE",
+      "contract": "Eip170Affiliate",
+      "aliases": [
+        "AFFILIATE"
+      ],
+      "fixtureField": "affiliate",
+      "fixtureType": "DegenerusAffiliate",
+      "bootstrap": true
+    },
+    {
+      "key": "JACKPOTS",
+      "contract": "DegenerusJackpots",
+      "aliases": [
+        "JACKPOTS"
+      ],
+      "fixtureField": "jackpots",
+      "fixtureType": "DegenerusJackpots"
+    },
+    {
+      "key": "DEITY_PASS",
+      "contract": "DegenerusDeityPass",
+      "aliases": [
+        "DEITY_PASS"
+      ],
+      "fixtureField": "deityPass",
+      "fixtureType": "DegenerusDeityPass"
+    },
+    {
+      "key": "VAULT",
+      "contract": "DegenerusVault",
+      "aliases": [
+        "VAULT"
+      ],
+      "fixtureField": "vault",
+      "fixtureType": "DegenerusVault"
+    },
+    {
+      "key": "SDGNRS",
+      "contract": "sDGNRS",
+      "aliases": [
+        "SDGNRS"
+      ],
+      "fixtureField": "sdgnrs",
+      "fixtureType": "sDGNRS"
+    },
+    {
+      "key": "DGNRS",
+      "contract": "DGNRS",
+      "aliases": [
+        "DGNRS"
+      ],
+      "fixtureField": "dgnrs",
+      "fixtureType": "DGNRS"
+    },
+    {
+      "key": "ADMIN",
+      "contract": "DegenerusAdmin",
+      "aliases": [
+        "ADMIN"
+      ],
+      "fixtureField": "admin",
+      "fixtureType": "DegenerusAdmin"
+    },
+    {
+      "key": "GNRUS",
+      "contract": "GNRUS",
+      "aliases": [
+        "GNRUS"
+      ],
+      "fixtureField": "gnrus",
+      "fixtureType": "GNRUS"
+    },
+    {
+      "key": "AFKING_SUB_TOKEN",
+      "contract": "AFKingSubscriptionToken",
+      "aliases": [
+        "AFKING_SUB_TOKEN"
+      ],
+      "fixtureField": "afkingSubToken",
+      "fixtureType": "AFKingSubscriptionToken"
+    },
+    {
+      "key": "PARIMUTUEL",
+      "contract": "DegenerusParimutuel",
+      "aliases": [
+        "PARIMUTUEL"
+      ],
+      "fixtureField": "parimutuel",
+      "fixtureType": "DegenerusParimutuel"
+    },
+    {
+      "key": "RECORD_BOUNTY",
+      "contract": "DegenerusRecordBounty",
+      "aliases": [
+        "RECORD_BOUNTY"
+      ],
+      "fixtureField": "recordBounty",
+      "fixtureType": "DegenerusRecordBounty"
+    },
+    {
+      "key": "CRAPS_ENGINE",
+      "contract": "Eip170CrapsEngine",
+      "aliases": [
+        "CRAPS_ENGINE"
+      ],
+      "fixtureField": "crapsEngine",
+      "fixtureType": "CrapsEngine"
+    },
+    {
+      "key": "CRAPS_LIFECYCLE_MODULE",
+      "contract": "Eip170JackpotBattle",
+      "aliases": [
+        "CRAPS_LIFECYCLE_MODULE"
+      ],
+      "fixtureField": "crapsLifecycleModule",
+      "fixtureType": "JackpotBattle"
+    },
+    {
+      "key": "CRAPS",
+      "contract": "CrapsBattle",
+      "aliases": [
+        "CRAPS",
+        "JACKPOT_BATTLE"
+      ],
+      "fixtureField": "crapsBattle",
+      "fixtureType": "CrapsViews",
+      "fixtureAliases": {
+        "JACKPOT_BATTLE": {
+          "field": "jackpotBattle",
+          "type": "JackpotBattle"
+        }
+      },
+      "fixtureContract": "CrapsViews"
+    },
+    {
+      "key": "WWXRP",
+      "contract": "WWXRP",
+      "aliases": [
+        "WWXRP"
+      ],
+      "fixtureField": "wwxrp",
+      "fixtureType": "WWXRP"
+    },
+    {
+      "key": "OWNER_GOVERNANCE",
+      "contract": "DegenerusOwnerGovernance",
+      "aliases": [
+        "OWNER_GOVERNANCE"
+      ],
+      "fixtureField": "ownerGovernance",
+      "fixtureType": "DegenerusOwnerGovernance"
+    }
+  ]
+}

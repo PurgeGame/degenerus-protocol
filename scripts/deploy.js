@@ -1,3 +1,4 @@
+import { usesAffiliateBootstrap } from "./lib/deploymentManifest.js";
 import hre from "hardhat";
 import {
   readFileSync,
@@ -292,7 +293,7 @@ function getConstructorArgs(
   affiliatePreReferrals
 ) {
   if (key === "ICONS_32") return [process.env.ICONS32_FINALIZE === "1"];
-  if (key === "COINFLIP") {
+  if (usesAffiliateBootstrap(key)) {
     return [
       affiliateBootstrap.owners,
       affiliateBootstrap.codes,

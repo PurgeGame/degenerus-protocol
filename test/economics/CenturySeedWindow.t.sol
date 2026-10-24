@@ -54,7 +54,7 @@ contract CenturySeedWindow is DeployProtocol {
 
     function testDeployAnnouncesTheWindowOnce() public {
         vm.recordLogs();
-        Coinflip fresh = new Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
+        Coinflip fresh = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)))));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 armed;
         for (uint256 i; i < logs.length; ++i) {

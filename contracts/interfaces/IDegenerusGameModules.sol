@@ -46,11 +46,10 @@ interface IDegenerusGameTicketModule {
 }
 
 interface IDegenerusGameMinerModule {
-    function playerActivityScoreCachedById(uint32 id) external returns (uint256);
     error NoWork();
     error RngNotReady();
     function mineFlip(uint32 gasMultiplierBps) external;
-    function minerAction() external view returns (uint8);
+    function minerAction() external returns (uint8);
 }
 
 interface IDegenerusGameRngModule {
@@ -136,11 +135,20 @@ interface IDegenerusGameJackpotDrawModule {
         external returns (MineFlipGas.Result memory);
     function runBafAwards(uint256 word, uint256 allowance, uint8[3] calldata traits)
         external returns (MineFlipGas.Result memory);
+    /// @notice Execute BAF jackpot distribution.
+    /// @param poolWei Total ETH pool for BAF.
+    /// @param lvl Current level.
+    /// @param rngWord VRF entropy.
+    /// @return claimableDelta ETH reserved in claimablePool for the staged award schedule.
+    function runBafJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 claimableDelta);
+
 }
 
 interface IDegenerusGameJackpotModule {
-    function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
-        external returns (MineFlipGas.Result memory);
     function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
     function runDailyJackpot(bool inJackpot, uint24 lvl, uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory);
@@ -170,17 +178,6 @@ interface IDegenerusGameJackpotModule {
     /// @notice Roll, record and emit level 1's purchase-day board without running distribution.
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external;
-
-    /// @notice Execute BAF jackpot distribution.
-    /// @param poolWei Total ETH pool for BAF.
-    /// @param lvl Current level.
-    /// @param rngWord VRF entropy.
-    /// @return claimableDelta ETH reserved in claimablePool for the staged award schedule.
-    function runBafJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
-    ) external returns (uint256 claimableDelta);
 
     /// @notice Distribute yield surplus to stakeholders.
     /// @param rngWord Unused — the surplus split is deterministic. Carried only to keep the

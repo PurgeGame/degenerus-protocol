@@ -99,7 +99,7 @@ library JackpotBucketLib {
         uint8 remainderIdx
     ) internal pure returns (uint256[4] memory shares) {
         uint256 distributed;
-        for (uint8 i; i < 4; ) {
+        for (uint256 i; i < 4; ) {
             if (i != remainderIdx) {
                 uint16 count = bucketCounts[i];
                 uint256 share = (pool * shareBps[i]) / 10_000;

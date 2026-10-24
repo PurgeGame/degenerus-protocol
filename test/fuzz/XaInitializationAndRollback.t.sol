@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {FLIP} from "../../contracts/FLIP.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
@@ -21,7 +22,7 @@ contract XaCallbackSnapshot {
     fallback() external payable {
         if (msg.sig == bytes4(keccak256("consumeCoinflipBoon_g2902(uint32)"))) {
             require(msg.sender==ContractAddresses.COINFLIP,"callback sender");
-            (,bool done)=Coinflip(ContractAddresses.COINFLIP).questCompletionToday(id);
+            (,bool done)=DegenerusQuests(ContractAddresses.QUESTS).questCompletionToday(id);
             require(done,"quest completion visible at callback");
             require(FLIP(ContractAddresses.COIN).balanceOf(player)==8000,"funding already burned");
             require(Coinflip(ContractAddresses.COINFLIP).coinflipAmountById(id)==0,"deposit not yet banked");
@@ -51,13 +52,14 @@ contract XaInitializationAndRollbackTest is DeployProtocol {
     function _root(string memory id) private pure returns (bytes32) {
         return bytes32(uint256(keccak256(abi.encode(uint256(keccak256(bytes(id)))-1))) & ~uint256(255));
     }
-    function test_NamespaceRootsInitializationAndRetiredAddresses() public {
+    function test_NamespaceRootsInitializationAndProfileAddresses() public {
         assertEq(_root("degenerus.storage.quests.v1"),bytes32(QaTrace.QUESTS));
         assertEq(_root("degenerus.storage.affiliate.v1"),bytes32(QaTrace.AFFILIATE));
-        assertEq(address(quests),address(coinflip));assertEq(address(affiliate),address(coinflip));
-        assertEq(vm.computeCreateAddress(address(this),11).code.length,0,"retired coinflip address");
-        assertEq(vm.computeCreateAddress(address(this),15).code.length,0,"retired quests address");
-        uint256 active=uint256(vm.load(address(coinflip),bytes32(QaTrace.QUESTS)));
+        assertEq(address(quests), ContractAddresses.QUESTS);
+        assertEq(address(affiliate), ContractAddresses.AFFILIATE);
+        assertGt(address(quests).code.length, 0);
+        assertGt(address(affiliate).code.length, 0);
+        uint256 active=uint256(vm.load(address(quests),bytes32(QaTrace.QUESTS)));
         assertEq(uint8(active>>128),1);assertEq(uint8(active>>136),1);
         assertEq(uint8(active>>24),1);assertEq(uint8(active>>88),7);
         (,uint32 vaultId,)=affiliate.affiliateCode(bytes32("VAULT"));
@@ -73,15 +75,15 @@ contract XaInitializationAndRollbackTest is DeployProtocol {
         vm.prank(address(coinflip));id=game.registerWallet_g9539(PLAYER,true);
         vm.prank(address(game));coin.mintForGame(PLAYER,10000);
         uint256 day=GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
-        vm.store(address(coinflip),bytes32(QaTrace.QUESTS),bytes32((day|(1<<24))|((day|(2<<24))<<64)));
+        vm.store(address(quests),bytes32(QaTrace.QUESTS),bytes32((day|(1<<24))|((day|(2<<24))<<64)));
         stateSlot=keccak256(abi.encode(uint256(id),QaTrace.QUESTS+1));
-        vm.store(address(coinflip),stateSlot,bytes32(day|(day<<24)|(day<<48)|(5<<72)|(5<<88)|(uint256(1)<<192)));
+        vm.store(address(quests),stateSlot,bytes32(day|(day<<24)|(day<<48)|(5<<72)|(5<<88)|(uint256(1)<<192)));
     }
     function test_RewardCallbackFailureRollsBackFundingQuestAndStakeThenRetriesOnce() public {
-        (uint32 id,bytes32 slot)=_ready();bytes32 before_=vm.load(address(coinflip),slot);
+        (uint32 id,bytes32 slot)=_ready();bytes32 before_=vm.load(address(quests),slot);
         vm.mockCallRevert(address(game),abi.encodeWithSignature("consumeCoinflipBoon_g2902(uint32)",id),hex"deadbeef");
         vm.expectRevert(bytes4(0xdeadbeef));vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
-        assertEq(coin.balanceOf(PLAYER),10000);assertEq(vm.load(address(coinflip),slot),before_);
+        assertEq(coin.balanceOf(PLAYER),10000);assertEq(vm.load(address(quests),slot),before_);
         assertEq(coinflip.coinflipAmountById(id),0);
         vm.clearMockedCalls();vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
         assertEq(coin.balanceOf(PLAYER),8000);assertEq(coinflip.coinflipAmountById(id),2100);

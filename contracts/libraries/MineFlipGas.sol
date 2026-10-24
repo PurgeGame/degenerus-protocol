@@ -87,6 +87,13 @@ library MineFlipGas {
         return current > meter.floor ? current - meter.floor : 0;
     }
 
+    /// @dev A local loop can spend only its metered allowance and the gas still in its frame.
+    function available(Meter memory meter) internal view returns (uint256 budget) {
+        budget = remaining(meter);
+        uint256 actual = gasleft();
+        if (actual < budget) budget = actual;
+    }
+
     function scale(Meter memory meter, uint256 estimate) internal pure returns (uint256) {
         uint256 multiplier = meter.multiplierBps;
         if (multiplier == DEFAULT_MULTIPLIER || multiplier == 0) return estimate;

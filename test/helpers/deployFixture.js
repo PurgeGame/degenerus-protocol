@@ -1,3 +1,4 @@
+import { usesAffiliateBootstrap } from "../../scripts/lib/deploymentManifest.js";
 import { seedLogicalDay, setPackedField } from "./logicalDayFixture.js";
 import hre from "hardhat";
 import {
@@ -252,7 +253,7 @@ async function deploy(contractName, args = []) {
 
 function getConstructorArgs(key, predicted, affiliateBootstrap, finalizeIcons) {
   if (key === "ICONS_32") return [finalizeIcons];
-  if (key === "COINFLIP") {
+  if (usesAffiliateBootstrap(key)) {
     return affiliateBootstrap;
   }
   if (key === "AF_KING") {

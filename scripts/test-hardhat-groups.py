@@ -20,7 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PIN = Path("contracts/ContractAddresses.sol")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 TOTAL = re.compile(r"^\s*(\d+) (passing|failing|pending)\b", re.MULTILINE)
-ENV_KEYS = ("NODE_OPTIONS", "HARDHAT_NETWORK", "HARDHAT_MAX_MEMORY", "CI")
+ENV_KEYS = (
+    "PROFILE","NODE_OPTIONS", "HARDHAT_NETWORK", "HARDHAT_MAX_MEMORY", "CI")
 VALUE_FLAGS = {"--grep", "--network", "--config", "--max-memory", "--tsconfig", "--reporter", "--timeout"}
 BOOLEAN_FLAGS = {"--no-compile", "--parallel", "--bail", "--show-stack-traces", "--version", "--help",
                  "--emoji", "--verbose", "--flamegraph", "--typecheck"}
@@ -310,6 +311,9 @@ def main():
     run_dir = log_dir / run_id
     run_dir.mkdir()
     original_pins = PIN.read_bytes()
+    profile_files = json.loads(subprocess.check_output(["node", "--input-type=module", "-e",
+        "import {PROFILE_FILES} from './scripts/lib/selectProfile.js'; console.log(JSON.stringify(PROFILE_FILES));"], text=True))
+    profile_originals = {ROOT / file: (ROOT / file).read_bytes() for file in profile_files}
     (run_dir / "ContractAddresses.original.sol").write_bytes(original_pins)
     hook = run_dir / "capture-compiler.cjs"
     hook.write_text(CAPTURE_HOOK)
@@ -353,6 +357,7 @@ def main():
                               "output": (run_dir / f"version-{name}.log").read_text().strip()}
         metadata["versions"] = versions
         write_json(run_dir / "run.json", metadata)
+        subprocess.run(["node", "scripts/select-profile.js", "--no-pins"], check=True)
         baseline = source_identity(config)
         write_json(run_dir / "sources.json", baseline)
         (run_dir / "hardhat.config.js").write_bytes(config.read_bytes())
@@ -440,6 +445,8 @@ def main():
         for sig in handlers:
             signal.signal(sig, signal.SIG_IGN)
         PIN.write_bytes(original_pins)
+        for file, original in profile_originals.items():
+            file.write_bytes(original)
         metadata["pins_restored_sha256"] = digest(PIN.read_bytes())
         metadata["completed_batches"] = sum(row["batch"].startswith("batch-") and "hardhat_exit_code" in row for row in current)
         metadata["finished_utc"] = datetime.now(timezone.utc).isoformat()

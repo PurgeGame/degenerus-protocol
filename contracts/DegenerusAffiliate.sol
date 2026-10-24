@@ -110,8 +110,8 @@ interface IGameAfkingDrain {
  * INTEGRATION POINTS:
  * - DegenerusGame: Calls payAffiliate() for purchase flows
  */
-/// @dev Coinflip inherits this implementation. All affiliate state is namespaced;
-///      only the host is deployed, after Game, and constructors execute once.
+/// @dev EIP-170 deploys this implementation separately; Glamsterdam inherits it
+///      in Coinflip. Both use the same namespace and run the constructor once.
 contract DegenerusAffiliate {
     /// @custom:storage-location erc7201:degenerus.storage.affiliate.v1
     struct DegenerusAffiliateStorage {

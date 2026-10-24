@@ -12,17 +12,12 @@ for (const [file, bounded, affiliate] of [
   let text = fs.readFileSync(file, 'utf8');
   const lines = [start, '        (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,',
     `            address[] memory players, bytes32[] memory refs) = ${affiliate};`];
-  let previousOffset = -1;
-  for (const [index,row] of DEPLOYMENTS.entries()) {
-    const offset = row.nonceOffset ?? index;
-    const gap = offset - previousOffset - 1;
-    if (gap) lines.push(`        vm.setNonce(address(this), vm.getNonce(address(this)) + ${gap}); // retired deployment nonce; retain token addresses`);
-    previousOffset = offset;
+  for (const row of DEPLOYMENTS) {
     if (file === 'test/fuzz/helpers/DeployProtocol.sol' && row.key === 'VAULT')
       lines.push('        _beforeProtocolSubscriptions();');
-    const args = row.key === 'ICONS_32' ? 'false' : row.key === 'COINFLIP' ? 'owners, codes, kicks, players, refs' : '';
-    const fromArtifact = true; // Keep one compiled production artifact per deployment, including the large QA host.
-    const creation = fromArtifact ? `${row.fixtureType}(payable(deployCode("${row.fixtureType}.sol:${row.fixtureType}", abi.encode(${args}))))` : `new ${row.fixtureType}(${args})`;
+    const args = row.key === 'ICONS_32' ? 'false' : row.bootstrap ? 'owners, codes, kicks, players, refs' : '';
+    const artifact = row.fixtureContract || row.contract;
+    const creation = `${row.fixtureType}(payable(deployCode("${artifact}.sol:${artifact}", abi.encode(${args}))))`;
     lines.push(`        ${row.fixtureField} = ${creation};`);
   }
   // An alias can have a distinct interface type; no CREATE is emitted for it.

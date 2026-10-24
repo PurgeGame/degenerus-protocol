@@ -4,7 +4,6 @@ pragma solidity 0.8.38;
 import {MintPaymentKind} from "./IDegenerusGame.sol";
 
 interface IGamePurchaseModule {
-    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
     function purchase(uint32 buyerId, uint256 entryQuantityScaled, uint256 boxOrder, bytes32 affiliateCode, MintPaymentKind payKind) external payable;
     function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind) external payable returns (uint32);
     function redeemFlip(uint32 id, uint256 entryQuantityScaled) external;

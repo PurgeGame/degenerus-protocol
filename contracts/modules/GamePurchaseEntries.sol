@@ -40,8 +40,4 @@ abstract contract GamePurchaseEntries is GamePurchase {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         return _sweepAccounts(ids);
     }
-    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        _raiseSmurfBaseAllowance(mainId, newBase);
-    }
 }

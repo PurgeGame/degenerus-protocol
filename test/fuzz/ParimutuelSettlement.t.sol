@@ -165,7 +165,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         vm.etch(ContractAddresses.GAME, address(new PariSettleMockGame()).code);
         vm.etch(ContractAddresses.QUESTS, address(new PariSettleMockQuests()).code);
         vm.etch(ContractAddresses.COIN, address(new PariSettleMockCoin()).code);
-        Coinflip builtFlip = new Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
+        Coinflip builtFlip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)))));
         vm.etch(ContractAddresses.COINFLIP, address(builtFlip).code);
         vm.copyStorage(address(builtFlip), ContractAddresses.COINFLIP);
         DegenerusParimutuel built = new DegenerusParimutuel();

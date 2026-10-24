@@ -1,9 +1,11 @@
+import { usesAffiliateBootstrap } from "../lib/deploymentManifest.js";
 // Local native-client deployment. Prepare first; compile input.json with pinned solc, then deploy.
 // node scripts/consolidation/native-deploy.js prepare|deploy RPC_URL EVIDENCE_DIRECTORY
 import fs from 'node:fs';
+import { selectProfile } from '../lib/selectProfile.js';
 import path from 'node:path';
 import { JsonRpcProvider, Contract, ContractFactory, getCreateAddress, keccak256, encodeBytes32String } from 'ethers';
-import { DEPLOYMENTS } from '../lib/deploymentManifest.js';
+import { DEPLOYMENTS, PROFILE } from '../lib/deploymentManifest.js';
 import { predictAddresses, computeDeployDayBoundary, reserveDeploymentNonces } from '../lib/predictAddresses.js';
 import { patchContractAddresses } from '../lib/patchContractAddresses.js';
 import { wireIcons32 } from '../lib/deployHelpers.js';
@@ -22,9 +24,13 @@ const client = await provider.send('web3_clientVersion', []);
 const chain = await provider.getNetwork();
 if (chain.chainId !== 1337n) throw new Error('Expected the local Geth dev chain (1337)');
 const optional = process.env.NATIVE_DEPLOY_OPTIONS === 'true';
+const runtimeLimit = PROFILE === 'eip170' ? 24576 : 65536;
+const initcodeLimit = PROFILE === 'eip170' ? 49152 : 131072;
+const transactionGas = PROFILE === 'eip170' ? 16_777_216 : 500_000_000;
 const mocks = ['MockVRFCoordinator','MockStETH','MockLinkToken','MockLinkEthFeed', ...(optional ? ['NativeEnsRegistrar'] : [])];
 fs.mkdirSync(directory, { recursive: true });
 if (mode === 'prepare') {
+  selectProfile();
   const nonce = await provider.getTransactionCount(deployer, 'pending');
   const block = await provider.getBlock('latest');
   fs.cpSync('contracts', path.join(directory,'contracts'), { recursive: true });
@@ -63,8 +69,8 @@ contract NativeEnsRegistrar {
     const artifact=artifacts[name];
     const factory=new ContractFactory(artifact.abi,'0x'+artifact.evm.bytecode.object,signer);
     const initcode=(await factory.getDeployTransaction(...args)).data;
-    if(artifact.evm.deployedBytecode.object.length/2>65536 || (initcode.length-2)/2>131072) throw new Error(`Size limit: ${name}`);
-    const contract=await factory.deploy(...args,{gasLimit:500_000_000});
+    if(artifact.evm.deployedBytecode.object.length/2>runtimeLimit || (initcode.length-2)/2>initcodeLimit) throw new Error(`Size limit (${PROFILE}): ${name}`);
+    const contract=await factory.deploy(...args,{gasLimit:transactionGas});
     const receipt=await contract.deploymentTransaction().wait();
     const address=await contract.getAddress();
     if(address.toLowerCase()!==expected.toLowerCase()) throw new Error(`Address divergence: ${key}`);
@@ -82,7 +88,7 @@ contract NativeEnsRegistrar {
   for(const row of DEPLOYMENTS) {
     await reserveDeploymentNonces(signer,row.key,manifest.nonce+mocks.length);
     const affiliateArgs = optional ? [[deployer],[encodeBytes32String('P7B')],[10],['0x000000000000000000000000000000000000b007'],[encodeBytes32String('P7B')]] : [[],[],[],[],[]];
-    await deploy(row.key,row.contract,row.key==='ICONS_32'?[true]:row.key==='COINFLIP'?affiliateArgs:[],manifest.predicted[row.key]);
+    await deploy(row.key,row.contract,row.key==='ICONS_32'?[true]:row.bootstrap?affiliateArgs:[],manifest.predicted[row.key]);
   }
   for(const row of DEPLOYMENTS) for(const alias of row.aliases) contracts[alias]=contracts[row.key];
   const shares=[];
@@ -95,7 +101,7 @@ contract NativeEnsRegistrar {
   }
   fs.writeFileSync(path.join(directory,'vault-shares.json'),JSON.stringify(shares,null,2));
   if (optional) {
-    const code=await contracts.COINFLIP.affiliateCode(encodeBytes32String('P7B'));
+    const code=await contracts.AFFILIATE.affiliateCode(encodeBytes32String('P7B'));
     if (code[0]!==deployer || code[1]===0n || code[2]!==10n) throw new Error('Affiliate bootstrap mismatch');
     const ens=[];
     for (const [address,expected] of [[manifest.predicted.VAULT,'vault.degenerus.eth'],[shares[0].address,'dgvf.degenerus.eth'],[shares[1].address,'dgve.degenerus.eth'],[manifest.predicted.ADMIN,'admin.degenerus.eth']]) {
@@ -106,7 +112,7 @@ contract NativeEnsRegistrar {
     fs.writeFileSync(path.join(directory,'optional-bootstrap.json'),JSON.stringify({affiliate:{owner:code[0],ownerId:code[1].toString(),kickback:code[2].toString()},ens},null,2));
   }
   stage = 'deity-bootstrap';
-  const genesis=await (await contracts.GAME.initProtocolDeity({gasLimit:500_000_000})).wait();
+  const genesis=await (await contracts.GAME.initProtocolDeity({gasLimit:transactionGas})).wait();
   fs.writeFileSync(path.join(directory,'bootstrap-receipt.json'),JSON.stringify(await provider.send('eth_getTransactionReceipt',[genesis.hash]),null,2));
   stage = 'icon-bootstrap';
   await wireIcons32(contracts.ICONS_32, JSON.parse(fs.readFileSync('scripts/data/icons32Data.symbolOrder.json')), {finalize:true});
@@ -119,7 +125,7 @@ contract NativeEnsRegistrar {
     ['ticket-and-foil',0n,true,price * 11n],
   ]) {
     stage = `purchase:${label}`;
-    const sample = await (await contracts.GAME.purchase(0,400,box,'0x'+'00'.repeat(32),0,foil,{value,gasLimit:50_000_000})).wait();
+    const sample = await (await contracts.GAME.purchase(0,400,box,'0x'+'00'.repeat(32),0,foil,{value,gasLimit:transactionGas})).wait();
     purchases.push({label,receipt:await provider.send('eth_getTransactionReceipt',[sample.hash])});
     fs.writeFileSync(path.join(directory,'purchase-receipts.json'),JSON.stringify(purchases,null,2));
     console.log(`${label}: gasUsed=${sample.gasUsed}`);

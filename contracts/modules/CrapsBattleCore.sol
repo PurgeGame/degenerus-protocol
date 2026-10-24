@@ -44,10 +44,14 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 ///      Coinflip must in turn authorize `ContractAddresses.CRAPS` for burns and credits.
 abstract contract CrapsBattleCore is CrapsBattleStorage {
     struct SeatBatch {
+        MineFlipGas.Meter meter;
+        Window window;
         uint64 slot;
         uint64 from;
         uint64 end;
+        uint64 fieldEnd;
         uint64 ownN;
+        uint64 dayN;
         uint256 dayBase;
         uint256 word;
         uint256 count;
@@ -56,7 +60,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         uint256 high;
     }
 
-    function resolveRngSlot_g1079(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory result) {
+    function resolveRngSlot_g1079(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory) {
         if (msg.sender != address(this)) revert OnlyGame();
         return _resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS);
     }
@@ -507,10 +511,13 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
             gameState = _gameState();
             if (_scheduledExpired(slot, _currentDayIndex(gameState))) { result.done = true; return result; }
         }
-        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
-        if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX)) return result;
-        Window memory w = _slotWindow(slot);
-        uint256 board = _loadBattle(w.key);
+        SeatBatch memory batch;
+        batch.meter = MineFlipGas.start(allowance);
+        if (!MineFlipGas.canRun(batch.meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX)) return result;
+        batch.window = _slotWindow(slot);
+        batch.slot = slot;
+        {
+        uint256 board = _loadBattle(batch.window.key);
         if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board) && board != 0) {
             result.done = true;
             return result;
@@ -518,23 +525,32 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         uint256 word = _slotWord(slot, slot < _CUSTOM_SLOT_BASE ? gameState : _gameState());
         if (word == 0) revert RngNotReady();
         uint64 end0 = uint64(uint32(board)) + 1;
-        uint64 from = _bonusCursorOf(slot) + 1;
         uint64 end = end0;
-        if (from + seatLimit < end) end = from + seatLimit;
-        if (end <= from) { result.done = true; return result; }
+        // The cursor only stores resolved seat ordinals, bounded by the uint32
+        // field count. Callers cap seatLimit at _RESOLVE_MAX_SEATS (20), so both
+        // sums fit uint64 even at the largest representable field.
+        unchecked {
+            batch.from = _bonusCursorOf(slot) + 1;
+            if (batch.from + seatLimit < end) end = batch.from + seatLimit;
+        }
+        if (end <= batch.from) { result.done = true; return result; }
         (uint256 dayBase, uint64 dayN) = _dayField(slot);
-        SeatBatch memory batch;
-        batch.slot = slot;
-        batch.from = from;
         batch.end = end;
-        batch.ownN = (end0 - 1) - dayN - w.drawn;
+        batch.ownN = uint64(uint32(board)) - dayN - batch.window.drawn;
+        batch.dayN = dayN;
         batch.dayBase = dayBase;
         batch.word = word;
-        _settleBatch(batch, w, meter);
-        uint64 afterCursor = _bonusCursorOf(slot);
-        result.progressed = afterCursor >= from;
-        result.rewardBasis = result.progressed ? afterCursor - from + 1 : 0;
-        result.done = afterCursor + 1 == end0;
+        batch.fieldEnd = end0;
+        }
+        _settleBatch(batch);
+        // The batch records its last committed seat before crediting its beneficiaries.
+        uint64 afterCursor = batch.done;
+        result.progressed = afterCursor != 0;
+        // A completed seat is in [from, end), and end is at most uint32.max + 1.
+        unchecked {
+            result.rewardBasis = result.progressed ? afterCursor - batch.from + 1 : 0;
+            result.done = afterCursor + 1 == batch.fieldEnd;
+        }
         if (result.progressed) {
             if (slot < _CUSTOM_SLOT_BASE && !_isJackpotSlot(slot)) {
                 _bookDay(uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY), batch.staked, batch.high);
@@ -542,22 +558,22 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
                 IHighRollerReserve(address(this)).settleHighRollerReserve(slot);
             }
         }
-        MineFlipGas.finish(meter);
+        MineFlipGas.finish(batch.meter);
     }
 
     /// @dev Each atomic seat includes sole-high and final-field payments. Credit arrays are
     /// flushed once; the admission tail grows for every already accumulated cold beneficiary.
-    function _settleBatch(SeatBatch memory wordBatch, Window memory w, MineFlipGas.Meter memory meter) private {
+    function _settleBatch(SeatBatch memory wordBatch) private {
         uint32[] memory ids = new uint32[](wordBatch.end - wordBatch.from);
         uint256[] memory amounts = new uint256[](wordBatch.end - wordBatch.from);
         uint256 freePtr;
         assembly ("memory-safe") { freePtr := mload(0x40) }
         for (uint64 n = wordBatch.from; n < wordBatch.end; ++n) {
-            if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + (wordBatch.count + 1) * _CREDIT_GAS_MAX)) break;
+            if (!MineFlipGas.canRun(wordBatch.meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + (wordBatch.count + 1) * _CREDIT_GAS_MAX)) break;
             assembly ("memory-safe") { mstore(0x40, freePtr) }
-            uint256 id = _seatId(wordBatch.slot, n, wordBatch.ownN, wordBatch.dayBase, w.entrants - wordBatch.ownN - w.drawn);
+            uint256 id = _seatId(wordBatch.slot, n, wordBatch.ownN, wordBatch.dayBase, wordBatch.dayN);
             SeatResult memory result = _resolve(id, n,
-                _loadBetUnchecked(id, id >> 64 == wordBatch.slot && uint64(id) > wordBatch.ownN), w, wordBatch.word);
+                _loadBetUnchecked(id, id >> 64 == wordBatch.slot && uint64(id) > wordBatch.ownN), wordBatch.window, wordBatch.word);
             wordBatch.staked += result.staked;
             wordBatch.high += result.high;
             if (result.paid != 0) {
@@ -566,7 +582,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
                 ++wordBatch.count;
             }
             wordBatch.done = n;
-            MineFlipGas.markProgress(meter);
+            MineFlipGas.markProgress(wordBatch.meter);
         }
         // Reserve the cursor write in _SETTLE_TAIL_GAS even on a budget stop.
         // No admitted seat means no write. The fresh masked write preserves the

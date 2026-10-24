@@ -95,7 +95,9 @@ __pycache__/
 
 # Kept locally and in history, not in the audit tree
 docs/archive/
-deployments/
+deployments/*
+!deployments/eip170.json
+!deployments/glamsterdam.json
 test/REGRESSION-BASELINE-*.md
 scripts/craps-high-water-system-sim.cpp
 scripts/craps-system-sim.cpp

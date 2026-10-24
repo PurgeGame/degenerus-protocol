@@ -4,6 +4,7 @@ import {OwnerTargetCall} from "../../helpers/OwnerTargetCall.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
+import {GamePurchaseEntries} from "../../../contracts/modules/GamePurchaseEntries.sol";
 
 // Production contracts
 import {DegenerusGamePassModule} from "../../../contracts/modules/DegenerusGamePassModule.sol";
@@ -132,6 +133,8 @@ abstract contract DeployProtocol is Test {
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
+    GamePurchaseEntries public purchaseModule;
+    JackpotBattle public crapsLifecycleModule;
     WWXRP public wwxrp;
     DegenerusAffiliate public affiliate;
     DegenerusJackpots public jackpots;
@@ -340,16 +343,29 @@ abstract contract DeployProtocol is Test {
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
             address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
         icons32 = Icons32Data(payable(deployCode("Icons32Data.sol:Icons32Data", abi.encode(false))));
-        endgameModule = DegenerusGameEndgameModule(payable(deployCode("DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule", abi.encode())));
-        dailyModule = DegenerusGameDailyModule(payable(deployCode("DegenerusGameDailyModule.sol:DegenerusGameDailyModule", abi.encode())));
-        passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
-        boxModule = DegenerusGameBoxModule(payable(deployCode("DegenerusGameBoxModule.sol:DegenerusGameBoxModule", abi.encode())));
+        bingoModule = DegenerusGame(payable(deployCode("Eip170Actions.sol:Eip170Actions", abi.encode())));
+        purchaseModule = GamePurchaseEntries(payable(deployCode("Eip170Purchase.sol:Eip170Purchase", abi.encode())));
+        mintModule = DegenerusGameMintModule(payable(deployCode("Eip170Mint.sol:Eip170Mint", abi.encode())));
+        foilModule = DegenerusGameFoilPackModule(payable(deployCode("Eip170DegenesisFoil.sol:Eip170DegenesisFoil", abi.encode())));
+        advanceModule = DegenerusGameAdvanceModule(payable(deployCode("Eip170Advance.sol:Eip170Advance", abi.encode())));
+        rngModule = DegenerusGameRngModule(payable(deployCode("Eip170Rng.sol:Eip170Rng", abi.encode())));
+        jackpotModule = DegenerusGameJackpotModule(payable(deployCode("Eip170Jackpot.sol:Eip170Jackpot", abi.encode())));
+        jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(deployCode("Eip170JackpotDraw.sol:Eip170JackpotDraw", abi.encode())));
+        whaleModule = DegenerusGameWhaleModule(payable(deployCode("Eip170Whale.sol:Eip170Whale", abi.encode())));
+        ticketModule = DegenerusGameTicketModule(payable(deployCode("Eip170TicketFoil.sol:Eip170TicketFoil", abi.encode())));
+        lootboxModule = DegenerusGameLootboxModule(payable(deployCode("Eip170Lootbox.sol:Eip170Lootbox", abi.encode())));
+        boonModule = DegenerusGameBoonModule(payable(deployCode("Eip170Boon.sol:Eip170Boon", abi.encode())));
+        degeneretteModule = DegenerusGameDegeneretteModule(payable(deployCode("Eip170Degenerette.sol:Eip170Degenerette", abi.encode())));
+        afkingModule = GameAfkingModule(payable(deployCode("Eip170Afking.sol:Eip170Afking", abi.encode())));
+        gameOverModule = DegenerusGameGameOverModule(payable(deployCode("Eip170Endgame.sol:Eip170Endgame", abi.encode())));
+        decimatorModule = DegenerusGameDecimatorModule(payable(deployCode("Eip170Decimator.sol:Eip170Decimator", abi.encode())));
+        minerModule = DegenerusGame(payable(deployCode("Eip170Miner.sol:Eip170Miner", abi.encode())));
         coin = FLIP(payable(deployCode("FLIP.sol:FLIP", abi.encode())));
-        vm.setNonce(address(this), vm.getNonce(address(this)) + 1); // retired deployment nonce; retain token addresses
         game = DegenerusGame(payable(deployCode("DegenerusGame.sol:DegenerusGame", abi.encode())));
-        coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode(owners, codes, kicks, players, refs))));
+        coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode())));
+        quests = DegenerusQuests(payable(deployCode("Eip170Quests.sol:Eip170Quests", abi.encode())));
+        affiliate = DegenerusAffiliate(payable(deployCode("Eip170Affiliate.sol:Eip170Affiliate", abi.encode(owners, codes, kicks, players, refs))));
         jackpots = DegenerusJackpots(payable(deployCode("DegenerusJackpots.sol:DegenerusJackpots", abi.encode())));
-        vm.setNonce(address(this), vm.getNonce(address(this)) + 1); // retired deployment nonce; retain token addresses
         deityPass = DegenerusDeityPass(payable(deployCode("DegenerusDeityPass.sol:DegenerusDeityPass", abi.encode())));
         _beforeProtocolSubscriptions();
         vault = DegenerusVault(payable(deployCode("DegenerusVault.sol:DegenerusVault", abi.encode())));
@@ -360,29 +376,12 @@ abstract contract DeployProtocol is Test {
         afkingSubToken = AFKingSubscriptionToken(payable(deployCode("AFKingSubscriptionToken.sol:AFKingSubscriptionToken", abi.encode())));
         parimutuel = DegenerusParimutuel(payable(deployCode("DegenerusParimutuel.sol:DegenerusParimutuel", abi.encode())));
         recordBounty = DegenerusRecordBounty(payable(deployCode("DegenerusRecordBounty.sol:DegenerusRecordBounty", abi.encode())));
+        crapsEngine = CrapsEngine(payable(deployCode("Eip170CrapsEngine.sol:Eip170CrapsEngine", abi.encode())));
+        crapsLifecycleModule = JackpotBattle(payable(deployCode("Eip170JackpotBattle.sol:Eip170JackpotBattle", abi.encode())));
         crapsBattle = CrapsViews(payable(deployCode("CrapsViews.sol:CrapsViews", abi.encode())));
         wwxrp = WWXRP(payable(deployCode("WWXRP.sol:WWXRP", abi.encode())));
         ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
-        mintModule = DegenerusGameMintModule(payable(address(endgameModule)));
-        decimatorModule = DegenerusGameDecimatorModule(payable(address(endgameModule)));
-        gameOverModule = DegenerusGameGameOverModule(payable(address(endgameModule)));
-        foilModule = DegenerusGameFoilPackModule(payable(address(endgameModule)));
-        degenesisModule = DegenerusGameDegenesisModule(payable(address(endgameModule)));
-        advanceModule = DegenerusGameAdvanceModule(payable(address(dailyModule)));
-        jackpotModule = DegenerusGameJackpotModule(payable(address(dailyModule)));
-        rngModule = DegenerusGameRngModule(payable(address(dailyModule)));
-        jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(address(dailyModule)));
-        whaleModule = DegenerusGameWhaleModule(payable(address(passModule)));
-        ticketModule = DegenerusGameTicketModule(payable(address(passModule)));
-        lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
-        boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
-        degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
-        afkingModule = GameAfkingModule(payable(address(boxModule)));
-        bingoModule = DegenerusGame(payable(address(game)));
-        minerModule = DegenerusGame(payable(address(game)));
-        affiliate = DegenerusAffiliate(payable(address(coinflip)));
-        quests = DegenerusQuests(payable(address(coinflip)));
-        crapsEngine = CrapsEngine(payable(address(crapsBattle)));
+        degenesisModule = DegenerusGameDegenesisModule(payable(address(foilModule)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS
         // A post-Degenesis unit-test fixture must seed logical headers explicitly:
@@ -440,10 +439,10 @@ abstract contract DeployProtocol is Test {
         }
         vm.store(address(coinflip), bytes32(uint256(4)), bytes32(flips));
         bytes32 root = 0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200;
-        uint256 pair = uint256(vm.load(address(coinflip), root));
+        uint256 pair = uint256(vm.load(address(quests), root));
         uint256 mask = uint256(0xffffff) | (uint256(0xffffff) << 64);
         pair = (pair & ~mask) | day | (uint256(day) << 64);
-        vm.store(address(coinflip), root, bytes32(pair));
+        vm.store(address(quests), root, bytes32(pair));
     }
 
     /// @dev Reach the real post-daily subscription window after a test advances time.
