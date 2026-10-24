@@ -162,7 +162,7 @@ contract CustomCohortRecyclingTest is CrapsPins {
         for (uint256 i; i < 5; ++i) slots[i] = _create();
         for (uint256 i; i < 4; ++i) _enter(slots[i]);
         uint256 burned = flip.totalBurned();
-        vm.expectRevert(JackpotBattle.BadJackpotField.selector);
+        vm.expectRevert(JackpotBattle.CustomSlotsFull.selector);
         _enter(slots[4]);
         assertEq(flip.totalBurned(), burned, "capacity rejection took no funds");
         vm.warp(block.timestamp + 60);

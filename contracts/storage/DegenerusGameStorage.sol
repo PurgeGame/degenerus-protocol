@@ -75,7 +75,7 @@ interface IAdminLinkValue {
  *   - DegenerusGameDecimatorModule (delegatecall module)
  *   - DegenerusGameDegeneretteModule (delegatecall module)
  *   - DegenerusGameGameOverModule (delegatecall module)
- *   - DegenerusGameBingoModule (delegatecall module)
+ *   - GameBingo (inherited Game entry points)
  *   - GameAfkingModule (delegatecall module)
  *   - DegenerusGameFoilPackModule (delegatecall module)
  *

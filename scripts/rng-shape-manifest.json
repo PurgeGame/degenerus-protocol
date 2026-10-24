@@ -1638,6 +1638,27 @@
       "expression": "keccak256(0,32)",
       "class": "NON-RNG",
       "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameDegenesisModule.sol",
+      "function": "_resolveDegenesisOrder",
+      "expression": "EntropyLib.hash4(RngTags.DEGENESIS_BOON,g.word,g.day,index)",
+      "class": "RNG",
+      "reason": "P8: retained cohort word committed before settlement; cohort and order index identify the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
+    },
+    {
+      "file": "modules/DegenerusGameBoonModule.sol",
+      "function": "rollDegenesisBoons",
+      "expression": "EntropyLib.hash2(RngTags.DEGENESIS_BOON_EXTRA,seed)",
+      "class": "RNG",
+      "reason": "P8: retained cohort word committed before settlement; cohort and order index identify the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
+    },
+    {
+      "file": "modules/DegenerusGameBoonModule.sol",
+      "function": "rollDegenesisBoons",
+      "expression": "EntropyLib.hash3(RngTags.DEGENESIS_BOON_TYPE,seed,slot)",
+      "class": "RNG",
+      "reason": "P8: retained cohort word committed before settlement; cohort and order index identify the frozen order, slot identifies each draw. Launch-level-1 normalization; caller, time, level, payee, held state and gas never select count/types."
     }
   ],
   "rawBitExceptions": [

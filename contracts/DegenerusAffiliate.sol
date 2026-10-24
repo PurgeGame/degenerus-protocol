@@ -196,8 +196,12 @@ contract DegenerusAffiliate {
     /// @notice Thrown when code creation is given a zero owner or a reserved-range code, or referral bootstrapping a zero player.
     error Zero();
 
-    /// @notice Generic insufficient condition error (code taken, invalid referral, array length mismatch).
+    /// @notice Invalid bootstrap array lengths or referral configuration.
     error Insufficient();
+
+    error CodeTaken();
+    error AlreadyReferred();
+    error UnknownCode();
 
     /// @notice Thrown when kickback percentage exceeds the maximum allowed (25%).
     error InvalidKickback();
@@ -454,10 +458,10 @@ contract DegenerusAffiliate {
         // nonpaying hooks. Above it, the caller must already have a qualifying paid entry.
         uint32 playerId = game.registerWallet_g9539(msg.sender, true);
         // SECURITY: Every assigned referral is permanent.
-        if (_affiliateStorage().playerReferralCode[playerId] != bytes32(0)) revert Insufficient();
+        if (_affiliateStorage().playerReferralCode[playerId] != bytes32(0)) revert AlreadyReferred();
         // SECURITY: Prevent invalid codes and self-referral.
         (uint256 ref, bytes32 word) = _referralTarget(code_, playerId);
-        if (ref == 0) revert Insufficient();
+        if (ref == 0) revert UnknownCode();
         _setReferral(playerId, word, code_, uint32(ref));
         emit Affiliate(0, code_, playerId); // 0 = player referred
     }
@@ -1180,7 +1184,7 @@ contract DegenerusAffiliate {
         if (kickbackPct > MAX_KICKBACK_PCT) revert InvalidKickback();
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code_];
         // SECURITY: First-come-first-served; codes cannot be overwritten.
-        if (info.ownerId != 0) revert Insufficient();
+        if (info.ownerId != 0) revert CodeTaken();
         uint32 ownerId = game.registerWallet_g9539(owner, true);
         (, uint256 cache) = _payoutUpline(code_, ownerId, true, 0);
         uint8 flags = uint8(cache >> 64) << 1;

@@ -564,8 +564,8 @@ contract DegenesisAdmissionCeilings is DegenesisGasBase {
 
     function test_ChangedAdmissionsUnderTenMillion() public pure {
         uint256[10] memory constants_ = [
-            GasBounds.DEGENESIS_WWXRP_GAS, GasBounds.DEGENESIS_FLIP_CREDIT_GAS, GasBounds.DEGENESIS_FLIP_PASS_GAS,
-            GasBounds.DEGENESIS_DGNRS_GAS, GasBounds.DEGENESIS_FLUSH_PER_CREDIT, GasBounds.DEGENESIS_TAIL_GAS,
+            GasBounds.DEGENESIS_WWXRP_GAS + GasBounds.DEGENESIS_BOON_GAS, GasBounds.DEGENESIS_FLIP_CREDIT_GAS + GasBounds.DEGENESIS_BOON_GAS, GasBounds.DEGENESIS_FLIP_PASS_GAS + GasBounds.DEGENESIS_BOON_GAS,
+            GasBounds.DEGENESIS_DGNRS_GAS + GasBounds.DEGENESIS_BOON_GAS, GasBounds.DEGENESIS_FLUSH_PER_CREDIT, GasBounds.DEGENESIS_TAIL_GAS,
             GasBounds.DEGENESIS_DAY_CLOSE, GasBounds.DEGENESIS_REQUEST_GAS, GasBounds.DEGENESIS_TERMINAL_GAS,
             GasBounds.DEGENESIS_WORD_COPY_GAS
         ];

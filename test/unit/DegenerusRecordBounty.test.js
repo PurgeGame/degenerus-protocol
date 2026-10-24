@@ -322,6 +322,9 @@ describe("DegenerusRecordBounty", function () {
       ).to.be.revertedWithCustomError(bounty, "NotAuthorized");
 
       await expect(ownerAction(bounty.connect(f.deployer), "setRenderer", [f.bob.address]))
+        .to.be.revertedWithCustomError(bounty, "InvalidRenderer");
+      await hre.network.provider.send("hardhat_setCode", [f.bob.address, "0x00"]);
+      await expect(ownerAction(bounty.connect(f.deployer), "setRenderer", [f.bob.address]))
         .to.emit(bounty, "RendererUpdated")
         .withArgs(ZERO_ADDRESS, f.bob.address);
       expect(await bounty.renderer()).to.equal(f.bob.address);

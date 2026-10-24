@@ -132,6 +132,9 @@ contract FLIP {
     /// @notice Requested amount exceeds available balance or allowance.
     error Insufficient();
 
+    error InsufficientBalance();
+    error InsufficientAllowance();
+
     /// @notice Deposit/burn amount is below the minimum threshold (1,000 FLIP).
     error AmountLTMin();
 
@@ -356,8 +359,9 @@ contract FLIP {
             uint256 allowed = allowance[from][msg.sender];
             // Infinite approval optimization: skip allowance update for max value
             if (allowed != type(uint256).max && amount != 0) {
-                // Solidity 0.8+ will revert on underflow if allowed < amount
-                uint256 newAllowance = allowed - amount;
+                if (allowed < amount) revert InsufficientAllowance();
+                uint256 newAllowance;
+                unchecked { newAllowance = allowed - amount; }
                 allowance[from][msg.sender] = newAllowance;
                 emit Approval(from, msg.sender, newAllowance);
             }
@@ -372,7 +376,7 @@ contract FLIP {
     }
 
     /// @notice Internal transfer helper.
-    /// @dev Reverts on zero address or insufficient balance (via Solidity 0.8+ underflow check).
+    /// @dev Reverts on zero address or insufficient balance after claiming available winnings.
     ///      A shortfall against the sender's balance is covered from unclaimed coinflip
     ///      winnings, sharing this function's balance read; the claim credits balanceOf, so the
     ///      debit re-reads after it. Unfrozen: claimCoinflipsFromFlip reaches claimableStored
@@ -389,8 +393,8 @@ contract FLIP {
             }
             balance = balanceOf[from];
         }
-        // Solidity 0.8+ reverts on underflow if the (possibly topped-up) balance < amount
-        balanceOf[from] = balance - amount;
+        if (balance < amount) revert InsufficientBalance();
+        unchecked { balanceOf[from] = balance - amount; }
 
         if (to == ContractAddresses.VAULT) {
             // Vault receives no circulating FLIP; redirect to mint allowance.
@@ -474,8 +478,9 @@ contract FLIP {
             emit VaultAllowanceSpent(from, amount);
             return;
         }
-        // Solidity 0.8+ reverts on underflow if balanceOf[from] < amount
-        balanceOf[from] -= amount;
+        uint256 balance = balanceOf[from];
+        if (balance < amount) revert InsufficientBalance();
+        unchecked { balanceOf[from] = balance - amount; }
         _supply.totalSupply -= amount128;
         emit Transfer(from, address(0), amount);
     }

@@ -185,7 +185,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.prank(a); affiliate.referPlayer(bytes32("VAULT"));
         assertEq(_pay(A, 1, 0), VAULT_ID);
         assertEq((_earningsWord(5, a) >> 253) & 1, 1);
-        vm.expectRevert(bytes4(keccak256("Insufficient()")));
+        vm.expectRevert(bytes4(keccak256("AlreadyReferred()")));
         vm.prank(a); affiliate.referPlayer(B);
         uint32 aId = _id(a);
         vm.prank(address(game));
@@ -199,7 +199,7 @@ contract AffiliateIdentityTest is DeployProtocol {
     function test_LockedDefaultCannotBeReplaced() public {
         uint32 aId = _id(a);
         vm.prank(address(game)); affiliate.payAffiliate(10000, bytes32(0), aId, 5, true, 0);
-        vm.expectRevert(bytes4(keccak256("Insufficient()")));
+        vm.expectRevert(bytes4(keccak256("AlreadyReferred()")));
         vm.prank(a); affiliate.referPlayer(B);
         vm.prank(address(game)); affiliate.payAffiliate(10000, B, aId, 5, true, 0);
         vm.prank(address(game)); affiliate.payAffiliateCombined_g978(C, aId, 5, 10000, 0, 0, 0, 0);

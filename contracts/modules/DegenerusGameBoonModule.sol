@@ -482,6 +482,33 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         );
     }
 
+    /// @notice Draw up to three additional boons for a committed Degenesis order.
+    /// @dev Game-context module dispatch only. The raw order funds a 20% probability budget,
+    ///      capped at 1 ETH and normalized at launch level 1. Whole chances guarantee draws;
+    ///      the remainder gets one independent roll. Selected types include ignored/discarded
+    ///      deliveries, packed in slot order into the low three bytes. Expiry starts today.
+    function rollDegenesisBoons(uint32 id, uint256 amount, uint256 seed)
+        external returns (uint24 boonTypes)
+    {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (amount == 0) return 0;
+        // Exact floor(amount * 2000 / 10000), without an overflowing intermediate.
+        uint256 budget = amount / 5;
+        if (budget > 1 ether) budget = 1 ether;
+        (uint256 expectedPerBoon, uint24 currentDay) = _boxBoonContext(id, 1);
+        if (expectedPerBoon == 0) return 0;
+        uint256 chance = budget * BOON_PPM_SCALE / expectedPerBoon;
+        if (chance > 3 * BOON_PPM_SCALE) chance = 3 * BOON_PPM_SCALE;
+        uint256 count = chance / BOON_PPM_SCALE;
+        uint256 remainder = chance % BOON_PPM_SCALE;
+        if (remainder != 0 && EntropyLib.hash2(RngTags.DEGENESIS_BOON_EXTRA, seed) % BOON_PPM_SCALE < remainder) ++count;
+        for (uint256 slot; slot < count; ++slot) {
+            uint8 boonType = _boonFromRoll(EntropyLib.hash3(RngTags.DEGENESIS_BOON_TYPE, seed, slot) % BOON_WEIGHT_TOTAL);
+            boonTypes |= uint24(boonType) << (8 * slot);
+            _deliverBoon(id, boonType, currentDay, amount);
+        }
+    }
+
     /// @dev Clear expiry and derive the immutable-for-this-entry normalization once.
     function _boxBoonContext(
         uint32 id,

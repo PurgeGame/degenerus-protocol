@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 
@@ -3330,7 +3331,7 @@ contract CrapsBattleTest is CrapsPins {
 
         _openDay();
         vm.prank(carol);
-        vm.expectRevert(CrapsBattleStorage.SeedAboveMax.selector);
+        vm.expectRevert(JackpotBattle.ZeroDonation.selector);
         craps.donate(false, PER, 0);
 
         // Hoisted: an inline `craps.BONUS_PERIODS_PER_DAY()` would be the call the prank and the

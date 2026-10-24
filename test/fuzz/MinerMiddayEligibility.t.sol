@@ -7,7 +7,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {MinerProgressHarness} from "./MinerNoProgress.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 
 contract MinerMiddayEligibilityHarness is MinerProgressHarness {

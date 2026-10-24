@@ -4,10 +4,10 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {MinerHarness} from "../helpers/MinerHarness.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-contract MinerDispatchHarness is DegenerusGameMinerModule {
+contract MinerDispatchHarness is MinerHarness {
     function seed(bool ticketsDone, bool humanDone, bool nextDayDue) external {
         uint24 today = _simulatedDayIndex();
         dailyIdx = nextDayDue ? today - 1 : today;

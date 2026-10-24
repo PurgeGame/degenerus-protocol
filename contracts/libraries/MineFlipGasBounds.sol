@@ -102,6 +102,10 @@ library MineFlipGasBounds {
     uint256 internal constant HUMAN_BOX_GAS = 125_000;
     // Human order cursor and return reserve.
     uint256 internal constant HUMAN_TAIL_GAS = 80_000;
+    /// @dev Degenesis dispatch, expiry, three boon deliveries, return and companion event.
+    ///      Native full-order addition: <=470,886 no-reservoir / 90,562 reservoir execution.
+    ///      A 20% margin rounds up to 600k; primary, coin-flush and tail terms stay separate.
+    uint256 internal constant DEGENESIS_BOON_GAS = 600_000;
     // Cold first order with a fresh WWXRP consolation: <=134.1k including state gas.
     uint256 internal constant DEGENESIS_WWXRP_GAS = 165_000;
     // Coin-credit order with the next order's cold decode and frame: <=37.7k.

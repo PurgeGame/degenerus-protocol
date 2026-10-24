@@ -283,20 +283,34 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         }
     }
 
-    function test_InnerReadUnderfundingCannotExpireMemberAndRetrySucceeds() public {
+    function test_AdmittedGasDrainingReadExpiresMemberAndNextFundedMemberProgresses() public {
         _add(PLAYER, false, 1, 0, 1);
+        _add(NEXT, true, 1, host.price(), 1);
         mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
         address implementation = address(0xF007);
         vm.etch(implementation, address(mockStETH).code);
         vm.etch(address(mockStETH), address(new SelectorFaultProxy(implementation, IStETH.balanceOf.selector, 12)).code);
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        host.subWork{gas: WORK_GAS}(MineFlipGas.budget(WORK_GAS, 10_000, true));
-        assertGt(host.memberOf(PLAYER), 0, "nested underfunding preserves membership");
-        vm.etch(address(mockStETH), implementation.code);
-        assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
         _work();
-        assertGt(host.memberOf(PLAYER), 0, "funded retry keeps the subscription");
-        assertLt(mockStETH.balanceOf(PLAYER), 1 ether, "retry funds the buy");
+        _assertEvicted(PLAYER);
+        assertGt(host.memberOf(NEXT), 0, "funded next member survives");
+        assertGt(host.entries(NEXT), 0, "funded next member progresses");
+        vm.etch(address(mockStETH), implementation.code);
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether, "failed atomic attempt moves no backing");
+        assertEq(mockStETH.allowance(PLAYER, address(game)), 1 ether, "failed attempt consumes no allowance");
+    }
+
+    function testNativeP8StethFundingSuccess() public {
+        _add(PLAYER, true, 1, 0, 1);
+        mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
+        this.exportNativeFixture("p8-steth-funded", address(this), address(host),
+            abi.encodeWithSignature("subWork(uint256)", WORK_GAS));
+    }
+
+    function testNativeP8StethRefusalContinues() public {
+        _add(PLAYER, true, 1, 0, 1);
+        _add(NEXT, true, 1, host.price(), 1);
+        this.exportNativeFixture("p8-steth-unfunded", address(this), address(host),
+            abi.encodeWithSignature("subWork(uint256)", WORK_GAS));
     }
 
     function test_OuterPullUnderfundingCannotExpireMember() public {

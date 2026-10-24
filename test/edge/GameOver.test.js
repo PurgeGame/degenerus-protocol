@@ -181,7 +181,7 @@ describe("GameOver", function () {
       expect(await game.gameOver()).to.equal(true);
 
       expect(await game.nextMinerAction()).to.equal(0n);
-      const miner = await hre.ethers.getContractFactory("DegenerusGameMinerModule");
+      const miner = await hre.ethers.getContractFactory("DegenerusGame");
       await expect(game.connect(deployer).mineFlip(0)).to.be.revertedWithCustomError(miner, "NoWork");
       expect(await game.isFinalSwept()).to.equal(false);
     });
@@ -343,7 +343,7 @@ describe("GameOver", function () {
 
       const timestamp = await game.gameOverTimestamp();
       const reserved = await game.claimablePoolView();
-      const miner = await hre.ethers.getContractFactory("DegenerusGameMinerModule");
+      const miner = await hre.ethers.getContractFactory("DegenerusGame");
       await expect(game.connect(deployer).mineFlip(0)).to.be.revertedWithCustomError(miner, "NoWork");
       expect(await game.isFinalSwept()).to.equal(false);
       expect(await game.gameOverTimestamp()).to.equal(timestamp);

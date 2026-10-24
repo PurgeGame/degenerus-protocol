@@ -2,12 +2,12 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {MinerHarness} from "../helpers/MinerHarness.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-contract MinerRewardScheduleHarness is DegenerusGameMinerModule {
+contract MinerRewardScheduleHarness is MinerHarness {
     function terms(uint256 elapsed) external pure returns (uint256 capWei, uint256 multiplierBps) {
         return _minerRewardTerms(elapsed);
     }

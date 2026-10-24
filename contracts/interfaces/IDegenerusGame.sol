@@ -392,7 +392,13 @@ interface IDegenerusGame {
     ///      the account's; fresh ETH comes from the caller. Overpay credits the payer's AFKing
     ///      balance: the account's own ID when the caller is the account, else the caller's
     ///      existing ID. Rewards go to the account's payee. Degenesis days 1-7 only; the Vault
-    ///      account cannot buy.
+    ///      account cannot buy. Primary token payees remain account-derived; additional boon,
+    ///      quest and activity state belongs to the stored wallet ID. Boons use 20% of raw ETH
+    ///      capped at 1 ETH, level-1 normalization and up to three guaranteed-plus-fractional
+    ///      draws. Normal settlement-day expiry and upgrade/discard rules apply; repeated types
+    ///      are allowed and splitting orders can avoid the per-order ceiling. The purchase
+    ///      itself earns no quest/streak/activity credit; drawn activity/shields can grant it.
+    ///      Neither the purchase nor the boon grant earns Degenesis credit.
     /// @param id Account receiving the order (0 = caller).
     /// @param amount Degenesis ETH: at least 0.01 ETH, a whole multiple of 0.0001 ETH, below
     ///        2^38 units of 0.0001 ETH (about 27.5M ETH).

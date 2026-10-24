@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 
@@ -12,6 +13,20 @@ import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins, MockFlip} from "./CrapsPins.sol";
 
 contract CompHarness is CrapsViews {
+    function seedRoundingBudget(uint64 slot) external {
+        Window memory w = _slotWindow(slot);
+        uint256 day = uint256(slot) / _BONUS_SLOTS_PER_DAY;
+        uint256 prior = _loadBudget(day);
+        uint256 weight = prior >> _BUDGET_W_SHIFT;
+        // Preserve the day's tagged schedule; give this field a 20,800-FLIP base.
+        uint256 budget = 20_800 * weight / (1 << (w.tier - 1));
+        _storeBudget(day, (prior & ~_BUDGET_MASK) | budget);
+    }
+
+    function unroundedBoost(uint64 slot, uint256 word) external view returns (uint256) {
+        return _jackpotBoostUnits(_slotWindow(slot), word);
+    }
+
     function seedToCeiling(bytes32 key) external {
         _storeBattle(key, (_battles[key] & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (_BG_SEED_MASK << _BG_SEED_SHIFT));
     }
@@ -162,6 +177,62 @@ contract CrapsCompBudgetTest is CrapsPins {
     }
 
     // ── Accrual ─────────────────────────────────────────────────────────────
+
+    function test_FinalizedPotEqualsWinnerAndHottestPaymentsAfterRounding() public {
+        uint24 day = _openDay(10);
+        uint64 slot = _slotAt(day, 0);
+        craps.seedRoundingBudget(slot);
+        uint256 word = 2; // the fixture reserves word 1 for the not-ready state
+        while (craps.unroundedBoost(slot, word) != 52) ++word;
+        _seat(alice, 0, 1);
+        _seat(bob, 0, 1);
+        bytes32 key = craps.battleKeyOf((uint256(slot) << 64) | 1);
+        vm.recordLogs();
+        _settle(day, 0, word, 512);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 announced;
+        uint256 winnerPaid;
+        uint256 hottestPaid;
+        uint256 finals;
+        for (uint256 i; i < logs.length; ++i) {
+            Vm.Log memory e = logs[i];
+            if (e.emitter != address(craps)) continue;
+            if (e.topics[0] == CrapsBattleStorage.CrapsBattleFinalized.selector && e.topics[1] == key) {
+                (,,,,, announced) = abi.decode(e.data, (uint8, uint64, uint256, uint256, uint256, uint256));
+                ++finals;
+            } else if (e.topics[0] == CrapsBattleStorage.CrapsBattlePaid.selector && e.topics[2] == key) {
+                winnerPaid += abi.decode(e.data, (uint256));
+            } else if (e.topics[0] == CrapsBattleStorage.CrapsHottestShooterPaid.selector && e.topics[2] == key) {
+                (, uint256 paid) = abi.decode(e.data, (uint16, uint256));
+                hottestPaid += paid;
+            } else if (e.topics[0] == CrapsBattleStorage.CrapsProtocolAwardSplit.selector && e.topics[1] == key
+                && (uint256(e.topics[3]) == 1 || uint256(e.topics[3]) == 5)) {
+                fail("the small rounded boost must remain liquid in this witness");
+            }
+        }
+        assertEq(finals, 1);
+        assertGt(winnerPaid, 0);
+        assertGt(hottestPaid, 0);
+        assertEq(announced, winnerPaid + hottestPaid, "event uses the paid rounded pot");
+    }
+
+    function test_NamedDonationAndCustomCapacityErrors() public {
+        uint64 slot = _openBattle(craps, 300, 4, 5, 0);
+        uint256 index = slot - craps.CUSTOM_SLOT_BASE();
+        vm.prank(alice);
+        vm.expectRevert(JackpotBattle.NothingToSeed.selector);
+        craps.donate(true, index, 1);
+        vm.prank(alice);
+        vm.expectRevert(JackpotBattle.ZeroDonation.selector);
+        craps.donate(true, index, 0);
+        for (uint64 i; i < 4; ++i) {
+            vm.prank(address(craps));
+            craps.admitCustom(slot + i);
+        }
+        vm.prank(address(craps));
+        vm.expectRevert(JackpotBattle.CustomSlotsFull.selector);
+        craps.admitCustom(slot + 4);
+    }
 
     function test_aFinishedWindowFeedsTwoPercentOfEveryBankrollItRan() public {
         uint24 day = _openDay(10);
@@ -375,7 +446,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(flip.compLane(), 10 * GRANULE - 1);
 
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattleStorage.SeedAboveMax.selector);
+        vm.expectRevert(JackpotBattle.ZeroDonation.selector);
         craps.donate(true, index, 0);
         craps.seedToCeiling(key);
         vm.prank(ContractAddresses.VAULT);

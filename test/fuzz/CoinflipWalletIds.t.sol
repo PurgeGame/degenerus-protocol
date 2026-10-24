@@ -5,7 +5,7 @@ import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {stdError} from "forge-std/StdError.sol";
+import {FLIP} from "../../contracts/FLIP.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -442,7 +442,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.prank(q);
         coin.transfer(to, 300);
         assertEq(coin.balanceOf(to), 300);
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(FLIP.InsufficientBalance.selector);
         vm.prank(q);
         coin.transfer(to, 600);
         assertEq(_gameId(q), 0);

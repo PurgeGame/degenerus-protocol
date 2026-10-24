@@ -152,11 +152,11 @@ export const DEPLOYMENTS = [
     "fixtureAliases": {
       "GAME_BINGO_MODULE": {
         "field": "bingoModule",
-        "type": "DegenerusGameBingoModule"
+        "type": "DegenerusGame"
       },
       "GAME_MINER_MODULE": {
         "field": "minerModule",
-        "type": "DegenerusGameMinerModule"
+        "type": "DegenerusGame"
       }
     },
     "nonceOffset": 7

@@ -344,7 +344,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         if (subscriber == VAULT_WALLET_ID || subscriber == SDGNRS_WALLET_ID) return funding;
         (bool ok, bytes memory result) = BoundedCall.callRemaining(meter, address(this), 1_000_000, 300_000,
             abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding, MineFlipGas.child(meter, 300_000)), 32);
-        if (!ok) BoundedCall.rethrowTrustedGasFailure();
+        // Admission already proved the outer attempt was funded. Any failure inside this
+        // optional atomic pull leaves funding unchanged, including a dependency that returns
+        // successfully only after exhausting the budget for a later inner call.
         return ok ? funding + abi.decode(result, (uint256)) : funding;
     }
 

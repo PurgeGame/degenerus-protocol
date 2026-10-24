@@ -276,3 +276,5 @@ OFF-CRANK	lowlevel:delegatecall	spendDegenesis	DegenerusGame.sol	BARE		Vault-onl
 OFF-CRANK	lowlevel:delegatecall	subscribe	DegenerusGame.sol	BARE		player / sDGNRS / VAULT subscribe entry (afking module); never reached from a crank root
 OFF-CRANK	lowlevel:delegatecall	updateVrfCoordinatorAndSub	DegenerusGame.sol	BARE		ADMIN governance coordinator rotation (DegenerusAdmin is the caller)
 OFF-CRANK	lowlevel:delegatecall	wireVrf	DegenerusGame.sol	BARE		ADMIN-only VRF wiring (DegenerusAdmin.wireVrf is the caller)
+
+CRANK-SELF	delegatecall:IDegenerusGameBoonModule.rollDegenesisBoons	_resolveDegenesisOrder	modules/DegenerusGameDegenesisModule.sol	BARE	test/fuzz/DegenesisBoonSettlement.t.sol	P8: fixed Box target in Game storage, committed order seed and stored ID; all primary/boon/cursor/credit effects revert together. No arbitrary Game issuance route.

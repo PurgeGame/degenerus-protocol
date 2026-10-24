@@ -14,7 +14,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {MinerHarness} from "../helpers/MinerHarness.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -823,7 +823,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
 // Selector: the GrowthSettle slot in the Game's derived action order.
 // =====================================================================================
 
-contract GrowthSelectorHarness is DegenerusGameMinerModule {
+contract GrowthSelectorHarness is MinerHarness {
     function seed(MinerAction action) external {
         uint24 today = _simulatedDayIndex();
         dailyIdx = today;

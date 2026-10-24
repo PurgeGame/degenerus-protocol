@@ -190,12 +190,12 @@ describe("FLIP", function () {
       expect(await coin.balanceOf(bob.address)).to.equal(flip(200));
     });
 
-    it("reverts (underflow) when balance is insufficient", async function () {
+    it("reverts with InsufficientBalance when balance is insufficient", async function () {
       const { coin, alice, bob } = await getFixture();
       // alice has no balance
       await expect(
         coin.connect(alice).transfer(bob.address, flip(1))
-      ).to.be.revertedWithPanic(0x11);
+      ).to.be.revertedWithCustomError(coin, "InsufficientBalance");
     });
 
     it("allows transferring entire balance", async function () {
@@ -272,7 +272,7 @@ describe("FLIP", function () {
 
       await expect(
         coin.connect(bob).transferFrom(alice.address, carol.address, flip(600))
-      ).to.be.revertedWithPanic(0x11);
+      ).to.be.revertedWithCustomError(coin, "InsufficientAllowance");
     });
 
     it("does not decrement infinite (max uint256) allowance", async function () {

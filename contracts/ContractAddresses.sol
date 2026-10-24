@@ -115,16 +115,10 @@ library ContractAddresses {
     // pipeline overwrites it with the real prediction.
     address internal constant CRAPS =
         address(0x796f2974e3C1af763252512dd6d521E9E984726C);
-    // The craps dice engine — appended, so it shifts no prior address. A pure
-    // contract the table reaches by STATICCALL; nothing authorizes it and it
-    // authorizes nothing. Committed as its Foundry deterministic-test address
-    // (nonce N+30) for the same reason as CRAPS above.
+    // The dice engine is hosted by CrapsBattle. This alias consumes no deployment nonce.
     address internal constant CRAPS_ENGINE =
         address(0x796f2974e3C1af763252512dd6d521E9E984726C);
-    // The daily jackpot battle's cold lifecycle module — appended, so it shifts no
-    // prior address. CRAPS delegatecalls it, so it runs in the table's storage
-    // and declares no storage of its own; its lock, draw and seal entry points
-    // are GAME-only. Committed as its Foundry deterministic-test address (nonce N+31).
+    // Jackpot lifecycle entries share the CrapsBattle host and storage; no separate deployment.
     address internal constant JACKPOT_BATTLE =
         address(0x796f2974e3C1af763252512dd6d521E9E984726C);
     // State-engine modules append to the CREATE sequence; all prior identities stay fixed.

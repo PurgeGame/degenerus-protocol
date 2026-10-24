@@ -81,6 +81,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice A reservation run asked for no days at all.
     error BadPassCount();
 
+    error InsufficientPassCredits();
+
     /// @notice A conversion would carry the high-roller credit lane past its ceiling.
     error PassLaneFull();
 
@@ -1226,16 +1228,14 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         }
     }
 
-    /// @dev Spend `count` credits from one lane. CHECKED: an insufficient balance underflows and
-    ///      takes the call down, so the check and the debit are one write rather than two.
+    /// @dev Spend `count` credits from one lane, rejecting a shortfall before the debit.
     function _takeCredits(uint32 id, bool high, uint256 count) internal {
         if (count == 0) revert BadPassCount();
         uint256 word = _passCreditsById[id];
         uint256 shift = high ? _PASS_HIGH_SHIFT : 0;
         uint256 held = (word >> shift) & _PASS_MAX;
-        // Deliberately CHECKED — this is the one subtraction here that can be driven negative by a
-        // caller, and it is the whole balance validation.
-        held -= count;
+        if (held < count) revert InsufficientPassCredits();
+        unchecked { held -= count; }
         _passCreditsById[id] = (word & ~(_PASS_MAX << shift)) | (held << shift);
     }
 

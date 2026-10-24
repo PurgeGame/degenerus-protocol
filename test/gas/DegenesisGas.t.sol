@@ -104,6 +104,18 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         prizePoolPendingPacked = pending;
     }
 
+    function hostSeedBoons(uint32 id, uint256 amount, uint256 seed) external {
+        _delegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSignature("rollDegenesisBoons(uint32,uint256,uint256)",id,amount,seed));
+    }
+    function hostAfkingBoonMember(uint32 id) external {
+        _seedSubscriber(id,true);
+        uint256 position = _subPosition1(id)-1;
+        uint24 day = _simulatedDayIndex();
+        _afkingEndpointDay = day-1;
+        _setSubLaneAt(position,_withSubCheckpoint(_subLaneAt(position),day-1,65530));
+        _setSubRunStart(id,day-1);
+    }
+
     // ---- production entries ----
     function hostRun(uint256 allowance) external returns (bool progressed, bool done, uint256 basis) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
@@ -276,6 +288,7 @@ abstract contract DegenesisGasBase is DegenesisDeployProtocol, NativeGasExport {
     function _cool() internal virtual {
         vm.cool(address(game));
         vm.cool(ContractAddresses.GAME_DEGENESIS_MODULE);
+        vm.cool(ContractAddresses.GAME_BOON_MODULE);
         vm.cool(ContractAddresses.GAME_ADVANCE_MODULE);
         vm.cool(ContractAddresses.GAME_RNG_MODULE);
         vm.cool(ContractAddresses.GAME_JACKPOT_MODULE);
@@ -545,6 +558,7 @@ abstract contract DegenesisSettleGas is DegenesisGasBase {
             admitted += d != 0 ? GasBounds.DEGENESIS_DGNRS_GAS
                 : normal + high != 0 ? GasBounds.DEGENESIS_FLIP_PASS_GAS
                 : f != 0 ? GasBounds.DEGENESIS_FLIP_CREDIT_GAS : GasBounds.DEGENESIS_WWXRP_GAS;
+            admitted += GasBounds.DEGENESIS_BOON_GAS;
         }
         emit log_named_uint("orders", n);
         emit log_named_uint("coin credits", credits);
@@ -662,7 +676,8 @@ contract DegenesisSettleCreditOneGas is DegenesisSettleGas {
     ///      cold), minus the refused frame and minus the schedule floor of one fresh flush
     ///      recipient (a cold zero-to-nonzero write; Glamsterdam also charges its state gas):
     ///      the flush frame, the close, the burn and the return, plus the order's own work,
-    ///      which stands for the refused next order's decode a partial chunk spends.
+    ///      which stands for the refused next order's decode a partial chunk spends. The added
+    ///      atomic boon work is covered by its separate admission term.
     function test_TailCoversFlushFrameCloseAndBurn() public {
         host.hostSdgnrsBalances(3 ether + 1, 15 ether);
         Measured memory one = _run(type(uint128).max);
@@ -672,8 +687,9 @@ contract DegenesisSettleCreditOneGas is DegenesisSettleGas {
         _log("one coin-credit order + seventh close with the burn (cold)", one);
         emit log_named_uint("tail, osaka", tailOsaka);
         emit log_named_uint("tail, no-reservoir total", tailTotal);
-        assertEq(one.slots, 1, "one fresh stake slot");
-        assertLe(tailOsaka > tailTotal ? tailOsaka : tailTotal, GasBounds.DEGENESIS_TAIL_GAS, "settlement tail");
+        assertGe(one.slots, 1, "fresh stake slot plus any additional boon writes");
+        assertLe(tailOsaka > tailTotal ? tailOsaka : tailTotal,
+            GasBounds.DEGENESIS_TAIL_GAS + GasBounds.DEGENESIS_BOON_GAS, "settlement tail plus atomic boons");
     }
 }
 
@@ -1154,7 +1170,7 @@ contract DegenesisSettleCreditResumeGas is DegenesisSettleGas {
 
     function test_WorstCreditOrder() public {
         // Room for the first order's admission, short of the second's extra flush reserve.
-        uint256 allowance = 30_000 + GasBounds.DEGENESIS_FLIP_CREDIT_GAS + GasBounds.DEGENESIS_TAIL_GAS
+        uint256 allowance = 30_000 + GasBounds.DEGENESIS_BOON_GAS + GasBounds.DEGENESIS_FLIP_CREDIT_GAS + GasBounds.DEGENESIS_TAIL_GAS
             + GasBounds.DEGENESIS_FLUSH_PER_CREDIT + 2_000 + 40_000;
         Measured memory admittedOne = _run(allowance);
         Measured memory refused = _run(0);
@@ -1176,8 +1192,8 @@ contract DegenesisSettleCreditResumeGas is DegenesisSettleGas {
         uint256 orderTotal = _total(admittedOne) - _total(refused) - FRESH_SLOT_GLAMSTERDAM;
         emit log_named_uint("worst coin-credit order before its flush, osaka", orderOsaka);
         emit log_named_uint("worst coin-credit order before its flush, no-reservoir total", orderTotal);
-        assertEq(admittedOne.slots, 1, "only the recipient's stake slot is new");
-        assertLe(orderOsaka > orderTotal ? orderOsaka : orderTotal, GasBounds.DEGENESIS_FLIP_CREDIT_GAS,
-            "coin-credit order bound");
+        assertGe(admittedOne.slots, 1, "fresh recipient stake plus any additional boon slots");
+        assertLe(orderOsaka > orderTotal ? orderOsaka : orderTotal, GasBounds.DEGENESIS_FLIP_CREDIT_GAS + GasBounds.DEGENESIS_BOON_GAS,
+            "coin-credit order plus boon bound");
     }
 }

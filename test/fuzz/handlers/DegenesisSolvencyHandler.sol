@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenesisBoonReference as BoonRef} from "../helpers/DegenesisBoonReference.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
@@ -411,6 +412,7 @@ contract DegenesisSolvencyHandler is Test {
         uint256 wwxrp;
         uint32 normalPasses;
         uint32 highPasses;
+        uint24 boonTypes;
     }
 
     function _fulfill(uint256 word) internal {
@@ -520,6 +522,18 @@ contract DegenesisSolvencyHandler is Test {
                     abi.decode(l.data, (uint8, uint32, uint256, uint256, uint256, uint256, uint32, uint32));
                 p.c = day;
                 p.index = index;
+                if (i == 0) _flag("missing boon companion");
+                else {
+                    Vm.Log memory companion = logs[i - 1];
+                    if (companion.emitter != address(game) || companion.topics.length != 2 ||
+                        companion.topics[0] != keccak256("DegenesisBoonsRolled(uint32,uint8,uint32,uint24)") ||
+                        companion.topics[1] != l.topics[1]) _flag("invalid boon companion");
+                    else {
+                        (uint8 bc, uint32 bi, uint24 types_) = abi.decode(companion.data,(uint8,uint32,uint24));
+                        if (bc != day || bi != index) _flag("boon companion order mismatch");
+                        p.boonTypes = types_;
+                    }
+                }
                 pool -= p.dgnrs;
                 _onResolved(p);
                 if (p.flip != 0) owedIdx[owedTail++] = np - 1;
@@ -566,6 +580,8 @@ contract DegenesisSolvencyHandler is Test {
                 continue;
             }
             Ref.Outcome memory r = Ref.outcome(w, p.c, p.index, lane(p.c, p.index), uint48(header(p.c)), pricedQ[p.c]);
+            if (p.boonTypes != BoonRef.selected(p.amount, BoonRef.root(w,p.c,p.index)))
+                _flag("boon draws differ from committed order reference");
             ++ghost_refChecked;
             if (r.id != p.id || r.amount != p.amount || r.flip != p.flip || r.dgnrs != p.dgnrs || r.wwxrp != p.wwxrp
                 || r.normalPasses != p.normalPasses || r.highPasses != p.highPasses) {

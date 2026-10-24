@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenesisBoonReference as BoonRef} from "../helpers/DegenesisBoonReference.sol";
 import {CrapsLensReader} from "../../../contracts/CrapsLens.sol";
 
 import "forge-std/Test.sol";
@@ -438,7 +439,18 @@ contract DegenesisRngFreezeHandler is Test {
             if (l.emitter == address(game)) {
                 if (t == SIG_DAILY_APPLIED) _onDailyApplied(l);
                 else if (t == SIG_PRICED) _onPriced(l, requested);
-                else if (t == SIG_RESOLVED) _onResolved(l);
+                else if (t == SIG_RESOLVED) {
+                    _onResolved(l);
+                    if (i == 0) { ++ghost_outcomeMismatches; continue; }
+                    Vm.Log memory companion = logs[i - 1];
+                    if (companion.emitter != address(game) || companion.topics.length != 2 ||
+                        companion.topics[0] != keccak256("DegenesisBoonsRolled(uint32,uint8,uint32,uint24)") ||
+                        companion.topics[1] != l.topics[1]) { ++ghost_outcomeMismatches; continue; }
+                    (uint8 c, uint32 index, uint24 types_) = abi.decode(companion.data,(uint8,uint32,uint24));
+                    (uint8 day, uint32 orderIndex, uint256 amount) = abi.decode(l.data,(uint8,uint32,uint256));
+                    if (c != day || index != orderIndex || types_ != BoonRef.selected(amount,BoonRef.root(snapWord,c,index)))
+                        ++ghost_outcomeMismatches;
+                }
                 else if (t == SIG_CLOSED) _onClosed(l);
                 else if (t == SIG_BUY) _onBuy(l);
             } else if (l.emitter == address(craps)) {

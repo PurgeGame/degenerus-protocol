@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {ActivityAffiliateCacheFixture, ActivityAffiliateCacheHost, ActivityAffiliateRealQA, ActivityAffiliateStubQA} from "./helpers/ActivityAffiliateCacheFixture.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -102,7 +101,6 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         vm.etch(ContractAddresses.GAME, type(ActivityAffiliateCacheHost).runtimeCode);
         ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, 1, 24);
         vm.etch(ContractAddresses.GAME, type(DegenerusGame).runtimeCode);
-        if (ContractAddresses.GAME_MINER_MODULE != ContractAddresses.GAME) vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
         vm.etch(ContractAddresses.QUESTS, type(ActivityAffiliateStubQA).runtimeCode);
         _seedEarnings(23, PLAYER_ID, 100);
         DegenerusGame game = DegenerusGame(payable(ContractAddresses.GAME));
@@ -125,7 +123,6 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         vm.etch(ContractAddresses.GAME, type(ActivityAffiliateCacheHost).runtimeCode);
         ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, packed, 24);
         vm.etch(ContractAddresses.GAME, type(DegenerusGame).runtimeCode);
-        if (ContractAddresses.GAME_MINER_MODULE != ContractAddresses.GAME) vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
         vm.etch(ContractAddresses.QUESTS, type(ActivityAffiliateRealQA).runtimeCode);
         game = DegenerusGame(payable(ContractAddresses.GAME));
         quests = DegenerusQuests(ContractAddresses.QUESTS);

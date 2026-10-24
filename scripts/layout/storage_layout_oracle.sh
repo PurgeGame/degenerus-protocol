@@ -38,8 +38,8 @@ MODULES=(
   DegenerusGameAdvanceModule DegenerusGameMintModule DegenerusGameLootboxModule
   DegenerusGameJackpotModule DegenerusGameDecimatorModule DegenerusGameDegeneretteModule
   DegenerusGameWhaleModule GameAfkingModule DegenerusGameBoonModule
-  DegenerusGameBingoModule DegenerusGameGameOverModule DegenerusGameFoilPackModule
-  DegenerusGameTicketModule DegenerusGameMinerModule DegenerusGameRngModule
+  DegenerusGameGameOverModule DegenerusGameFoilPackModule
+  DegenerusGameTicketModule DegenerusGameRngModule
   DegenerusGameJackpotDrawModule DegenerusGameDegenesisModule DegenerusGameBoxModule
   DegenerusGamePassModule DegenerusGameEndgameModule
 )

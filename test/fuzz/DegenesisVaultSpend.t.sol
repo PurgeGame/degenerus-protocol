@@ -243,10 +243,10 @@ contract DegenesisVaultSpend is DegenesisFixture {
         _seedClaimable(VAULT_ID, 1 ether);
         uint256 cost = 10 * game.mintPrice();
         vm.prank(owner);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("DegenesisMaxCostExceeded()")));
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (0, false, 4000, 0, cost - 1)), 0);
         vm.prank(owner);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("DegenesisMaxCostExceeded()")));
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (0, false, 4000, 0, 0)), 0);
     }
 

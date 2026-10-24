@@ -14,7 +14,7 @@ import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusGameWhaleModule, IDegenerusGameMintModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameWhaleModule, IDegenerusGameMintModule, IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDegenesisWwxrp {
     function creditPrize(uint32 to, uint256 amount) external;
@@ -75,8 +75,12 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         uint32 highPasses
     );
 
-    /// @notice A sealed cohort funds equal shares of future prizes, insurance, the Vault budget
-    ///         and sDGNRS AFKing.
+    /// @notice Selected additional boon types, emitted immediately before order completion.
+    /// @dev Bytes 0..2 are draw slots, zero if unused; ignored/discarded draws remain present.
+    event DegenesisBoonsRolled(uint32 indexed id, uint8 degenesisDay, uint32 orderIndex, uint24 boonTypes);
+
+    /// @notice A sealed cohort funds future prizes (50%), the Vault budget (25%)
+    ///         and sDGNRS AFKing (25%).
     event DegenesisCohortSplit(uint8 indexed degenesisDay, uint256 volume);
     /// @notice A sealed cohort was priced and bound to `boundDay`'s daily word.
     event DegenesisCohortPriced(uint8 indexed degenesisDay, uint256 volume, uint256 payoutBudget, uint24 boundDay);
@@ -139,7 +143,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     ///         then prepaid AFKing balance; overpay credits the payer's AFKing.
     /// @dev Sale-day, size and Vault gates, 1:1 credit consume, payment, then the whole amount is
     ///      held in claimablePool until the cohort split and the order joins today's cohort. No
-    ///      affiliate, quest, streak or activity work. Raw msg.data target of Game.buyDegenesisBox.
+    ///      affiliate, quest, streak or activity work at purchase; a settlement boon may grant
+    ///      activity or quest shields in addition to the exclusive primary reward. Raw msg.data target of Game.buyDegenesisBox.
     /// @param id Account receiving the order (0 = caller; account rule).
     /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the
     ///        per-order bound.
@@ -251,6 +256,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     }
 
     /// @dev Cold accounting values retained across the inlined claimable purchase.
+    error DegenesisMaxCostExceeded();
+
     struct DegenesisSpend {
         uint256 budget;
         uint256 funded;
@@ -264,7 +271,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     ///      claimablePool), runs the existing claimable-funded purchase in this frame, then moves
     ///      back what the purchase did not take. The purchase may lower the Vault's balance word
     ///      by at most `maxCost`, from claimable alone, so the net move is exactly the cost and
-    ///      none of the budget stays withdrawable. No affiliate code: the Vault default applies.
+    ///      none of the budget stays withdrawable. No explicit affiliate code: the recipient's existing referral applies.
     /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes.
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket).
@@ -290,9 +297,11 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
             _degenesisPurchaseWith(recipientId, quantity, boxOrder);
         }
         uint256 after_ = balancesPacked[VAULT_WALLET_ID];
-        // Checked: a word that grew, an AFKing draw or a draw above maxCost reverts.
+        // A growing word or AFKing draw remains invalid; reject spending above maxCost explicitly.
         uint256 cost = spend.funded - after_;
-        uint256 unspent = spend.maxCost - cost;
+        if (cost > spend.maxCost) revert DegenesisMaxCostExceeded();
+        uint256 unspent;
+        unchecked { unspent = spend.maxCost - cost; }
         balancesPacked[VAULT_WALLET_ID] = after_ - unspent;
         degenesisVaultBudget = uint128(spend.budget - cost);
         emit DegenesisVaultSpent(recipientId, cost);
@@ -389,9 +398,9 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @dev Miner stage, not an RNG consumer. Each order's outcome is a pure function of the bound
     ///      word and the frozen cohort, derived before admission, so each admits against its own
     ///      branch bound plus the coin-credit flush still owed. The cursor advances before each
-    ///      order pays. Coin credits pay in one batch per chunk: nothing acts between orders of
-    ///      one call. Revert-free except gas: every callee is a revert-free credit or the
-    ///      clamping pool transfer.
+    ///      order pays. Coin credits pay in one batch per chunk; each boon delivery completes
+    ///      before the next order. Shared boon delivery runs atomically after the primary legs; bounded,
+    ///      saturating stat credits and ordinary upgrade/discard rules preserve settlement liveness.
     function runDegenesisWork_g1860(uint256 gasAllowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         if (!_degenesisSettlePending()) {
@@ -422,7 +431,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
                 : (o.normalPasses | o.highPasses) != 0 ? GasBounds.DEGENESIS_FLIP_PASS_GAS
                 : o.wwxrp ? GasBounds.DEGENESIS_WWXRP_GAS : GasBounds.DEGENESIS_FLIP_CREDIT_GAS;
             if (!MineFlipGas.canRun(
-                meter, branchGas, GasBounds.DEGENESIS_TAIL_GAS + credits * GasBounds.DEGENESIS_FLUSH_PER_CREDIT
+                meter, branchGas + GasBounds.DEGENESIS_BOON_GAS, GasBounds.DEGENESIS_TAIL_GAS + credits * GasBounds.DEGENESIS_FLUSH_PER_CREDIT
             )) break;
             active += uint256(1) << GA_CURSOR_SHIFT;
             degenesisActive = active;
@@ -530,6 +539,12 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
             IDegenesisPasses(ContractAddresses.CRAPS).creditPasses(o.id, o.normalPasses, o.highPasses);
         }
         if (o.wwxrp) IDegenesisWwxrp(ContractAddresses.WWXRP).creditPrize(o.id, DEGENESIS_WWXRP_PRIZE);
+        uint256 boonSeed = EntropyLib.hash4(RngTags.DEGENESIS_BOON, g.word, g.day, index);
+        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameBoonModule.rollDegenesisBoons.selector, o.id, o.units * DEGENESIS_UNIT, boonSeed)
+        );
+        if (!ok) _revertDegenesis(data);
+        emit DegenesisBoonsRolled(o.id, uint8(g.day), uint32(index), abi.decode(data, (uint24)));
         emit DegenesisOrderResolved(
             o.id,
             uint8(g.day),

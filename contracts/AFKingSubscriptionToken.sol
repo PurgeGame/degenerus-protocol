@@ -136,6 +136,9 @@ contract AFKingSubscriptionToken {
     /// @notice Token does not exist (or wrong `from` on transfer)
     error InvalidToken();
 
+    /// @notice A nonzero renderer must have deployed code.
+    error InvalidRenderer();
+
     /// @notice Thrown when zero address is provided where not allowed
     error ZeroAddress();
 
@@ -628,6 +631,7 @@ contract AFKingSubscriptionToken {
     /// @notice Set optional external renderer. Set to address(0) to disable.
     /// @param newRenderer Address of the new renderer contract (or zero to use internal).
     function setRenderer(address newRenderer) external onlyOwner {
+        if (newRenderer != address(0) && newRenderer.code.length == 0) revert InvalidRenderer();
         address prev = renderer;
         renderer = newRenderer;
         emit RendererUpdated(prev, newRenderer);

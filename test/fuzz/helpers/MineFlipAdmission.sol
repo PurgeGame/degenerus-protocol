@@ -41,7 +41,7 @@ library MineFlipAdmission {
         uint256 branch = GasBounds.DEGENESIS_DGNRS_GAS;
         if (GasBounds.DEGENESIS_FLIP_PASS_GAS > branch) branch = GasBounds.DEGENESIS_FLIP_PASS_GAS;
         if (GasBounds.DEGENESIS_WWXRP_GAS > branch) branch = GasBounds.DEGENESIS_WWXRP_GAS;
-        return branch + GasBounds.DEGENESIS_TAIL_GAS + GasBounds.DEGENESIS_FLUSH_PER_CREDIT;
+        return branch + GasBounds.DEGENESIS_BOON_GAS + GasBounds.DEGENESIS_TAIL_GAS + GasBounds.DEGENESIS_FLUSH_PER_CREDIT;
     }
 
     /// @dev Game over's loan checkpoint: the terminal phase pre-check, one worst-family loan, one

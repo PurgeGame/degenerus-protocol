@@ -295,7 +295,7 @@ def gas_study():
 
 def main():
     sources = ["contracts/DegenerusAffiliate.sol", "contracts/libraries/AffiliateEarningsLib.sol", "contracts/libraries/PriceLookupLib.sol",
-               "contracts/modules/DegenerusGameBingoModule.sol",
+               "contracts/modules/GameBingo.sol",
                "contracts/modules/DegenerusGameMintStreakUtils.sol"]
     out = {"scope": "Python codec/accounting model and storage-only Glamsterdam estimates; no EVM/security proof",
            "score_cap": LIVE_CAP, "history_cap": HISTORY_CAP,

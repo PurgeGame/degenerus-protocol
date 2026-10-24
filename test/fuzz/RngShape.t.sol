@@ -12,7 +12,7 @@ contract RngShapeTest is Test {
     }
 
     function testFuzz_ActionAndDiscriminatorIndependence(uint256 word) public pure {
-        uint256[] memory tags = new uint256[](111);
+        uint256[] memory tags = new uint256[](114);
         tags[0] = RngTags.BAF_FAR_PAIR;
         tags[1] = RngTags.BAF_FUTURE_ATTEMPT;
         tags[2] = RngTags.BAF_HEAD;
@@ -124,6 +124,9 @@ contract RngShapeTest is Test {
         tags[108] = RngTags.WWXRP_INCINERATOR;
         tags[109] = RngTags.WWXRP_SMALL;
         tags[110] = RngTags.WWXRP_WINNER;
+        tags[111] = RngTags.DEGENESIS_BOON;
+        tags[112] = RngTags.DEGENESIS_BOON_EXTRA;
+        tags[113] = RngTags.DEGENESIS_BOON_TYPE;
         for (uint256 i; i < tags.length; ++i) {
             assertEq(tags[i], i < 57 ? i + 1 : i + 2, "tags must stay uniquely assigned");
             uint256 a = EntropyLib.hash2(tags[i], word);

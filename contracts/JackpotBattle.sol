@@ -29,6 +29,9 @@ interface IFlipCrapsComps {
 contract JackpotBattle is CrapsBattleStorage {
     error BadJackpotField();
     error OnlyTableSelf();
+    error CustomSlotsFull();
+    error NothingToSeed();
+    error ZeroDonation();
     /// @dev The Game's FLIP-per-price unit: `price / _PRICE_COIN_UNIT` FLIP buys one ticket.
     uint256 private constant _PRICE_COIN_UNIT = 1000;
     /// @dev Conservative whole-run loss budget, using the same 12% calibration as the ordinary
@@ -100,7 +103,8 @@ contract JackpotBattle is CrapsBattleStorage {
         if (slot < _CUSTOM_SLOT_BASE && !_jackpotIsJackpotSlot(slot)
             && g >> 255 == 0 && _dailyWordAt(_currentDayIndex()) == 0) revert RngNotReady();
         if (slot < _CUSTOM_SLOT_BASE && g == 0) revert BonusPeriodSpent();
-        if (granules == 0 || g == 0) revert SeedAboveMax();
+        if (granules == 0) revert ZeroDonation();
+        if (g == 0) revert NothingToSeed();
         uint256 seed;
         unchecked {
             seed = ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK) + granules;
@@ -216,7 +220,7 @@ contract JackpotBattle is CrapsBattleStorage {
         for (uint256 i; i < 4; ++i) {
             if (_fundedCustomSlots[i] == 1) { _fundedCustomSlots[i] = slot; return; }
         }
-        revert BadJackpotField();
+        revert CustomSlotsFull();
     }
 
     function registerRngSlot_g709(uint48 index, uint64 slot, bytes32 key) external {
@@ -523,8 +527,9 @@ contract JackpotBattle is CrapsBattleStorage {
             highs = ((word >> _PASS_HIGH_SHIFT) & _PASS_MAX) + highCount;
         }
         if (highs > _PASS_MAX) revert PassLaneFull();
-        // Deliberately CHECKED, exactly as `_takeCredits`: the underflow IS the balance test.
-        uint256 normals = (word & _PASS_MAX) - cost;
+        uint256 normals = word & _PASS_MAX;
+        if (normals < cost) revert InsufficientPassCredits();
+        unchecked { normals -= cost; }
         _passCreditsById[id] =
             (word & ~(_PASS_MAX | (_PASS_MAX << _PASS_HIGH_SHIFT))) | (highs << _PASS_HIGH_SHIFT) | normals;
         emit CrapsNormalPassesConverted(id, cost, highCount);
@@ -709,7 +714,7 @@ contract JackpotBattle is CrapsBattleStorage {
             uint256 entrants = g & _MASK32;
             // The main boost is shared by the finalization log and the payout. Its derivation
             // reads the day's budget and hashes the settling word, so compute it once here.
-            uint256 boost = _jackpotBoostUnits(w, word);
+            uint256 boost = _jackpotRoundBoost(_jackpotBoostUnits(w, word));
             bool scheduled = slot < _CUSTOM_SLOT_BASE;
             uint256 best = (g >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
             (Craps.SlipStop stop,, uint256 peakFlip, uint256 endFlip) = _jackpotDecodeBest(best);
@@ -764,7 +769,6 @@ contract JackpotBattle is CrapsBattleStorage {
             // donated on top of it. Nothing about either was stored.
             // Donations pay in full and bypass protocol-bonus rounding.
             uint256 donated = (g >> _BG_SEED_SHIFT) & _BG_SEED_MASK;
-            boost = _jackpotRoundBoost(boost);
             // The bounties and the house money, and NOTHING else. What the field busted away is
             // deleted where it busted.
             uint256 pot = (w.stakeUnits * (entrants + w.extraUnits) + boost + donated) * _BATTLE_STAKE_UNIT + w.extraPot;

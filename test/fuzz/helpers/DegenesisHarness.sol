@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenesisBoonReference as BoonRef} from "./DegenesisBoonReference.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenesisDeployProtocol} from "./DeployProtocol.sol";
 import {GameSlots, GameSlotKeys} from "../../helpers/GameSlots.sol";
@@ -62,6 +63,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         uint256 wwxrp;
         uint32 normalPasses;
         uint32 highPasses;
+        uint24 boonTypes;
     }
 
     uint256 internal lastFulfilledReq;
@@ -390,6 +392,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         o.day = uint8(day);
         o.index = uint32(index);
         o.amount = units * UNIT;
+        o.boonTypes = BoonRef.selected(o.amount, BoonRef.root(word, day, index));
         uint256 seed = _seed(word, day, index, id);
         uint256 cat = EntropyLib.hash2(51, seed) % 100;
         uint256 size = EntropyLib.hash2(56, seed);
@@ -443,6 +446,13 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
             r.id = uint32(uint256(logs[i].topics[1]));
             (r.day, r.index, r.amount, r.flip, r.dgnrs, r.wwxrp, r.normalPasses, r.highPasses) =
                 abi.decode(logs[i].data, (uint8, uint32, uint256, uint256, uint256, uint256, uint32, uint32));
+            assertGt(i, 0, "completion has preceding boon event");
+            Vm.Log memory companion = logs[i - 1];
+            assertEq(companion.emitter, address(game));
+            assertEq(companion.topics[0], keccak256("DegenesisBoonsRolled(uint32,uint8,uint32,uint24)"));
+            assertEq(companion.topics[1], logs[i].topics[1]);
+            (uint8 day, uint32 index, uint24 types_) = abi.decode(companion.data, (uint8,uint32,uint24));
+            assertEq(day, r.day); assertEq(index, r.index); r.boonTypes = types_;
         }
     }
 
@@ -462,6 +472,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         assertEq(got.wwxrp, want.wwxrp, string.concat(tag, ": wwxrp"));
         assertEq(got.normalPasses, want.normalPasses, string.concat(tag, ": normal passes"));
         assertEq(got.highPasses, want.highPasses, string.concat(tag, ": high passes"));
+        assertEq(got.boonTypes, want.boonTypes, string.concat(tag, ": additional boon draws"));
     }
 
     /// @dev Reference resolution of every order of cohort `c` from its stored lanes, the given

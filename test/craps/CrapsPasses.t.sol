@@ -422,7 +422,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 start = _today() + 2;
 
         vm.prank(alice);
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(CrapsBattleStorage.InsufficientPassCredits.selector);
         craps.applyCrapsPasses(start, 5, false);
 
         assertEq(craps.dayStateOf(start, alice), 0, "a failed application still wrote a day");
@@ -483,7 +483,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 start = _today() + 2;
 
         vm.prank(alice);
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(CrapsBattleStorage.InsufficientPassCredits.selector);
         craps.applyCrapsPasses(start, 1, false);
 
         vm.prank(alice);
@@ -799,7 +799,7 @@ contract CrapsPassesTest is CrapsPins {
     function test_twentyNormalsCannotBuyAHigh() public {
         craps.setPassCredits(alice, 20, 7);
         vm.prank(alice);
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(CrapsBattleStorage.InsufficientPassCredits.selector);
         craps.convertNormalToHigh(0, 1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 20, "a refused conversion still debited normals");
@@ -811,7 +811,7 @@ contract CrapsPassesTest is CrapsPins {
     function test_aShortBalanceConvertsNothingNotPart() public {
         craps.setPassCredits(alice, 41, 0);
         vm.prank(alice);
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(CrapsBattleStorage.InsufficientPassCredits.selector);
         craps.convertNormalToHigh(0, 2);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 41, "a refused conversion moved the normal lane");
@@ -917,7 +917,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 day = _today() + 2;
         vm.prank(alice);
         craps.applyCrapsPasses(day, 1, false, 0);
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(CrapsBattleStorage.InsufficientPassCredits.selector);
         vm.prank(alice);
         craps.upgradeReservedDay(0, day);
         (uint256 normal,) = craps.passCreditsOf(alice);

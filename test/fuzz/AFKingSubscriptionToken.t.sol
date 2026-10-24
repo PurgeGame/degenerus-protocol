@@ -814,9 +814,13 @@ contract AFKingSubscriptionTokenTest is Test {
         vm.prank(alice);
         vm.expectRevert(AFKingSubscriptionToken.NotAuthorized.selector);
         coin.setRenderer(address(1));
+        MockSeatRenderer renderer = new MockSeatRenderer();
         vm.prank(admin);
+        coin.setRenderer(address(renderer));
+        assertEq(coin.renderer(), address(renderer), "DGVE majority sets the renderer");
+        vm.prank(admin);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidRenderer.selector);
         coin.setRenderer(address(1));
-        assertEq(coin.renderer(), address(1), "DGVE majority sets the renderer");
     }
 
     // ──────────────────────────────────────────────────────────────────────

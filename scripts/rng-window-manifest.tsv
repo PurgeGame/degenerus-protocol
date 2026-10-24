@@ -210,7 +210,7 @@ GATE	_dailyWordAt	_reservableDay	storage/CrapsBattleStorage.sol	READ
 GATE	degenesisWord	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Existence test (word != 0) selecting the DegenesisSettle stage; no value decision.
 GATE	rngFlagsAndNudges	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Terminal-bit test (bit 13) so the stage never runs once the terminal word is applied; no entropy consumed.
 CONSUMER-SEALED	_lootboxWord	_mineFlip	modules/GameMiner.sol	READ	Stage 1 passes the published read word to the batch closed by its request; every later request waits for that stage to drain.
-CONSUMER-SEALED	degenesisWord	runDegenesisWork_g1860	modules/DegenerusGameDegenesisModule.sol	READ	DegenesisSettle miner stage: loads the bound word once into the frozen cohort and derives every outcome from it; the order list closed with the sale day and the cohort was split and priced at the word-free request boundary, so nothing a player can still change reaches the derivation.
+CONSUMER-SEALED	degenesisWord	runDegenesisWork_g1860	modules/DegenerusGameDegenesisModule.sol	READ	DegenesisSettle miner stage: loads the bound word once into the frozen cohort and derives primary outcomes and additional boon roots from it (cohort/order/slot tags; fixed level-1 normalization); the order list closed with the sale day and the cohort was split and priced at the word-free request boundary, so nothing a player can still change reaches the derivation.
 
 # Decimator jackpot integration (2026-10-05)
 

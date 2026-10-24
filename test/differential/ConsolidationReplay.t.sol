@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
@@ -27,8 +28,6 @@ import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusG
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
-import {DegenerusGameBingoModule} from "../../contracts/modules/DegenerusGameBingoModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
@@ -177,8 +176,8 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         if (key == keccak256("DegenerusGameDecimatorModule")) decimatorModule = DegenerusGameDecimatorModule(payable(target));
         if (key == keccak256("DegenerusGameDegenesisModule")) degenesisModule = DegenerusGameDegenesisModule(payable(target));
         if (key == keccak256("DegenerusGameFoilPackModule")) foilModule = DegenerusGameFoilPackModule(payable(target));
-        if (key == keccak256("DegenerusGameMinerModule")) minerModule = DegenerusGameMinerModule(payable(target));
-        if (key == keccak256("DegenerusGameBingoModule")) bingoModule = DegenerusGameBingoModule(payable(target));
+        if (key == keccak256("DegenerusGameMinerModule")) minerModule = DegenerusGame(payable(target));
+        if (key == keccak256("DegenerusGameBingoModule")) bingoModule = DegenerusGame(payable(target));
         if (key == keccak256("GameAfkingModule")) afkingModule = GameAfkingModule(payable(target));
         if (key == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(payable(target));
         if (key == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(payable(target));

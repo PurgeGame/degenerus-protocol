@@ -626,10 +626,9 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         while (i < endIndex) {
             uint256 groupIdx = i >> 4;
 
-            // Hash all inputs so the wallet ID (baseKey bits 32-63)
-            // reaches the low 32 bits of s. LCG iteration preserves low-bit
-            // independence, so the category bucket — derived from the low 32
-            // bits of s — inherits whatever entropy the seed's low bits carry.
+            // The tag, committed word, wallet-free batch key and group index fix the traits.
+            // Mask the wallet ID out of baseKey; LCG iteration expands the same group seed
+            // regardless of the wallet that receives the tickets.
             uint256 seed = uint256(
                 EntropyLib.hash4(RngTags.TICKET_TRAITS, entropyWord, baseKey & ~(uint256(type(uint32).max) << TicketEntropy.ID_SHIFT), groupIdx)
             );

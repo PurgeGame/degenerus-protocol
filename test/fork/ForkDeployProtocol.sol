@@ -17,7 +17,6 @@ import {Icons32Data} from "../../contracts/Icons32Data.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {DegenerusGameDegenesisModule} from "../../contracts/modules/DegenerusGameDegenesisModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
@@ -30,7 +29,6 @@ import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxMo
 import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusGameDegeneretteModule.sol";
-import {DegenerusGameBingoModule} from "../../contracts/modules/DegenerusGameBingoModule.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
@@ -246,8 +244,8 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
         afkingModule = GameAfkingModule(payable(address(boxModule)));
-        bingoModule = DegenerusGameBingoModule(payable(address(game)));
-        minerModule = DegenerusGameMinerModule(payable(address(game)));
+        bingoModule = DegenerusGame(payable(address(game)));
+        minerModule = DegenerusGame(payable(address(game)));
         affiliate = DegenerusAffiliate(payable(address(coinflip)));
         quests = DegenerusQuests(payable(address(coinflip)));
         crapsEngine = CrapsEngine(payable(address(crapsBattle)));

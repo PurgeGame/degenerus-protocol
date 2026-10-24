@@ -748,7 +748,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertTrue(w == 1 || w == 2, "the share goes to VAULT or SDGNRS");
 
         address other = makeAddr("forgedRefer");
-        vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
+        vm.expectRevert(DegenerusAffiliate.UnknownCode.selector);
         _refer(other, forged);
         assertEq(_refWord(other), 0);
     }
@@ -762,7 +762,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(_id(address(1)), 0, "address(1) is not registered");
         assertEq(_registrations(acc), 0);
         address other = makeAddr("sentinelRefer");
-        vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
+        vm.expectRevert(DegenerusAffiliate.UnknownCode.selector);
         _refer(other, LOCKED);
         assertEq(_id(address(1)), 0);
     }
@@ -826,7 +826,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _buy(p, _dflt(p));
         assertEq(_refWord(p), 1, "own default code locks");
         address q = makeAddr("selfDefaultRefer");
-        vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
+        vm.expectRevert(DegenerusAffiliate.UnknownCode.selector);
         _refer(q, _dflt(q));
         assertEq(_id(q), 0, "a refused referral registers nobody");
     }
@@ -858,7 +858,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         address o = makeAddr("selfRefer");
         bytes32 code = bytes32("SELF_REFER");
         _create(o, code, 5);
-        vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
+        vm.expectRevert(DegenerusAffiliate.UnknownCode.selector);
         _refer(o, code);
         assertEq(_refWord(o), 0);
     }

@@ -48,7 +48,8 @@ price tables and reward curves.
   - **Orders.** A box costs at least **0.01 ETH**, in whole **0.0001 ETH** units, up to a per-order
     bound of about **27.5M ETH**. One roll per order; splitting an order changes variance, not the
     expected sDGNRS per ETH (apart from rounding and the fixed WWXRP consolation). A Degenesis box
-    pays no affiliate commission and earns no quest, streak or activity credit.
+    pays no affiliate commission. The purchase itself earns no quest, streak or activity credit;
+    an additional drawn boon can grant activity or a quest shield.
   - **ETH routing.** Each day's ETH is held as a reserved obligation, then split once per daily
     cohort at the first daily request after the day ends: **50%** to the future prize pool, **25%** to
     a restricted Vault purchase budget, **25%** to sDGNRS AFKing funding. The Vault budget buys
@@ -59,6 +60,20 @@ price tables and reward curves.
     sDGNRS, **10%** WWXRP, with an independent size roll for FLIP and sDGNRS. A FLIP result below
     one whole FLIP, a lost fractional pass, or a zero sDGNRS award pays the WWXRP consolation
     (1 WWXRP before the vault owner's `gameMintScale`) instead; no order resolves to nothing.
+  - **Additional boons.** Every primary outcome, including consolation, also draws from the
+    ordinary boon table using a probability budget of **20% of the raw ETH order, capped at
+    1 ETH**. Normalize at launch level 1 with the existing 50% utilization assumption: each full
+    100% chance guarantees a draw and the remainder rolls once for another, up to **three draws
+    per order**. Activity, boosts, early-purchase bonuses and cohort volume do not multiply this
+    budget. It creates no ETH reserve and does not reduce the exclusive primary reward.
+    Types may repeat; ordinary upgrades, ignored equal/lower tiers and deity-discount discards
+    apply. Three draws need not produce three active boons. Expiry starts on the settlement day,
+    so early-sale boons can expire before launch. Splitting large purchases into separate orders
+    can produce more total draws by avoiding the per-order ceiling. Neither Degenesis purchases
+    nor boon grants earn new Degenesis credit. Ordinary boxes keep their existing one-draw rules.
+    `DegenesisBoonsRolled` immediately precedes `DegenesisOrderResolved`: bytes 0, 1 and 2 of
+    `boonTypes` identify selected types in draw order, including ignored/discarded draws, with
+    unused bytes zero. A zero-draw order still emits the companion event.
   - **sDGNRS schedule.** The sale pool is **100B** sDGNRS (10% of the initial supply). For a cohort
     with applied ETH `V` and remaining pool `R`, `Q = min(2.5T, 2/3 R)` with target `T = 20B` on days
     1-3 and `10B` on days 4-7. An sDGNRS order of `x` ETH receives `x * Q * m / V`, with `m`

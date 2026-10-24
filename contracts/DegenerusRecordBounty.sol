@@ -74,6 +74,9 @@ contract DegenerusRecordBounty {
     error NotAuthorized();
     /// @notice Thrown when a record kind or tokenId is outside the valid 0-4 range.
     error InvalidToken();
+
+    /// @notice A nonzero renderer must have deployed code.
+    error InvalidRenderer();
     /// @notice Thrown when a recipient address is the zero address.
     error ZeroAddress();
     /// @notice Thrown when a render color string is not a valid hex color.
@@ -224,6 +227,7 @@ contract DegenerusRecordBounty {
     ///         metadata, not just the art. Set to address(0) to disable.
     /// @param newRenderer Address of the new renderer contract (or zero to use internal).
     function setRenderer(address newRenderer) external onlyOwner {
+        if (newRenderer != address(0) && newRenderer.code.length == 0) revert InvalidRenderer();
         address prev = renderer;
         renderer = newRenderer;
         emit RendererUpdated(prev, newRenderer);

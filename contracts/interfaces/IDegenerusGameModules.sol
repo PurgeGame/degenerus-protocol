@@ -384,6 +384,13 @@ interface IDegenerusGameBoonModule {
     /// @notice One-time creator-gated registration and ticket batch for both protocol deities.
     function initProtocolDeity() external;
 
+    /// @notice Game-context settlement dispatch: 20% of raw Degenesis ETH, capped at 1 ETH,
+    ///         fixed level-1 normalization, up to three guaranteed-plus-fractional draws.
+    /// @dev Normal settlement-day expiry and upgrade/discard rules apply. Repeats are allowed;
+    ///      splitting orders can avoid the per-order ceiling. No Degenesis credit is earned.
+    /// @return boonTypes Selected type IDs in bytes 0, 1, 2, including ignored/discarded types.
+    function rollDegenesisBoons(uint32 id, uint256 amount, uint256 seed) external returns (uint24 boonTypes);
+
     /// @notice Draw boons for every box in one opened entry, in a single call
     /// @param id Box owner's wallet ID (boon and quest state key)
     /// @param perBoxBudget Boon budget of a single box, in wei of ETH-equivalent value

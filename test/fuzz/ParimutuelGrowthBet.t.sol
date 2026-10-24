@@ -658,11 +658,11 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     function testQuestRewardRejectsForeignCaller() public {
         uint32 aliceId = _giveWalletId(alice);
         vm.prank(alice);
-        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
+        vm.expectRevert(bytes4(keccak256("OnlyParimutuel()")));
         quests.recordGrowthBet(aliceId, 50, 150);
 
         vm.prank(address(game));
-        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
+        vm.expectRevert(bytes4(keccak256("OnlyParimutuel()")));
         quests.recordGrowthBet(aliceId, 50, 150);
     }
 

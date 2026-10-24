@@ -48,7 +48,6 @@ DEFAULT_SCOPE = [
     "DegenerusGame.sol",
     "storage/DegenerusGameStorage.sol",
     "modules/DegenerusGameAdvanceModule.sol",
-    "modules/DegenerusGameMinerModule.sol",
     "modules/DegenerusGameRngModule.sol",
     "modules/DegenerusGameTicketModule.sol",
     "modules/DegenerusGameJackpotDrawModule.sol",

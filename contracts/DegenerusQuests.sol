@@ -122,6 +122,8 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Thrown when caller is not the authorized GAME contract.
     error OnlyGame();
 
+    error OnlyParimutuel();
+
     // =========================================================================
     //                                EVENTS
     // =========================================================================
@@ -2844,7 +2846,7 @@ contract DegenerusQuests is IDegenerusQuests {
         override
         returns (uint256 paid)
     {
-        if (msg.sender != ContractAddresses.PARIMUTUEL) revert OnlyGame();
+        if (msg.sender != ContractAddresses.PARIMUTUEL) revert OnlyParimutuel();
         if (reward == 0) return 0;
 
         uint8 currentVersion = uint8(_questsStorage().activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT);

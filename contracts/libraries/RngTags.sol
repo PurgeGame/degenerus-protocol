@@ -115,4 +115,7 @@ library RngTags {
     uint256 internal constant WWXRP_INCINERATOR = 110;
     uint256 internal constant WWXRP_SMALL = 111;
     uint256 internal constant WWXRP_WINNER = 112;
+    uint256 internal constant DEGENESIS_BOON = 113;
+    uint256 internal constant DEGENESIS_BOON_EXTRA = 114;
+    uint256 internal constant DEGENESIS_BOON_TYPE = 115;
 }

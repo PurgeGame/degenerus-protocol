@@ -211,7 +211,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
             else (ok, result) = target.delegatecall{gas: forwarded}(callData);
             if (!ok) {
                 unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
-                // Only our request worker emits this selector; external revert bytes are discarded.
+                // Trusted request/terminal workers wrap dependency failures in this refusal selector.
                 if ((request || action == MinerAction.Terminal) && result.length == 4
                     && bytes4(result) == ExternalRequestRefused.selector) {
                     requestRefused = true;

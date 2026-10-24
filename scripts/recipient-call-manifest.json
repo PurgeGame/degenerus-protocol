@@ -8680,38 +8680,6 @@
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
   },
   {
-    "path": "contracts/modules/DegenerusGameMinerModule.sol",
-    "scope": "DegenerusGameMinerModule.mineFlip",
-    "kind": "recipient-helper",
-    "expression": "_mineFlip(gasMultiplierBps)",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMinerModule.sol",
-    "scope": "DegenerusGameMinerModule.minerAction",
-    "kind": "recipient-helper",
-    "expression": "_minerAction()",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMinerModule.sol",
-    "scope": "DegenerusGameMinerModule.playerActivityScoreCached",
-    "kind": "recipient-helper",
-    "expression": "_minerActivity(player)",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMinerModule.sol",
-    "scope": "DegenerusGameMinerModule.playerActivityScoreCachedById",
-    "kind": "recipient-helper",
-    "expression": "_minerActivityById(id)",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
     "path": "contracts/modules/DegenerusGameMintModule.sol",
     "scope": "DegenerusGameMintModule.purchaseWith",
     "kind": "recipient-helper",
@@ -9461,15 +9429,7 @@
     "kind": "bounded-wrapper",
     "expression": "BoundedCall.callRemaining(meter, address(this), 1_000_000, 300_000, abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding, MineFlipGas.child(meter, 300_000)), 32)",
     "count": 1,
-    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule._tryFundAfkingSteth",
-    "kind": "bounded-wrapper",
-    "expression": "BoundedCall.rethrowTrustedGasFailure()",
-    "count": 1,
-    "review": "P7A: immediately after the immutable Game funding self-call; propagates trusted gas refusals so underfunding never expires a subscriber. Token errors are wrapped as AfkingStethPullFailed inside the rollback frame; no external error can spoof the retry classification."
+    "review": "P8 M-01: outer bounded-call admission rejects caller starvation before the attempt. A failed optional atomic pull, including a gas-draining successful dependency read followed by inner admission refusal, leaves funding unchanged; ordinary unfunded expiry then advances. Failed transfers and credits roll back together; fixed Game self-call and 300k parent tail retained."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -10702,5 +10662,21 @@
     "expression": "BoundedCall.staticWordRemaining(meter, address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId))",
     "count": 1,
     "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameBoonModule.sol",
+    "scope": "DegenerusGameBoonModule.rollDegenesisBoons",
+    "kind": "recipient-helper",
+    "expression": "_deliverBoon(id, boonType, currentDay, amount)",
+    "count": 1,
+    "review": "P8: at most three committed draws, in slot order, delivered to the stored wallet ID with ordinary upgrade/discard/expiry semantics; fixed level-1 normalization. Shared activity and shield protocol calls retain their Game authorization and rollback with the whole order."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
+    "scope": "DegenerusGameDegenesisModule._resolveDegenesisOrder",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameBoonModule.rollDegenesisBoons.selector, o.id, o.units * DEGENESIS_UNIT, boonSeed) )",
+    "count": 1,
+    "review": "P8: fixed Box-bundle target in Game storage; stored recipient, raw amount and cohort/order-tagged retained word seed. No Game issuance route; errors bubble and roll back cursor, primary legs, boons, events and queued coin credits together. Added admission bound covers complete boon path."
   }
 ]

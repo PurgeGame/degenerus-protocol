@@ -133,6 +133,7 @@ describe("DegenerusDeityPass", function () {
   describe("setRenderer()", function () {
     it("owner can set the renderer address", async function () {
       const { deityPass, deployer, alice } = await getFixture();
+      await hre.network.provider.send("hardhat_setCode", [alice.address, "0x00"]);
       const tx = await ownerAction(deityPass
         .connect(deployer), "setRenderer", [alice.address]);
       await expect(tx)
@@ -143,6 +144,7 @@ describe("DegenerusDeityPass", function () {
 
     it("can set renderer back to address(0) to disable external rendering", async function () {
       const { deityPass, deployer, alice } = await getFixture();
+      await hre.network.provider.send("hardhat_setCode", [alice.address, "0x00"]);
       await ownerAction(deityPass.connect(deployer), "setRenderer", [alice.address]);
       await ownerAction(deityPass.connect(deployer), "setRenderer", [ZERO_ADDRESS]);
       expect(await deityPass.renderer()).to.equal(ZERO_ADDRESS);
@@ -157,7 +159,9 @@ describe("DegenerusDeityPass", function () {
 
     it("emits RendererUpdated with previous and new renderer addresses", async function () {
       const { deityPass, deployer, alice, bob } = await getFixture();
+      await hre.network.provider.send("hardhat_setCode", [alice.address, "0x00"]);
       await ownerAction(deityPass.connect(deployer), "setRenderer", [alice.address]);
+      await hre.network.provider.send("hardhat_setCode", [bob.address, "0x00"]);
       const tx = await ownerAction(deityPass.connect(deployer), "setRenderer", [bob.address]);
       await expect(tx)
         .to.emit(deityPass, "RendererUpdated")

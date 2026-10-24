@@ -3,7 +3,7 @@ pragma solidity 0.8.38;
 import {GameMiner} from "../../contracts/modules/GameMiner.sol";
 
 import "forge-std/Test.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {MinerHarness} from "../helpers/MinerHarness.sol";
 import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
@@ -126,7 +126,7 @@ contract FSMEmptyDependencies {
 }
 
 /// @dev Test setup and reads only; all daily, RNG and terminal state writers are production code.
-contract FSMAdvanceHarness is DegenerusGameMinerModule {
+contract FSMAdvanceHarness is MinerHarness {
     /// @dev Mirrors only the Game retry forwarding stub; Admin ownership is covered by
     ///      DailyRngStallRecovery using the actual Admin contract.
     function retryRng() external {
@@ -251,7 +251,7 @@ contract GameFSMProductionTransitionTest is Test {
         vm.warp(block.timestamp + uint256(elapsedDays) * 1 days);
         // Before the 30-day sweep a finished ending has no engine work: mineFlip reverts NoWork and
         // changes nothing (an idle engine refuses the call instead of returning, be793ed7c).
-        (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
+        (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         assert(!ok);
         assert(result.length == 4 && bytes4(result) == GameMiner.NoWork.selector);
         assert(machine.gameOver());
@@ -262,7 +262,7 @@ contract GameFSMProductionTransitionTest is Test {
     function _lastPurchase_promotesOnceAcrossRetry(uint16 initialLevel) private {
         vm.warp(_dayStart(31) + 120);
         machine.seed(initialLevel, 30, 30, true);
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
+        _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         assert(machine.level() == uint24(initialLevel) + 1);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(locked && requestId == 1);
@@ -306,21 +306,21 @@ contract GameFSMProductionTransitionTest is Test {
         uint24 day = uint24(initialDay) + uint24(gap) + 1;
         vm.warp(_dayStart(day) + 120);
         machine.seed(1, initialDay, initialDay, false);
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
+        _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         assert(machine.sealedDay() == initialDay);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
         machine.recordDeliveredWord(42);
         vm.recordLogs();
         // A due Vault backstop is its own checkpoint after applying the delivered word.
         // Its continuation then composes battle, purchase daily/seal and read consumers.
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
+        _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         FSMEmptyDependencies deps = FSMEmptyDependencies(ContractAddresses.COINFLIP);
         uint24 afterGap = gap == 0 ? uint24(initialDay) : day - 1;
         if (day >= 45) {
             assert(deps.vaultSettles() == 1);
             assert(deps.battles() == 0);
             assert(machine.sealedDay() == afterGap);
-            _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
+            _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         } else assert(deps.vaultSettles() == 0);
         assert(afterGap >= initialDay);
         assert(machine.wordAt(day) == 42);
@@ -362,7 +362,7 @@ contract GameFSMProductionTransitionTest is Test {
         assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
         assert(machine.level() == 1);
         assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).settlements() == uint256(gap) + 1);
-        (bool repeated,) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
+        (bool repeated,) = address(machine).call(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         assert(!repeated);
         assert(machine.sealedDay() == day);
     }

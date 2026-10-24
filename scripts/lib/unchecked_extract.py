@@ -27,7 +27,6 @@ DEFAULT_SCOPE = [
     "DegenerusGame.sol",
     "storage/DegenerusGameStorage.sol",
     "modules/DegenerusGameAdvanceModule.sol",
-    "modules/DegenerusGameMinerModule.sol",
     "modules/DegenerusGameRngModule.sol",
     "modules/DegenerusGameTicketModule.sol",
     "modules/DegenerusGameJackpotDrawModule.sol",
@@ -54,7 +53,6 @@ DEFAULT_SCOPE = [
     "modules/DegenerusGameEndgameModule.sol",
     "modules/DegenerusGameDecimatorModule.sol",
     "modules/DegenerusGameDegeneretteModule.sol",
-    "modules/DegenerusGameBingoModule.sol",
     "modules/DegenerusGameDegenesisModule.sol",
 ]
 # New consolidated components cannot silently escape the source census.

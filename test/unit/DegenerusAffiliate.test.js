@@ -293,13 +293,13 @@ describe("DegenerusAffiliate", function () {
       ).to.be.revertedWithCustomError(affiliate, "Zero");
     });
 
-    it("reverts with Insufficient when code is already taken", async function () {
+    it("reverts with CodeTaken when code is already taken", async function () {
       const { affiliate, alice, bob } = await loadFixture(deployFullProtocol);
       const code = toBytes32("SHARED");
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       await expect(
         affiliate.connect(bob).createAffiliateCode(code, 0)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "CodeTaken");
     });
 
     it("reverts with InvalidKickback when kickback exceeds 25%", async function () {
@@ -354,23 +354,23 @@ describe("DegenerusAffiliate", function () {
       expect(ev.args.locked).to.equal(false);
     });
 
-    it("reverts Insufficient for self-referral", async function () {
+    it("reverts UnknownCode for self-referral", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       const code = toBytes32("SELF");
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       await expect(
         affiliate.connect(alice).referPlayer(code)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "UnknownCode");
     });
 
-    it("reverts Insufficient for non-existent code", async function () {
+    it("reverts UnknownCode for non-existent code", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       await expect(
         affiliate.connect(alice).referPlayer(toBytes32("NOPE"))
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "UnknownCode");
     });
 
-    it("reverts Insufficient when already referred (non-vault code)", async function () {
+    it("reverts AlreadyReferred when already referred (non-vault code)", async function () {
       const { affiliate, alice, bob, carol } = await loadFixture(
         deployFullProtocol
       );
@@ -381,7 +381,7 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code1);
       await expect(
         affiliate.connect(bob).referPlayer(code2)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "AlreadyReferred");
     });
   });
 

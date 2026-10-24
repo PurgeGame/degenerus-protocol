@@ -82,6 +82,8 @@ contract GNRUS {
     /// @notice Thrown when burn amount is 0 or below minimum
     error InsufficientBurn();
 
+    error InsufficientBalance();
+
     /// @notice Thrown when burnAtGameOver has already been called
     error AlreadyFinalized();
 
@@ -383,9 +385,10 @@ contract GNRUS {
     ///      game-side claimable (less the 1-wei sentinel); the game is drawn from only when on-hand
     ///      is short. CEI: supply/balance are updated and events emitted before any external value
     ///      transfer; the only pre-burn external call is game.claimWinnings, which cannot write GNRUS
-    ///      balances, so `acctBal` (read by the caller) is still fresh at the burn. Checked
-    ///      subtraction — the underflow revert is the over-burn guard.
+    ///      balances, so `acctBal` (read by the caller) is still fresh at the burn. The explicit
+    ///      balance check rejects over-burning before reading backing or computing a payout.
     function _redeemTo(address account, uint256 amount, uint256 acctBal, uint256 supply, address recipient) private {
+        if (acctBal < amount) revert InsufficientBalance();
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimable = game.claimableWinningsOf(address(this));
@@ -403,7 +406,7 @@ contract GNRUS {
         uint256 ethOut = owed <= ethBal ? owed : ethBal;
         uint256 stethOut = owed - ethOut;
 
-        balanceOf[account] = acctBal - amount;
+        unchecked { balanceOf[account] = acctBal - amount; }
         unchecked { totalSupply = supply - amount; }
 
         emit Transfer(account, address(0), amount);

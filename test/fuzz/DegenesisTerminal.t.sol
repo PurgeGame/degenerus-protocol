@@ -62,6 +62,7 @@ contract DegenesisTerminal is DegenesisFixture {
         uint256 releasedSdgnrs;
         uint256 splitsDuringEnding;
         uint256 resolvedDuringEnding;
+        uint256 boonsDuringEnding;
         bool drained;
         uint256 drainedClaimablePool;
         uint256 drainedAvailable;
@@ -114,6 +115,7 @@ contract DegenesisTerminal is DegenesisFixture {
             }
             e.releases += releases;
             e.resolvedDuringEnding += _countSig(logs, RESOLVED_SIG);
+            e.boonsDuringEnding += _countSig(logs, keccak256("DegenesisBoonsRolled(uint32,uint8,uint32,uint24)"));
             if (splits != 0) {
                 e.splitsDuringEnding += splits;
                 e.atSplit = p;
@@ -131,6 +133,7 @@ contract DegenesisTerminal is DegenesisFixture {
 
     /// @dev Every terminal check shared by the endings.
     function _assertTerminal(Ending memory e, Pre memory start, uint256 bobClaimable, uint256 bobAfking) internal view {
+        assertEq(e.boonsDuringEnding,e.resolvedDuringEnding,"terminal forfeiture creates no separate boon awards");
         assertTrue(game.gameOver(), "game over");
         assertEq(e.releases, 1, "one release");
         // Setup splits what is unsplit, then releases: both in the call that sets gameOver.

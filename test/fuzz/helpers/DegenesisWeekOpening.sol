@@ -50,6 +50,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
         uint256 orders;
         uint256 volume;
         uint256 resolved;
+        uint256 boonOrders;
         uint256 splits;
         uint256 priced;
         uint256 closed;
@@ -267,6 +268,14 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
                 require(!dgwResolvedKey[key], "DegenesisWeekOpening: an order resolved twice");
                 require(index < dgwOrders[day] && amount >= 0.01 ether, "DegenesisWeekOpening: unknown order resolved");
                 dgwResolvedKey[key] = true;
+                require(i != 0, "DegenesisWeekOpening: missing boon companion");
+                Vm.Log memory companion = logs[i - 1];
+                require(companion.emitter == address(game) && companion.topics[0] ==
+                    keccak256("DegenesisBoonsRolled(uint32,uint8,uint32,uint24)") && companion.topics[1] == l.topics[1],
+                    "DegenesisWeekOpening: invalid boon companion");
+                (uint8 bc, uint32 bi,) = abi.decode(companion.data,(uint8,uint32,uint24));
+                require(bc == day && bi == index, "DegenesisWeekOpening: boon order mismatch");
+                ++dgw.boonOrders;
                 ++dgw.resolved;
             } else if (t == DGW_SIG_SPLIT) {
                 ++dgw.splits;
@@ -316,6 +325,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
             assertLe(dgw.nextAtLaunch, DGW_TARGET_L1, "NON-VACUITY: next pool at or below 50 ETH at the launch");
         }
         if (_dgwKeepLogs()) return;
+        assertEq(dgw.boonOrders,dgw.resolved,"one atomic boon resolution per settled order");
         assertEq(dgw.splits, 7, "NON-VACUITY: seven splits");
         assertEq(dgw.degenesisDayStages, 7, "NON-VACUITY: seven Degenesis daily branches");
         if (dgw.turbo) assertEq(dgw.l1JackpotEnded, 1, "NON-VACUITY: the level-1 turbo jackpot ran");
