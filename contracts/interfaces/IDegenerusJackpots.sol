@@ -36,7 +36,7 @@ interface IDegenerusJackpots {
 
     function bafConsolationOfId(uint32 playerId, uint24 lvl) external view returns (uint256);
     /// @notice Opens a bracket's resolution (today's winning-flip claims route onward).
-    function beginBaf(uint24 day) external;
+    function beginBafOn(uint24 day) external;
 
     /// @notice Closes a resolved bracket: clears the board and bumps the epoch.
     function finalizeBaf(uint24 lvl) external;
@@ -79,7 +79,7 @@ interface IDegenerusJackpots {
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit cannot
     ///      roll forward into future bracket leaderboards.
     /// @param lvl Level whose BAF was skipped.
-    function markBafSkipped(uint24 lvl, uint24 day) external;
+    function markBafSkippedAt(uint24 lvl, uint24 day) external;
 
     /// @notice Day index of the most recent BAF resolution or skip.
     function getLastBafResolvedDay() external view returns (uint24);

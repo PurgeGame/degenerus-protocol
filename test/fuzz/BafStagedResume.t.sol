@@ -22,7 +22,7 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 ///         (board length cleared, epoch bumped) and returns the ETH term of unfilled slots to the pending
 ///         future pool (the stage runs inside the daily request's pool freeze); a resume from a
 ///         checkpoint under any allowance pays the identical remaining awards; another kind is left
-///         untouched. A real consolidation (`runBafJackpot` -> `beginBaf`) arms the record with the
+///         untouched. A real consolidation (`runBafJackpot` -> `beginBafOn`) arms the record with the
 ///         same reservation.
 abstract contract BafStagedResumeFixture is BafBracketFixture {
     uint24 internal constant LVL = 20;
@@ -290,7 +290,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
     // Real consolidation
     // ---------------------------------------------------------------------
 
-    /// @dev The x0 consolidation on a winning flip runs `runBafJackpot`: `beginBaf` records the
+    /// @dev The x0 consolidation on a winning flip runs `runBafJackpot`: `beginBafOn` records the
     ///      resolution day, the record is armed at cursor 0 with the schedule's ETH term reserved,
     ///      no award is paid in that transaction, and the stage then pays out every slot.
     function test_RealConsolidationArmsTheScheduleReserve() public {
@@ -303,7 +303,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         assertTrue(r.progressed && r.done, "consolidation completes");
         assertTrue(game.jackpotPhase(), "the jackpot phase opened");
         assertEq(_actualMarks(logs, LVL, LVL).length, 0, "no award is paid in the consolidation transaction");
-        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView(), "beginBaf records the resolution day");
+        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView(), "beginBafOn records the resolution day");
 
         BafStageHost.WorkView memory w = host.workView();
         assertEq(w.kind, 7, "the award stage is armed");

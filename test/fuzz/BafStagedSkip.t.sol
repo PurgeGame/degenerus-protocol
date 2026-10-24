@@ -77,7 +77,7 @@ contract BafStagedSkipTest is BafBracketFixture {
                 assertTrue(sig != ETH_SIG && sig != TICKET_SIG && sig != WHALE_SIG, "no BAF award on a losing flip");
             }
         }
-        assertTrue(skipped, "markBafSkipped ran in the consolidation transaction");
+        assertTrue(skipped, "markBafSkippedAt ran in the consolidation transaction");
         assertTrue(settled, "pools settled in the same transaction");
         assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView(), "the skip records the resolution day");
 

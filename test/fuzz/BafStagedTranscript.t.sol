@@ -248,7 +248,7 @@ contract CenturyTraitRoundSeeder is DegenerusGame, BucketSeed {
 
 /// @title BafStagedTranscript -- the staged BAF payout is a pure function of state.
 /// @notice From one last-purchase-day snapshot (daily lock held, word recorded) the consolidation
-///         call (`runBafJackpot`: `beginBaf` plus the kind-7 record reserving the schedule's ETH
+///         call (`runBafJackpot`: `beginBafOn` plus the kind-7 record reserving the schedule's ETH
 ///         term), every BAF award call (stage 19) and the first jackpot-phase call run under three
 ///         allowance partitions: one call for every award, the minimal allowance admitting one
 ///         eight-award group per call, and a fuzzed ladder that includes calls below one group.
@@ -608,7 +608,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         }
     }
 
-    /// @dev Consolidation effects. A winning flip runs `beginBaf` (resolution day = today) and
+    /// @dev Consolidation effects. A winning flip runs `beginBafOn` (resolution day = today) and
     ///      arms kind 7 with the schedule's reserved ETH term, leaving the board and epoch as they
     ///      were; a losing flip arms nothing and marks the bracket skipped.
     function _checkArmed(Vm.Log[] memory consLogs, Bracket memory b0, Stage memory st)
@@ -633,7 +633,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
             assertTrue((b.levelWord >> 72) & 0xff == 1, "the bracket reads skipped");
             return h;
         }
-        assertEq(b.levelWord, b0.levelWord, "beginBaf leaves the epoch and board length");
+        assertEq(b.levelWord, b0.levelWord, "beginBafOn leaves the epoch and board length");
         assertEq(kind, 7, "BAF award stage armed");
         assertEq(n, _positions(), "two places per scatter round plus three head slots");
         assertGt(budget, 0, "the BAF pool is positive");

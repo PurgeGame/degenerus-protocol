@@ -322,8 +322,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @notice Opens a bracket's resolution: winning-flip credit claimed from today on belongs
     ///         to the next bracket.
+    /// @dev The name keeps this selector dispatching after Coinflip's per-claim entries.
     /// @custom:access Restricted to game contract via onlyGame modifier.
-    function beginBaf(uint24 day) external onlyGame {
+    function beginBafOn(uint24 day) external onlyGame {
         lastBafResolvedDay = day;
     }
 
@@ -433,8 +434,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      would only burn gas. Sets the bracket's skipped flag: the frozen
     ///      player scores become claimable as WWXRP consolation.
     /// @param lvl Level whose BAF was skipped.
+    /// @dev The name keeps this selector dispatching after Coinflip's per-claim entries.
     /// @custom:access Restricted to game contract via onlyGame modifier.
-    function markBafSkipped(uint24 lvl, uint24 today) external onlyGame {
+    function markBafSkippedAt(uint24 lvl, uint24 today) external onlyGame {
         bafLevel[lvl].skipped = true;
         // The authenticated Game caller supplies its current logical day.
         lastBafResolvedDay = today;

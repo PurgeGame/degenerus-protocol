@@ -299,7 +299,7 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         vm.prank(address(coinflip));
         jackpots.recordBafFlip(id, BRACKET, score);
         vm.prank(address(game));
-        jackpots.markBafSkipped(BRACKET, uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
+        jackpots.markBafSkippedAt(BRACKET, uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
     }
 
     /// @notice Anyone runs the claim; the WWXRP lands on the score owner's address; a second claim

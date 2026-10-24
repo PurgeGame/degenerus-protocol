@@ -27,7 +27,7 @@ contract BafStorageReuseTest is Test {
 
     function _skip(uint24 bracket) private {
         vm.prank(ContractAddresses.GAME);
-        jp.markBafSkipped(bracket, 1);
+        jp.markBafSkippedAt(bracket, 1);
     }
 
     function test_closingAndNextCoexistThenReuseAfterFinalization() public {

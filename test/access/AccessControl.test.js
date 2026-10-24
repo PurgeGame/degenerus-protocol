@@ -210,11 +210,11 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(jackpots, "OnlyCoin");
     });
 
-    it("beginBaf: reverts when called by alice (onlyGame → OnlyGame)", async function () {
+    it("beginBafOn: reverts when called by alice (onlyGame → OnlyGame)", async function () {
       const { jackpots, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        jackpots.connect(alice).beginBaf(1)
+        jackpots.connect(alice).beginBafOn(1)
       ).to.be.revertedWithCustomError(jackpots, "OnlyGame");
     });
 

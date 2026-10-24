@@ -1417,13 +1417,13 @@ contract CoverageGap222 is DeployProtocol {
 
     function test_gap_jackpots_bafResolutionHooks_guard() public {
         vm.prank(buyer);
-        (bool okBegin, bytes memory errBegin) = address(jackpots).call(abi.encodeWithSignature("beginBaf(uint24)", uint24(1)));
+        (bool okBegin, bytes memory errBegin) = address(jackpots).call(abi.encodeWithSignature("beginBafOn(uint24)", uint24(1)));
         vm.prank(buyer);
         (bool okFinal, bytes memory errFinal) =
             address(jackpots).call(abi.encodeWithSignature("finalizeBaf(uint24)", uint24(10)));
-        assertFalse(okBegin, "jackpots.beginBaf rejected non-game caller");
+        assertFalse(okBegin, "jackpots.beginBafOn rejected non-game caller");
         assertFalse(okFinal, "jackpots.finalizeBaf rejected non-game caller");
-        assertEq(bytes4(errBegin), bytes4(keccak256("OnlyGame()")), "beginBaf: OnlyGame");
+        assertEq(bytes4(errBegin), bytes4(keccak256("OnlyGame()")), "beginBafOn: OnlyGame");
         assertEq(bytes4(errFinal), bytes4(keccak256("OnlyGame()")), "finalizeBaf: OnlyGame");
     }
 

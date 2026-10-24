@@ -32,7 +32,7 @@ import {
  * STRATEGY:
  *   The lock predicate is the security-critical change — it's what stops players from
  *   writing into bafTotals[N] between _requestRng and the bracket's resolution (the
- *   consolidation's beginBaf and the award stage that draws from the frozen bracket
+ *   consolidation's beginBafOn and the award stage that draws from the frozen bracket
  *   through bafPairWinners / bafHeadWinner until finalizeBaf). We verify it
  *   directly: drive the game one day cycle organically so alice has a winning claimable
  *   flip + claimableStored, then overwrite the `level` byte in slot 0 of the game's
@@ -545,10 +545,10 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-08 — markBafSkipped path routes identically to the beginBaf path
+  // BAF-ROUTE-08 — markBafSkippedAt path routes identically to the beginBafOn path
   // =========================================================================
-  describe("BAF-ROUTE-08 markBafSkipped routing equivalence", function () {
-    it("[08] markBafSkipped bumps lastBafResolvedDay; day-D claims seed bracket 20, like the beginBaf path", async function () {
+  describe("BAF-ROUTE-08 markBafSkippedAt routing equivalence", function () {
+    it("[08] markBafSkippedAt bumps lastBafResolvedDay; day-D claims seed bracket 20, like the beginBafOn path", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
 
@@ -556,7 +556,7 @@ describe("BafCreditRouting", function () {
       const gameAddr = await game.getAddress();
       const jackpotsAddr = await jackpots.getAddress();
 
-      // Impersonate the game contract to call markBafSkipped (onlyGame modifier).
+      // Impersonate the game contract to call markBafSkippedAt (onlyGame modifier).
       await hre.ethers.provider.send("hardhat_setBalance", [
         gameAddr,
         "0x1000000000000000000",
@@ -565,7 +565,7 @@ describe("BafCreditRouting", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
       const dayBefore = await jackpots.getLastBafResolvedDay();
-      const skipTx = await jackpots.connect(gameSigner).markBafSkipped(10, await game.currentDayView());
+      const skipTx = await jackpots.connect(gameSigner).markBafSkippedAt(10, await game.currentDayView());
       const skipReceipt = await skipTx.wait();
 
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [

@@ -13,7 +13,7 @@ contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
     function test_DaysEffBafBegin() public {
         uint24 day = game.currentDayView();
         bytes memory data = vm.envOr("DAYSEFF_NEW_ABI", false)
-            ? abi.encodeWithSignature("beginBaf(uint24)", day) : abi.encodeWithSignature("beginBaf()");
+            ? abi.encodeWithSignature("beginBafOn(uint24)", day) : abi.encodeWithSignature("beginBaf()");
         emit log_named_uint("dayseff_baf_begin", this.measure(address(jackpots), address(game), data));
         assertEq(jackpots.getLastBafResolvedDay(), day);
     }
@@ -27,7 +27,7 @@ contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
     function test_DaysEffBafSkip() public {
         uint24 day = game.currentDayView();
         bytes memory data = vm.envOr("DAYSEFF_NEW_ABI", false)
-            ? abi.encodeWithSignature("markBafSkipped(uint24,uint24)", uint24(10), day)
+            ? abi.encodeWithSignature("markBafSkippedAt(uint24,uint24)", uint24(10), day)
             : abi.encodeWithSignature("markBafSkipped(uint24)", uint24(10));
         emit log_named_uint("dayseff_baf_skip", this.measure(address(jackpots), address(game), data));
         assertEq(jackpots.getLastBafResolvedDay(), day);

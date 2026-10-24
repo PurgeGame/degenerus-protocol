@@ -446,7 +446,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.prank(address(coinflip));
         jackpots.recordBafFlip(smurfId, 10, 5_000);
         vm.prank(GAME);
-        jackpots.markBafSkipped(10, uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
+        jackpots.markBafSkippedAt(10, uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
         assertEq(jackpots.bafConsolationOfId(smurfId, 10), 5);
         uint256 ownerBefore = wwxrp.claimable(smurfId);
 
@@ -470,7 +470,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.prank(address(coinflip));
         jackpots.recordBafFlip(ownerId, 10, 3_000);
         vm.prank(GAME);
-        jackpots.markBafSkipped(10, uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
+        jackpots.markBafSkippedAt(10, uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
         uint256 before = wwxrp.claimable(ownerId);
         uint32 unallocated = uint32(_walletCount());
 

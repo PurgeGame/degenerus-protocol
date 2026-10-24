@@ -63,7 +63,7 @@ const excluded = {
   ],
   DGNRS: ["unwrapTo", "approve", "transfer", "transferFrom", "burnForSdgnrs"],
   AFFILIATE: ["payAffiliate", "payAffiliateCombined", "referSmurf"],
-  JACKPOTS: ["beginBaf", "finalizeBaf", "markBafSkipped", "recordBafFlip"],
+  JACKPOTS: ["beginBafOn", "finalizeBaf", "markBafSkippedAt", "recordBafFlip"],
   AFKING_SUB_TOKEN: [
     "consumeSeat", "mintSeatFor", "setRenderer", "vaultMintSeats",
     "transferFrom", "safeTransferFrom", // The Vault moves seats with sweepNft.

@@ -776,7 +776,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
                 p.future -= claimed;
                 p.claimable += claimed;
             } else {
-                advanceJackpots.markBafSkipped(lvl, dailyIdx);
+                advanceJackpots.markBafSkippedAt(lvl, dailyIdx);
 
                 // Century BAF incinerator: level-x99 WWXRP burners bet on this
                 // exact skip. WWXRP draws one burn-weighted winner and credits

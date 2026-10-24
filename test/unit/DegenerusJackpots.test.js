@@ -22,9 +22,9 @@ import {
  *    - ignores vault address
  *    - emits BafFlipRecorded
  *    - top-4 leaderboard maintenance (insert, update, replace)
- *  - beginBaf / finalizeBaf (onlyGame)
+ *  - beginBafOn / finalizeBaf (onlyGame)
  *    - access control
- *    - beginBaf records the resolution day and leaves the board frozen
+ *    - beginBafOn records the resolution day and leaves the board frozen
  *    - finalizeBaf clears the board and bumps the epoch (stored scores read zero)
  *  - bafHeadWinner / bafPairWinners (views the game's award stage pays from)
  *    - head slots read the frozen board and the armed-day depositor draw
@@ -383,12 +383,12 @@ describe("DegenerusJackpots", function () {
   });
 
   // =========================================================================
-  // 4. beginBaf / finalizeBaf - Access Control
+  // 4. beginBafOn / finalizeBaf - Access Control
   // =========================================================================
-  describe("beginBaf / finalizeBaf - access control", function () {
+  describe("beginBafOn / finalizeBaf - access control", function () {
     it("reverts OnlyGame when called by random EOA", async function () {
       const { jackpots, alice } = await loadFixture(deployFullProtocol);
-      await expect(jackpots.connect(alice).beginBaf(1)).to.be.revertedWithCustomError(jackpots, "OnlyGame");
+      await expect(jackpots.connect(alice).beginBafOn(1)).to.be.revertedWithCustomError(jackpots, "OnlyGame");
       await expect(jackpots.connect(alice).finalizeBaf(10)).to.be.revertedWithCustomError(jackpots, "OnlyGame");
     });
 
@@ -402,7 +402,7 @@ describe("DegenerusJackpots", function () {
       ]);
       const coinSigner = await hre.ethers.getSigner(coinAddr);
       await expect(
-        jackpots.connect(coinSigner).beginBaf(1)
+        jackpots.connect(coinSigner).beginBafOn(1)
       ).to.be.revertedWithCustomError(jackpots, "OnlyGame");
       await expect(
         jackpots.connect(coinSigner).finalizeBaf(10)
@@ -413,14 +413,14 @@ describe("DegenerusJackpots", function () {
     it("succeeds when called by game contract", async function () {
       const { jackpots, game } = await loadFixture(deployFullProtocol);
       await asGame(hre.ethers, game, async (gameSigner) => {
-        await expect(jackpots.connect(gameSigner).beginBaf(await game.currentDayView())).to.not.be.reverted;
+        await expect(jackpots.connect(gameSigner).beginBafOn(await game.currentDayView())).to.not.be.reverted;
         await expect(jackpots.connect(gameSigner).finalizeBaf(10)).to.not.be.reverted;
       });
     });
   });
 
   // =========================================================================
-  // 5. Bracket resolution: beginBaf, the frozen views, finalizeBaf
+  // 5. Bracket resolution: beginBafOn, the frozen views, finalizeBaf
   // =========================================================================
   describe("bracket resolution", function () {
     it("an unscored bracket names nobody in any slot", async function () {
@@ -439,14 +439,14 @@ describe("DegenerusJackpots", function () {
       }
     });
 
-    it("beginBaf records today's resolution day and leaves the board frozen", async function () {
+    it("beginBafOn records today's resolution day and leaves the board frozen", async function () {
       const { jackpots, game, coinflip, alice, bob } = await loadFixture(deployFullProtocol);
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, alice.address, 10, eth(500));
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
       const before = await jackpots.bafHeadWinner(10, 1n, 0);
       expect(before).to.equal(await idOf(coinflip, alice.address));
 
-      await asGame(hre.ethers, game, async (gameSigner) => jackpots.connect(gameSigner).beginBaf(await game.currentDayView()));
+      await asGame(hre.ethers, game, async (gameSigner) => jackpots.connect(gameSigner).beginBafOn(await game.currentDayView()));
 
       expect(await jackpots.getLastBafResolvedDay()).to.equal(await game.currentDayView());
       // The award stage draws across several transactions from the same board.
@@ -460,7 +460,7 @@ describe("DegenerusJackpots", function () {
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
 
       await asGame(hre.ethers, game, async (gameSigner) => {
-        await jackpots.connect(gameSigner).beginBaf(await game.currentDayView());
+        await jackpots.connect(gameSigner).beginBafOn(await game.currentDayView());
         await jackpots.connect(gameSigner).finalizeBaf(10);
       });
 

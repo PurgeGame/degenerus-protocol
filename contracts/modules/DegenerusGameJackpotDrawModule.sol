@@ -455,7 +455,7 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         // BAF levels are even. Prepare both buffers once, including empty levels, so
         // the sampler can use its current/next flag directly without stale tickets.
         if (!_prepareTicketLevelAfterFoil(lvl) || !_prepareTicketLevelAfterFoil(lvl + 1)) revert E();
-        jackpots.beginBaf(dailyIdx);
+        jackpots.beginBafOn(dailyIdx);
         uint256 rounds = _bafRounds(poolWei);
         claimableDelta = _bafReservation(poolWei, rounds);
         JackpotWork storage work = jackpotWork;

@@ -6827,7 +6827,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots",
     "kind": "external",
-    "expression": "advanceJackpots.markBafSkipped(lvl, dailyIdx)",
+    "expression": "advanceJackpots.markBafSkippedAt(lvl, dailyIdx)",
     "count": 1,
     "review": "DAYS_EFF: same pinned Game/Coinflip-authorized recipient; caller supplies its exact dailyIdx or requestedDailyIdx. Removed recipient-to-Game day callback. No value transfer or recipient hook added."
   },
@@ -8347,7 +8347,7 @@
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
     "scope": "DegenerusGameJackpotDrawModule.runBafJackpot",
     "kind": "external",
-    "expression": "jackpots.beginBaf(dailyIdx)",
+    "expression": "jackpots.beginBafOn(dailyIdx)",
     "count": 1,
     "review": "DAYS_EFF: same pinned Game/Coinflip-authorized recipient; caller supplies its exact dailyIdx or requestedDailyIdx. Removed recipient-to-Game day callback. No value transfer or recipient hook added."
   },
