@@ -38,11 +38,11 @@ contract CrapsAccountsTest is CrapsPins {
     uint24 internal day;
     uint64 internal custom;
 
-    uint32 internal constant BOARD = 3 | (3 << 12) | (1 << 15);
+    uint32 internal constant BOARD = 5 << 27;
     uint32 internal constant BOARD_B = 2 | (1 << 3);
     uint8 internal constant UPGRADE_MASK = 1 << 1;
-    uint256 internal constant ID_SHIFT = 85;
-    uint256 internal constant INIT = 1 << 84;
+    uint256 internal constant ID_SHIFT = CrapsPreferenceLib.ID_SHIFT;
+    uint256 internal constant INIT = CrapsPreferenceLib.INITIALIZED;
     uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 65;
 
     uint8 internal constant SET_BOARD = 0;

@@ -538,7 +538,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     function test_RealEnginePreferredBoardsAndCallerPartitionsKeepTranscript() public {
         vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotRealEngineProbe).runtimeCode);
         for (uint160 q; q < 4; ++q) {
-            uint32 chips = q == 0 ? 0 : q == 1 ? 1 : q == 2 ? 3 : 3 | 3 << 9 | 1 << 24;
+            uint32 chips = q == 0 ? 0 : q == 1 ? 1 : q == 2 ? 4 << 27 | 3 << 9 : 5 << 27;
             DecimatorJackpotPreferenceProbe(ContractAddresses.CRAPS).set(address(0xa100 + q), chips);
         }
         h.prepare(LVL, 101, 60 ether, 1000 ether, WORD, true);
@@ -563,7 +563,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         uint64 id = 102;
         while (!Sample.contains(word, LVL, 202, id)) ++word;
         address owner = address(0x1001);
-        uint32 chips = 3 | 3 << 9 | 1 << 24;
+        uint32 chips = 5 << 27;
         DecimatorJackpotPreferenceProbe(ContractAddresses.CRAPS).set(owner, chips);
         h.prepare(LVL, 101, 60 ether, 1000 ether, word, true);
         for (uint8 q; q < 4; ++q) h.setDeity(q, owner);
@@ -572,8 +572,8 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.expectCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSignature(
             "settleSlipBounded(uint256,uint256,uint256,uint256,bytes32,uint256,uint256,uint256,uint256)",
             uint256(chips), uint256(60), uint256(keccak256(abi.encode(RngTags.DECIMATOR_BOARD,word,uint256(id)))),
-            uint256(3), keccak256(abi.encode(RngTags.DECIMATOR_DICE,word)),
-            uint256(3000e18), uint256(uint160(player)), uint256(0x050c), uint256(511 << 16 | 48)
+            uint256(5), keccak256(abi.encode(RngTags.DECIMATOR_DICE,word)),
+            uint256(3000e18), uint256(uint160(player)), uint256(0x0a0c), uint256(511 << 16 | 48)
         ), 1);
         vm.recordLogs();
         _daily(word, 3_000_000);

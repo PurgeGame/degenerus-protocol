@@ -32,12 +32,12 @@ contract CrapsReaderStub {
 
 /// @title The jackpot battle field under wallet IDs
 /// @notice `JackpotBattleFieldLib.prepare(uint32[] ids)` builds one word per drawn entry,
-///         `id | board << 160 | 1 << 180`, reading each distinct wallet's saved board from the
+///         `id | board << 160 | 1 << JackpotBattleFieldLib.UNITS_SHIFT`, reading each distinct wallet's saved board from the
 ///         ID-keyed pass word (`_passCreditsById`, pinned by CrapsPreferenceLib.PASS_SLOT) in one batched `extsload`.
 contract JackpotBattleFieldIdsTest is Test {
     uint256 internal constant ID_SLOT = CrapsPreferenceLib.PASS_SLOT;
     bytes4 internal constant BATCH_SEL = bytes4(keccak256("extsload(bytes32[])"));
-    uint32 internal constant BOARD_A = 3 | (3 << 12) | (1 << 15);
+    uint32 internal constant BOARD_A = 5 << 27;
     uint32 internal constant BOARD_B = 2 | (1 << 3);
 
     function setUp() public {
@@ -95,9 +95,24 @@ contract JackpotBattleFieldIdsTest is Test {
         ids[0] = 9;
         (uint256[] memory field,) = _prepareRecorded(ids);
         assertEq(field.length, 1);
-        assertEq(field[0], _word(9, BOARD_A), "field word == id | board << 160 | 1 << 180");
+        assertEq(field[0], _word(9, BOARD_A), "field word == id | board << 160 | 1 << JackpotBattleFieldLib.UNITS_SHIFT");
         assertEq(uint32(field[0]), 9);
         assertEq((field[0] >> 32) & ((uint256(1) << 128) - 1), 0, "pass balances never enter the field");
+    }
+
+    function test_FiveDarkChipsExcludeEveryNeighborAndUnitFromDecode() public {
+        uint32 id = type(uint32).max;
+        uint256 boardMask = uint256(0x1FFFFF) << 64;
+        vm.store(ContractAddresses.CRAPS, _idKey(id),
+            bytes32((type(uint256).max & ~boardMask) | (uint256(5) << 82)));
+        uint32[] memory ids = new uint32[](2);
+        ids[0] = id; ids[1] = id;
+        uint256[] memory field = JackpotBattleFieldLib.prepare(ids);
+        assertEq(field[0], uint256(id) | (uint256(5) << 178) | (uint256(1) << 181));
+        assertEq(field[1], field[0], "repeat winners remain separate entries");
+        (uint32 chips, uint256 placed) = CrapsPreferenceLib.decode(field[0] >> 96);
+        assertEq(chips, 5 << 27);
+        assertEq(placed, 5, "unit bit entered the board");
     }
 
     function test_lowByteCollisionAndRepeatsDedupeToOneBatchedRead() public {

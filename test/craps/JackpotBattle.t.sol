@@ -172,7 +172,7 @@ contract JackpotBattleTest is CrapsPins {
     }
     function _start(uint256 word, uint256 n, address base) internal {
         uint256[] memory field = new uint256[](n);
-        for (uint256 i; i < n; ++i) field[i] = uint160(base) + i | (uint256(1) << 180);
+        for (uint256 i; i < n; ++i) field[i] = uint160(base) + i | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
         vm.startPrank(ContractAddresses.GAME);
         api.prepareJackpotBattle(7, word);
         api.appendJackpotBattle(field, 0, true);
@@ -264,7 +264,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.startPrank(ContractAddresses.GAME);
         api.prepareJackpotBattle(7, 123);
         uint256[] memory field = new uint256[](JackpotBattleFieldLib.MAX_CHUNK + 1);
-        for (uint256 i; i < field.length; ++i) field[i] = uint160(bob) | (uint256(1) << 180);
+        for (uint256 i; i < field.length; ++i) field[i] = uint160(bob) | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
         vm.expectRevert(JackpotBattle.BadJackpotField.selector);
         api.appendJackpotBattle(field, field.length, false);
         vm.stopPrank();
@@ -279,7 +279,7 @@ contract JackpotBattleTest is CrapsPins {
         (,, uint256 remaining) = api.prepareJackpotBattle(7, 123);
         assertEq(remaining, 100);
         uint256[] memory field = new uint256[](50);
-        for (uint256 i; i < field.length; ++i) field[i] = uint160(bob) | (uint256(1) << 180);
+        for (uint256 i; i < field.length; ++i) field[i] = uint160(bob) | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
         vm.prank(ContractAddresses.GAME);
         api.appendJackpotBattle(field, 50, false);
         assertEq(_round().drawnCount, 50);
@@ -478,8 +478,8 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(resumed, frozen);
         assertEq(_round().level, 7);
         uint256[] memory f = new uint256[](3);
-        f[0] = uint160(bob) | (uint256(1) << 180);
-        f[1] = uint256(1) << 180;
+        f[0] = uint160(bob) | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
+        f[1] = uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT;
         f[2] = uint160(bob);
         vm.prank(ContractAddresses.GAME);
         api.appendJackpotBattle(f, 3, true);
@@ -546,7 +546,7 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(_round().added, 200_000);
         _start(99, 1, alice);
         uint256[] memory f = new uint256[](3);
-        for (uint256 i; i < f.length; ++i) f[i] = uint160(bob) + i | (uint256(1) << 180);
+        for (uint256 i; i < f.length; ++i) f[i] = uint160(bob) + i | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
         vm.startPrank(ContractAddresses.GAME);
         api.prepareJackpotBattle(7, 777);
         vm.expectRevert(JackpotBattle.BadJackpotField.selector);
@@ -579,7 +579,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.prank(alice); table.enterBonusBattle(5, 0, h);
         _lock(500_000);
         uint256[] memory f = new uint256[](3);
-        for (uint256 i; i < f.length; ++i) f[i] = uint160(bob) | (uint256(1) << 180);
+        for (uint256 i; i < f.length; ++i) f[i] = uint160(bob) | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
         vm.startPrank(ContractAddresses.GAME);
         api.prepareJackpotBattle(7, 999);
         api.appendJackpotBattle(f, 0, true);

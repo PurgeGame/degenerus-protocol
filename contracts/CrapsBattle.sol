@@ -276,11 +276,14 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         if (packed & 7 != 0 && (packed >> _CHIP_DONT_SHIFT) & _CHIP_DONT_MASK != 0) {
             revert BoardPlaysBothSides();
         }
-        // Three is the ceiling, so bit 2 being set in any three-bit leg is the whole cap test.
-        if ((packed >> 2) & _CHIP_LO_MASK != 0) revert TooManyChipsOnALeg();
+        // The first nine legs are capped at three; Don't Pass at five.
+        // Both upper Don't Pass bits are set exactly for counts six and seven.
+        if (((packed >> 2) & _FIRST_NINE_LEG_MASK) | ((packed >> 28) & (packed >> 29) & 1) != 0) {
+            revert TooManyChipsOnALeg();
+        }
         unchecked {
-            // Pair the ten validated 0..3 counts into five base-64 digits.
-            // Their total is at most 30, so reducing modulo 63 gives the exact sum.
+            // Pair nine 0..3 counts and one 0..5 count into five base-64 digits.
+            // Each pair is at most eight and the total at most 32: no carry or modulo wrap.
             count = ((packed & 0x071C71C7) + ((packed >> 3) & 0x071C71C7)) % 63;
         }
     }
@@ -341,8 +344,9 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     function _rememberBoard(uint256 word, uint32 chips) private returns (bool saved) {
         uint256 field = CrapsPreferenceLib.compress(chips)
             | (CrapsPreferenceLib.INITIALIZED >> CrapsPreferenceLib.SHIFT);
-        // Compare the twenty board bits and the adjacent initialized bit together.
-        if ((word >> CrapsPreferenceLib.SHIFT) & 0x1FFFFF == field) return true;
+        // Compare all 21 board bits and the initialized bit, ignoring balances and the memory ID.
+        if ((word & (CrapsPreferenceLib.MASK | CrapsPreferenceLib.INITIALIZED))
+            == field << CrapsPreferenceLib.SHIFT) return true;
         saved = !IGameCraps(_GAME).rngLocked();
         if (saved) {
             uint32 id = uint32(word >> CrapsPreferenceLib.ID_SHIFT);
@@ -994,7 +998,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     /// @custom:reverts BadPassCount If `count` is zero.
     /// @custom:reverts DayNotReservable If any day in the range is taken, worded or not future.
     /// @custom:reverts BadRandomCount If `chips` names more than seven chips.
-    /// @custom:reverts TooManyChipsOnALeg If any leg stacks more than three chips.
+    /// @custom:reverts TooManyChipsOnALeg If another leg exceeds three chips or Don't Pass exceeds five.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     /// @custom:reverts NoWalletId If the Game has no wallet ID for the caller.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
@@ -1026,7 +1030,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     /// @custom:reverts BadPassCount If `count` is zero.
     /// @custom:reverts DayNotReservable If any day in the range is taken, worded or not future.
     /// @custom:reverts BadRandomCount If `chips` names more than seven chips.
-    /// @custom:reverts TooManyChipsOnALeg If any leg stacks more than three chips.
+    /// @custom:reverts TooManyChipsOnALeg If another leg exceeds three chips or Don't Pass exceeds five.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function buyFutureCrapsDays(uint32 id, uint24 startDay, uint8 count, bool high, uint32 chips) public {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
+
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
 import {Vm, VmSafe} from "forge-std/Vm.sol";
@@ -81,12 +83,12 @@ contract CrapsWalletIdsTest is CrapsPins {
     uint24 internal day;
 
     uint256 internal constant PLAIN_WORD = 40 << 8;
-    uint32 internal constant BOARD = 3 | (3 << 12) | (1 << 15);
+    uint32 internal constant BOARD = 5 << 27;
     uint32 internal constant BOARD_B = 2 | (1 << 3);
     uint256 internal constant ADDRESS_SLOT = 14;
     uint256 internal constant ID_SLOT = 14;
-    uint256 internal constant INIT = 1 << 84;
-    uint256 internal constant ID_SHIFT = 85;
+    uint256 internal constant INIT = CrapsPreferenceLib.INITIALIZED;
+    uint256 internal constant ID_SHIFT = CrapsPreferenceLib.ID_SHIFT;
     uint256 internal constant HIGH_BIT = 1 << 65;
     uint256 internal constant DAY_HIGH_MASK = 0x3F << 65;
     uint256 internal constant AWARD_UNIT_BIT = 1 << 72;
@@ -514,7 +516,7 @@ contract CrapsWalletIdsTest is CrapsPins {
     }
 
     function _entry(uint32 id, uint32 chips) internal pure returns (uint256) {
-        return uint256(id) | (CrapsPreferenceLib.compress(chips) << 160) | (uint256(1) << 180);
+        return uint256(id) | (CrapsPreferenceLib.compress(chips) << 160) | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
     }
 
     function test_appendStoresTheIdWithAnAwardUnitAndSkipsZeroIds() public {
@@ -524,9 +526,9 @@ contract CrapsWalletIdsTest is CrapsPins {
         _lock(150_000);
         uint256[] memory field = new uint256[](4);
         field[0] = _entry(aId, BOARD);
-        field[1] = uint256(1) << 180;
+        field[1] = uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT;
         field[2] = _entry(bId, 0);
-        field[3] = uint256(aId) | (uint256(2) << 180);
+        field[3] = uint256(aId) | (uint256(2) << JackpotBattleFieldLib.UNITS_SHIFT);
         vm.recordLogs();
         _start(uint256(keccak256("append-ids")), field);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -934,7 +936,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         for (uint256 i; i < field.length; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, "field", i)));
             uint32 id = r % 3 == 0 ? 0 : (r % 3 == 1 ? game.walletIdOf_g3120(_actor(r >> 8)) : uint32(r >> 32));
-            field[i] = uint256(id) | (uint256((r >> 64) % 4 == 0 ? 2 : 1) << 180);
+            field[i] = uint256(id) | (uint256((r >> 64) % 4 == 0 ? 2 : 1) << JackpotBattleFieldLib.UNITS_SHIFT);
         }
         vm.recordLogs();
         _start(seed | 1, field);
@@ -948,6 +950,8 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     // ── 14. Replay golden ────────────────────────────────────────────────────
 
+    // Keep the pre-P8C board and historical settlement amounts for replay compatibility.
+    uint32 internal constant GOLDEN_BOARD = 3 | (3 << 12) | (1 << 15);
     uint256 internal constant GOLDEN_NONCE = 38;
     uint256 internal constant GOLDEN_PAID = 32000;
     uint256 internal constant GOLDEN_WON = 32010;
@@ -958,10 +962,10 @@ contract CrapsWalletIdsTest is CrapsPins {
         returns (Craps.SlipResult memory)
     {
         if (owner > type(uint32).max) return legacyEngine.settleBattle(
-            betId, owner | (uint256(BOARD) << 160), w.played / 10, w.bankroll, w.goal, w.bound,
+            betId, owner | (uint256(GOLDEN_BOARD) << 160), w.played / 10, w.bankroll, w.goal, w.bound,
             (uint256(1) << 64) | 1, word);
         return CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle(
-            betId, owner | (uint256(BOARD) << 32), w.played / 10, w.bankroll, w.goal, w.bound, (uint256(1) << 64) | 1, word
+            betId, owner | (uint256(GOLDEN_BOARD) << 32), w.played / 10, w.bankroll, w.goal, w.bound, (uint256(1) << 64) | 1, word
         );
     }
 
@@ -972,7 +976,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         assertEq(n, 7, "fixture: golden wallet ID");
         uint64 slot = _customSlot(true);
         vm.prank(alice);
-        uint256 betId = c.enterBattle(slot, BOARD, 1);
+        uint256 betId = c.enterBattle(slot, GOLDEN_BOARD, 1);
         CrapsBattleStorage.Window memory w = c.windowOf(slot);
         uint256 word = uint256(keccak256(abi.encode("wallet-id-golden", GOLDEN_NONCE)));
         _closeOn(c, slot, 0, word);

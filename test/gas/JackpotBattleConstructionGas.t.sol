@@ -111,9 +111,9 @@ contract BattleConstructionTableSeed is CrapsBattleStorage {
         }
     }
 
-    function seedBoards(uint32[] calldata ids) external {
-        // Seven legal chips, including the last leg: decode executes all ten iterations.
-        uint32 chips = uint32((3 << 9) | (3 << 12) | (1 << 27));
+    function seedBoards(uint32[] calldata ids, bool dark) external {
+        // Legal mixed and five-chip dark boards exercise the full preference width.
+        uint32 chips = dark ? uint32(5 << 27) : uint32((3 << 9) | (3 << 12) | (1 << 27));
         uint256 preference = (CrapsPreferenceLib.compress(chips) << CrapsPreferenceLib.SHIFT)
             | CrapsPreferenceLib.INITIALIZED;
         for (uint256 i; i < ids.length; ++i) _passCreditsById[ids[i]] = preference;
@@ -161,7 +161,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
                 players[i] = uint32((0x100000 + uint256(offset) * 1000 + i) << 8);
             }
             gs.seedQueue(CEILING + 1 + offset, players);
-            ts.seedBoards(players);
+            ts.seedBoards(players, vm.envOr("P8C_DARK_CONSTRUCTION", false));
         }
         vm.etch(address(crapsBattle), tableCode);
         vm.etch(address(game), gameCode);
@@ -217,7 +217,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             (uint256 units, uint32 chips) = abi.decode(entries[i].data, (uint256, uint32));
             assertEq(player & 255, 0);
             assertEq(units, 1);
-            assertEq(chips, (3 << 9) | (3 << 12) | (1 << 27));
+            assertEq(chips, vm.envOr("P8C_DARK_CONSTRUCTION", false) ? 5 << 27 : (3 << 9) | (3 << 12) | (1 << 27));
             for (uint256 j; j < n; ++j) assertTrue(players[j] != player, "full collision scan requires unique wallets");
             players[n++] = player;
         }

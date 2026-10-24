@@ -9,13 +9,13 @@ interface ICrapsPreferenceReader {
 }
 
 /// @dev Game-side preparation of one chunk of the daily draw, at most `MAX_CHUNK` entries. One
-///      calldata word per awarded entry: wallet ID [0:31], compact board [160:179], one unit [180].
+///      calldata word per awarded entry: wallet ID [0:31], compact board [160:180], one unit [181].
 ///      The battle receives this frozen field and makes no storage callbacks.
 library JackpotBattleFieldLib {
     /// @dev Most entries one draw call collects and one append accepts; Game and battle share it.
     uint256 internal constant MAX_CHUNK = 50;
     uint256 internal constant BOARD_SHIFT = 160;
-    uint256 internal constant UNITS_SHIFT = 180;
+    uint256 internal constant UNITS_SHIFT = 181;
 
     function prepare(uint32[] memory ids) internal view returns (uint256[] memory field) {
         uint256 units = ids.length;

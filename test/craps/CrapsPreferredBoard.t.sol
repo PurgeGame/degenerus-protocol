@@ -16,8 +16,8 @@ contract CrapsPreferredBoardTest is CrapsPins {
     address private bob = makeAddr("preferred-bob");
     uint32 private aliceId;
     uint32 private bobId;
-    uint256 private constant INIT = 1 << 84;
-    uint32 private constant BOARD = 3 | (3 << 12) | (1 << 15);
+    uint256 private constant INIT = CrapsPreferenceLib.INITIALIZED;
+    uint32 private constant BOARD = 5 << 27;
     bytes32 private constant EVENT = keccak256("CrapsPreferredBoardSet(uint32,uint32)");
 
     function setUp() public {
@@ -83,7 +83,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         uint256 left = 7;
         bool dark = entropy & 1 != 0;
         for (uint256 i; i < 10; ++i) {
-            uint256 count = (entropy >> (i * 6)) & 3;
+            uint256 count = (entropy >> (i * 6)) % (i == 9 ? 6 : 4);
             if ((dark && i == 0) || (!dark && i == 9)) count = 0;
             if (count > left) count = left;
             left -= count;
@@ -117,6 +117,53 @@ contract CrapsPreferredBoardTest is CrapsPins {
             vm.prank(alice); vm.expectRevert(); c.setPreferredBoard(0, bad[i]);
             assertEq(_word(alice), 0);
         }
+    }
+
+    function test_DarkLimitsAndOrdinaryCaps() public {
+        for (uint32 n = 4; n <= 5; ++n) {
+            _save(alice, n << 27);
+            assertEq(c.preferredBoardOf(aliceId), n << 27);
+        }
+        _save(alice, (4 << 27) | (3 << 9));
+        _save(alice, (5 << 27) | (2 << 24));
+        for (uint32 n = 6; n <= 7; ++n) {
+            vm.prank(alice);
+            vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
+            c.setPreferredBoard(0, n << 27);
+        }
+        for (uint32 leg; leg < 9; ++leg) {
+            for (uint32 n = 4; n <= 7; ++n) {
+                vm.prank(alice);
+                vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
+                c.setPreferredBoard(0, n << (leg * 3));
+            }
+        }
+        vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
+        c.setPreferredBoard(0, (5 << 27) | (3 << 9));
+        vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
+        c.setPreferredBoard(0, 8 << 27);
+        vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
+        c.setPreferredBoard(0, 1 << 31);
+        vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
+        c.setPreferredBoard(0, 1 | (5 << 27));
+    }
+
+    function test_DarkHighBitClearsAndLockDetectsThreeVersusFive() public {
+        uint256 neighbors = type(uint64).max | CrapsPreferenceLib.RETAINED | (uint256(1) << 255);
+        vm.store(address(c), _idKey(alice), bytes32(neighbors));
+        _save(alice, 5 << 27);
+        assertEq(_word(alice), neighbors | INIT | (uint256(5) << 82));
+        game.setRngLocked(true);
+        _save(alice, 5 << 27);
+        vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
+        c.setPreferredBoard(0, 3 << 27);
+        game.setRngLocked(false);
+        _save(alice, 3 << 27);
+        assertEq(_word(alice), neighbors | INIT | (uint256(3) << 82));
+        _save(alice, 4 << 27);
+        _save(alice, 0);
+        assertEq(_word(alice), neighbors | INIT);
+        assertEq((_word(alice) >> 86) & type(uint32).max, 0, "memory ID leaked");
     }
 
     function test_LockBlocksFirstChangeClearButAllowsEqualAndRead() public {

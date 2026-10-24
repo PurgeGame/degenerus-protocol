@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
+
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
 import {CrapsPins} from "./CrapsPins.sol";
@@ -67,7 +69,7 @@ contract DegenesisJackpotPaidField is CrapsPins {
         uint256 cursor;
         (, cursor, remaining) = api.prepareJackpotBattle(7, 0xD6E);
         uint256[] memory field = new uint256[](remaining > 3 ? 3 : remaining);
-        for (uint256 i; i < field.length; ++i) field[i] = uint160(address(0xD1000)) + i | (uint256(1) << 180);
+        for (uint256 i; i < field.length; ++i) field[i] = uint160(address(0xD1000)) + i | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
         api.appendJackpotBattle(field, cursor, true);
         for (uint256 i; i < 200; ++i) {
             (,,, bool done) = api.jackpotProgress();

@@ -117,7 +117,7 @@ contract CrapsFlowHandler {
         uint24 rest = count - first;
         uint24 second = rest > 3 ? 3 : rest;
         uint24 third = rest - second;
-        uint256 shape = (seed >> 3) % 4;
+        uint256 shape = (seed >> 3) % 5;
         if (shape == 0) {
             b.place4 = first;
             b.place10 = second;
@@ -130,6 +130,9 @@ contract CrapsFlowHandler {
             b.dontPass = first;
             b.place4 = second;
             b.place10 = third;
+        } else if (shape == 4) {
+            b.dontPass = count > 5 ? 5 : count;
+            b.place6 = count - b.dontPass;
         } else {
             b.place6 = first;
             b.hard8 = second;

@@ -162,12 +162,13 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         emit DecBurnRecorded(playerId, lvl, id, baseAmount, credited, stack, chips);
     }
 
-    /// @dev A normal battle's board rules: at most three chips on a leg, seven named in all, and
+    /// @dev A normal battle's board rules: at most three on each of the first nine legs, five
+    ///      on Don't Pass, seven named in all, and
     ///      never both the pass line and don't pass.
     function _checkBoard(uint256 chips) private pure {
         if (
-            chips > 0x3FFFFFFF || (chips & 7 != 0 && chips >> 27 != 0) || (chips >> 2) & 0x9249249 != 0
-                || _named(chips) > 7
+            chips > 0x3FFFFFFF || (chips & 7 != 0 && chips >> 27 != 0)
+                || ((chips >> 2) & 0x1249249) | ((chips >> 28) & (chips >> 29) & 1) != 0 || _named(chips) > 7
         ) revert E();
     }
 

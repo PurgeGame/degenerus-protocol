@@ -91,9 +91,9 @@ contract WalletIdTruthHandler is Test {
     // ------------------------------------------------------------------ storage roots (goldens)
     uint256 internal constant CF_PLAYER_STATE = 2; // Coinflip.playerState
     uint256 internal constant CF_ID_SHIFT = 184; // PlayerCoinflipState.id: slot 0, byte offset 23
-    uint256 internal constant CR_ID_SHIFT = 85; // CrapsPreferenceLib.ID_SHIFT
-    uint256 internal constant CR_BOARD_MASK = uint256(0xFFFFF) << 64;
-    uint256 internal constant CR_INITIALIZED = uint256(1) << 84;
+    uint256 internal constant CR_ID_SHIFT = 86; // CrapsPreferenceLib.ID_SHIFT
+    uint256 internal constant CR_BOARD_MASK = uint256(0x1FFFFF) << 64;
+    uint256 internal constant CR_INITIALIZED = uint256(1) << 85;
     uint256 internal constant AFF_CODE = QaSlots.CODE; // DegenerusAffiliate._affiliateCode
     uint256 internal constant AFF_EARNED = QaSlots.EARNED; // affiliateCoinEarned[ownerId]
     uint256 internal constant AFF_REFERRAL = QaSlots.REFERRAL; // playerReferralCode

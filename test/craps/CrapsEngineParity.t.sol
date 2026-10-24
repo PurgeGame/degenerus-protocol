@@ -6,9 +6,15 @@ import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
+import {CrapsOracle} from "./CrapsOracle.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 /// @dev Test-only inline wrapper with explicit bounds, including the historical 8,192-roll limit.
 contract InlineCrapsReference is Craps {
+    function board(uint256 chips, uint256 chip, uint256 scatter) external pure returns (Bets memory b) {
+        b = _boardFrom(chips, chip);
+        _scatterInto(b, scatter, chip, 3);
+    }
     function run(uint256 chips, uint256 chipFlip, uint256 scatter, uint256 count, bytes32 seed,
         uint256 bankroll, uint256 goal, address player, uint256 boost, uint256 budget)
         external pure returns (SlipResult memory)
@@ -23,6 +29,46 @@ contract InlineCrapsReference is Craps {
 ///      roll limits. The deterministic 400-slip digest was regenerated for the duration rule;
 ///      payouts are also checked against the independent per-roll oracle in separate suites.
 contract CrapsEngineParity is Test {
+    function test_FiveDarkTwoPlaceThreeScatterAtMaximumRoundAndBoundedOracle() public {
+        CrapsEngine engine = new CrapsBattle();
+        InlineCrapsReference ref = new InlineCrapsReference();
+        CrapsOracle oracle = new CrapsOracle();
+        uint256 scatter;
+        while (true) {
+            bool allDark = true;
+            for (uint256 i; i < 3; ++i) {
+                if (uint256(keccak256(abi.encode(RngTags.CRAPS_SCATTER_CHIP, scatter, i))) % 10 != 9) allDark = false;
+            }
+            if (allDark) break;
+            ++scatter;
+        }
+        uint256 chip = uint256(type(uint24).max) / 10;
+        Craps.Bets memory dark = ref.board((5 << 27) | (2 << 9), chip, scatter);
+        assertEq(dark.dontPass, chip * 8, "five selected dark plus exactly three scatter");
+        assertEq(dark.passLine, 0);
+        assertEq(dark.place6, chip * 2);
+        // Scatter can select Pass Line even though the selected board cannot name both sides.
+        uint256 mixedScatter;
+        while (ref.board((5 << 27) | (2 << 9), chip, mixedScatter).passLine == 0) ++mixedScatter;
+        for (uint256 variant; variant < 2; ++variant) {
+            uint256 draw = variant == 0 ? scatter : mixedScatter;
+            Craps.Bets memory board = ref.board((5 << 27) | (2 << 9), chip, draw);
+            for (uint256 i; i < 24; ++i) {
+                bytes32 seed = keccak256(abi.encode("five-dark-oracle", i));
+                uint256 budget = i % 2 == 0 ? 1 : 511;
+                uint256 boost = i % 3 == 0 ? 0 : 0x050c;
+                uint256 bankroll = chip * 250e18;
+                Craps.SlipResult memory actual = engine.settleSlipBounded(
+                    (5 << 27) | (2 << 9), chip, draw, 3, seed, bankroll, 1, boost, (budget << 16) | 48);
+                CrapsOracle.SlipResult memory expected = oracle.resolveSlipUnder(
+                    board, seed, bankroll, 0, 48, budget, address(1), boost);
+                assertEq(actual.bankrollOut, expected.bankrollOut);
+                assertEq(actual.peakBankroll, expected.peakBankroll);
+                assertEq(actual.totalRolls, expected.totalRolls);
+                assertEq(actual.handsPlayed, expected.handsPlayed);
+            }
+        }
+    }
     // Generated from the duration-rule Solidity engine; independent oracle parity is
     // covered by CrapsHotDuration and CrapsShooterBoost, including bounded runs.
     bytes32 internal constant INLINE_ENGINE_DIGEST =

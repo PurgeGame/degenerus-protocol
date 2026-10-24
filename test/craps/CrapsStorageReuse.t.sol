@@ -289,16 +289,26 @@ contract CrapsStorageReuseTest is CrapsPins {
     }
     function test_ThreeLanesShareWordAndAmendPreservesBothNeighbors() public {
         uint24 day = _today();
-        uint256 a = uint256(1) | (uint256(3) << 32);
-        uint256 b = uint256(2) | (uint256(5) << 62);
-        uint256 c = uint256(3) | (uint256(0x7f) << 65);
+        uint256 dark = uint256(5) << 59;
+        uint256 a = uint256(1) | dark | (uint256(4) << 62);
+        uint256 b = uint256(2) | dark | (uint256(2) << 62);
+        uint256 c = uint256(3) | dark | (uint256(0x3f) << 65);
         table.put(_id(day, 1), a);
         table.put(_id(day, 2), b);
         table.put(_id(day, 3), c);
         assertEq(table.physicalKey(_id(day, 1)), table.physicalKey(_id(day, 3)));
-        table.setBetWord(_id(day, 2), b | (uint256(7) << 32));
+        uint256[3] memory originals = [a, b, c];
+        for (uint256 lane; lane < 3; ++lane) {
+            uint256 changed = (originals[lane] & ~(uint256(7) << 59)) | (uint256(3) << 59);
+            table.setBetWord(_id(day, uint64(lane + 1)), changed);
+            for (uint256 other; other < 3; ++other) {
+                assertEq(table.betWordOf(_id(day, uint64(other + 1))), other == lane ? changed : originals[other]);
+            }
+            assertEq(uint24(table.rawBet(_id(day, 1)) >> 216), day, "day tag changed");
+            table.setBetWord(_id(day, uint64(lane + 1)), originals[lane]);
+        }
         assertEq(table.betWordOf(_id(day, 1)), a);
-        assertEq(table.betWordOf(_id(day, 2)), b | (uint256(7) << 32));
+        assertEq(table.betWordOf(_id(day, 2)), b);
         assertEq(table.betWordOf(_id(day, 3)), c);
         assertEq(table.betWordOf(_id(day, 4)), 0);
         _warp(day + 64);

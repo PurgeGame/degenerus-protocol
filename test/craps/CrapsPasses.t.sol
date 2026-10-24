@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
+
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 
 import {Craps} from "../../contracts/Craps.sol";
@@ -71,18 +73,18 @@ contract CrapsPassesTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         craps.creditPasses(id, 1, 0);
         // The board has never been saved; only the pass and retained bit are present.
-        assertEq(uint256(vm.load(address(craps), key)), (1 << 117) | 1);
+        assertEq(uint256(vm.load(address(craps), key)), CrapsPreferenceLib.RETAINED | 1);
         uint24 tomorrow = _today() + 1;
         vm.prank(alice);
         craps.applyCrapsPasses(tomorrow, 1, false, 0);
         assertEq(uint256(vm.load(address(craps), key)) & type(uint64).max, 0);
-        assertTrue(uint256(vm.load(address(craps), key)) & (1 << 117) != 0);
+        assertTrue(uint256(vm.load(address(craps), key)) & CrapsPreferenceLib.RETAINED != 0);
         vm.prank(ContractAddresses.GAME);
         craps.creditPasses(id, 2, 3);
         (uint256 normal, uint256 high) = craps.passCreditsOf(alice);
         assertEq(normal, 2);
         assertEq(high, 3);
-        assertTrue(uint256(vm.load(address(craps), key)) & (1 << 117) != 0);
+        assertTrue(uint256(vm.load(address(craps), key)) & CrapsPreferenceLib.RETAINED != 0);
     }
 
     function test_onlyTheGameMayDeliverPasses() public {

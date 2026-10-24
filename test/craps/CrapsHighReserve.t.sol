@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
+
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
 import {CrapsPins} from "./CrapsPins.sol";
@@ -74,7 +76,7 @@ contract CrapsHighReserveTest is CrapsPins {
     function _start(uint256 word, uint256 awards) internal {
         uint256[] memory field = new uint256[](awards);
         // Repeated awards to an existing high entrant must never buy more raffle tickets.
-        for (uint256 i; i < awards; ++i) field[i] = uint256(game.registerWallet_g9539(ALICE, true)) | (uint256(1) << 180);
+        for (uint256 i; i < awards; ++i) field[i] = uint256(game.registerWallet_g9539(ALICE, true)) | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
         vm.startPrank(ContractAddresses.GAME);
         api.prepareJackpotBattle(2, word);
         api.appendJackpotBattle(field, 0, true);

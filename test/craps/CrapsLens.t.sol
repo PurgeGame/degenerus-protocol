@@ -93,7 +93,7 @@ contract CrapsLensTest is Test {
 
     function test_PreferenceIgnoresCreditLanesAndRetentionBits() public {
         assertEq(lens.preferredBoardOf(17), 0);
-        uint32 board = 3 | (uint32(3) << 9) | (uint32(1) << 12);
+        uint32 board = 5 << 27;
         table.seedPreference(17, board, 123456789);
         assertEq(lens.preferredBoardOf(17), board);
         assertEq(lens.progressivePool(), 123456789);

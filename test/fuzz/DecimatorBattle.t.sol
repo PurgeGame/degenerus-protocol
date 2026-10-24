@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -469,7 +470,7 @@ contract DecimatorBattleTest is Test {
         assertEq(_bal(h, address(2)), 1 ether);
     }
 
-    /// @dev The battle board rules: three per leg, seven named, one side of the line, thirty bits.
+    /// @dev The battle board rules: three per ordinary leg, seven named, one side, thirty bits.
     function test_BoardRulesMatchNormalBattles() public {
         uint32[5] memory bad = [
             uint32(4),                  // four chips on the pass line
@@ -480,7 +481,7 @@ contract DecimatorBattleTest is Test {
         ];
         vm.startPrank(ContractAddresses.COIN);
         for (uint256 i; i < bad.length; ++i) {
-            vm.expectRevert(bytes4(keccak256("E()")));
+            vm.expectRevert(i == 0 ? CrapsBattleStorage.TooManyChipsOnALeg.selector : bytes4(keccak256("E()")));
             h.recordFor(address(1), LVL, 1000, 10_000, bad[i]);
         }
         uint32 seven = 3 | 3 << 3 | 1 << 6;
@@ -491,6 +492,27 @@ contract DecimatorBattleTest is Test {
         vm.stopPrank();
         assertEq(h.entryOf(LVL, 1).chips, 1 << 27);
         assertEq(h.entryOf(LVL, 1).stack, 2000);
+    }
+
+    function test_DontPassFiveAndOrdinaryLegCaps() public {
+        vm.startPrank(ContractAddresses.COIN);
+        for (uint32 n = 4; n <= 5; ++n) {
+            h.recordFor(address(1), LVL, 1000, 10_000, n << 27);
+            assertEq(h.entryOf(LVL, 1).chips, n << 27);
+        }
+        h.recordFor(address(1), LVL, 1000, 10_000, (4 << 27) | (3 << 9));
+        h.recordFor(address(1), LVL, 1000, 10_000, (5 << 27) | (2 << 24));
+        for (uint32 n = 6; n <= 7; ++n) {
+            vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
+            h.recordFor(address(1), LVL, 1000, 10_000, n << 27);
+        }
+        for (uint32 leg; leg < 9; ++leg) {
+            vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
+            h.recordFor(address(1), LVL, 1000, 10_000, uint32(4) << (leg * 3));
+        }
+        vm.expectRevert(bytes4(keccak256("E()")));
+        h.recordFor(address(1), LVL, 1000, 10_000, (5 << 27) | (3 << 9));
+        vm.stopPrank();
     }
 
     /// @dev A chosen board reaches the engine with the scatter count and boost row for its size.

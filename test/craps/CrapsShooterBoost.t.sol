@@ -162,6 +162,7 @@ contract CrapsShooterBoostTest is CrapsPins {
     }
 
     function _dark() internal pure returns (Craps.Bets memory b) {
+        // Drawn stake: five selected dark chips plus two scattered dark chips.
         b.dontPass = 7 * 60;
     }
 

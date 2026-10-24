@@ -377,7 +377,7 @@ EXEMPT-ADVANCE	PARAM	word	awardDailyFlipJackpot	modules/DegenerusGameJackpotDraw
 NOT-RNG	PARAM	word	bonusScore	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
 PURE-DERIVE	PARAM	word	daily	libraries/GoldSixLib.sol	Committed daily word supplies the independent 1/6 keep gate and seven-way replacement hash.
 PURE-DERIVE	PARAM	word	decSurvivorAt	DegenerusGameLens.sol	Public pure replay input, no game-state mutation.
-NOT-RNG	PARAM	word	decode	libraries/CrapsPreferenceLib.sol	packed pass balances and saved board, not randomness; mask bits 64-83, ignore initialized sentinel
+NOT-RNG	PARAM	word	decode	libraries/CrapsPreferenceLib.sol	packed pass balances and saved board, not randomness; mask bits 64-84, ignore initialized sentinel
 PURE-DERIVE	PARAM	word	field	libraries/DecimatorSamplingLib.sol	Caches exact survivor count and tagged rotation; called only after total field size is fixed.
 CONSUMER-SEALED	PARAM	word	finalizeBattle_g3665	JackpotBattle.sol	Only the pinned table invokes finalization; the slot was sealed before the active read word, and canonical resolved seats determine standing.
 CONSUMER-SEALED	PARAM	word	payBattlePot	JackpotBattle.sol	Self-only table finalization; fixed settlement word and frozen field select the named shooter for the stored longest shared hand; no reseed or entrant mutation.

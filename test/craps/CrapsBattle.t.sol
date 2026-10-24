@@ -872,7 +872,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.stakeFor(drawn) / 1e18, uint256(L) * 1, "the drawn board is not the whole round");
     }
 
-    /// @dev The maximum three chips on the dark side sit in the TOP three bits of the chip region,
+    /// @dev The maximum five chips on the dark side sit in the TOP three bits of the chip region,
     ///      directly under the standing. A chip word written one bit out, or a mask still sized
     ///      for nine legs, corrupts the standing, the multiple or the day-entry field; this pins
     ///      all three against a full legal tenth count at once.
@@ -881,9 +881,7 @@ contract CrapsBattleTest is CrapsPins {
         // are both non-zero and every neighbour of the chip region is under load at once.
         uint64 slot = _openHigh(craps, uint32(LW / 1), 2, 10, SU, 9);
         Craps.Bets memory c;
-        c.dontPass = 3;
-        c.place6 = 3;
-        c.place8 = 1;
+        c.dontPass = 5;
 
         uint16 standing = 4321;
         game.setScore(alice, standing);
@@ -893,7 +891,7 @@ contract CrapsBattleTest is CrapsPins {
         CrapsViews.Bet memory bet = craps.betOf(betId);
         assertEq(
             bet.chips,
-            (uint256(3) << 27) | (uint256(3) << 9) | (uint256(1) << 12),
+            uint256(5) << 27,
             "the dark count did not land in its own field"
         );
         assertEq((craps.betWordOf(betId) >> 190) & 0xFFFF, 0, "reserved score bits were written");
@@ -2882,7 +2880,7 @@ contract CrapsBattleTest is CrapsPins {
     ///
     ///      The DICE are not capped, and are not meant to be: whatever complement they place may
     ///      land wherever it lands. The rule is about what a ticket CHOOSES.
-    function test_threeChipsIsTheCapOnEveryNamedLeg() public {
+    function test_threeChipsIsTheCapOnOrdinaryNamedLegs() public {
         _openDay();
         game.setScore(alice, BON_SCORE);
 

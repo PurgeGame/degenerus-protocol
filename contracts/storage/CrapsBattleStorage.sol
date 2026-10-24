@@ -59,7 +59,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         than seven chips.
     error BadRandomCount();
 
-    /// @notice A board stacks more than three player-selected chips on a single leg.
+    /// @notice A board selects more than three chips on another leg, or more than five on Don't Pass.
     error TooManyChipsOnALeg();
     /// @notice A ticket named chips on the pass line AND on don't pass. Pick a side: a board that
     ///         backs the shooter and fades them at once is two wagers cancelling into two house
@@ -349,9 +349,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BET_HIGH_SHIFT = 65;
     uint256 internal constant _BET_DAYHIGH_MASK = 0x3F << 65;
 
-    /// @dev Bit 0 of every one of the ten three-bit legs. Shifting each leg's `4` bit onto this
-    ///      mask makes the three-chip ceiling one board-wide test.
-    uint256 internal constant _CHIP_LO_MASK = 0x9249249;
+    /// @dev Bit 0 of the first nine three-bit legs. Their high bits enforce the three-chip cap;
+    ///      Don't Pass (the tenth leg) has a separate five-chip cap.
+    uint256 internal constant _FIRST_NINE_LEG_MASK = 0x1249249;
 
     uint256 internal constant _CB_HIGH_MASK = 0xFF;
 
@@ -672,7 +672,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     /// @dev A wallet's UNCOMMITTED day-pass credits and its board, keyed by Game wallet ID: the
     ///      normal count in bits 0..31, the high-roller count above `_PASS_HIGH_SHIFT`, the
-    ///      preferred board in bits 64..83 (two bits per leg) and bit 84 set on its first save
+    ///      preferred board in bits 64..84 (two bits for the first nine legs, three for Don't Pass)
+    ///      and bit 85 set on its first save
     ///      and never cleared. Board writes preserve the pass lanes and pass writes preserve
     ///      the board. Awarded by the lootbox and by the pass half of a protocol payout, spent by
     ///      committing one to a future day, and movable one way — normals into highs — at the

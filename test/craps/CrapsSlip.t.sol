@@ -542,9 +542,8 @@ contract CrapsSlipTest is CrapsPins {
         uint256 word = uint256(keccak256(abi.encode(rawWord)));
         // Seven chips split between the dark side and a light leg that is not the pass line —
         // naming both sides is refused at the door, and rightly so.
-        // Bounded by the THREE-A-LEG cap, and the light remainder spread over two legs for the
-        // same reason: a seven-chip board can no longer sit on one number.
-        uint256 dark = bound(uint256(rawSplit), 1, 3);
+        // Don't Pass accepts up to five; ordinary legs split the remainder at three.
+        uint256 dark = bound(uint256(rawSplit), 1, 5);
         Craps.Bets memory b;
         b.dontPass = uint24(dark);
         uint256 rest = 7 - dark;
@@ -568,14 +567,10 @@ contract CrapsSlipTest is CrapsPins {
     ///      what reaches the engine's no-line specialization with a dark wager on it. Both machines
     ///      carry their own copy of the rule, so this is the only fixture that grades the second.
     ///
-    ///      Not dark-ONLY any more: three chips a leg is the table's cap, so seven cannot sit on
-    ///      `dontPass` alone. The specialization keys on the absence of a PASS LINE, which a
-        ///      place-6 remainder leaves untouched.
+    ///      Five selected chips sit on Don't Pass; the five scatter chips may add a pass line.
     function test_aDarkOnlyBoardMatchesTheIndependentOracle() public {
         Craps.Bets memory b;
-        b.dontPass = 3;
-        b.place6 = 3;
-        b.place8 = 1;
+        b.dontPass = 5;
         uint256 bankroll = uint256(PLAYED) * 5 * 1;
 
         for (uint256 i = 0; i < 12; ++i) {
