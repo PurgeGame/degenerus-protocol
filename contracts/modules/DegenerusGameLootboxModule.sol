@@ -582,11 +582,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     function resolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord, uint24 currentLevel)
         external
     {
-        _boxResolveHumanBoxOrder(buffer, position, entry, rngWord, currentLevel);
+        _localboxResolveHumanBoxOrder(buffer, position, entry, rngWord, currentLevel);
     }
 
-    function _boxResolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord, uint24 currentLevel)
-        internal override
+    function _localboxResolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord, uint24 currentLevel)
+        internal
     {
         BoxRoll memory c;
         c.id = uint32(entry);
@@ -621,11 +621,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         external
         payable
     {
-        _boxResolveLootboxDirect(id, amount, rngWord, activityScore);
+        _localboxResolveLootboxDirect(id, amount, rngWord, activityScore);
     }
 
-    function _boxResolveLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
-        internal override
+    function _localboxResolveLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
+        internal
 
     {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
@@ -771,11 +771,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     function resolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
         external
     {
-        _boxResolveAfkingBox(id, amount, day, rngWord, activityScore);
+        _localboxResolveAfkingBox(id, amount, day, rngWord, activityScore);
     }
 
-    function _boxResolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
-        internal override
+    function _localboxResolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
+        internal
     {
         if (amount == 0) return;
 

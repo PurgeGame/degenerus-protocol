@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusVaultShare, DegenerusVault} from "../../contracts/DegenerusVault.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -24,7 +25,7 @@ contract OwnerGovernanceProtocolTest is DeployProtocol {
         assertEq(address(ownerGovernance.dgve()), address(dgve));
         assertFalse(vault.isVaultOwner(address(this))); assertTrue(vault.isVaultOwner(address(ownerGovernance)));
         vm.expectRevert(); game.setLootboxRngThreshold(1 ether);
-        _ownerAction(address(game), abi.encodeCall(DegenerusGame.setLootboxRngThreshold, (1 ether)), 0);
+        _ownerAction(address(game), abi.encodeCall(GameFacade.setLootboxRngThreshold, (1 ether)), 0);
         _ownerAction(address(vault), abi.encodeCall(DegenerusVault.setCrapsCompAllowance, (address(77), 12)), 0);
         _ownerAction(address(wwxrp), abi.encodeCall(WWXRP.setGameMintScale, (3)), 0);
         assertEq(wwxrp.gameMintScale(), 3);
@@ -61,13 +62,13 @@ contract OwnerGovernanceProtocolTest is DeployProtocol {
         vm.deal(address(vault), 1 ether); vm.deal(representative, 1 ether);
         uint256 funding = game.afkingFundingOf(address(vault));
         vm.prank(representative);
-        ownerGovernance.directAction{value: 0.5 ether}(abi.encodeCall(DegenerusVault.playerAction, (address(game), abi.encodeCall(DegenerusGame.depositAfkingFunding, (uint32(1))), 0.5 ether)), owners);
+        ownerGovernance.directAction{value: 0.5 ether}(abi.encodeCall(DegenerusVault.playerAction, (address(game), abi.encodeCall(GameFacade.depositAfkingFunding, (uint32(1))), 0.5 ether)), owners);
         assertEq(game.afkingFundingOf(address(vault)), funding + 1 ether);
         assertEq(address(vault).balance, 0.5 ether);
         assertEq(address(ownerGovernance).balance, 0);
         assertEq(ownerGovernance.proposalCount(), 0);
         vm.prank(representative); vm.expectRevert(DegenerusVault.UnsupportedPlayerAction.selector);
-        ownerGovernance.directAction(abi.encodeCall(DegenerusVault.playerAction, (address(game), abi.encodeCall(DegenerusGame.setLootboxRngThreshold, (1 ether)), 0)), owners);
+        ownerGovernance.directAction(abi.encodeCall(DegenerusVault.playerAction, (address(game), abi.encodeCall(GameFacade.setLootboxRngThreshold, (1 ether)), 0)), owners);
         vm.prank(representative); vm.expectRevert(DegenerusVault.UnsupportedPlayerAction.selector);
         ownerGovernance.directAction(abi.encodeCall(DegenerusVault.playerAction, (address(vault), abi.encodeCall(DegenerusVault.spendDegenesis, (0, false, 400, 0, 1 ether)), 0)), owners);
     }

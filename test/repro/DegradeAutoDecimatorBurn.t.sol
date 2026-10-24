@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -26,12 +28,12 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     function _mockLegs(uint256 previewed, uint256 consumed) private {
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(Coinflip.previewFlipBacking.selector, HOUSE),
+            abi.encodeWithSelector(CoinflipCore.previewFlipBacking.selector, HOUSE),
             abi.encode(previewed)
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(Coinflip.consumeFlipBacking.selector, HOUSE, previewed),
+            abi.encodeWithSelector(CoinflipCore.consumeFlipBacking.selector, HOUSE, previewed),
             abi.encode(consumed)
         );
     }
@@ -53,7 +55,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     function test_DustConsumeSkipsTheWindow() public {
         _mockLegs(5_000, 1999);
         uint256 supply = coin.totalSupply();
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector), 0);
         vm.recordLogs();
 
         uint256 amount = _autoBurn();
@@ -74,10 +76,10 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
         );
         vm.mockCall(
             address(game),
-            abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector),
+            abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector),
             abi.encode(uint64(1))
         );
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector), 1);
         vm.recordLogs();
 
         uint256 amount = _autoBurn();

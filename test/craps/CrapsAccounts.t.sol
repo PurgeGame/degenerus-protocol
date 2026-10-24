@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CrapsBattleCore} from "../../contracts/modules/CrapsBattleCore.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {CrapsPins, MockGame, MockFlip, MockQuests} from "./CrapsPins.sol";
@@ -186,14 +187,14 @@ contract CrapsAccountsTest is CrapsPins {
     }
 
     function _doorData(uint8 door, uint32 id, uint256 arg) internal view returns (bytes memory) {
-        if (door == SET_BOARD) return abi.encodeCall(CrapsBattle.setPreferredBoard, (id, BOARD));
-        if (door == AMEND) return abi.encodeCall(CrapsBattle.amendSlip, (id, arg, BOARD_B));
-        if (door == BATTLE) return abi.encodeCall(CrapsBattle.enterBattle, (id, custom, BOARD, 1));
-        if (door == WINDOW) return abi.encodeCall(CrapsBattle.enterBonusBattle, (id, 1, BOARD, 1));
-        if (door == DAY) return abi.encodeCall(CrapsBattle.enterBonusDay, (id, BOARD, 1));
-        if (door == PASSES) return abi.encodeCall(CrapsBattle.applyCrapsPasses, (id, day + 1, 1, false, BOARD));
-        if (door == FUTURE) return abi.encodeCall(CrapsBattle.buyFutureCrapsDays, (id, day + 1, 1, false, BOARD));
-        if (door == UPGRADE) return abi.encodeCall(CrapsBattle.upgradeDayWindows, (id, day, UPGRADE_MASK));
+        if (door == SET_BOARD) return abi.encodeCall(CrapsBattleCore.setPreferredBoard, (id, BOARD));
+        if (door == AMEND) return abi.encodeCall(CrapsBattleCore.amendSlip, (id, arg, BOARD_B));
+        if (door == BATTLE) return abi.encodeCall(CrapsBattleCore.enterBattle, (id, custom, BOARD, 1));
+        if (door == WINDOW) return abi.encodeCall(CrapsBattleCore.enterBonusBattle, (id, 1, BOARD, 1));
+        if (door == DAY) return abi.encodeCall(CrapsBattleCore.enterBonusDay, (id, BOARD, 1));
+        if (door == PASSES) return abi.encodeCall(CrapsBattleCore.applyCrapsPasses, (id, day + 1, 1, false, BOARD));
+        if (door == FUTURE) return abi.encodeCall(CrapsBattleCore.buyFutureCrapsDays, (id, day + 1, 1, false, BOARD));
+        if (door == UPGRADE) return abi.encodeCall(CrapsBattleCore.upgradeDayWindows, (id, day, UPGRADE_MASK));
         if (door == CONVERT) return abi.encodeCall(JackpotBattle.convertNormalToHigh, (id, 1));
         return abi.encodeCall(JackpotBattle.upgradeReservedDay, (id, day + 1));
     }
@@ -724,7 +725,7 @@ contract CrapsAccountsTest is CrapsPins {
         vm.recordLogs();
         if (door == 10) {
             vm.prank(ContractAddresses.VAULT);
-            (bool ok,) = address(c).call(abi.encodeCall(CrapsBattle.vaultComp, (_fuzzComp(kindSeed % 6, id))));
+            (bool ok,) = address(c).call(abi.encodeCall(CrapsBattleCore.vaultComp, (_fuzzComp(kindSeed % 6, id))));
             ok;
         } else {
             _call(door, caller, id, arg);

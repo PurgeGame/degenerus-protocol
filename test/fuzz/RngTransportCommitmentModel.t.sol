@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameDailyInternals} from "../../contracts/modules/GameDailyInternals.sol";
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
@@ -45,7 +47,7 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
     function retrySpent() external view returns (bool) { return _rngRetrySpent(); }
     function deactivate() external { _setRngRequestActive(false); }
 
-    /// @dev Mirror of DegenerusGame.rawFulfillRandomWords (the callback lives in the facade,
+    /// @dev Mirror of GameFacade.rawFulfillRandomWords (the callback lives in the facade,
     ///      not the module, so the LINK-paid call carries no delegatecall overhead).
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
@@ -125,7 +127,7 @@ contract RngTransportCommitmentModelTest is Test {
         bytes32 fixedInputs = game.commitment();
         vm.warp(ORIGIN + 20 hours - 1);
         vm.prank(ContractAddresses.ADMIN);
-        vm.expectRevert(DegenerusGameAdvanceModule.RngNotReady.selector);
+        vm.expectRevert(GameDailyInternals.RngNotReady.selector);
         game.retryRng();
         vm.warp(ORIGIN + 20 hours);
         vm.prank(ContractAddresses.ADMIN);
@@ -140,7 +142,7 @@ contract RngTransportCommitmentModelTest is Test {
         _deliver(address(coordinator), id, 0xC0FFEE);
         assertEq(_word(), uint256(0xC0FFEE) + (daily ? count : 0));
         vm.prank(ContractAddresses.ADMIN);
-        vm.expectRevert(DegenerusGameAdvanceModule.RngNotReady.selector);
+        vm.expectRevert(GameDailyInternals.RngNotReady.selector);
         game.retryRng();
     }
 

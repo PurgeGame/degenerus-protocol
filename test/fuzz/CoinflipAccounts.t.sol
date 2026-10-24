@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {QaTrace} from "../helpers/QaTrace.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
@@ -235,10 +237,10 @@ contract CoinflipAccountsTest is DeployProtocol {
         uint256 laneBefore = _lane(target, smurfId);
         uint256 ownerLaneBefore = _lane(target, ownerId);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, owner)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, owner)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         _expectedQuestId = smurfId;
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (smurfId)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (smurfId)), 1);
         vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 1_000), 1);
         vm.recordLogs();
         vm.prank(owner);
@@ -268,7 +270,7 @@ contract CoinflipAccountsTest is DeployProtocol {
     ///         trophy and the sDGNRS leg go to O (the payee), never to S's key.
     function test_OwnerDepositForSmurf_ArmsFlipRecord_TrophyToOwner() public {
         _fundFlip(owner, 300_000);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector, smurfId), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector, smurfId), 1);
         vm.recordLogs();
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 200_000);
@@ -339,12 +341,12 @@ contract CoinflipAccountsTest is DeployProtocol {
         uint256 ownerFlip = coin.balanceOf(owner);
         uint256 ownerWwxrp = wwxrp.claimable(smurfId);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, stranger)), 1);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet_g9539, (stranger, true)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, stranger)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (stranger, true)), 1);
         _expectedQuestId = funderId;
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector, smurfId), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon_g2902.selector), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.consumeCoinflipBoon_g2902.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector), 0);
         vm.prank(stranger);
         coinflip.depositCoinflip(smurfId, 250_000);
         _checkExpectedQuest();
@@ -379,11 +381,11 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.prank(GAME);
         coinflip.armBafDraw(target);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (aid, operator)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (aid, operator)), 1);
         _expectedQuestId = aid;
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon_g2902.selector), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.consumeCoinflipBoon_g2902.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector), 0);
         vm.prank(operator);
         coinflip.depositCoinflip(aid, 250_000);
         _checkExpectedQuest();
@@ -407,10 +409,10 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.armBafDraw(target);
         uint256 laneBefore = _lane(target, smurfId);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, operator)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, operator)), 1);
         vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 250_000), 1);
         _expectedQuestId = smurfId;
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon_g2902.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.consumeCoinflipBoon_g2902.selector), 0);
         vm.prank(operator);
         coinflip.depositCoinflip(smurfId, 250_000);
         _checkExpectedQuest();
@@ -481,7 +483,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         _resolveDay(d + 2, false);
         uint256 ownerWwxrp = wwxrp.claimable(smurfId);
 
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector), 0);
         vm.prank(stranger);
         coinflip.depositCoinflip(smurfId, 0);
@@ -503,10 +505,10 @@ contract CoinflipAccountsTest is DeployProtocol {
         uint24 d = _today();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (uint32(1), GAME)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (uint32(1), GAME)), 1);
         vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)"), 0);
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         vm.prank(GAME);
         coinflip.depositCoinflip(1, 0);
         _checkExpectedQuest();
@@ -547,7 +549,7 @@ contract CoinflipAccountsTest is DeployProtocol {
     }
 
     function _driveThroughX0Seal() internal {
-        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.depositCoinflip, (uint32(1), uint256(0))));
+        vm.expectCall(address(coinflip), abi.encodeCall(CoinflipCore.depositCoinflip, (uint32(1), uint256(0))));
         address buyer = makeAddr("cfa_x0_buyer");
         vm.deal(buyer, 100_000 ether);
         vm.deal(address(game), 2_000 ether);
@@ -614,22 +616,22 @@ contract CoinflipAccountsTest is DeployProtocol {
         _resolveDay(d + 1, true);
 
         vm.startPrank(stranger);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.claimCoinflips(smurfId, type(uint256).max);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.claimCoinflipCarry(smurfId, 1);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuy(smurfId, false, 0);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuyTakeProfit(smurfId, 0);
         vm.stopPrank();
 
         uint256 preview = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
         assertGt(preview, 0);
         uint256 ownerBefore = coin.balanceOf(owner);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, owner)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, owner)), 1);
         vm.recordLogs();
         vm.prank(owner);
         uint256 got = coinflip.claimCoinflips(smurfId, type(uint256).max);
@@ -709,11 +711,11 @@ contract CoinflipAccountsTest is DeployProtocol {
     ///         Re-enabling reverts AutoRebuyAlreadyEnabled; once the flip is frozen RngLocked wins.
     function test_SetAutoRebuy_NoGameBranch_AlreadyEnabled_RngLockedFirst() public {
         vm.startPrank(GAME);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuy(1, true, 0);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuy(ownerId, false, 0);
         vm.stopPrank();
 
@@ -722,16 +724,16 @@ contract CoinflipAccountsTest is DeployProtocol {
         _resolveDay(d + 1, true);
         vm.prank(owner);
         coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
-        vm.expectRevert(Coinflip.AutoRebuyAlreadyEnabled.selector);
+        vm.expectRevert(CoinflipCore.AutoRebuyAlreadyEnabled.selector);
         vm.prank(owner);
         coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
 
         _warpToDay(d + 2);
         assertFalse(coinflip.flipResolvedToday(), "today's flip unresolved");
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         vm.prank(owner);
         coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         vm.prank(operator);
         coinflip.setCoinflipAutoRebuy(smurfId, false, 0);
     }
@@ -748,7 +750,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         address p = makeAddr("cfa_self");
         _fundFlip(p, 10_000);
         uint24 d = _today();
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.resolveAccount_g502.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.resolveAccount_g502.selector), 0);
         vm.prank(p);
         coinflip.depositCoinflip(0, 1_000);
         _checkExpectedQuest();

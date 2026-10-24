@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
@@ -87,7 +88,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         uint256 before = _received(alice);
         uint256 opBefore = _received(operator);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.resolveAccount_g502, (aliceId, operator)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.resolveAccount_g502, (aliceId, operator)), 1);
         vm.recordLogs();
         vm.prank(operator);
         sdgnrs.claimRedemption(aliceId, id);
@@ -188,7 +189,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         sdgnrs.claimRedemption(aliceId, id);
 
         uint256 before = _received(alice);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.resolveAccount_g502.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.resolveAccount_g502.selector), 0);
         vm.prank(alice);
         sdgnrs.claimRedemption(0, id);
         assertGt(_received(alice), before, "self claim paid the caller");

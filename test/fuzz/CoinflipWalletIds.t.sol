@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {QaTrace} from "../helpers/QaTrace.sol";
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
@@ -176,7 +178,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint32 expectedId = uint32(_walletCount());
         assertEq(_gameId(p), 0);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
@@ -213,8 +215,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.prank(p);
         game.setOperatorApproval(0, o, true);
 
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (expectedId, o)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (expectedId, o)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
@@ -254,9 +256,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _fund(f, 10_000);
         uint32 fid = uint32(_walletCount());
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (rid, f)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector, r), 0);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet_g9539, (f, true)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (rid, f)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector, r), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (f, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (fid, 1_000)), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
@@ -352,8 +354,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint256 payout = 5_000 + (5_000 * uint256(pct)) / 100;
         assertEq(coinflip.previewClaimCoinflips(p), payout);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.walletIdOf_g3120, (p)), 2);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.walletIdOf_g3120, (p)), 2);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 0);
         vm.expectCall(address(jackpots), abi.encodeWithSelector(DegenerusJackpots.recordBafFlip.selector, id), 1);
         uint256 before = coin.balanceOf(p);
         vm.prank(p);
@@ -498,7 +500,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_lane(target, idb), 7);
         assertEq(_lane(target, 0), 0);
 
-        vm.expectRevert(Coinflip.OnlyFlipCreditors.selector);
+        vm.expectRevert(CoinflipCore.OnlyFlipCreditors.selector);
         vm.prank(a);
         coinflip.creditFlip_g317(ida, 1);
     }
@@ -557,7 +559,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         coinflip.creditFlip_g317(id, STAKE_LANE_MAX - 150);
         assertEq(_lane(target, id), STAKE_LANE_MAX - 50);
 
-        vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
+        vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
         vm.prank(p);
         coinflip.depositCoinflip(0, 100);
 
@@ -588,8 +590,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     /// @notice `depositCoinflip(1, 0)` from GAME, the sDGNRS settlement walk and the sDGNRS
     ///         backing read make no Game identity call; the seed rides IDs 1 and 2 only.
     function test_ProtocolPaths_NoGameLookup_SeedKeyedOnProtocolIds() public {
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.walletIdOf_g3120.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.walletIdOf_g3120.selector), 0);
         vm.recordLogs();
         uint24 d = _today();
         _warpToDay(d + 1);
@@ -704,8 +706,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint32 ida = _giveWalletId(a);
         uint32 idb = _giveWalletId(b);
 
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector), 3);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.payRecordSdgnrs, (idb, 0)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector), 3);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.payRecordSdgnrs, (idb, 0)), 1);
 
         // First mark: no bar to clear, claims the floor share.
         vm.prank(GAME);
@@ -735,7 +737,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         // A claim on the same day draws the 5% floor of the reduced pool.
         uint256 pool = coinflip.recordPool();
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.payRecordSdgnrs, (ida, 500)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.payRecordSdgnrs, (ida, 500)), 1);
         vm.prank(GAME);
         uint256 paidC = coinflip.armRecord(KIND_SPIN, ida, 2 ether);
         assertEq(paidC, (pool * 500) / 10_000);
@@ -754,7 +756,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         address payee = makeAddr("payee_returned");
         uint32 id = _giveWalletId(a);
         vm.mockCall(
-            GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector, id), abi.encode(uint256(0), payee)
+            GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector, id), abi.encode(uint256(0), payee)
         );
         vm.prank(GAME);
         coinflip.armRecord(KIND_SPIN, id, 1 ether);
@@ -772,7 +774,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint256 pool = coinflip.recordPool();
         uint256 expectedPaid = (pool * 500) / 10_000;
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.payRecordSdgnrs, (id, 500)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.payRecordSdgnrs, (id, 500)), 1);
         vm.recordLogs();
         vm.prank(CRAPS);
         uint256 paid = coinflip.armDiceRunRecord(id, 1_500_000);
@@ -798,7 +800,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.prank(CRAPS);
         assertEq(coinflip.armDiceRunRecord(id, 1_500_000), 0, "no strict improvement");
-        vm.expectRevert(Coinflip.OnlyCraps.selector);
+        vm.expectRevert(CoinflipCore.OnlyCraps.selector);
         coinflip.armDiceRunRecord(id, 2_000_000);
     }
 

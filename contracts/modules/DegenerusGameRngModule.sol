@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {DegenerusGameAdvanceModule} from "./DegenerusGameAdvanceModule.sol";
+import {GameDailyInternals} from "./GameDailyInternals.sol";
+
+import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @notice Commitment boundary, publication and transport-only recovery.
 /// @dev The miner engine selects when these actions run. A fresh request is last.
-abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
+abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRngUtils {
     error PreResetWindow();
     error InsufficientLink();
     error NoPendingLootbox();
@@ -37,7 +39,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
         MineFlipGas.Meter memory meter = MineFlipGas.fromCall(36);
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _minerMaintenancePending()
             || _livenessTriggered() || day != _afkingResetDay || day != dailyIdx + 1 || !dailyComplete || !_dailyRequestDue() || !subsFullyProcessed) revert RngNotReady();
-        prepareRequestBoundary(day);
+        _rngPrepareRequestBoundary(day);
         _swapTicketSlot();
         _swapFoilSlot();
         _sealHeroWagers(day);

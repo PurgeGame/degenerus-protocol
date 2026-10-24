@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameJackpotEvents} from "./GameJackpotEvents.sol";
+
+import {GameDailyInternals} from "./GameDailyInternals.sol";
 
 import {RngTags} from "../libraries/RngTags.sol";
 
@@ -33,7 +36,8 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
-import {DegenerusGameJackpotDrawModule} from "./DegenerusGameJackpotDrawModule.sol";
+import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
+import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
@@ -74,7 +78,7 @@ import {IDegenerusGameWhaleModule, IDegenerusGameTicketModule, IDegenerusGameDec
  *      - EntropyLib.hash2 provides full-diffusion keccak derivation for sub-selections.
  *      - Winner selection intentionally allows duplicates (more tickets = more chances).
  */
-abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
+abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInternals, DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -1043,7 +1047,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
             (uint256(1) << 190) |
             (uint256(quadrant) << 191) |
             (uint256(dailyIdx) << 193);
-        payGoldenTicket(
+        _drawPayGoldenTicket(
             uint32(g),
             lvl,
             GOLDEN_TICKET_ROUTE_BOARD,
@@ -1076,7 +1080,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
         uint8 golds
     ) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        payGoldenTicket(winner, lvl, GOLDEN_TICKET_ROUTE_FOIL, golds, true);
+        _drawPayGoldenTicket(winner, lvl, GOLDEN_TICKET_ROUTE_FOIL, golds, true);
     }
 
     // =========================================================================
@@ -1274,7 +1278,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) public {
         (, uint32 traits,) = _foilDrawFor(uint256(rngRequestDay));
-        awardDailyFlipJackpot(minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord);
+        _drawAwardDailyFlip(minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord);
     }
 
     /// @notice Roll, record and emit level 1's purchase-day board without running any
@@ -1342,6 +1346,6 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
         uint8 solo = _pickSoloQuadrant(main, EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, level));
         uint8[3] memory traits;
         for (uint256 q; q < 3; ++q) traits[q] = main[q < solo ? q : q + 1];
-        return runBafAwards(word, allowance, traits);
+        return _drawRunBaf(word, allowance, traits);
     }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -21,7 +22,7 @@ contract OwnerVaultStub {
         return maxCost;
     }
     function playerAction(address to, bytes calldata data, uint256 ethValue) external payable returns (bytes memory result) {
-        if (to != Pins.GAME || bytes4(data) != DegenerusGame.depositAfkingFunding.selector) {
+        if (to != Pins.GAME || bytes4(data) != GameFacade.depositAfkingFunding.selector) {
             revert DegenerusVault.UnsupportedPlayerAction();
         }
         bool ok;
@@ -95,7 +96,7 @@ abstract contract OwnerGovernanceFixture is Test {
         vm.prank(C); token.approve(address(gov), type(uint256).max);
     }
     function _data(uint256 value) internal pure returns (bytes memory) {
-        return abi.encodeCall(DegenerusGame.setLootboxRngThreshold, (value));
+        return abi.encodeCall(GameFacade.setLootboxRngThreshold, (value));
     }
     function _propose(address who, uint256 amount) internal returns (uint256 id) {
         vm.prank(who); id = gov.propose(who, Pins.GAME, 0, _data(7), amount);
@@ -105,7 +106,7 @@ abstract contract OwnerGovernanceFixture is Test {
         (amount,,,,) = gov.positions(who);
     }
     function _playerData() internal pure returns (bytes memory) {
-        return abi.encodeCall(DegenerusGame.depositAfkingFunding, (uint32(1)));
+        return abi.encodeCall(GameFacade.depositAfkingFunding, (uint32(1)));
     }
     function _owners(address first, address second) internal pure returns (address[] memory owners) {
         owners = new address[](second == address(0) ? 1 : 2);
@@ -144,8 +145,8 @@ contract OwnerGovernanceTest is OwnerGovernanceFixture {
             DegenerusVault.crapsCompDonate.selector, DegenerusVault.setCrapsCompAllowance.selector,
             DegenerusVault.wwxrpMint.selector, DegenerusVault.afkingSeatMint.selector,
             DegenerusVault.dgnrsUnwrapTo.selector, DegenerusVault.sweepToken.selector,
-            DegenerusVault.sweepNft.selector, DegenerusGame.setLootboxRngThreshold.selector,
-            DegenerusGame.depositAfkingFunding.selector, ERC20.transfer.selector
+            DegenerusVault.sweepNft.selector, GameFacade.setLootboxRngThreshold.selector,
+            GameFacade.depositAfkingFunding.selector, ERC20.transfer.selector
         ];
         for (uint256 i; i < forbidden.length; ++i) {
             vm.prank(A); vm.expectRevert(Gov.ActionNotAllowed.selector);

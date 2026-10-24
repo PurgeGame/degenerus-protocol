@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -15,7 +16,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         (1) Access-guard revert — the impl's `:503` (wireVrf) /
 ///             `:1717` (updateVrfCoordinatorAndSub) `msg.sender != ContractAddresses.ADMIN`
 ///             check rejects every non-ADMIN caller through the routed delegatecall reach
-///             (DegenerusGame.wireVrf :308 / updateVrfCoordinatorAndSub :1874 ->
+///             (GameFacade.wireVrf :308 / updateVrfCoordinatorAndSub :1874 ->
 ///             delegatecall -> AdvanceModule impl -> ADMIN guard). This is the
 ///             "second wire from an unauthorized caller reverts" provable shape.
 ///         (2) Structural one-shot attestation — DegenerusAdmin reaches `gameAdmin.wireVrf`
@@ -29,7 +30,7 @@ contract VrfWireOneShot is DeployProtocol {
     }
 
     /// @notice A non-ADMIN caller's `wireVrf` reverts via the impl `:503` ADMIN guard.
-    /// @dev Routed reach: DegenerusGame.wireVrf (:308) delegatecalls the AdvanceModule
+    /// @dev Routed reach: GameFacade.wireVrf (:308) delegatecalls the AdvanceModule
     ///      impl (:498) whose `:503` `msg.sender != ContractAddresses.ADMIN` check rejects
     ///      the call. `msg.sender` is preserved across delegatecall, so a freshly-made
     ///      non-admin actor (distinct from ContractAddresses.ADMIN) is genuinely rejected
@@ -56,7 +57,7 @@ contract VrfWireOneShot is DeployProtocol {
     }
 
     /// @notice A non-ADMIN caller's `updateVrfCoordinatorAndSub` reverts (VRF-05 companion).
-    /// @dev The routed admin dispatch (DegenerusGame.updateVrfCoordinatorAndSub :1874 ->
+    /// @dev The routed admin dispatch (GameFacade.updateVrfCoordinatorAndSub :1874 ->
     ///      delegatecall -> AdvanceModule impl :1712) terminates at the same impl behind the
     ///      `:1717` `msg.sender != ContractAddresses.ADMIN` guard. Proves the routed
     ///      coordinator-rotation entry is guarded against any non-ADMIN sender.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameDailyInternals} from "./GameDailyInternals.sol";
+
 import {RngTags} from "../libraries/RngTags.sol";
 
 /*
@@ -27,7 +29,6 @@ import {RngTags} from "../libraries/RngTags.sol";
  */
 
 import {IStETH} from "../interfaces/IStETH.sol";
-import {DegenerusGameJackpotModule} from "./DegenerusGameJackpotModule.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
@@ -51,15 +52,14 @@ interface IWwxrpIncinerator { function resolveIncinerator(uint24 bracket, uint25
 /// @notice Daily economics and lifecycle transitions, selected by the miner engine.
 /// @dev Publication and ticket materialization precede these actions. Read consumers
 ///      follow day sealing. Fresh RNG commitment belongs to the RNG module.
-abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, DegenerusGameRngUtils {
-    error RngNotReady();
+abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGameRngUtils {
     error StEthStakeRefused();
 
     IGNRUSResolve private constant charityResolve = IGNRUSResolve(ContractAddresses.GNRUS);
     IDegenerusJackpots private constant advanceJackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
     IWwxrpIncinerator private constant wwxrpIncinerator = IWwxrpIncinerator(ContractAddresses.WWXRP);
 
-    event Advance(uint8 stage, uint24 lvl);
+
     event LoanSeized(uint32 indexed accountId, uint32 indexed lenderId);
     event LoanRepaid(uint32 indexed accountId, address indexed payer, uint256 owed);
     event PoolSkimApplied(uint24 indexed lvl, uint256 take, uint256 insuranceSkim);
@@ -223,7 +223,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         }
 
         if (_jackpotBattlePending()) {
-            result = runPurchaseJackpotBattle(_mintCeiling(), word, _phaseAllowance(meter));
+            result = _dailyRunBattle(_mintCeiling(), word, _phaseAllowance(meter));
             stage = inJackpot ? STAGE_JACKPOT_BATTLE : STAGE_PURCHASE_BATTLE;
         } else if (phaseTransitionActive) {
             if (!MineFlipGas.canRun(meter, GasBounds.TRANSITION_CLOSE, GasBounds.DAILY_PHASE_TAIL)) return result;
@@ -239,18 +239,18 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             stage = STAGE_TRANSITION_DONE;
         } else if (jackpotWork.kind == 7) {
             // Reserved BAF awards are drawn and paid in groups before the first jackpot-phase daily.
-            result = runBafAwards(word, _phaseAllowance(meter));
+            result = _dailyRunBaf(word, _phaseAllowance(meter));
             stage = STAGE_JACKPOT_BAF_AWARDS;
         } else if (jackpotWork.kind == 1 || jackpotWork.kind == 2) {
             // Pricing can set ticket-leg flags before the ETH quadrants have finished.
-            result = runDailyJackpot(inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail));
+            result = _dailyRunJackpot(inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail));
             if (result.done && !inJackpot && !_purchaseTicketLegPending()) {
                 _sealPurchaseDay(purchaseLevel, day, purchaseStartDay, meter);
             }
             stage = inJackpot ? STAGE_JACKPOT_DAILY_STARTED : STAGE_PURCHASE_DAILY;
         } else if (!inJackpot) {
             if (_purchaseTicketLegPending()) {
-                result = runPurchaseDailyTickets(word, MineFlipGas.child(meter, sealTail));
+                result = _dailyRunPurchaseTickets(word, MineFlipGas.child(meter, sealTail));
                 if (result.done) _sealPurchaseDay(purchaseLevel, day, purchaseStartDay, meter);
                 stage = STAGE_PURCHASE_DAILY_TICKETS;
             } else if (!lastPurchase && purchaseLevel == 1 && day < GameTimeLib.MAIN_LAUNCH_DAY) {
@@ -265,14 +265,14 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             } else if (!lastPurchase) {
                 if (purchaseLevel == 1) {
                     if (!MineFlipGas.canRun(meter, GasBounds.LEVEL_ONE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
-                    _emitLevelOneWinningTraits(word);
-                    payDailyFlipJackpot(1, word, 1, 1);
+                    _dailyEmitLevelOneTraits(word);
+                    _dailyPayFlip(1, word, 1, 1);
                     result.progressed = true;
                     // The draw and required seal are one indivisible unit. Keep its
                     // first-unit gas permission through the seal's dependency calls.
                     result.done = true;
                 } else {
-                    result = runDailyJackpot(false, purchaseLevel, word, MineFlipGas.child(meter, sealTail));
+                    result = _dailyRunJackpot(false, purchaseLevel, word, MineFlipGas.child(meter, sealTail));
                 }
                 if (result.done && !_purchaseTicketLegPending()) {
                     _sealPurchaseDay(purchaseLevel, day, purchaseStartDay, meter);
@@ -291,7 +291,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                         _growthOver(_growthRatchet(purchaseLevel - 2), _growthRatchet(purchaseLevel - 1), achieved))) {
                     _setGrowthSettlePending(true);
                 }
-                _distributeYieldSurplus(meter);
+                _dailyDistributeYield(meter);
                 _consolidatePoolsAndRewardJackpots(lvl, purchaseLevel, day, word, purchaseStartDay);
                 jackpotPhaseFlag = true;
                 lastPurchaseDay = false;
@@ -302,10 +302,10 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                 stage = STAGE_ENTERED_JACKPOT;
             }
         } else if (_earlyBirdLegPending()) {
-            result = runEarlyBirdTickets(word, _phaseAllowance(meter));
+            result = _dailyRunEarlyBird(word, _phaseAllowance(meter));
             stage = STAGE_JACKPOT_EARLY_BIRD_TICKETS;
         } else if (dailyJackpotCoinTicketsPending) {
-            result = runDailyJackpotTickets(word, _phaseAllowance(meter));
+            result = _dailyRunTickets(word, _phaseAllowance(meter));
             if (result.done) {
                 if (jackpotCounter >= _jackpotDays()) {
                     _endPhase(lvl);
@@ -316,7 +316,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                 }
             } else stage = STAGE_JACKPOT_COIN_TICKETS;
         } else {
-            result = runDailyJackpot(true, lvl, word, _phaseAllowance(meter));
+            result = _dailyRunJackpot(true, lvl, word, _phaseAllowance(meter));
             stage = STAGE_JACKPOT_DAILY_STARTED;
         }
         MineFlipGas.finish(meter);

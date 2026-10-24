@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
 
 import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
@@ -217,7 +218,7 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
         _warpToDay(4);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.claimCoinflipCarry(0, 1);
     }
 
@@ -329,19 +330,19 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
 
         // --- gated mutators: every one shut ---
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, true, 1);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.claimCoinflipCarry(0, type(uint256).max);
 
         // --- ungated settle paths: open, and provably carry-neutral ---
@@ -364,7 +365,7 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
 
     function test_RevertsWithoutAutoRebuy() public {
         vm.prank(player);
-        vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
+        vm.expectRevert(CoinflipCore.AutoRebuyNotEnabled.selector);
         coinflip.claimCoinflipCarry(0, 1);
     }
     function testUnlimitedRebuyRetainsBothWordsAcrossWinLossAndStopOne() public {

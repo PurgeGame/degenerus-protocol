@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
@@ -137,7 +139,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint32 expectedId = uint32(_walletCount());
         uint24 day = _today();
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
         vm.recordLogs();
         vm.prank(p);
         wwxrp.enter(0, 100);
@@ -224,9 +226,9 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertEq(uint256(vm.load(address(game), _boonSlot1(pid))), slot1, "raw key = boonPacked(id).slot1");
         assertEq((slot1 >> WWXRP_LANE_SHIFT) & 3, 1);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (pid)), 1);
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (qid)), 0);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (pid)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (qid)), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         (uint256 pScore,) = game.playerActivityScore(p);
         (uint256 qScore,) = game.playerActivityScore(q);
         vm.recordLogs();
@@ -258,8 +260,8 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint32 pid = _giveWalletId(p);
         _seedWwxrpLane(pid, 2);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (uint32(0))), 1);
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (pid)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (uint32(0))), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (pid)), 1);
         vm.prank(app);
         assertEq(wwxrp.consumeBoon(0), 0);
         vm.prank(app);
@@ -294,7 +296,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertEq(wid, id, "winning entry view returns the ID");
 
         address runner = makeAddr("claim_runner");
-        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip_g317, (id, 10_000)), 1);
+        vm.expectCall(address(coinflip), abi.encodeCall(CoinflipCore.creditFlip_g317, (id, 10_000)), 1);
         vm.recordLogs();
         vm.prank(runner);
         wwxrp.claim(day, 0);
@@ -355,12 +357,12 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint24 armedDay = 7;
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(Coinflip.bafDrawInfo.selector),
+            abi.encodeWithSelector(CoinflipCore.bafDrawInfo.selector),
             abi.encode(armedDay, uint96(1_000_000), uint32(3))
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(Coinflip.getCoinflipDayResult.selector, armedDay),
+            abi.encodeWithSelector(CoinflipCore.getCoinflipDayResult.selector, armedDay),
             abi.encode(uint16(1), false)
         );
         uint256 word = uint256(keccak256("incinerator_word"));
@@ -369,7 +371,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint256 roll = uint256(keccak256(abi.encode(DOM_INCIN_WINNER, word))) % total;
         uint32 expected = c1 > roll ? id1 : id2;
 
-        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip_g317, (expected, 100_000)), 1);
+        vm.expectCall(address(coinflip), abi.encodeCall(CoinflipCore.creditFlip_g317, (expected, 100_000)), 1);
         vm.recordLogs();
         vm.prank(address(game));
         uint32 winner = wwxrp.resolveIncinerator(200, word);

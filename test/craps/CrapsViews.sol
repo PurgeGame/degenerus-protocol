@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CrapsBattleCore} from "../../contracts/modules/CrapsBattleCore.sol";
 
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsBattle, IReadCohortLifecycle} from "../../contracts/CrapsBattle.sol";
@@ -69,7 +70,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
     uint256 public constant MAX_BANKROLL_MULT = _MAX_BANKROLL_MULT;
     uint256 public constant MIN_BATTLE_GOAL_MULT = _MIN_BATTLE_GOAL_MULT;
     uint256 public constant MAX_GOAL_MULT = _MAX_GOAL_MULT;
-    /// @dev The schedule's close offsets, as `CrapsBattle._currentBonusSlot` writes them: routine
+    /// @dev The schedule's close offsets, as `CrapsBattleCore._currentBonusSlot` writes them: routine
     ///      closes every six hours plus the clock alignment, the opener 20 minutes in, and the last
     ///      window 20 minutes before the turnover.
     uint256 public constant BONUS_PERIOD = 6 hours;

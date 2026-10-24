@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
@@ -29,7 +30,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
         }
     }
 
-    /// @dev Same body as DegenerusGame.playerActivityScore — the authoritative
+    /// @dev Same body as GameFacade.playerActivityScore — the authoritative
     ///      aggregate the lens breakdown must reconcile against.
     function playerActivityScore(address player) external view returns (uint256) {
         return _playerActivityScore(_walletIdOf(player), _effectiveQuestStreak(_walletIdOf(player)));

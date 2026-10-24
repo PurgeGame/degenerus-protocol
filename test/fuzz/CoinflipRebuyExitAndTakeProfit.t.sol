@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
@@ -172,7 +173,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _warpToDay(4);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
     }
 
@@ -205,7 +206,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _warpToDay(4);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
     }
 
@@ -243,7 +244,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _warpToDay(4);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, true, 1);
     }
 
@@ -253,11 +254,11 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _warpToDay(4);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
+        vm.expectRevert(CoinflipCore.AutoRebuyNotEnabled.selector);
         coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
+        vm.expectRevert(CoinflipCore.AutoRebuyNotEnabled.selector);
         coinflip.claimCoinflipCarry(0, 1);
     }
 
@@ -316,7 +317,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         assertEq(carry, expectedCarry, "the staked remainder stays locked on today");
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.RngLocked.selector);
+        vm.expectRevert(CoinflipCore.RngLocked.selector);
         coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
     }
 
@@ -472,13 +473,13 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         game.setOperatorApproval(0, operator, true);
 
         vm.prank(GAME);
-        vm.expectRevert(Coinflip.NotApproved.selector);
+        vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuy(playerId, true, invalid);
 
         address[2] memory callers = [player, operator];
         for (uint256 i; i < callers.length; ++i) {
             vm.prank(callers[i]);
-            vm.expectRevert(Coinflip.TakeProfitTooLarge.selector);
+            vm.expectRevert(CoinflipCore.TakeProfitTooLarge.selector);
             coinflip.setCoinflipAutoRebuy(playerId, true, invalid);
             (bool enabled, uint256 stop, uint256 carry, uint24 start) = coinflip.coinflipAutoRebuyInfo(player);
             assertFalse(enabled, "invalid threshold must not enable rebuy");
@@ -500,7 +501,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         address[2] memory callers = [player, operator];
         for (uint256 i; i < callers.length; ++i) {
             vm.prank(callers[i]);
-            vm.expectRevert(Coinflip.TakeProfitTooLarge.selector);
+            vm.expectRevert(CoinflipCore.TakeProfitTooLarge.selector);
             coinflip.setCoinflipAutoRebuyTakeProfit(playerId, invalid);
             assertEq(_rebuyConfigHash(), stateBefore);
             assertEq(coin.balanceOf(player), balanceBefore, "invalid input must not settle or mint");

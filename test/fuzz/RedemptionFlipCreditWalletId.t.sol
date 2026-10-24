@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
@@ -44,7 +45,7 @@ contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
         uint256 flipPaid = principal + (principal * reward) / 100;
         uint256 before = coinflip.coinflipAmount(alice);
 
-        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip_g317, (aliceId, flipPaid)), 1);
+        vm.expectCall(address(coinflip), abi.encodeCall(CoinflipCore.creditFlip_g317, (aliceId, flipPaid)), 1);
         vm.recordLogs();
         assertTrue(_work(9_000_000), "settlement drains");
         Vm.Log[] memory logs = vm.getRecordedLogs();

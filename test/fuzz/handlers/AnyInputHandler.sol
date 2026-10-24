@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../../contracts/modules/GameFacade.sol";
 
 import "forge-std/Test.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -268,7 +269,7 @@ contract AnyInputHandler is Test {
         // payKind is folded onto 0..4 only so the 4-value enum is hit at all: 0..3 are the real kinds,
         // 4 reaches the contract out of range and must fail its ABI decode.
         _call(5, address(game), _val(value), abi.encodeWithSelector(
-            DegenerusGame.purchase.selector, _id(bSeed), qty, boxOrder, code, uint256(payKind % 5), foil));
+            GameFacade.purchase.selector, _id(bSeed), qty, boxOrder, code, uint256(payKind % 5), foil));
     }
 
     function g_redeemFlip(uint256 a, uint256 bSeed, uint256 qty) external act(a) {

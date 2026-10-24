@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Test} from "forge-std/Test.sol";
@@ -1632,9 +1634,9 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
     function _door(uint256 kind, address who, address other, uint256 r) private returns (bool ok) {
         uint256 price = game.mintPrice();
         if (kind == 0) {
-            ok = _call(who, price, abi.encodeCall(DegenerusGame.purchase, (uint32(0), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
+            ok = _call(who, price, abi.encodeCall(GameFacade.purchase, (uint32(0), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
         } else if (kind == 1) {
-            ok = _call(who, price, abi.encodeCall(DegenerusGame.purchase, (uint32(0), 0, 1, bytes32(0), MintPaymentKind.DirectEth, false)));
+            ok = _call(who, price, abi.encodeCall(GameFacade.purchase, (uint32(0), 0, 1, bytes32(0), MintPaymentKind.DirectEth, false)));
         } else if (kind == 2) {
             // An operator acts only for an allocated account; a wallet with no ID is bought for by its own caller.
             uint32 whoId = game.walletIdOf_g3120(who);
@@ -1642,20 +1644,20 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
                 vm.prank(who);
                 game.setOperatorApproval(0, OPERATOR, true);
             }
-            ok = _call(OPERATOR, price, abi.encodeCall(DegenerusGame.purchase, (whoId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
+            ok = _call(OPERATOR, price, abi.encodeCall(GameFacade.purchase, (whoId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
         } else if (kind == 3) {
-            ok = _call(who, 4 ether, abi.encodeCall(DegenerusGame.purchaseWhalePass, (uint32(0), 1, bytes32(0))));
+            ok = _call(who, 4 ether, abi.encodeCall(GameFacade.purchaseWhalePass, (uint32(0), 1, bytes32(0))));
         } else if (kind == 4) {
-            ok = _call(who, 1 ether, abi.encodeCall(DegenerusGame.purchaseLazyPass, (uint32(0), bytes32(0))));
+            ok = _call(who, 1 ether, abi.encodeCall(GameFacade.purchaseLazyPass, (uint32(0), bytes32(0))));
         } else if (kind == 5) {
             // Symbols 0 and 6 are the protocol's, 7 is DEITY's.
-            ok = _call(who, 200 ether, abi.encodeCall(DegenerusGame.purchaseDeityPass, (uint32(0), uint8(8 + (r >> 32) % 24), bytes32(0))));
+            ok = _call(who, 200 ether, abi.encodeCall(GameFacade.purchaseDeityPass, (uint32(0), uint8(8 + (r >> 32) % 24), bytes32(0))));
         } else if (kind == 6) {
-            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (uint32(0), 0, uint128(0.01 ether), 1, 3)));
+            ok = _call(who, 0.01 ether, abi.encodeCall(GameFacade.placeDegeneretteBet, (uint32(0), 0, uint128(0.01 ether), 1, 3)));
         } else if (kind == 7) {
-            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (game.walletIdOf_g3120(other), 0, uint128(0.01 ether), 1, 3)));
+            ok = _call(who, 0.01 ether, abi.encodeCall(GameFacade.placeDegeneretteBet, (game.walletIdOf_g3120(other), 0, uint128(0.01 ether), 1, 3)));
         } else if (kind == 8) {
-            ok = _call(DEITY, 0, abi.encodeCall(DegenerusGame.smite, (uint256(DEITY_SYMBOL), _idOrRegister(who))));
+            ok = _call(DEITY, 0, abi.encodeCall(GameFacade.smite, (uint256(DEITY_SYMBOL), _idOrRegister(who))));
         } else if (kind == 9) {
             _giveWalletId(who);
             ok = true;
@@ -1667,13 +1669,13 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
             vm.prank(address(game));
             coin.mintForGame(who, 1_000);
             vm.prank(who);
-            (ok, ) = address(coinflip).call(abi.encodeCall(Coinflip.depositCoinflip, (uint32(0), 1_000)));
+            (ok, ) = address(coinflip).call(abi.encodeCall(CoinflipCore.depositCoinflip, (uint32(0), 1_000)));
         } else if (kind == 12) {
-            ok = _call(DEITY, 0, abi.encodeCall(DegenerusGame.decurse, (_idOrRegister(who))));
+            ok = _call(DEITY, 0, abi.encodeCall(GameFacade.decurse, (_idOrRegister(who))));
         } else if (kind == 13) {
-            ok = _call(who, 1 ether, abi.encodeCall(DegenerusGame.depositAfkingFunding, (_idOrRegister(who))));
+            ok = _call(who, 1 ether, abi.encodeCall(GameFacade.depositAfkingFunding, (_idOrRegister(who))));
         } else {
-            ok = _call(who, 0.05 ether, abi.encodeCall(DegenerusGame.buyDegenesisBox, (uint32(0), 0.05 ether)));
+            ok = _call(who, 0.05 ether, abi.encodeCall(GameFacade.buyDegenesisBox, (uint32(0), 0.05 ether)));
         }
     }
 

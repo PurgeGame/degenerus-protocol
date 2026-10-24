@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -175,10 +176,10 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         uint32 expectedId = uint32(_walletCount());
         assertEq(_gameId(p), 0);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (expectedId, BURN)), 1);
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (expectedId)), 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector, expectedId, lvl), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeDecimatorBoon, (expectedId)), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector, expectedId, lvl), 1);
         vm.recordLogs();
         vm.prank(p);
         coin.decimatorBurn(0, BURN, 0);
@@ -210,7 +211,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         assertEq(n, 0);
 
         uint256 walletsBefore = _walletCount();
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (id, BURN)), 1);
         vm.recordLogs();
         vm.prank(p);
@@ -242,7 +243,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.expectCall(
             address(game),
             abi.encodeCall(
-                DegenerusGame.recordDecBurn_g5574,
+                GameFacade.recordDecBurn_g5574,
                 (id, lvl, BURN + reward, ActivityCurveLib.decBattleMultBps(postScore), uint32(0))
             ),
             1
@@ -292,7 +293,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
         vm.expectCall(
             address(game),
-            abi.encodeCall(DegenerusGame.recordDecBurn_g5574, (id, lvl, BURN + reward, postMult, uint32(0))),
+            abi.encodeCall(GameFacade.recordDecBurn_g5574, (id, lvl, BURN + reward, postMult, uint32(0))),
             1
         );
         vm.prank(p);
@@ -341,10 +342,10 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         uint24 lvl = _openWindow();
         uint256 walletsBefore = _walletCount();
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (SDGNRS, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (SDGNRS, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (uint32(2), 8_000)), 1);
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (uint32(2))), 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector, uint32(2), lvl), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeDecimatorBoon, (uint32(2))), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector, uint32(2), lvl), 1);
         vm.recordLogs();
         vm.prank(address(game));
         uint256 spent = coin.autoDecimatorBurn(lvl, 8_000);
@@ -372,8 +373,8 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         _seedCrapsLane(qid, 2);
         uint256 grossAndFlags = (uint256(500) << 8) | 0x1;
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (pid)), 2);
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (qid)), 0);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (pid)), 2);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (qid)), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.recordCrapsAction_g14623, (pid, uint8(1))), 2);
         vm.prank(CRAPS);
         uint8 mask = coin.burnCoinForCraps(p, pid, grossAndFlags);
@@ -397,7 +398,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         coin.creditCrapsComps(1_000);
         uint256 lane = coin.crapsCompAllowance();
 
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon_g2902.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.consumeCoinflipBoon_g2902.selector), 0);
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.recordCrapsAction_g14623.selector), 0);
         vm.prank(CRAPS);
         uint8 mask = coin.burnCoinForCraps(p, pid, (uint256(500) << 8) | 0x10 | 0x1);

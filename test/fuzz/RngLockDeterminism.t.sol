@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
@@ -182,7 +183,7 @@ contract RngLockDeterminism is DeployProtocol {
     // cls 10 = game.mineFlip{gas: 1.5M}(0) — a bounded-allowance engine step fired during
     //   rngLock: it stops at its first checkpoint (or waits for the word), and must never
     //   abort the lock nor alter the consumed VRF-derived output.
-    // cls 11 = DegenerusGame.claimWhalePass(player) — the v50 WHALE-04 freeze leg:
+    // cls 11 = GameFacade.claimWhalePass(player) — the v50 WHALE-04 freeze leg:
     //   the deferred whale-pass materialization endpoint fired same-tx inside the
     //   locked window. Per 334-WHALE04-FREEZE-PROOF.md §2, the far-future band
     //   (lvl > currentLevel+5) REVERTS under rngLock at Storage:661, and the whole

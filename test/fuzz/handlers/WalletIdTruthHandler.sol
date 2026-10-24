@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../../contracts/modules/GameFacade.sol";
 import {QaSlots} from "../../helpers/QaSlots.sol";
 import {PeripheralSlots} from "../../helpers/PeripheralSlots.sol";
 
@@ -455,7 +456,7 @@ contract WalletIdTruthHandler is Test {
         returns (bytes memory)
     {
         return abi.encodeWithSelector(
-            DegenerusGame.purchase.selector, id, qty, boxAmt == 0 ? 0 : BoxOrderLib.boCustomFloor(boxAmt), code,
+            GameFacade.purchase.selector, id, qty, boxAmt == 0 ? 0 : BoxOrderLib.boCustomFloor(boxAmt), code,
             combined ? MintPaymentKind.Combined : MintPaymentKind.DirectEth, foil);
     }
 
@@ -940,7 +941,7 @@ contract WalletIdTruthHandler is Test {
         eth = bound(eth, 1 ether, 40 ether);
         if (priceWei == 0) return;
         _call(40, p, GAME, eth, abi.encodeWithSelector(
-            DegenerusGame.purchase.selector, uint32(0), eth * 400 / priceWei, uint256(0), bytes32(0),
+            GameFacade.purchase.selector, uint32(0), eth * 400 / priceWei, uint256(0), bytes32(0),
             MintPaymentKind.DirectEth, false), false);
     }
 

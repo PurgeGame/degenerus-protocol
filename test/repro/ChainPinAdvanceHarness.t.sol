@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -259,7 +260,7 @@ contract ChainPinAfking is DeployProtocol {
     }
 
     /// @dev Both protocol seats bought for two days, then cannot pay on the same pass: each is paused and settled
-    ///      through `Affiliate.claim` -> `drainAffiliateBases` -> `Coinflip.creditFlip_g317`, and the pass completes.
+    ///      through `Affiliate.claim` -> `drainAffiliateBases` -> `CoinflipCore.creditFlip_g317`, and the pass completes.
     function test_FA6_bothProtocolSeatsUnfundedOnTheSameDay() public {
         game.depositAfkingFunding{value: 10 ether}(VAULT_ID);
         game.depositAfkingFunding{value: 10 ether}(SDGNRS_ID);

@@ -6,7 +6,7 @@ import {JackpotBattle} from "../JackpotBattle.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusVault} from "../DegenerusVault.sol";
 import {DegenerusAdmin} from "../DegenerusAdmin.sol";
-import {DegenerusGame} from "../DegenerusGame.sol";
+import {GameFacade} from "../modules/GameFacade.sol";
 import {WWXRP} from "../WWXRP.sol";
 import {CrapsBattle} from "../CrapsBattle.sol";
 import {GNRUS} from "../GNRUS.sol";
@@ -40,11 +40,11 @@ library OwnerActions {
                 || selector == DegenerusAdmin.swapGameEthForStEth.selector;
         }
         if (target == ContractAddresses.GAME) {
-            return selector == DegenerusGame.setLootboxRngThreshold.selector
-                || selector == DegenerusGame.setMiddayMaxBasefee.selector
-                || selector == DegenerusGame.setThanosLevel.selector
-                || selector == DegenerusGame.raiseSmurfBaseAllowance.selector
-                || selector == DegenerusGame.adminStakeEthForStEth.selector;
+            return selector == GameFacade.setLootboxRngThreshold.selector
+                || selector == GameFacade.setMiddayMaxBasefee.selector
+                || selector == GameFacade.setThanosLevel.selector
+                || selector == GameFacade.raiseSmurfBaseAllowance.selector
+                || selector == GameFacade.adminStakeEthForStEth.selector;
         }
         if (target == ContractAddresses.WWXRP) {
             return selector == WWXRP.setGameMintScale.selector || selector == WWXRP.setTrustedMinter.selector

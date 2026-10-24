@@ -993,16 +993,16 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 seed,
         uint8 symbol
     ) external payable returns (uint256 wwxrpOut) {
-        return _boxResolveWwxrpSpinFromBox(playerId, stake, activityScore, seed, symbol);
+        return _localboxResolveWwxrpSpinFromBox(playerId, stake, activityScore, seed, symbol);
     }
 
-    function _boxResolveWwxrpSpinFromBox(
+    function _localboxResolveWwxrpSpinFromBox(
         uint32 playerId,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
         uint8 symbol
-    ) internal override returns (uint256 wwxrpOut) {
+    ) internal returns (uint256 wwxrpOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return 0;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
@@ -1040,16 +1040,16 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 seed,
         uint8 symbol
     ) external payable returns (uint256 flipOut) {
-        return _boxResolveFlipSpinsFromBox(playerId, totalStake, activityScore, seed, symbol);
+        return _localboxResolveFlipSpinsFromBox(playerId, totalStake, activityScore, seed, symbol);
     }
 
-    function _boxResolveFlipSpinsFromBox(
+    function _localboxResolveFlipSpinsFromBox(
         uint32 playerId,
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
         uint8 symbol
-    ) internal override returns (uint256 flipOut) {
+    ) internal returns (uint256 flipOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         // Returned, not minted: the caller sums every FLIP lane in the entry and credits once.
         return
@@ -1132,16 +1132,16 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 seed,
         uint8 symbol
     ) external payable {
-        _boxResolveEthSpinFromBox(playerId, stake, activityScore, seed, symbol);
+        _localboxResolveEthSpinFromBox(playerId, stake, activityScore, seed, symbol);
     }
 
-    function _boxResolveEthSpinFromBox(
+    function _localboxResolveEthSpinFromBox(
         uint32 playerId,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
         uint8 symbol
-    ) internal override {
+    ) internal {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_ETH);

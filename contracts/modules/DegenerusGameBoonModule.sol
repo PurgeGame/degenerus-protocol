@@ -453,10 +453,10 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         uint256 seed,
         uint256 nonceBase
     ) external payable {
-        _boxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase);
+        _localboxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase);
     }
 
-    function _boxRollBoxBoons(
+    function _localboxRollBoxBoons(
         uint32 id,
         uint256 perBoxBudget,
         uint256 boxCount,
@@ -464,7 +464,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         uint24 currentLevel,
         uint256 seed,
         uint256 nonceBase
-    ) internal virtual override {
+    ) internal {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (perBoxBudget == 0 || boxCount == 0) return;
 

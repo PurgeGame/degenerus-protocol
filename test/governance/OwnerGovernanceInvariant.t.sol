@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {Test} from "forge-std/Test.sol";
 import {OwnerGovernanceFixture, OwnerCollateral, OwnerTargetStub} from "./OwnerGovernance.t.sol";
 import {DegenerusOwnerGovernance as Gov} from "../../contracts/DegenerusOwnerGovernance.sol";
@@ -17,7 +18,7 @@ contract OwnerVoteHandler is Test {
     uint256 public rejectedDirectActions;
     constructor(Gov g, OwnerCollateral t) { gov = g; token = t; }
     function _data() internal pure returns (bytes memory) {
-        return abi.encodeCall(DegenerusGame.setLootboxRngThreshold, (123));
+        return abi.encodeCall(GameFacade.setLootboxRngThreshold, (123));
     }
     function propose(uint256 who) external {
         gov.propose(owners[who % 3], Pins.GAME, 0, _data(), 0);
@@ -107,7 +108,7 @@ contract OwnerVoteHandler is Test {
         assembly ("memory-safe") { mstore(selected, count) }
         bytes memory data;
         if (action % 4 == 0) data = abi.encodeCall(DegenerusVault.playerAction,
-            (Pins.GAME, abi.encodeCall(DegenerusGame.depositAfkingFunding, (uint32(1))), 0));
+            (Pins.GAME, abi.encodeCall(GameFacade.depositAfkingFunding, (uint32(1))), 0));
         else if (action % 4 == 1) data = abi.encodeCall(DegenerusVault.spendDegenesis, (0, false, 400, 0, 1));
         else if (action % 4 == 2) data = abi.encodeCall(DegenerusVault.setLiquidationBuyFallback, (true, 0));
         else data = _data(); // A raw Game call cannot choose a non-Vault target.

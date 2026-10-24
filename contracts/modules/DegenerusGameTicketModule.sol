@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameJackpotEvents} from "./GameJackpotEvents.sol";
 
 import {RngTags} from "../libraries/RngTags.sol";
 
@@ -24,7 +25,7 @@ import {IDegenerusGameFoilWorkerModule} from "../interfaces/IDegenerusGameModule
 ///      safe checkpoint. Owner streams and complete seated rounds are independent
 ///      of that partition. The miner dispatcher owns
 ///      admission/publication and must not replace the word before this work ends.
-contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
+contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDrawUtils {
 
     // Each bound includes cold writes. TAIL covers all cursor/seat persistence,
     // queue release, completion flags and the return after the last admitted item.
@@ -48,10 +49,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     // 32-winner sampler/shuffle geometry so transaction boundaries cannot change outcomes.
     uint256 internal constant DIRECT_ROUND_GAS_MAX = 12_000_000;
 
-    event JackpotTicketWin(
-        uint32 indexed walletId, uint24 indexed lvl, uint16 indexed trait,
-        uint32 tickets, uint24 sourceLvl, uint256 entryIndex, bool roundedUp
-    );
+
 
     /// @dev Packed owners are wallet IDs, eight per word. Source index uint32.max denotes a
     ///      virtual deity occurrence (a source-index sentinel, not a wallet ID).

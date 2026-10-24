@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameJackpotEvents} from "./GameJackpotEvents.sol";
 
 import {RngTags} from "../libraries/RngTags.sol";
 
@@ -25,7 +26,7 @@ interface IJackpotBattleMeter {
 
 /// @notice Frozen daily FLIP draws and the separately metered jackpot-battle field.
 /// @dev Shared daily-bundle component; uses the GAME storage and session.
-abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
+abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
     uint256 private constant GOLDEN_TICKET_WWXRP = 100;
     event GoldenTicketWin(
         uint32 indexed walletId,
@@ -138,10 +139,8 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
     /// @dev Scatter rounds double at each fourfold step of the BAF pool above this anchor.
     uint256 private constant BAF_ROUNDS_ANCHOR = 125 ether;
     uint256 private constant BAF_ROUNDS_MAX_MULTIPLIER = 32;
-    event JackpotEthWin(uint32 indexed walletId, uint24 indexed level, uint16 indexed traitId,
-        uint256 amount, uint256 entryIndex);
-    event JackpotTicketWin(uint32 indexed walletId, uint24 indexed entryLevel, uint16 indexed traitId,
-        uint32 entryCount, uint24 sourceLevel, uint256 entryIndex, bool roundedUp);
+
+
 
     /// @notice Every sampled near-level spot, including zero-score candidates and score-check losers.
     /// @dev Array order identifies each spot; wallet IDs may repeat. Empty arrays mean empty buckets.

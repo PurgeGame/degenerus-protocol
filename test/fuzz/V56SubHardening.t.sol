@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
@@ -312,7 +313,7 @@ contract V56SubHardening is DeployProtocol {
     // F-356-01 — the drainAffiliateBases Game dispatch stub is reachable + AFFILIATE-only
     // =========================================================================
 
-    /// @notice F-356-01 reachability: the DegenerusGame.drainAffiliateBases dispatch stub is reachable
+    /// @notice F-356-01 reachability: the GameFacade.drainAffiliateBases dispatch stub is reachable
     ///         from the affiliate path. Pranked as ContractAddresses.AFFILIATE (the caller the
     ///         DegenerusAffiliate.claim() loop routes through), the stub delegatecalls the module past
     ///         its AFFILIATE-only gate, settles the sub and returns the elapsed affiliate base

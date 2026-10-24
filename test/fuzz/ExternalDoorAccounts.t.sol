@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -194,12 +195,12 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         _fundFlip(owner, 10_000);
         uint24 lvl = _openWindow();
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, owner)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, owner)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (smurfId, BURN)), 1);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCachedById, (smurfId)), 1);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (smurfId)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector, smurfId, lvl), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.playerActivityScoreCachedById, (smurfId)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.consumeDecimatorBoon, (smurfId)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector, smurfId, lvl), 1);
         vm.recordLogs();
         vm.prank(owner);
         coin.decimatorBurn(smurfId, BURN, 0);
@@ -261,8 +262,8 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         address p = makeAddr("xda_self_burner");
         _fundFlip(p, 10_000);
         uint32 expected = uint32(_walletCount());
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.resolveAccount_g502.selector), 0);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.resolveAccount_g502.selector), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (expected, BURN)), 1);
         vm.prank(p);
         coin.decimatorBurn(0, BURN, 0);
@@ -285,7 +286,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         _openMarket(1);
         _fundFlip(owner, 10_000);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, owner)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, owner)), 1);
         // The bet and P's refused repeat below: the gate read precedes the AlreadyBet check.
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.marketBetGates, (smurfId, uint24(1))), 2);
         vm.recordLogs();
@@ -343,7 +344,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.deal(owner, price);
         vm.prank(owner);
         game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.resolveAccount_g502.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.resolveAccount_g502.selector), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.marketBetGates, (ownerId, uint24(1))), 1);
         vm.prank(owner);
         parimutuel.placeBet(0, true);
@@ -363,10 +364,10 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         uint256 wallets = _walletCount();
         uint24 day = _today();
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, owner)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCachedById, (smurfId)), 1);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (smurfId)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, owner)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.playerActivityScoreCachedById, (smurfId)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (smurfId)), 1);
         vm.recordLogs();
         vm.prank(owner);
         wwxrp.enter(smurfId, 100);
@@ -423,7 +424,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         assertEq(wwxrp.balanceOf(owner), 900, "P's entry for S burned O's WWXRP");
         assertEq(wwxrp.balanceOf(operator), 0);
 
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.resolveAccount_g502.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.resolveAccount_g502.selector), 0);
         vm.prank(stranger);
         wwxrp.enter(0, 100);
         assertEq(wwxrp.balanceOf(stranger), 900);
@@ -449,7 +450,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         assertEq(jackpots.bafConsolationOfId(smurfId, 10), 5);
         uint256 ownerBefore = wwxrp.claimable(smurfId);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount_g502, (smurfId, stranger)), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (smurfId, stranger)), 0);
         vm.expectEmit(true, true, false, true, address(jackpots));
         emit BafConsolationClaimed(smurfId, 10, 5_000, 5);
         vm.prank(stranger);
@@ -483,8 +484,8 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.prank(stranger);
         jackpots.claimBafConsolation(unallocated, 10);
 
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.resolveAccount_g502.selector), 0);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.walletIdOf_g3120, (owner)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.resolveAccount_g502.selector), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.walletIdOf_g3120, (owner)), 1);
         vm.prank(owner);
         jackpots.claimBafConsolation(0, 10);
         assertEq(wwxrp.claimable(ownerId) - before, 3, "self claim paid the caller");

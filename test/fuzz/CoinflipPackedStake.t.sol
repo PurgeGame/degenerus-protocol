@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {CoinflipCore} from "../../contracts/modules/CoinflipCore.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -274,7 +275,7 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(coinflip.coinflipAmount(player), total);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.AmountLTMin.selector);
+        vm.expectRevert(CoinflipCore.AmountLTMin.selector);
         coinflip.depositCoinflip(0, 99);
     }
 
@@ -288,7 +289,7 @@ contract CoinflipPackedStake is DeployProtocol {
         uint256 wallet = coin.balanceOf(player);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
+        vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
         coinflip.depositCoinflip(0, 100_000);
         assertEq(coin.balanceOf(player), wallet, "the burn rolled back");
         assertEq(coinflip.coinflipAmount(player), stake, "nothing was added");
@@ -313,7 +314,7 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(coinflip.coinflipAmount(player), fill);
 
         vm.prank(player);
-        vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
+        vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
         coinflip.depositCoinflip(0, payout);
         assertEq(coinflip.previewClaimCoinflips(player), payout, "the claimable draw rolled back with the revert");
         assertEq(coinflip.coinflipAmount(player), fill, "nothing was added");
@@ -325,11 +326,11 @@ contract CoinflipPackedStake is DeployProtocol {
         _mint(gifter, 100);
 
         vm.prank(operator);
-        vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
+        vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
         coinflip.depositCoinflip(playerId, 100);
 
         vm.prank(gifter);
-        vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
+        vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
         coinflip.depositCoinflip(playerId, 100);
 
         assertEq(coin.balanceOf(player), 100);
@@ -339,7 +340,7 @@ contract CoinflipPackedStake is DeployProtocol {
     function test_GiftDepositBelowMinimumIsRejected() public {
         _mint(gifter, 100);
         vm.prank(gifter);
-        vm.expectRevert(Coinflip.AmountLTMin.selector);
+        vm.expectRevert(CoinflipCore.AmountLTMin.selector);
         coinflip.depositCoinflip(playerId, 100 - 1);
     }
 

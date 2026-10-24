@@ -11,7 +11,7 @@ import {IDegenerusParimutuel} from "../interfaces/IDegenerusParimutuel.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
-import {CrapsBattle} from "../CrapsBattle.sol";
+import {CrapsBattleCore as CrapsBattle} from "../modules/CrapsBattleCore.sol";
 import {WWXRP} from "../WWXRP.sol";
 import {DGNRS} from "../DGNRS.sol";
 import {AFKingSubscriptionToken} from "../AFKingSubscriptionToken.sol";
