@@ -231,7 +231,7 @@ abstract contract StallCreditBase is DeployProtocol {
         newVRF.addConsumer(subId, address(game));
         newVRF.fundSubscription(subId, 100e18);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), subId, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(newVRF), subId, bytes32(uint256(1)), 300_000);
         vrf = newVRF;
     }
 

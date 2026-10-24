@@ -543,7 +543,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         fresh.addConsumer(sub, address(game));
         fresh.fundSubscription(sub, 100e18);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(fresh), sub, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(fresh), sub, bytes32(uint256(1)), 300_000);
     }
 
     function _sawLog(Vm.Log[] memory logs, bytes32 sig) private view returns (bool) {

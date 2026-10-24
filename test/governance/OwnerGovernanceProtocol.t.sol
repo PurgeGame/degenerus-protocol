@@ -87,7 +87,7 @@ contract OwnerGovernanceProtocolTest is DeployProtocol {
         // A closed registry must not block owner recovery, even with no gameplay identity.
         vm.mockCallRevert(address(game), abi.encodeWithSignature("registerWalletIdentity(address)", address(ownerGovernance)), "registry closed");
         MockVRFCoordinator next = new MockVRFCoordinator();
-        bytes memory result = _ownerAction(address(admin), abi.encodeCall(DegenerusAdmin.propose, (address(next), bytes32(uint256(123)))), 0);
+        bytes memory result = _ownerAction(address(admin), abi.encodeCall(DegenerusAdmin.propose, (address(next), bytes32(uint256(123)), 300_000)), 0);
         uint256 id = abi.decode(result, (uint256));
         assertEq(admin.activeProposalId(address(ownerGovernance)), id);
     }

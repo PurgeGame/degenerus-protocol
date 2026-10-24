@@ -33,13 +33,14 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
     function _reqData(uint16 confirmations) internal view returns (bytes memory) {
         bytes32 keyHash = vm.load(address(game), bytes32(GameSlots.VRF_KEY_HASH));
         uint256 subId = uint256(vm.load(address(game), bytes32(GameSlots.VRF_SUBSCRIPTION_ID)));
+        uint32 callbackGas = uint32(uint256(vm.load(address(game), bytes32(GameSlots.VRF_COORDINATOR))) >> 160);
         return abi.encodeWithSelector(
             REQ_SEL,
             VRFRandomWordsRequest({
                 keyHash: keyHash,
                 subId: subId,
                 requestConfirmations: confirmations,
-                callbackGasLimit: 300_000,
+                callbackGasLimit: callbackGas,
                 numWords: 1,
                 extraArgs: ""
             })
@@ -108,7 +109,7 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
         vm.expectCall(address(next), six, 1);
         vm.expectCall(address(next), four, 0);
         vm.prank(ContractAddresses.ADMIN);
-        game.updateVrfCoordinatorAndSub(address(next), sub, key);
+        game.updateVrfCoordinatorAndSub(address(next), sub, key, 300_000);
         assertEq(next.lastRequestId(), 1, "re-issued on the new coordinator");
     }
 
@@ -122,7 +123,7 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
         vm.expectCall(address(next), abi.encodeWithSelector(REQ_SEL, VRFRandomWordsRequest(key, sub, 4, 300_000, 1, "")), 1);
         vm.expectCall(address(next), abi.encodeWithSelector(REQ_SEL, VRFRandomWordsRequest(key, sub, 6, 300_000, 1, "")), 0);
         vm.prank(ContractAddresses.ADMIN);
-        game.updateVrfCoordinatorAndSub(address(next), sub, key);
+        game.updateVrfCoordinatorAndSub(address(next), sub, key, 300_000);
         assertEq(next.lastRequestId(), 1, "re-issued on the new coordinator");
     }
 

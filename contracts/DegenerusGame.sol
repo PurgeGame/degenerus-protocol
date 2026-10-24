@@ -1263,15 +1263,16 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
     /// @notice Emergency VRF coordinator rotation (governance-gated).
     /// @dev Access: ADMIN only. Stall duration enforced by Admin governance.
     ///      Signature: updateVrfCoordinatorAndSub(address newCoordinator, uint256 newSubId,
-    ///      bytes32 newKeyHash) — the new VRF coordinator address, the new subscription ID, and
-    ///      the new key hash for the gas lane. The signature matches the module function exactly
+    ///      bytes32 newKeyHash, uint32 newCallbackGasLimit) — the new VRF coordinator address, the
+    ///      new subscription ID, the new key hash for the gas lane and the callback gas limit. The signature matches the module function exactly
     ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
     ///      contract-size headroom for no behavior change.
     /// @custom:reverts OnlyAdmin If caller is not ADMIN.
     function updateVrfCoordinatorAndSub(
         address,
         uint256,
-        bytes32
+        bytes32,
+        uint32
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_GAMEOVER_MODULE

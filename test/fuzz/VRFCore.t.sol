@@ -96,7 +96,7 @@ contract VRFCore is DeployProtocol {
         uint256 newSubId = newVRF.createSubscription();
         newVRF.addConsumer(newSubId, address(game));
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)), 300_000);
         _lastFulfilledReqId = 0;
     }
 
@@ -256,17 +256,16 @@ contract VRFCore is DeployProtocol {
         game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
 
-        // Measure gas for fulfillment (includes mock overhead, but callback itself is ~33k)
+        // Measure gas for fulfillment (includes mock overhead)
         uint256 gasBefore = gasleft();
         mockVRF.fulfillRandomWords(reqId, 0xDEAD);
         uint256 gasUsed = gasBefore - gasleft();
 
-        // The callback gas budget is 300k. Total measured includes mock overhead,
-        // but even with overhead it should be well under 300k.
-        assertLt(gasUsed, 300_000, "Daily callback should use < 300k gas");
+        // The wired callback gas limit is 150k; even with mock overhead the fulfillment stays under it.
+        assertLt(gasUsed, 150_000, "Daily callback should use < 150k gas");
     }
 
-    /// @notice Gas budget: mid-day callback path under 300k gas.
+    /// @notice Gas budget: mid-day callback path under 150k gas.
     function test_callbackGasBudget_midday() public {
         _setupForMidDayRng();
 
@@ -278,7 +277,7 @@ contract VRFCore is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, 0xCAFE);
         uint256 gasUsed = gasBefore - gasleft();
 
-        assertLt(gasUsed, 300_000, "Mid-day callback should use < 300k gas");
+        assertLt(gasUsed, 150_000, "Mid-day callback should use < 150k gas");
     }
 
     /// @notice Zero-guard: randomWord == 0 produces stored value of 1.
@@ -327,6 +326,29 @@ contract VRFCore is DeployProtocol {
         // After _unlockRng: vrfRequestId should be 0
         assertEq(_readVrfRequestId(), reqId, "idle request ID is retained after unlock");
         assertFalse(game.isRngFulfilled(), "idle callback authority is disarmed");
+    }
+
+    /// @notice Requests carry the wired callback gas limit until a rotation replaces it.
+    function test_callbackGasLimit_wiredThenRotated() public {
+        _completeDay(0xDEAD0001);
+        assertEq(mockVRF.lastCallbackGasLimit(), 150_000, "wired default");
+
+        vm.warp(block.timestamp + 1 days);
+        game.mineFlip(0);
+        assertTrue(game.rngLocked(), "daily in flight");
+        MockVRFCoordinator newVRF = new MockVRFCoordinator();
+        uint256 newSubId = newVRF.createSubscription();
+        newVRF.addConsumer(newSubId, address(game));
+        vm.prank(address(admin));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)), 1_250_000);
+        assertEq(newVRF.lastCallbackGasLimit(), 1_250_000, "re-issued request uses the new limit");
+
+        newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0xCAFE0002);
+        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineFlip(0);
+        assertFalse(game.rngLocked(), "day completes");
+        uint256 slot = uint256(vm.load(address(game), bytes32(uint256(GameSlots.VRF_COORDINATOR))));
+        assertEq(address(uint160(slot)), address(newVRF), "coordinator shares the slot");
+        assertEq(uint32(slot >> 160), 1_250_000, "rotated limit persists for later requests");
     }
 
     /// @notice Mid-day request: vrfRequestId set, cleared after mid-day fulfillment.

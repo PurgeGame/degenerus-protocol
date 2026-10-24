@@ -333,7 +333,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 45 hours);
 
         vm.prank(_vaultOwner());
-        uint256 proposalId = admin.propose(ForkPins.VRF_COORDINATOR, KEY_HASH_1000_GWEI);
+        uint256 proposalId = admin.propose(ForkPins.VRF_COORDINATOR, KEY_HASH_1000_GWEI, 300_000);
         vm.recordLogs();
         vm.prank(voter);
         admin.vote(proposalId, true);

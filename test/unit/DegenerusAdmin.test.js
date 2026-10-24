@@ -451,7 +451,7 @@ describe("DegenerusAdmin", function () {
       const vrfAddr = await mockVRF.getAddress();
       const newKeyHash = hre.ethers.id("test-key-hash");
       await expect(
-        ownerAction(admin.connect(deployer), "propose", [vrfAddr, newKeyHash])
+        ownerAction(admin.connect(deployer), "propose", [vrfAddr, newKeyHash, 300000])
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
@@ -460,7 +460,7 @@ describe("DegenerusAdmin", function () {
       const newKeyHash = hre.ethers.id("test-key-hash");
       // Even if stalled, zero coordinator should revert ZeroAddress first
       await expect(
-        ownerAction(admin.connect(deployer), "propose", [ZERO_ADDRESS, newKeyHash])
+        ownerAction(admin.connect(deployer), "propose", [ZERO_ADDRESS, newKeyHash, 300000])
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
@@ -468,7 +468,7 @@ describe("DegenerusAdmin", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       await expect(
-        ownerAction(admin.connect(deployer), "propose", [vrfAddr, ZERO_BYTES32])
+        ownerAction(admin.connect(deployer), "propose", [vrfAddr, ZERO_BYTES32, 300000])
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
@@ -480,7 +480,7 @@ describe("DegenerusAdmin", function () {
       await hre.ethers.provider.send("evm_increaseTime", [7 * 86400 + 1]);
       await hre.ethers.provider.send("evm_mine");
       await expect(
-        admin.connect(alice).propose(vrfAddr, newKeyHash)
+        admin.connect(alice).propose(vrfAddr, newKeyHash, 300000)
       ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 

@@ -694,11 +694,13 @@ interface IDegenerusGame {
     /// @param keyHash_ Key hash for the VRF request.
     function wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) external;
 
-    /// @notice Update VRF coordinator, subscription, and key hash configuration.
+    /// @notice Update VRF coordinator, subscription, key hash and callback gas limit.
     /// @param newCoordinator New VRF coordinator address.
     /// @param newSubId New subscription ID.
     /// @param newKeyHash New key hash for VRF requests.
-    function updateVrfCoordinatorAndSub(address newCoordinator, uint256 newSubId, bytes32 newKeyHash) external;
+    /// @param newCallbackGasLimit Callback gas limit for VRF requests.
+    function updateVrfCoordinatorAndSub(address newCoordinator, uint256 newSubId, bytes32 newKeyHash,
+        uint32 newCallbackGasLimit) external;
 
     /// @notice VRF callback to receive random words.
     /// @dev Coordinator-gated in the module body (delegatecall preserves msg.sender).

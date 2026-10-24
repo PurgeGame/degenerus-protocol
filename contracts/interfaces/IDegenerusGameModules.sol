@@ -107,14 +107,16 @@ interface IDegenerusGameGameOverModule {
         bytes32 keyHash_
     ) external;
 
-    /// @notice Updates VRF coordinator, subscription, and key hash configuration
+    /// @notice Updates VRF coordinator, subscription, key hash and callback gas limit
     /// @param newCoordinator New VRF coordinator address
     /// @param newSubId New subscription ID
     /// @param newKeyHash New key hash for VRF requests
+    /// @param newCallbackGasLimit Callback gas limit for VRF requests
     function updateVrfCoordinatorAndSub(
         address newCoordinator,
         uint256 newSubId,
-        bytes32 newKeyHash
+        bytes32 newKeyHash,
+        uint32 newCallbackGasLimit
     ) external;
 
     /// @notice Claim deterministic-ending shares for account `id`'s terminal-level tickets.

@@ -79,6 +79,7 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_deityBySymbol() external pure returns (uint256 s, uint256 o) { assembly { s := deityBySymbol.slot o := deityBySymbol.offset } }
     function s_degenesisActive() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisActive.slot o := degenesisActive.offset } }
     function s_vrfCoordinator() external pure returns (uint256 s, uint256 o) { assembly { s := vrfCoordinator.slot o := vrfCoordinator.offset } }
+    function s_vrfCallbackGasLimit() external pure returns (uint256 s, uint256 o) { assembly { s := vrfCallbackGasLimit.slot o := vrfCallbackGasLimit.offset } }
     function s_vrfKeyHash() external pure returns (uint256 s, uint256 o) { assembly { s := vrfKeyHash.slot o := vrfKeyHash.offset } }
     function s_vrfSubscriptionId() external pure returns (uint256 s, uint256 o) { assembly { s := vrfSubscriptionId.slot o := vrfSubscriptionId.offset } }
     function s_lootboxRngPacked() external pure returns (uint256 s, uint256 o) { assembly { s := lootboxRngPacked.slot o := lootboxRngPacked.offset } }
@@ -337,6 +338,7 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_deityBySymbol(); assertEq(s, GameSlots.DEITY_BY_SYMBOL, "deityBySymbol.slot"); assertEq(o, 0, "deityBySymbol.offset");
         (s, o) = h.s_degenesisActive(); assertEq(s, GameSlots.DEGENESIS_ACTIVE, "degenesisActive.slot"); assertEq(o, 0, "degenesisActive.offset");
         (s, o) = h.s_vrfCoordinator(); assertEq(s, GameSlots.VRF_COORDINATOR, "vrfCoordinator.slot"); assertEq(o, 0, "vrfCoordinator.offset");
+        (s, o) = h.s_vrfCallbackGasLimit(); assertEq(s, GameSlots.VRF_COORDINATOR, "vrfCallbackGasLimit.slot"); assertEq(o, 20, "vrfCallbackGasLimit.offset");
         (s, o) = h.s_vrfKeyHash(); assertEq(s, GameSlots.VRF_KEY_HASH, "vrfKeyHash.slot"); assertEq(o, 0, "vrfKeyHash.offset");
         (s, o) = h.s_vrfSubscriptionId(); assertEq(s, GameSlots.VRF_SUBSCRIPTION_ID, "vrfSubscriptionId.slot"); assertEq(o, 0, "vrfSubscriptionId.offset");
         (s, o) = h.s_lootboxRngPacked(); assertEq(s, GameSlots.LOOTBOX_RNG_PACKED, "lootboxRngPacked.slot"); assertEq(o, 0, "lootboxRngPacked.offset");

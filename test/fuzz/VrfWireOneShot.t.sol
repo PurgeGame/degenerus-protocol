@@ -67,10 +67,10 @@ contract VrfWireOneShot is DeployProtocol {
         vm.prank(nonAdmin);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "updateVrfCoordinatorAndSub(address,uint256,bytes32)",
+                "updateVrfCoordinatorAndSub(address,uint256,bytes32,uint32)",
                 makeAddr("coord2"),
                 uint256(2),
-                keccak256("kh2")
+                keccak256("kh2"), 300_000
             )
         );
         assertFalse(

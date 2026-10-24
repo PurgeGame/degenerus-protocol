@@ -665,7 +665,7 @@ describe("RngStall", function () {
       await expect(
         admin
           .connect(deployer)
-          .propose(newCoordAddr, hre.ethers.keccak256("0x01"))
+          .propose(newCoordAddr, hre.ethers.keccak256("0x01"), 300000)
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
@@ -677,7 +677,7 @@ describe("RngStall", function () {
       await expect(
         admin
           .connect(deployer)
-          .propose(hre.ethers.ZeroAddress, nonZeroKeyHash)
+          .propose(hre.ethers.ZeroAddress, nonZeroKeyHash, 300000)
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
@@ -696,7 +696,7 @@ describe("RngStall", function () {
       const newKeyHash = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("kh2"));
 
       await expect(
-        admin.connect(alice).propose(await newCoord.getAddress(), newKeyHash)
+        admin.connect(alice).propose(await newCoord.getAddress(), newKeyHash, 300000)
       ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 

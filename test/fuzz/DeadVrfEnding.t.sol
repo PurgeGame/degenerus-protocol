@@ -570,7 +570,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256 sub = fresh.createSubscription();
         fresh.addConsumer(sub, address(game));
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(fresh), sub, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(fresh), sub, bytes32(uint256(1)), 300_000);
         assertFalse(game.livenessTriggered(), "a swap never ends the grace");
 
         uint256 t = block.timestamp;
@@ -620,7 +620,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         fresh.addConsumer(sub, address(game));
         fresh.fundSubscription(sub, 100e18);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(fresh), sub, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(fresh), sub, bytes32(uint256(1)), 300_000);
     }
 
     /// @dev A lootbox-only mid-day request (no ticket cohort swapped) sent on the deadline day

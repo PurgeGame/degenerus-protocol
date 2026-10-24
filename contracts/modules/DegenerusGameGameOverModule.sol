@@ -195,7 +195,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         20 ether;
 
     /// @dev VRF request parameters (mirror the advance module's daily/mid-day lanes).
-    uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
+    ///      The callback gas limit is the value wired at deployment; rotation may replace it.
+    uint32 private constant VRF_CALLBACK_GAS_LIMIT = 150_000;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 6;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
 
@@ -1118,7 +1119,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
 
         address current = address(vrfCoordinator);
-        _setVrfConfig(coordinator_, subId, keyHash_);
+        _setVrfConfig(coordinator_, subId, keyHash_, VRF_CALLBACK_GAS_LIMIT);
         lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit VrfCoordinatorUpdated(current, coordinator_);
     }
@@ -1129,15 +1130,17 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @param newCoordinator New VRF coordinator address.
     /// @param newSubId New subscription ID.
     /// @param newKeyHash New key hash for the gas lane.
+    /// @param newCallbackGasLimit Callback gas limit for every later request.
     function updateVrfCoordinatorAndSub(
         address newCoordinator,
         uint256 newSubId,
-        bytes32 newKeyHash
+        bytes32 newKeyHash,
+        uint32 newCallbackGasLimit
     ) external {
         if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
 
         address current = address(vrfCoordinator);
-        _setVrfConfig(newCoordinator, newSubId, newKeyHash);
+        _setVrfConfig(newCoordinator, newSubId, newKeyHash, newCallbackGasLimit);
 
         // Once the game has ended, or the deterministic ending has latched, no word can count
         // for anything: repoint the config only, never re-issue.
@@ -1182,12 +1185,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         emit VrfCoordinatorUpdated(current, newCoordinator);
     }
 
-    /// @dev Write the VRF coordinator, subscription, and key hash together.
+    /// @dev Write the VRF coordinator, subscription, key hash and callback gas limit together.
     /// @param coord VRF coordinator address.
     /// @param sub VRF subscription ID for LINK billing.
     /// @param key VRF key hash for gas lane selection.
-    function _setVrfConfig(address coord, uint256 sub, bytes32 key) private {
+    /// @param callbackGas Callback gas limit for VRF requests.
+    function _setVrfConfig(address coord, uint256 sub, bytes32 key, uint32 callbackGas) private {
         vrfCoordinator = IVRFCoordinator(coord);
+        vrfCallbackGasLimit = callbackGas;
         vrfSubscriptionId = sub;
         vrfKeyHash = key;
     }
@@ -1201,7 +1206,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 keyHash: vrfKeyHash,
                 subId: vrfSubscriptionId,
                 requestConfirmations: confirmations,
-                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
+                callbackGasLimit: vrfCallbackGasLimit,
                 numWords: 1,
                 extraArgs: hex""
             })

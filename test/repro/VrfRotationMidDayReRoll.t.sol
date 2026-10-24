@@ -106,7 +106,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         newVRF.addConsumer(newSubId, address(game));
         newVRF.fundSubscription(newSubId, 100e18);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)), 300_000);
 
         // POST-FIX: no spurious re-issue on the new coordinator.
         assertEq(
@@ -146,7 +146,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         newVRF.addConsumer(newSubId, address(game));
         newVRF.fundSubscription(newSubId, 100e18);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)), 300_000);
 
         assertTrue(newVRF.lastRequestId() != 0, "C1: genuine in-flight mid-day request must re-issue on rotation");
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), vrfWord);

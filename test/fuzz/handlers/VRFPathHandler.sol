@@ -313,7 +313,7 @@ contract VRFPathHandler is Test {
         try game.updateVrfCoordinatorAndSub(
             address(newVRF),
             newSubId,
-            bytes32(uint256(1))
+            bytes32(uint256(1)), 300_000
         ) {} catch {
             return;
         }

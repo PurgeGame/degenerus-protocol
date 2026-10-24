@@ -330,7 +330,7 @@ contract VaultPlayerActionsTest is SeatFixture {
         _reject(address(sdgnrs), abi.encodeWithSignature("wrapperTransferTo(address,uint256)", stranger, 1));
         _reject(address(crapsBattle), abi.encodeWithSignature("creditPasses(uint32,uint32,uint32)", VAULT_ID, 1, 0));
         _reject(
-            ContractAddresses.ADMIN, abi.encodeWithSignature("propose(address,bytes32)", stranger, bytes32(uint256(1)))
+            ContractAddresses.ADMIN, abi.encodeWithSignature("propose(address,bytes32,uint32)", stranger, bytes32(uint256(1)), 300_000)
         );
         _reject(ContractAddresses.ADMIN, abi.encodeWithSignature("vote(uint256,bool)", 1, true));
         _reject(ContractAddresses.ADMIN, abi.encodeWithSignature("proposeFeedSwap(address)", stranger));

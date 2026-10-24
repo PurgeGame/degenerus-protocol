@@ -23,6 +23,7 @@ contract MockVRFCoordinator {
 
     mapping(uint256 => Subscription) public subs;
     mapping(uint256 => PendingRequest) public pendingRequests;
+    uint32 public lastCallbackGasLimit;
 
     // --- IVRFCoordinatorV2_5Owner ---
 
@@ -67,8 +68,9 @@ contract MockVRFCoordinator {
     // --- IVRFCoordinator ---
 
     function requestRandomWords(
-        VRFRandomWordsRequest calldata
+        VRFRandomWordsRequest calldata req
     ) external returns (uint256 requestId) {
+        lastCallbackGasLimit = req.callbackGasLimit;
         requestId = _nextRequestId++;
         pendingRequests[requestId] = PendingRequest({
             subId: 0,

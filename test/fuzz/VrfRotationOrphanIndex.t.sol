@@ -118,7 +118,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         newVRF.addConsumer(newSubId, address(game));
         newVRF.fundSubscription(newSubId, 100e18);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)), 300_000);
     }
 
     // ──────────────────────────────────────────────────────────────────────

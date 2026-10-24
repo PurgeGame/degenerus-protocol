@@ -268,7 +268,7 @@ describe("AccessControl", function () {
       const { admin, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        admin.connect(alice).propose(alice.address, ZERO_BYTES32)
+        admin.connect(alice).propose(alice.address, ZERO_BYTES32, 300000)
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
@@ -385,7 +385,7 @@ describe("AccessControl", function () {
         game.connect(alice).updateVrfCoordinatorAndSub(
           alice.address,
           1n,
-          ZERO_BYTES32
+          ZERO_BYTES32, 300000
         )
       ).to.be.revertedWithCustomError(game, "OnlyAdmin");
     });

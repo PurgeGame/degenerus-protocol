@@ -123,7 +123,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
         uint256 sub = next.createSubscription();
         next.addConsumer(sub, address(game));
         vm.prank(ContractAddresses.ADMIN);
-        game.updateVrfCoordinatorAndSub(address(next), sub, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(next), sub, bytes32(uint256(1)), 300_000);
         assertEq(next.lastRequestId(), 0, "delivered word is not retried");
         assertTrue(game.isRngFulfilled());
         assertEq(RecyclingState.currentWord(address(game)), 42);

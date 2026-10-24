@@ -129,7 +129,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         _buy();
         CompletionCheckingCoordinator observer = new CompletionCheckingCoordinator(game);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(observer), 1, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(observer), 1, bytes32(uint256(1)), 300_000);
         vm.prank(buyer); game.mineFlip(0);
         assertFalse(game.rngComplete());
         assertEq(uint256(game.extsload_g8132(bytes32(uint256(4)))), 90001);

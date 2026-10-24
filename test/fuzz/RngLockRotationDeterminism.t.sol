@@ -237,7 +237,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     // ────────────────────────────────────────────────────────────────────
 
     /// @dev Deploy + fund a 2nd MockVRFCoordinator and ADMIN-prank
-    ///      updateVrfCoordinatorAndSub(newCoord, newSub, bytes32(seed)). Repoints
+    ///      updateVrfCoordinatorAndSub(newCoord, newSub, bytes32(seed), 300_000). Repoints
     ///      the active coordinator and resets the per-coordinator fulfilment
     ///      counter. `seed` fuzzes the rotation newKeyHash/newSubId (which the
     ///      freeze invariant requires NOT to influence the VRF-derived output).
@@ -254,7 +254,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         newVRF.addConsumer(newSubId, address(game));
         newVRF.fundSubscription(newSubId, 100e18);
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(seed));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(seed), 300_000);
         _activeVRF = newVRF;
         _lastFulfilledReqId = 0;
     }

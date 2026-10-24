@@ -88,7 +88,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 newSubId = newVRF.createSubscription();
         newVRF.addConsumer(newSubId, address(game));
         vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
+        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)), 300_000);
         _lastFulfilledReqId = 0;
     }
 

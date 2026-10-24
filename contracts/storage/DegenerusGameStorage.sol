@@ -1159,7 +1159,7 @@ abstract contract DegenerusGameStorage {
         (ok, result) = BoundedCall.callRemaining(meter, address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE,
             abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({
                 keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations,
-                callbackGasLimit: 300_000, numWords: 1, extraArgs: hex""
+                callbackGasLimit: vrfCallbackGasLimit, numWords: 1, extraArgs: hex""
             })), 32);
         if (ok) id = abi.decode(result, (uint256));
         ok = ok && id != 0;
@@ -3265,6 +3265,10 @@ abstract contract DegenerusGameStorage {
     /// @dev Chainlink VRF V2.5 coordinator contract.
     ///      Mutable for emergency rotation; see updateVrfCoordinatorAndSub().
     IVRFCoordinator internal vrfCoordinator;
+
+    /// @dev Callback gas limit sent with every VRF request. Packs into the coordinator's
+    ///      slot, so requests read both with one SLOAD. Rotated only with the coordinator.
+    uint32 internal vrfCallbackGasLimit;
 
     /// @dev VRF key hash identifying the oracle and gas lane.
     ///      Rotatable with coordinator; determines gas price tier.

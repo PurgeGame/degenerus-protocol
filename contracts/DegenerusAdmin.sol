@@ -122,14 +122,16 @@ interface IDegenerusGameAdmin {
     /// @notice Whether the game has ended.
     function gameOver() external view returns (bool);
 
-    /// @notice Update the VRF coordinator, subscription, and key hash atomically.
+    /// @notice Update the VRF coordinator, subscription, key hash and callback gas limit atomically.
     /// @param newCoordinator New VRF coordinator address.
     /// @param newSubId New subscription ID.
     /// @param newKeyHash New VRF key hash.
+    /// @param newCallbackGasLimit Callback gas limit for VRF requests.
     function updateVrfCoordinatorAndSub(
         address newCoordinator,
         uint256 newSubId,
-        bytes32 newKeyHash
+        bytes32 newKeyHash,
+        uint32 newCallbackGasLimit
     ) external;
 
     /// @notice Wire initial VRF configuration during deployment.
@@ -254,7 +256,8 @@ contract DegenerusAdmin {
     /// @dev Packed into 3 storage slots (down from 7).
     ///      Weights and snapshot stored as whole tokens (raw / 1e12). Max 1T = fits uint40 (1.1T max).
     ///      createdAt as uint40 = max year ~36,847.
-    ///      Slot 1: proposer(4) + createdAt(5) + votingSnapshot(5) + path(1) + state(1) = 16 bytes
+    ///      Slot 1: proposer(4) + createdAt(5) + votingSnapshot(5) + path(1) + state(1)
+    ///              + callbackGasLimit(4) = 20 bytes
     ///      Slot 2: coordinator(20) + approveWeight(5) + rejectWeight(5) = 30 bytes
     ///      Slot 3: keyHash(32) = 32 bytes
     struct Proposal {
@@ -263,6 +266,7 @@ contract DegenerusAdmin {
         uint40 votingSnapshot;         // slot 1: voting sDGNRS at proposal time (whole tokens)
         ProposalPath path;             // slot 1: Admin or Community
         ProposalState state;           // slot 1: Active, Executed, or Killed (expiry computed live from createdAt)
+        uint32 callbackGasLimit;       // slot 1: proposed VRF callback gas limit
         address coordinator;           // slot 2: proposed VRF coordinator
         uint40 approveWeight;          // slot 2: cumulative sDGNRS approve weight (whole tokens)
         uint40 rejectWeight;           // slot 2: cumulative sDGNRS reject weight (whole tokens)
@@ -278,7 +282,7 @@ contract DegenerusAdmin {
     /// @notice Thrown when the caller is not the address a function is restricted to
     ///         (the game contract, the vault owner, or the LINK token, depending on the call).
     error NotAuthorized();
-    /// @notice Thrown when a proposed coordinator or key hash is the zero value.
+    /// @notice Thrown when a proposed coordinator, key hash or callback gas limit is zero.
     error ZeroAddress();
     error InvalidRecipient();
     /// @notice Thrown when a coordinator-swap or feed-swap proposal is filed before its
@@ -371,12 +375,14 @@ contract DegenerusAdmin {
     /// @param proposer The ordinary wallet ID that filed the proposal.
     /// @param coordinator The proposed VRF coordinator.
     /// @param keyHash The proposed VRF key hash.
+    /// @param callbackGasLimit The proposed VRF callback gas limit.
     /// @param path The proposal's path (Admin or Community).
     event ProposalCreated(
         uint256 indexed proposalId,
         uint32 indexed proposer,
         address coordinator,
         bytes32 keyHash,
+        uint32 callbackGasLimit,
         ProposalPath path
     );
     /// @notice Emitted when a vote is cast on a coordinator-swap proposal.
@@ -915,14 +921,17 @@ contract DegenerusAdmin {
     ///      - Community path: 0.5%+ voting sDGNRS, requires 7d+ VRF stall
     /// @param newCoordinator Address of the proposed VRF coordinator.
     /// @param newKeyHash Key hash for the proposed coordinator.
+    /// @param newCallbackGasLimit VRF callback gas limit after the swap. VRF checks the
+    ///        subscription's LINK against the cost at this cap, so keep it near the measured need.
     /// @return proposalId The ID of the created proposal.
     function propose(
         address newCoordinator,
-        bytes32 newKeyHash
+        bytes32 newKeyHash,
+        uint32 newCallbackGasLimit
     ) external returns (uint256 proposalId) {
         if (subscriptionId == 0) revert NotWired();
         if (gameAdmin.gameOver()) revert GameOver();
-        if (newCoordinator == address(0) || newKeyHash == bytes32(0))
+        if (newCoordinator == address(0) || newKeyHash == bytes32(0) || newCallbackGasLimit == 0)
             revert ZeroAddress();
 
         // 1-per-address active proposal limit. A slot pointing at a superseded proposal
@@ -960,11 +969,12 @@ contract DegenerusAdmin {
         // p.state = ProposalState.Active (default 0)
         p.coordinator = newCoordinator;
         p.keyHash = newKeyHash;
+        p.callbackGasLimit = newCallbackGasLimit;
         p.votingSnapshot = uint40(circ / 1e12);
 
         _activeProposalId[proposerId] = proposalId;
 
-        emit ProposalCreated(proposalId, proposerId, newCoordinator, newKeyHash, path);
+        emit ProposalCreated(proposalId, proposerId, newCoordinator, newKeyHash, newCallbackGasLimit, path);
     }
 
     /// @notice Vote on an active VRF swap proposal.
@@ -1200,7 +1210,8 @@ contract DegenerusAdmin {
         gameAdmin.updateVrfCoordinatorAndSub(
             newCoordinator,
             newSubId,
-            newKeyHash
+            newKeyHash,
+            p.callbackGasLimit
         );
 
         // 5. Transfer LINK to new subscription

@@ -306,7 +306,7 @@ contract RngLockDeterminism is DeployProtocol {
             try newVrf.fundSubscription(newSub, 100e18) {} catch { return; }
             vm.prank(adminAddr);
             try game.updateVrfCoordinatorAndSub(
-                address(newVrf), newSub, bytes32(uint256(nonce | 1))
+                address(newVrf), newSub, bytes32(uint256(nonce | 1)), 300_000
             ) {} catch { return; }
             return;
         }

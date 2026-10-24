@@ -1723,7 +1723,7 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin._executeSwap",
     "kind": "external",
-    "expression": "gameAdmin.updateVrfCoordinatorAndSub( newCoordinator, newSubId, newKeyHash )",
+    "expression": "gameAdmin.updateVrfCoordinatorAndSub( newCoordinator, newSubId, newKeyHash, p.callbackGasLimit )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8003,7 +8003,7 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._requestVrfWord",
     "kind": "external",
-    "expression": "vrfCoordinator.requestRandomWords( VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex\"\" }) )",
+    "expression": "vrfCoordinator.requestRandomWords( VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: vrfCallbackGasLimit, numWords: 1, extraArgs: hex\"\" }) )",
     "count": 1,
     "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
   },
@@ -10555,7 +10555,7 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._boundedVrfRequest",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callRemaining(meter, address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE, abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: 300_000, numWords: 1, extraArgs: hex\"\" })), 32)",
+    "expression": "BoundedCall.callRemaining(meter, address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE, abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: vrfCallbackGasLimit, numWords: 1, extraArgs: hex\"\" })), 32)",
     "count": 1,
     "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
   },

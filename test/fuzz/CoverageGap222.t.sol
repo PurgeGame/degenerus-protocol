@@ -648,9 +648,9 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(admin).call(
             abi.encodeWithSignature(
-                "propose(address,bytes32)",
+                "propose(address,bytes32,uint32)",
                 newCoord,
-                newKey
+                newKey, 300_000
             )
         );
         // Stall precondition not met at fresh deploy — must revert.
@@ -1349,10 +1349,10 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o2, ) = address(game).call(
             abi.encodeWithSignature(
-                "updateVrfCoordinatorAndSub(address,uint256,bytes32)",
+                "updateVrfCoordinatorAndSub(address,uint256,bytes32,uint32)",
                 coord,
                 uint256(1),
-                kh
+                kh, 300_000
             )
         );
         assertFalse(o1, "game.wireVrf rejected non-admin caller");
