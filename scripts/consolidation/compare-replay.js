@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import { AbiCoder, Interface } from 'ethers';
 const [left, right, abiFile, output, mode = "P1"] = process.argv.slice(2);
-if (!["P1", "P2", "P3", "--p6", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only", "--xa"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
-const compilerOnly = mode === "--compiler-only" || mode === "--xa";
+if (!["P1", "P2", "P3", "--p6", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only", "--xa", "--profiles"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
+const compilerOnly = mode === "--compiler-only" || mode === "--xa" || mode === "--profiles";
 const phase = compilerOnly ? null : mode;
 const p5Mode = ["--p5", "--p5-separate-mint", "--integrated"].includes(mode);
 if (!output) throw new Error('usage: compare-replay.js BASELINE_LOG CANDIDATE_LOG BASELINE_CONTRACTS_JSON OUTPUT_JSON');
@@ -35,14 +36,14 @@ export function parse(text) {
     const [kind, ...p] = line.slice(start).trim().split('|');
     if (kind === 'DIFFNAME') {
       if (p[1] === 'player:0') {
-        run = { identity: `${suite}/${test}`, transactions: [], checkpoints: [], slots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
+        run = { identity: `${suite}/${test}`, transactions: [], checkpoints: [], slots: {}, pendingSlots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
         runs.push(run);
       }
       names.set(p[0].toLowerCase(), p[1]); continue;
     }
     if (kind === 'DIFFTX') {
       if (!run) {
-        run = { identity: `${suite}/${test}`, transactions: [], checkpoints: [], slots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
+        run = { identity: `${suite}/${test}`, transactions: [], checkpoints: [], slots: {}, pendingSlots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
         runs.push(run);
       }
       if (!run) throw new Error('Observation before first transaction');
@@ -52,7 +53,7 @@ export function parse(text) {
       ++g.count; g.gas += tx.gas; if (tx.status !== 'ok') ++g.failed;
     } else if (kind === 'DIFFSLOT') {
       const key = `${p[0]}:${p[1]}`;
-      run.initial[key] ??= p[3]; run.slots[key] = p[2];
+      run.initial[key] ??= p[3]; run.slots[key] = p[2]; run.pendingSlots[key] = p[2];
     } else if (kind === 'DIFFETH') run.eth[p[0]] = p[1];
     else if (kind === 'DIFFTOKEN') run.tokens[`${p[0]}:${p[1]}`] = p[2];
     else if (kind === 'DIFFEVENT') {
@@ -106,7 +107,8 @@ export function parse(text) {
       const key = `${p[1]}:${p[2]}`;
       run.engineEdges[key] = (run.engineEdges[key] || 0) + 1;
     } else if (kind === 'DIFFCHECK') {
-      run.checkpoints.push({ id: +p[0], action: p[1], level: p[2], slots: { ...run.slots }, eth: { ...run.eth }, tokens: { ...run.tokens }, events: run.events.splice(0) });
+      run.checkpoints.push({ id: +p[0], action: p[1], level: p[2], slots: { ...run.pendingSlots }, eth: { ...run.eth }, tokens: { ...run.tokens }, events: run.events.splice(0) });
+      run.pendingSlots = {};
     }
   }
   if (!runs.length || runs.some(r => !r.checkpoints.length)) throw new Error('No complete checkpoint evidence');
@@ -114,7 +116,10 @@ export function parse(text) {
 }
 export function differences(a, b) {
   const errors = [];
-  const same = (category, x, y) => { try { assert.deepEqual(y, x); } catch { errors.push(category); } };
+  let totalCount = 0;
+  const fail = message => { ++totalCount; if (errors.length < 1000) errors.push(message); };
+  // Avoid materializing giant assertion diffs for long lifecycle transcripts.
+  const same = (category, x, y) => { if (!isDeepStrictEqual(y, x)) fail(category); };
   same('run count', a.length, b.length);
   for (let i = 0; i < Math.min(a.length, b.length); ++i) {
     const x = a[i], y = b[i];
@@ -123,21 +128,24 @@ export function differences(a, b) {
     const calls = r => r.transactions.map(({ gas, sequence, ...t }) => t);
     same(`run ${i} top-level results`, calls(x), calls(y));
     const keys = new Set([...Object.keys(x.initial), ...Object.keys(y.initial)]);
+    const xState = {}, yState = {};
     for (let c = 0; c < Math.min(x.checkpoints.length, y.checkpoints.length); ++c) {
       const p = x.checkpoints[c], q = y.checkpoints[c];
+      Object.assign(xState, p.slots); Object.assign(yState, q.slots);
       for (const key of keys) {
-        const xv = p.slots[key] ?? x.initial[key] ?? y.initial[key];
-        const yv = q.slots[key] ?? y.initial[key] ?? x.initial[key];
-        if (xv !== yv) errors.push(`run ${i} checkpoint ${c} slot ${key}: ${xv} -> ${yv}`);
+        const xv = xState[key] ?? x.initial[key] ?? y.initial[key];
+        const yv = yState[key] ?? y.initial[key] ?? x.initial[key];
+        if (xv !== yv) fail(`run ${i} checkpoint ${c} slot ${key}: ${xv} -> ${yv}`);
       }
       for (const field of ['action', 'level', 'eth', 'tokens', 'events']) same(`run ${i} checkpoint ${c} ${field}`, p[field], q[field]);
     }
     same(`run ${i} trailing events`, x.events, y.events);
   }
+  Object.defineProperty(errors, 'totalCount', {value:totalCount});
   return errors;
 }
 const a = parse(fs.readFileSync(left, 'utf8')), b = parse(fs.readFileSync(right, 'utf8'));
-if (mode === '--xa') {
+if (mode === '--xa' || mode === '--profiles') {
   // Forge suite completion order is nondeterministic; pair tests by their recorded identity.
   for (const runs of [a,b]) {
     assert.equal(new Set(runs.map(r=>r.identity)).size,runs.length,'ambiguous replay identity');
@@ -161,15 +169,15 @@ if (mode === '--xa') {
 }
 const errors = differences(a, b);
 const proofs = {};
-assert.deepEqual(differences(a, structuredClone(a)), []);
+assert.deepEqual(differences(a, a), []);
 proofs.self = 'PASS';
 for (const mutation of ['slot', 'payout', 'event', 'revert']) {
-  const bad = structuredClone(a), r = bad[0];
+  const reference = a.slice(0, 1), bad = structuredClone(reference), r = bad[0];
   if (mutation === 'slot') { const c = r.checkpoints.find(c => Object.keys(c.slots).length); c.slots[Object.keys(c.slots)[0]] = '0x1234'; }
   if (mutation === 'payout') r.checkpoints[0].eth[Object.keys(r.checkpoints[0].eth)[0]] = '12345';
   if (mutation === 'event') { const c = r.checkpoints.find(c => c.events.length); c.events[0].args[0] = 'altered'; }
   if (mutation === 'revert') r.transactions[0].result = '0x12345678';
-  assert(differences(a, bad).length, `Undetected ${mutation}`);
+  assert(differences(reference, bad).length, `Undetected ${mutation}`);
   proofs[mutation] = 'DETECTED';
 }
 const forbidden = [
@@ -187,7 +195,7 @@ const edges = forbidden.map(([name, sig]) => {
   const selector = new Interface([`function ${sig}`]).getFunction(sig).selector;
   return { name, signature: sig, baseline: a.reduce((n,r)=>n+(r.edges[`${name}:${selector}`]||0),0), candidate: b.reduce((n,r)=>n+(r.edges[`${name}:${selector}`]||0),0) };
 });
-assert(edges.every(e => e.candidate === 0), 'Candidate still delegates through an eliminated edge');
+if (mode !== '--profiles') assert(edges.every(e => e.candidate === 0), 'Candidate still delegates through an eliminated edge');
 const adapterSelector = new Interface(['function purchaseWith(uint32,uint256,uint256,bytes32,uint8,uint256,uint32)']).getFunction('purchaseWith').selector;
 const adapterEdges = ['foil-ticket-and-floor-hook', 'create-smurf'].map(label => ({label,
   baseline:a.reduce((n,r)=>n+(r.edgesByLabel?.[`${label}|mod:Mint:${adapterSelector}`]||0),0),
@@ -208,7 +216,7 @@ if (p5Mode) {
       assert(edge.candidate > 0, 'Separate Mint comparison must exercise the retained adapter');
     else assert.equal(edge.candidate, 0, `P5 still delegates through ${signature}`);
   }
-} else {
+} else if (mode !== '--profiles') {
   for (const e of adapterEdges) {
     if (e.label === 'foil-ticket-and-floor-hook') assert.equal(e.candidate,e.baseline,'Foil must retain its explicit-value Mint adapter');
     else assert.equal(e.candidate,0,'Smurf creation must use the internal explicit-value helper');
@@ -287,7 +295,7 @@ if (phase === 'P3' || mode === '--integrated') {
     gameEdges.push(row);
   }
 }
-const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, gameEdges, crapsEdges, p5Edges, runs: a.map((r,i) => ({ identity:r.identity, transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
+const report = { differences: errors, totalDifferenceCount: errors.totalCount, proofs, removedEdges: edges, adapterEdges, boxEdges, gameEdges, crapsEdges, p5Edges, runs: a.map((r,i) => ({ identity:r.identity, transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
 fs.writeFileSync(output, JSON.stringify(report, null, 2)+'\n');
-console.log(JSON.stringify({ differences: errors.length, firstDifferences: errors.slice(0,10), proofs, removedEdges: edges, runs: report.runs.map(({ baselineGas,candidateGas,...r })=>r) }, null, 2));
+console.log(JSON.stringify({ differences: errors.totalCount, firstDifferences: errors.slice(0,10), proofs, removedEdges: edges, runs: report.runs.map(({ baselineGas,candidateGas,...r })=>r) }, null, 2));
 if (errors.length) process.exitCode = 1;

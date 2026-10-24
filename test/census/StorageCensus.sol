@@ -388,7 +388,7 @@ abstract contract StorageCensus is DeployProtocol {
     // ---------------------------------------------------------------------------------------
 
     /// @dev Fulfil the latest VRF request if it is pending. Returns true when it fulfilled one.
-    function _cFulfill(uint256 salt) internal returns (bool) {
+    function _cFulfill(uint256 salt) internal virtual returns (bool) {
         uint256 req = mockVRF.lastRequestId();
         if (req == 0) return false;
         (,, bool fulfilled) = mockVRF.pendingRequests(req);

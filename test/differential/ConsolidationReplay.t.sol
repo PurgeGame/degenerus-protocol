@@ -204,10 +204,10 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     }
 
 
-    /// @dev Map only the two versioned moved regions to the original logical roots.
+    /// @dev Map the two ERC-7201 regions to the same logical owners in either profile.
     ///      Mapping preimages come from the EVM recorder, never guessed from keys.
     function _logicalStorage(address account, bytes32 slot) private view returns (string memory, bytes32) {
-        if (account != address(coinflip)) return (_name(account), slot);
+        if (account != address(coinflip) && account != address(quests) && account != address(affiliate)) return (_name(account), slot);
         uint256 q = 1901532333685506345381563804653063251365749963858977004851173307698040730112;
         uint256 a = 66805284957968375743578360778328825040172275763452996655486391024476574631936;
         uint256 at = uint256(slot);
@@ -332,6 +332,12 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         console.log(string.concat("DIFFSLOT|Game|", vm.toString(slot), "|", vm.toString(vm.load(address(game), slot)), "|", vm.toString(before)));
     }
 
+    /// @dev A request receives the same word regardless of profile worker batching.
+    ///      StorageCensus supplies the request ID; its caller's loop salt is excluded.
+    function _cFulfill(uint256) internal override returns (bool) {
+        return super._cFulfill(0xCE5505);
+    }
+
     function _crank(uint256 tag) internal override {
         super._crank(tag);
         _checkpoint();
@@ -351,6 +357,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     }
 
     function _censusEnd() internal override {
+        assertEq(censusMineReverts, 0, "replay must not hide a stalled miner");
         _checkpoint();
         super._censusEnd();
     }
