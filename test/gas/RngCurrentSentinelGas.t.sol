@@ -53,6 +53,17 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
                 }
             }
             assertTrue(_sealed(day), "bounded real day completed");
+            // A mid-day request the engine sent on the way stays outstanding; answer it so the next
+            // cycle starts from an idle engine.
+            uint256 open = mockVRF.lastRequestId();
+            (,, bool openDone) = mockVRF.pendingRequests(open);
+            if (open != 0 && open != fulfilled && !openDone) {
+                uint256[] memory midday = new uint256[](1); midday[0] = word;
+                vm.prank(address(mockVRF));
+                game.rawFulfillRandomWords(open, midday);
+                callback += vm.snapshotGasLastCall("sentinel-callback");
+                fulfilled = open;
+            }
             assertEq(game.rngWordForDay(day), word);
             assertFalse(game.isRngFulfilled(), "day returned to waiting");
             assertGt(callback, 0, "non-vacuous callback");

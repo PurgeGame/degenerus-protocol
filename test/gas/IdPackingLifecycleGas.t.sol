@@ -121,15 +121,17 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
     }
 
     function test_CrapsOneFreshAndReused() public {
-        uint24 day = GameTimeLib.currentDayIndex() + 1;
+        uint24 day = game.currentDayView() + 1;
         _crapsCycle(day, 1, "craps-one-fresh");
         vm.warp(block.timestamp + 63 days);
+        _seedLogicalFixtureDay(day + 63);
         _crapsCycle(day + 64, 1, "craps-one-reused");
     }
     function test_CrapsThreeFreshAndReused() public {
-        uint24 day = GameTimeLib.currentDayIndex() + 1;
+        uint24 day = game.currentDayView() + 1;
         _crapsCycle(day, 3, "craps-three-fresh");
         vm.warp(block.timestamp + 63 days);
+        _seedLogicalFixtureDay(day + 63);
         _crapsCycle(day + 64, 3, "craps-three-reused");
     }
 }

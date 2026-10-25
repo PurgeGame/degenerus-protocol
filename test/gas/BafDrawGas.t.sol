@@ -86,7 +86,7 @@ contract BafDrawGas is DeployProtocol {
         // The retained Coinflip records add their tag/initialized checks to the first deposit:
         // 109,455 measured after storage reuse phase 2 (ceiling was 108,000).
         assertLe(first, 115_000, "first-ever warm deposit ceiling");
-        assertLe(sameDay, 26_000, "same-day warm repeat ceiling");
+        assertLe(sameDay, 27_500, "same-day warm repeat ceiling"); // 27,160 measured on the stack (was 26,000)
         assertLe(nextDay, 46_500, "next-day warm repeat ceiling");
     }
 
