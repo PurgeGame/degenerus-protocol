@@ -151,11 +151,12 @@ interface IDegenerusQuests {
     ///      through the wallet table. Affiliate credits the returned reward.
     /// @param id Wallet ID of the affiliate (code owner or upline) earning the reward
     /// @param amount The amount of affiliate rewards earned
+    /// @param day The Game's current logical day, or 0 to read it from the Game
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleAffiliate_g55809(uint32 id, uint256 amount)
+    function handleAffiliate_g2566281(uint32 id, uint256 amount, uint24 day)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 

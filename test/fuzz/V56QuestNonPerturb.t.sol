@@ -370,7 +370,7 @@ contract V56QuestNonPerturb is DeployProtocol {
         } else if (t == QT_AFFILIATE) {
             uint32 qid9 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleAffiliate_g55809(qid9, 100_000 ether);
+            (reward, qt, s, completed) = quests.handleAffiliate_g2566281(qid9, 100_000 ether, _fixtureGameDay());
         } else if (t == QT_DEGENERETTE_FLIP) {
             uint32 qid10 = _qid(player);
             vm.prank(ContractAddresses.COIN);

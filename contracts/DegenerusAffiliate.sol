@@ -63,7 +63,7 @@ interface IDegenerusQuestsAffiliate {
     ///      surplus returndata is ignored per ABI decoding rules. Affiliate passes the nonzero
     ///      stored ID of the winning owner or upline.
     /// @return reward Quest reward amount earned (0 if quest not completed).
-    function handleAffiliate_g55809(uint32 id, uint256 amount)
+    function handleAffiliate_g2566281(uint32 id, uint256 amount, uint24 day)
         external returns (uint256 reward);
 }
 
@@ -655,7 +655,7 @@ contract DegenerusAffiliate {
             }
 
             (uint32 winner, uint256 credit) =
-                _settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback);
+                _settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, 0);
             if (credit != 0) _affiliateCreditFlip(winner, credit);
         }
 
@@ -679,7 +679,9 @@ contract DegenerusAffiliate {
      * @param code Referral code supplied with the buy (resolved + locked once).
 
      * @param senderId The buyer's wallet ID (seeds the winner roll).
-     * @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
+     * @param levelDay Leaderboard level for all legs (ticket and lootbox both freeze at level + 1)
+     *        in the low 24 bits and the Game's current logical day, passed on to the winner's
+     *        quest hop, in the next 24.
      * @param tktFreshFlip Ticket-leg fresh spend in FLIP base units (fresh bps).
      * @param tktRecycledFlip Ticket-leg recycled spend in FLIP base units (recycled bps).
      * @param lbFreshFlip Lootbox-leg fresh spend in FLIP base units (fresh bps, tapered).
@@ -692,10 +694,10 @@ contract DegenerusAffiliate {
      * @return playerKickback FLIP kickback owed the buyer (summed across legs).
      * @custom:reverts OnlyAuthorized When caller is not the GAME contract.
      */
-    function payAffiliateCombined_g978(
+    function payAffiliateCombined_g3742656(
         bytes32 code,
         uint32 senderId,
-        uint24 lvl,
+        uint256 levelDay,
         uint256 tktFreshFlip,
         uint256 tktRecycledFlip,
         uint256 lbFreshFlip,
@@ -706,6 +708,7 @@ contract DegenerusAffiliate {
         returns (uint32 winnerId, uint256 winnerCredit, uint256 playerKickback)
     {
         if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
+        uint24 lvl = uint24(levelDay);
         (uint256 ref, bytes32 routeCode) = _resolveReferral(code, senderId);
 
         // Scale each leg at its OWN rate (fresh/recycled bps, taper on the lootbox-fresh leg) so
@@ -717,7 +720,7 @@ contract DegenerusAffiliate {
         );
         if (sumScaled == 0) return (0, 0, playerKickback);
         (winnerId, winnerCredit) =
-            _settleShare(ref, routeCode, senderId, lvl, sumScaled, sumScaled - playerKickback);
+            _settleShare(ref, routeCode, senderId, lvl, sumScaled, sumScaled - playerKickback, uint24(levelDay >> 24));
     }
 
     /// @dev Book `scaled` to the owner's level earnings and roll the winner of `shareBase`.
@@ -730,7 +733,8 @@ contract DegenerusAffiliate {
         uint32 senderId,
         uint24 lvl,
         uint256 scaled,
-        uint256 shareBase
+        uint256 shareBase,
+        uint24 day
     ) private returns (uint32 winnerId, uint256 winnerCredit) {
         uint32 ownerId = uint32(ref);
         bool noReferrer = ref & NO_REFERRER != 0;
@@ -745,7 +749,7 @@ contract DegenerusAffiliate {
             if (noReferrer) {
                 winnerCredit = shareBase;
             } else if (winnerId != senderId) {
-                winnerCredit = shareBase + _affiliateQuestReward(winnerId, shareBase);
+                winnerCredit = shareBase + _affiliateQuestReward(winnerId, shareBase, day);
             }
         }
     }
@@ -1280,8 +1284,8 @@ contract DegenerusAffiliate {
 
 
 
-    function _affiliateQuestReward(uint32 id, uint256 amount) internal virtual returns (uint256) {
-        return affiliateQuests.handleAffiliate_g55809(id, amount);
+    function _affiliateQuestReward(uint32 id, uint256 amount, uint24 day) internal virtual returns (uint256) {
+        return affiliateQuests.handleAffiliate_g2566281(id, amount, day);
     }
 
     function _affiliateCreditFlip(uint32 id, uint256 amount) internal virtual {

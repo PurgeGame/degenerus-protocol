@@ -28,7 +28,7 @@ import {
  *  - handlePurchase_g23478 (onlyCoin, progress, completion, reward)
  *  - handleFlip_g217 (onlyCoin, progress, completion)
  *  - handleDecimator (onlyCoin, access)
- *  - handleAffiliate_g55809 (onlyCoin, access)
+ *  - handleAffiliate_g2566281 (onlyCoin, access)
  *  - handleDegenerette_g3 (onlyCoin, access)
  *  - playerQuestStates (view)
  *  - getActiveQuests (view)
@@ -83,7 +83,7 @@ async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintF
  */
 // Handlers whose trusted caller supplies the Game day, keyed by their argument count without it.
 // The purchase handler takes the day first; the others take it last.
-const DAY_ARG = { handlePurchase_g23478: 6, handleFlip_g217: 2, handleDegenerette_g3: 4 };
+const DAY_ARG = { handlePurchase_g23478: 6, handleFlip_g217: 2, handleDegenerette_g3: 4, handleAffiliate_g2566281: 2 };
 
 async function callHandlerAsCoin(hreEthers, coin, quests, fnName, args) {
   if (DAY_ARG[fnName] === args.length) {
@@ -651,21 +651,21 @@ describe("DegenerusQuests", function () {
   });
 
   // =========================================================================
-  // 9. handleAffiliate_g55809 - Access Control
+  // 9. handleAffiliate_g2566281 - Access Control
   // =========================================================================
-  describe("handleAffiliate_g55809 - access control", function () {
+  describe("handleAffiliate_g2566281 - access control", function () {
     it("reverts OnlyCoin when called by EOA", async function () {
       const { quests, alice } = await loadFixture(questFixture);
       await expect(
-        quests.connect(alice).handleAffiliate_g55809(ALICE, flip(2000))
+        quests.connect(alice).handleAffiliate_g2566281(ALICE, flip(2000), 1)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
-    it("coin can call handleAffiliate_g55809 without revert", async function () {
+    it("coin can call handleAffiliate_g2566281 without revert", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       await rollQuestAsGame(hre.ethers, game, quests, 10n, 99n);
       await expect(
-        callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate_g55809", [
+        callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate_g2566281", [
           ALICE,
           flip(2000),
         ])
@@ -1009,7 +1009,7 @@ describe("DegenerusQuests", function () {
       const handlers = [
         ["handleFlip_g217", [ALICE, flip(1000)]],
         ["handleDecimator", [ALICE, flip(1000)]],
-        ["handleAffiliate_g55809", [ALICE, flip(1000)]],
+        ["handleAffiliate_g2566281", [ALICE, flip(1000)]],
         ["handleDegenerette_g3", [ALICE, eth("0.01"), true, 0]],
       ];
 
@@ -1219,7 +1219,7 @@ describe("DegenerusQuests", function () {
       const ctx = await loadFixture(questFixture);
       const { quests, game, coin, alice } = ctx;
 
-      // A daily must be rolled (handleAffiliate_g55809 early-returns on currentDay == 0).
+      // A daily must be rolled (handleAffiliate_g2566281 early-returns on currentDay == 0).
       // Pick one whose slot 1 is NOT affiliate so only the level leg accrues.
       const gameAddr = await game.getAddress();
       await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
@@ -1255,7 +1255,7 @@ describe("DegenerusQuests", function () {
       expect(view.target, "affiliate level target is 6,000 FLIP").to.equal(flip(6000));
 
       // One FLIP short must not settle it.
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate_g55809", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate_g2566281", [
         ALICE,
         flip(6000) - 1n,
       ]);
@@ -1265,7 +1265,7 @@ describe("DegenerusQuests", function () {
       ).to.equal(false);
 
       // The boundary wei crosses it.
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate_g55809", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate_g2566281", [
         ALICE,
         1n,
       ]);
@@ -1320,7 +1320,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleAffiliate_g55809",
+        "handleAffiliate_g2566281",
         [ALICE, flip(1)]
       );
       const evs = await getEvents(tx, quests, "QuestProgressUpdated");
@@ -1356,7 +1356,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleAffiliate_g55809",
+        "handleAffiliate_g2566281",
         [ALICE, flip(599)]
       );
       expect(short.result[3], "599 FLIP does not complete").to.equal(false);
@@ -1365,7 +1365,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handleAffiliate_g55809",
+        "handleAffiliate_g2566281",
         [ALICE, flip(1)]
       );
       expect(boundary.result[3], "the 600th FLIP completes").to.equal(true);

@@ -809,14 +809,6 @@
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate._affiliateQuestReward",
-    "kind": "external",
-    "expression": "affiliateQuests.handleAffiliate_g55809(id, amount)",
-    "count": 1,
-    "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate._bootstrapReferral",
     "kind": "external",
     "expression": "game.registerWallet_g9539(player, true)",
@@ -918,14 +910,6 @@
     "expression": "_referralTarget(code, senderId)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate._settleShare",
-    "kind": "recipient-helper",
-    "expression": "_affiliateQuestReward(winnerId, shareBase)",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -1046,30 +1030,6 @@
     "expression": "_resolveReferral(code, senderId)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate.payAffiliate",
-    "kind": "recipient-helper",
-    "expression": "_settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate.payAffiliateCombined_g978",
-    "kind": "recipient-helper",
-    "expression": "_resolveReferral(code, senderId)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate.payAffiliateCombined_g978",
-    "kind": "recipient-helper",
-    "expression": "_settleShare(ref, routeCode, senderId, lvl, sumScaled, sumScaled - playerKickback)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -2411,14 +2371,6 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._handleAffiliate",
     "kind": "recipient-helper",
-    "expression": "_currentQuestDay(quests)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._handleAffiliate",
-    "kind": "recipient-helper",
     "expression": "_handleLevelQuestProgress(id, QUEST_TYPE_AFFILIATE, amount, 0)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
@@ -2726,14 +2678,6 @@
     "expression": "_questViewData( local[slot], state, slot, currentDay )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleAffiliate_g55809",
-    "kind": "recipient-helper",
-    "expression": "_handleAffiliate(id, amount)",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -11187,14 +11131,6 @@
     "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._purchaseForWithCached",
     "kind": "external",
-    "expression": "affiliate.payAffiliateCombined_g978( affiliateCode, buyerId, quote.cachedLevel + 1, ticket.ticketFreshFlip, ticket.ticketRecycledFlip, lbFreshFlip, lbRecycledFlip, uint16(cachedScore) )",
-    "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._purchaseForWithCached",
-    "kind": "external",
     "expression": "coinflip.armRecord( RECORD_KIND_BUY, buyerId, entryQuantityScaled / (4 * QTY_SCALE) )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
@@ -11476,14 +11412,6 @@
     "scope": "GlamsterdamCoinflip._affiliateCreditFlipPair",
     "kind": "recipient-helper",
     "expression": "_creditFlip(b, amountB)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
-    "scope": "GlamsterdamCoinflip._affiliateQuestReward",
-    "kind": "recipient-helper",
-    "expression": "_handleAffiliate(id, amount)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
   },
@@ -12480,6 +12408,46 @@
     "review": "EXTERNAL READ: stETH balance read with all gas above the meter floor and caller tail, 32-byte prefix and uint128 sanity limit; failure skips optional funding so source order is never guessed."
   },
   {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate._affiliateQuestReward",
+    "kind": "external",
+    "expression": "affiliateQuests.handleAffiliate_g2566281(id, amount, day)",
+    "count": 1,
+    "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate._settleShare",
+    "kind": "recipient-helper",
+    "expression": "_affiliateQuestReward(winnerId, shareBase, day)",
+    "count": 1,
+    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate.payAffiliate",
+    "kind": "recipient-helper",
+    "expression": "_settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, 0)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handleAffiliate",
+    "kind": "recipient-helper",
+    "expression": "_questGameDay()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: a zero day argument reads the logical-day accessor the quest identity already used; the Coinflip host overrides it with its packed local mirror. Reward recipient authorization is unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.handleAffiliate_g2566281",
+    "kind": "recipient-helper",
+    "expression": "_handleAffiliate(id, amount, day)",
+    "count": 1,
+    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestLootboxRng",
     "kind": "bounded-wrapper",
@@ -12488,11 +12456,43 @@
     "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
   },
   {
+    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
+    "scope": "GlamsterdamCoinflip._affiliateQuestReward",
+    "kind": "recipient-helper",
+    "expression": "_handleAffiliate(id, amount, day)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
+  },
+  {
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._boundedVrfRequest",
     "kind": "bounded-wrapper",
     "expression": "BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE)",
     "count": 1,
     "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate.payAffiliateCombined_g3742656",
+    "kind": "recipient-helper",
+    "expression": "_resolveReferral(code, senderId)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate.payAffiliateCombined_g3742656",
+    "kind": "recipient-helper",
+    "expression": "_settleShare(ref, routeCode, senderId, lvl, sumScaled, sumScaled - playerKickback, uint24(levelDay >> 24))",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "external",
+    "expression": "affiliate.payAffiliateCombined_g3742656( affiliateCode, buyerId, (uint256(dailyIdx) << 24) | (quote.cachedLevel + 1), ticket.ticketFreshFlip, ticket.ticketRecycledFlip, lbFreshFlip, lbRecycledFlip, uint16(cachedScore) )",
+    "count": 1,
+    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   }
 ]

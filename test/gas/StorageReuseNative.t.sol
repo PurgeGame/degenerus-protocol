@@ -156,14 +156,14 @@ contract StorageReuseNativeTest is DeployProtocol, NativeGasExport {
         uint32 buyer = 100_000;
         while (uint256(keccak256(abi.encodePacked(keccak256("affiliate-payout-roll-v1"),
             GameTimeLib.currentDayIndex(), buyer, code))) % 20 >= 15) ++buyer;
-        bytes memory input = abi.encodeCall(affiliate.payAffiliateCombined_g978, (code, buyer, 8, 10000, 0, 0, 0, 0));
+        bytes memory input = abi.encodeCall(affiliate.payAffiliateCombined_g3742656, (code, buyer, (uint256(_fixtureGameDay()) << 24) | 8, 10000, 0, 0, 0, 0));
         _nativeFixture("affiliate_fresh", address(game), address(affiliate), input);
-        vm.prank(address(game)); affiliate.payAffiliateCombined_g978(code, buyer, 8, 10000, 0, 0, 0, 0);
+        vm.prank(address(game)); affiliate.payAffiliateCombined_g3742656(code, buyer, (uint256(_fixtureGameDay()) << 24) | 8, 10000, 0, 0, 0, 0);
         _nativeFixture("affiliate_same_level", address(game), address(affiliate), input);
         _nativeFixture("affiliate_next_level", address(game), address(affiliate),
-            abi.encodeCall(affiliate.payAffiliateCombined_g978, (code, buyer, 9, 10000, 0, 0, 0, 0)));
+            abi.encodeCall(affiliate.payAffiliateCombined_g3742656, (code, buyer, (uint256(_fixtureGameDay()) << 24) | 9, 10000, 0, 0, 0, 0)));
         _nativeFixture("affiliate_gap_7", address(game), address(affiliate),
-            abi.encodeCall(affiliate.payAffiliateCombined_g978, (code, buyer, 15, 10000, 0, 0, 0, 0)));
+            abi.encodeCall(affiliate.payAffiliateCombined_g3742656, (code, buyer, (uint256(_fixtureGameDay()) << 24) | 15, 10000, 0, 0, 0, 0)));
         AffiliateStorage.set(address(affiliate), id, 8, (uint256(1) << 35) - 1);
         _nativeFixture("affiliate_capped", address(game), address(affiliate), input);
     }

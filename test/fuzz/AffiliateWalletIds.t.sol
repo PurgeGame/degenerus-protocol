@@ -280,7 +280,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         senderId = _settlementId(sender, code, senderId);
         vm.prank(address(game));
         (winnerId, credit, kickback) =
-            affiliate.payAffiliateCombined_g978(code, senderId, lvl, freshFlip, 0, 0, 0, 0);
+            affiliate.payAffiliateCombined_g3742656(code, senderId, (uint256(_fixtureGameDay()) << 24) | lvl, freshFlip, 0, 0, 0, 0);
     }
 
     function _pay(uint256 amount, bytes32 code, address sender, uint32 senderId, uint24 lvl)
@@ -1183,7 +1183,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             bytes[] memory credits = _affiliateCredits(acc);
             assertEq(credits.length, 1);
             _assertCredit(credits[0], parity == 0 ? 1 : 2, 1000);
-            assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate_g55809.selector).length, 0);
+            assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate_g2566281.selector).length, 0);
         }
     }
 
@@ -1237,7 +1237,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         vm.startStateDiffRecording();
         _pay(4000, bytes32(0), s, sid, 1);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate_g55809.selector).length, 0);
+        assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate_g2566281.selector).length, 0);
         assertEq(_calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip_g317.selector).length, 0);
         assertEq(affiliate.affiliateScore(1, oid), 1000, "earnings still booked");
         (uint32 w, uint256 c,) = _payCombined(bytes32(0), s, sid, 1, 4000);
@@ -1259,7 +1259,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(
-            _calls(acc, address(game), address(affiliate), affiliate.payAffiliateCombined_g978.selector).length, 1
+            _calls(acc, address(game), address(affiliate), affiliate.payAffiliateCombined_g3742656.selector).length, 1
         );
         (uint32 id1, uint256 a1, uint32 id2, uint256 a2) = _pair(acc);
         uint256 total = _earnedTotal(logs, oid);
@@ -1538,8 +1538,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             uint32 sid = uint32(20_000_000 + step);
             address expWinner = _refWinner(codes[k], owners[k], sid);
             vm.prank(address(game));
-            (uint32 w,,) = affiliate.payAffiliateCombined_g978(
-                codes[k], sid, lvl, fresh, recycled, lbFresh, 0, score
+            (uint32 w,,) = affiliate.payAffiliateCombined_g3742656(
+                codes[k], sid, (uint256(_fixtureGameDay()) << 24) | lvl, fresh, recycled, lbFresh, 0, score
             );
             assertEq(w, _id(expWinner), "winner");
             _book(
@@ -1799,7 +1799,7 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
     function _landWord(uint256 word) private {
         RecyclingState.seedWord(address(game), IDX, bytes32(word));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(_fixtureGameDay()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 

@@ -24,8 +24,8 @@ contract GlamsterdamCoinflip is DegenerusQuests, DegenerusAffiliate, CoinflipCor
         _creditFlip(id, amount);
     }
 
-    function _affiliateQuestReward(uint32 id, uint256 amount) internal override returns (uint256 reward) {
-        (reward,,,) = _handleAffiliate(id, amount);
+    function _affiliateQuestReward(uint32 id, uint256 amount, uint24 day) internal override returns (uint256 reward) {
+        (reward,,,) = _handleAffiliate(id, amount, day);
     }
 
     function _affiliateCreditFlip(uint32 id, uint256 amount) internal override {

@@ -363,7 +363,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
             affiliate.payAffiliate(4000, bytes32(0), sid, 1, true, 0);
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             (, bytes32[] memory writes) = vm.accesses(address(quests));
-            assertEq(_onlyId(acc, address(affiliate), quests.handleAffiliate_g55809.selector), expected[cls]);
+            assertEq(_onlyId(acc, address(affiliate), quests.handleAffiliate_g2566281.selector), expected[cls]);
             _assertWritesUnder(writes, expected[cls]);
         }
     }
@@ -480,7 +480,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _setLevelQuest(QT_AFFILIATE);
         vm.recordLogs();
         vm.startStateDiffRecording();
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 6_000)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 6_000, _fixtureGameDay())));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes[] memory ext = _calls(acc, address(quests), address(game), game.extsload_g2807007.selector);
@@ -499,7 +499,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         address[2] memory keys = [ContractAddresses.VAULT, ContractAddresses.SDGNRS];
         for (uint32 id = 1; id <= 2; ++id) {
             vm.startStateDiffRecording();
-            _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 6_000)));
+            _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 6_000, _fixtureGameDay())));
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             assertEq(_calls(acc, address(quests), address(game), game.extsload_g2807007.selector).length, 0, "no extsload");
             bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
@@ -513,7 +513,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint32 id = _giveWalletId(o);
         _setLevelQuest(QT_AFFILIATE);
         vm.startStateDiffRecording();
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 6_000)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 6_000, _fixtureGameDay())));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_calls(acc, address(quests), address(game), game.extsload_g2807007.selector).length, 0);
         assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip_g317.selector).length, 0, "no credit");
@@ -521,9 +521,23 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq(uint128(_lq(id) >> 8), 6_000, "progress kept");
         _eligible(o, false, 5);
         vm.startStateDiffRecording();
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 1)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 1, _fixtureGameDay())));
         acc = vm.stopAndReturnStateDiff();
         _assertQuestCredit(acc, id, 800);
+    }
+
+    /// @dev The Affiliate passes the Game day it was handed: a stale day records nothing, a zero
+    ///      day (the foil and pass payers hold none) reads the Game's, a current day matches it.
+    function test_AffiliateHopTakesTheSuppliedDayAndReadsItAtZero() public {
+        uint32 id = _giveWalletId(makeAddr("hopDay"));
+        _setLevelQuest(QT_AFFILIATE);
+        uint24 day = _fixtureGameDay();
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 1_000, day + 1)));
+        assertEq(uint128(_lq(id) >> 8), 0, "a stale day records nothing");
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 1_000, 0)));
+        assertEq(uint128(_lq(id) >> 8), 1_000, "a zero day reads the Game day");
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 500, day)));
+        assertEq(uint128(_lq(id) >> 8), 1_500, "the supplied current day records the same");
     }
 
     function test_UplineCompletingLevelQuestThroughAffiliateIsCreditedById() public {
@@ -979,7 +993,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         if (afk) _as(address(game), abi.encodeCall(quests.beginAfking, (id, wallDay)));
         _as(address(coinflip), abi.encodeCall(quests.handleFlip_g217, (id, amount, _fixtureGameDay())));
         _as(address(coin), abi.encodeCall(quests.handleDecimator, (id, amount)));
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, amount)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, amount, _fixtureGameDay())));
         _as(address(game), abi.encodeCall(quests.handleDegenerette_g3, (id, amount, amount & 1 == 0, price, _fixtureGameDay())));
         _as(
             address(game),

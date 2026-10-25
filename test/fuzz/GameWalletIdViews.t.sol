@@ -905,7 +905,7 @@ contract GameWalletIdViews is DeployProtocol {
         );
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g978.selector),
+            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g3742656.selector),
             abi.encode(winnerId, uint256(500), uint256(300))
         );
         // The call carries the buyer ID first and the returned winner ID with its credit.

@@ -74,7 +74,7 @@ async function payAffiliateAsGame(
 }
 
 /**
- * Call payAffiliateCombined_g978 as the game contract (impersonation).
+ * Call payAffiliateCombined_g3742656 as the game contract (impersonation).
  */
 async function payAffiliateCombinedAsGame(
   hreEthers,
@@ -95,7 +95,7 @@ async function payAffiliateCombinedAsGame(
   const senderId = await giveWalletId(game, sender);
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliateCombined_g978(code, senderId, lvl, tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
+    .payAffiliateCombined_g3742656(code, senderId, (BigInt(await game.currentDayView_g542950()) << 24n) | BigInt(lvl), tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -1258,7 +1258,7 @@ describe("DegenerusAffiliate", function () {
       expect(b.newTotal - a.newTotal).to.equal(flip(50000)); // recycled 5%
     });
 
-    it("payAffiliateCombined_g978 pools its four legs into ONE emit", async function () {
+    it("payAffiliateCombined_g3742656 pools its four legs into ONE emit", async function () {
       const { affiliate, game, bob, code } = await setup();
       const tx = await payAffiliateCombinedAsGame(
         hre.ethers, game, affiliate, code, bob.address, 1,

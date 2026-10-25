@@ -1132,24 +1132,25 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      * @param id Wallet ID of the affiliate (code owner or upline) who earned commission.
      * @param amount FLIP earned from affiliate referrals (in base units).
+     * @param day The Game's current logical day, or 0 to read it here.
      * @return reward FLIP earned (whole FLIP).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
      * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
-    function handleAffiliate_g55809(uint32 id, uint256 amount) external questsContext onlyCoin
+    function handleAffiliate_g2566281(uint32 id, uint256 amount, uint24 day) external questsContext onlyCoin
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        return _handleAffiliate(id, amount);
+        return _handleAffiliate(id, amount, day);
     }
 
     /// @dev Only the guarded wrapper or a trusted co-located action may enter.
-    function _handleAffiliate(uint32 id, uint256 amount) internal
+    function _handleAffiliate(uint32 id, uint256 amount, uint24 day) internal
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
-        uint24 currentDay = _currentQuestDay(quests);
+        uint24 currentDay = _currentQuestDay(quests, day == 0 ? _questGameDay() : day);
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
         if (amount == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);

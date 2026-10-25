@@ -67,7 +67,9 @@ interface IDegenerusAffiliate {
 
 
     /// @param senderId The buyer's wallet ID (seeds the winner roll).
-    /// @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
+    /// @param levelDay Leaderboard level for all legs (ticket and lootbox both freeze at level + 1)
+    ///        in the low 24 bits and the Game's current logical day, passed on to the winner's
+    ///        quest hop, in the next 24.
     /// @param tktFreshFlip Ticket-leg fresh spend in FLIP base units.
     /// @param tktRecycledFlip Ticket-leg recycled spend in FLIP base units.
     /// @param lbFreshFlip Lootbox-leg fresh spend in FLIP base units (tapered).
@@ -80,10 +82,10 @@ interface IDegenerusAffiliate {
     ///         winnerId == senderId.
     /// @return playerKickback FLIP kickback owed the buyer (summed across legs).
     /// @custom:reverts OnlyAuthorized If caller is not GAME.
-    function payAffiliateCombined_g978(
+    function payAffiliateCombined_g3742656(
         bytes32 code,
         uint32 senderId,
-        uint24 lvl,
+        uint256 levelDay,
         uint256 tktFreshFlip,
         uint256 tktRecycledFlip,
         uint256 lbFreshFlip,

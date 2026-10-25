@@ -446,7 +446,7 @@ contract GameWalletIdCredits is DeployProtocol {
         uint256 snap = vm.snapshotState();
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g978.selector),
+            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g3742656.selector),
             abi.encode(uint32(0), uint256(0), uint256(0))
         );
         uint256 b0 = _lane(buyerId);
@@ -457,7 +457,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g978.selector),
+            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g3742656.selector),
             abi.encode(winnerId, uint256(500), uint256(300))
         );
         uint256 buyerBefore = _lane(buyerId);

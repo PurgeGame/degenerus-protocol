@@ -932,10 +932,10 @@ abstract contract GamePurchase is
                 ? _ethToFlipValue(c.lootboxClaimableUsed, quote.priceWei)
                 : 0;
             uint256 affKickback;
-            (affWinnerId, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined_g978(
+            (affWinnerId, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined_g3742656(
                 affiliateCode,
                 buyerId,
-                quote.cachedLevel + 1,
+                (uint256(dailyIdx) << 24) | (quote.cachedLevel + 1),
                 ticket.ticketFreshFlip,
                 ticket.ticketRecycledFlip,
                 lbFreshFlip,

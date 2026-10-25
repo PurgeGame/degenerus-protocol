@@ -63,7 +63,7 @@ contract AffiliateIdentityTest is DeployProtocol {
     function _pay(bytes32 code, uint256 branch, uint256 nonce) private returns (uint32 winnerId) {
         (address buyer, uint32 buyerId) = _buyer(code, branch, nonce);
         vm.prank(address(game));
-        (winnerId,,) = affiliate.payAffiliateCombined_g978(code, buyerId, 5, 10000, 0, 0, 0, 0);
+        (winnerId,,) = affiliate.payAffiliateCombined_g3742656(code, buyerId, (uint256(_fixtureGameDay()) << 24) | 5, 10000, 0, 0, 0, 0);
     }
     function _earningsSlot(uint24 lvl, address owner) private view returns (bytes32) {
         return keccak256(abi.encode(uint256(_id(owner)), uint256(QaSlots.EARNED)));
@@ -189,7 +189,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.prank(a); affiliate.referPlayer(B);
         uint32 aId = _id(a);
         vm.prank(address(game));
-        affiliate.payAffiliateCombined_g978(B, aId, 5, 10000, 0, 0, 0, 0);
+        affiliate.payAffiliateCombined_g3742656(B, aId, (uint256(_fixtureGameDay()) << 24) | 5, 10000, 0, 0, 0, 0);
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
         vm.prank(address(game)); affiliate.payAffiliate(10000, C, aId, 5, true, 0);
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
@@ -202,7 +202,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("AlreadyReferred()")));
         vm.prank(a); affiliate.referPlayer(B);
         vm.prank(address(game)); affiliate.payAffiliate(10000, B, aId, 5, true, 0);
-        vm.prank(address(game)); affiliate.payAffiliateCombined_g978(C, aId, 5, 10000, 0, 0, 0, 0);
+        vm.prank(address(game)); affiliate.payAffiliateCombined_g3742656(C, aId, (uint256(_fixtureGameDay()) << 24) | 5, 10000, 0, 0, 0, 0);
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
     }
 
@@ -228,7 +228,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.store(address(affiliate), _earningsSlot(5, a), bytes32(_earningsWord(5, a) | (first & ~((uint256(1) << 189) - 1))));
         (address buyer, uint32 buyerId) = _buyer(code, 2, 200);
         vm.prank(address(game));
-        (uint32 winner,,) = affiliate.payAffiliateCombined_g978(code, buyerId, 6, 10000, 0, 0, 0, 0);
+        (uint32 winner,,) = affiliate.payAffiliateCombined_g3742656(code, buyerId, (uint256(_fixtureGameDay()) << 24) | 6, 10000, 0, 0, 0, 0);
         assertEq(winner, _id(c));
         assertEq(_earningsWord(6, a) >> 189, first >> 189);
         assertEq(affiliate.affiliateScore(6, _id(a)), 2000);
@@ -266,7 +266,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         uint256 denominator = affiliate.totalAffiliateScore(5);
         (, uint32 buyerId) = _buyer(A, 1, 200);
         vm.prank(address(game));
-        (uint32 winner, uint256 credit, uint256 kickback) = affiliate.payAffiliateCombined_g978(A, buyerId, 5, 10000, 0, 0, 0, 0);
+        (uint32 winner, uint256 credit, uint256 kickback) = affiliate.payAffiliateCombined_g3742656(A, buyerId, (uint256(_fixtureGameDay()) << 24) | 5, 10000, 0, 0, 0, 0);
         assertEq(winner, _id(b));
         assertEq(credit, 1760, "full commission after the existing 12% kickback");
         assertEq(kickback, 240, "score cap must not reduce kickback");
