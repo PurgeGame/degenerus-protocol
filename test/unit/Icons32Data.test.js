@@ -89,6 +89,7 @@ describe("Icons32Data bootstrap and governance", function () {
     await ownerAction(icons32,"setPaths",[0,["governed"]]);
   });
   it("opt-in finalization happens on the final upload and prevents all later writes", async function () {
+    this.timeout(300_000); // deploys a finalizing fixture and uploads every icon set: ~100s unloaded
     const {icons32} = await loadFixture(finalizedFixture);
     await icons32.setSymbols(0,data.symQ1);
     expect(await icons32.finalized()).to.equal(false);
