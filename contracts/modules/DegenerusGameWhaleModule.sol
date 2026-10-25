@@ -1023,7 +1023,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         uint256 reward = whaleReserve - remaining;
         if (reward != 0) {
-            dgnrs.transferFromPool(IsDGNRS.Pool.Whale, _payee(_walletElement(buyer)), reward);
+            dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Whale, _payee(_walletElement(buyer)), reward);
         }
     }
 
@@ -1048,7 +1048,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             uint256 totalReward = (whaleReserve * DEITY_WHALE_POOL_BPS) /
                 10_000;
             if (totalReward != 0) {
-                dgnrs.transferFromPool(
+                dgnrs.transferFromPool_g106128(
                     IsDGNRS.Pool.Whale,
                     _payee(_walletElement(buyer)),
                     totalReward
@@ -1072,7 +1072,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             DGNRS_AFFILIATE_DIRECT_DEITY_PPM) /
             DGNRS_WHALE_REWARD_PPM_SCALE;
         if (affiliateShare != 0) {
-            dgnrs.transferFromPool(
+            dgnrs.transferFromPool_g106128(
                 IsDGNRS.Pool.Affiliate,
                 _payee(_walletElement(affiliateId)),
                 affiliateShare
@@ -1082,7 +1082,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 uplineShare = (affiliateReserve *
             DGNRS_AFFILIATE_UPLINE_DEITY_PPM) / DGNRS_WHALE_REWARD_PPM_SCALE;
         if (upline1Id != 0 && uplineShare != 0) {
-            dgnrs.transferFromPool(
+            dgnrs.transferFromPool_g106128(
                 IsDGNRS.Pool.Affiliate,
                 _payee(_walletElement(upline1Id)),
                 uplineShare
@@ -1090,7 +1090,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         uint256 upline2Share = uplineShare / 2;
         if (upline2Id != 0 && upline2Share != 0) {
-            dgnrs.transferFromPool(
+            dgnrs.transferFromPool_g106128(
                 IsDGNRS.Pool.Affiliate,
                 _payee(_walletElement(upline2Id)),
                 upline2Share

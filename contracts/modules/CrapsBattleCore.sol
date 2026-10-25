@@ -975,7 +975,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///      and the newcomer rate, which only a paid door's account carries.
     function _burnForCraps(uint256 account, uint256 grossAndFlags) private returns (uint8) {
         if (account & _ACCOUNT_NEWCOMER != 0) grossAndFlags += ((grossAndFlags >> 8) / 20) << 8;
-        return IFlipCoin(ContractAddresses.COIN).burnCoinForCraps(
+        return IFlipCoin(ContractAddresses.COIN).burnCoinForCraps_g292454(
             address(uint160(account)), uint32(account >> _ACCOUNT_ID_SHIFT), grossAndFlags
         );
     }
@@ -995,7 +995,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @dev ONE encoder for the plain burns. The lapse sweep's guarded burn stays direct —
     ///      a `try` needs the external call in its own hands.
     function _burnCoin(address from, uint256 amount) private {
-        IFlipCoin(ContractAddresses.COIN).burnCoin(from, amount);
+        IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(from, amount);
     }
 
     /// @notice Commit `count` of account `id`'s day-pass credits (0 = the caller) to `count`
@@ -1583,7 +1583,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         if (funded) {
             _takeCredits(id, high, 1);
         } else {
-            try IFlipCoin(ContractAddresses.COIN).burnCoin(address(uint160(account)), cost) {
+            try IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(address(uint160(account)), cost) {
                 funded = true;
             } catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
         }

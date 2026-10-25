@@ -123,11 +123,11 @@ abstract contract GameBingo is DegenerusGameStorage {
         _markBingoClaimed(lvl, playerId);
 
         // ---- Interactions (after all effects) ----
-        // sDGNRS draw: transferFromPool clamps to the available Reward pool and
+        // sDGNRS draw: transferFromPool_g106128 clamps to the available Reward pool and
         // returns the actual amount paid. An empty/0 pool is a graceful no-op
         // (dgnrsPaid == 0, no revert; the claim stays set and FLIP is still credited).
         uint256 poolBal = dgnrs.poolBalance(IsDGNRS.Pool.Reward);
-        uint256 dgnrsPaid = dgnrs.transferFromPool(
+        uint256 dgnrsPaid = dgnrs.transferFromPool_g106128(
             IsDGNRS.Pool.Reward,
             payee,
             (poolBal * BINGO_DGNRS_BPS) / 10_000
@@ -179,7 +179,7 @@ abstract contract GameBingo is DegenerusGameStorage {
         // Mark before interactions. A failed transfer reverts the stamp; a callback cannot
         // replay this claim or be overwritten by a stale copy of the shared bingo word.
         _markAffiliateDgnrsClaimed(currLevel, playerId);
-        uint256 paid = dgnrs.transferFromPool(
+        uint256 paid = dgnrs.transferFromPool_g106128(
             IsDGNRS.Pool.Affiliate,
             payee,
             reward

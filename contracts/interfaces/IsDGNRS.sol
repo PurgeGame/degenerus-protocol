@@ -61,7 +61,7 @@ interface IsDGNRS {
     /// @param to Recipient address
     /// @param amount Amount of sDGNRS to transfer
     /// @return transferred Amount actually transferred (may be less if pool has insufficient balance)
-    function transferFromPool(Pool pool, address to, uint256 amount) external returns (uint256 transferred);
+    function transferFromPool_g106128(Pool pool, address to, uint256 amount) external returns (uint256 transferred);
 
     /// @notice Recycle a random 25-75% of the century's live burns into Whale/Affiliate/Lootbox/Reward.
     /// @dev GAME-only; called at the transition close after levels 100, 200, etc. No backing moves.
@@ -137,14 +137,14 @@ interface IsDGNRS {
     /// @dev Never reverts. An empty batch, or a close while another batch settles, is a no-op.
     /// @param gameClaimable sDGNRS's claimable balance on the Game.
     /// @return pull Value the Game moves from that claimable into its redemption reserve.
-    function closeRedemptionBatch(uint256 gameClaimable) external returns (uint256 pull);
+    function closeRedemptionBatch_g165517(uint256 gameClaimable) external returns (uint256 pull);
 
     /// @notice Resolve the settling batch at a flat roll of 100 if its live settlement never started
     ///         (Game only; both endings).
     function resolveTerminalRedemptions() external;
 
     /// @notice True while a closed batch has unsettled claims (RNG consumer stage 1).
-    function redemptionSettlementPending() external view returns (bool);
+    function redemptionSettlementPending_g153837() external view returns (bool);
 
     /// @notice Settle the closed batch on `word`, the published word of the current session.
     function runRedemptionWork(uint256 word, uint256 gasAllowance) external returns (MineFlipGas.Result memory);

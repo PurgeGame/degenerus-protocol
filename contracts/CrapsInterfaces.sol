@@ -24,16 +24,16 @@ interface ICrapsEngine {
 interface IFlipCoin {
     /// @notice FLIP.sol's burn of `amount` from `target`'s FLIP balance, consuming settled
     ///         coinflip winnings only for the shortfall.
-    function burnCoin(address target, uint256 amount) external;
+    function burnCoin_g27673(address target, uint256 amount) external;
     /// @dev The paid-craps twin. Takes the price with action flags in its low byte and hands back
     ///      the one-hot craps-boon tier consumed by this burn (0 on every burn that consumed none).
     ///      The FLIP burn stays on `target`'s address, which is the account's PAYEE (the caller
     ///      for a self door, a smurf's owner, or an ordinary account's own key); `id` is the
     ///      account's nonzero wallet ID, obtained by the table before the bet body, which keys
     ///      the craps boon lane and the craps quest. A comp burn ignores `id`.
-    function burnCoinForCraps(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 boonMask);
+    function burnCoinForCraps_g292454(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 boonMask);
     /// @dev Feed the craps comp lane: two percent of a completed field's eligible bankroll.
-    function creditCrapsComps(uint256 amount) external;
+    function creditCrapsComps_g37225(uint256 amount) external;
 }
 
 /// @dev The vault's ownership test — the pinned DGVE governance executor. The only authority this contract

@@ -30,12 +30,12 @@ interface IDegenerusCoin {
     /// @notice Burns coins from a target address
     /// @param target The address to burn coins from
     /// @param amount The amount of coins to burn
-    function burnCoin(address target, uint256 amount) external;
+    function burnCoin_g27673(address target, uint256 amount) external;
 
     /// @notice Mints new coins directly to a player for game rewards
     /// @param player The address to mint coins to
     /// @param amount The amount of coins to mint
-    function mintForGame(address player, uint256 amount) external;
+    function mintForGame_g152734(address player, uint256 amount) external;
 
     /// @notice Spendable FLIP for a player: wallet balance + claimable coinflip stake.
     /// @param player The address to read.

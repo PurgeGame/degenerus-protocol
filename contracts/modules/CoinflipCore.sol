@@ -44,7 +44,7 @@ import {RngTags} from "../libraries/RngTags.sol";
  *
  * @dev INTERACTIONS:
  *      - Burns FLIP from players on deposit (via FLIP.burnForCoinflip)
- *      - Mints FLIP to players on claim (via FLIP.mintForGame)
+ *      - Mints FLIP to players on claim (via FLIP.mintForGame_g152734)
  *      - Receives quest flip credits from game contract
  *      - Processes RNG results for payout calculations
  */
@@ -62,7 +62,7 @@ interface IFLIP {
     /// @notice Burn FLIP from a player for coinflip deposit.
     function burnForCoinflip(address from, uint256 amount) external;
     /// @notice Mint FLIP to a player (coinflip claims, degenerette wins).
-    function mintForGame(address to, uint256 amount) external;
+    function mintForGame_g152734(address to, uint256 amount) external;
 }
 
 /// @notice Interface for WWXRP contract methods used by Coinflip.
@@ -536,7 +536,7 @@ abstract contract CoinflipCore {
 
         // Claimable-first waterfall: settled winnings fund the stake before the wallet does, so a
         // rebet spends the bank instead of requiring a claim-out that would mint the FLIP just to
-        // burn it again. Supply-neutral: claimableStored is UNMINTED (mintForGame fires only when
+        // burn it again. Supply-neutral: claimableStored is UNMINTED (mintForGame_g152734 fires only when
         // FLIP is claimed out) and a day stake is off-supply too — a normal deposit burns its
         // principal to create one — so moving between the two mints and burns nothing. Gated on
         // an authorized caller: a permissionless gift funds the whole stake from the caller's own
@@ -750,7 +750,7 @@ abstract contract CoinflipCore {
 
         if (toClaim != 0) {
             if (mintTokens) {
-                flip.mintForGame(payee, toClaim);
+                flip.mintForGame_g152734(payee, toClaim);
             }
             claimed = toClaim;
         }
@@ -1413,7 +1413,7 @@ abstract contract CoinflipCore {
             emit CoinflipAutoRebuyToggled(id, false);
         }
         state.claimableStored = 0;
-        if (claimed != 0) flip.mintForGame(buyer == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS, claimed);
+        if (claimed != 0) flip.mintForGame_g152734(buyer == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS, claimed);
         _emitClaimState(id);
     }
 
@@ -1472,7 +1472,7 @@ abstract contract CoinflipCore {
         }
 
         if (mintable != 0) {
-            flip.mintForGame(payee, mintable);
+            flip.mintForGame_g152734(payee, mintable);
         }
         _emitClaimState(id);
     }
@@ -1500,7 +1500,7 @@ abstract contract CoinflipCore {
         emit CoinflipAutoRebuyStopSet(id, takeProfit);
 
         if (mintable != 0) {
-            flip.mintForGame(payee, mintable);
+            flip.mintForGame_g152734(payee, mintable);
         }
         _emitClaimState(id);
     }
@@ -1543,7 +1543,7 @@ abstract contract CoinflipCore {
             unchecked {
                 state.autoRebuyCarry = uint128(carry - claimed);
             }
-            flip.mintForGame(payee, claimed);
+            flip.mintForGame_g152734(payee, claimed);
         }
         _emitClaimState(id);
     }

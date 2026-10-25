@@ -21,7 +21,7 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         // Requests need the read certificate, so the previous batch has finished settling.
         _releaseRedemptionReserve();
         uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
-        uint256 pull = IsDGNRS(ContractAddresses.SDGNRS).closeRedemptionBatch(claimable);
+        uint256 pull = IsDGNRS(ContractAddresses.SDGNRS).closeRedemptionBatch_g165517(claimable);
         if (pull == 0) return;
         _debitClaimable(SDGNRS_WALLET_ID, pull);
         _setRedemptionReserve(pull);

@@ -102,7 +102,7 @@ contract FLIP {
     /// @param amount The amount added to vault mint allowance (0 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
     /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
-    /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin, burnCoinForCraps) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
+    /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin_g27673, burnCoinForCraps_g292454) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
     /// @param amount The amount consumed from allowance (0 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
@@ -454,7 +454,7 @@ contract FLIP {
 
     /// @notice Internal burn helper - destroys tokens.
     /// @dev Decreases totalSupply and sender balance. Emits Transfer to address(0).
-    ///      Ordering in burnCoin/burnCoinForCraps/decimatorBurn: the trusted coinflip shortfall
+    ///      Ordering in burnCoin_g27673/burnCoinForCraps_g292454/decimatorBurn: the trusted coinflip shortfall
     ///      consumption runs first, then this burn, then any boon/quest/game accounting calls.
     /// @param from The address to burn from (cannot be zero).
     /// @param amount The amount to burn (0 decimals).
@@ -507,7 +507,7 @@ contract FLIP {
     /// @dev Only callable by COINFLIP or GAME.
     /// @param to The player's address to mint to.
     /// @param amount The amount of FLIP to mint (0 decimals).
-    function mintForGame(address to, uint256 amount) external {
+    function mintForGame_g152734(address to, uint256 amount) external {
         // CRAPS is deliberately absent: the table is burn-only and pays every winning in coinflip
         // credit, so a liquid mint is authority it has no call site for.
         if (msg.sender != ContractAddresses.COINFLIP && msg.sender != ContractAddresses.GAME) {
@@ -558,7 +558,7 @@ contract FLIP {
         _;
     }
 
-    /// @dev Restricts access to GAME, PARIMUTUEL or CRAPS. Used for: burnCoin.
+    /// @dev Restricts access to GAME, PARIMUTUEL or CRAPS. Used for: burnCoin_g27673.
     ///      PARIMUTUEL burns exactly one fixed stake, and only from the payee of an account whose
     ///      caller it authorized, so the widening reaches no non-consenting balance.
     ///      Carry-consuming automatic sDGNRS Decimator burns keep plain onlyGame;
@@ -630,7 +630,7 @@ contract FLIP {
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.
     /// @param amount The amount to burn (0 decimals).
-    function burnCoin(address target, uint256 amount) external onlyGameOrParimutuel {
+    function burnCoin_g27673(address target, uint256 amount) external onlyGameOrParimutuel {
         uint256 consumed = _consumeCoinflipShortfall(target, amount);
         _burn(target, amount - consumed);
     }
@@ -646,7 +646,7 @@ contract FLIP {
     uint256 private constant CRAPS_FLAG_COMP = 0x10;
 
     /// @notice Burn a paid craps purchase, spend any craps boon on it, and report the action.
-    /// @dev Access: CRAPS only. The craps twin of `burnCoin`, kept separate so the ordinary burn
+    /// @dev Access: CRAPS only. The craps twin of `burnCoin_g27673`, kept separate so the ordinary burn
     ///      — Game, Parimutuel, donations, upgrades, protocol seats — gains neither a caller
     ///      branch nor a storage read.
     ///
@@ -665,7 +665,7 @@ contract FLIP {
     /// @return boonMask One-hot tier for the caller to store on the slip — 1, 2 or 4 for the
     ///         tiers the table pays at 5/10/15%, and 0 on every burn that did not consume a boon.
     /// @custom:reverts OnlyGame If the caller is not the craps table.
-    function burnCoinForCraps(address player, uint32 id, uint256 grossAndFlags)
+    function burnCoinForCraps_g292454(address player, uint32 id, uint256 grossAndFlags)
         external
         returns (uint8 boonMask)
     {
@@ -716,7 +716,7 @@ contract FLIP {
     ///         battle with two percent of the field's eligible bankroll.
     /// @param amount FLIP whole tokens to add to the lane.
     /// @custom:reverts OnlyGame If the caller is not the craps table.
-    function creditCrapsComps(uint256 amount) external {
+    function creditCrapsComps_g37225(uint256 amount) external {
         if (msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
         uint128 lane = _toUint128(uint256(_crapsCompAllowance) + amount);
         _crapsCompAllowance = lane;

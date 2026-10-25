@@ -1115,7 +1115,7 @@ abstract contract GamePurchase is
     }
 
     function _coinReceive(address payer, uint256 amount) private {
-        coin.burnCoin(payer, amount);
+        coin.burnCoin_g27673(payer, amount);
     }
 
     /// @dev Convert ETH-denominated spend to FLIP base units at current ticket price.

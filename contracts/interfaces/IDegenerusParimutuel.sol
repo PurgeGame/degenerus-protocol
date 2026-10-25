@@ -40,7 +40,7 @@ interface IDegenerusParimutuel {
     /// @dev Authorized: `id == 0` is the caller, whose ID comes from the Game registry. A nonzero `id` needs Game
     ///      `resolveAccount_g7029(id, msg.sender).authorized` (the account's key, a smurf's owner, or an
     ///      approved operator); the gates and growth-bet reward use that ID. The
-    ///      stake burns from the account's PAYEE (`burnCoin(payee, STAKE)`); the bet, the
+    ///      stake burns from the account's PAYEE (`burnCoin_g27673(payee, STAKE)`); the bet, the
     ///      settlement credit (`creditFlipBatch` by ID) and the quest reward are the account's.
     /// @param id Account placing the bet (0 = caller).
     /// @param over True for OVER, false for UNDER.

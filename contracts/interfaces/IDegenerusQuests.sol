@@ -215,7 +215,7 @@ interface IDegenerusQuests {
     ///      other quest handler gains a caller comparison. Carries no boon value — a craps boon
     ///      boosts the slip's bankroll return at settlement, never entry-time coinflip credit.
     ///      CRAPS obtains the buyer's ID before the bet body and FLIP forwards it from
-    ///      `burnCoinForCraps`. Credits the join-quest reward itself by ID.
+    ///      `burnCoinForCraps_g292454`. Credits the join-quest reward itself by ID.
     /// @param id Wallet ID of the player who paid for the action.
     /// @param actionFlags Bit 0 paid join, bit 1 paid day pass, bit 2 normal day streak,
     ///        bit 3 high day streak.

@@ -368,7 +368,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
                 emit DegenesisAfkingExcessClaimable(excess);
             }
             emit DegenesisInventoryBurned(
-                dgnrs.transferFromPool(IsDGNRS.Pool.Degenesis, ContractAddresses.SDGNRS, type(uint256).max)
+                dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Degenesis, ContractAddresses.SDGNRS, type(uint256).max)
             );
         }
     }
@@ -533,7 +533,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         returns (uint256 paid)
     {
         if (o.dgnrs != 0) {
-            paid = dgnrs.transferFromPool(IsDGNRS.Pool.Degenesis, _payee(_walletElement(o.id)), o.dgnrs);
+            paid = dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Degenesis, _payee(_walletElement(o.id)), o.dgnrs);
             if (paid == 0) o.wwxrp = true;
         } else if ((o.normalPasses | o.highPasses) != 0) {
             IDegenesisPasses(ContractAddresses.CRAPS).creditPasses(o.id, o.normalPasses, o.highPasses);

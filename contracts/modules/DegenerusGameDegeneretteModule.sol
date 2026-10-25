@@ -334,7 +334,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     /// @dev Pay the current owner's accumulated FLIP and ETH, then clear them.
     function _flushOwner(ResolveAcc memory acc) private {
         if (acc.flipMint != 0) {
-            coin.mintForGame(_resolvePayee(acc), acc.flipMint);
+            coin.mintForGame_g152734(_resolvePayee(acc), acc.flipMint);
             acc.flipMint = 0;
         }
         if (acc.ethClaimable != 0) {
@@ -908,7 +908,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 reward = (poolBalance * bps * cappedBet) / (10_000 * 1 ether);
         if (reward == 0) return;
 
-        sdgnrs.transferFromPool(
+        sdgnrs.transferFromPool_g106128(
             IsDGNRS.Pool.Reward,
             _resolvePayee(acc),
             reward

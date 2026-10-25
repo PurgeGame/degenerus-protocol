@@ -627,9 +627,9 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             // The leader is stored by wallet ID; decoded once per level for the token transfer.
             address top = _payee(_walletElement(topId));
             uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) / 10_000;
-            uint256 paid = dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate, top, dgnrsReward);
+            uint256 paid = dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Affiliate, top, dgnrsReward);
             emit AffiliateDgnrsReward(top, lvl, paid);
-            // transferFromPool returns the exact pool decrement (clamped to the
+            // transferFromPool_g106128 returns the exact pool decrement (clamped to the
             // available balance, zero on the empty-pool path), so the remaining
             // pool is derivable without a second external read.
             poolBalance -= paid;

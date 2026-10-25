@@ -113,7 +113,7 @@ library ContractAddresses {
     address internal constant ENS_REVERSE_REGISTRAR =
         address(0x0000000000000000000000000000000000000000);
     // Craps table — appended, so it shifts no prior address. FLIP authorizes this
-    // address for mintForGame (payouts) and burnCoin (stakes), the same pair of
+    // address for mintForGame_g152734 (payouts) and burnCoin_g27673 (stakes), the same pair of
     // sinks every other FLIP game uses. Like every constant above it, the value
     // committed here is the Foundry deterministic-test address (DEPLOY_ORDER
     // nonce N+29), so a clean checkout tests craps unpatched; the deploy

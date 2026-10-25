@@ -4773,7 +4773,7 @@ abstract contract DegenerusGameStorage {
         if (!_rngSessionPublished()
             || _currentRngWord() == 0 || !ticketsFullyProcessed
             || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0) return 0;
-        if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return 1;
+        if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending_g153837()) return 1;
         if (_pendingBoxCount != 0) return 2;
         if (!humanReadComplete) return 3;
         if (degeneretteCursor < degeneretteReadCount) return 4;
@@ -4789,7 +4789,7 @@ abstract contract DegenerusGameStorage {
             || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 || !humanReadComplete
             || degeneretteCursor < degeneretteReadCount
             || _pendingBoxCount != 0 || decBattleQueue != 0) return false;
-        if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return false;
+        if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending_g153837()) return false;
         return packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) == 0;
     }
 

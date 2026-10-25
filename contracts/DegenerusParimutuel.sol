@@ -233,7 +233,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         if (!mayBet) revert NotEligible();
         _recordBet(id, round, over);
 
-        coin.burnCoin(payee, STAKE);
+        coin.burnCoin_g27673(payee, STAKE);
 
         // Only an eligible bettor reaches for the quest: recordGrowthBet applies the same
         // gate internally and pays such a call 0 with no side effects, so skipping it for

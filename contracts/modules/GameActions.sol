@@ -109,7 +109,7 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         if (shareBps == 0) return (0, payee);
         uint256 payout = (dgnrs.poolBalance(IsDGNRS.Pool.Reward) * shareBps) /
             (10_000 * RECORD_SDGNRS_SCALE_DIV);
-        if (payout != 0) paid = dgnrs.transferFromPool(IsDGNRS.Pool.Reward, payee, payout);
+        if (payout != 0) paid = dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Reward, payee, payout);
         }
 
     function _actionSetOperatorApproval(uint32 id, address operator, bool approved) internal  {
@@ -212,7 +212,7 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         if (reversals >= RNG_NUDGE_CAP) revert GameFacade.NudgeCapReached();
         uint256 cost = _currentNudgeCost(reversals);
         if (cost != expectedCost) revert GameFacade.NudgeCostChanged();
-        coin.burnCoin(msg.sender, cost);
+        coin.burnCoin_g27673(msg.sender, cost);
         uint256 newCount = reversals + 1;
         // The 255 cap fits the low byte; the packed setter preserves neighboring flags.
         _setNudgeCount(newCount);

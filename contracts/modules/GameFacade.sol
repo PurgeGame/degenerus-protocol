@@ -436,7 +436,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @dev Access: COINFLIP only, which owns the all-time records (flip, spin, luckbox,
     ///      buy, dice run) and computes the claim's accrued pool share. Pays that share
     ///      at 1/500 scale from the sDGNRS reward pool — 0.01% to 0.15% of the pool per
-    ///      claim across the share curve. transferFromPool clamps to the available
+    ///      claim across the share curve. transferFromPool_g106128 clamps to the available
     ///      balance and returns the exact decrement, zero on an empty pool. The payee is
     ///      returned on every call, a zero share included: Coinflip mints the record
     ///      trophy to it on every ratchet.

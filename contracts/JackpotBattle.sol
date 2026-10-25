@@ -24,7 +24,7 @@ interface IGameCrapsPending {
 }
 
 interface IFlipCrapsComps {
-    function creditCrapsComps(uint256 amount) external;
+    function creditCrapsComps_g37225(uint256 amount) external;
 }
 
 /// @notice Lifecycle component inherited by CrapsBattle in the table storage context.
@@ -118,10 +118,10 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         }
         if (seed > _BG_SEED_MASK) revert SeedAboveMax();
         if (msg.sender == ContractAddresses.VAULT) {
-            IFlipCoin(ContractAddresses.COIN).burnCoinForCraps(
+            IFlipCoin(ContractAddresses.COIN).burnCoinForCraps_g292454(
                 ContractAddresses.VAULT, _VAULT_ID, (amount << 8) | _CRAPS_FLAG_COMP
             );
-        } else IFlipCoin(ContractAddresses.COIN).burnCoin(msg.sender, amount);
+        } else IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(msg.sender, amount);
         _storeBattle(key, (g & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (seed << _BG_SEED_SHIFT));
         emit CrapsBonusDonated(key, msg.sender, amount, seed * _BATTLE_STAKE_UNIT);
     }
@@ -513,7 +513,7 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         uint256 highComps = lossBudget * _HIGH_COMP_SHARE_BPS / _BPS_DENOMINATOR;
         uint256 earned = staked / 50;
         earned += highComps;
-        if (earned != 0) IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps(earned);
+        if (earned != 0) IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps_g37225(earned);
         if (highFees != 0) emit JackpotHighCompsAccrued(slot, highFees, atRisk, lossBudget, highComps);
     }
 
@@ -591,7 +591,7 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
 
 
     function _creditComps(uint256 amount) private {
-        IFlipCoin(ContractAddresses.COIN).creditCrapsComps(amount);
+        IFlipCoin(ContractAddresses.COIN).creditCrapsComps_g37225(amount);
     }
 
     function _creditFlip(uint32 id, uint256 amount) private {

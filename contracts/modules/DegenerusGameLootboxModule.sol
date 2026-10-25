@@ -1395,6 +1395,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @return paid Actual DGNRS amount paid from pool
     function _creditDgnrsReward(BoxAcc memory acc, uint256 amount) private returns (uint256 paid) {
         if (amount == 0) return 0;
-        paid = dgnrs.transferFromPool(IsDGNRS.Pool.Lootbox, _boxPayee(acc), amount);
+        paid = dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Lootbox, _boxPayee(acc), amount);
     }
 }

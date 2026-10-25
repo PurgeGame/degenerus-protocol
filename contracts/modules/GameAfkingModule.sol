@@ -1116,7 +1116,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         uint256 curse = (mintPacked_[target] >> BitPackingLib.CURSE_COUNT_SHIFT) &
             BitPackingLib.MASK_5;
         if (curse == 0) revert NothingToClaim();
-        coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 10);
+        coin.burnCoin_g27673(msg.sender, PRICE_COIN_UNIT / 10);
         _clearCurse(target);
         emit Decursed(msg.sender, target);
     }
@@ -1146,7 +1146,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
             smitee == SDGNRS_WALLET_ID ||
             smitee == GNRUS_WALLET_ID
         ) revert Unauthorized(); // protocol-addr skip
-        coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 5);
+        coin.burnCoin_g27673(msg.sender, PRICE_COIN_UNIT / 5);
         _applyCurseStack(smitee);
         emit Smited(deityId, smitee);
     }

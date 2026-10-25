@@ -380,7 +380,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
         } else if (currency == CURRENCY_FLIP) {
-            coin.burnCoin(burnFrom, totalBet);
+            coin.burnCoin_g27673(burnFrom, totalBet);
             // Pending FLIP and the bet's queue count commit in one write.
             uint256 lrWord = lootboxRngPacked;
             lootboxRngPacked = ((lrWord & ~(LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT))

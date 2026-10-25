@@ -387,7 +387,7 @@ contract sDGNRS {
 
     /// @dev A closed batch has unsettled claims: RNG consumer stage 1, which every later request
     ///      waits for. A batch only closes non-empty, so a settling id always has claims left.
-    function redemptionSettlementPending() external view returns (bool) {
+    function redemptionSettlementPending_g153837() external view returns (bool) {
         return _settlingBatch != 0;
     }
 
@@ -413,7 +413,7 @@ contract sDGNRS {
     /// @param gameClaimable sDGNRS's claimable balance on the Game (1 wei of it is dust).
     /// @return pull The batch's reserve, isolated from ordinary Game claimable (at most
     ///         `gameClaimable` − 1).
-    function closeRedemptionBatch(uint256 gameClaimable) external onlyGame returns (uint256 pull) {
+    function closeRedemptionBatch_g165517(uint256 gameClaimable) external onlyGame returns (uint256 pull) {
         uint32 id = _openBatch;
         RedemptionBatch storage batch = _redemptionBatches[id & 1];
         uint256 tokens = batch.tokens;
@@ -876,7 +876,7 @@ contract sDGNRS {
     /// @return transferred Actual amount transferred (may be less than requested if pool depleted)
     /// @custom:reverts Unauthorized If caller is not game contract
     /// @custom:reverts ZeroAddress If to is zero address
-    function transferFromPool(Pool pool, address to, uint256 amount) external onlyGame returns (uint256 transferred) {
+    function transferFromPool_g106128(Pool pool, address to, uint256 amount) external onlyGame returns (uint256 transferred) {
         if (amount == 0) return 0;
         if (to == address(0)) revert ZeroAddress();
         uint8 idx = _poolIndex(pool);
