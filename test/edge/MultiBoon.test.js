@@ -37,7 +37,7 @@ import {
  *      gate no longer blocks cross-category boon application
  */
 describe("Multi-category boon coexistence", function () {
-  this.timeout(120_000);
+  this.timeout(600_000); // each issuance scan completes up to 180 real logical days (~2 min)
 
   after(function () {
     restoreAddresses();
@@ -111,8 +111,8 @@ describe("Multi-category boon coexistence", function () {
         const tx = await game
           .connect(deity)
           .issueDeityBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
-        // DeityBoonIssued emitted via delegatecall -- decode with lootboxModule ABI
-        const events = await getEvents(tx, lootboxModule, "DeityBoonIssued");
+        // DeityBoonIssued is emitted by the Game itself (GameBoonActions)
+        const events = await getEvents(tx, game, "DeityBoonIssued");
         expect(events.length).to.equal(1);
         return { boonType: Number(slots[slot]), tx, events };
       }
@@ -347,7 +347,7 @@ describe("Multi-category boon coexistence", function () {
           const tx = await game
             .connect(alice)
             .issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
-          const events = await getEvents(tx, lootboxModule, "DeityBoonIssued");
+          const events = await getEvents(tx, game, "DeityBoonIssued");
           if (events.length > 0) {
             const emittedType = Number(events[0].args.boonType);
             categories.add(boonCategory(emittedType));
