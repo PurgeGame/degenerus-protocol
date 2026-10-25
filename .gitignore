@@ -79,8 +79,6 @@ docs/audit/*
 !docs/audit/freeze-audit-2026-10-16.json
 !docs/audit/source-sha256.txt
 !docs/audit/verification-sha256.txt
-!docs/audit/glamsterdam-calibration-2026-10-16.csv
-!docs/audit/glamsterdam-calibration-2026-10-16.json
 
 # ── Meta ────────────────────────────────────────────────────────────────
 !/README.md
