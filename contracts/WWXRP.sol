@@ -48,7 +48,7 @@ import {RngTags} from "./libraries/RngTags.sol";
  *        address may mint or burn.
  *      - enter()/claim(): daily burn draw for a fixed FLIP prize
  *      - Century BAF incinerator: a level-x99 enter() burn also bets on the
- *        upcoming x00 BAF skipping — when the century flip loses, one
+ *        upcoming x00 BAF skipping — when the BAF gate skips, one
  *        burn-weighted winner is credited game-side with a share of the FLIP
  *        that day's direct depositors burned and lost (flip credit, not ETH)
  *
@@ -93,10 +93,11 @@ import {RngTags} from "./libraries/RngTags.sol";
  *      day d+1 while entry is open is structurally impossible — the same
  *      settlement-blindness model as coinflip deposits, which also stay open
  *      through the daily lock and settle on the next word. reverseFlip
- *      nudges move only the coinflip; this draw reads the raw recorded word. No fallback word exists: a game whose VRF
- *      dies ends deterministically without any word, so entry carries no
- *      stall gate; burns into a dead game's days simply never settle. The draw has
- *      no owner, no parameter mutation, and no override of RNG, winner,
+ *      nudges move only the coinflip; this draw reads the raw recorded
+ *      word. No fallback word exists: a game whose VRF dies ends
+ *      deterministically without any word, so entry carries no stall
+ *      gate; burns into a dead game's days simply never settle. The draw
+ *      has no owner, no parameter mutation, and no override of RNG, winner,
  *      probability, prize, or recipient.
  *
  * @dev SECURITY:
@@ -1095,10 +1096,10 @@ contract WWXRP {
       +======================================================================+
       |  A hedge on the century BAF's 50/50 fire gate: daily-draw burns made |
       |  during a level x99 (via enter()) also arm the next x00 bracket and  |
-      |  pay one burn-weighted winner iff that level's BAF skips (daily flip |
-      |  lost). The award is FLIP, not ETH: INCINERATOR_FLIP_BPS of the      |
-      |  armed day's BAF draw book, credited as coinflip stake by this       |
-      |  contract. The would-be BAF pool rolls forward whole in futurePool.  |
+      |  pay one burn-weighted winner iff that level's BAF skips. The        |
+      |  award is FLIP, not ETH: INCINERATOR_FLIP_BPS of the armed day's     |
+      |  BAF draw book, credited as coinflip stake by this contract. The     |
+      |  would-be BAF pool rolls forward whole in futurePool.                |
       +======================================================================+*/
 
     /// @dev Record an incinerator entry riding a daily-draw burn during a
@@ -1107,7 +1108,7 @@ contract WWXRP {
     ///      amount by the same activity/boon multipliers the carrying entry
     ///      snapshotted (no whole-token truncation). The level increments to
     ///      x00 in the same transaction that requests the VRF word whose
-    ///      tagged daily flip decides the BAF fire gate, so enter()'s level check alone
+    ///      tagged hash decides the BAF fire gate, so enter()'s level check alone
     ///      closes entries before the deciding word can exist — no separate
     ///      rng-lock gate is needed. On a fired (won) BAF the bracket's
     ///      entries are simply never resolved: the burn was the losing side
@@ -1193,12 +1194,9 @@ contract WWXRP {
         }
         winnerId = _incinEntry[lo].id;
 
-        // Pay only against a book that actually lost. The skip gate reads the low bit of the
-        // transition's own word, which is the armed day's word on every ordinary path — but a
-        // VRF stall can resolve the armed day from a backfilled derived word while the
-        // transition keeps a later day's, leaving the two independent. Reading the armed day's
-        // stored result instead of assuming the coupling keeps the award honest in both cases:
-        // a day that won, or one that never resolved, funds nothing.
+        // Pay only against a book that actually lost. The skip gate is a tagged hash of the
+        // transition's word, independent of the armed day's coinflip, so the armed day's stored
+        // result decides the award: a day that won, or one that never resolved, funds nothing.
         (uint24 armedDay, uint96 lostFlip, ) = coinflip.bafDrawInfo();
         (uint16 rewardPercent, bool armedWin) = coinflip.getCoinflipDayResult(armedDay);
         uint256 flipAward = (!armedWin && rewardPercent != 0)
