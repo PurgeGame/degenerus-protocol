@@ -70,11 +70,11 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         "site 1 must reduce its budget to whole FLIP_ROUND_UNIT shares"
       ).to.equal(true);
       expect(
-        /uint256\s+cap\s*=\s*units\s*<\s*COIN_DRAW_SHARES\s*\?\s*units\s*:\s*COIN_DRAW_SHARES\s*;/.test(body),
+        /c\.cap\s*=\s*units\s*<\s*COIN_DRAW_SHARES\s*\?\s*units\s*:\s*COIN_DRAW_SHARES\s*;/.test(body),
         "site 1 must cap its winner count at COIN_DRAW_SHARES"
       ).to.equal(true);
       expect(
-        /uint256\s+amount\s*=\s*\(\s*units\s*\/\s*cap\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(body),
+        /c\.amount\s*=\s*\(\s*units\s*\/\s*c\.cap\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(body),
         "site 1 must pay each winner the same whole-unit share"
       ).to.equal(true);
       expect(
@@ -157,7 +157,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         sig: "function _settleLootboxRoll(",
         seed: "rollSeed", tag: "BOX_ROUND",
       },
-      { n: 6, file: DEGENERETTE, sig: "function _resolveBet(", seed: "rngWord", tag: "BET_ROUND" },
+      { n: 6, file: DEGENERETTE, sig: "function _resolveBetWork(", seed: "c\\.rngWord", tag: "BET_ROUND" },
       // Site 7's collapse lives in `_flipSpinChain`, the helper both FLIP-spin entry
       // points delegate to (`resolveFlipSpinsFromBox` for the lootbox roll and the
       // biggest-spin record bounty for its replay). The entry points carry no award
@@ -192,18 +192,18 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     }
 
     it("[03e] site 6 carries the collapse delta into `acc.flipMint` so the single flush mints exactly the rounded payout", function () {
-      const body = bodyOf(DEGENERETTE, "function _resolveBet(");
+      const body = bodyOf(DEGENERETTE, "function _resolveBetWork(");
       expect(
-        /acc\.flipMint\s*\+=\s*rounded\s*-\s*(?:totals\.)?totalPayout\s*;/.test(body),
+        /(?:c\.)?acc\.flipMint\s*\+=\s*rounded\s*-\s*(?:c\.)?(?:totals\.)?totalPayout\s*;/.test(body),
         "an upward round must add its delta to the accumulator"
       ).to.equal(true);
       expect(
-        /acc\.flipMint\s*-=\s*(?:totals\.)?totalPayout\s*-\s*rounded\s*;/.test(body),
+        /(?:c\.)?acc\.flipMint\s*-=\s*(?:c\.)?(?:totals\.)?totalPayout\s*-\s*rounded\s*;/.test(body),
         "a downward round must subtract its delta from the accumulator"
       ).to.equal(true);
       // Ordering: the survival flip settles first, so the threshold reads against the
       // number the player actually receives and a lost flip never reaches it.
-      const survivalIdx = body.indexOf("EntropyLib.hash3(RngTags.BET_SURVIVAL, rngWord, betId)");
+      const survivalIdx = body.indexOf("EntropyLib.hash3(RngTags.BET_SURVIVAL, c.rngWord, c.betId)");
       const roundIdx = body.indexOf("FlipRoundLib.roundFlipToHundreds(");
       expect(survivalIdx).to.be.greaterThan(-1);
       expect(roundIdx).to.be.greaterThan(-1);
@@ -223,7 +223,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       // does not inline the mint — pin it to the shared flush instead, which it routes through.
       const entry = bodyOf(DEGENERETTE, "function _runDegeneretteWork(");
       expect(
-        /_flushOwner\s*\(\s*acc\s*\)\s*;/.test(entry),
+        /_flushOwner\s*\(\s*(?:c\.)?acc\s*\)\s*;/.test(entry),
         "sweepDegeneretteBets must settle through the shared per-owner flush"
       ).to.equal(true);
 
@@ -241,12 +241,12 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     });
 
     it("[04b] the collapse at site 6 keys on the immutable `betId`, not on anything the caller chose", function () {
-      const body = bodyOf(DEGENERETTE, "function _resolveBet(");
+      const body = bodyOf(DEGENERETTE, "function _resolveBetWork(");
       expect(
-        /EntropyLib\.hash3\(\s*RngTags\.BET_ROUND\s*,\s*rngWord\s*,\s*betId\s*\)/.test(
+        /EntropyLib\.hash3\(\s*RngTags\.BET_ROUND\s*,\s*c\.rngWord\s*,\s*c\.betId\s*\)/.test(
           body
         ),
-        "the collapse seed must be `hash3(RngTags.BET_ROUND, rngWord, betId)` — all inputs immutable at fulfillment"
+        "the collapse seed must be `hash3(RngTags.BET_ROUND, c.rngWord, c.betId)` — all inputs immutable at fulfillment"
       ).to.equal(true);
     });
   });
@@ -255,7 +255,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
 
     it("[05b] the degenerette affiliate `refFlip` credit is untouched (owner-ruled out of scope)", function () {
-      const body = bodyOf(DEGENERETTE, "function _resolveBet(");
+      const body = bodyOf(DEGENERETTE, "function _resolveBetWork(");
       const refIdx = body.indexOf("uint256 refFlip");
       expect(refIdx, "`refFlip` affiliate credit not found").to.be.greaterThan(
         -1

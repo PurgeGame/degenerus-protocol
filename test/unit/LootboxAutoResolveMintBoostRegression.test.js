@@ -69,7 +69,7 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
         expect(body(name)).to.include("TicketEntropy.remainder(");
         expect(body(name)).to.include("TicketEntropy.identity(");
       }
-      expect(body("_solo")).to.include("finalTail && rem != 0 && TicketEntropy.remainder(stream, entropy, rem)");
+      expect(body("_solo")).to.include("c.finalTail && c.rem != 0 && TicketEntropy.remainder(c.stream, entropy, c.rem)");
       expect(body("_runTicketWork")).to.include("_drainQueue(");
       expect(body("_drainQueue")).to.include("_solo(");
       expect(body("_drainQueue")).to.include("_roundPhase(");
