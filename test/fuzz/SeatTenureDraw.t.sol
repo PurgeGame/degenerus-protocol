@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {OpenVrfRequest} from "../helpers/OpenVrfRequest.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Test.sol";
@@ -68,6 +69,8 @@ contract SeatTenureDraw is DeployProtocol {
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
+        // A scheduled Craps window can leave a mid-day request open; mining waits for its word.
+        OpenVrfRequest.answer(mockVRF, vrfWord);
         // The day's request follows the day's preparation and Craps maintenance checkpoints
         // (each a separate keeper step), so crank until the real daily request is issued.
         uint256 before = mockVRF.lastRequestId();

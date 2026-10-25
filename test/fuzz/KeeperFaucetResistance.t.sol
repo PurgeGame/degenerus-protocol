@@ -153,6 +153,8 @@ contract KeeperFaucetResistance is DeployProtocol {
     ///         Degenerette stage resolves it, so a second crank over the same drained queue finds no
     ///         work (NoWork) and pays nothing; no path pays for it twice.
     function testReResolveResolvedBetRevertsNoSecondReward() public {
+        // The day's request is not due, so the first crank stops after the queue it resolves.
+        _seedLogicalFixtureDay(game.currentDayView());
         uint64 betId = _placeLosingBet(player);
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         _openSweepFor(INDEX);
@@ -287,6 +289,8 @@ contract KeeperFaucetResistance is DeployProtocol {
         // shape: 0 ETH 1 spin, 1 FLIP 1 spin, 2 ETH 1 spin on symbol 0 (warm ring),
         //        3 ETH 25 spins, 4 FLIP 15 spins. Caps keep every bet inside one crank's budget.
         uint8 shape = shapeSel % 5;
+        // The day's request is not due, so the sweep call is the bets' resolution alone.
+        _seedLogicalFixtureDay(game.currentDayView());
         uint16[5] memory caps = [uint16(48), 300, 48, 21, 95];
         uint8[5] memory spinsOf = [uint8(1), 1, 1, 25, 15];
         uint256 n = (uint256(nSel) % caps[shape]) + 1;
@@ -315,6 +319,8 @@ contract KeeperFaucetResistance is DeployProtocol {
         }
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         _openSweepFor(INDEX);
+        // The sweep consumes the queue, so its length is read before the crank.
+        assertEq(DQ.lastBetId(vm, address(game), INDEX), n, "n bets queued");
 
         // The keeper pays the base fee as its gas price; the bounty is priced at min(basefee, cap).
         vm.fee(gasPriceWei);
@@ -333,7 +339,6 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 bounty = coinflip.coinflipAmount(sweeper) - preStake;
         (, uint256 measured, uint256 reported) = _minerWork(sweepLogs);
 
-        assertEq(DQ.lastBetId(vm, address(game), INDEX), n, "n bets queued");
         for (uint64 id = 1; id <= n; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "sweep resolved every bet");
         assertEq(bounty, _whole(reported), "the credit is the reported bounty");
         assertEq(reported, _expectedPay(measured, false, false), "the bounty is the measured-gas formula");

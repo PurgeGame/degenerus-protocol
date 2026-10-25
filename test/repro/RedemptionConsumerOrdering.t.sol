@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {OpenVrfRequest} from "../helpers/OpenVrfRequest.sol";
 
 import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -44,7 +45,11 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
     }
 
     function _complete() private {
-        for (uint256 i; i < 500 && !game.rngComplete(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 500 && !game.rngComplete(); ++i) {
+            // A scheduled Craps window can open a mid-day request; mining waits for its word.
+            OpenVrfRequest.answer(mockVRF, 0xB008);
+            game.mineFlip(0);
+        }
         assertTrue(game.rngComplete(), "all committed work completes");
     }
 

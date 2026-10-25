@@ -905,14 +905,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) break;
             // Fulfill any in-flight request FIRST (before advancing) — a stamping advance can leave the game
             // rngLocked with an unfilled word, and mineFlip() would revert RngNotReady if called while the
-            // word is 0. Fulfilling at the loop top clears the lock so the next advance can proceed.
+            // word is 0. A trailing mid-day request (a shut Craps window arms one) waits the same way and
+            // reports no advance work, so it is answered before the idle check.
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
             game.mineFlip(0);
-            _fulfillPending(vrfWord);
         }
     }
 
@@ -920,11 +919,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      before a mineFlip open so it reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
             game.mineFlip(0);
-            _fulfillPending(vrfWord);
         }
     }
 

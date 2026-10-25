@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {OpenVrfRequest} from "../helpers/OpenVrfRequest.sol";
 import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
 import "forge-std/Test.sol";
@@ -489,6 +490,8 @@ contract LensSettlementParity is DeployProtocol {
     function _completeDay(uint256 vrfWord) private {
         _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
+        // A scheduled Craps window can leave a mid-day request open; mining waits for its word.
+        OpenVrfRequest.answer(mockVRF, vrfWord);
         uint256 before = mockVRF.lastRequestId();
         for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();

@@ -117,6 +117,9 @@ contract LootboxBoonCoexistence is DeployProtocol {
         vm.store(address(game), data, bytes32(word));
         uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         lr = (lr & ~(uint256(0xFFFFFFFF) << 120)) | (uint256(1) << 120);
+        // The forged cohort carries no shut Craps window, so the box call cannot also request a
+        // mid-day word (which would rotate the buffers it is observed on).
+        lr &= ~(uint256(3) << 250);
         vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
     }
