@@ -98,6 +98,11 @@ contract DegenesisSolvencyInvariant is DegenesisDeployProtocol {
         }
     }
 
+    /// @dev GO_SWEPT: the final sweep has run.
+    function _swept() internal view returns (bool) {
+        return uint8(uint256(vm.load(address(game), bytes32(uint256(GameSlots.GAME_OVER_STATE_PACKED)))) >> 56) != 0;
+    }
+
     /// @dev Σ (claimable above the registration sentinel + AFKing) over the whole wallet table.
     function _sumAllHalves() internal view returns (uint256 sum) {
         uint256 n = uint256(vm.load(address(game), bytes32(GameSlots.WALLETS)));
@@ -117,6 +122,12 @@ contract DegenesisSolvencyInvariant is DegenesisDeployProtocol {
     }
 
     function invariant_claimablePoolIdentity() public view {
+        // The final sweep zeroes claimablePool and pays the winners in ETH and stETH. The balance
+        // words it forfeits are dead state, so only the zeroed pool is asserted afterwards.
+        if (_swept()) {
+            assertEq(game.claimablePoolView(), 0, "the final sweep leaves claimablePool at zero");
+            return;
+        }
         (uint256 total, uint256 splitVolume) = _volumes();
         assertEq(
             game.claimablePoolView(),
