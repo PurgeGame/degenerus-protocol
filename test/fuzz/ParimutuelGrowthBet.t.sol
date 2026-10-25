@@ -722,7 +722,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     ///      (level >= 2, clear of the century band) and return that round.
     function _driveToLiveJackpotPhase() internal returns (uint24 round) {
         for (uint256 i = 0; i < 40 && game.level() < 2; i++) {
-            if (!game.jackpotPhase()) _seedNextPool(50 ether);
+            // The seal needs the pool strictly over the level's target.
+            if (!game.jackpotPhase()) _seedNextPool(game.prizePoolTargetView() + 1 ether);
             _driveDay();
         }
         for (uint256 i = 0; i < 40; i++) {

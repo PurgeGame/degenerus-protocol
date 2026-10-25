@@ -36,6 +36,8 @@ contract ProtocolBoonFixture is DegenerusGameStorage, WalletSeed {
         ));
         if (!ok) assembly { revert(add(data, 32), mload(data)) }
     }
+    /// @dev Read back by Quests when a boon award credits a quest streak.
+    function currentDayView() external view returns (uint24) { return dailyIdx; }
     function endGame() external { gameOver = true; }
     function requireLivenessTriggered() external view { require(_livenessTriggered(), "not past death deadline"); }
     function maxEntries(address issuer, uint24 day) external {
@@ -104,6 +106,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         lens = new DegenerusGameLens();
         fixture = new ProtocolBoonFixture();
         vm.warp(vm.getBlockTimestamp() + 1 days);
+        // Wall time alone creates no game day: the fixture's logical day follows its clock.
+        _setRequestedFixtureDay(game.currentWallDayView());
         day = game.currentDayView_g542950();
         bettor = makeAddr("bettor");
         vm.deal(bettor, 1_000_000 ether);
@@ -128,9 +132,14 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         uint32 id = _giveWalletId(who);
         vm.mockCall(address(quests), abi.encodeWithSelector(quests.effectiveBaseStreakAndAfking_g1521.selector, id), abi.encode(uint32(score * 2), false));
     }
+    /// @dev A fixture day passes: the clock moves and the requested logical day follows it.
+    function _advanceDays(uint256 n) private {
+        vm.warp(vm.getBlockTimestamp() + n * 1 days);
+        _setRequestedFixtureDay(game.currentWallDayView());
+    }
     function _ready() private {
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, uint256(12345))));
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _advanceDays(1);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(987654321))));
     }
     /// @dev Run the engine until today's daily word is recorded and the lock is released. Any
@@ -138,6 +147,10 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     ///      is answered with `seed`; mineFlip runs only while it reports work (it reverts NoWork /
     ///      RngNotReady when idle or waiting).
     function _finishDailyAdvance(uint256 seed) private {
+        _finishDailyAdvance(seed, 0);
+    }
+    /// @dev `minDay`: the logical day the advance must have reached (a request opens it).
+    function _finishDailyAdvance(uint256 seed, uint24 minDay) private {
         _finishReadConsumers();
         for (uint256 i; i < 150; ++i) {
             uint256 request = mockVRF.lastRequestId();
@@ -145,7 +158,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
                 (,, bool done) = mockVRF.pendingRequests(request);
                 if (!done) mockVRF.fulfillRandomWords(request, seed);
             }
-            if (!game.rngLocked() && game.rngWordForDay(game.currentDayView_g542950()) != 0) return;
+            if (!game.rngLocked() && game.currentDayView_g542950() >= minDay && game.rngWordForDay(game.currentDayView_g542950()) != 0) return;
             if (game.advanceDue()) game.mineFlip(0);
         }
         fail("daily advance must finish after the boon stage");
@@ -289,6 +302,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
 
     function testLaunchDayEthBetsReceiveAllSixBoonsThroughRealAdvance() public {
         vm.warp(_deployTimestamp());
+        _setRequestedFixtureDay(_deployDay()); // back on the launch day, before its first request
         day = game.currentDayView_g542950();
         assertEq(day, _deployDay());
         assertEq(game.rngWordForDay(day), 0);
@@ -327,6 +341,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     function testEthEntriesStayOpenBeforeAndAfterDailyVrfFulfillmentWhileLocked() public {
         for (uint256 i; i < 150 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
+        // The request opened the logical day the entries below belong to.
+        day = game.currentDayView();
         assertEq(game.rngWordForDay(day), 0);
         vm.prank(bettor); _bet(0, 0.005 ether);
         vm.prank(bettor); _bet(6, 0.005 ether);
@@ -340,7 +356,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.recordLogs();
-        _finishDailyAdvance(987654321);
+        _finishDailyAdvance(987654321, day + 1);
         _assertBettorAwards(vm.getRecordedLogs(), 6);
     }
     function testManualProtocolBoonsBlockedIncludingApprovedOperator() public {
@@ -395,18 +411,18 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.prank(bettor); _bet(0, 0.005 ether);
         _resolve();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _advanceDays(1);
         _resolve();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(123))));
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, uint256(456))));
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _advanceDays(1);
         _resolve();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
     }
     function testMissingPredecessorUsesAwardWordForMenuAndDoesNotReplay() public {
         vm.prank(bettor); _bet(0, 0.005 ether);
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _advanceDays(1);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(123))));
         uint256 snapshot = vm.snapshotState();
         vm.recordLogs();
@@ -669,7 +685,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 7);
         uint256 drawnWord = _poolWord(address(vault), day);
 
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _advanceDays(1);
         address other = makeAddr("ringOther");
         vm.deal(other, 1 ether);
         _score(other, 0);
@@ -695,7 +711,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         uint256 staleVault = _poolWord(address(vault), day);
         uint256 staleSdgnrs = _poolWord(address(sdgnrs), day);
         // Day + 1 passes with no draw; day + 2 has no bets; day + 3 draws day + 2.
-        vm.warp(vm.getBlockTimestamp() + 3 days);
+        _advanceDays(3);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 2, uint256(111))));
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 3, uint256(222))));
         vm.recordLogs();
@@ -717,10 +733,10 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.prank(bettor); _bet(6, 0.005 ether);
         uint24 x = game.currentDayView_g542950();
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        _finishDailyAdvance(2);
+        _finishDailyAdvance(2, x + 1);
         assertEq(lens.protocolBoonPool(address(game), address(vault), x).awardedMask, 7, "x drawn on x + 1");
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        _finishDailyAdvance(3);
+        _finishDailyAdvance(3, x + 2);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         // Un-draw the stale pools so only the day-tag guard can stop them drawing on x + 3.
         for (uint256 i; i < 2; ++i) {
@@ -734,7 +750,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             abi.encodeWithSelector(IDegenerusGameBoonModule.resolveProtocolBoonDraws.selector),
             abi.encodeWithSignature("Error(string)", "stale pool dispatched"));
         vm.recordLogs();
-        _finishDailyAdvance(4);
+        _finishDailyAdvance(4, x + 3);
         assertEq(_countAwards(vm.getRecordedLogs()), 0, "stale slot awarded");
         assertEq(_poolWord(address(vault), x), vaultWord, "stale vault slot written");
         assertEq(_poolWord(address(sdgnrs), x), sdgnrsWord, "stale sDGNRS slot written");
@@ -763,7 +779,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             }
             if (k == days_) break;
             ref[k] = _ringBets(seed, k, bettors);
-            vm.warp(vm.getBlockTimestamp() + 1 days);
+            _advanceDays(1);
         }
     }
 

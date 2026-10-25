@@ -169,6 +169,8 @@ contract QueueHost is GamePurchaseBox, DegenerusGame {
         uint24 today = _wallDay();
         dailyIdx = today;
         rngRequestTime = uint48(block.timestamp);
+        // The seeded day just completed, so the stall deadman has not fired however far the clock moved.
+        lastDailyCompletedAt = uint48(block.timestamp);
         purchaseStartDay = on ? today - uint24(_PURCHASE_TIMEOUT_DAYS) : today;
     }
 

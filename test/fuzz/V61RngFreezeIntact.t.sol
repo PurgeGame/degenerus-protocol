@@ -523,9 +523,12 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     function _seedDailyIdx(uint256 day) internal {
+        // Wall time alone creates no game day: seed the logical headers, mirrors and Craps cursor,
+        // and start the purchase phase on the seeded day so no purchase deadline has passed.
+        _seedLogicalFixtureDay(uint24(day));
+        _seedCrapsFixtureCursor(uint24(day));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        slot0 &= ~(uint256(0xFFFFFF) << 24);
-        slot0 |= (day & 0xFFFFFF) << 24;
+        slot0 = (slot0 & ~uint256(0xFFFFFF)) | (day & 0xFFFFFF);
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 

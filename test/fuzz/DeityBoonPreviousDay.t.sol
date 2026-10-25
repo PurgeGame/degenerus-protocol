@@ -48,6 +48,8 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
 
     function _warp(uint24 day) private {
         vm.warp((uint256(day - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 3 hours);
+        // Wall time alone creates no game day: the requested logical day is set explicitly.
+        _setRequestedFixtureDay(day);
     }
 
     function _seed(uint24 day, uint256 word, bool locked) private {
@@ -165,6 +167,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
 
     function test_FirstDayHasNoPreviousSeed() public {
         _warp(1);
+        _seed(0, 0, false); // the ring holds no word from the later setUp days
         _seed(1, TODAY_WORD, false);
         (uint256 word, uint24 day,,,) = game.deityBoonData(DEITY);
         assertEq(word, 0);

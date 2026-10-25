@@ -93,6 +93,10 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
     function subscriptionWindow() external {
         require(_pendingBoxCount == 0);
         dailyIdx = _wallDay();
+        // Today's request is out and its day completed, so no daily request is due.
+        dailyComplete = true;
+        lastDailyCompletedAt = uint48(block.timestamp);
+        lastDailyRequestWallDay = dailyIdx;
         _afkingResetDay = dailyIdx;
         _afkingEndpointDay = dailyIdx;
         subsFullyProcessed = true;

@@ -302,7 +302,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(p, 4);
         assertEq(_lastEthDayOf(p), previousDay, "fixture: a prior ticket mint-day stamp exists");
         assertEq(game.curseCountOf(p), 4, "fixture: buyer is cursed");
-        assertNotEq(game.currentDayView_g542950(), 100, "fixture: wall-clock day differs from the saved daily index");
+        assertNotEq(game.currentWallDayView(), 100, "fixture: wall-clock day differs from the saved daily index");
 
         uint256 boxAmount = _oneTicketCost();
         vm.deal(p, boxAmount);
@@ -440,9 +440,12 @@ contract V61CureBountyDecurse is DeployProtocol {
 
     /// @dev Field-isolated seed of dailyIdx (slot 0, byte 3, uint24).
     function _seedDailyIdx(uint256 day) internal {
+        // Wall time alone creates no game day: seed the logical headers, mirrors and Craps cursor,
+        // and start the purchase phase on the seeded day so no purchase deadline has passed.
+        _seedLogicalFixtureDay(uint24(day));
+        _seedCrapsFixtureCursor(uint24(day));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        slot0 &= ~(uint256(0xFFFFFF) << 24);
-        slot0 |= (day & 0xFFFFFF) << 24;
+        slot0 = (slot0 & ~uint256(0xFFFFFF)) | (day & 0xFFFFFF);
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 

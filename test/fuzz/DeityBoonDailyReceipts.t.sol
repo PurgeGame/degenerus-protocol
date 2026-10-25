@@ -40,6 +40,8 @@ contract DeityBoonDailyReceiptsTest is DeployProtocol {
 
     function _day(uint24 day) private {
         vm.warp((uint256(day - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        // Wall time alone creates no game day: the requested logical day is set explicitly.
+        _setRequestedFixtureDay(day);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(MultipleBoonRngSeeder).runtimeCode);
         MultipleBoonRngSeeder(address(game)).seed(day);

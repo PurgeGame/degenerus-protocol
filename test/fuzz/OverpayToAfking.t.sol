@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {DeployProtocol, DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenesisFixture} from "./helpers/DegenesisFixture.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -173,10 +174,11 @@ contract OverpayToAfking is DeployProtocol {
 }
 
 /// @notice A Degenesis box bought with more ETH than it costs credits the excess to the payer's afking.
-contract OverpayToAfkingDegenesis is DegenesisDeployProtocol {
-    function setUp() public {
-        _deployProtocol();
-        vm.warp(block.timestamp + 1 days); // Degenesis day 1
+contract OverpayToAfkingDegenesis is DegenesisFixture {
+    function setUp() public override {
+        super.setUp();
+        // Degenesis day 1 is logical day 2: it opens at the first daily request, not with the clock.
+        _driveDay(2);
     }
 
     function test_DegenesisOverpayCreditsAfking() public {

@@ -129,7 +129,7 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         assertEq(game.claimablePoolView(), poolBefore + missing - cost, "receipt and both debits conserve liabilities");
         assertEq(game.nextPrizePoolView() + game.futurePrizePoolView(), prizesBefore + cost);
         assertGt(host.memberOf(PLAYER), 0);
-        assertEq(host.endpoint(), game.currentDayView_g542950(), "the pass completed");
+        assertEq(host.endpoint(), game.currentDayView_g542950() + 1, "the pass completed for the day the next request opens");
         if (tickets) assertGt(host.entries(PLAYER), 0);
         else assertEq(host.pendingBoxes(), 1);
     }
