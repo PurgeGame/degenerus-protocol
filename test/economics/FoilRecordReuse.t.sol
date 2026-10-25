@@ -11,6 +11,12 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract FoilRecordReuseHarness is DegenerusGameStorage, WalletSeed {
     function setLevel(uint24 lvl) external { level = lvl; }
 
+    /// @dev Logical game day: the day index and the latest completed daily result.
+    function setLogicalDay(uint24 d) external {
+        dailyIdx = d;
+        rngDayTags = d;
+    }
+
     function storeRecord(address player, uint24 lvl, uint24 generationDay, bool ready)
         external returns (uint256 record)
     {
@@ -65,6 +71,7 @@ contract FoilRecordReuseTest is Test {
         day = GameTimeLib.currentDayIndex();
         h = new FoilRecordReuseHarness();
         h.setLevel(5);
+        h.setLogicalDay(day);
     }
 
     function test_reuseRequiresGenerationAndCompletedLevel() public {
@@ -82,9 +89,9 @@ contract FoilRecordReuseTest is Test {
     function test_lateGenerationKeepsGoldWindowAfterLevelRetirement() public {
         uint256 record = h.storeRecord(PLAYER, 1, day, true);
         assertFalse(h.reusable(record), "gold generation day remains open");
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        h.setLogicalDay(day + 1);
         assertFalse(h.reusable(record), "following gold day remains open");
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        h.setLogicalDay(day + 2);
         assertTrue(h.reusable(record), "gold deadline expires on second following day");
     }
 
@@ -92,9 +99,11 @@ contract FoilRecordReuseTest is Test {
         uint256 record = h.storeRecord(PLAYER, 1, day - 3, true);
         h.storeDraw(day, 1);
         assertFalse(h.reusable(record), "today's match still needs its lines");
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        h.setLogicalDay(day + 1);
+        h.storeDraw(day + 1, 2);
         assertFalse(h.reusable(record), "yesterday's match still needs its lines");
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        h.setLogicalDay(day + 2);
+        h.storeDraw(day + 2, 3);
         assertTrue(h.reusable(record), "old retained board cannot extend expired rights");
     }
 

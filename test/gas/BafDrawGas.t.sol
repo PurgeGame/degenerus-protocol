@@ -29,16 +29,31 @@ contract BafDrawGas is DeployProtocol {
 
     address private alice;
     address private bob;
+    /// @dev Coinflip's mirror of the requested logical day at setUp: test day 2.
+    uint24 private base;
 
     function setUp() public {
         _deployProtocol();
         alice = makeAddr("gas_alice");
         bob = makeAddr("gas_bob");
-        _warpToDay(2);
+        base = coinflip.requestedDailyIdx();
     }
 
+    /// @dev Test day `d` (the fixture starts on day 2): each later day is one fresh daily request,
+    ///      the call that moves Coinflip's logical-day mirror.
     function _warpToDay(uint24 d) internal {
-        vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
+        uint24 want = base + d - 2;
+        uint24 requested = coinflip.requestedDailyIdx();
+        while (requested < want) {
+            ++requested;
+            vm.prank(GAME);
+            coinflip.onDailyRequest(requested);
+        }
+    }
+
+    /// @dev The flip round new stakes target on test day `d`.
+    function _round(uint24 d) internal view returns (uint24) {
+        return base + d - 1;
     }
 
     function _mint(address who, uint256 amount) internal {
@@ -178,7 +193,7 @@ contract BafDrawGas is DeployProtocol {
         uint256 baseRepeat = _measuredDeposit(alice);
 
         vm.prank(GAME);
-        coinflip.armBafDraw(3);
+        coinflip.armBafDraw(_round(2));
 
         uint256 armedFirstEntry = _measuredDeposit(bob); // first entry of the day
         uint256 armedNextEntry = _measuredDeposit(bob); // appended entry

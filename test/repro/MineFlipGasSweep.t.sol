@@ -87,9 +87,10 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
 
     function _holdFor(uint24 lvl) internal view override returns (uint256) {
         if (!_slow()) return super._holdFor(lvl);
-        // Level 0 idles 240 days and levels 1-18 hold 27 purchase days each, so the level-20
-        // seal falls after day 90 and the vault can carry a full-window backlog.
-        return lvl == 0 ? 240 : (lvl < 19 ? 27 : 0);
+        // Every level holds under the 30-game-day purchase deadline (level 0 idles 25 days,
+        // levels 1-18 hold 27 each), so the level-20 seal falls after day 90 and the vault can
+        // carry a full-window backlog.
+        return lvl == 0 ? 25 : (lvl < 19 ? 27 : 0);
     }
 
     function setUp() public override {
@@ -135,7 +136,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
         if (_slow()) {
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(SweepVaultSeeder).runtimeCode);
-            require(latchDay > 731, "harness: the slow game reaches a full-window backlog");
+            require(latchDay > 90, "harness: the slow game reaches a full-window backlog");
             SweepVaultSeeder(address(coinflip)).seedVaultHistory(latchDay, 90, true);
             vm.etch(address(coinflip), original);
         }

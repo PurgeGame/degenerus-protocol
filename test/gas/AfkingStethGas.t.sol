@@ -34,6 +34,7 @@ contract AfkingStethGasHost is SubscriberNativeGasHost {
 
     function fundingOf(address source) external view returns (uint256) { return _afkingOf(_walletIdOf(source)); }
     function cursor() external view returns (uint256) { return _subCursor; }
+    function resetDay() external view returns (uint24) { return _afkingResetDay; }
 
     function measuredSubWork(uint256 allowance)
         external returns (MineFlipGas.Result memory result, uint256 grossGas)
@@ -80,7 +81,7 @@ contract AfkingStethGasTest is DeployProtocol {
 
     function _assertDelivered(address player, bool tickets) private view {
         (uint24 bought, uint24 opened) = host.delivered(player);
-        assertEq(bought, game.currentDayView_g542950(), "paid day committed");
+        assertEq(bought, host.resetDay(), "paid day committed");
         assertEq(opened, tickets ? bought : bought - 1, "correct delivery mode");
     }
 
