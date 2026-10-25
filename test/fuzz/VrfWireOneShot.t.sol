@@ -6,20 +6,20 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title VrfWireOneShot — VTST-04: VRF wiring is one-shot (proves VRF-04 + VRF-05)
-/// @notice Phase 312 deliberately OMITTED the `wireVrf` init-only runtime lock that the
+/// @notice Phase 312 deliberately OMITTED the `initVrf` init-only runtime lock that the
 ///         311 SPEC originally mandated (user-approved VRF-04 deviation, see
 ///         312-01-SUMMARY Deviations §1). There is NO
 ///         `if (address(vrfCoordinator) != address(0)) revert E();` guard in the
 ///         contract — so this test does NOT assert any such init-lock revert (one would
 ///         fail). The one-shot property is proven in the form that ACTUALLY EXISTS:
 ///
-///         (1) Access-guard revert — the impl's `:503` (wireVrf) /
+///         (1) Access-guard revert — the impl's `:503` (initVrf) /
 ///             `:1717` (updateVrfCoordinatorAndSub) `msg.sender != ContractAddresses.ADMIN`
 ///             check rejects every non-ADMIN caller through the routed delegatecall reach
-///             (GameFacade.wireVrf :308 / updateVrfCoordinatorAndSub :1874 ->
+///             (GameFacade.initVrf :308 / updateVrfCoordinatorAndSub :1874 ->
 ///             delegatecall -> AdvanceModule impl -> ADMIN guard). This is the
 ///             "second wire from an unauthorized caller reverts" provable shape.
-///         (2) Structural one-shot attestation — DegenerusAdmin reaches `gameAdmin.wireVrf`
+///         (2) Structural one-shot attestation — DegenerusAdmin reaches `gameAdmin.initVrf`
 ///             only from its constructor (:458) and exposes no post-construction forwarder,
 ///             so a second wire even from the ADMIN sender is topologically unreachable.
 ///
@@ -29,8 +29,8 @@ contract VrfWireOneShot is DeployProtocol {
         _deployProtocol();
     }
 
-    /// @notice A non-ADMIN caller's `wireVrf` reverts via the impl `:503` ADMIN guard.
-    /// @dev Routed reach: GameFacade.wireVrf (:308) delegatecalls the AdvanceModule
+    /// @notice A non-ADMIN caller's `initVrf` reverts via the impl `:503` ADMIN guard.
+    /// @dev Routed reach: GameFacade.initVrf (:308) delegatecalls the AdvanceModule
     ///      impl (:498) whose `:503` `msg.sender != ContractAddresses.ADMIN` check rejects
     ///      the call. `msg.sender` is preserved across delegatecall, so a freshly-made
     ///      non-admin actor (distinct from ContractAddresses.ADMIN) is genuinely rejected
@@ -47,13 +47,13 @@ contract VrfWireOneShot is DeployProtocol {
         vm.prank(nonAdmin);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "wireVrf(address,uint256,bytes32)",
+                "initVrf(address,uint256,bytes32)",
                 makeAddr("coord"),
                 uint256(1),
                 keccak256("kh")
             )
         );
-        assertFalse(ok, "wireVrf rejects non-ADMIN caller (the :503 guard)");
+        assertFalse(ok, "initVrf rejects non-ADMIN caller (the :503 guard)");
     }
 
     /// @notice A non-ADMIN caller's `updateVrfCoordinatorAndSub` reverts (VRF-05 companion).
@@ -81,9 +81,9 @@ contract VrfWireOneShot is DeployProtocol {
     }
 
     /// @notice The constructor wire ran exactly once at deploy.
-    /// @dev DegenerusAdmin's constructor (:445) calls gameAdmin.wireVrf (:458), which sets
+    /// @dev DegenerusAdmin's constructor (:445) calls gameAdmin.initVrf (:458), which sets
     ///      `lastVrfProcessedTimestamp`. A non-zero `lastVrfProcessed()` view confirms wiring
-    ///      is in place, establishing that any further `wireVrf` is the "second wire" the
+    ///      is in place, establishing that any further `initVrf` is the "second wire" the
     ///      access guard blocks for every non-ADMIN caller.
     function test_wiringHappenedAtDeploy() public view {
         assertTrue(
@@ -92,19 +92,19 @@ contract VrfWireOneShot is DeployProtocol {
         );
     }
 
-    /// @notice Structural one-shot attestation: DegenerusAdmin reaches `wireVrf` only from
+    /// @notice Structural one-shot attestation: DegenerusAdmin reaches `initVrf` only from
     ///         its constructor — so a second wire even from the ADMIN sender is unreachable.
     /// @dev This attests the user-approved VRF-04 deviation (NO init-only lock; one-shot by
     ///      construction, per 312-01-SUMMARY Deviations §1). The access guard (the prior
     ///      tests) shows non-ADMIN callers are rejected; this shows the only authorized
     ///      caller (the DegenerusAdmin contract, ContractAddresses.ADMIN, via preserved
-    ///      delegatecall `msg.sender`) can fire `wireVrf` exactly once because it lives in the
+    ///      delegatecall `msg.sender`) can fire `initVrf` exactly once because it lives in the
     ///      constructor and DegenerusAdmin exposes no post-construction forwarder.
     ///
-    ///      Form: read DegenerusAdmin.sol and assert the call site `gameAdmin.wireVrf(`
+    ///      Form: read DegenerusAdmin.sol and assert the call site `gameAdmin.initVrf(`
     ///      appears exactly once (the constructor at :458). The
-    ///      `interface ... { function wireVrf(...) external; }` declaration uses a different
-    ///      receiver and is NOT a `gameAdmin.wireVrf(` call site, so the call-site count is the
+    ///      `interface ... { function initVrf(...) external; }` declaration uses a different
+    ///      receiver and is NOT a `gameAdmin.initVrf(` call site, so the call-site count is the
     ///      load-bearing one-shot invariant.
     ///
     ///      foundry.toml grants read `fs_permissions` for ./contracts, so `vm.readFile`
@@ -115,11 +115,11 @@ contract VrfWireOneShot is DeployProtocol {
         try vm.readFile("contracts/DegenerusAdmin.sol") returns (
             string memory src
         ) {
-            // Source-level grep: exactly one `gameAdmin.wireVrf(` call site (the constructor).
+            // Source-level grep: exactly one `gameAdmin.initVrf(` call site (the constructor).
             assertEq(
-                _countOccurrences(src, "gameAdmin.wireVrf("),
+                _countOccurrences(src, "gameAdmin.initVrf("),
                 1,
-                "DegenerusAdmin calls wireVrf exactly once (the constructor :458)"
+                "DegenerusAdmin calls initVrf exactly once (the constructor :458)"
             );
         } catch {
             // No silent equivalent fallback: a reverting read means the structural invariant

@@ -98,7 +98,7 @@ contract NativeSwapAdminHarness is DegenerusAdmin {
 contract NativeSwapGameProbe {
     bool public gameOver;
     mapping(address => uint256) public credits;
-    function wireVrf(address, uint256, bytes32) external {}
+    function initVrf(address, uint256, bytes32) external {}
     function creditMiddayRng(address donor, uint256 amount) external returns (uint32) { credits[donor] += amount; return 1; }
     function updateVrfCoordinatorAndSub(address replacement, uint256 sub, bytes32 keyHash, uint32 gasLimit) external {
         (, uint96 balance,,,) = MockVRFCoordinator(payable(replacement)).getSubscription(sub);

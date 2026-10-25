@@ -630,22 +630,22 @@ abstract contract DegenerusGameStorage {
     /// @dev Timestamp of the last successfully processed VRF word.
     ///      Used by governance to detect VRF transport stalls; game liveness instead
     ///      reads the final daily completion timestamp.
-    ///      Initialized in wireVrf(), updated in _applyDailyRng(). Shares slot 5 with the
+    ///      Initialized in initVrf(), updated in _applyDailyRng(). Shares slot 4 with the
     ///      request day and the ticket buffer stamps.
     uint48 internal lastVrfProcessedTimestamp;
-    /// @dev Even/odd ticket epochs: two uint24 levels, slot-5 bytes 10..15.
+    /// @dev Even/odd ticket epochs: two uint24 levels, slot-4 bytes 10..15.
     uint48 internal ticketBufferLevels;
     /// @dev Next index of `_loansDue[level]` to seize while `LOANS_DUE_PENDING` is set;
-    ///      slot-5 bytes 16..19.
+    ///      slot-4 bytes 16..19.
     uint32 internal loanSeizeCursor;
     /// @dev Last resolved day the Game successfully settled the Vault through. A lower
-    ///      bound on its actual Coinflip cursor; slot-5 bytes 20..22, preserving later roots.
+    ///      bound on its actual Coinflip cursor; slot-4 bytes 20..22, preserving later roots.
     uint24 internal vaultFlipSettledDay;
     /// @dev Bits 0/1 invalidate the retained even/odd trait bitmap until its first append.
     uint8 internal traitBucketStale;
     /// @dev Exact round occupying the reusable Decimator entry words.
     uint24 internal decEntriesLevel;
-    /// @dev Actual reset window of the last accepted daily request (slot 5, byte 27).
+    /// @dev Actual reset window of the last accepted daily request (slot 4, byte 27).
     uint24 internal lastDailyRequestWallDay;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
@@ -2799,7 +2799,7 @@ abstract contract DegenerusGameStorage {
     uint128 internal degenesisVaultBudget;
     /// @dev Only full daily completion refreshes this real-time escape clock.
     uint48 internal lastDailyCompletedAt = uint48(block.timestamp);
-    /// @dev Exact opening request of the current Degenesis cohort; slot 13, byte 22.
+    /// @dev Exact opening request of the current Degenesis cohort; slot 12, byte 22.
     ///      Midday requests, retries and completion never restart its six-hour bonus.
     uint48 internal degenesisOpenedAt;
 

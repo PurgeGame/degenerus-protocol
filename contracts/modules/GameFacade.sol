@@ -239,12 +239,12 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @dev Access: ADMIN only. Overwrites any existing config on each call.
     ///      SECURITY: Config can be changed via emergency rotation (updateVrfCoordinatorAndSub).
     /// @custom:reverts OnlyAdmin If caller is not ADMIN.
-    /// @dev Signature: wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) —
+    /// @dev Signature: initVrf(address coordinator_, uint256 subId, bytes32 keyHash_) —
     ///      Chainlink VRF V2.5 coordinator address, VRF subscription ID for native billing,
     ///      and the VRF key hash identifying the oracle and gas lane. The signature matches
     ///      the module function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding here would cost contract-size headroom for no behavior change.
-    function wireVrf(address, uint256, bytes32) external {
+    function initVrf(address, uint256, bytes32) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_GAMEOVER_MODULE
             .delegatecall(msg.data);

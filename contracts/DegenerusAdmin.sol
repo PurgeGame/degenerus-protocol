@@ -140,7 +140,7 @@ interface IDegenerusGameAdmin {
     /// @param coordinator_ VRF coordinator address.
     /// @param subId Subscription ID.
     /// @param keyHash_ VRF key hash.
-    function wireVrf(
+    function initVrf(
         address coordinator_,
         uint256 subId,
         bytes32 keyHash_
@@ -494,7 +494,7 @@ contract DegenerusAdmin {
         vrfCoordinator.addConsumer(subId, ContractAddresses.GAME);
         emit ConsumerAdded(ContractAddresses.GAME);
 
-        gameAdmin.wireVrf(
+        gameAdmin.initVrf(
             ContractAddresses.VRF_COORDINATOR,
             subId,
             ContractAddresses.VRF_KEY_HASH

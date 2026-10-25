@@ -290,7 +290,7 @@ OFF-CRANK	lowlevel:delegatecall	smite	modules/GameFacade.sol	BARE		player entry 
 OFF-CRANK	lowlevel:delegatecall	spendDegenesis	modules/GameFacade.sol	BARE		Vault-only Degenesis budget spend (raw msg.data forward; the Degenesis module checks the Vault caller)
 OFF-CRANK	lowlevel:delegatecall	subscribe	modules/GameFacade.sol	BARE		player / sDGNRS / VAULT subscribe entry (afking module); never reached from a crank root
 OFF-CRANK	lowlevel:delegatecall	updateVrfCoordinatorAndSub	modules/GameFacade.sol	BARE		ADMIN governance coordinator rotation (DegenerusAdmin is the caller)
-OFF-CRANK	lowlevel:delegatecall	wireVrf	modules/GameFacade.sol	BARE		ADMIN-only VRF wiring (DegenerusAdmin.wireVrf is the caller)
+OFF-CRANK	lowlevel:delegatecall	initVrf	modules/GameFacade.sol	BARE		ADMIN-only VRF wiring (DegenerusAdmin.initVrf is the caller)
 CRANK-CAUGHT	yul:call	callValueRemaining	libraries/BoundedCall.sol	BARE		Library CALL returns only success and a bounded output prefix; callee errors never bubble unwrapped. All scoped call sites below retain caller-specific skip/rollback policies and scaled pre-call admission.
 CRANK-SELF	yul:delegatecall	_delegateLifecycle	modules/CrapsLifecycleRouter.sol	BARE		Table delegates unchanged msg.data to the compile-time lifecycle worker with all remaining gas, preserving table storage and exact return/revert data.
 CRANK-CAUGHT	yul:staticcall	staticcallRemaining	libraries/BoundedCall.sol	BARE		Library STATICCALL bounds the output prefix and returns a failure flag. Scoped read callers below implement optional-zero or atomic request/funding policies; scaled admission protects the meter floor.

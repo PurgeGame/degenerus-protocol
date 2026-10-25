@@ -1101,7 +1101,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
     /// @param subId VRF subscription ID for native billing.
     /// @param keyHash_ VRF key hash for gas lane selection.
-    function wireVrf(
+    function initVrf(
         address coordinator_,
         uint256 subId,
         bytes32 keyHash_

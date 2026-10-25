@@ -46,7 +46,7 @@ contract CoverageGap222 is DeployProtocol {
 
     /// @notice Drive a full purchase -> mineFlip() cycle.
     /// @dev Closes gaps: game.purchase, game.mineFlip, game.currentDayView_g542950
-    ///      (EXEMPT), game.purchaseInfo_g1027 (EXEMPT), wireVrf (admin-path).
+    ///      (EXEMPT), game.purchaseInfo_g1027 (EXEMPT), initVrf (admin-path).
     ///      D-14 target: the purchase flow takes the DirectEth branch
     ///      of MintPaymentKind dispatch inside _purchaseFor.
     function test_gap_lifecycle_purchase_then_advanceGame() public {
@@ -1323,7 +1323,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(game).call(
             abi.encodeWithSignature(
-                "wireVrf(address,uint256,bytes32)",
+                "initVrf(address,uint256,bytes32)",
                 coord,
                 uint256(1),
                 kh
@@ -1338,7 +1338,7 @@ contract CoverageGap222 is DeployProtocol {
                 kh, 300_000
             )
         );
-        assertFalse(o1, "game.wireVrf rejected non-admin caller");
+        assertFalse(o1, "game.initVrf rejected non-admin caller");
         assertFalse(o2, "game.updateVrfCoordinatorAndSub rejected non-admin caller");
     }
 

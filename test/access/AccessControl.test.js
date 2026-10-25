@@ -111,11 +111,11 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("DegenerusGame", function () {
-    it("wireVrf: reverts when called by alice (only ADMIN contract)", async function () {
+    it("initVrf: reverts when called by alice (only ADMIN contract)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        game.connect(alice).wireVrf(
+        game.connect(alice).initVrf(
           alice.address, // coordinator
           1n,            // subId
           ZERO_BYTES32   // keyHash

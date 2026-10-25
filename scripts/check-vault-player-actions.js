@@ -30,7 +30,7 @@ const excluded = {
     "rawFulfillRandomWords", "recordAfkingSecondary_g3316", "recordDecBurn", "registerWallet_g9539",
     "registerWalletIdentity", "resolveRedemptionLootbox", "retryRng", "runBafJackpot",
     "runDecimatorJackpot", "runTerminalJackpotWork", "setCrapsRngPending",
-    "updateVrfCoordinatorAndSub", "wireVrf",
+    "updateVrfCoordinatorAndSub", "initVrf",
     "spendDegenesis", // Dedicated Vault restricted-budget control.
     "borrow", "repay", // The Vault never takes loans.
     // Direct DGVE-owner controls.

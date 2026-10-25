@@ -555,7 +555,7 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.constructor",
     "kind": "external",
-    "expression": "gameAdmin.wireVrf( ContractAddresses.VRF_COORDINATOR, subId, ContractAddresses.VRF_KEY_HASH )",
+    "expression": "gameAdmin.initVrf( ContractAddresses.VRF_COORDINATOR, subId, ContractAddresses.VRF_KEY_HASH )",
     "count": 1,
     "review": "DEPLOYMENT: constructor-only call; ENS registration is best effort."
   },
@@ -10905,7 +10905,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.wireVrf",
+    "scope": "GameFacade.initVrf",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses .GAME_GAMEOVER_MODULE .delegatecall(msg.data)",
     "count": 1,

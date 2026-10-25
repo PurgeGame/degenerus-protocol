@@ -294,7 +294,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         if (action == 0) {
             vm.prank(adminAddr);
-            try game.wireVrf(address(mockVRF), 1, bytes32(uint256(1))) {} catch { return; }
+            try game.initVrf(address(mockVRF), 1, bytes32(uint256(1))) {} catch { return; }
             return;
         }
         if (action == 1) {

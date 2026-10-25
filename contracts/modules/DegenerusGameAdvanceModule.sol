@@ -863,7 +863,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
 
     /// @dev Zero deposit banks mintable winnings exactly once. All callers have an applied
     ///      final-day result, so the 90-day walk reaches `day` (or was already settled).
-    ///      Reload/modify only this packed field after the call; never flush a cached slot 5.
+    ///      Reload/modify only this packed field after the call; never flush a cached slot 4.
     function _settleVaultFlips(uint24 day) private {
         coinflip.depositCoinflip(VAULT_WALLET_ID, 0);
         if (day > vaultFlipSettledDay) vaultFlipSettledDay = day;

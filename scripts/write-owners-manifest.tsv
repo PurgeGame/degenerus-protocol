@@ -53,12 +53,12 @@ HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a defa
 INIT	_afkingEndpointDay	modules/GameFacade.sol	constructor sets the deploy day as the first reward endpoint
 INIT	dailyIdx	modules/GameFacade.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
 INIT	foilSlotRetained	modules/GameFacade.sol	Constructor retains the foil cursor word through later empty swaps.
-INIT	lastVrfProcessedTimestamp	modules/DegenerusGameGameOverModule.sol	wireVrf (deploy-only, called from the ADMIN constructor) seeds the timestamp; the deadman itself keys off dailyIdx
+INIT	lastVrfProcessedTimestamp	modules/DegenerusGameGameOverModule.sol	initVrf (deploy-only, called from the ADMIN constructor) seeds the timestamp; the deadman itself keys off dailyIdx
 INIT	prizePoolPendingPacked	modules/GameFacade.sol	constructor stores the empty buffer as its bit-255 sentinel so the first freeze credit rewrites a nonzero slot
 INIT	purchaseStartDay	modules/GameFacade.sol	constructor seeds the deploy day
-INIT	vrfCoordinator	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation; config, not game state
-INIT	vrfKeyHash	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
-INIT	vrfSubscriptionId	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
+INIT	vrfCoordinator	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from initVrf (deploy) and the governance rotation; config, not game state
+INIT	vrfKeyHash	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from initVrf (deploy) and the governance rotation
+INIT	vrfSubscriptionId	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from initVrf (deploy) and the governance rotation
 INIT	wallets	storage/DegenerusGameStorage.sol	Storage constructor reserves ID zero by setting the wallet-table length to one; later registration appends normally.
 OWNER	_afkingCohortPriceMilli	modules/GameAfkingModule.sol	runSubscriberWork prices the box cohort on the pass's first visit; the opener only reads it
 OWNER	_afkingEndpointDay	modules/GameAfkingModule.sol	runSubscriberWork advances it to the process day when the pass completes; sole runtime writer

@@ -698,7 +698,7 @@ interface IDegenerusGame {
     /// @param coordinator_ Address of the VRF coordinator contract.
     /// @param subId Chainlink VRF subscription ID.
     /// @param keyHash_ Key hash for the VRF request.
-    function wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) external;
+    function initVrf(address coordinator_, uint256 subId, bytes32 keyHash_) external;
 
     /// @notice Update VRF coordinator, subscription, key hash and callback gas limit.
     /// @param newCoordinator New VRF coordinator address.

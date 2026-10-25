@@ -100,7 +100,7 @@ interface IDegenerusGameGameOverModule {
     /// @param coordinator_ Address of the VRF coordinator contract
     /// @param subId Chainlink VRF subscription ID
     /// @param keyHash_ Key hash for the VRF request
-    function wireVrf(
+    function initVrf(
         address coordinator_,
         uint256 subId,
         bytes32 keyHash_

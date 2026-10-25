@@ -488,7 +488,7 @@ describe("VRF Governance", function () {
   // 10. lastVrfProcessed view
   // =========================================================================
   describe("lastVrfProcessed", function () {
-    it("returns non-zero after deployment (set in wireVrf)", async function () {
+    it("returns non-zero after deployment (set in initVrf)", async function () {
       const { game } = await loadFixture(deployFullProtocol);
       const ts = await game.lastVrfProcessed();
       expect(ts).to.be.gt(0n);

@@ -76,7 +76,7 @@ describe("DegenerusGame", function () {
 
     it("VRF coordinator is wired after deployment (via admin constructor)", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      // Game should have VRF config from the admin wireVrf call in admin constructor
+      // Game should have VRF config from the admin initVrf call in admin constructor
       // verify via rngLocked (should return false, not revert)
       expect(await game.rngLocked()).to.be.false;
     });
@@ -458,14 +458,14 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 17. wireVrf access control
+  // 17. initVrf access control
   // ---------------------------------------------------------------------------
-  describe("wireVrf", function () {
+  describe("initVrf", function () {
     it("reverts when called by non-admin", async function () {
       const { game, alice, mockVRF } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       await expect(
-        game.connect(alice).wireVrf(vrfAddr, 1n, ZERO_BYTES32)
+        game.connect(alice).initVrf(vrfAddr, 1n, ZERO_BYTES32)
       ).to.be.revertedWithCustomError(errorAbi("OnlyAdmin()"), "OnlyAdmin");
     });
   });
