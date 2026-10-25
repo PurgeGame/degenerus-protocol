@@ -3291,9 +3291,11 @@ abstract contract DegenerusGameStorage {
             return _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0
                 ? EndingReason.HardStall : EndingReason.PurchaseTimeout;
         }
-        // Header-only exclusions precede the separate completion/request word.
-        if (lastPurchaseDay || jackpotPhaseFlag || dailyIdx < purchaseStartDay
-            || dailyIdx - purchaseStartDay < _PURCHASE_TIMEOUT_DAYS || !dailyComplete || !_dailyRequestDue()
+        // Count the last completed day: a request in flight has not completed its day, and a
+        // request always follows a completed day, so dailyIdx >= 1 while !dailyComplete.
+        uint24 lastDone = dailyComplete ? dailyIdx : dailyIdx - 1;
+        if (lastPurchaseDay || jackpotPhaseFlag || lastDone < purchaseStartDay
+            || lastDone - purchaseStartDay < _PURCHASE_TIMEOUT_DAYS
             || _wallDay() <= _wallDayAt(lastDailyCompletedAt)) return EndingReason.None;
         if (_getNextPrizePool() > _prizePoolTarget(level + 1)) return EndingReason.None;
         return EndingReason.PurchaseTimeout;
