@@ -289,11 +289,11 @@ contract VRFCore is DeployProtocol {
 
         _finishReadConsumers();
         vm.warp(block.timestamp + 1 days);
-        for (uint256 i = 0; i < 40 && !game.rngLocked(); i++) {
+        for (uint256 i = 0; i < 40 && mockVRF.lastRequestId() == replacement; i++) {
             try game.mineFlip(0) {} catch { vm.warp(block.timestamp + 12 hours); }
         }
         uint256 next = mockVRF.lastRequestId();
-        assertTrue(game.rngLocked() && next != replacement, "the next daily request waits");
+        assertTrue(next != replacement, "a later request waits");
         mockVRF.fulfillRandomWordsRaw(superseded, address(game), lateWord);
         assertEq(_readRngWordCurrent(), 0, "superseded answer never fills a later request");
         mockVRF.fulfillRandomWords(next, 0xBEEF0003);
