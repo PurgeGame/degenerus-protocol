@@ -8,6 +8,7 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
@@ -819,7 +820,12 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         assertTrue(h.seats() != 0, "fixture: eight seats persisted");
         (, uint256 lo) = _stepGas(LVL + 1, Step.Round);
         uint256 withReload = _usedAt(LVL + 1, lo, Step.Round);
+        // The selection gate (SELECT_MAX + TAIL) leaves enough declared slack to admit the reload,
+        // so the selection-only baseline is the same call with no persisted seats to re-read.
+        uint256 snap = vm.snapshotState();
+        vm.store(address(h), bytes32(GameSlots.TICKET_SEATS), bytes32(0));
         uint256 selectOnly = _usedAt(LVL + 1, _selectOnlyAllowance(), Step.Round);
+        assertTrue(vm.revertToStateAndDelete(snap));
         emit log_named_uint("reload_eight_seats_cold", withReload - selectOnly);
         assertLe(withReload - selectOnly, GasBounds.TICKET_RELOAD_MAX, "cold reload exceeds RELOAD_MAX");
         _exportChunk(LVL + 1, lo, Step.Round, withReload);
