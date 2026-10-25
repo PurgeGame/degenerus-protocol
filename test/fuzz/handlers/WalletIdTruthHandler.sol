@@ -10,7 +10,6 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
-import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {GameSlots, GameSlotKeys, CrapsSlots} from "../../helpers/GameSlots.sol";
 
@@ -69,7 +68,6 @@ contract WalletIdTruthHandler is Test {
     // ------------------------------------------------------------------ wiring
     DegenerusGame public immutable game;
     MockVRFCoordinator public immutable vrf;
-    MockLinkToken public immutable link;
 
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant COINFLIP = ContractAddresses.COINFLIP;
@@ -230,10 +228,9 @@ contract WalletIdTruthHandler is Test {
     address[] internal _burners;
     uint32[] internal _burnBatches;
 
-    constructor(DegenerusGame game_, MockVRFCoordinator vrf_, MockLinkToken link_, address[] memory seeded) {
+    constructor(DegenerusGame game_, MockVRFCoordinator vrf_, address[] memory seeded) {
         game = game_;
         vrf = vrf_;
-        link = link_;
         _initNames();
         address[14] memory protocol =
             [VAULT, SDGNRS, GNRUS, GAME, COINFLIP, COIN, CRAPS, AFFILIATE, WWXRP, DGNRS, PARIMUTUEL, QUESTS, JACKPOTS, ADMIN];
@@ -266,7 +263,7 @@ contract WalletIdTruthHandler is Test {
         keys.push(k);
     }
 
-    /// @dev A brand-new address holding ETH, FLIP, WWXRP, LINK and DGNRS but no wallet ID.
+    /// @dev A brand-new address holding ETH, FLIP, WWXRP and DGNRS but no wallet ID.
     function _fresh() internal returns (address a) {
         a = address(uint160(uint256(keccak256(abi.encode("wallet-id-truth", freshCount++)))));
         vm.deal(a, 300 ether);
@@ -274,7 +271,6 @@ contract WalletIdTruthHandler is Test {
         (bool ok1,) = COIN.call(abi.encodeWithSignature("mintForGame(address,uint256)", a, 5_000_000));
         (bool ok2,) = WWXRP.call(abi.encodeWithSignature("mintPrize(address,uint256)", a, 200_000));
         vm.stopPrank();
-        link.mint(a, 50 ether);
         vm.prank(ContractAddresses.CREATOR);
         (bool ok3,) = DGNRS.call(abi.encodeWithSignature("transfer(address,uint256)", a, 1_000_000 ether));
         ok1;
@@ -827,11 +823,12 @@ contract WalletIdTruthHandler is Test {
         }
     }
 
-    function adm_donateLink(uint256 a, uint256 amt) external {
+    /// @dev The native VRF donation door: it funds the subscription and banks the donor's request
+    ///      credit, so a fresh donor registers on first contact.
+    function adm_donateVrf(uint256 a, uint256 amt) external {
         address p = _actor(a);
         amt = bound(amt, 1e15, 5 ether);
-        if (link.balanceOf(p) < amt) link.mint(p, amt);
-        _call(32, p, address(link), 0, abi.encodeWithSignature("transferAndCall(address,uint256,bytes)", ADMIN, amt, ""), false);
+        _call(32, p, ADMIN, amt, abi.encodeWithSignature("donateVrf()"), false);
     }
 
     // =====================================================================================
@@ -1815,7 +1812,7 @@ contract WalletIdTruthHandler is Test {
         _names[29] = "wx_enter";
         _names[30] = "wx_claim";
         _names[31] = "pm_placeBet";
-        _names[32] = "adm_donateLink";
+        _names[32] = "adm_donateVrf";
         _names[33] = "s_burn";
         _names[34] = "s_burnWrapped";
         _names[35] = "s_claim";

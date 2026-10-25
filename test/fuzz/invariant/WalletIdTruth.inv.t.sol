@@ -45,7 +45,6 @@ contract WalletIdTruthInvariant is DeployProtocol {
             coin.mintForGame(a, 5_000_000);
             wwxrp.mintPrize(a, 200_000);
             vm.stopPrank();
-            mockLINK.mint(a, 50 ether);
             if (i < 4) {
                 vm.prank(a);
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
@@ -53,7 +52,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
             }
         }
         _driveDay(1);
-        handler = new WalletIdTruthHandler(game, mockVRF, mockLINK, seeded);
+        handler = new WalletIdTruthHandler(game, mockVRF, seeded);
         targetContract(address(handler));
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: _selectors()}));
     }
@@ -196,7 +195,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         s[i++] = WalletIdTruthHandler.wx_enter.selector;
         s[i++] = WalletIdTruthHandler.wx_claim.selector;
         s[i++] = WalletIdTruthHandler.pm_placeBet.selector;
-        s[i++] = WalletIdTruthHandler.adm_donateLink.selector;
+        s[i++] = WalletIdTruthHandler.adm_donateVrf.selector;
         s[i++] = WalletIdTruthHandler.s_burn.selector;
         s[i++] = WalletIdTruthHandler.s_burnWrapped.selector;
         s[i++] = WalletIdTruthHandler.s_claim.selector;
@@ -318,7 +317,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         handler.af_createCode(0, 1, 5);
         handler.af_referPlayer(0, 3); // a fresh default-code owner registers through the referral
         handler.wx_enter(0, 100);
-        handler.adm_donateLink(0, 1 ether);
+        handler.adm_donateVrf(0, 1 ether);
         handler.prog_driveDay(0, 7); // a fresh keeper may register on its first paid bounty
     }
 
