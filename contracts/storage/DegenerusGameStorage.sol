@@ -1240,14 +1240,16 @@ abstract contract DegenerusGameStorage {
         uint256 remaining = available - fromYield;
         uint256 fromClaimable;
         uint256 fromAfking;
+        uint256 packed;
         if (remaining != 0) {
+            packed = balancesPacked[SDGNRS_WALLET_ID];
             // The unbacked one-wei wallet sentinel is never a funding source.
-            uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
+            uint256 claimable = uint128(packed);
             if (claimable != 0) --claimable;
             fromClaimable = remaining < claimable ? remaining : claimable;
             remaining -= fromClaimable;
             if (remaining != 0) {
-                uint256 afking = _afkingOf(SDGNRS_WALLET_ID);
+                uint256 afking = packed >> 128;
                 fromAfking = remaining < afking ? remaining : afking;
             }
         }
@@ -1258,7 +1260,7 @@ abstract contract DegenerusGameStorage {
             abi.encodeWithSelector(IVRFCoordinator.fundSubscriptionWithNative.selector, vrfSubscriptionId), 0);
         if (!ok) return 0;
         if (fromSdgnrs != 0) {
-            _debitClaimableAndAfking(SDGNRS_WALLET_ID, fromClaimable, fromAfking);
+            _debitClaimableAndAfkingFrom(SDGNRS_WALLET_ID, packed, fromClaimable, fromAfking);
             claimablePool -= uint128(fromSdgnrs);
         }
         emit VrfFunded(level, fromYield, fromSdgnrs);
