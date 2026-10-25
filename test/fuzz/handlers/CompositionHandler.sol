@@ -103,6 +103,9 @@ contract CompositionHandler is Test {
 
         if (game.gameOver()) return;
 
+        // A whale pass needs an unlocked game: answer the daily request and drain the day first.
+        _settleDay();
+
         // Try whale pass first
         uint256 whaleCost = 2.4 ether;
         if (whaleCost <= currentActor.balance) {
@@ -126,6 +129,25 @@ contract CompositionHandler is Test {
         }
 
         _checkCompositionInvariants();
+    }
+
+    /// @dev Fulfil the pending VRF request and mine until the daily lock clears (bounded).
+    function _settleDay() private {
+        for (uint256 i; i < 8 && game.rngLocked(); ++i) {
+            uint256 reqId = vrf.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = vrf.pendingRequests(reqId);
+                if (!fulfilled) {
+                    try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp, reqId)))) {
+                        ghost_vrfFulfillments++;
+                    } catch {}
+                }
+            }
+            vm.prank(currentActor);
+            try game.mineFlip(0) {
+                ghost_mineFlips++;
+            } catch {}
+        }
     }
 
     // =========================================================================
