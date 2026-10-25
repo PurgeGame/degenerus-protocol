@@ -17,7 +17,8 @@ contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
     function walletKeyOf(uint32 id) external view returns (address) { return _walletKey(id); }
     function price(uint24 target, uint256 budget, uint256 word, bool turbo) external {
         level = target - 1;
-        dailyIdx = 100;
+        dailyIdx = 101;
+        rngRequestDay = 101;
         jackpotPhaseFlag = true;
         jackpotCounter = 0;
         jackpotFlags = turbo ? JACKPOT_TURBO : 0;

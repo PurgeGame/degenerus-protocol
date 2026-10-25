@@ -17,13 +17,14 @@ contract DegradeDirectFallbackHarness is DegenerusGameJackpotModule, BucketSeed 
     function seed(uint256 word, uint256 tickets) external {
         level = 41;
         jackpotPhaseFlag = true;
-        dailyIdx = 100;
         rngLockedFlag = true;
         _seedWallet(address(1));
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
-        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
-            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
+        dailyIdx = 101;
+        rngRequestDay = 101;
+        dailyFoilDraw[rngRequestDay & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, rngRequestDay, word);
         for (uint8 q; q < 4; ++q) {
             _seedBucketDistinct(41, traits[q], 64, uint160(0x10000 + uint256(q) * 0x10000));
         }

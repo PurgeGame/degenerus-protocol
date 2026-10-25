@@ -18,8 +18,10 @@ contract WordJackpotHarness is DegenerusGameJackpotModule, BucketSeed {
         level = 41;
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
-        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
-            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
+        dailyIdx = 101;
+        rngRequestDay = 101;
+        dailyFoilDraw[rngRequestDay & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, rngRequestDay, word);
         dailyTicketBudgetsPacked = (awards * 4) << 144;
         _seedBucketDistinct(42, trait, len, 0x10000);
         deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = deity == address(0) ? 0 : _seedWallet(deity);
