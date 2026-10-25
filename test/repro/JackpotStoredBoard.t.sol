@@ -9,7 +9,9 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 contract StoredBoardHarness is DegenerusGameJackpotModule {
     function seed(uint8 counter, bool turbo) external {
         level = 4;
-        dailyIdx = 100;
+        // The daily index and the request day advance together at the daily request.
+        dailyIdx = 101;
+        rngRequestDay = 101;
         rngLockedFlag = true;
         jackpotPhaseFlag = true;
         jackpotCounter = counter;
