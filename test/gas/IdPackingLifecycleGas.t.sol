@@ -50,9 +50,9 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
             total += _sample(string.concat(prefix, "-place-", vm.toString(i + 1)), address(game));
         }
         RecyclingState.seedWord(address(game), 1, bytes32(WORD));
+        _seedLogicalFixtureDay(game.currentDayView());
         uint256 state = uint256(vm.load(address(game), bytes32(0)));
-        vm.store(address(game), bytes32(0), bytes32((state & ~(uint256(0xffffff) << 24))
-            | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192)));
+        vm.store(address(game), bytes32(0), bytes32(state | (uint256(1) << 192)));
         vm.record();
         game.mineFlip(0);
         total += _sample(string.concat(prefix, "-resolve"), address(game));
