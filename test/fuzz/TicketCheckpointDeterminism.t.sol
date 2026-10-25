@@ -12,7 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract TicketCheckpointHarness is DegenerusGameTicketModule, WalletSeed {
-    function initialize(uint24 lvl) external { level = lvl; }
+    function initialize(uint24 lvl) external { level = lvl; dailyIdx = 10; }
     function credit(address player, uint24 lvl, uint32 scaled) external { _queueEntriesScaled(_seedWallet(player), lvl, scaled); }
     function commit(uint256 word, bool future) external {
         rngWordCurrent = word < 2 ? 2 : word;

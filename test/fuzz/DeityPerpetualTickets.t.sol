@@ -142,7 +142,7 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
         }
         assertEq(_owed(115, buyer, 15), 0, "level + 100 is the next transition's grant");
         _fixtureCall(abi.encodeCall(PerpetualFixture.setJackpotPhase, (false)));
-        _fixtureCall(abi.encodeCall(PerpetualFixture.renew, (address(passModule), 115)));
+        _fixtureCall(abi.encodeCall(PerpetualFixture.renew, (address(ticketModule), 115)));
         assertEq(_owed(115, buyer, 15), 4);
         _assertOnce(115, buyer, 15);
     }
@@ -156,7 +156,7 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
         // Already queued deity must get +4 without a duplicate lane; remaining 31
         // straddle five packed words after the six-entry tail.
         _fixtureCall(abi.encodeCall(PerpetualFixture.queue, (address(vault), target, 20)));
-        _fixtureCall(abi.encodeCall(PerpetualFixture.renew, (address(passModule), target)));
+        _fixtureCall(abi.encodeCall(PerpetualFixture.renew, (address(ticketModule), target)));
         for (uint256 i; i < 32; ++i) {
             address owner = lens.deityOwnerAt(address(game), i);
             assertEq(_owed(target, owner, 1), i == 0 ? 24 : 4);
@@ -172,7 +172,7 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
         _fixtureCall(abi.encodeCall(PerpetualFixture.fillOwners, ()));
         _fixtureCall(abi.encodeCall(PerpetualFixture.setLevel, (uint24(1))));
         uint256 before = gasleft();
-        _fixtureCall(abi.encodeCall(PerpetualFixture.renew, (address(passModule), 101)));
+        _fixtureCall(abi.encodeCall(PerpetualFixture.renew, (address(ticketModule), 101)));
         emit log_named_uint("renew_32_fresh_owners_cold_gas", before - gasleft());
     }
 

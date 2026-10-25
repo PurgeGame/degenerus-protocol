@@ -381,7 +381,7 @@ contract GameWalletIdViews is DeployProtocol {
         for (uint256 i; i < field.length; ++i) {
             uint256 w = field[i];
             uint32 id = uint32(w);
-            assertEq(w >> 180, 1, "one unit");
+            assertEq(w >> 181, 1, "one unit");
             assertEq((w >> 32) & ((uint256(1) << 128) - 1), 0, "bits 32..159 zero");
             // The ID must be a queue lane at an eligible level (seeded or protocol-queued).
             bool lane;
@@ -395,7 +395,7 @@ contract GameWalletIdViews is DeployProtocol {
             for (uint256 j; j < ids.length; ++j) {
                 if (ids[j] == id && j % 3 == 0) saved = (uint256(j + 1) << CrapsPreferenceLib.SHIFT) & CrapsPreferenceLib.MASK;
             }
-            assertEq((w >> 160) & ((uint256(1) << 20) - 1), saved >> CrapsPreferenceLib.SHIFT, "board read by the ID");
+            assertEq((w >> 160) & ((uint256(1) << 21) - 1), saved >> CrapsPreferenceLib.SHIFT, "board read by the ID");
         }
     }
 

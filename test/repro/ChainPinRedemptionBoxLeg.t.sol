@@ -7,6 +7,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ChainPinFundHarness} from "./ChainPinRedemptionLedger.t.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
@@ -250,12 +251,12 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
             uint256 rj = uint256(keccak256(abi.encode(r, j)));
             _fulfillPending(rj);
             uint8 act = game.nextMinerAction();
-            if (act == 0) break; // Idle
-            if (act == 2) {
+            if (act == uint8(DegenerusGameStorage.MinerAction.Idle)) break;
+            if (act == uint8(DegenerusGameStorage.MinerAction.Wait)) {
                 ++nWaitBreaks;
                 break; // Wait on a word nobody can answer
             }
-            if (act == 8) {
+            if (act == uint8(DegenerusGameStorage.MinerAction.Redemption)) {
                 ++nRedemptionSteps;
                 assertEq(game.rngConsumerStage_g379(), 1, "A-F1: a selected Redemption action meets RedemptionStageBlocked");
             }
@@ -270,7 +271,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
                 );
                 if (ok) break;
             }
-            if (!ok && act == 8) revert(string.concat("STAGE 1 REVERTED: ", vm.toString(data)));
+            if (!ok && act == uint8(DegenerusGameStorage.MinerAction.Redemption)) revert(string.concat("STAGE 1 REVERTED: ", vm.toString(data)));
             _assertFunding();
             bool settling = sdgnrs.redemptionSettlementPending();
             if (wasSettling && !settling) ++nBatchesSettled;

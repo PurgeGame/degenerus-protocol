@@ -7,6 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameWhaleModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
@@ -16,7 +17,12 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///      the Game's storage context (`address(this) == GAME`) exactly as the afking STAGE nests it,
 ///      without the STAGE's own gate in front. `vm.etch` keeps the Game's storage, so the module
 ///      sees the live level, claimable, boon lane and RNG state.
-contract WhaleModuleForwarder {
+contract WhaleModuleForwarder is DegenerusGameStorage {
+    /// @dev The Game's logical day, which the quest handler reads back during the affiliate payout.
+    function currentDayView() external view returns (uint24) {
+        return dailyIdx;
+    }
+
     /// @dev The Game's raw storage read, which the affiliate calls back into during the purchase.
     function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") {
