@@ -86,7 +86,10 @@ contract BafDrawGas is DeployProtocol {
         // The retained Coinflip records add their tag/initialized checks to the first deposit:
         // 109,455 measured after storage reuse phase 2 (ceiling was 108,000).
         assertLe(first, 115_000, "first-ever warm deposit ceiling");
-        assertLe(sameDay, 27_500, "same-day warm repeat ceiling"); // 27,160 measured on the stack (was 26,000)
+        // Every deposit now runs the Quests flip hook with the Game day: 21,886 measured on EIP-170 (the
+        // hook is a separate contract, 3.3k of the frame), 21,351 on Glamsterdam (hook inline), 20,842 at P8
+        // (no hook call on a repeat). The EIP-170 figure was 27,160 before the split call-overhead cuts.
+        assertLe(sameDay, 22_500, "same-day warm repeat ceiling");
         assertLe(nextDay, 46_500, "next-day warm repeat ceiling");
     }
 

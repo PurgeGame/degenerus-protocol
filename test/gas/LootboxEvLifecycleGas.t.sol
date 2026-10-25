@@ -118,29 +118,29 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
         assertTrue(complete);
     }
 
-    /// @dev Recalibrated again on the stack at 0e0766a79 (eip170 profile, solc 0.8.38/via-IR/1000/Osaka,
-    ///      isolated transactions): every case grew by a near-uniform ~5-6k per path (consistent with the
-    ///      profile's extra cold module hops; not bisected), and pass_grant realizes a cheaper branch
-    ///      (7 new slots, was 10) after the RNG derivation changes. The limits below stay at the
-    ///      original 1% / 1000-per-order. Earlier calibration, kept for history:
-    ///      recalibrated on frozen P7B 824d757cf, solc 0.8.38/via-IR/1000/Osaka,
-    ///      isolated transactions. P6b changed RNG domains and therefore the realized
+    /// @dev Recalibrated on the stack with the VRF request-ID port (eip170 profile, solc 0.8.38/via-IR/1000/
+    ///      Osaka, isolated transactions). Against the P7B calibration (e.g. exhausted 395,695) every case
+    ///      is higher, bisected: logical game days add about 4.0k per path (75a1765b3), the Glamsterdam
+    ///      shape gains about 1.3k more through the profile and native-VRF commits (exhausted 401,048 there),
+    ///      and the EIP-170 split adds about 14.6k of cold module hops (exhausted 415,662 here; 419,214
+    ///      before the split call-overhead cuts). pass_grant realizes a cheaper branch (7 new slots, was
+    ///      10) after the RNG derivation changes. The limits stay at the original 1% / 1000-per-order.
+    ///      Earlier calibration: frozen P7B 824d757cf. P6b changed RNG domains and therefore the realized
     ///      award branches and new-slot counts. The 0.8.34 b80dab839 measurements remain
-    ///      historical evidence in docs/VERIFICATION.md; these pins protect the final
-    ///      workload with the original 1% / 1000-per-order regression limits.
+    ///      historical evidence in docs/VERIFICATION.md.
     function _baseline(bytes32 label) private pure returns (uint256, uint256, uint256) {
-        if (label == keccak256("cover")) return (179218, 481278, 3);
-        if (label == keccak256("distinct_wallets")) return (1325163, 4375403, 32);
-        if (label == keccak256("exhausted")) return (419214, 1346214, 10);
-        if (label == keccak256("existing_bonus")) return (423144, 1357344, 10);
-        if (label == keccak256("fresh_bonus")) return (440301, 1455321, 11);
-        if (label == keccak256("low_score")) return (428341, 1436161, 11);
-        if (label == keccak256("manual_with_afk")) return (481623, 1599063, 12);
-        if (label == keccak256("100_boxes")) return (1565825, 3554225, 20);
-        if (label == keccak256("nested_eth_spin")) return (519420, 1725280, 13);
-        if (label == keccak256("pass_grant")) return (311292, 980232, 7);
-        if (label == keccak256("same_wallet")) return (912592, 2480892, 15);
-        if (label == keccak256("taper")) return (423340, 1357540, 10);
+        if (label == keccak256("cover")) return (179460, 481520, 3);
+        if (label == keccak256("distinct_wallets")) return (1307320, 4357560, 32);
+        if (label == keccak256("exhausted")) return (415662, 1342662, 10);
+        if (label == keccak256("existing_bonus")) return (419592, 1353792, 10);
+        if (label == keccak256("fresh_bonus")) return (436749, 1451769, 11);
+        if (label == keccak256("low_score")) return (424789, 1432609, 11);
+        if (label == keccak256("manual_with_afk")) return (477939, 1595379, 12);
+        if (label == keccak256("100_boxes")) return (1562271, 3550671, 20);
+        if (label == keccak256("nested_eth_spin")) return (515868, 1721728, 13);
+        if (label == keccak256("pass_grant")) return (309384, 978324, 7);
+        if (label == keccak256("same_wallet")) return (894353, 2462653, 15);
+        if (label == keccak256("taper")) return (419788, 1353988, 10);
         revert("missing lifecycle baseline");
     }
 
