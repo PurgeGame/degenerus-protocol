@@ -3086,6 +3086,12 @@ abstract contract DegenerusGameStorage {
         uint256 packedAfter
     );
 
+    /// @dev Mint-level count after a pass grant; saturates at the uint24 maximum.
+    function _satLevelCount(uint24 count, uint24 add) internal pure returns (uint24) {
+        uint256 sum = uint256(count) + add;
+        return sum > type(uint24).max ? type(uint24).max : uint24(sum);
+    }
+
     /// @dev Activates a 10-level pass for a registered player. Shared logic for lazy pass purchases
     ///      and awards. Updates mintPacked_ (levelCount +10, frozenUntilLevel, passType, lastLevel,
     ///      day) and queues tickets for the 10-level range under the wallet ID the word carries.
@@ -3124,7 +3130,7 @@ abstract contract DegenerusGameStorage {
             levelsToAdd = deltaFreeze;
         }
 
-        uint24 newLevelCount = levelCount + levelsToAdd;
+        uint24 newLevelCount = _satLevelCount(levelCount, levelsToAdd);
 
         uint8 currentPassType = uint8(
             (prevData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3
@@ -3215,7 +3221,7 @@ abstract contract DegenerusGameStorage {
             levelsToAdd = deltaFreeze;
         }
 
-        uint24 newLevelCount = levelCount + levelsToAdd;
+        uint24 newLevelCount = _satLevelCount(levelCount, levelsToAdd);
 
         uint256 data = prevData;
         data = BitPackingLib.setPacked(
