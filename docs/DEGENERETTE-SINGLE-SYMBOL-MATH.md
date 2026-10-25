@@ -42,22 +42,23 @@ For ordinary ETH and FLIP bets:
 - Placement rejects an already revealed RNG index. Draws cannot be rerolled by
   changing settlement order or batching.
 
-Using `H` for keccak256 over 32-byte ABI words and `packedH` for packed ABI:
+Using `H` for keccak256 over 32-byte ABI words, with a unique numeric tag first:
 
 ```text
-spinSeed = H(rngWord, uint256(index), uint256(symbol), uint256(spinIndex))
-player   = ordinaryLanes(H(spinSeed, PLAYER_TICKET_TAG)), hero lane = 0x40 | icon
-house0   = houseLanes(packedH(rngWord, uint32(index), bytes1(0x51)))
-houseN   = houseLanes(packedH(rngWord, uint32(index), uint8(spinIndex), bytes1(0x51)))
+spinSeed  = H(BET_PLAYER, rngWord, symbol, spinIndex)
+player    = ordinaryLanes(H(SPIN_PLAYER, spinSeed)), hero lane = 0x40 | icon
+houseSeed = H(BET_HOUSE, rngWord, spinIndex)
+house     = houseLanes(houseSeed)
 ```
 
 Internal WWXRP reward spins use the box or foil award's committed seed in their
 own domain. They never create a player-funded bet or burn the player's WWXRP:
 
 ```text
-rewardSeed = H(committedAwardSeed, WWXRP_DRAW_TAG)
-houseSeed  = H(rewardSeed, RESULT_TICKET_TAG)
-rigSeed    = H(rewardSeed, WWXRP_RIG_SALT)
+rewardSeed = committedAwardSeed
+player     = ordinaryLanes(H(SPIN_PLAYER, rewardSeed)), hero lane = 0x40 | icon
+houseSeed  = H(SPIN_HOUSE, rewardSeed)
+rigSeed    = H(SPIN_RIG, rewardSeed)
 ```
 
 FLIP survival and award rounding keep their separate owner/bet-id domains, where
@@ -76,8 +77,8 @@ both pools unchanged, so later wagers cannot change an already committed board.
 
 The hero views expose the sealed pool under the request day minus one and the
 accumulating pool under the current day. Other days return zero; use bet logs
-for historical calendar-day totals. Protocol deity-boon entries retain their
-separate calendar-day eligibility rules.
+for historical game-day totals. Protocol deity-boon entries retain their
+separate game-day eligibility rules.
 
 ## Lane format
 
@@ -253,10 +254,10 @@ A natural WWXRP score 9 pays its token prize through the ordinary payout path.
   regenerate the rest, including every color, so foil color rarity never reaches
   Degenerette payouts.
 - Automatic player, hero, result and rig draws use separate tagged domains.
-- The public bet ABI is `betDegenerette(address,uint8,uint128,uint8,uint8)`.
+- The public bet ABI is `betDegenerette(uint32,uint8,uint128,uint8,uint8)`.
   Currency accepts only `0` (ETH) and `1` (FLIP). ETH permits up to 25 spins and
-  FLIP up to 15. In the queued bet word, bits 160–164 hold the symbol, 188–251 the
-  effective stake units, and 252–255 are reserved.
+  FLIP up to 15. In the queued bet lane, bits 32–36 hold the symbol, 60–123 the
+  stake per spin in currency units, and 124–127 are reserved.
 
 ## Reproducible verification
 

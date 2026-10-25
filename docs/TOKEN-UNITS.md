@@ -5,7 +5,7 @@ allowances, transfer/mint/burn calls, and paid rewards. For
 example, depositing 100 FLIP passes `100`, and entering a WWXRP draw with 25 tokens
 passes `25`. Do not multiply these amounts by `10^18` or use `parseEther` for them.
 
-ETH, stETH, LINK, DGNRS, sDGNRS, GNRUS, and vault shares keep their existing
+ETH, stETH, DGNRS, sDGNRS, GNRUS, and vault shares keep their existing
 18-decimal units. Mathematical fixed-point scales remain separate from token denominations. The
 stateless Craps simulation, Decimator normalized peak, and internal box/foil spin
 stakes retain 10^18 sub-units per token; their receipts are computation results,

@@ -180,7 +180,7 @@ their existing saturating behavior; a whale-pass entitlement that cannot fit is
 ignored. These collisions never invoke the manual recipient-limit reverts and
 never cause a reroll or extra recipient selection.
 
-Awards are only issued on their designated next calendar day. A missed day does
+Awards are only issued on their designated next game day. A missed day does
 not later grant permanent activity/shield/pass benefits. Pools are held for two
 days (see below), so a day's pool stays inspectable through its draw day; older
 pools are recoverable from the events. A missing predecessor word uses the
@@ -193,21 +193,20 @@ approved operator. Public paid deities retain their ordinary manual-gift rules.
 
 ## Storage and read interface
 
-The deity registry keeps its existing root and one-slot element stride. After
-terminal-decimator removal, `deityPassSales`, `protocolBoonPools`, and
-`protocolBoonEntries` occupy its former slots 47–49; all other surviving fields
-retain their positions. This layout is for a new deployment, not an in-place
-migration of existing contract state.
+The deity registry keeps its one-slot element stride. `deityPassSales` is at
+Game storage slot 35, and `protocolBoonPools` and `protocolBoonEntries` are the
+fixed-array roots at slots 832 and 836. This layout is for a new deployment, not an
+in-place migration of existing contract state.
 
 | Record | Fields | Bits |
 |---|---|---:|
 | Pool | `uint112 totalWageredWei`, `uint64 totalWeight`, `uint32 entryCount`, `uint8 awardedMask`, `uint24 day` | 240 |
-| Entry | `address player`, `uint64 cumulativeWeight`, `uint16 scoreSnapshot` | 240 |
+| Entry | `uint32 playerId`, `uint64 cumulativeWeight`, `uint16 scoreSnapshot` | 112 |
 
 Pools and entries are two-slot rings keyed `[issuer][day & 1]`, so a day reuses the
 slots written two days earlier instead of fresh zero slots (about 17k gas less per
 entry once the ring is warm). This is safe because day D's pool is written only
-while the wall day is D and drawn only while the wall day is D + 1 (the draw
+while the game day is D and drawn only while the game day is D + 1 (the draw
 returns unless its award day is today); by the time day D + 2 writes the same
 slots, day D has been drawn or can never be. The pool's `day` tag names the wager
 day the slot holds: the first entry of a new day resets the pool, and a draw or a
@@ -235,7 +234,7 @@ wager day and its draw day, until a later same-parity day reuses the ring slot; 
 not-ready pool. Quotes and winner lookup stay outside the
 size-constrained GAME facade. `ProtocolBoonDrawEntered` and
 `ProtocolBoonDrawAwarded` provide entry and issuance logs. Entry events are emitted
-by the Degenerette module through GAME and include issuer, player, day, paid ETH,
+by the Degenerette bet module through GAME and include issuer, player, day, paid ETH,
 score, weight and entry index. Automatic draws update used-slot views and emit only the draw award event; `DeityBoonIssued` remains the
 manual-gift event. The draw event's `day` identifies the wager pool, and
 the award day is `day + 1`.

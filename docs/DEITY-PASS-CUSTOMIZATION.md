@@ -245,8 +245,8 @@ verify the mutation paths use only external `STATICCALL` and write only renderer
 storage. Symbol metadata stays unchanged; no gameplay contract imports or reads
 this extension, and no scoring, roll, odds, ticket-color or boon logic is modified.
 
-Validation completed: 14 customization tests and 69 existing pass/gold-dice
+Validation: [final battery] customization tests and [final battery] existing pass/gold-dice
 regressions passed. All 32 production symbols were also rendered through the
 compiled extension and raster-checked for badge-envelope overflow; none exceeded
 the outer ring. The published ABI matches the compiled artifact. Renderer runtime
-bytecode is 11,048 bytes with the stated compiler settings.
+bytecode size with the stated compiler settings: [final battery] bytes.

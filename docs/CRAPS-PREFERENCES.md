@@ -33,7 +33,7 @@ Use the same canonical encoding as paid entries: three bits per leg, from least 
 | 8 | hard8 |
 | 9 | dontPass |
 
-Encode as `sum(count[i] << (3 * i))`. Each count is 0–3, the total is at most seven, and passLine and dontPass cannot both be named. Bits 30–31 must be zero. The dice scatter the remaining chips to reach ten. Zero means entirely random; unset preferences also read as zero.
+Encode as `sum(count[i] << (3 * i))`. Each of the first nine counts is 0–3, dontPass is 0–5, the total is at most seven, and passLine and dontPass cannot both be named. Bits 30–31 must be zero. The dice scatter the remaining chips to reach ten. Zero means entirely random; unset preferences also read as zero.
 
 Successful calls to `enterBattle`, `throwCraps`, `playCraps`, `buyFutureCrapsDays`, `applyCrapsPasses`, and `amendSlip` remember the supplied board. Explicit entry data always controls that ticket, including zero. Saving the already initialized board causes no preference write, event, or RNG lookup.
 
@@ -41,21 +41,22 @@ While `Game.rngLocked()` is true, the setter rejects initialization and changes 
 
 ## Storage
 
-`CrapsBattle._passCreditsById[walletId]` uses mapping base slot 14. Its packed word is:
+`CrapsBattle._passCreditsById[walletId]` uses mapping base slot 9. Its packed word is:
 
 | Bits | Value |
 | --- | --- |
 | 0–31 | Normal passes |
 | 32–63 | High passes |
-| 64–83 | Ten two-bit chip counts |
-| 84 | Permanent initialized sentinel |
-| 85–116 | Reserved in storage; helpers carry a temporary wallet ID here in memory |
-| 117 | Retained storage sentinel |
-| 118–255 | Reserved |
+| 64–81 | Nine two-bit chip counts (legs 0–8) |
+| 82–84 | Three-bit dontPass count |
+| 85 | Permanent initialized sentinel |
+| 86–117 | Reserved in storage; helpers carry a temporary wallet ID here in memory |
+| 118 | Retained storage sentinel |
+| 119–255 | Reserved |
 
 The sentinel is set on the first successful manual or automatic save, including zero. Clearing the board or spending the final pass preserves it. Awards and comp tickets do not initialize it. All balance and preference writes preserve the other fields.
 
-The **20-bit storage encoding differs from the 30-bit API encoding**. Use the lens's `preferredBoardOf` for UI reads. Raw readers use `extsload(keccak256(abi.encode(walletId, uint256(14))))` and decode the word with `CrapsPreferenceLib.decode`, which expands each two-bit count to the API encoding. Do not pass the compact field directly to a paid-entry API.
+The **21-bit storage encoding differs from the 30-bit API encoding**. Use the lens's `preferredBoardOf` for UI reads. Raw readers use `extsload(keccak256(abi.encode(walletId, uint256(9))))` and decode the word with `CrapsPreferenceLib.decode`, which expands the stored counts to the API encoding. Do not pass the compact field directly to a paid-entry API.
 
 ## Automatic entries
 
@@ -146,7 +147,7 @@ chunks while enough gas remains for another complete chunk; otherwise it saves t
 cursor and resumes on the next advance.
 
 - Each visit picks a level uniformly among eligible nonempty far-future queues, chooses a starting position, and walks that level's whole queue circularly. Levels are picked with replacement between visits. Chunk boundaries preserve the unfinished visit.
-- The Game reads all distinct wallets' saved boards in one `extsload(bytes32[])` call. It passes one word per entry: address in bits 0–159, the compact board in 160–179, one unit at bit 180. The battle makes no storage callbacks, and a malformed or empty entry forfeits its award.
+- The Game reads all distinct wallets' saved boards in one `extsload(bytes32[])` call. It passes one word per entry: wallet ID in bits 0–31, the compact board in 160–179, one unit at bit 181. The battle makes no storage callbacks, and a malformed or empty entry forfeits its award.
 
 The chunk that reaches the award target, or finds no eligible level, seals the field.
 Each paid seat has one base place in the Added-funded main pool; extra high units
@@ -168,7 +169,7 @@ the action books.
 Every seat throws the same dice. Seats settle through the table's normal resolver in one order: paid window seats, then day tickets, then awarded seats.
 
 - An awarded seat keys its scatter, survival coin and shooter boost to its own bet id rather than to the wallet. Repeat awards to one wallet are therefore separate runs.
-- Each advance settles seats on a 1,500-unit work budget. The call that seals the field first charges its own draw (110 units plus 10 per entry) against that budget and settles on the rest.
+- Each advance settles seats while its metered gas allowance admits another complete seat. The call that seals the field spends its draw first and settles with the remainder.
 - Every run has the shared 600-roll between-shooter budget (1,111-roll ceiling), like every slip.
 
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat finalizes the field once:

@@ -40,7 +40,7 @@ Wallet-wide functions without an account-ID argument still act on the Vault wall
 | Affiliate / Jackpots | Create a Vault-owned referral code, referral registration, affiliate claims, BAF consolation claims |
 | AFKing seat token | Restyle, approve operators (seats move with `sweepNft`) |
 | GNRUS | Charity votes and GNRUS burns |
-| LINK | `transferAndCall`, including LINK donations credited to the Vault |
+| Admin | `donateVrf` (native ETH VRF subscription funding) |
 
 For example, the approved transaction below buys a foil pack with 0.1 ETH from Vault reserves. Encode this Vault call as the governance proposal; a holder cannot call it directly:
 
@@ -48,7 +48,7 @@ For example, the approved transaction below buys a foil pack with 0.1 ETH from V
 vault.playerAction(
     GAME,
     abi.encodeCall(
-        IDegenerusGame.purchase,
+        IDegenerusGame.purchaseOrderFor,
         (0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true)
     ),
     0.1 ether // Must cover the current quote; normal payment rules apply.
@@ -80,11 +80,11 @@ Underlying restrictions are deliberately preserved:
 
 - Vault AFKing is box-only, quantity 0 pauses its permanent seat, and quantity 1–8
   resumes/changes it. The normal AFKing timing gates still apply.
-- The Vault never borrows: `borrow` and `repay` are not on the allowlist. Its protocol
+- The Vault never borrows: `borrow` and `clearDebtNow` are not on the allowlist. Its protocol
   deity cannot manually issue boons.
   The Vault already owns a deity pass, so purchasing a second remains prohibited.
 - The Vault's referral is already assigned permanently; it cannot replace it.
-- VRF/feed proposals and votes are excluded: `sDGNRS.votingSupply()` excludes
+- VRF coordinator-swap proposals and votes are excluded: `sDGNRS.votingSupply()` excludes
   the Vault's treasury allocation. Counting that balance as votes would violate
   the governance denominator. The DGVE executor retains the Admin owner proposal path. Holders retain
   community voting rights from their personal eligible sDGNRS holdings.

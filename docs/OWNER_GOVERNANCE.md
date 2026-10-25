@@ -50,7 +50,7 @@ The creator can upload each of the 33 paths and three name quadrants once withou
 
 `wireIcons32` verifies previously written entries before resuming, uploads missing entries, and checks the entire canonical dataset afterward. A fresh setup uses seven upload transactions. Repeating completed setup submits none. A mismatch requires an approved correction; it is never silently overwritten.
 
-The executor is appended at deployment nonce `N+37`. Earlier contract addresses and the Vault-created share addresses retain their existing positions.
+The executor is the final deployment in each profile: nonce `N+36` in the eip170 profile and `N+20` in the glamsterdam profile, where `N` is the first deployment's nonce. Earlier contract addresses and the Vault-created share addresses retain their existing positions.
 
 ## CLI
 

@@ -47,7 +47,7 @@ these compact offsets for the fresh deployment.
 
 ## Placement rules
 
-`betDegenerette(player, currency, amountPerSpin, spinCount, symbol)` only
+`betDegenerette(id, currency, amountPerSpin, spinCount, symbol)` only
 accepts ETH (0) and FLIP (1); `spinCount` is capped per currency (ETH 25, FLIP
 15). `amountPerSpin` must be a whole multiple of the currency's stake unit —
 1 gwei for ETH, 1 whole FLIP for FLIP — and at least the currency's minimum bet
@@ -60,10 +60,10 @@ to the stake unit — the player never spins on an un-funded fractional unit.
 
 ## Sweep integration
 
-`mineFlip()` runs the read cohort's consumers in a fixed order: sDGNRS
+`mineRun()` runs the read cohort's consumers in a fixed order: sDGNRS
 redemption settlement, AFKing boxes, human box entries
-(`GameAfkingModule.runHumanBoxWork`), then Degenerette bets
-(`DegenerusGameDegeneretteModule.runDegeneretteWork`), the Decimator and
+(`GameAfkingModule.runHumanBoxWork_g315`), then Degenerette bets
+(`DegenerusGameDegeneretteModule.runDegeneretteWork_g670`), the Decimator and
 read-bound Craps. The bet worker walks `degeneretteCursor` up to
 `degeneretteReadCount`, admits each bet against its declared gas bound, and
 resolves it against the buffer's published session word. It writes the advanced
@@ -86,7 +86,7 @@ range).
 indexed betId, uint256 packed)` is emitted at placement; `packed` is the
 queued bet word (layout above).
 
-`DegeneretteResolved(uint32 indexed player, uint32 indexed index, uint64
+`DegeneretteResolved(uint32 indexed playerId, uint32 indexed index, uint64
 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)` is
 emitted once per resolved bet, always by the sweep. `spins` packs 5 bytes per spin (spin 0 first): 4
 bytes of big-endian player traits, then one byte of `score (bits 0-3) | house
