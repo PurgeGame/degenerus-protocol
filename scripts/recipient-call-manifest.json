@@ -8755,7 +8755,7 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestMinerRng_g4954",
     "kind": "recipient-helper",
-    "expression": "_requestLootboxRng(msg.sender, MineFlipGas.fromCall(4))",
+    "expression": "_requestLootboxRng(msg.sender, MineFlipGas.fromCall(floorChecked ? 36 : 4), floorChecked)",
     "count": 1,
     "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },

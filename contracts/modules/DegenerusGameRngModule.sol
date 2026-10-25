@@ -80,10 +80,12 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
     ///         The caller's donated credit pays the threshold gate when pending work sits
     ///         below it.
     function requestMinerRng_g4954() external {
-        _requestLootboxRng(msg.sender, MineFlipGas.fromCall(4));
+        // The miner prefixes a flag word when its selection already applied the subscription floor.
+        bool floorChecked = msg.data.length == 68;
+        _requestLootboxRng(msg.sender, MineFlipGas.fromCall(floorChecked ? 36 : 4), floorChecked);
     }
 
-    function _requestLootboxRng(address caller, MineFlipGas.Meter memory meter) private {
+    function _requestLootboxRng(address caller, MineFlipGas.Meter memory meter, bool floorChecked) private {
         if (address(this) != ContractAddresses.GAME || !dailyComplete || _dailyRequestDue()
             || _minerMaintenancePending() || _livenessTriggered()) revert RngNotReady();
         // Completion already requires no daily lock, active request or mid-day ticket latch.
@@ -121,9 +123,11 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
             }
             // The request that follows admits at its own floor and reserve.
             BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE);
-            (bool readable, uint256 nativeBal) = _vrfNativeBalance(meter, VRF_REQUEST_MIN_GAS + VRF_REQUEST_RESERVE);
-            if (!readable) revert ExternalRequestRefused();
-            if (nativeBal < _vrfMinFulfillBalance() * 3 / 2) revert InsufficientNativeBalance();
+            if (!floorChecked) {
+                (bool readable, uint256 nativeBal) = _vrfNativeBalance(meter, VRF_REQUEST_MIN_GAS + VRF_REQUEST_RESERVE);
+                if (!readable) revert ExternalRequestRefused();
+                if (nativeBal < _vrfMinFulfillBalance() * 3 / 2) revert InsufficientNativeBalance();
+            }
             // Pending FLIP counts as work but adds nothing to the threshold: only ETH pays for a
             // mid-day word. Below the threshold the caller's donated credit pays the gate,
             // charged after the native floor so credit is never spent on a request the

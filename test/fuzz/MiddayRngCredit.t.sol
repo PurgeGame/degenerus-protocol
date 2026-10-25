@@ -590,6 +590,14 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(_actionFor(outsider), 0, "no mid-day request without credit");
     }
 
+    /// @notice The selection and the request it dispatches read the subscription once between them.
+    function test_midday_request_reads_the_subscription_once() public pricedBlock {
+        _purchaseBelowThreshold();
+        _grantCredit(donor, _expectedCharge() * 2);
+        vm.expectCall(address(mockVRF), abi.encodeWithSignature("getSubscription(uint256)", uint256(1)), uint64(1));
+        _mineRequest(donor);
+    }
+
     /// @notice A balance short of the charge buys nothing and is left untouched.
     function test_insufficientCreditRefusesAndPreservesBalance() public pricedBlock {
         _purchaseBelowThreshold();

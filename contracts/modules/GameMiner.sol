@@ -132,7 +132,11 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                 if (action == MinerAction.RequestDaily) {
                     callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestDailyRng_g8190.selector, _afkingResetDay, allowance);
                 } else {
-                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector, allowance);
+                    // Selection read the subscription unless a pending Craps window waived the floor, and
+                    // nothing ran since: the request is told so by a leading flag word.
+                    callData = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 == 0
+                        ? abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector, uint256(1), allowance)
+                        : abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector, allowance);
                 }
                 uint256 requestMax = action == MinerAction.RequestDaily
                     ? GasBounds.RNG_DAILY_REQUEST : GasBounds.RNG_MIDDAY_REQUEST;
