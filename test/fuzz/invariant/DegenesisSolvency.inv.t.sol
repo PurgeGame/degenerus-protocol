@@ -80,8 +80,11 @@ contract DegenesisSolvencyInvariant is DegenesisDeployProtocol {
     // Readers
     // =====================================================================
 
+    /// @dev The protocol wallets plus the VRF coordinator: the Game funds its subscription in native
+    ///      ETH, so those wei leave the Game's custody but not the closed system.
     function _custody() internal view returns (uint256 total) {
-        address[5] memory sinks = [address(game), address(vault), address(sdgnrs), address(gnrus), address(dgnrs)];
+        address[6] memory sinks =
+            [address(game), address(vault), address(sdgnrs), address(gnrus), address(dgnrs), address(mockVRF)];
         for (uint256 i; i < sinks.length; ++i) total += sinks[i].balance + mockStETH.balanceOf(sinks[i]);
         // Native VRF funding moves ETH from the Game into the coordinator's subscription.
         total += address(mockVRF).balance;
