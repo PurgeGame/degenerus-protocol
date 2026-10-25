@@ -1,8 +1,8 @@
 {
   "date": "2026-10-25",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "0e0766a79b8b693b404bc1165f9796d66df659d3",
-  "source_file_count": 164,
+  "base_commit": "f15eaa0e8518b52a1a3f483665bc2c17fe727e3e",
+  "source_file_count": 163,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
     "contracts/Coinflip.sol",
@@ -151,11 +151,10 @@
     "contracts/profiles/eip170/Eip170JackpotBattle.sol",
     "contracts/profiles/eip170/Eip170JackpotDraw.sol",
     "contracts/profiles/eip170/Eip170Lootbox.sol",
-    "contracts/profiles/eip170/Eip170Miner.sol",
+    "contracts/profiles/eip170/Eip170MinerRng.sol",
     "contracts/profiles/eip170/Eip170Mint.sol",
     "contracts/profiles/eip170/Eip170Purchase.sol",
     "contracts/profiles/eip170/Eip170Quests.sol",
-    "contracts/profiles/eip170/Eip170Rng.sol",
     "contracts/profiles/eip170/Eip170TicketFoil.sol",
     "contracts/profiles/eip170/Eip170Whale.sol",
     "contracts/profiles/glamsterdam/GlamsterdamBox.sol",
