@@ -592,14 +592,14 @@ contract ChainPinAdvanceDriven is ChainPinBase {
         assertEq(sdgnrsRecorded[5], 1, "and the entry landed in level 5's round");
     }
 
-    /// F3: a word applied after midnight skips the opening-day burn (and everything else gated on the wall
-    /// day) without reverting; the game goes on to the next level.
-    function test_F3_requestPinnedBeforeMidnightSkipsBurn() public {
+    /// F3: the opening day is a logical day, not a wall day: a word whose request was pinned before midnight
+    /// and applied after it still performs the opening-day burn and enters level 5's round.
+    function test_F3_requestPinnedBeforeMidnightStillBurns() public {
         _driveTurbo(5, 4);
         assertTrue(crossedMidnight, "harness: the clock crossed midnight with the arming request in flight");
-        assertEq(uint256(game.level()), 5, "the game carried on past the skipped opening day");
-        assertEq(sdgnrsBurns, 0, "no opening-day burn after midnight");
-        assertEq(sdgnrsRecorded[5], 0, "no entry in level 5's round");
+        assertEq(uint256(game.level()), 5, "the game carried on");
+        assertGe(sdgnrsBurns, 1, "the opening-day burn ran after midnight");
+        assertEq(sdgnrsRecorded[5], 1, "and the entry landed in level 5's round");
     }
 
     // ---- F10 ----

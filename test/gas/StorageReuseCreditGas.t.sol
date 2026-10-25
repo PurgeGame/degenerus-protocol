@@ -18,6 +18,8 @@ contract StorageReuseCreditGasTest is DeployProtocol {
         vm.warp((uint256(today - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         bytes32 slot = bytes32(uint256(4));
         uint256 w = uint256(vm.load(address(coinflip), slot));
+        // New stakes target the round after Coinflip's mirror of the requested logical day.
+        w = (w & ~(uint256(type(uint24).max) << 176)) | (uint256(today) << 176);
         vm.store(address(coinflip), slot, bytes32((w & ~uint256(type(uint24).max)) | resolved));
     }
 

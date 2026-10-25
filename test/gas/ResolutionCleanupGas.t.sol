@@ -32,6 +32,7 @@ contract ResolutionCleanupGasTest is DeployProtocol {
         }
         uint256 start = (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + day - 1) * 1 days + 82_620;
         vm.warp(start);
+        _seedLogicalFixtureDay(day);
         RecyclingState.seedDailyWord(address(game), day, WORD);
         vm.prank(address(game)); table.openBonusDay();
         uint256[5] memory closes = [uint256(21 minutes), 6 hours + 4 minutes, 12 hours + 4 minutes,

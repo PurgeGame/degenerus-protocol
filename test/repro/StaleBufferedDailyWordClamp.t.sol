@@ -80,11 +80,13 @@ contract StaleBufferedDailyWordClamp is DeployProtocol {
         // call that seals D may go straight on to D+1's fresh request (the engine selects the
         // next action in the same flow, 60d31f775), so the drive stops on D's seal.
         vm.warp(vm.getBlockTimestamp() + 1 days);
+        // The daily index already reads D (it advances at the request), so the drive stops once D
+        // is unlocked or its successor's request is out.
         for (uint256 i = 0; i < 20; i++) {
             game.mineFlip(0);
-            if (_dailyIdx() == dayD) break;
+            if (!game.rngLocked() || mockVRF.lastRequestId() != staleReqId) break;
         }
-        assertEq(_dailyIdx(), dayD, "clamped advance sealed the request day");
+        assertTrue(!game.rngLocked() || mockVRF.lastRequestId() != staleReqId, "day D was sealed");
         assertEq(game.rngWordForDay(dayD), WORD_D, "request day resolved with its own raw word");
         assertEq(game.rngWordForDay(dayD + 1), 0, "buffered word NOT reused for day D+1");
         (uint16 rpD, bool winD) = coinflip.getCoinflipDayResult(dayD);

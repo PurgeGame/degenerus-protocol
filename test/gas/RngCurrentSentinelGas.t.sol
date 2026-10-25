@@ -33,7 +33,8 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
     function test_ColdCallbackAndRequestCrankCostsThroughFourRealDays() public {
         uint256 callbacks; uint256 requests; uint256 cranks; uint256 fulfilled;
         for (uint256 cycle; cycle < 4; ++cycle) {
-            uint24 day = game.currentDayView_g542950();
+            // The daily request advances the logical day; this cycle seals the next one.
+            uint24 day = game.currentDayView_g542950() + 1;
             uint256 word = uint256(keccak256(abi.encode("sentinel-callback", cycle)));
             uint256 callback; uint256 request; uint256 crank;
             for (uint256 i; i < 5000 && !_sealed(day); ++i) {

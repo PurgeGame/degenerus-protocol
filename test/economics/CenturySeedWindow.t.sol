@@ -23,7 +23,7 @@ contract CenturySeedWindow is DeployProtocol {
     uint24 internal constant SEED_FLIP_DAYS = 20;
     bytes32 internal constant ARMED_SIG = keccak256("SeedWindowArmed(uint24,uint24,uint256)");
 
-    /// @dev A day-one deployment: Coinflip's logical-day mirror starts at zero, so every round
+    /// @dev A day-one deployment: Coinflip's logical-day mirror starts at round 1, so every round
     ///      of the window is reachable.
     function _deployTimestamp() internal pure override returns (uint256) {
         return DEPLOY_TS_DEGENESIS;
@@ -56,9 +56,8 @@ contract CenturySeedWindow is DeployProtocol {
     // ------------------------------------------------------------------
 
     function testDeployWindowSeedsEveryDayForBothRecipients() public {
-        // Round 1 precedes the window; rounds 2..21 are read through the views.
-        assertEq(_stakeOnDay(ContractAddresses.VAULT, 1), 0, "no seed before the window");
-        assertEq(_stakeOnDay(ContractAddresses.SDGNRS, 1), 0, "no seed before the window");
+        // The mirror starts at round 1, so the first reachable target is round 2.
+        assertEq(coinflip.requestedDailyIdx(), 1, "fixture: a day-one deployment");
         for (uint24 d = 2; d <= SEED_FLIP_DAYS + 1; ++d) {
             assertEq(_stakeOnDay(ContractAddresses.VAULT, d), SEED_FLIP_DAILY, "VAULT seeded on every window day");
             assertEq(_stakeOnDay(ContractAddresses.SDGNRS, d), SEED_FLIP_DAILY, "sDGNRS seeded on every window day");

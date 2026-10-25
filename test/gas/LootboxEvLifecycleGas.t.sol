@@ -118,24 +118,29 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
         assertTrue(complete);
     }
 
-    /// @dev Recalibrated on frozen P7B 824d757cf, solc 0.8.38/via-IR/1000/Osaka,
+    /// @dev Recalibrated again on the stack at 0e0766a79 (eip170 profile, solc 0.8.38/via-IR/1000/Osaka,
+    ///      isolated transactions): every case grew by a near-uniform ~5-6k per path (consistent with the
+    ///      profile's extra cold module hops; not bisected), and pass_grant realizes a cheaper branch
+    ///      (7 new slots, was 10) after the RNG derivation changes. The limits below stay at the
+    ///      original 1% / 1000-per-order. Earlier calibration, kept for history:
+    ///      recalibrated on frozen P7B 824d757cf, solc 0.8.38/via-IR/1000/Osaka,
     ///      isolated transactions. P6b changed RNG domains and therefore the realized
     ///      award branches and new-slot counts. The 0.8.34 b80dab839 measurements remain
     ///      historical evidence in docs/VERIFICATION.md; these pins protect the final
     ///      workload with the original 1% / 1000-per-order regression limits.
     function _baseline(bytes32 label) private pure returns (uint256, uint256, uint256) {
-        if (label == keccak256("cover")) return (173112, 474372, 3);
-        if (label == keccak256("distinct_wallets")) return (1259368, 4303608, 32);
-        if (label == keccak256("exhausted")) return (395695, 1320695, 10);
-        if (label == keccak256("existing_bonus")) return (399625, 1331825, 10);
-        if (label == keccak256("fresh_bonus")) return (416782, 1429802, 11);
-        if (label == keccak256("low_score")) return (405626, 1411446, 11);
-        if (label == keccak256("manual_with_afk")) return (457874, 1573314, 12);
-        if (label == keccak256("100_boxes")) return (1500450, 3486450, 20);
-        if (label == keccak256("nested_eth_spin")) return (492350, 1695810, 13);
-        if (label == keccak256("pass_grant")) return (365714, 1297914, 10);
-        if (label == keccak256("same_wallet")) return (849278, 2411578, 15);
-        if (label == keccak256("taper")) return (399823, 1332023, 10);
+        if (label == keccak256("cover")) return (179218, 481278, 3);
+        if (label == keccak256("distinct_wallets")) return (1325163, 4375403, 32);
+        if (label == keccak256("exhausted")) return (419214, 1346214, 10);
+        if (label == keccak256("existing_bonus")) return (423144, 1357344, 10);
+        if (label == keccak256("fresh_bonus")) return (440301, 1455321, 11);
+        if (label == keccak256("low_score")) return (428341, 1436161, 11);
+        if (label == keccak256("manual_with_afk")) return (481623, 1599063, 12);
+        if (label == keccak256("100_boxes")) return (1565825, 3554225, 20);
+        if (label == keccak256("nested_eth_spin")) return (519420, 1725280, 13);
+        if (label == keccak256("pass_grant")) return (311292, 980232, 7);
+        if (label == keccak256("same_wallet")) return (912592, 2480892, 15);
+        if (label == keccak256("taper")) return (423340, 1357540, 10);
         revert("missing lifecycle baseline");
     }
 

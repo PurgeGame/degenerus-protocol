@@ -23,6 +23,11 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
         decEntriesLevel = lvl;
     }
 
+    /// @dev Complete `n` more logical game days; the wall clock alone never moves the day.
+    function advanceDay(uint24 n) external {
+        dailyIdx += n;
+    }
+
     function seal(uint24 lvl, uint128 pool, uint256 word) external returns (uint256 returned) {
         _setDecWindowOpen(false);
         if (decBattleRounds[lvl].phase == 0) {

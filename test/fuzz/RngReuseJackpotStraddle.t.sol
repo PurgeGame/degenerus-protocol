@@ -113,8 +113,9 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
         // Cross the wall-day and run the next day normally: it must request a FRESH word.
         vm.warp(block.timestamp + 1 days + 1);
-        uint24 D1 = game.currentDayView_g542950();
-        assertGt(D1, D, "control: warp advanced to a later day");
+        // The wall clock creates no logical day: day D+1 exists only once D has completed and its request goes out.
+        assertEq(game.currentDayView_g542950(), D, "control: the wall clock alone adds no logical day");
+        uint24 D1 = D + 1;
         uint256 wordD1 = _advanceUntilWordRecorded(D1); // fulfills the fresh request
 
         emit log_named_uint("[control] rngWordForDay(D+1)", wordD1);
@@ -140,8 +141,8 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
         // STRADDLE: cross the wall-day WITHOUT completing the deferred settlement.
         vm.warp(block.timestamp + 1 days + 1);
-        uint24 D1 = game.currentDayView_g542950();
-        assertGt(D1, D, "warp advanced to a later day");
+        assertEq(game.currentDayView_g542950(), D, "the wall clock alone adds no logical day");
+        uint24 D1 = D + 1;
 
         // Advance + fulfill: the clamp seals day D (deferred half on wordD), then D+1 asks fresh.
         uint256 wordD1 = _advanceUntilWordRecorded(D1);
@@ -184,8 +185,8 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
         // STRADDLE across the wall-day WITHOUT completing/sealing the day.
         vm.warp(block.timestamp + 1 days + 1);
-        uint24 D1 = game.currentDayView_g542950();
-        assertGt(D1, D, "transition: warp advanced to a later day");
+        assertEq(game.currentDayView_g542950(), D, "transition: the wall clock alone adds no logical day");
+        uint24 D1 = D + 1;
         // Advance + fulfill: the clamp processes day D's jackpot sequence on wordD, then
         // the wall-day requests its own fresh word.
         uint256 wordD1 = _advanceUntilWordRecorded(D1);

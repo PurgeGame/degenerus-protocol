@@ -112,9 +112,11 @@ contract LootboxOpenGoldens is DeployProtocol {
 
     /// @dev Event tag of the fixture's entry: QUEUED_ENTRY_TAG | position << 1 | buffer.
     uint48 internal constant QUEUED_ENTRY_TAG = uint48(1) << 46;
-    uint48 internal constant WHALE_REF = QUEUED_ENTRY_TAG; // buffer 0, position 0
+    /// @dev The fixture's write buffer after the day's cycle (the daily cycle advances the index).
+    uint48 internal gi;
+    function _whaleRef() internal view returns (uint48) { return QUEUED_ENTRY_TAG | gi; } // position 0
 
-    /// @dev The golden fixture: on buffer 0, the whale's order of twelve 0.15 ETH boxes is entry 0.
+    /// @dev The golden fixture: on the day's write buffer, the whale's order of twelve 0.15 ETH boxes is entry 0.
     ///      Every
     ///      queued seed is H(19, H(20, word, position), n), so the
     ///      pinned figures use the final domains and position; the fixture also asserts the owner. The
@@ -126,15 +128,15 @@ contract LootboxOpenGoldens is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         assertEq(game.level(), 0, "golden fixture level");
         assertEq(priceWei, 0.01 ether, "golden fixture price");
-        assertEq(_idx(), 0, "golden fixture tag");
-        assertEq(RecyclingState.boxCount(address(game), 0), 0, "golden fixture: empty buffer");
+        gi = _idx();
+        assertEq(RecyclingState.boxCount(address(game), gi), 0, "golden fixture: empty buffer");
         whale = makeAddr("goldenBuyer");
         vm.deal(whale, 20 ether);
         vm.prank(whale);
         game.purchase{value: 12 * 0.15 ether + priceWei + 1 ether}(0, 400, BoxOrderLib.boCustoms(12, 0.15 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        assertEq(RecyclingState.boxCount(address(game), 0), 1, "golden fixture: one entry");
-        assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
-        assertEq(BoxOrderLib.boScore(RecyclingState.boxEntry(address(game), 0, 0)), 1, "golden fixture: whale's frozen score");
+        assertEq(RecyclingState.boxCount(address(game), gi), 1, "golden fixture: one entry");
+        assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), gi, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
+        assertEq(BoxOrderLib.boScore(RecyclingState.boxEntry(address(game), gi, 0)), 1, "golden fixture: whale's frozen score");
     }
 
     /// @dev Fixed word ("golden_word", 28): nine plain boxes of twelve (the same target levels the
@@ -144,8 +146,8 @@ contract LootboxOpenGoldens is DeployProtocol {
         address whale = _goldenFixture();
         _mineMiddayRequest(actor);
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(28)))) | 1);
-        assertGt(_word(0), 0, "the word landed");
-        assertTrue(game.boxIndexComplete(0), "opened");
+        assertGt(_word(gi), 0, "the word landed");
+        assertTrue(game.boxIndexComplete(gi), "opened");
 
         Opened[9] memory opened;
         uint256 nOpened;
@@ -164,7 +166,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             uint32 who = uint32(uint256(logs[i].topics[1]));
             if (t == OPENED) {
                 assertEq(who, whaleId, "every plain box is the order's");
-                assertEq(uint256(logs[i].topics[2]), WHALE_REF, "tagged with the order's buffer and position");
+                assertEq(uint256(logs[i].topics[2]), _whaleRef(), "tagged with the order's buffer and position");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool up) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 assertLt(nOpened, 9, "bounded");
                 opened[nOpened++] = Opened(a, lvl, sc, fl, up);
@@ -224,7 +226,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         address whale = _goldenFixture();
         _mineMiddayRequest(actor);
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(68)))) | 1);
-        assertTrue(game.boxIndexComplete(0), "opened");
+        assertTrue(game.boxIndexComplete(gi), "opened");
 
         uint32 whaleId = game.walletIdOf_g3120(whale);
         uint256 nO; uint256 nQ; uint256 nP;
@@ -235,7 +237,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             uint32 who = uint32(uint256(logs[i].topics[1]));
             if (t == OPENED) {
                 assertEq(who, whaleId, "order's box");
-                assertEq(uint256(logs[i].topics[2]), WHALE_REF, "a parent box, never a recirculated child");
+                assertEq(uint256(logs[i].topics[2]), _whaleRef(), "a parent box, never a recirculated child");
                 assertLt(nO, 8, "eight parent boxes");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 _checkWord68Box(nO, a, lvl, sc, fl, u);

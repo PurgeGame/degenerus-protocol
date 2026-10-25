@@ -123,9 +123,9 @@ contract DecimatorBattleTest is Test {
 
     function test_TopupsPreserveEarlyCreditAndUseCurrentMultiplier() public {
         assertEq(_burn(h, address(1), LVL, 1_000_000, 19_000), 1);
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        h.advanceDay(1);
         assertEq(_burn(h, address(1), LVL, 1_000_000, 20_000), 1);
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        h.advanceDay(1);
         _burn(h, address(1), LVL, 1_000_000, 10_000);
         DecimatorBattleHarness.Entry memory e = h.entryOf(LVL, 1);
         assertEq(e.stack, 4_510_000);
@@ -133,15 +133,16 @@ contract DecimatorBattleTest is Test {
     }
 
     function test_FirstBurnDoesNotStartClockAndNoOld500kCap() public {
-        vm.warp(vm.getBlockTimestamp() + 3 days);
+        h.advanceDay(3);
         _burn(h, address(1), LVL, 10_000_000, 20_000);
         assertEq(h.entryOf(LVL, 1).stack, 14_580_000);
     }
 
     function test_ResetBoundary() public {
+        // Wall time alone never moves the logical day: a burn a day-minus-two-seconds later is still day zero.
         vm.warp(vm.getBlockTimestamp() + 1 days - 2);
         _burn(h, address(1), LVL, 1000, 10_000);
-        vm.warp(vm.getBlockTimestamp() + 1);
+        h.advanceDay(1);
         _burn(h, address(2), LVL, 1000, 10_000);
         assertEq(h.entryOf(LVL, 1).stack, 1000);
         assertEq(h.entryOf(LVL, 2).stack, 900);

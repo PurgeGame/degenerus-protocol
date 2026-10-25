@@ -45,13 +45,14 @@ contract RouterWorstCaseGas is DeployProtocol {
         address opener = makeAddr("mbAdv_opener");
         uint256 maxCallGas;
         uint256 calls;
+        // The day index advances at the daily request, so the baseline is read before it.
+        uint256 sealedBefore = uint24(uint256(vm.load(address(game), bytes32(0))) >> 24);
         // The new day's preparation and request (a request ends its call).
         while (!game.rngLocked()) {
             assertLt(calls, 16, "advance non-vacuity: a real new-day advance step ran (rngLock/day moved)");
             maxCallGas = _realisticCall(opener, maxCallGas);
             ++calls;
         }
-        uint256 sealedBefore = uint24(uint256(vm.load(address(game), bytes32(0))) >> 24);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256("mbAdv_word")) | 1);
         // The day's processing: publication, the ticket drain, the day's word, its daily phase.
         while (game.rngLocked()) {

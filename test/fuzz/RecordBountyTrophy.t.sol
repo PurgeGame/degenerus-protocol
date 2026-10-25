@@ -92,7 +92,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
             (address holder, uint128 mark, uint24 sinceDay, ) = recordBounty.recordInfo(i);
             assertEq(holder, HOME, "recordInfo holder");
             assertEq(mark, 0, "mark starts unset");
-            assertEq(sinceDay, _deployDay(), "since-day stamps the deploy day");
+            assertEq(sinceDay, 1, "since-day stamps the logical day at deploy");
         }
     }
 
@@ -261,6 +261,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
     }
 
     /// @dev Wall clock to game-day `d` (just past the 22:57 UTC reset).
+    /// @dev Move the logical game day (the record clocks read it), with the wall clock beside it.
     function _warpToDay(uint24 d) internal {
         vm.warp(
             (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
@@ -268,5 +269,6 @@ contract RecordBountyTrophyTest is DeployProtocol {
                 82_620 +
                 1
         );
+        _seedLogicalFixtureDay(d);
     }
 }

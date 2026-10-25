@@ -135,13 +135,15 @@ contract ChainPinDecimatorHarness is DeployProtocol {
 
     // ---- F3 ----
 
-    /// @dev A word applied after the wall day moved on skips the opening-day burn (and the craps opener)
-    ///      without reverting; the control applies the same word on the day itself.
-    function test_F3_lateWordSkipsOpeningBurn() public {
+    /// @dev The opening day is a logical day: a word applied after the wall day moved on still burns,
+    ///      records the entry and opens the craps seat, exactly like the on-time control.
+    function test_F3_lateWordStillBurnsOnTheLogicalDay() public {
         _fund(400_000);
         _prepare(21, 4, 3, true);
         uint256 snap = vm.snapshotState();
+        vm.recordLogs();
         harness.applyOpeningWord(21);
+        uint256 onTimeBurn = _burnedBy(vm.getRecordedLogs());
         (uint256 onTime,) = harness.entry(5);
         assertGt(onTime, 0, "control: the on-time word records the entry");
         assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0, "control: and opens the craps seat");
@@ -150,12 +152,10 @@ contract ChainPinDecimatorHarness is DeployProtocol {
         _warp(22);
         vm.recordLogs();
         harness.applyOpeningWord(21);
-        assertEq(_burnedBy(vm.getRecordedLogs()), 0, "F3: no burn after midnight");
+        assertEq(_burnedBy(vm.getRecordedLogs()), onTimeBurn, "F3: the late word burns the same amount");
         (uint256 late,) = harness.entry(5);
-        assertEq(late, 0, "F3: no entry after midnight");
-        assertGt(game.rngWordForDay(21), 0, "F3: the word was still applied");
-        assertGt(coinflip.previewFlipBacking(HOUSE), 8000, "F3: the day's backing is untouched");
-        assertEq(crapsBattle.daySeatNumberOf(21, HOUSE), 0, "F3: no craps seat for the stale day");
+        assertEq(late, onTime, "F3: and records the same entry");
+        assertGt(game.rngWordForDay(21), 0, "F3: the word was applied");
     }
 
     // ---- F10 (sDGNRS side) ----
