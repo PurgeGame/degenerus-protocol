@@ -99,8 +99,16 @@ describe("GameLifecycle", function () {
    */
   async function driveFullVRFCycle(game, mockVRF, advanceModule, caller) {
 
-    // Step 1: trigger VRF request.
-    await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+    // Step 1: run the miner's steps until the daily VRF request engages. Earlier mid-day
+    // requests that still wait for a word are answered first; maintenance and subscription
+    // steps may come before the request itself.
+    for (let i = 0; i < 50 && !(await game.rngLocked()); i++) {
+      if ((await game.nextMinerAction()) === 2n) {
+        await mockVRF.fulfillRandomWords(await getLastVRFRequestId(mockVRF), 987654321n);
+        continue;
+      }
+      await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+    }
     expect(await game.rngLocked()).to.equal(
       true,
       "Expected rngLocked=true after VRF request"

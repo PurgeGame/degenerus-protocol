@@ -5,11 +5,11 @@ import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
+import { driveDailyCycle } from "../helpers/dailyCycle.js";
 import {
   eth,
   advanceTime,
   advanceToNextDay,
-  getLastVRFRequestId,
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
 
@@ -20,22 +20,18 @@ const MintPaymentKind = { DirectEth: 0 };
  * LivenessMidJackpot — integration tests that drive the game into a real
  * jackpot phase, then exercise the two clocks that govern liveness there.
  *
- * While jackpotPhaseFlag is set, _livenessTriggered (DegenerusGameStorage.sol)
- * does NOT consult the in-phase day clock — that clock would false-fire in the
- * productive window between target-met and phase-transition close, deadlocking
- * the multi-call jackpot dance. Instead it returns _vrfDeadmanFired(), the
- * phase-independent VRF-death deadman: simulatedDayIndex - dailyIdx > 30.
+ * A jackpot phase in progress is never ended by the purchase deadline (the only VRF-alive
+ * ending). The one thing that overrides it is the hard stall: fourteen days without a completed
+ * day always takes the dead-VRF deterministic ending, even if the VRF would still answer.
  *
- *   - Inside the deadman window (no day sealed for <= 30 days) the pause holds
- *     and liveness stays false: the jackpot phase completes normally.
- *   - Once the stall reaches fourteen days the deadman fires, overriding the pause.
- *     mineFlip then consults it separately (AdvanceModule:216,
- *     `(!inJackpot && !lastPurchase) || _vrfDeadmanFired()`) to reach
- *     _handleGameOverPath and drain to terminal fund release even mid-jackpot,
- *     rather than bricking.
+ *   - Inside the stall window (no day completed for < 14 days) the jackpot phase continues
+ *     and liveness stays false.
+ *   - Once the stall reaches fourteen days the hard stall fires, overriding the phase.
+ *     mineFlip then reaches the terminal path and drains to terminal fund release even
+ *     mid-jackpot, rather than bricking.
  *
- * dailyIdx (slot 0, byte offset 3, uint24) is read straight from storage to
- * land the warp exactly on the 13-day deadman threshold.
+ * The stall is measured from the last completed day (dailySessionState), which the warps below
+ * move to exactly the 13- and 14-day thresholds.
  */
 describe("LivenessMidJackpot", function () {
   this.timeout(600_000);
@@ -87,51 +83,26 @@ describe("LivenessMidJackpot", function () {
     );
   }
 
-  async function driveOneCycleSameDay(game, deployer, mockVRF, word) {
-    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
-    const reqId = await getLastVRFRequestId(mockVRF);
-    try {
-      await mockVRF.fulfillRandomWords(reqId, word);
-    } catch {
-      /* may already be fulfilled */
-    }
-    for (let i = 0; i < 200; i++) {
-      try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
-      } catch {
-        break;
-      }
-      if (!(await game.rngLocked())) break;
-    }
+  async function driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, word) {
+    return driveDailyCycle(game, deployer, mockVRF, advanceModule, word);
   }
 
-  async function driveOneCycle(game, deployer, mockVRF, word) {
+  async function driveOneCycle(game, deployer, mockVRF, advanceModule, word) {
     await advanceToNextDay();
-    return driveOneCycleSameDay(game, deployer, mockVRF, word);
+    return driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, word);
   }
 
   /**
-   * Repeatedly call mineFlip until gameOver latches. Once the deadman has
-   * fired mid-jackpot, mineFlip enters _handleGameOverPath every call: it
-   * requests its own terminal word (fulfilled below), applies it, drains queued
-   * tickets one batch per tx, then the terminal drain sets gameOver.
+   * Repeatedly call mineFlip until gameOver latches. A 14-day stall always takes the dead-VRF
+   * deterministic ending (no VRF request, no wait for a word): the terminal drain walks its
+   * cohorts one checkpoint per call and then latches gameOver.
    */
-  async function driveToGameOver(game, deployer, mockVRF) {
+  async function driveToGameOver(game, deployer) {
     for (let i = 0; i < 600; i++) {
-      try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
-      } catch {
-        await advanceToNextDay();
-      }
-      try {
-        const reqId = await getLastVRFRequestId(mockVRF);
-        await mockVRF.fulfillRandomWords(reqId, BigInt(i) * 1009n + 7n);
-      } catch {
-        /* no fresh request / already fulfilled */
-      }
       if (await game.gameOver()) return true;
+      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
     }
-    return false;
+    return await game.gameOver();
   }
 
   /** 2.4 ETH whale + 500 tickets × 5 ETH = 7.4 ETH per buyer. */
@@ -153,14 +124,14 @@ describe("LivenessMidJackpot", function () {
    * Returns once jackpotPhase() == true.
    */
   async function driveIntoJackpotPhase(fixture) {
-    const { game, deployer, mockVRF, alice, bob, carol, dan, eve, others } =
+    const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
       fixture;
 
     // Day 2 warmup: small purchase + cycle so purchaseDays >= 2 on next cycle
     // (prevents turbo, which would compress jackpot into a single physical day).
     await buyFullTickets(game, alice, 10, 0.1);
     await advanceToNextDay();
-    await driveOneCycleSameDay(game, deployer, mockVRF, 7n);
+    await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 7n);
 
     // Heavy purchases (19 buyers × 7.4 ETH = 140 ETH > 50 ETH bootstrap).
     const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
@@ -168,7 +139,7 @@ describe("LivenessMidJackpot", function () {
 
     // Drive cycles until jackpot phase is reached.
     for (let cycle = 0; cycle < 8; cycle++) {
-      await driveOneCycle(game, deployer, mockVRF, BigInt(cycle * 1000 + 42));
+      await driveOneCycle(game, deployer, mockVRF, advanceModule, BigInt(cycle * 1000 + 42));
       if (await game.jackpotPhase()) return;
     }
     throw new Error("Failed to enter jackpot phase");
@@ -208,8 +179,8 @@ describe("LivenessMidJackpot", function () {
 
     expect(await game.jackpotPhase()).to.equal(true);
 
-    // Warp the stall (currentDay - dailyIdx) to exactly 30: the deadman is a
-    // strict `> 30`, so it stays unfired and the jackpot pause holds.
+    // Warp the stall to 13 days: the hard stall fires at 14, so
+    // it stays unfired and the jackpot phase continues.
     const warpDays = 13 - (await stallDays(game));
     expect(warpDays).to.be.greaterThan(0);
     await advanceTime(warpDays * 86400);
@@ -228,8 +199,8 @@ describe("LivenessMidJackpot", function () {
 
     expect(await game.jackpotPhase()).to.equal(true);
 
-    // Warp the stall to 31 days: deadman fires. jackpotPhaseFlag is still set,
-    // yet liveness flips true because _livenessTriggered returns the deadman.
+    // Warp the stall to 14 days: the hard stall fires. jackpotPhaseFlag is still set,
+    // yet liveness flips true because the hard stall takes the dead-VRF ending.
     const warpDays = 14 - (await stallDays(game));
     expect(warpDays).to.be.greaterThan(0);
     await advanceTime(warpDays * 86400);
@@ -244,7 +215,7 @@ describe("LivenessMidJackpot", function () {
 
   it("mineFlip does not revert mid-jackpot when the deadman has fired", async function () {
     const fixture = await loadFixture(deployAtJackpot);
-    const { game, deployer, mockVRF } = fixture;
+    const { game, deployer } = fixture;
 
     expect(await game.jackpotPhase()).to.equal(true);
 
@@ -252,16 +223,16 @@ describe("LivenessMidJackpot", function () {
     await advanceTime(14 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 
-    // mineFlip now takes the deadman game-over path instead of the jackpot
+    // mineFlip now takes the dead-VRF terminal path instead of the jackpot
     // ticket-queue path; it must not revert, and the RNG lock must not stick.
-    await driveOneCycle(game, deployer, mockVRF, 0xdeadbeefn);
+    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
 
     expect(await game.rngLocked()).to.equal(false);
   });
 
   it("deadman drives the stalled jackpot to terminal game-over fund release", async function () {
     const fixture = await loadFixture(deployAtJackpot);
-    const { game, deployer, mockVRF } = fixture;
+    const { game, deployer } = fixture;
 
     expect(await game.jackpotPhase()).to.equal(true);
     expect(await game.gameOver()).to.equal(false);
@@ -270,7 +241,7 @@ describe("LivenessMidJackpot", function () {
     await advanceTime(14 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 
-    const reached = await driveToGameOver(game, deployer, mockVRF);
+    const reached = await driveToGameOver(game, deployer);
 
     expect(reached).to.equal(
       true,

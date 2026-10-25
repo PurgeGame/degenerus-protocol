@@ -5,6 +5,7 @@ import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
+import { driveDailyCycle } from "../helpers/dailyCycle.js";
 import {
   eth,
   advanceToNextDay,
@@ -64,32 +65,11 @@ describe("JackpotDuration", function () {
   }
 
   /**
-   * Drive one VRF cycle on the CURRENT day (no time advancement).
-   * Caller must ensure advanceToNextDay() was called first so that
-   * day != dailyIdx (mineFlip reverts with NotTimeYet otherwise).
+   * Drive one logical day on the CURRENT wall day (no time advancement): the miner's next steps
+   * run in engine order until idle. The caller advances the wall day first so a daily request is due.
    */
   async function driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, word) {
-    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
-    const requestId = await getLastVRFRequestId(mockVRF);
-    try {
-      await mockVRF.fulfillRandomWords(requestId, word);
-    } catch {
-      // May already be fulfilled
-    }
-    let lastStage = -1n;
-    for (let i = 0; i < 200; i++) {
-      try {
-        const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
-        const events = await getAdvanceEvents(tx, advanceModule);
-        if (events.length > 0) {
-          lastStage = events[0].args.stage;
-        }
-      } catch {
-        break;
-      }
-      if (!(await game.rngLocked())) break;
-    }
-    return lastStage;
+    return driveDailyCycle(game, deployer, mockVRF, advanceModule, word);
   }
 
   /**
