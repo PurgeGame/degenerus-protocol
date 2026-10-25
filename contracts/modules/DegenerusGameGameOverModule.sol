@@ -251,11 +251,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///         STAGE_TICKETS_WORKING -- a drain or tally batch; the caller retries
     ///
     ///      Two endings:
-    ///      - Deterministic, when VRF is dead (_vrfDead: a request unanswered for
-    ///        _VRF_DEAD_TIMEOUT). Latched on first entry and never undone. No entropy at all:
-    ///        _tallyDeadVrf counts the terminal level's tickets over as many calls as it needs,
-    ///        then the game-over drain fixes the pot they share (claimDeadVrf).
-    ///      - Normal, for the purchase deadline or the deadman with VRF alive. The terminal word
+    ///      - Deterministic, for a hard stall: a request unanswered for _VRF_DEAD_TIMEOUT
+    ///        (_vrfDead) or no day completed for _VRF_DEAD_TIMEOUT (_vrfDeadmanFired). A hard stall
+    ///        always ends here, even if VRF would answer. Latched on first entry and never undone.
+    ///        No entropy at all: _tallyDeadVrf counts the terminal level's tickets over as many
+    ///        calls as it needs, then the game-over drain fixes the pot they share (claimDeadVrf).
+    ///      - Normal, for the purchase deadline only. The terminal word
     ///        is one this path requests itself after liveness froze purchases, and every
     ///        cohort at the terminal level draws on it. There is no retry here: if that
     ///        request goes unanswered for _VRF_DEAD_TIMEOUT the dead ending takes over.
@@ -344,7 +345,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // --- Normal ending ---
         // The terminal word is always this path's own request, sent after liveness froze entry;
-        // LR_GO_SWAP latches when it goes out. A daily request from before that (the deadman
+        // LR_GO_SWAP latches when it goes out. A daily request from before that (the purchase deadline
         // cutting off a day stuck in processing, or a backlog) never supplies it: its word, once
         // delivered, only finalizes the lootbox index its request reserved, so the cohort that
         // request committed still drains on a word requested after it; then the request is
@@ -534,8 +535,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     /// @dev Process game over by distributing remaining funds. Runs when the game-over trigger
-    ///      fires: the purchase deadline (30 completed purchase rounds), the 14-day no-completion
-    ///      deadman, or a VRF request unanswered for 14 days. Sets terminal gameOver flag.
+    ///      fires: the purchase deadline (30 game days without a purchase), or a hard stall (no
+    ///      day completed, or a VRF request unanswered, for 14 days). Sets terminal gameOver flag.
     ///
     ///      Distribution logic:
     ///      - If game ended early (levels 0-9): refund of the price paid (capped at 20 ETH) per deity pass,
