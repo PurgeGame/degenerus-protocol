@@ -14,18 +14,24 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_DIRECT_GROUP_GAS = 65_000;
     // Dispatch, decoding and checkpoint normalization; selection is admitted separately.
     uint256 internal constant ENGINE_BOUNDARY = 200_000;
-    // Selection, one fixed 50k native-balance probe and caller-credit lookup, with margin.
+    // Selection plus native-balance admission: 50k minimum + 200k read reserve + 10k frame,
+    // caller-credit lookup and cold selection reads, with margin.
     uint256 internal constant ENGINE_SELECTION = 450_000;
     // Return and one caller credit; native R90 fresh/spill transactions: 130.7k/148.1k.
     uint256 internal constant ENGINE_RETURN = 200_000;
     // Prior cold-century envelope: 5.954M including 25 fresh slots; revalidate R90 callers.
     uint256 internal constant DAILY_APPLY = 7_200_000;
-    // Native cold request/credit witnesses peak at 523.9k; retain forwarding and frame headroom.
+    // Native cold request/credit witnesses peak at 523.9k. The subscription read admits at 50k
+    // above the request's own 1M floor and reserve; retain forwarding and frame headroom.
     uint256 internal constant RNG_MIDDAY_REQUEST = 2_200_000;
-    // Native daily witnesses: 1.53M normal, 1.59M refill, 1.72M with a gas-burning fund call.
-    // Includes fixed 50k balance / 50k stETH / 150k funding budgets; transport stays uncapped.
+    // Native daily witnesses: 1.55M normal, 1.60M refill (EIP-170 profile, Amsterdam; Osaka
+    // 0.55M/0.59M). Refill admission: VRF_DAILY_REFILL_TAIL + 150k funding minimum + 45k value
+    // frame, 3.25M. Coordinator calls forward all gas above the tails; only stETH stays at 50k.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
     uint256 internal constant RNG_DAILY_REQUEST = 4_400_000;
+    // Rest of a fresh daily request after its refill. Measured 1.546M (refill day, funding call
+    // and request included); plus the Degenesis-pricing and redemption-close extras admitted on top.
+    uint256 internal constant VRF_DAILY_REFILL_TAIL = 1_800_000 + DEGENESIS_REQUEST_GAS + RNG_REDEMPTION_CLOSE;
     // Nonempty close plus mixed ETH/stETH pull: 443.5k, including proxy and
     // 10k balance / 40k transfer execution padding. No historical coinflip walk here.
     uint256 internal constant RNG_REDEMPTION_CLOSE = 550_000;
@@ -37,8 +43,13 @@ library MineFlipGasBounds {
     // Cold level-one draw with 51 fresh slots: 6.240M.
     uint256 internal constant LEVEL_ONE_DRAW = 7_500_000;
     // Cold losing x00 flip, incinerator search, seals and yield/keep roll: 1.368M. Native x00
-    // with VRF funding 1.208M; burning the 50k read and 150k fund budgets 1.367M.
+    // with VRF funding 1.216M (Amsterdam), 0.45M Osaka. Funding admission at the call: about
+    // 0.42M spent + VRF_LEVEL_FUND_TAIL + 150k minimum + 45k frame, 1.62M, within this plus
+    // DAILY_PHASE_TAIL.
     uint256 internal constant POOL_CONSOLIDATION = 1_650_000;
+    // Level entry after its VRF top-up: the yield split, the rest of the consolidation and the
+    // phase tail. Measured at most 0.79M (x00 win, Amsterdam), with margin.
+    uint256 internal constant VRF_LEVEL_FUND_TAIL = 1_000_000;
     // Prior 150k phase tail + bounded balance 60,794 and allocation/frame margin.
     uint256 internal constant DAILY_PHASE_TAIL = 250_000;
     // Conservative prior full-walk envelope, retained for the 90-day Vault checkpoint
@@ -59,7 +70,7 @@ library MineFlipGasBounds {
     // Fresh cursor (110.1k) plus 80k frame, with margin.
     uint256 internal constant TERMINAL_TALLY_TAIL = 250_000;
     // Cold sweep 547.3k + shutdown admission (1M + 250k reserve + 15,873 EIP-150
-    // + 10k frame), with margin. Admin's nested cancellation/native ETH tails fit in 1M.
+    // + 10k frame), with margin. Admin's cancellation admission (450k + 50k tail + 10k) fits in 1M.
     uint256 internal constant TERMINAL_FINAL_SWEEP = 2_200_000;
     // Sweep return reserve.
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;

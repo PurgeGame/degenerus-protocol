@@ -475,9 +475,9 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin._executeSwap",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callValueFixed(oldCoord, 0, 450_000, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, oldSub, address(this)))",
+    "expression": "BoundedCall.callRemaining(unmetered, oldCoord, CANCEL_MIN_GAS, SWAP_TAIL, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, oldSub, address(this)), 0)",
     "count": 1,
-    "review": "GOVERNANCE: cancellation is skipped against a coordinator without code and its bounded failure is skipped; a successful native refund is retained transiently and funds the replacement before Game reissue. A cancel refused while a request is pending leaves no refund: Game refills the replacement (yield, then sDGNRS claimable, then AFKing) before the reissue. No donation credit."
+    "review": "GOVERNANCE: trusted coordinator; cancellation forwards all gas above SWAP_TAIL (450k admission minimum, no cap) and is skipped against a coordinator without code or on refusal; a successful native refund is retained transiently and funds the replacement before Game reissue. A cancel refused while a request is pending leaves no refund: Game refills the replacement (yield, then sDGNRS claimable, then AFKing) before the reissue. No donation credit."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -723,9 +723,9 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.shutdownVrf",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callValueFixed(coordinator, 0, 450_000, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target))",
+    "expression": "BoundedCall.callRemaining(meter, coordinator, CANCEL_MIN_GAS, SHUTDOWN_TAIL, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0)",
     "count": 1,
-    "review": "TERMINAL: fixed 450k cancellation call, no returndata copy; dead/burning coordinator skipped, successful refund goes directly to pinned Vault."
+    "review": "TERMINAL: trusted coordinator; cancellation forwards all gas above the meter floor and SHUTDOWN_TAIL (450k admission minimum, no cap), no returndata copy; a refused or dead cancellation is skipped and the handle is still spent; a successful refund goes directly to the pinned Vault."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -4857,14 +4857,6 @@
   },
   {
     "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.callValueFixed",
-    "kind": "assembly",
-    "expression": "call(budget, target, value, add(input, 32), mload(input), 0, 0)",
-    "count": 1,
-    "review": "EXTERNAL OPTIONAL: fixed operand gas, no returndata copied, returns success; callers implement skip/debit-on-success or governance recovery policy."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
     "scope": "BoundedCall.callValueRemaining",
     "kind": "assembly",
     "expression": "call(operand, target, value, add(input, 32), mload(input), 0, 0)",
@@ -8011,9 +8003,9 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule.updateVrfCoordinatorAndSub",
     "kind": "recipient-helper",
-    "expression": "_refillVrfNative()",
+    "expression": "_refillVrfNative(unmetered, VRF_REQUEST_MIN_GAS)",
     "count": 1,
-    "review": "SWAP FUNDING: after the new config and before any reissue, outside the ended/latched return; a cancel refused while a request is pending leaves Admin no refund, so the replacement is refilled from yield, then sDGNRS claimable, then AFKing. Fixed external budgets; failure skips and the reissue still goes out."
+    "review": "SWAP FUNDING: after the new config and before any reissue, outside the ended/latched return; a cancel refused while a request is pending leaves Admin no refund, so the replacement is refilled from yield, then sDGNRS claimable, then AFKing. Coordinator calls forward all gas above the reissue tail; only the stETH read keeps its fixed budget; failure skips and the reissue still goes out."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8179,15 +8171,15 @@
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._distributeYieldSurplus",
     "kind": "recipient-helper",
-    "expression": "_topUpVrfNative(target - nativeBalance, yieldPool)",
+    "expression": "_topUpVrfNative(meter, GasBounds.VRF_LEVEL_FUND_TAIL, target - nativeBalance, yieldPool)",
     "count": 1,
-    "review": "LEVEL FUNDING: bounded subscription and stETH reads; a deficit of at least a tenth of (target - low-water) is filled yield-first before the 23% splits, ledger reload after successful sDGNRS debit; failure skips pull."
+    "review": "LEVEL FUNDING: subscription read and funding forward all gas above the level-entry tail; bounded stETH read; a deficit of at least a tenth of (target - low-water) is filled yield-first before the 23% splits, ledger reload after successful sDGNRS debit; failure skips pull."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._distributeYieldSurplus",
     "kind": "recipient-helper",
-    "expression": "_vrfNativeBalance()",
+    "expression": "_vrfNativeBalance(meter, GasBounds.VRF_LEVEL_FUND_TAIL)",
     "count": 1,
     "review": "LEVEL FUNDING: bounded subscription and stETH reads; optional yield-first native pull before 23% splits, ledger reload after successful sDGNRS debit; failure skips pull."
   },
@@ -8803,9 +8795,9 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestLootboxRng",
     "kind": "recipient-helper",
-    "expression": "_vrfNativeBalance()",
+    "expression": "_vrfNativeBalance(meter, VRF_REQUEST_MIN_GAS + VRF_REQUEST_RESERVE)",
     "count": 1,
-    "review": "MIDDAY: fixed subscription read only for lootbox admission after pending work gates; craps bypasses it; failure rolls back request and credit."
+    "review": "MIDDAY: subscription read (all gas above the following request floor and reserve) only for lootbox admission after pending work gates; craps bypasses it; failure rolls back request and credit."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -8843,9 +8835,9 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestDailyRng_g8190",
     "kind": "recipient-helper",
-    "expression": "_refillVrfNative()",
+    "expression": "_refillVrfNative(meter, GasBounds.VRF_DAILY_REFILL_TAIL)",
     "count": 1,
-    "review": "DAILY: first-step optional native refill; fixed external budgets, no balance admission for the following daily request."
+    "review": "DAILY: first-step optional native refill; coordinator calls forward all gas above the daily-request tail, no balance admission for the following daily request."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -12403,9 +12395,9 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._minerMiddayEligible",
     "kind": "recipient-helper",
-    "expression": "_vrfNativeBalance()",
+    "expression": "_vrfNativeBalance(meter, VRF_READ_RESERVE)",
     "count": 1,
-    "review": "SELECTION: fixed native balance probe only for lootboxes; craps never probes balance; ineligible optional work is skipped."
+    "review": "SELECTION: native balance read (all gas above the 200k selection tail) only for lootboxes; craps never probes balance; ineligible optional work is skipped."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -12443,7 +12435,7 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._refillVrfNative",
     "kind": "recipient-helper",
-    "expression": "_topUpVrfNative(target - balance, surplus)",
+    "expression": "_topUpVrfNative(meter, tail, target - balance, surplus)",
     "count": 1,
     "review": "DAILY AND SWAP FUNDING: ETH check, then subscription probe; below low-water, bounded stETH read then shared yield-first pull to target; any dependency failure skips without gating the request."
   },
@@ -12451,7 +12443,7 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._refillVrfNative",
     "kind": "recipient-helper",
-    "expression": "_vrfNativeBalance()",
+    "expression": "_vrfNativeBalance(meter, tail)",
     "count": 1,
     "review": "DAILY FUNDING: subscription probe first; below low-water and with ETH, bounded stETH read then shared yield-first pull; any dependency failure skips without gating request."
   },
@@ -12483,9 +12475,9 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._topUpVrfNative",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callValueFixed(address(vrfCoordinator), amount, VRF_FUND_GAS, abi.encodeWithSelector(IVRFCoordinator.fundSubscriptionWithNative.selector, vrfSubscriptionId))",
+    "expression": "BoundedCall.callValueRemaining(meter, address(vrfCoordinator), amount, VRF_FUND_MIN_GAS, tail, abi.encodeWithSelector(IVRFCoordinator.fundSubscriptionWithNative.selector, vrfSubscriptionId), 0)",
     "count": 1,
-    "review": "NATIVE VALUE OUT: fixed 150k fund call (fresh-slot v2.5 funding about 130k) capped by liquid ETH and the caller's deficit; untracked yield then sDGNRS claimable excluding sentinel then AFKing; debit paired with claimablePool only on successful send."
+    "review": "NATIVE VALUE OUT: trusted coordinator; the fund call forwards all gas above the meter floor and the caller tail (150k admission minimum, no cap), capped by liquid ETH and the caller deficit; untracked yield then sDGNRS claimable excluding sentinel then AFKing; debit paired with claimablePool only on successful send."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -12499,9 +12491,9 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._vrfNativeBalance",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticcallFixed(address(vrfCoordinator), EXTERNAL_READ_GAS, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId), 64)",
+    "expression": "BoundedCall.staticcallRemaining(meter, address(vrfCoordinator), EXTERNAL_READ_GAS, tail, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId), 64)",
     "count": 1,
-    "review": "EXTERNAL READ: fixed 50k coordinator staticcall, 64-byte prefix, second word validated as uint96; malformed/revert/OOG returns failure."
+    "review": "EXTERNAL READ: trusted coordinator staticcall forwarding all gas above the meter floor and caller tail (50k admission minimum), 64-byte prefix, second word validated as uint96; malformed or reverting returns failure."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",

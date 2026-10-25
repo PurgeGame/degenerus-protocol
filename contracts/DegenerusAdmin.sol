@@ -27,6 +27,7 @@ pragma solidity 0.8.38;
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 
 import {BoundedCall} from "./libraries/BoundedCall.sol";
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /**
@@ -454,6 +455,14 @@ contract DegenerusAdmin {
     /// @dev Basis points denominator.
     uint256 private constant BPS = 10000;
 
+    /// @dev Coordinator cancellation forwards all gas above the caller's tail; the minimum
+    ///      admits the call and never caps it.
+    uint256 private constant CANCEL_MIN_GAS = 450_000;
+    /// @dev Swap work after cancelling: create, add the consumer, fund and the Game reissue.
+    uint256 private constant SWAP_TAIL = 1_500_000;
+    /// @dev Shutdown work after cancelling: the refund balance read and two events.
+    uint256 private constant SHUTDOWN_TAIL = 50_000;
+
     // =========================================================================
     // ACCESS CONTROL
     // =========================================================================
@@ -805,8 +814,9 @@ contract DegenerusAdmin {
         // without one, Game refills the replacement before its reissue.
         if (oldSub != 0 && oldCoord.code.length != 0) {
             refundSource = oldCoord;
-            bool cancelled = BoundedCall.callValueFixed(oldCoord, 0, 450_000,
-                abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, oldSub, address(this)));
+            MineFlipGas.Meter memory unmetered;
+            (bool cancelled,) = BoundedCall.callRemaining(unmetered, oldCoord, CANCEL_MIN_GAS, SWAP_TAIL,
+                abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, oldSub, address(this)), 0);
             refundSource = address(0);
             if (cancelled) emit SubscriptionCancelled(oldSub, address(this));
         }
@@ -847,16 +857,17 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @notice Cancel the subscription at game over; the coordinator refunds the Vault.
-    /// @dev Broken external coordinators are skipped, including gas-burning implementations.
+    /// @dev A cancellation the coordinator refuses is skipped; the shutdown still completes.
     function shutdownVrf() external {
+        MineFlipGas.Meter memory meter = MineFlipGas.fromCall(4);
         if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
         uint256 subId = subscriptionId;
         if (subId == 0) return;
         subscriptionId = 0;
         address target = ContractAddresses.VAULT;
         uint256 beforeBalance = target.balance;
-        bool cancelled = BoundedCall.callValueFixed(coordinator, 0, 450_000,
-            abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target));
+        (bool cancelled,) = BoundedCall.callRemaining(meter, coordinator, CANCEL_MIN_GAS, SHUTDOWN_TAIL,
+            abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0);
         if (cancelled) emit SubscriptionCancelled(subId, target);
         emit SubscriptionShutdown(subId, target, target.balance - beforeBalance);
     }

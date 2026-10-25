@@ -102,15 +102,6 @@ library BoundedCall {
         }
     }
 
-    /// @dev Fixed-cost best-effort funding; no return payload is decoded or copied.
-    function callValueFixed(address target, uint256 value, uint256 budget, bytes memory input)
-        internal returns (bool ok)
-    {
-        assembly ("memory-safe") {
-            ok := call(budget, target, value, add(input, 32), mload(input), 0, 0)
-        }
-    }
-
     function _remaining(MineFlipGas.Meter memory meter, uint256 minimum, uint256 reserve, uint256 overhead)
         private view returns (uint256 available)
     {

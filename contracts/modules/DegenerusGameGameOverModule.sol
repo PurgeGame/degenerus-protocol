@@ -804,7 +804,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     function _shutdownVrf(MineFlipGas.Meter memory meter) private {
-        // Admin needs the cancellation floor plus its native refund budget.
+        // Admin needs the cancellation minimum plus its shutdown tail.
         // A failed trusted frame must roll back GO_SWEPT and all asset transfers:
         // otherwise the live subscription cannot be recovered by retrySubCancel.
         (bool ok,) = BoundedCall.callRemaining(meter, ContractAddresses.ADMIN, 1_000_000, 250_000,
@@ -1140,8 +1140,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         }
 
         // A cancel refused while a request is pending leaves Admin no refund to forward, so
-        // the replacement subscription is refilled here, before any reissue.
-        _refillVrfNative();
+        // the replacement subscription is refilled here, before any reissue. Governance calls
+        // carry no meter; the reissue that follows is kept back as the tail.
+        MineFlipGas.Meter memory unmetered;
+        _refillVrfNative(unmetered, VRF_REQUEST_MIN_GAS);
 
         // Detect what is in flight and re-issue on the new coordinator. A re-issue is the same
         // request sent again: rngRequestTime is left as it was, so the request keeps the day it

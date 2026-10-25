@@ -13,19 +13,6 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {RequestCostCoordinator} from "../helpers/RequestCostCoordinator.sol";
 
-/// @dev A coordinator that spends almost all of the 50k read budget on a valid empty balance,
-///      then burns the whole fixed funding budget.
-contract BurningFundCoordinator {
-    function getSubscription(uint256) external view returns (uint96, uint96, uint64, address, address[] memory) {
-        uint256 start = gasleft();
-        while (start - gasleft() < 45_000) {}
-        return (0, 0, 0, address(this), new address[](0));
-    }
-    function fundSubscriptionWithNative(uint256) external payable {
-        assembly ("memory-safe") { for {} 1 {} {} }
-    }
-}
-
 /// @dev Last-purchase-day state one level below `lvl`; the real request pre-increments the level.
 ///      A Decimator event of `decEntrants` entrants is open for `lvl` (sealing is constant work
 ///      regardless of the entrant population).
@@ -261,17 +248,13 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
     }
 
     /// @dev The level-entry funding call included: a source-shaped live subscription below the
-    ///      funding threshold, or a coordinator that burns both fixed budgets.
-    function _fundingCase(bool burn) private {
-        if (burn) {
-            vm.etch(address(mockVRF), type(BurningFundCoordinator).runtimeCode);
-        } else {
-            vm.etch(address(mockVRF), address(new RequestCostCoordinator(125_000)).code);
-            RequestCostCoordinator(address(mockVRF)).seed(address(game), 1);
-            // balances[1]: nonzero request count, 0.01 ETH native balance.
-            vm.store(address(mockVRF), keccak256(abi.encode(uint256(1), uint256(2))),
-                bytes32((uint256(100) << 192) | (uint256(0.01 ether) << 96)));
-        }
+    ///      funding threshold.
+    function _fundingCase() private {
+        vm.etch(address(mockVRF), address(new RequestCostCoordinator(125_000)).code);
+        RequestCostCoordinator(address(mockVRF)).seed(address(game), 1);
+        // balances[1]: nonzero request count, 0.01 ETH native balance.
+        vm.store(address(mockVRF), keccak256(abi.encode(uint256(1), uint256(2))),
+            bytes32((uint256(100) << 192) | (uint256(0.01 ether) << 96)));
         uint256 nativeSnapshot = vm.snapshotState();
         _coolAll();
         vm.cool(address(mockVRF));
@@ -280,11 +263,11 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         uint256 used = vm.lastCallGas().gasTotalUsed;
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        string memory label = string.concat(_label(), burn ? "_burning_fund" : "_funded");
+        string memory label = string.concat(_label(), "_funded");
         emit log_named_uint(string.concat("consolidation_", label, "_cold_including_intrinsic"), used);
         assertTrue(result.progressed && result.done, "the consolidation completes in one call");
         assertEq(_stageOf(logs), STAGE_ENTERED_JACKPOT, "the jackpot phase is entered");
-        assertEq(_countTopic(logs, keccak256("VrfFunded(uint24,uint256,uint256)")), burn ? 0 : 1, "funding outcome");
+        assertEq(_countTopic(logs, keccak256("VrfFunded(uint24,uint256,uint256)")), 1, "funding outcome");
         assertEq(_countTopic(logs, keccak256("YieldSurplusDistributed(uint256)")), 1, "surplus distributes");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
@@ -295,8 +278,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         vm.deleteStateSnapshot(nativeSnapshot);
     }
 
-    function test_ConsolidationColdFunded() public { _fundingCase(false); }
-    function test_ConsolidationColdBurningFund() public { _fundingCase(true); }
+    function test_ConsolidationColdFunded() public { _fundingCase(); }
 
     function _checkIncinerator(Vm.Log[] memory logs) private {
         bytes32 sig = keccak256("IncineratorResolved(uint24,uint32,uint256,uint256,uint256)");

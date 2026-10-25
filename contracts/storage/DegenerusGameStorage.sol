@@ -1137,11 +1137,18 @@ abstract contract DegenerusGameStorage {
     // A request may create its id slot and seal packed state before returning to
     // the checkpoint caller. These are caller reserves, never coordinator caps.
     uint256 internal constant VRF_REQUEST_RESERVE = 500_000;
+    // Coordinator reads and funding forward all gas above the meter floor and these caller
+    // tails, like the request; the minimum admits the call and never caps it.
+    uint256 internal constant VRF_READ_RESERVE = 200_000;
+    // A first funding creates the subscription's balance slot: 125,077 gas natively.
+    uint256 internal constant VRF_FUND_MIN_GAS = 150_000;
 
     /// @dev Native balance is the second static ABI word; never decode consumers.
-    function _vrfNativeBalance() internal view returns (bool ok, uint256 nativeBalance) {
+    function _vrfNativeBalance(MineFlipGas.Meter memory meter, uint256 tail)
+        internal view returns (bool ok, uint256 nativeBalance)
+    {
         bytes memory result;
-        (ok, result) = BoundedCall.staticcallFixed(address(vrfCoordinator), EXTERNAL_READ_GAS,
+        (ok, result) = BoundedCall.staticcallRemaining(meter, address(vrfCoordinator), EXTERNAL_READ_GAS, tail,
             abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId), 64);
         if (ok) assembly ("memory-safe") { nativeBalance := mload(add(result, 64)) }
         ok = ok && nativeBalance <= type(uint96).max;
@@ -1167,10 +1174,6 @@ abstract contract DegenerusGameStorage {
         + 5 * VRF_REQUESTS_PER_DAY * 1 gwei) * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
     uint256 internal constant VRF_TARGET_PER_GAS =
         VRF_LOW_WATER_PER_GAS + 2 * VRF_MAX_REQUESTS_PER_INTERVAL * 1 gwei * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
-    // v2.5 fundSubscriptionWithNative: four cold reads, two writes and one event. The first
-    // funding of a fresh subscription creates its balance slot: about 130k on Glamsterdam.
-    uint256 internal constant VRF_FUND_GAS = 150_000;
-
     event VrfFunded(uint24 level, uint256 fromYield, uint256 fromSdgnrs);
 
     function _vrfMinFulfillBalance() internal view returns (uint256) {
@@ -1209,22 +1212,25 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Fresh daily request and coordinator swap. The normal day reads only the subscription.
-    function _refillVrfNative() internal {
+    /// `tail` is the caller's work after the refill, kept back from both coordinator calls.
+    function _refillVrfNative(MineFlipGas.Meter memory meter, uint256 tail) internal {
         if (address(this).balance == 0) return;
-        (bool ok, uint256 balance) = _vrfNativeBalance();
+        (bool ok, uint256 balance) = _vrfNativeBalance(meter, tail);
         if (!ok) return;
         (uint256 lowWater, uint256 target) = _vrfNativeLevels();
         if (balance >= lowWater) return;
         uint256 surplus;
         (ok, surplus) = _vrfYieldSurplus();
-        if (ok) _topUpVrfNative(target - balance, surplus);
+        if (ok) _topUpVrfNative(meter, tail, target - balance, surplus);
     }
 
     /// @dev Yield first, then the protocol's ordinary claimable, then AFKing. Claim ETH is a
     /// soft liquidity reservation; every non-yield wei sent removes one wei of obligations.
     /// Callers read the subscription with a 64-byte return, so the coordinator has code.
     /// Returns only the yield actually sent, so the caller can split the remaining surplus.
-    function _topUpVrfNative(uint256 deficit, uint256 surplus) internal returns (uint256 fromYield) {
+    function _topUpVrfNative(MineFlipGas.Meter memory meter, uint256 tail, uint256 deficit, uint256 surplus)
+        internal returns (uint256 fromYield)
+    {
         uint256 available = address(this).balance;
         if (available > deficit) available = deficit;
         fromYield = available < surplus ? available : surplus;
@@ -1244,8 +1250,10 @@ abstract contract DegenerusGameStorage {
         }
         uint256 fromSdgnrs = fromClaimable + fromAfking;
         uint256 amount = fromYield + fromSdgnrs;
-        if (amount == 0 || !BoundedCall.callValueFixed(address(vrfCoordinator), amount, VRF_FUND_GAS,
-            abi.encodeWithSelector(IVRFCoordinator.fundSubscriptionWithNative.selector, vrfSubscriptionId))) return 0;
+        if (amount == 0) return 0;
+        (bool ok,) = BoundedCall.callValueRemaining(meter, address(vrfCoordinator), amount, VRF_FUND_MIN_GAS, tail,
+            abi.encodeWithSelector(IVRFCoordinator.fundSubscriptionWithNative.selector, vrfSubscriptionId), 0);
+        if (!ok) return 0;
         if (fromSdgnrs != 0) {
             _debitClaimableAndAfking(SDGNRS_WALLET_ID, fromClaimable, fromAfking);
             claimablePool -= uint128(fromSdgnrs);
@@ -1299,7 +1307,7 @@ abstract contract DegenerusGameStorage {
         // No coordinator is wired before VRF setup, so nothing can be requested yet.
         if (address(vrfCoordinator) == address(0)) return false;
         if (!crapsWork) {
-            (bool ok, uint256 nativeBal) = _vrfNativeBalance();
+            (bool ok, uint256 nativeBal) = _vrfNativeBalance(meter, VRF_READ_RESERVE);
             if (!ok || nativeBal < _vrfMinFulfillBalance() * 3 / 2) return false;
         }
         if (!needsCredit) return true;

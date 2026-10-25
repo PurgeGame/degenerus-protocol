@@ -108,7 +108,7 @@ contract GameIsolationHost is DegenerusGame {
     function requestIdentity() external view returns (uint24, uint48, bool) {
         return (rngRequestDay, rngRequestTime, _rngRequestActive());
     }
-    function nativeBalance() external view returns (bool, uint256) { return _vrfNativeBalance(); }
+    function nativeBalance() external view returns (bool, uint256) { return _vrfNativeBalance(MineFlipGas.fromCall(4), VRF_READ_RESERVE); }
     function observedSteth() external view returns (uint256) { return _boundedStethBalance(MineFlipGas.fromCall(4), 100_000); }
     function requestProbe() external returns (bool, uint256) { return _boundedVrfRequest(6, MineFlipGas.fromCall(4)); }
     function swept() external view returns (bool) { return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0; }
@@ -248,10 +248,10 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         assertGt(day, 0); assertTrue(active);
     }
 
-    function test_ExpensiveSubscriptionReadSkipsAtFixedBudget() public {
+    function test_ExpensiveTrustedSubscriptionReadSucceedsBeyondFormerCap() public {
         _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, 8);
         (bool ok, uint256 balance) = host.nativeBalance{gas: 3_000_000}();
-        assertFalse(ok); assertEq(balance, 0);
+        assertTrue(ok); assertGt(balance, 0);
     }
 
     function test_SelectorFailuresPreserveCertificationAndRefuseEligibility() public {
@@ -375,11 +375,12 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function test_UnderfundedReadAndStakeAdmissionRevertsWithoutFailurePolicy() public {
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         host.observedSteth{gas: 50_000}();
-        (bool readable, uint256 nativeAmount) = host.nativeBalance{gas: 50_000}();
-        assertTrue(readable); assertGt(nativeAmount, 0);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        host.nativeBalance{gas: 50_000}();
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         host.requestProbe{gas: 500_000}();
-        // Fixed-budget optional reads no longer impose an admission revert.
+        // The level-entry subscription read keeps back the consolidation tail.
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         host.invoke{gas: 500_000}(ContractAddresses.GAME_JACKPOT_MODULE,
             abi.encodeCall(IDegenerusGameJackpotModule.distributeYieldSurplus, (uint256(777))));
         vm.deal(address(game), 1 ether);

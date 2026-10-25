@@ -5,6 +5,7 @@ import {GameDailyInternals} from "./GameDailyInternals.sol";
 
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -39,7 +40,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         MineFlipGas.Meter memory meter = MineFlipGas.fromCall(36);
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _minerMaintenancePending()
             || _livenessTriggered() || day != _afkingResetDay || day != dailyIdx + 1 || !dailyComplete || !_dailyRequestDue() || !subsFullyProcessed) revert RngNotReady();
-        _refillVrfNative();
+        _refillVrfNative(meter, GasBounds.VRF_DAILY_REFILL_TAIL);
         _rngPrepareRequestBoundary(day);
         _swapTicketSlot();
         _swapFoilSlot();
@@ -121,7 +122,8 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
             if (pendingEth == 0 && _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) == 0) {
                 revert NoPendingLootbox();
             }
-            (bool readable, uint256 nativeBal) = _vrfNativeBalance();
+            // The request that follows admits at its own floor and reserve.
+            (bool readable, uint256 nativeBal) = _vrfNativeBalance(meter, VRF_REQUEST_MIN_GAS + VRF_REQUEST_RESERVE);
             if (!readable) revert ExternalRequestRefused();
             if (nativeBal < _vrfMinFulfillBalance() * 3 / 2) revert InsufficientNativeBalance();
             // Pending FLIP counts as work but adds nothing to the threshold: only ETH pays for a

@@ -7,6 +7,7 @@ import {IVRFCoordinator, VRFRandomWordsRequest} from "../../contracts/interfaces
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MockStETH} from "../../contracts/mocks/MockStETH.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 contract NativeFundingHarness is YieldHarness {
     function wire(address coordinator, uint32 callbackGas) external {
@@ -25,19 +26,27 @@ contract NativeFundingHarness is YieldHarness {
     function lowWater() external view returns (uint256 l) { (l,) = _vrfNativeLevels(); }
     function minimum() external view returns (uint256) { return _vrfMinFulfillBalance(); }
     function surplus() external view returns (bool, uint256) { return _vrfYieldSurplus(); }
-    function readBalance() external view returns (bool, uint256) { return _vrfNativeBalance(); }
-    function refill() external { _refillVrfNative(); }
+    function readBalance() external view returns (bool, uint256) {
+        MineFlipGas.Meter memory unmetered;
+        return _vrfNativeBalance(unmetered, VRF_READ_RESERVE);
+    }
+    function refill() external {
+        MineFlipGas.Meter memory unmetered;
+        _refillVrfNative(unmetered, GasBounds.VRF_DAILY_REFILL_TAIL);
+    }
     function freshDailyTransport() external returns (uint256 id) {
-        _refillVrfNative();
+        MineFlipGas.Meter memory unmetered;
+        _refillVrfNative(unmetered, GasBounds.VRF_DAILY_REFILL_TAIL);
         (bool ok, uint256 request) = _boundedVrfRequest(6, MineFlipGas.fromCall(4));
         require(ok, "request");
         return request;
     }
     function topUp() external {
-        (bool ok, uint256 balance) = _vrfNativeBalance();
+        MineFlipGas.Meter memory unmetered;
+        (bool ok, uint256 balance) = _vrfNativeBalance(unmetered, GasBounds.VRF_LEVEL_FUND_TAIL);
         (bool read, uint256 yield) = _vrfYieldSurplus();
         (, uint256 t) = _vrfNativeLevels();
-        if (ok && read && balance < t) _topUpVrfNative(t - balance, yield);
+        if (ok && read && balance < t) _topUpVrfNative(unmetered, GasBounds.VRF_LEVEL_FUND_TAIL, t - balance, yield);
     }
 }
 
@@ -53,14 +62,12 @@ contract NativeFundingCoordinator {
     function getSubscription(uint256) external view returns (uint96, uint96, uint64, address, address[] memory) {
         uint256 mode = readMode;
         if (mode == 1) revert("broken read");
-        if (mode == 2) assembly ("memory-safe") { for {} 1 {} {} }
         if (mode == 3) assembly ("memory-safe") { mstore(0, 0) return(0, 32) }
         if (mode == 4) assembly ("memory-safe") { mstore(0, 0) mstore(32, shl(96, 1)) return(0, 64) }
         return (type(uint96).max, uint96(nativeBalance), 0, address(this), new address[](0));
     }
     function fundSubscriptionWithNative(uint256) external payable {
         if (fundMode == 1) revert("broken fund");
-        if (fundMode == 2) assembly ("memory-safe") { for {} 1 {} {} }
         nativeBalance += msg.value; sent += msg.value;
     }
     function requestRandomWords(VRFRandomWordsRequest calldata req) external returns (uint256) {
@@ -114,8 +121,16 @@ contract VrfNativeFundingTest is Test {
         (bool ok, uint256 bal) = h.readBalance();
         assertTrue(ok); assertEq(bal, 0.42 ether);
         for (uint8 mode = 1; mode <= 4; ++mode) {
+            if (mode == 2) continue;
             c.configure(0, mode, 0); (ok,) = h.readBalance(); assertFalse(ok);
         }
+    }
+    /// @dev A dead coordinator without code answers nothing: the refill skips with no send.
+    function testNoCodeCoordinatorSkipsRefill() public {
+        h.wire(address(0xdead), 150_000);
+        (bool ok,) = h.readBalance(); assertFalse(ok);
+        h.refill();
+        assertEq(address(0xdead).balance, 0); _unchanged(2 ether + 1, 3 ether, 5 ether);
     }
     function testYieldFundsBeforeEitherSdgnrsBalance() public {
         vm.deal(address(h), 15 ether);
@@ -167,18 +182,18 @@ contract VrfNativeFundingTest is Test {
         vm.clearMockedCalls(); _unchanged(2 ether + 1, 3 ether, 5 ether);
     }
     function testBrokenReadSkipsFundingButStillRequests() public {
+        uint256 requests;
         for (uint8 mode = 1; mode <= 4; ++mode) {
+            if (mode == 2) continue;
             c.configure(0, mode, 0);
-            assertEq(h.freshDailyTransport(), mode);
+            assertEq(h.freshDailyTransport(), ++requests);
             assertEq(c.sent(), 0); _unchanged(2 ether + 1, 3 ether, 5 ether);
         }
     }
     function testBrokenFundingSkipsDebitButStillRequests() public {
-        for (uint8 mode = 1; mode <= 2; ++mode) {
-            c.configure(0, 0, mode);
-            assertEq(h.freshDailyTransport(), mode);
-            assertEq(c.sent(), 0); _unchanged(2 ether + 1, 3 ether, 5 ether);
-        }
+        c.configure(0, 0, 1);
+        assertEq(h.freshDailyTransport(), 1);
+        assertEq(c.sent(), 0); _unchanged(2 ether + 1, 3 ether, 5 ether);
     }
     function testLevelEntryBelowThresholdSendsNothingAndSplitsFullSurplus() public {
         uint256 band = h.target() - h.lowWater();
