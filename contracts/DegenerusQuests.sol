@@ -1787,7 +1787,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      3. Resolution level 5, 15, 25, 35... ending in 5 (except 95, 195, etc.)
      *
      *      The rules are written against the RESOLUTION level -- the level burns key
-     *      into, which is level() + 1 (the basis FLIP uses at FLIP.sol:664). While a
+     *      into, which is currentLvl() + 1 (the basis FLIP uses at FLIP.sol:664). While a
      *      window is open the stored level still reads the x4/x99 that opened it (the
      *      game opens at x4/x99 and closes at x5/x00, both keyed on the incremented
      *      level), so testing the stored level directly would never match.

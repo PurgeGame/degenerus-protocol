@@ -1613,7 +1613,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @notice Comprehensive purchase info for UI consumption.
     /// @dev Bundles level, state, flags, and price into a single call. lvl is the ACTUAL game
     ///      level (Coinflip keys BAF bracketing / the transition lock on it from this one
-    ///      snapshot, avoiding a second level() read); priceWei is the buy-now price at the
+    ///      snapshot, avoiding a second currentLvl() read); priceWei is the buy-now price at the
     ///      ROUTED level, so a caller following the quote pays what execution charges — the two
     ///      differ during the purchase phase and the final jackpot RNG window (buys route to
     ///      level+1), which is intentional.

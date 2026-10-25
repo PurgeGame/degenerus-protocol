@@ -936,7 +936,7 @@ contract DegenerusAffiliate {
         uint256 u1Share = ((sumB - skipU1) * 20) / 100;
         uint256 u2Share = ((sumB - skipU2) * 5) / 100;
 
-        // Leaderboard credit to A at the next level (level() + 1, the level the subs' tickets buy
+        // Leaderboard credit to A at the next level (currentLvl() + 1, the level the subs' tickets buy
         // into; sumB already uses whole-token units).
         // The Game drain can call other contracts. Reload the score payload afterwards;
         // only immutable, already-validated cache fields may be merged from the old word.

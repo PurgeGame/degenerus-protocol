@@ -104,7 +104,7 @@ interface IDegenerusAffiliate {
     ///      resolved once. Each sub settles atomically at the Game storage owner, which pays the sub
     ///      and returns its base; a run's total splits 75/20/5 (floored, remainder to A) and pays
     ///      A / U1 / U2 directly via `creditFlip`; no-referrer subs split 50/50 VAULT/sDGNRS. Fixed
-    ///      split (no roll, no seed). The leaderboard credits A once per run, at `level() + 1`.
+    ///      split (no roll, no seed). The leaderboard credits A once per run, at `currentLvl() + 1`.
     /// @param subs Afking subscribers to settle, in any order.
     function claim(uint32[] calldata subs) external;
     function defaultCodeById(uint32 id) external pure returns (bytes32);

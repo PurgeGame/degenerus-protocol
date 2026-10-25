@@ -174,7 +174,7 @@ interface IDegenerusGame {
 
     /// @notice Get comprehensive purchase information in a single call.
     /// @dev Gas-optimized batch query: lvl is the ACTUAL game level (on-chain consumers key on
-    ///      it from this one snapshot, avoiding a second level() read), while priceWei is the
+    ///      it from this one snapshot, avoiding a second currentLvl() read), while priceWei is the
     ///      buy-now price at the ROUTED ticket level. The two diverge during the purchase phase
     ///      and the final jackpot RNG window (buys route to level+1) — this is intentional.
     /// @return lvl Actual current game level.

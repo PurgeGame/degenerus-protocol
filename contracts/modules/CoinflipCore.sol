@@ -941,7 +941,7 @@ abstract contract CoinflipCore {
         if (totals.winningBafCredit != 0 && id != SDGNRS_WALLET_ID) {
             (uint24 cachedLevel, , , , ) = coinflipGame.purchaseInfo_g1027();
             // purchaseInfo_g1027.lvl is the ACTUAL game level (one snapshot, no separate
-            // level() read); the bracket keys on the real level, not the routed buy
+            // currentLvl() read); the bracket keys on the real level, not the routed buy
             // level (which diverges on the final jackpot day).
             //
             // Recording is unconditional — even inside a resolving BAF window. The
