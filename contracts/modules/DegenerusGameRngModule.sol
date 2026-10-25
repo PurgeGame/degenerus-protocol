@@ -31,7 +31,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         if (address(this) != ContractAddresses.GAME || !_rngRequestActive() || _rngSessionPublished()
             || _currentRngWord() == 0 || _livenessTriggered()) revert RngNotReady();
         _finalizeLootboxRng(_currentRngWord());
-        if (!rngLockedFlag) _clearRngRequest();
+        if (!rngLockedFlag) _endRngSession();
     }
 
 
@@ -68,8 +68,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
     function retryRng() external {
         if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
         if (gameOver || _livenessTriggered() || !_rngRetryDue(uint48(block.timestamp))) revert RngNotReady();
-        // The superseded request loses callback authority before the replacement is sent.
-        _clearRngRequest();
+        // The replacement's ID supersedes the old request; a refused request reverts this call.
         _spendRngRetry();
         _setRngRequest(_requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4)));
         emit Advance(STAGE_RNG_REQUESTED, level);

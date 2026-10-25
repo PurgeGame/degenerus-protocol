@@ -62,10 +62,14 @@ contract VRFCore is DeployProtocol {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev The slot-0 request-active bit mirrors a nonzero request ID.
+    /// @dev An open session (slot-0 bit) always carries its request's nonzero ID; a consumed
+    ///      session may keep its answered ID with the bit clear.
     function _assertSessionMirror() internal view {
         bool active = (uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0)))) >> 254) & 1 != 0;
-        assertEq(active, _readVrfRequestId() != 0, "active bit mirrors the request ID");
+        if (active) {
+            assertTrue(_readVrfRequestId() != 0, "an open session carries a nonzero ID");
+            assertEq(_readVrfRequestId(), uint64(mockVRF.lastRequestId()), "the open session's ID is the live request");
+        }
     }
 
     /// @dev Read vrfRequestId directly from the coordinator's slot.
@@ -243,6 +247,26 @@ contract VRFCore is DeployProtocol {
         assertEq(_readRngWordCurrent(), randomWord, "the delivered word stands");
     }
 
+    /// @notice A consumed request keeps its ID, so a second answer to it (which the mock allows)
+    ///         overwrites only the session word in slot 3; header and recorded day word stay.
+    /// @dev Relies on the coordinator answering each request once (v2.5 deletes the commitment first).
+    function test_secondAnswerToConsumedRequestOverwritesOnlyTheSessionWord(uint256 lateWord) public {
+        vm.assume(lateWord > 1 && lateWord != 0xBEEF0001);
+        game.mineFlip(0);
+        uint256 reqId = mockVRF.lastRequestId();
+        uint24 day = game.currentDayView();
+        mockVRF.fulfillRandomWords(reqId, 0xBEEF0001);
+        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineFlip(0);
+        assertFalse(game.rngLocked(), "the day consumed its word");
+        bytes32 word = vm.load(address(game), bytes32(SLOT_RNG_WORD_CURRENT));
+        bytes32 header = vm.load(address(game), bytes32(SLOT_PACKED_0));
+        mockVRF.fulfillRandomWordsRaw(reqId, address(game), lateWord);
+        assertTrue(vm.load(address(game), bytes32(SLOT_RNG_WORD_CURRENT)) != word, "slot 3 takes the second answer");
+        assertEq(uint256(vm.load(address(game), bytes32(SLOT_RNG_WORD_CURRENT))), lateWord, "slot 3 holds the raw second word");
+        assertEq(vm.load(address(game), bytes32(SLOT_PACKED_0)), header, "header unchanged");
+        assertEq(game.rngWordForDay(day), 0xBEEF0001, "recorded day word unchanged");
+    }
+
     /// @notice A superseded request answered late is ignored, even once its replacement has been
     ///         consumed and a later request is waiting: an old answer never stands in for a new one.
     function test_lateSupersededFulfillmentIgnored(uint256 lateWord) public {
@@ -386,7 +410,7 @@ contract VRFCore is DeployProtocol {
         assertFalse(game.rngLocked(), "Should be unlocked after full processing");
 
         // After _unlockRng: vrfRequestId should be 0
-        assertEq(_readVrfRequestId(), 0, "unlock closes the session: no request in flight");
+        assertEq(_readVrfRequestId(), reqId, "the consumed request keeps its ID");
         _assertSessionMirror();
         assertFalse(game.isRngFulfilled(), "idle callback authority is disarmed");
     }
@@ -421,7 +445,7 @@ contract VRFCore is DeployProtocol {
         _setupForMidDayRng(true);
 
         // Before mid-day request, vrfRequestId should be 0 (cleared by _unlockRng from day 2)
-        assertEq(_readVrfRequestId(), 0, "no request in flight before the midpoint");
+        assertEq(_readVrfRequestId(), mockVRF.lastRequestId(), "the consumed daily request keeps its ID");
 
         // Fire mid-day request
         uint256 reqId = _mineMiddayRequest();
@@ -435,7 +459,7 @@ contract VRFCore is DeployProtocol {
         // After mid-day branch: vrfRequestId cleared to 0
         assertTrue(game.isRngFulfilled(), "callback leaves publication pending");
         game.mineFlip(0);
-        assertEq(_readVrfRequestId(), 0, "publication closes the session");
+        assertEq(_readVrfRequestId(), reqId, "publication keeps the answered ID");
         assertFalse(game.isRngFulfilled(), "publication disarms callback authority");
         // rngRequestTime also cleared
         assertGt(_readRngRequestTime(), 1, "idle timestamp is retained");
@@ -623,7 +647,7 @@ contract VRFCore is DeployProtocol {
         // Both should be cleared
         assertTrue(game.isRngFulfilled());
         game.mineFlip(0);
-        assertEq(_readVrfRequestId(), 0, "publication closes the session");
+        assertEq(_readVrfRequestId(), reqId, "publication keeps the answered ID");
         assertFalse(game.isRngFulfilled());
         assertGt(_readRngRequestTime(), 1, "idle request timestamp retained");
     }

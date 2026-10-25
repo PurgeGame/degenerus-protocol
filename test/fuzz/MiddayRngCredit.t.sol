@@ -178,8 +178,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     }
 
     /// @notice A delivered mid-day word is published only by the keeper, exactly once, with the
-    ///         timestamp retained and the request ID cleared; neither the closed request nor a
-    ///         stale one can fill the session again.
+    ///         request ID and timestamp retained; a stale request cannot fill the session again.
     function test_MiddaySessionRequiresKeeperPublicationAndRetainsMetadata() public pricedBlock {
         // Finish the fixture's primed day through production stages, including the
         // empty ticket frontier; marking only dailyIdx would leave genesis tickets pending.
@@ -222,11 +221,12 @@ contract MiddayRngCreditTest is DeployProtocol {
         }
         assertEq(count, 1, "keeper publishes exactly once");
         assertFalse(game.isRngFulfilled(), "keeper retires callback authority");
-        assertEq(uint64(uint256(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 0,
-            "keeper closes the session: no request in flight");
+        assertEq(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID)), requestSlot, "keeper keeps the answered request ID");
         assertEq((uint256(game.extsload_g2807007(bytes32(0))) >> 48) & type(uint48).max, requestTime, "keeper retains timestamp");
+        // Relies on the coordinator answering each request once: the mock's second answer overwrites slot 3.
         mockVRF.fulfillRandomWordsRaw(id, address(game), 99);
-        assertEq(RecyclingState.currentWord(address(game)), 42, "a closed session cannot accept a late answer");
+        assertEq(RecyclingState.currentWord(address(game)), 99, "a second answer to the kept ID overwrites the session word");
+        vm.store(address(game), bytes32(GameSlots.RNG_WORD_CURRENT), bytes32(uint256(42))); // restore for the rest of the run
         // The real daily stage also awards tickets. Drain those through the required
         // production advance category before completing the box frontier.
         for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineFlip(0);

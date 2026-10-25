@@ -1011,7 +1011,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         bool wasLocked = rngLockedFlag;
         rngLockedFlag = false;
         // Retain the session word until every remaining read consumer completes.
-        _clearRngRequest();
+        _endRngSession();
         _unfreezePool();
         // The day-seal is the one chokepoint every completed game-day passes through (purchase
         // daily, jackpot coin+tickets, phase transition). Emit the daily pool

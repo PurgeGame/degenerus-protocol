@@ -525,15 +525,20 @@ abstract contract DegenerusGameStorage {
     function _setRngComplete(bool on) internal {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 8)) | (on ? uint16(1) << 8 : 0);
     }
-    /// @dev Open request session. Bit 14 mirrors `vrfRequestId != 0` for slot-0 readers; the
-    ///      callback reads only the ID. Both change together, only through the two helpers below.
+    /// @dev Open request session for slot-0 readers. While set, `vrfRequestId` is the session's
+    ///      request; the callback reads only the ID, which a consumed session keeps (its request
+    ///      is answered and the coordinator answers each request once).
     function _rngRequestActive() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 14) != 0; }
     /// @dev Open the session for request `id`; its low 64 bits grant callback authority.
     function _setRngRequest(uint256 id) internal {
         vrfRequestId = uint64(id);
         rngFlagsAndNudges |= uint16(1) << 14;
     }
-    /// @dev Close the session: ID 0 means no request may be answered.
+    /// @dev Close a consumed session; its answered request ID stays.
+    function _endRngSession() internal {
+        rngFlagsAndNudges &= ~(uint16(1) << 14);
+    }
+    /// @dev Close a session whose request may still be answered: ID 0 accepts no answer.
     function _clearRngRequest() internal {
         vrfRequestId = 0;
         rngFlagsAndNudges &= ~(uint16(1) << 14);

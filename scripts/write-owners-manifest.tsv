@@ -223,7 +223,7 @@ OWNER	ticketsFullyProcessed	modules/DegenerusGameRngUtils.sol	Shared normal/term
 OWNER	ticketsFullyProcessed	modules/GameMiner.sol	Internalized component retains the reviewed writer role: Miner certifies the complete selected normal ticket/future/foil read window only when native Ticket worker reports done; also clears the midday latch.
 OWNER	vaultFlipSettledDay	modules/DegenerusGameAdvanceModule.sol	_settleVaultFlips stamps only after a successful zero-deposit settle; shared by the daily 45-day checkpoint and x0 seal, never the RNG or terminal path
 OWNER	vrfRequestId	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorAndSub re-issues an in-flight request on the new coordinator and stores the new id (the old fulfilment is rejected by mismatch)
-OWNER	vrfRequestId	storage/DegenerusGameStorage.sol	_setRngRequest/_clearRngRequest open and close the request session: the low 64 bits of the new ID beside the coordinator, 0 when no request may be answered, mirrored by the slot-0 active bit
+OWNER	vrfRequestId	storage/DegenerusGameStorage.sol	_setRngRequest opens a session with the low 64 bits of the new ID beside the coordinator; _clearRngRequest zeroes it where the request may still be answered (dead latch, pre-freeze drop); a consumed session keeps its answered ID
 OWNER	walletIds	modules/DegenerusGameGameOverModule.sol	_seizeLoan clears only the borrower's default gameplay ID when a main account's loan is seized, retaining permanent identity.
 OWNER	yieldAccumulator	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled accumulator at transition
 OWNER	yieldAccumulator	modules/DegenerusGameDegenesisModule.sol	_splitDegenesisCohorts reserves the insurance quarter in the existing accumulator

@@ -340,7 +340,7 @@ contract GameFSMProductionTransitionTest is Test {
         }
         assert(dailyLegs == 1 && machine.sealedDay() == requested);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
-        assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 0);
+        assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
         assert(machine.level() == 1);
         (bool repeated,) = address(machine).call(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         assert(!repeated && machine.sealedDay() == requested);

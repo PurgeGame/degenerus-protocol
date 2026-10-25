@@ -1257,10 +1257,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Stores the raw word answering the open request; publication is a later miner
     ///      action. Raw values 0/1 leave the request pending for retry. The coordinator fulfills
-    ///      each request once, so only a superseded request (retry or re-issue) or one whose
-    ///      session closed (consumed, dead-VRF latch) can arrive late; its ID no longer matches
-    ///      and it is ignored, not reverted. Runs in the base contract so the Native-paid callback
-    ///      carries no delegatecall overhead.
+    ///      each request once, so a consumed request (whose ID stays) is never answered again;
+    ///      only a superseded request (retry, re-issue) or one dropped at the dead-VRF latch can
+    ///      arrive late, and its ID no longer matches: ignored, not reverted. Runs in the base
+    ///      contract so the Native-paid callback carries no delegatecall overhead.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         uint256 vrf;
         uint256 word;
@@ -1273,7 +1273,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         if (msg.sender != address(uint160(vrf))) revert OnlyCoordinator();
         uint64 id;
         assembly ("memory-safe") { id := shr(mul(vrfRequestId.offset, 8), vrf) }
-        // ID 0: no request may be answered. A superseded request no longer matches.
+        // ID 0: no request may be answered. A superseded or dropped request no longer matches.
         if (id == 0 || uint64(requestId) != id) return;
         // The two reserved values leave this request waiting for its existing retry path.
         if (word < 2) return;
