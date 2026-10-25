@@ -349,7 +349,7 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, true); // deity gift
 
-        vm.warp(block.timestamp + 1 days);
+        _setRequestedFixtureDay(today + 1);
         assertGt(game.currentDayView_g542950(), today, "day did not roll");
 
         uint256 stake = _placeAndReadPackedStake(CURRENCY_ETH, 1 ether, 1);
@@ -363,7 +363,7 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false);
 
-        vm.warp(block.timestamp + uint256(EXPIRY_DAYS) * 1 days);
+        _setRequestedFixtureDay(today + EXPIRY_DAYS);
         assertEq(
             _placeAndReadPackedStake(CURRENCY_ETH, 1 ether, 1),
             1.12 ether,
@@ -372,7 +372,7 @@ contract DegeneretteBoonStake is DeployProtocol {
 
         // Re-grant and step one day past the window.
         _grantBoon(player, CURRENCY_ETH, 3, today, false);
-        vm.warp(block.timestamp + 1 days);
+        _setRequestedFixtureDay(today + EXPIRY_DAYS + 1);
         assertEq(
             _placeAndReadPackedStake(CURRENCY_ETH, 1 ether, 1),
             1 ether,

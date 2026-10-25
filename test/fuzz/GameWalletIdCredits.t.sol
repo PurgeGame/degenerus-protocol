@@ -96,7 +96,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
     /// @dev Raw Coinflip stake lane of `id` for the deposit target day (Coinflip slot 0 root).
     function _lane(uint32 id) private view returns (uint256) {
-        return CoinflipStorage.read(address(coinflip), id, GameTimeLib.currentDayIndex() + 1);
+        return CoinflipStorage.read(address(coinflip), id, coinflip.requestedDailyIdx() + 1);
     }
 
     /// @dev Sum of `CoinflipStakeUpdated` amounts for `id`, and the count of credits to other IDs.

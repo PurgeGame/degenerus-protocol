@@ -124,9 +124,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function _warp(uint24 day) private {
         vm.warp((uint256(day - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         bytes32 root = 0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200;
-        bytes32 pair = vm.load(address(coinflip), root);
+        bytes32 pair = vm.load(address(quests), root);
         _seedLogicalFixtureDay(day);
-        vm.store(address(coinflip), root, pair);
+        vm.store(address(quests), root, pair);
     }
 
     function _fund(uint256 amount) private {
