@@ -622,7 +622,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // The whole-day craps ticket's streak credit does NOT come through this door: it rides
         // the burn's flag byte into recordCrapsAction, which reaches the same private body.
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        _awardStreakBonus(id, amount, currentDay, 0);
+        _awardStreakBonus(id, amount, currentDay, currentDay);
     }
 
     /// @dev The streak-bonus body, callable from inside this contract. `recordCrapsAction` reaches
@@ -762,7 +762,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint24 streak)
     {
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
-        uint24 questDay = _currentQuestDayFast();
+        uint24 questDay = _currentQuestDayFast(currentDay);
         uint24 syncDay = questDay == 0 ? currentDay : questDay;
         if (syncDay != 0) _questSyncState(state, id, syncDay);
         streak = state.streak;
@@ -2563,10 +2563,6 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      the callers that materialized the array only to read the day.
     function _questGameDay() internal view virtual returns (uint24) {
         return GameTimeLib.gameDayIndex();
-    }
-
-    function _currentQuestDayFast() private view returns (uint24) {
-        return _currentQuestDayFast(_questGameDay());
     }
 
     function _currentQuestDayFast(uint24 gameDay) private view returns (uint24) {

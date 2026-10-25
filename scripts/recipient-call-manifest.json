@@ -2353,14 +2353,6 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._currentQuestDayFast()",
-    "kind": "recipient-helper",
-    "expression": "_questGameDay()",
-    "count": 1,
-    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._foilStreakFloor",
     "kind": "external",
     "expression": "questGame.floorAfkingStreakBase(id, FOIL_STREAK_FLOOR)",
@@ -2603,17 +2595,9 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.awardQuestStreakBonus",
     "kind": "recipient-helper",
-    "expression": "_awardStreakBonus(id, amount, currentDay, 0)",
+    "expression": "_awardStreakBonus(id, amount, currentDay, currentDay)",
     "count": 1,
     "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.beginAfking",
-    "kind": "recipient-helper",
-    "expression": "_currentQuestDayFast()",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
