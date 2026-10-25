@@ -856,12 +856,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      N-1 runs share everything but the Nth box, so their difference is one box's open cost.
     function _sessionGas(uint256 vrfWord) internal returns (uint256 total) {
         _fulfillPending(vrfWord);
-        for (uint256 i; i < 200 && !game.rngComplete(); ++i) {
+        // The session ends when no engine work remains. A shut Craps window arms a mid-day request in
+        // the closing call; it only waits for its word (no work), and is not part of this session.
+        for (uint256 i; i < 200 && game.advanceDue(); ++i) {
             uint256 g0 = gasleft();
             game.mineFlip(0);
             total += g0 - gasleft();
         }
-        require(game.rngComplete(), "fixture: the session completed");
+        require(!game.advanceDue() && !game.rngLocked(), "fixture: the session completed");
     }
 
     function _allPending(address[] memory subs) internal view returns (bool) {
