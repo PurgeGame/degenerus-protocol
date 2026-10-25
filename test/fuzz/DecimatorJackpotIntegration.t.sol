@@ -13,9 +13,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DecimatorJackpotTerms} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {SelectedCrapsEngine} from "../../contracts/profiles/Selected.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
@@ -50,10 +50,6 @@ contract DecimatorJackpotPreferenceProbe {
         (chips,) = CrapsPreferenceLib.decode(word);
     }
 }
-
-contract DecimatorJackpotCombinedProbe is DecimatorJackpotEngineProbe, DecimatorJackpotPreferenceProbe {}
-
-contract DecimatorJackpotRealEngineProbe is CrapsEngine, DecimatorJackpotPreferenceProbe {}
 
 contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
     function seedProtocolWallets() external { _seedProtocolWallets(); }
@@ -145,7 +141,8 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameDailyModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameDecimatorModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
-        vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotCombinedProbe).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotPreferenceProbe).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorJackpotEngineProbe).runtimeCode);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
         h = DecimatorJackpotHarness(ContractAddresses.GAME);
@@ -536,7 +533,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     }
 
     function test_RealEnginePreferredBoardsAndCallerPartitionsKeepTranscript() public {
-        vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotRealEngineProbe).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(SelectedCrapsEngine).runtimeCode);
         for (uint160 q; q < 4; ++q) {
             uint32 chips = q == 0 ? 0 : q == 1 ? 1 : q == 2 ? 4 << 27 | 3 << 9 : 5 << 27;
             DecimatorJackpotPreferenceProbe(ContractAddresses.CRAPS).set(address(0xa100 + q), chips);

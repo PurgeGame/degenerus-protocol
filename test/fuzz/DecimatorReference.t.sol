@@ -25,7 +25,7 @@ contract DecimatorReferenceTest is Test {
     function test_AggregateTracksActualTopupAndDecay() public {
         _burn(address(1), 2001);
         _burn(address(2), 4000);
-        vm.warp(block.timestamp + 1 days);
+        h.advanceDay(1);
         _burn(address(1), 2001);
         assertEq(h.roundOf(5).totalCreditedStack, 7801);
         assertEq(h.roundOf(5).count, 2);
