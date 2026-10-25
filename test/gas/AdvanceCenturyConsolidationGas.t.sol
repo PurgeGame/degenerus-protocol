@@ -595,6 +595,9 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         // mock's full shares-based balanceOf path rather than its empty fast path.
         vm.deal(address(game), uint256(s.nextPool) + s.futurePool + 68.25 ether + uint256(s.nextPool) / 400);
         mockStETH.mint(address(game), 50 ether);
+        // A subscription above target keeps VRF funding out of the pool arithmetic;
+        // PoolConsolidationGas measures the funded consolidation.
+        mockVRF.fundSubscription(1, 1 ether);
         _armCenturyWord(word, centuryDay);
         assertEq(game.level(), 100, "real request must pre-increment the level");
         assertEq(game.rngWordForDay(centuryDay), 0, "the word-apply transaction must apply fresh RNG");

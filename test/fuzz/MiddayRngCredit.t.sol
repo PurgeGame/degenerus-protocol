@@ -550,6 +550,19 @@ contract MiddayRngCreditTest is DeployProtocol {
         _mineRefused(outsider);
     }
 
+    /// @notice Between one and four times the ceiling a lootbox request waits while a pending
+    ///         window's request goes out, up to the 4x edge inclusive.
+    function test_crapsRequestsAboveTheLootboxCeilingUpToFourTimes() public pricedBlock {
+        _purchaseAboveThreshold();
+        vm.fee(6 gwei);
+        _mineRefused(outsider);
+        vm.fee(20 gwei);
+        _mineRefused(outsider);
+
+        _pendCrapsWindow();
+        _mineRequest(outsider);
+    }
+
     /// @notice A request that already clears the gates costs a credit holder nothing.
     function test_clearingRequestDoesNotChargeCredit() public pricedBlock {
         _purchaseAboveThreshold();

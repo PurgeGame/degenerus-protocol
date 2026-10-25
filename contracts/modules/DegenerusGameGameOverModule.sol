@@ -1139,10 +1139,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             return;
         }
 
+        // A cancel refused while a request is pending leaves Admin no refund to forward, so
+        // the replacement subscription is refilled here, before any reissue.
+        _refillVrfNative();
+
         // Detect what is in flight and re-issue on the new coordinator. A re-issue is the same
         // request sent again: rngRequestTime is left as it was, so the request keeps the day it
         // was first issued for and the VRF-dead window keeps running from the original send.
-        // DegenerusAdmin funds the replacement subscription before this reissue. If the new coordinator also stalls, the vault owner's one retry is
+        // If the new coordinator also stalls, the vault owner's one retry is
         // the remaining recourse, and a request unanswered _VRF_DEAD_TIMEOUT from its original
         // send reaches the VRF-dead ending.
         if (!rngLockedFlag) {

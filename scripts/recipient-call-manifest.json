@@ -477,7 +477,7 @@
     "kind": "bounded-wrapper",
     "expression": "BoundedCall.callValueFixed(oldCoord, 0, 450_000, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, oldSub, address(this)))",
     "count": 1,
-    "review": "GOVERNANCE: bounded cancellation failure is skipped; native refunds are retained transiently and atomically fund the replacement before Game reissue. No donation credit."
+    "review": "GOVERNANCE: cancellation is skipped against a coordinator without code and its bounded failure is skipped; a successful native refund is retained transiently and funds the replacement before Game reissue. A cancel refused while a request is pending leaves no refund: Game refills the replacement (yield, then sDGNRS claimable, then AFKing) before the reissue. No donation credit."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -501,7 +501,7 @@
     "kind": "external",
     "expression": "IVRFCoordinatorV2_5Owner(newCoordinator).fundSubscriptionWithNative{value: bal}(newSubId)",
     "count": 1,
-    "review": "GOVERNANCE: bounded cancellation failure is skipped; native refunds are retained transiently and atomically fund the replacement before Game reissue. No donation credit."
+    "review": "GOVERNANCE: cancellation is skipped against a coordinator without code and its bounded failure is skipped; a successful native refund is retained transiently and funds the replacement before Game reissue. A cancel refused while a request is pending leaves no refund: Game refills the replacement (yield, then sDGNRS claimable, then AFKing) before the reissue. No donation credit."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -8011,6 +8011,14 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule.updateVrfCoordinatorAndSub",
     "kind": "recipient-helper",
+    "expression": "_refillVrfNative()",
+    "count": 1,
+    "review": "SWAP FUNDING: after the new config and before any reissue, outside the ended/latched return; a cancel refused while a request is pending leaves Admin no refund, so the replacement is refilled from yield, then sDGNRS claimable, then AFKing. Fixed external budgets; failure skips and the reissue still goes out."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule.updateVrfCoordinatorAndSub",
+    "kind": "recipient-helper",
     "expression": "_requestVrfWord(VRF_MIDDAY_CONFIRMATIONS)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -8171,9 +8179,9 @@
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._distributeYieldSurplus",
     "kind": "recipient-helper",
-    "expression": "_topUpVrfNative(nativeBalance, yieldPool)",
+    "expression": "_topUpVrfNative(target - nativeBalance, yieldPool)",
     "count": 1,
-    "review": "LEVEL FUNDING: bounded subscription and stETH reads; optional yield-first native pull before 23% splits, ledger reload after successful sDGNRS debit; failure skips pull."
+    "review": "LEVEL FUNDING: bounded subscription and stETH reads; a deficit of at least a tenth of (target - low-water) is filled yield-first before the 23% splits, ledger reload after successful sDGNRS debit; failure skips pull."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -12435,9 +12443,9 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._refillVrfNative",
     "kind": "recipient-helper",
-    "expression": "_topUpVrfNative(balance, surplus)",
+    "expression": "_topUpVrfNative(target - balance, surplus)",
     "count": 1,
-    "review": "DAILY FUNDING: subscription probe first; below low-water and with ETH, bounded stETH read then shared yield-first pull; any dependency failure skips without gating request."
+    "review": "DAILY AND SWAP FUNDING: ETH check, then subscription probe; below low-water, bounded stETH read then shared yield-first pull to target; any dependency failure skips without gating the request."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -12477,7 +12485,7 @@
     "kind": "bounded-wrapper",
     "expression": "BoundedCall.callValueFixed(address(vrfCoordinator), amount, VRF_FUND_GAS, abi.encodeWithSelector(IVRFCoordinator.fundSubscriptionWithNative.selector, vrfSubscriptionId))",
     "count": 1,
-    "review": "NATIVE VALUE OUT: fixed 300k fund call capped by liquid ETH; untracked yield then sDGNRS claimable excluding sentinel then AFKing; debit paired with claimablePool only on successful send."
+    "review": "NATIVE VALUE OUT: fixed 150k fund call (fresh-slot v2.5 funding about 130k) capped by liquid ETH and the caller's deficit; untracked yield then sDGNRS claimable excluding sentinel then AFKing; debit paired with claimablePool only on successful send."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",

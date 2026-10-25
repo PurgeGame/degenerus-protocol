@@ -215,7 +215,9 @@ claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md)
 
 VRF requests are paid in ETH. At level entry, funding takes untracked yield before the
 23% stakeholder distributions, then sDGNRS ordinary claimable and finally its prepaid
-AFKing balance if needed. A daily low-water check uses the same order. Each sDGNRS
+AFKing balance if needed. Level entry funds only a deficit of at least a tenth of the
+gap between target and low-water. A daily low-water check, and a coordinator swap whose
+old subscription could not refund, refill to target in the same order. Each sDGNRS
 debit reduces aggregate claim liabilities by the exact amount sent, so its live price
 and redemption preview reflect that spending immediately. No other player's claim,
 prize pool, redemption reserve or accumulated yield is debited.

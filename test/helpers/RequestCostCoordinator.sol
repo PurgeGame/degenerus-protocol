@@ -32,11 +32,15 @@ contract RequestCostCoordinator {
     mapping(uint256 => Subscription) private balances;
     mapping(uint256 => bytes32) public commitments;
     Config private config;
+    // SubscriptionAPI packs s_totalBalance and s_totalNativeBalance into one slot.
+    uint96 private totalBalance;
+    uint96 private totalNativeBalance;
     uint256 private immutable executionFloor;
 
     event RandomWordsRequested(bytes32 indexed keyHash, uint256 requestId, uint256 preSeed,
         uint256 indexed subId, uint16 minimumRequestConfirmations, uint32 callbackGasLimit,
         uint32 numWords, bytes extraArgs, address indexed sender);
+    event SubscriptionFundedWithNative(uint256 indexed subId, uint256 oldNativeBalance, uint256 newNativeBalance);
 
     constructor(uint256 floor) { executionFloor = floor; }
 
@@ -45,9 +49,19 @@ contract RequestCostCoordinator {
         config.maxGasLimit = 2_500_000;
         subscriptions[1].owner = msg.sender;
         balances[1].nativeBalance = 100 ether;
+        balances[1].reqCount = 100;
+        totalNativeBalance = 100 ether;
         consumers[consumer][1].active = true;
         subscriptions[1].consumers.push(consumer);
         for (uint256 i = 1; i < count; ++i) subscriptions[1].consumers.push(address(uint160(0xD000 + i)));
+    }
+
+    /// @dev A further subscription with only `consumer`, as a coordinator swap creates it.
+    function seedSubscription(uint256 id, address consumer, uint96 nativeBalance) external {
+        subscriptions[id].owner = msg.sender;
+        subscriptions[id].consumers.push(consumer);
+        consumers[consumer][id].active = true;
+        balances[id].nativeBalance = nativeBalance;
     }
 
     function getSubscription(uint256 id) external view
@@ -80,8 +94,15 @@ contract RequestCostCoordinator {
         while (start - gasleft() < executionFloor) { }
     }
 
+    /// @dev SubscriptionAPI.fundSubscriptionWithNative: lock and owner reads, the subscription
+    /// and total native balance writes, and the funding event.
     function fundSubscriptionWithNative(uint256 id) external payable {
+        require(!config.reentrancyLock, "reentrant");
+        require(subscriptions[id].owner != address(0), "subscription");
+        uint256 oldNativeBalance = balances[id].nativeBalance;
         balances[id].nativeBalance += uint96(msg.value);
+        totalNativeBalance += uint96(msg.value);
+        emit SubscriptionFundedWithNative(id, oldNativeBalance, oldNativeBalance + msg.value);
     }
 
     function requests(address consumer) external view returns (uint64) { return consumers[consumer][1].nonce; }

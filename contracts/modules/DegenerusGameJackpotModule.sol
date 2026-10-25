@@ -767,7 +767,13 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         (bool readable, uint256 yieldPool) = _vrfYieldSurplus();
         if (!readable) return;
         (bool balanceReadable, uint256 nativeBalance) = _vrfNativeBalance();
-        if (balanceReadable) yieldPool -= _topUpVrfNative(nativeBalance, yieldPool);
+        if (balanceReadable) {
+            (uint256 lowWater, uint256 target) = _vrfNativeLevels();
+            // Only a deficit of at least a tenth of the refill band is worth a funding call.
+            if (nativeBalance + (target - lowWater) / 10 <= target) {
+                yieldPool -= _topUpVrfNative(target - nativeBalance, yieldPool);
+            }
+        }
         uint128 claimablePoolCached = claimablePool;
         uint256 yieldAccCached = yieldAccumulator;
         uint256 quarterShare = (yieldPool * 2300) / 10_000;

@@ -151,13 +151,13 @@ contract VrfRotationLiveness is DeployProtocol {
     ///      engine reports NoWork() -- the keeper has done all the work available for this
     ///      wall-clock day.
     function _completeDay(uint256 vrfWord) internal {
-        uint24 today = game.currentDayView();
         for (uint256 i = 0; i < 600; i++) {
             _answer(vrfWord);
             if (!_advanceTolerant()) break;
         }
         assertFalse(game.rngLocked(), "the day completes and unlocks");
-        assertTrue(game.rngWordForDay(today) != 0, "today is sealed on its own word");
+        // The daily request advances the logical day; its word is recorded on that day.
+        assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "today is sealed on its own word");
     }
 
     /// @dev Drive the game into a mid-day RNG state where the mid-day request (mineFlip's

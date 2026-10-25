@@ -515,7 +515,8 @@ contract CoordinatorRequestCostTest is Test {
     }
     function measureCoordinator() external returns (uint256) {
         require(msg.sender == address(this));
-        coordinator.requestRandomWords(VRFRandomWordsRequest(bytes32(uint256(1234)), 1, 4, 300_000, 1, hex""));
+        coordinator.requestRandomWords(VRFRandomWordsRequest(bytes32(uint256(1234)), 1, 4, 300_000, 1,
+            abi.encodeWithSelector(bytes4(keccak256("VRF ExtraArgsV1")), true)));
         return vm.lastCallGas().gasTotalUsed;
     }
 }

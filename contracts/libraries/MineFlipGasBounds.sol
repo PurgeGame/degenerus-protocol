@@ -22,8 +22,8 @@ library MineFlipGasBounds {
     uint256 internal constant DAILY_APPLY = 7_200_000;
     // Native cold request/credit witnesses peak at 523.9k; retain forwarding and frame headroom.
     uint256 internal constant RNG_MIDDAY_REQUEST = 2_200_000;
-    // Native daily witnesses: 1.54M normal, 1.68M refill, 1.87M with a gas-burning fund call.
-    // Includes fixed 50k balance / 50k stETH / 300k funding budgets; transport stays uncapped.
+    // Native daily witnesses: 1.53M normal, 1.59M refill, 1.72M with a gas-burning fund call.
+    // Includes fixed 50k balance / 50k stETH / 150k funding budgets; transport stays uncapped.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
     uint256 internal constant RNG_DAILY_REQUEST = 4_400_000;
     // Nonempty close plus mixed ETH/stETH pull: 443.5k, including proxy and
@@ -36,7 +36,8 @@ library MineFlipGasBounds {
     uint256 internal constant TRANSITION_CLOSE = 6_200_000;
     // Cold level-one draw with 51 fresh slots: 6.240M.
     uint256 internal constant LEVEL_ONE_DRAW = 7_500_000;
-    // Cold losing x00 flip, incinerator search, seals and yield/keep roll: 1.368M.
+    // Cold losing x00 flip, incinerator search, seals and yield/keep roll: 1.368M. Native x00
+    // with VRF funding 1.208M; burning the 50k read and 150k fund budgets 1.367M.
     uint256 internal constant POOL_CONSOLIDATION = 1_650_000;
     // Prior 150k phase tail + bounded balance 60,794 and allocation/frame margin.
     uint256 internal constant DAILY_PHASE_TAIL = 250_000;

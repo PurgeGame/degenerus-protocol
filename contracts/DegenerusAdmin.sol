@@ -801,8 +801,9 @@ contract DegenerusAdmin {
         address oldCoord = coordinator;
 
         // Cancellation may fail while an old request remains pending. Governance can recover
-        // that retired subscription later. A successful native refund stays here for funding.
-        if (oldSub != 0) {
+        // that retired subscription later. A successful native refund stays here for funding;
+        // without one, Game refills the replacement before its reissue.
+        if (oldSub != 0 && oldCoord.code.length != 0) {
             refundSource = oldCoord;
             bool cancelled = BoundedCall.callValueFixed(oldCoord, 0, 450_000,
                 abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, oldSub, address(this)));

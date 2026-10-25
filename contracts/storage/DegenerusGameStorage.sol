@@ -1162,33 +1162,29 @@ abstract contract DegenerusGameStorage {
         + 5 * VRF_REQUESTS_PER_DAY * VRF_STRESS_COST;
     uint256 internal constant VRF_NATIVE_TARGET =
         VRF_NATIVE_LOW_WATER + 2 * VRF_MAX_REQUESTS_PER_INTERVAL * VRF_STRESS_COST;
-    uint256 internal constant VRF_FUND_GAS = 300_000;
+    // Per callback gas above 150k: two lane minimums plus the low-water and interval stress cost.
+    uint256 internal constant VRF_LOW_WATER_PER_GAS = (2 * ContractAddresses.VRF_LANE_MAX_GAS_PRICE
+        + 5 * VRF_REQUESTS_PER_DAY * 1 gwei) * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
+    uint256 internal constant VRF_TARGET_PER_GAS =
+        VRF_LOW_WATER_PER_GAS + 2 * VRF_MAX_REQUESTS_PER_INTERVAL * 1 gwei * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
+    // v2.5 fundSubscriptionWithNative: four cold reads, two writes and one event. The first
+    // funding of a fresh subscription creates its balance slot: about 130k on Glamsterdam.
+    uint256 internal constant VRF_FUND_GAS = 150_000;
 
-    event VrfFunded(uint24 indexed level, uint256 fromYield, uint256 fromSdgnrs);
+    event VrfFunded(uint24 level, uint256 fromYield, uint256 fromSdgnrs);
 
     function _vrfMinFulfillBalance() internal view returns (uint256) {
         return ContractAddresses.VRF_LANE_MAX_GAS_PRICE * (200_000 + uint256(vrfCallbackGasLimit))
             * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
     }
 
-    /// @dev Governance may raise the callback cap; reserve and stress allowance rise with it.
+    /// @dev Governance may raise the callback cap; low-water and target rise with it.
     /// The default-sized constants remain a minimum, even for a smaller callback.
-    function _vrfExtraStressCost() private view returns (uint256) {
+    function _vrfNativeLevels() internal view returns (uint256 lowWater, uint256 target) {
         uint256 callbackGas = vrfCallbackGasLimit;
-        return callbackGas > 150_000
-            ? (callbackGas - 150_000) * 1 gwei * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100 : 0;
-    }
-
-    function _vrfNativeLowWater() internal view returns (uint256) {
-        uint256 minimum = _vrfMinFulfillBalance();
-        uint256 baseMinimum = ContractAddresses.VRF_LANE_MAX_GAS_PRICE * 350_000
-            * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
-        return VRF_NATIVE_LOW_WATER + (minimum > baseMinimum ? 2 * (minimum - baseMinimum) : 0)
-            + 5 * VRF_REQUESTS_PER_DAY * _vrfExtraStressCost();
-    }
-
-    function _vrfNativeTarget() internal view returns (uint256) {
-        return _vrfNativeLowWater() + 2 * VRF_MAX_REQUESTS_PER_INTERVAL * (VRF_STRESS_COST + _vrfExtraStressCost());
+        uint256 extra = callbackGas > 150_000 ? callbackGas - 150_000 : 0;
+        lowWater = VRF_NATIVE_LOW_WATER + extra * VRF_LOW_WATER_PER_GAS;
+        target = VRF_NATIVE_TARGET + extra * VRF_TARGET_PER_GAS;
     }
 
     /// @dev Count all ETH obligations, including the frozen purchase buffer, exactly once.
@@ -1212,24 +1208,25 @@ abstract contract DegenerusGameStorage {
         return (true, _untrackedYield(stBal));
     }
 
-    /// @dev First step of a fresh daily request. The normal day reads only the subscription.
+    /// @dev Fresh daily request and coordinator swap. The normal day reads only the subscription.
     function _refillVrfNative() internal {
+        if (address(this).balance == 0) return;
         (bool ok, uint256 balance) = _vrfNativeBalance();
-        if (!ok || balance >= _vrfNativeLowWater() || address(this).balance == 0) return;
+        if (!ok) return;
+        (uint256 lowWater, uint256 target) = _vrfNativeLevels();
+        if (balance >= lowWater) return;
         uint256 surplus;
         (ok, surplus) = _vrfYieldSurplus();
-        if (ok) _topUpVrfNative(balance, surplus);
+        if (ok) _topUpVrfNative(target - balance, surplus);
     }
 
     /// @dev Yield first, then the protocol's ordinary claimable, then AFKing. Claim ETH is a
     /// soft liquidity reservation; every non-yield wei sent removes one wei of obligations.
+    /// Callers read the subscription with a 64-byte return, so the coordinator has code.
     /// Returns only the yield actually sent, so the caller can split the remaining surplus.
-    function _topUpVrfNative(uint256 balance, uint256 surplus) internal returns (uint256 fromYield) {
-        uint256 target = _vrfNativeTarget();
-        uint256 liquid = address(this).balance;
-        if (balance >= target || liquid == 0 || address(vrfCoordinator).code.length == 0) return 0;
-        uint256 available = target - balance;
-        if (available > liquid) available = liquid;
+    function _topUpVrfNative(uint256 deficit, uint256 surplus) internal returns (uint256 fromYield) {
+        uint256 available = address(this).balance;
+        if (available > deficit) available = deficit;
         fromYield = available < surplus ? available : surplus;
         uint256 remaining = available - fromYield;
         uint256 fromClaimable;

@@ -21,8 +21,8 @@ contract NativeFundingHarness is YieldHarness {
     function funds() external view returns (uint256 ordinary, uint256 afking, uint256 pool) {
         return (_claimableOf(SDGNRS_WALLET_ID), _afkingOf(SDGNRS_WALLET_ID), claimablePool);
     }
-    function target() external view returns (uint256) { return _vrfNativeTarget(); }
-    function lowWater() external view returns (uint256) { return _vrfNativeLowWater(); }
+    function target() external view returns (uint256 t) { (, t) = _vrfNativeLevels(); }
+    function lowWater() external view returns (uint256 l) { (l,) = _vrfNativeLevels(); }
     function minimum() external view returns (uint256) { return _vrfMinFulfillBalance(); }
     function surplus() external view returns (bool, uint256) { return _vrfYieldSurplus(); }
     function readBalance() external view returns (bool, uint256) { return _vrfNativeBalance(); }
@@ -36,7 +36,8 @@ contract NativeFundingHarness is YieldHarness {
     function topUp() external {
         (bool ok, uint256 balance) = _vrfNativeBalance();
         (bool read, uint256 yield) = _vrfYieldSurplus();
-        if (ok && read) _topUpVrfNative(balance, yield);
+        (, uint256 t) = _vrfNativeLevels();
+        if (ok && read && balance < t) _topUpVrfNative(t - balance, yield);
     }
 }
 
@@ -73,7 +74,7 @@ contract VrfNativeFundingTest is Test {
     NativeFundingHarness h;
     NativeFundingCoordinator c;
     MockStETH st;
-    event VrfFunded(uint24 indexed level, uint256 fromYield, uint256 fromSdgnrs);
+    event VrfFunded(uint24 level, uint256 fromYield, uint256 fromSdgnrs);
 
     function setUp() public {
         deployCodeTo("MockStETH.sol:MockStETH", ContractAddresses.STETH_TOKEN);
@@ -98,9 +99,15 @@ contract VrfNativeFundingTest is Test {
         assertEq(h.minimum(), 0.0868 ether);
         assertEq(h.lowWater(), 0.19592 ether);
         assertEq(h.target(), 0.49352 ether);
+        h.wire(address(c), 100_000);
+        assertEq(h.lowWater(), 0.19592 ether); assertEq(h.target(), 0.49352 ether);
+        // 150k extra callback gas: two lane minimums (0.0744) plus 60 requests (0.01116) at
+        // 1 gwei stress, and 800 interval requests (0.1488) more for the target.
         h.wire(address(c), 300_000);
+        assertEq(h.minimum(), 0.124 ether);
+        assertEq(h.lowWater(), 0.28148 ether);
+        assertEq(h.target(), 0.72788 ether);
         assertGt(h.lowWater(), h.minimum() * 2);
-        assertGt(h.target(), 0.49352 ether);
     }
     function testNativeSecondWordAndMalformedReads() public {
         c.configure(0.42 ether, 0, 0);
@@ -112,7 +119,7 @@ contract VrfNativeFundingTest is Test {
     }
     function testYieldFundsBeforeEitherSdgnrsBalance() public {
         vm.deal(address(h), 15 ether);
-        vm.expectEmit(true, false, false, true, address(h)); emit VrfFunded(0, h.target(), 0);
+        vm.expectEmit(false, false, false, true, address(h)); emit VrfFunded(0, h.target(), 0);
         h.topUp();
         assertEq(c.sent(), h.target()); _unchanged(2 ether + 1, 3 ether, 5 ether);
         h.topUp(); assertEq(c.sent(), h.target()); _solvent();
@@ -172,6 +179,26 @@ contract VrfNativeFundingTest is Test {
             assertEq(h.freshDailyTransport(), mode);
             assertEq(c.sent(), 0); _unchanged(2 ether + 1, 3 ether, 5 ether);
         }
+    }
+    function testLevelEntryBelowThresholdSendsNothingAndSplitsFullSurplus() public {
+        uint256 band = h.target() - h.lowWater();
+        c.configure(h.target() - band / 10 + 1, 0, 0);
+        vm.deal(address(h), 16 ether);
+        h.distributeYieldSurplus(0);
+        assertEq(c.sent(), 0);
+        uint256 share = 2 ether * 2300 / 10000;
+        assertEq(h.getClaimable(1), share);
+        _unchanged(2 ether + 1 + share, 3 ether, 5 ether + 3 * share);
+    }
+    function testLevelEntryAtThresholdFundsToTarget() public {
+        uint256 band = h.target() - h.lowWater();
+        c.configure(h.target() - band / 10, 0, 0);
+        vm.deal(address(h), 16 ether);
+        h.distributeYieldSurplus(0);
+        assertEq(c.sent(), band / 10); assertEq(c.nativeBalance(), h.target());
+        uint256 share = (2 ether - band / 10) * 2300 / 10000;
+        assertEq(h.getClaimable(1), share);
+        _unchanged(2 ether + 1 + share, 3 ether, 5 ether + 3 * share);
     }
     function test_FailedTopUpLeavesFullSurplusForSplit() public {
         vm.deal(address(h), 15 ether); c.configure(0, 0, 1);

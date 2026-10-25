@@ -38,6 +38,7 @@ contract MockVRFCoordinator {
     }
 
     function cancelSubscription(uint256 subId, address to) external {
+        if (pendingCount[subId] != 0) revert PendingRequestExists();
         uint96 bal = subs[subId].balance;
         delete subs[subId];
         if (bal > 0) {
@@ -79,6 +80,7 @@ contract MockVRFCoordinator {
         lastCallbackGasLimit = req.callbackGasLimit;
         lastNativePayment = true;
         requestId = _nextRequestId++;
+        ++pendingCount[req.subId];
         pendingRequests[requestId] = PendingRequest({
             subId: req.subId,
             consumer: msg.sender,
@@ -92,6 +94,7 @@ contract MockVRFCoordinator {
         PendingRequest storage req = pendingRequests[requestId];
         require(!req.fulfilled, "already fulfilled");
         req.fulfilled = true;
+        if (pendingCount[req.subId] != 0) --pendingCount[req.subId];
 
         uint256[] memory words = new uint256[](1);
         words[0] = randomWord;
@@ -109,7 +112,9 @@ contract MockVRFCoordinator {
     /// @dev Reset the fulfilled flag for a request so it can be reused in multi-day
     ///      test sequences where the game may reuse the same VRF request slot.
     function resetFulfilled(uint256 requestId) external {
-        pendingRequests[requestId].fulfilled = false;
+        PendingRequest storage req = pendingRequests[requestId];
+        if (req.fulfilled) ++pendingCount[req.subId];
+        req.fulfilled = false;
     }
 
     function fulfillRandomWordsRaw(
@@ -147,6 +152,10 @@ contract MockVRFCoordinator {
     function chargeNative(uint256 subId, uint96 amount) external {
         subs[subId].balance -= amount;
     }
+
+    /// @dev Unanswered requests per subscription; v2.5 refuses cancellation while any exist.
+    mapping(uint256 => uint256) public pendingCount;
+    error PendingRequestExists();
 
     receive() external payable {}
 }
