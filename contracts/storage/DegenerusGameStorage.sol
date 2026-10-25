@@ -1201,13 +1201,14 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev A failed stETH read cannot establish source order, so skip the optional pull.
-    function _vrfYieldSurplus() internal view returns (bool ok, uint256 surplus) {
-        bytes memory result;
-        (ok, result) = BoundedCall.staticcallFixed(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS,
-            abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)), 32);
-        if (!ok) return (false, 0);
-        uint256 stBal = abi.decode(result, (uint256));
-        if (stBal > type(uint128).max) return (false, 0);
+    ///      Like the coordinator calls, the read forwards all gas above the meter floor and `tail`.
+    function _vrfYieldSurplus(MineFlipGas.Meter memory meter, uint256 tail)
+        internal view returns (bool ok, uint256 surplus)
+    {
+        uint256 stBal;
+        (ok, stBal) = BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, tail,
+            abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
+        if (!ok || stBal > type(uint128).max) return (false, 0);
         return (true, _untrackedYield(stBal));
     }
 
@@ -1220,7 +1221,7 @@ abstract contract DegenerusGameStorage {
         (uint256 lowWater, uint256 target) = _vrfNativeLevels();
         if (balance >= lowWater) return;
         uint256 surplus;
-        (ok, surplus) = _vrfYieldSurplus();
+        (ok, surplus) = _vrfYieldSurplus(meter, tail);
         if (ok) _topUpVrfNative(meter, tail, target - balance, surplus);
     }
 

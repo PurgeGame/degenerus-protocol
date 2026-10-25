@@ -4881,14 +4881,6 @@
   },
   {
     "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.staticcallFixed",
-    "kind": "assembly",
-    "expression": "staticcall(budget, target, add(input, 32), mload(input), 0, 0)",
-    "count": 1,
-    "review": "EXTERNAL OPTIONAL READ: fixed operand gas, fixed output prefix, rejects short returndata and returns failure; no gasleft decision."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
     "scope": "BoundedCall.staticcallRemaining",
     "kind": "assembly",
     "expression": "staticcall(operand, target, add(input, 32), mload(input), 0, 0)",
@@ -8187,7 +8179,7 @@
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._distributeYieldSurplus",
     "kind": "recipient-helper",
-    "expression": "_vrfYieldSurplus()",
+    "expression": "_vrfYieldSurplus(meter, GasBounds.VRF_LEVEL_FUND_TAIL)",
     "count": 1,
     "review": "LEVEL FUNDING: bounded subscription and stETH reads; optional yield-first native pull before 23% splits, ledger reload after successful sDGNRS debit; failure skips pull."
   },
@@ -12451,7 +12443,7 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._refillVrfNative",
     "kind": "recipient-helper",
-    "expression": "_vrfYieldSurplus()",
+    "expression": "_vrfYieldSurplus(meter, tail)",
     "count": 1,
     "review": "DAILY FUNDING: subscription probe first; below low-water and with ETH, bounded stETH read then shared yield-first pull; any dependency failure skips without gating request."
   },
@@ -12499,8 +12491,8 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._vrfYieldSurplus",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticcallFixed(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)), 32)",
+    "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, tail, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
     "count": 1,
-    "review": "EXTERNAL READ: fixed 50k stETH balance read, 32-byte prefix and uint128 sanity limit; failure skips optional funding so source order is never guessed."
+    "review": "EXTERNAL READ: stETH balance read with all gas above the meter floor and caller tail, 32-byte prefix and uint128 sanity limit; failure skips optional funding so source order is never guessed."
   }
 ]

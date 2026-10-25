@@ -764,7 +764,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     function _distributeYieldSurplus(MineFlipGas.Meter memory meter) internal {
         // Compute the existing surplus, fund VRF before its stakeholder split, then reload
         // the aggregate claimable liability after a successful protocol-wallet debit.
-        (bool readable, uint256 yieldPool) = _vrfYieldSurplus();
+        (bool readable, uint256 yieldPool) = _vrfYieldSurplus(meter, GasBounds.VRF_LEVEL_FUND_TAIL);
         if (!readable) return;
         (bool balanceReadable, uint256 nativeBalance) = _vrfNativeBalance(meter, GasBounds.VRF_LEVEL_FUND_TAIL);
         if (balanceReadable) {

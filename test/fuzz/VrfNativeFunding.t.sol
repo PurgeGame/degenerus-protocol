@@ -25,7 +25,10 @@ contract NativeFundingHarness is YieldHarness {
     function target() external view returns (uint256 t) { (, t) = _vrfNativeLevels(); }
     function lowWater() external view returns (uint256 l) { (l,) = _vrfNativeLevels(); }
     function minimum() external view returns (uint256) { return _vrfMinFulfillBalance(); }
-    function surplus() external view returns (bool, uint256) { return _vrfYieldSurplus(); }
+    function surplus() external view returns (bool, uint256) {
+        MineFlipGas.Meter memory unmetered;
+        return _vrfYieldSurplus(unmetered, GasBounds.VRF_LEVEL_FUND_TAIL);
+    }
     function readBalance() external view returns (bool, uint256) {
         MineFlipGas.Meter memory unmetered;
         return _vrfNativeBalance(unmetered, VRF_READ_RESERVE);
@@ -44,7 +47,7 @@ contract NativeFundingHarness is YieldHarness {
     function topUp() external {
         MineFlipGas.Meter memory unmetered;
         (bool ok, uint256 balance) = _vrfNativeBalance(unmetered, GasBounds.VRF_LEVEL_FUND_TAIL);
-        (bool read, uint256 yield) = _vrfYieldSurplus();
+        (bool read, uint256 yield) = _vrfYieldSurplus(unmetered, GasBounds.VRF_LEVEL_FUND_TAIL);
         (, uint256 t) = _vrfNativeLevels();
         if (ok && read && balance < t) _topUpVrfNative(unmetered, GasBounds.VRF_LEVEL_FUND_TAIL, t - balance, yield);
     }
@@ -223,6 +226,18 @@ contract VrfNativeFundingTest is Test {
     }
     function testBrokenStethReadNeverUsesSdgnrsBeforeUnknownYield() public {
         vm.mockCallRevert(address(st), abi.encodeWithSelector(st.balanceOf.selector), "broken");
+        h.refill(); assertEq(c.sent(), 0);
+        vm.clearMockedCalls(); _unchanged(2 ether + 1, 3 ether, 5 ether);
+    }
+    /// @dev A stETH without code or with a short answer skips the funding and distribution.
+    function testDeadStethSkipsFundingWithoutLedgerChange() public {
+        bytes memory code = address(st).code;
+        vm.etch(address(st), "");
+        (bool ok,) = h.surplus(); assertFalse(ok);
+        h.refill(); assertEq(c.sent(), 0);
+        vm.etch(address(st), code); _unchanged(2 ether + 1, 3 ether, 5 ether);
+        vm.mockCall(address(st), abi.encodeWithSelector(st.balanceOf.selector), hex"1234");
+        (ok,) = h.surplus(); assertFalse(ok);
         h.refill(); assertEq(c.sent(), 0);
         vm.clearMockedCalls(); _unchanged(2 ether + 1, 3 ether, 5 ether);
     }
