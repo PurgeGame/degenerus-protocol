@@ -506,39 +506,40 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     // M. Terminal two-case entropy
     // ---------------------------------------------------------------------
 
-    /// Economic death with working VRF — the normal ending. Death is detected before
-    /// the day's request fires, so the terminal swap commits everything, the FRESH
-    /// terminal word resolves it in a single drain, and no window key on either
-    /// parity survives.
+    /// Purchase-deadline death with working VRF — the normal ending. Thirty game days pass
+    /// with the target unmet, so the ending decision fires before the next request's normal
+    /// work: the terminal swap commits everything, the FRESH terminal word resolves it in a
+    /// single drain, and no window key on either parity survives. Wall time alone never
+    /// ends the game, so the logical day is moved thirty-one days past the level's start
+    /// instead of grinding thirty live days.
     function testTerminalFreshWordClearsEverythingInOneCohort() public {
         vm.pauseGasMetering();
         (uint24 L, , ) = _runJackpotPhase(MIDDAY_NEVER, MODE_DRAIN_SAME_DAY, true);
 
-        // Purchase phase: queue a live cohort, then drive the liveness ending with
-        // VRF fully working (fulfill everything).
+        // Purchase phase: queue a live cohort, then age the level past the purchase deadline
+        // and let days complete with VRF fully working (every request fulfilled).
         _buyTickets();
         assertGt(
             _queueLen(_writeKeyOf(L + 1)),
             0,
             "harness: the evening cohort must stage on the write side"
         );
-        // ONE warp straight past the liveness deadline from the settled evening:
-        // no intermediate day is ever requested, so the first advance detects
-        // death on a fully-idle game (no recorded word, nothing in flight) and
-        // the terminal path owns the whole swap/request/drain sequence. Repeated
-        // shorter warps would instead run the stall-recovery re-walk, whose
-        // recorded-but-unsealed day word is the delivered-word terminal case —
-        // a different (write-buffer-forfeiting) ending than this test pins.
-        simTime += 150 days;
-        vm.warp(simTime);
-        for (uint256 j = 0; j < 60 && !game.gameOver(); j++) {
-            (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
-            );
-            ok;
+        // The target stays unmet through those days: the next pool is empty and the target-met
+        // latch is clear (the fixture's own AFKing buyers would otherwise meet the target and
+        // promote the level every few days).
+        {
+            bytes32 poolSlot = bytes32(GameSlots.PRIZE_POOLS_PACKED);
+            uint256 pools = uint256(vm.load(address(game), poolSlot));
+            vm.store(address(game), poolSlot, bytes32(pools & ~((uint256(1) << 128) - 1)));
+            uint256 header = uint256(vm.load(address(game), bytes32(0)));
+            vm.store(address(game), bytes32(0), bytes32(header & ~(uint256(0xff) << 136)));
+        }
+        _setRequestedFixtureDay(game.currentDayView() + 31);
+        for (uint256 d = 0; d < 8 && !game.gameOver(); d++) {
+            _runFullDay();
             _fulfillPending();
         }
-        assertTrue(game.gameOver(), "harness: liveness death must latch game over");
+        assertTrue(game.gameOver(), "harness: the purchase deadline must latch game over");
 
         _assertPayoutKeyClear(L + 1);
     }

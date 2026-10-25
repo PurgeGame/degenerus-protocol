@@ -213,7 +213,9 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         assertTrue(b1, "first day of level 4 buys");
         assertEq(_sdgnrsBonusLevel(), 4, "latched at 4");
 
-        // Same level, next day, richer again: no second purchase.
+        // Same level, next day, richer again: no second purchase. The fixture's pools meet the
+        // level target on day one, so the Game promotes itself to level 5; hold it at 4.
+        _setLevel(4);
         _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
         _nextDay(0x5D70301);
         (bool b2,,) = _lastWhalePurchase();
@@ -235,7 +237,9 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         assertFalse(b1, "too poor: nothing");
         assertEq(_sdgnrsBonusLevel(), 4, "the attempt latched the level");
 
-        // Richer the next day, same level: no second attempt.
+        // Richer the next day, same level: no second attempt. The fixture's pools meet the
+        // level target on day one, so the Game promotes itself to level 5; hold it at 4.
+        _setLevel(4);
         _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
         _nextDay(0x5D70401);
         (bool b2,,) = _lastWhalePurchase();

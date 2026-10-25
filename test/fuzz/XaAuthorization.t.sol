@@ -15,13 +15,16 @@ contract XaAuthorizationTest is DeployProtocol {
     XaForeignCaller private foreignCaller;
     function setUp() public { _deployProtocol(); foreignCaller = new XaForeignCaller(); }
     function test_AllPrivilegedCallerSetsAndForeignContexts() public {
-        address[11] memory callers = [ContractAddresses.GAME, ContractAddresses.COIN, ContractAddresses.COINFLIP, ContractAddresses.ADMIN, ContractAddresses.CRAPS, ContractAddresses.SDGNRS, ContractAddresses.WWXRP, ContractAddresses.PARIMUTUEL, ContractAddresses.VAULT, ContractAddresses.DGNRS, ContractAddresses.JACKPOTS];
-        for (uint256 i; i < 33; ++i) {
+        address[13] memory callers = [ContractAddresses.GAME, ContractAddresses.COIN, ContractAddresses.COINFLIP, ContractAddresses.ADMIN, ContractAddresses.CRAPS, ContractAddresses.SDGNRS, ContractAddresses.WWXRP, ContractAddresses.PARIMUTUEL, ContractAddresses.VAULT, ContractAddresses.DGNRS, ContractAddresses.JACKPOTS, ContractAddresses.QUESTS, ContractAddresses.AFFILIATE];
+        for (uint256 i; i < 32; ++i) {
             (bytes memory data, uint256 allowed, bytes4 denied) = _entry(i);
-            for (uint256 j; j < callers.length; ++j) {
+            address target = _target(i);
+            // Quests and Affiliate are their own contracts here: only the Coinflip's callers include them.
+            uint256 n = i <= 16 ? 11 : 13;
+            for (uint256 j; j < n; ++j) {
                 uint256 snap = vm.snapshotState();
                 vm.prank(callers[j]);
-                (bool ok, bytes memory result) = address(coinflip).call(data);
+                (bool ok, bytes memory result) = target.call(data);
                 bytes4 err = result.length >= 4 ? bytes4(result) : bytes4(0);
                 if (allowed & (1 << j) == 0) { assertFalse(ok, "unauthorized success"); assertEq(err, denied, "wrong denial"); }
                 else { assertTrue(ok || err != denied, "valid caller denied"); }
@@ -29,22 +32,29 @@ contract XaAuthorizationTest is DeployProtocol {
             }
             for (uint256 nonce=11; nonce<=15; nonce+=4) {
                 vm.prank(vm.computeCreateAddress(address(this),nonce));
-                (bool retiredOk,bytes memory retiredResult)=address(coinflip).call(data);
+                (bool retiredOk,bytes memory retiredResult)=target.call(data);
                 assertFalse(retiredOk,"retired address authorized");assertEq(bytes4(retiredResult),denied);
             }
             vm.prank(address(0xBAD));
-            (bool ok, bytes memory result) = address(coinflip).call(data);
+            (bool ok, bytes memory result) = target.call(data);
             assertFalse(ok); assertEq(bytes4(result), denied, "EOA denial");
-            (ok, result) = foreignCaller.invoke(address(coinflip), data, false);
+            (ok, result) = foreignCaller.invoke(target, data, false);
             assertFalse(ok); assertEq(bytes4(result), denied, "contract denial");
-            for (uint256 j; j < callers.length; ++j) {
+            for (uint256 j; j < n; ++j) {
                 vm.prank(callers[j]);
-                (ok, result) = foreignCaller.invoke(address(coinflip), data, true);
+                (ok, result) = foreignCaller.invoke(target, data, true);
                 assertFalse(ok, "foreign delegate success");
                 bytes4 err = bytes4(result);
                 assertTrue(err == bytes4(keccak256("DegenerusQuestsForeignContext()")) || err == bytes4(keccak256("DegenerusAffiliateForeignContext()")), "foreign context denial");
             }
         }
+    }
+    /// @dev The eip170 profile deploys Quests (entries 0-13) and Affiliate (14-16) as their own contracts;
+    ///      only the Coinflip entries (17-32) land on the Coinflip.
+    function _target(uint256 i) private view returns (address) {
+        if (i <= 13) return address(quests);
+        if (i <= 16) return address(affiliate);
+        return address(coinflip);
     }
     function _entry(uint256 i) private pure returns (bytes memory, uint256, bytes4) {
         if (i == 0) return (hex"4738bb8800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 1, bytes4(keccak256("OnlyGame()"))); // DegenerusQuests.rollDailyQuest
@@ -73,13 +83,12 @@ contract XaAuthorizationTest is DeployProtocol {
         if (i == 23) return (hex"0e0b46f40000000000000000000000000000000000000000000000000000000000000000", 1, bytes4(keccak256("OnlyDegenerusGame()"))); // CoinflipCore.armBafDraw
         if (i == 24) return (hex"e08b07510000000000000000000000000000000000000000000000000000000000000000", 1, bytes4(keccak256("OnlyDegenerusGame()"))); // CoinflipCore.sweepAccountCoinflips
         if (i == 25) return (hex"ffa84f76000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 1, bytes4(keccak256("OnlyDegenerusGame()"))); // CoinflipCore.processCoinflipPayouts
-        if (i == 26) return (hex"3efee220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 1, bytes4(keccak256("OnlyDegenerusGame()"))); // Coinflip.processCoinflipGap
-        if (i == 27) return (hex"ca74493800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 16, bytes4(keccak256("OnlyCraps()"))); // CoinflipCore.armDiceRunRecord
-        if (i == 28) return (hex"0003fb6300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 253, bytes4(keccak256("OnlyFlipCreditors()"))); // CoinflipCore.creditFlip_g317
-        if (i == 29) return (hex"c7a80d4f0000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 253, bytes4(keccak256("OnlyFlipCreditors()"))); // CoinflipCore.creditFlipBatch
-        if (i == 30) return (hex"000fae5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 253, bytes4(keccak256("OnlyFlipCreditors()"))); // CoinflipCore.creditFlipPair_g578
-        if (i == 31) return (hex"39f3cf32", 32, bytes4(keccak256("OnlysDGNRS()"))); // CoinflipCore.redeemableFlipBacking
-        if (i == 32) return (hex"63f29eea0000000000000000000000000000000000000000000000000000000000000000", 32, bytes4(keccak256("OnlysDGNRS()"))); // CoinflipCore.withdrawRedeemedFlip
+        if (i == 26) return (hex"ca74493800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 16, bytes4(keccak256("OnlyCraps()"))); // CoinflipCore.armDiceRunRecord
+        if (i == 27) return (hex"0003fb6300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 6385, bytes4(keccak256("OnlyFlipCreditors()"))); // CoinflipCore.creditFlip_g317
+        if (i == 28) return (hex"c7a80d4f0000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 6385, bytes4(keccak256("OnlyFlipCreditors()"))); // CoinflipCore.creditFlipBatch
+        if (i == 29) return (hex"000fae5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 6385, bytes4(keccak256("OnlyFlipCreditors()"))); // CoinflipCore.creditFlipPair_g578
+        if (i == 30) return (hex"39f3cf32", 32, bytes4(keccak256("OnlysDGNRS()"))); // CoinflipCore.redeemableFlipBacking
+        if (i == 31) return (hex"63f29eea0000000000000000000000000000000000000000000000000000000000000000", 32, bytes4(keccak256("OnlysDGNRS()"))); // CoinflipCore.withdrawRedeemedFlip
         revert("unknown entry");
     }
 }
