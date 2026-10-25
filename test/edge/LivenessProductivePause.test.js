@@ -6,6 +6,8 @@ import { seedLogicalDay, setPackedField } from "../helpers/logicalDayFixture.js"
 import { advanceTime } from "../helpers/testUtils.js";
 
 describe("LivenessProductivePause", function () {
+  // Each aged fixture deploys the full protocol again (about 100s on a loaded machine).
+  this.timeout(300_000);
   after(restoreAddresses);
 
   async function agedPurchase() {
