@@ -135,7 +135,7 @@ contract MockGame {
         uint256 value = uint256(slots[slot]);
         uint24 day = GameTimeLib.currentDayIndex();
         if (slot == bytes32(0)) value = (value & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24);
-        if (slot == bytes32(uint256(5))) value = (value & ~(uint256(0xffffff) << 216)) | (uint256(day) << 216);
+        if (slot == bytes32(GameSlots.LAST_DAILY_REQUEST_WALL_DAY)) value = (value & ~(uint256(0xffffff) << 216)) | (uint256(day) << 216);
         return bytes32(value);
     }
     function currentDayView_g542950() external view returns (uint24) { return GameTimeLib.currentDayIndex(); }
