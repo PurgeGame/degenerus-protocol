@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FreezeHarness -- Exposes freeze-related internal helpers for testing.
 contract FreezeHarness is DegenerusGameAdvanceModule, WalletSeed {
@@ -72,7 +73,7 @@ contract FreezeLifecycleTest is Test {
     FreezeHarness harness;
     uint256 internal constant SENTINEL = uint256(1) << 255;
     uint256 internal constant FUTURE_MAX = type(uint128).max >> 1;
-    bytes32 internal constant PENDING_SLOT = bytes32(uint256(9));
+    bytes32 internal constant PENDING_SLOT = bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED);
 
     function setUp() public {
         // The freeze push calls the parimutuel at its fixed address; this harness deploys
@@ -95,7 +96,7 @@ contract FreezeLifecycleTest is Test {
 
     function testPendingSlotPin() public {
         harness.setRawPendingPools(0xabc);
-        assertEq(uint256(vm.load(address(harness), PENDING_SLOT)), 0xabc, "prizePoolPendingPacked is slot 9");
+        assertEq(uint256(vm.load(address(harness), PENDING_SLOT)), 0xabc, "prizePoolPendingPacked is slot 8");
     }
 
     // =====================================================================

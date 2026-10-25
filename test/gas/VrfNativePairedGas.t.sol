@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 import {MineFlipRequestGasTest, RequestGameSeeder} from "./MineFlipRequestGas.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract NativePairSeeder is RequestGameSeeder {
     function pendingCraps() external { lootboxRngPacked |= uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer()); }
@@ -74,7 +75,12 @@ contract VrfNativePairedGasTest is MineFlipRequestGasTest {
             vm.prank(ContractAddresses.ADMIN);
             host.updateVrfCoordinatorAndSub(address(coordinator), 2, bytes32(uint256(1234)), 150_000);
             (,, uint256 reissued,) = host.committed();
-            assertTrue(reissued != original && coordinator.commitments(reissued) != bytes32(0), "swap reissued the daily request");
+            // The Game keeps the low 64 bits; the full ID is the coordinator's derivation for the new nonce.
+            bytes32 keyHash = vm.load(address(game), bytes32(GameSlots.VRF_KEY_HASH));
+            uint256 preSeed = uint256(keccak256(abi.encode(keyHash, address(game), sub, coordinator.requests(address(game)))));
+            uint256 fullId = uint256(keccak256(abi.encode(keyHash, preSeed)));
+            assertTrue(reissued != original && reissued == uint64(fullId) && coordinator.commitments(fullId) != bytes32(0),
+                "swap reissued the daily request");
         }
         (, uint96 balance,,,) = coordinator.getSubscription(sub);
         if (kind == 3 || kind == 4 || kind == 7) assertEq(balance, 0.49352 ether, "funded to target");
