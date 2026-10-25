@@ -59,6 +59,14 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
             nextReserve = uint256(nextBase) * 175 / 100;
         }
         assertEq(sdgnrs.pendingRedemptionEthValue(), nextReserve);
+        // Whether the call that finished the batch also requested the next day's word depends on
+        // the gas partition and the later burns; run every variant to the same request point so
+        // the owners' live stake reads (which target the requested day) compare like for like.
+        for (uint256 i; i < 50; ++i) {
+            uint8 next = game.nextMinerAction();
+            if (next == 0 || next == 2) break; // idle, or waiting on the request just issued
+            game.mineFlip{gas: allowance}(0);
+        }
         for (uint256 i; i < OWNERS; ++i) assertEq(_claimTokens(_owner(i), id), 0);
         return _awardDigest(vm.getRecordedLogs(), id);
     }

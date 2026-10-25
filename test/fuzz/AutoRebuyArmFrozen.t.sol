@@ -3,9 +3,10 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
-/// @notice Arming coinflip auto-rebuy is frozen while two or more days are unresolved, so a
-///         delivered word whose derived results are already readable cannot be compounded
-///         through by a position that arms after seeing them.
+/// @notice A position already on auto-rebuy is frozen from the daily request until that day's flip
+///         is applied: it holds a carry the pending word prices, so toggling off would extract it
+///         before a known loss. Arming stays open: it first settles every published outcome and
+///         can only affect the following unknown round. Wall time creates no extra unresolved day.
 contract AutoRebuyArmFrozen is DeployProtocol {
     uint256 private constant WORD_NORMAL = 0xA11CE;
     uint256 private constant WORD_LATE = 0xBEEF_0001;
@@ -15,6 +16,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
 
     address private player = makeAddr("rebuy_player");
     address private armed = makeAddr("rebuy_armed");
+    address private late = makeAddr("rebuy_late");
     uint256 private _t;
     uint256 private _lastFulfilledReqId;
 
@@ -26,11 +28,11 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         vm.deal(address(game), 5_000_000 ether);
     }
 
-    function test_ArmingFrozenFromFulfilUntilTheDaySeals() public {
+    function test_ArmedPositionFrozenFromRequestUntilItsDayResolves() public {
         _runStageNewDay(WORD_NORMAL);
         _runStageNewDay(WORD_NORMAL ^ 1);
 
-        // Caught up: arming is open. One position stays armed into the stall.
+        // Caught up: arming and disarming are open. One position stays armed into the request.
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(0, true, 0);
         vm.prank(player);
@@ -41,47 +43,45 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         uint256 reqR = _requestFreshDaily();
+        uint24 R = game.currentDayView();
         _t += 3 days;
         vm.warp(_t);
-        uint24 W = game.currentDayView_g542950();
+        assertEq(game.currentDayView_g542950(), R, "a stall creates no further game day");
 
-        // Stalled with the word outstanding: arming frozen, and the armed position frozen.
-        vm.prank(player);
+        // Word outstanding: the armed position is frozen. A new position may still arm (its
+        // arming settles only published outcomes), and once armed it is frozen like the rest.
+        vm.prank(armed);
         vm.expectRevert(RngLocked.selector);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
+        vm.prank(late);
         coinflip.setCoinflipAutoRebuy(0, true, 0);
+        vm.prank(late);
+        vm.expectRevert(RngLocked.selector);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
+
+        // Word delivered but not yet applied: still frozen (the result is readable now).
+        mockVRF.fulfillRandomWords(reqR, WORD_LATE);
         vm.prank(armed);
         vm.expectRevert(RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
 
-        // Word delivered but not yet applied: still frozen (results are readable now).
-        mockVRF.fulfillRandomWords(reqR, WORD_LATE);
-        vm.prank(player);
-        vm.expectRevert(RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(0, true, 0);
-
-        // R seals on its late word. Once R's read cohort drains, the same crank chain issues
-        // W's fresh daily request under the lock: there is no unlocked window between them.
+        // R seals on its late word. Once R's read cohort drains, the same crank chain issues the
+        // next day's request under the lock: there is no unlocked window between them.
         uint256 fresh = _requestFreshDaily();
-        assertEq(_dailyIdx(), W - 3, "R sealed before W's fresh request");
-        // R+1..W remain unresolved while W's word is outstanding: arming and the armed position
-        // stay frozen.
-        vm.prank(player);
-        vm.expectRevert(RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(0, true, 0);
+        assertEq(game.currentDayView(), R + 1, "the next request advances exactly one logical day");
         vm.prank(armed);
         vm.expectRevert(RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
-        game.mineFlip(0); // backfill: every day through W resolved, lock still held
-        // Nothing unresolved remains, so arming is open even under the lock: a known run can
-        // only be claimed plainly, never compounded.
-        vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(0, true, 0);
+        game.mineFlip(0); // apply the word: the requested day is resolved, the lock still held
+        // Nothing unresolved remains, so the armed positions are free even under the lock.
         vm.prank(armed);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
+        vm.prank(late);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         _advanceUntilUnlocked();
-        assertEq(_dailyIdx(), W, "sealed W");
+        assertEq(_dailyIdx(), R + 1, "sealed the requested day");
     }
 
     function _runStageNewDay(uint256 vrfWord) internal {

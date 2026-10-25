@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -440,7 +441,8 @@ contract MinerNoProgressTest is Test {
             abi.encode(uint32(1), uint32(0), uint32(0), uint256(0)));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
         vm.etch(ContractAddresses.CRAPS, address(new MinerMaintenanceTable()).code);
-
+        // The table delegates its lifecycle entries to the profile module.
+        ProfileModules.installCraps(vm);
         return MinerMaintenanceTable(ContractAddresses.CRAPS);
     }
 

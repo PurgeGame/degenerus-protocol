@@ -157,6 +157,9 @@ contract FSMAdvanceHarness is MinerHarness {
     /// @dev An empty game whose deterministic ending is latched and whose (empty) tally is
     ///      complete, ended by the production terminal worker mineFlip's Terminal stage runs.
     function drainEmptyDeadGame(uint24 day) external {
+        // A hard ending: no day completed for the dead-VRF window, so the ending is always the
+        // deterministic one and the terminal worker latches it on entry.
+        lastDailyCompletedAt = uint48(block.timestamp - _VRF_DEAD_TIMEOUT);
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
         deadTallyStage = 3;
         (bool ok,) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
@@ -207,6 +210,8 @@ contract GameFSMProductionTransitionTest is Test {
         // RNG, Advance and jackpot code share Daily. Stub only the external empty
         // Craps dependency; run the actual consolidated daily state writers.
         vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameDailyModule).runtimeCode);
+        // The daily request and the delivered-word apply live in the RNG module.
+        vm.etch(ContractAddresses.GAME_RNG_MODULE, vm.getDeployedCode("Eip170Rng.sol:Eip170Rng"));
         // The engine drains the (empty) ticket queues and the delivered cohort's (empty) human
         // boxes on its own path (60d31f775); both run production bytecode.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGameTicketModule).runtimeCode);
