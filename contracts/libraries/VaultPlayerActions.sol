@@ -57,15 +57,19 @@ library VaultPlayerActions {
                 || selector == IVaultAffiliateClaim.claimAffiliateDgnrs.selector
                 || selector == IVaultBatchAffiliateClaim.claimAffiliateDgnrs.selector;
         }
+        // Affiliate is its own contract in the eip170 profile; the glamsterdam profile aliases it
+        // to Coinflip, where a non-matching selector falls through to the Coinflip branch.
+        if (target == ContractAddresses.AFFILIATE) {
+            if (selector == IDegenerusAffiliate.createAffiliateCode.selector
+                || selector == IDegenerusAffiliate.referPlayer.selector
+                || selector == IDegenerusAffiliate.claim.selector) return true;
+        }
         if (target == ContractAddresses.COINFLIP) {
             return selector == ICoinflip.depositCoinflip.selector
                 || selector == ICoinflip.claimCoinflips.selector
                 || selector == ICoinflip.claimCoinflipCarry.selector
                 || selector == ICoinflip.setCoinflipAutoRebuy.selector
-                || selector == ICoinflip.setCoinflipAutoRebuyTakeProfit.selector
-                || selector == IDegenerusAffiliate.createAffiliateCode.selector
-                || selector == IDegenerusAffiliate.referPlayer.selector
-                || selector == IDegenerusAffiliate.claim.selector;
+                || selector == ICoinflip.setCoinflipAutoRebuyTakeProfit.selector;
         }
         if (target == ContractAddresses.COIN) {
             return selector == IDegenerusCoin.decimatorBurn.selector;

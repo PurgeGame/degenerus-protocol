@@ -14,7 +14,7 @@ const canonical = name => name.replace(/_g\d+$/, "");
 const contracts = {
   GAME: "DegenerusGame", COINFLIP: "Coinflip", COIN: "FLIP", CRAPS: "CrapsBattle",
   PARIMUTUEL: "DegenerusParimutuel", WWXRP: "WWXRP", SDGNRS: "sDGNRS", DGNRS: "DGNRS",
-  JACKPOTS: "DegenerusJackpots",
+  AFFILIATE: "DegenerusAffiliate", JACKPOTS: "DegenerusJackpots",
   AFKING_SUB_TOKEN: "AFKingSubscriptionToken", GNRUS: "GNRUS",
   ADMIN: "DegenerusAdmin",
 };
@@ -37,11 +37,6 @@ const excluded = {
     "raiseSmurfBaseAllowance", "setLootboxRngThreshold", "setMiddayMaxBasefee", "setThanosLevel",
   ],
   COINFLIP: [
-    // Consolidated Affiliate and Quests hooks: Game, token or Parimutuel authorized.
-    "awardQuestStreakBonus", "awardQuestStreakShield", "beginAfking", "finalizeAfking",
-    "handleAffiliate", "handleDecimator", "handleDegenerette", "handleFlip", "handleFoilPurchase",
-    "handlePurchase", "payAffiliate", "payAffiliateCombined", "recordCrapsAction", "recordGrowthBet",
-    "referSmurf", "rollDailyQuest", "rollLevelQuest",
     "armBafDraw", "armDiceRunRecord", "armRecord", "claimCoinflipsFromFlip",
     "consumeCoinflipsForBurn", "consumeFlipBacking", "creditFlip", "creditFlipBatch",
     "creditFlipPair", "creditSdgnrsBacking", "fundRecordPool", "onDailyRequest",
@@ -60,6 +55,14 @@ const excluded = {
     "vaultComp", "donate", // Dedicated Vault batch/delegate-budget controls.
     "creditPasses", "deliverPasses", "resolveRngSlot_g1079",
     "setBattleCreator", // DGVE owner calls this directly, including to authorize the Vault.
+  ],
+  // Affiliate and Quests hooks: Game, token or Parimutuel authorized. A standalone Affiliate
+  // exposes the first set; the Coinflip shell of the profile that hosts it adds both.
+  AFFILIATE: ["payAffiliate", "payAffiliateCombined", "referSmurf"],
+  QUESTS_SHELL: [
+    "awardQuestStreakBonus", "awardQuestStreakShield", "beginAfking", "finalizeAfking",
+    "handleAffiliate", "handleDecimator", "handleDegenerette", "handleFlip", "handleFoilPurchase",
+    "handlePurchase", "recordCrapsAction", "recordGrowthBet", "rollDailyQuest", "rollLevelQuest",
   ],
   PARIMUTUEL: ["recordGrowth", "runGrowthWork"],
   WWXRP: [
@@ -96,25 +99,35 @@ function selectorSignature(name, method) {
   }
   return selectorInterfaces.get(name).getFunction(method).format("sighash");
 }
+const abiOf = name => new Interface(JSON.parse(fs.readFileSync(path.join(root, `${name}.sol`, `${name}.json`), "utf8")).abi);
+const allowedOf = body => new Set([...body.matchAll(/(\w+)\.(\w+)\.selector/g)].map(([, name, method]) => selectorSignature(name, method)));
+const mutableOf = iface => iface.fragments.filter(f => f.type === "function" && !["pure", "view"].includes(f.stateMutability));
+// One profile hosts Affiliate (and Quests) inside Coinflip; the other deploys them standalone.
+const sharedShell = mutableOf(abiOf(contracts.COINFLIP)).some(f => f.name === "createAffiliateCode");
+const bodies = Object.fromEntries(branches.map(([, target, body]) => [target, body]));
 let count = 0;
 for (const [, target, body] of branches) {
-  const name = contracts[target];
+  const name = sharedShell && target === "AFFILIATE" ? contracts.COINFLIP : contracts[target];
   assert.ok(name, `Unclassified target ${target}`);
-  const artifact = JSON.parse(fs.readFileSync(path.join(root, `${name}.sol`, `${name}.json`), "utf8"));
-  const iface = new Interface(artifact.abi);
-  const mutable = iface.fragments.filter(f => f.type === "function" && !["pure", "view"].includes(f.stateMutability));
+  const iface = abiOf(name);
+  const mutable = mutableOf(iface);
   const signatures = new Set(mutable.map(f => f.format("sighash")));
-  const allowed = new Set([...body.matchAll(/(\w+)\.(\w+)\.selector/g)].map(([, name, method]) => selectorSignature(name, method)));
-  for (const signature of allowed) assert.ok(signatures.has(signature), `${target}: invalid allowed ABI ${signature}`);
+  const own = allowedOf(body);
+  for (const signature of own) assert.ok(signatures.has(signature), `${target}: invalid allowed ABI ${signature}`);
+  count += own.size;
+  // The shared shell answers at one address: its allowlist and exclusions are the union.
+  if (sharedShell && target === "AFFILIATE") continue;
+  const merged = sharedShell && target === "COINFLIP";
+  const allowed = merged ? new Set([...own, ...allowedOf(bodies.AFFILIATE)]) : own;
+  const exclusions = merged ? [...excluded.COINFLIP, ...excluded.AFFILIATE, ...excluded.QUESTS_SHELL] : excluded[target];
   for (const f of mutable) {
     const signature = f.format("sighash");
-    assert.ok(allowed.has(signature) || excluded[target].some(name => canonical(name) === canonical(f.name)), `${target}: unreviewed player surface ${signature}`);
+    assert.ok(allowed.has(signature) || exclusions.some(name => canonical(name) === canonical(f.name)), `${target}: unreviewed player surface ${signature}`);
     if (!allowed.has(signature)) {
       assert.ok(![...allowed].some(s => iface.getFunction(s).selector === f.selector), `${target}: excluded selector collision ${signature}`);
     }
   }
-  for (const name of excluded[target]) assert.ok(mutable.some(f => canonical(f.name) === canonical(name)), `${target}: stale exclusion ${name}`);
-  count += allowed.size;
+  for (const name of exclusions) assert.ok(mutable.some(f => canonical(f.name) === canonical(name)), `${target}: stale exclusion ${name}`);
 }
 const vault = JSON.parse(fs.readFileSync(path.join(root, "DegenerusVault.sol", "DegenerusVault.json"), "utf8"));
 const vaultIface = new Interface(vault.abi);
