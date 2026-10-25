@@ -20,6 +20,8 @@ contract PoolConservationDegenesis is PoolConservation, DegenesisWeekOpening {
     function setUp() public override {
         _deployProtocol();
         _degenesisWeek(true);
+        // The week leaves the engine idle on its last day: the next wall day makes a daily request due.
+        vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), address(game).balance + 5_000_000 ether);
         mockVRF.fundSubscription(1, 100e18);
         startingBacking = address(game).balance + mockStETH.balanceOf(address(game));
