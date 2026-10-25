@@ -24,7 +24,9 @@ contract DegeneretteBetInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        vm.warp(block.timestamp + 1 days);
+        // No wall-clock advance: the fixture's logical day is already requested, so mineFlip here is only the
+        // Degenerette read consumer. A due daily request would let the first mineFlip start a real day
+        // and leave the handler's seeded word fixture inconsistent with the request in flight.
 
         // Game handler drives purchases (needed to set up lootbox RNG index)
         gameHandler = new GameHandler(game, 10);
