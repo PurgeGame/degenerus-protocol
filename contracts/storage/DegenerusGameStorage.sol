@@ -3442,9 +3442,9 @@ abstract contract DegenerusGameStorage {
     /// 246,071 gas in three samples; 300k includes headroom for coordinator overhead.
     /// Each credit wei is backed by four donated wei, so a request is paid for while
     /// 4 * 2 * 300k * (basefee + allowance) covers billed * 1.24 * fulfilment gas price. The
-    /// callback now bills about 76k gas (10.8k measured callback plus about 65k coordinator
-    /// overhead): the donation backing covers a fulfilment price of about 25 times
-    /// (basefee + allowance).
+    /// callback bills about 107k gas (10.8k measured callback plus up to about 96k coordinator
+    /// overhead, from the sample above): the donation backing covers a fulfilment price of
+    /// about 18 times (basefee + allowance), about 4.7 gwei at the basefee floor.
     uint256 internal constant MIDDAY_RNG_BILLED_GAS = 300_000;
     uint256 internal constant MIDDAY_RNG_CHARGE_MULT = 2;
     uint256 internal constant MIDDAY_BASEFEE_FLOOR = 0.01 gwei;
