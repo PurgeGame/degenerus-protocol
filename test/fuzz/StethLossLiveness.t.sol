@@ -7,6 +7,7 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Etched over the Game only to seed an outstanding claimable and loan collateral; the real runtime
 ///      is restored straight after. Backing ETH is dealt to the Game by the caller.
@@ -16,6 +17,20 @@ contract StethLossSeeder is DegenerusGameStorage {
     function credit(uint32 id, uint256 amount) external {
         _creditClaimable(id, amount);
         claimablePool += uint128(amount);
+    }
+
+    /// @dev Up to `limit` created terminal-level tickets of wallet `id`, as claimDeadVrf references.
+    function deadRefs(uint32 id, uint256 limit) external view returns (uint256[] memory refs) {
+        uint24 lvl = _gameOverTicketLevel(level);
+        refs = new uint256[](limit);
+        uint256 n;
+        for (uint256 t; t < 256 && n < limit; ++t) {
+            uint256 len = _bucketLength(lvl, t);
+            for (uint256 k; k < len && n < limit; ++k) {
+                if (_bucketIdAtUnchecked(lvl, uint8(t), k) == id) refs[n++] = (t << 64) | k;
+            }
+        }
+        assembly ("memory-safe") { mstore(refs, n) }
     }
 }
 
@@ -77,6 +92,9 @@ contract StethLossLiveness is RedemptionFixture {
     uint8 private constant BEFORE_SWEEP = 2;
 
     uint256 private shortfalls;
+    /// @dev A hard-stall ending credits the fixed pot ticket by ticket, on claim (claimDeadVrf). A loss that
+    ///      lands after the latch meets those credits only once the tickets are claimed.
+    bool private claimDeadShares;
     uint256 private paidClaims;
 
     function test_stethLoss10Percent_midGame() public { _scenario(1_000, MID_GAME); }
@@ -126,7 +144,10 @@ contract StethLossLiveness is RedemptionFixture {
         // 2. Game over by liveness timeout; the terminal payouts complete.
         _driveToGameOver();
         assertTrue(game.gameOver(), "game over never latched");
-        if (when == AFTER_GAME_OVER) _cutStETH(lossBps);
+        if (when == AFTER_GAME_OVER) {
+            _cutStETH(lossBps);
+            claimDeadShares = true;
+        }
 
         // 3. Claims pay or revert with the documented shortfall error, never a panic.
         _claimAll();
@@ -239,6 +260,15 @@ contract StethLossLiveness is RedemptionFixture {
     function _driveToGameOver() private {
         vm.warp(vm.getBlockTimestamp() + 370 days);
         for (uint256 i; i < 400 && !game.gameOver(); ++i) _crank(8);
+        // The latch precedes the resumable prize draw: finish the terminal credits too, so that a loss
+        // landing after "game over" meets credits granted while the stETH still existed.
+        for (uint256 i; i < 400 && _terminalPayoutPending(); ++i) _crank(8);
+        assertFalse(_terminalPayoutPending(), "the terminal payout never completed");
+    }
+
+    function _terminalPayoutPending() private view returns (bool) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED)));
+        return (packed >> 48) & 0xFF == 0;
     }
 
     function _idle() private { _crank(200); }
@@ -271,9 +301,20 @@ contract StethLossLiveness is RedemptionFixture {
 
     // ---------------------------------------------------------------- claims
 
+    function _claimDeadShares(address who) private {
+        uint32 id = game.walletIdOf_g3120(who);
+        if (id == 0) return;
+        bytes memory real = address(game).code;
+        vm.etch(address(game), type(StethLossSeeder).runtimeCode);
+        uint256[] memory refs = StethLossSeeder(address(game)).deadRefs(id, 512);
+        vm.etch(address(game), real);
+        if (refs.length != 0) game.claimDeadVrf(id, refs);
+    }
+
     function _claimAll() private {
         address[6] memory who = [driver, borrower, subscriber, bystander, address(sdgnrs), ContractAddresses.CREATOR];
         for (uint256 i; i < who.length; ++i) {
+            if (claimDeadShares) _claimDeadShares(who[i]);
             uint256 owed = game.claimableWinningsOf(who[i]);
             vm.prank(who[i]);
             try game.claimWinnings(0) {
