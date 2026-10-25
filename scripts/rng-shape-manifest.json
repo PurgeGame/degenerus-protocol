@@ -1666,7 +1666,7 @@
       "file": "modules/CoinflipCore.sol",
       "function": "processCoinflipPayouts",
       "expression": "boolwin=(rngWord&1)==1;",
-      "reason": "Owner 2026-10-22: each reverse flip adds one to the raw daily word and must reverse its win bit."
+      "reason": "Owner 2026-10-22/24: the coin word is the raw daily word plus the frozen reverse flips, so each flip reverses the win bit; nudges reach no other derivation, which all hash(tag, raw word)."
     }
   ]
 }

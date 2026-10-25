@@ -51,23 +51,21 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
     ///      not the module, so the LINK-paid call carries no delegatecall overhead).
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         uint256 vrf;
+        // The coordinator and request ID share one slot.
         assembly ("memory-safe") { vrf := sload(vrfCoordinator.slot) }
         if (msg.sender != address(uint160(vrf))) revert OnlyCoordinator();
-        uint16 flags;
-        bool daily;
+        bool active;
         uint64 id;
         uint256 word;
         assembly ("memory-safe") {
-            let state := sload(rngFlagsAndNudges.slot)
-            flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
-            daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
+            // Request-active bit: flags bit 14.
+            active := and(shr(add(mul(rngFlagsAndNudges.offset, 8), 14), sload(rngFlagsAndNudges.slot)), 1)
             id := shr(mul(vrfRequestId.offset, 8), vrf)
+            // The coordinator always sends the one requested word; no further decoding.
             word := calldataload(randomWords.offset)
         }
-        if (flags & (uint16(1) << 14) == 0 || uint64(requestId) != id) return;
-        if (daily) {
-            unchecked { word += flags & 0xFF; }
-        }
+        if (!active || uint64(requestId) != id) return;
+        // The two reserved values leave this request waiting for its existing retry path.
         if (word < 2) return;
         rngWordCurrent = word;
     }
@@ -110,9 +108,9 @@ contract RngTransportCommitmentModelTest is Test {
         _deliver(address(0xBAD), id, raw);
         _deliver(address(coordinator), id, raw);
         uint256 expected;
-        unchecked { expected = raw + (daily ? count : 0); }
+        expected = raw;
         if (expected < 2) expected = 0;
-        assertEq(_word(), expected, "independent modular-add/reserved model");
+        assertEq(_word(), expected, "raw word for every request; reserved values refused");
         assertEq(game.commitment(), fixedInputs, "callback preserves frozen inputs");
         assertEq(game.visible(read), 0, "accepted is distinct from published");
         if (expected != 0) {
@@ -145,7 +143,7 @@ contract RngTransportCommitmentModelTest is Test {
         _deliver(address(coordinator), 99, 0xBAD);
         assertEq(_word(), 0, "superseded transport response is stale");
         _deliver(address(coordinator), id, 0xC0FFEE);
-        assertEq(_word(), uint256(0xC0FFEE) + (daily ? count : 0));
+        assertEq(_word(), uint256(0xC0FFEE));
         vm.prank(ContractAddresses.ADMIN);
         vm.expectRevert(GameDailyInternals.RngNotReady.selector);
         game.retryRng();
@@ -173,10 +171,11 @@ contract RngTransportCommitmentModelTest is Test {
         assertTrue(game.dead(), "deadline stays passed");
     }
 
-    function test_ReservedAndModularBoundaryCases() public {
+    /// @dev The callback stores the raw word; nudges reach only the coinflip, at daily apply.
+    function test_ReservedBoundaryCasesIgnoreNudges() public {
         uint256[6] memory raw = [uint256(0), 1, type(uint256).max, type(uint256).max, type(uint256).max, uint256(0)];
         uint16[6] memory nudge = [uint16(0), 0, 1, 2, 3, 255];
-        uint256[6] memory expected = [uint256(0), 0, 0, 0, 2, 255];
+        uint256[6] memory expected = [uint256(0), 0, type(uint256).max, type(uint256).max, type(uint256).max, 0];
         for (uint256 i; i < raw.length; ++i) {
             game.seed(address(coordinator), i + 1, true, nudge[i], false, 1, ORIGIN);
             _deliver(address(coordinator), i + 1, raw[i]);

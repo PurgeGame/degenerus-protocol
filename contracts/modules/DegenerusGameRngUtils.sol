@@ -12,8 +12,8 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 /// @dev Daily and terminal entropy share recording and nudge rules.
 ///      This base declares no storage; both delegate modules inline the same helpers.
 abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
-    /// @notice Finalized daily word and the nudges applied to its raw input.
-    event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
+    /// @notice Recorded daily word and the nudges added to it for the coinflip alone.
+    event DailyRngApplied(uint24 day, uint256 word, uint256 nudges);
 
     /// @dev Isolate the whole priced pull from ordinary spending. Only settlement legs may
     ///      consume the reserve; it remains inside claimablePool until paid or recycled.
@@ -52,17 +52,17 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
     }
 
-    /// @dev Record the callback-finalized word and clear its frozen nudge receipt. A recorded
-    ///      day word is never 0 ("no word") or 1 (rngGate's "request sent" return): a
-    ///      callback-finalized word of 0/1 is refused and recovered by the existing retry.
-    function _applyDailyRng(uint24 day, uint256 finalWord) internal returns (uint256) {
+    /// @dev Record the raw word and clear its frozen nudge receipt. Nudges move only the
+    ///      coinflip: the returned coin word is the raw word plus the frozen count, so each
+    ///      nudge reverses the coin's win bit. A recorded day word is never 0 ("no word") or
+    ///      1 (rngGate's "request sent" return); the callback refuses both.
+    function _applyDailyRng(uint24 day, uint256 word) internal returns (uint256 coinWord) {
         uint256 nudges = _nudgeCount();
-        uint256 rawWord = _rawDailyRngWord(finalWord);
+        unchecked { coinWord = word + nudges; }
         _clearAppliedNudges();
-        _recordDailyRng(day, finalWord);
+        _recordDailyRng(day, word);
         lastVrfProcessedTimestamp = uint48(block.timestamp);
-        emit DailyRngApplied(day, rawWord, nudges, finalWord);
-        return finalWord;
+        emit DailyRngApplied(day, word, nudges);
     }
     /// @dev Move fresh contributions to the pending pool while a daily commitment is frozen.
     ///      The buffer is already empty: the last unfreeze left only its sentinel.

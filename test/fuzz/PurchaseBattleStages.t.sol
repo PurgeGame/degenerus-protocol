@@ -86,7 +86,7 @@ abstract contract PurchaseBattleStagesBase is PurchaseDailyFixture, FreshWordLeg
         for (uint256 i; i < lastLogs.length; ++i) {
             if (lastLogs[i].topics.length == 0) continue;
             bytes32 sig = lastLogs[i].topics[0];
-            assertTrue(sig != keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)"));
+            assertTrue(sig != keccak256("DailyRngApplied(uint24,uint256,uint256)"));
             assertTrue(sig != keccak256("DailyWinningTraits(uint24,uint32)"));
         }
     }

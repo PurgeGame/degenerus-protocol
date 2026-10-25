@@ -6,6 +6,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @dev Runs at the coordinator's address. The returned figure is the callback's share of a
 ///      coordinator fulfillment: the CALL (cold Game account) plus everything Game executes.
@@ -96,14 +97,14 @@ contract VrfCallbackGasTest is DeployProtocol {
     function test_DailyCallbackColdTransaction() public {
         uint256 id = _dailyRequest(7);
         uint256 used = _direct(id, 1_000_000);
-        assertEq(RecyclingState.currentWord(address(game)), 1_000_007);
+        assertTrue(game.isRngFulfilled(), "daily word accepted");
         emit log_named_uint("daily callback cold tx gas", used);
     }
 
     function test_DailyCallbackBilled() public {
         uint256 id = _dailyRequest(7);
         uint256 used = _billed(id, 1_000_000);
-        assertEq(RecyclingState.currentWord(address(game)), 1_000_007);
+        assertTrue(game.isRngFulfilled(), "daily word accepted");
         emit log_named_uint("daily callback billed gas", used);
     }
 
@@ -147,6 +148,27 @@ contract VrfCallbackGasTest is DeployProtocol {
         vm.prank(ContractAddresses.ADMIN);
         game.retryRng();
         emit log_named_uint("midday retry tx gas", vm.snapshotGasLastCall("vrf-retry"));
+    }
+
+    /// @dev The mining transaction that applies the nudged daily word (either event shape).
+    function test_DailyApplyTransaction() public {
+        uint256 id = _dailyRequest(7);
+        mockVRF.fulfillRandomWords(id, 1_000_000);
+        bytes32 current = keccak256("DailyRngApplied(uint24,uint256,uint256)");
+        bytes32 legacy = keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)");
+        for (uint256 i; i < 200 && game.rngLocked(); ++i) {
+            vm.recordLogs();
+            game.mineFlip(0);
+            uint256 used = vm.snapshotGasLastCall("vrf-apply");
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length; ++j) {
+                if (logs[j].emitter == address(game) && (logs[j].topics[0] == current || logs[j].topics[0] == legacy)) {
+                    emit log_named_uint("daily apply tx gas", used);
+                    return;
+                }
+            }
+        }
+        revert("no daily apply");
     }
 
     function _swap() private returns (MockVRFCoordinator next) {

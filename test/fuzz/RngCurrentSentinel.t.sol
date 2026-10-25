@@ -16,7 +16,7 @@ contract CurrentWordApplyHarness is DegenerusGameRngUtils {
 
 /// @dev Real Game callbacks, then the same shared daily recorder used by both
 /// delegate modules. Only the isolated post-callback recorder is overlaid;
-/// coordinator authorization, request identity and duplicate protection run live.
+/// coordinator authorization and request identity run live.
 contract RngCurrentSentinelTest is DeployProtocol {
     function setUp() public { _deployProtocol(); vm.warp(vm.getBlockTimestamp() + 1 days); }
 
@@ -29,27 +29,28 @@ contract RngCurrentSentinelTest is DeployProtocol {
         assertFalse(game.isRngFulfilled());
     }
 
+    /// @dev The callback stores the raw word for every request; the recorder keeps it as the
+    ///      day word and returns raw + nudges as the coinflip's word alone.
     function _check(uint256 input, uint64 nudges) private {
         uint256 id = _request();
         nudges = uint64(bound(nudges, 0, 255));
         RecyclingState.seedNudges(address(game), nudges);
-        uint256 expected;
-        unchecked { expected = input + nudges; }
+        uint256 coinWord;
+        unchecked { coinWord = input + nudges; }
         bytes32 state = game.extsload_g2807007(bytes32(0));
         mockVRF.fulfillRandomWords(id, input);
         assertEq(game.extsload_g2807007(bytes32(0)), state, "callback never writes nudge or lifecycle metadata");
-        if (expected < 2) {
-            assertFalse(game.isRngFulfilled(), "reserved final words leave the request unanswered");
+        if (input < 2) {
+            assertFalse(game.isRngFulfilled(), "reserved raw words leave the request unanswered");
             assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), 1, "nonzero waiting sentinel retained");
             assertEq(RecyclingState.nudgeCount(address(game)), nudges, "retry keeps paid nudges");
             return;
         }
-        assertTrue(game.isRngFulfilled(), "final word delivered");
-        assertEq(RecyclingState.currentWord(address(game)), expected, "callback stores the final session word");
+        assertTrue(game.isRngFulfilled(), "raw word delivered");
+        assertEq(RecyclingState.currentWord(address(game)), input, "callback stores the raw session word");
         uint256 stored = uint256(game.extsload_g2807007(bytes32(uint256(3))));
-        assertEq(stored, expected);
-        mockVRF.fulfillRandomWordsRaw(id, address(game), 777777);
-        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), stored, "duplicate must not replace delivered word");
+        vm.expectRevert("already fulfilled");
+        mockVRF.fulfillRandomWords(id, 777777);
         mockVRF.fulfillRandomWordsRaw(id + 1, address(game), 888888);
         assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), stored, "wrong identity must not replace word");
 
@@ -57,9 +58,9 @@ contract RngCurrentSentinelTest is DeployProtocol {
         bytes memory gameCode = address(game).code;
         CurrentWordApplyHarness recorder = new CurrentWordApplyHarness();
         vm.etch(address(game), address(recorder).code);
-        assertEq(CurrentWordApplyHarness(address(game)).applyCurrent(day), expected);
+        assertEq(CurrentWordApplyHarness(address(game)).applyCurrent(day), coinWord, "coin word adds the nudges");
         vm.etch(address(game), gameCode);
-        assertEq(game.rngWordForDay(day), expected, "entropy unchanged by encoding");
+        assertEq(game.rngWordForDay(day), input, "recorded day word stays raw");
         assertEq(RecyclingState.nudgeCount(address(game)), 0, "nudge receipt cleared after one recording");
     }
 
@@ -71,17 +72,16 @@ contract RngCurrentSentinelTest is DeployProtocol {
             game.reverseFlip(cost);
         }
         uint256 id = _request();
-        mockVRF.fulfillRandomWords(id, word);
-        uint256 finalWord = RecyclingState.currentWord(address(game));
-        assertEq(finalWord, word + (reverse ? 1 : 0));
         uint24 day = game.currentDayView_g542950();
-        vm.prank(address(game));
-        coinflip.processCoinflipPayouts(0, finalWord, day);
+        mockVRF.fulfillRandomWords(id, word);
+        assertEq(RecyclingState.currentWord(address(game)), word, "callback stores the raw word");
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineFlip(0);
+        assertEq(game.rngWordForDay(day), word, "every other consumer reads the raw word");
         (, win) = coinflip.getCoinflipDayResult(day);
     }
 
     function testFuzz_OnePaidReverseAlwaysFlipsTheDailyCoin(uint256 word) public {
-        // The callback deliberately retries final sentinel values 0 and 1.
+        // The callback deliberately retries raw sentinel values 0 and 1.
         word = bound(word, 2, type(uint256).max - 1);
         uint256 snap = vm.snapshotState();
         bool original = _resolvedCoinResult(word, false);
@@ -91,17 +91,17 @@ contract RngCurrentSentinelTest is DeployProtocol {
     }
 
     function test_ZeroFinalWordRemainsPending() public { _check(0, 0); }
-    function test_OneRawWordWithNudgesIsStoredWithoutNormalization() public { _check(1, 3); }
-    function test_NudgedZeroRemainsPending() public { _check(type(uint256).max, 1); }
+    function test_OneRawWordWithNudgesRemainsPending() public { _check(1, 3); }
+    function test_MaxWordWithOneNudgeIsDeliveredRaw() public { _check(type(uint256).max, 1); }
     function test_OneFinalWordRemainsPending() public { _check(1, 0); }
-    function test_NudgedOneRemainsPending() public { _check(type(uint256).max, 2); }
-    function test_NudgedWrapToTwoIsDeliveredUnchanged() public { _check(type(uint256).max, 3); }
+    function test_MaxWordWithTwoNudgesIsDeliveredRaw() public { _check(type(uint256).max, 2); }
+    function test_NudgedCoinWordWrapsWithoutTouchingTheRawWord() public { _check(type(uint256).max, 3); }
     function test_ZeroRawWordWithNudgesNeedsNoFallback() public { _check(0, 256); }
     function test_ReservedFinalWordRecoversThroughExistingOwnerRetry() public {
         uint256 id = _request();
         RecyclingState.seedNudges(address(game), 1);
-        mockVRF.fulfillRandomWords(id, type(uint256).max);
-        assertFalse(game.isRngFulfilled());
+        mockVRF.fulfillRandomWords(id, 1);
+        assertFalse(game.isRngFulfilled(), "a reserved raw word is refused despite the nudge");
         vm.warp(vm.getBlockTimestamp() + 20 hours);
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
@@ -110,7 +110,8 @@ contract RngCurrentSentinelTest is DeployProtocol {
         mockVRF.fulfillRandomWordsRaw(id, address(game), 42);
         assertEq(RecyclingState.currentWord(address(game)), 0, "retired callback rejected");
         mockVRF.fulfillRandomWords(retry, 42);
-        assertEq(RecyclingState.currentWord(address(game)), 43, "replacement applies the preserved nudge exactly once");
+        assertEq(RecyclingState.currentWord(address(game)), 42, "replacement stores the raw word");
+        assertEq(RecyclingState.nudgeCount(address(game)), 1, "the nudge stays frozen for the coinflip");
     }
 
     function test_MaxWordWithoutNudgeRemainsMax() public { _check(type(uint256).max, 0); }

@@ -141,7 +141,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         address indexed operator,
         bool approved
     );
-    /// @notice Emitted when a player nudges the next RNG word.
+    /// @notice Emitted when a player nudges the next daily coinflip word.
     event ReverseFlip(
         address indexed caller,
         uint256 totalQueued,
@@ -1174,7 +1174,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  • RNG lock prevents state manipulation during VRF window            |
       |  • Single 20h timeout retry (vault owner via Admin) per request      |
       |  • Governance-gated coordinator rotation via Admin                   |
-      |  • Nudge system allows players to influence (not predict) RNG        |
+      |  • Nudges flip the daily coinflip (blind); other draws use raw words |
       +======================================================================+*/
 
     /// @notice Emergency VRF coordinator rotation (governance-gated).
@@ -1225,12 +1225,13 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     error NudgeCapReached();
 
-    /// @notice Pay the quoted FLIP cost to nudge the next daily RNG word by +1.
+    /// @notice Pay the quoted FLIP cost to nudge the next daily coinflip word by +1.
     /// @dev Cost scales +50% per queued nudge, rounds up to a whole FLIP, and resets after
     ///      the queued nudges are applied. The caller-supplied quote prevents a transaction
     ///      from paying a higher price if another nudge lands first.
     ///      Only available while RNG is unlocked (before VRF request is in-flight).
-    ///      MECHANISM: Adds 1 to the VRF word for each nudge, changing outcomes.
+    ///      MECHANISM: Adds 1 to the daily coinflip word for each nudge, reversing its win
+    ///      bit. Every other daily consumer uses the raw word.
     ///      SECURITY: Players cannot predict the base word, only influence it.
     /// @custom:reverts RngLocked If RNG is currently locked (VRF request pending).
     /// @custom:reverts NudgeCostChanged If the live quote differs from expectedCost.
@@ -1254,37 +1255,28 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
 
     /// @notice Chainlink VRF callback for random word fulfillment.
-    /// @dev Accepts the coordinator's response to the active request and stores the final
-    ///      session word; publication is a later miner action. A daily lock adds the frozen
-    ///      nudge count. Final values 0/1 leave the request pending for retry. The coordinator
-    ///      fulfills each request once, so only a superseded request (retry or re-issue) can
-    ///      arrive late; its ID no longer matches and it is ignored, not reverted. Runs in the
-    ///      base contract so the Native-paid callback carries no delegatecall overhead.
+    /// @dev Stores the raw word answering the active request; publication is a later miner
+    ///      action. Raw values 0/1 leave the request pending for retry. The coordinator fulfills
+    ///      each request once, so only a superseded request (retry or re-issue) can arrive late;
+    ///      its ID no longer matches and it is ignored, not reverted. Runs in the base contract
+    ///      so the Native-paid callback carries no delegatecall overhead.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         uint256 vrf;
         // The coordinator and request ID share one slot.
         assembly ("memory-safe") { vrf := sload(vrfCoordinator.slot) }
         if (msg.sender != address(uint160(vrf))) revert OnlyCoordinator();
-        uint16 flags;
-        bool daily;
+        bool active;
         uint64 id;
         uint256 word;
         assembly ("memory-safe") {
-            let state := sload(rngFlagsAndNudges.slot)
-            flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
-            daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
+            // Request-active bit: flags bit 14.
+            active := and(shr(add(mul(rngFlagsAndNudges.offset, 8), 14), sload(rngFlagsAndNudges.slot)), 1)
             id := shr(mul(vrfRequestId.offset, 8), vrf)
             // The coordinator always sends the one requested word; no further decoding.
             word := calldataload(randomWords.offset)
         }
-        if (flags & (uint16(1) << 14) == 0 || uint64(requestId) != id) return;
-
-        // Addition preserves the uniform distribution. The two reserved final values
-        // leave this request waiting for its existing retry path (probability 2 / 2^256).
-        if (daily) {
-            // The frozen count is the low byte of the same slot-0 snapshot: no extra SLOAD.
-            unchecked { word += flags & 0xFF; }
-        }
+        if (!active || uint64(requestId) != id) return;
+        // The two reserved values leave this request waiting for its existing retry path.
         if (word < 2) return;
         rngWordCurrent = word;
     }

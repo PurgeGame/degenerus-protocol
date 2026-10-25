@@ -231,12 +231,10 @@ describe("STAT-01 — per-pull level distribution chi² uniformity over 10K samp
 //      request),
 //   2. fulfilling the VRF request with the named seed,
 //   3. continuing mineFlip() until the daily flow processes — during which
-//      _applyDailyRng emits DailyRngApplied(day, rawWord, nudges, finalWord)
-//      and the helper consumes `finalWord` as its `randomWord` argument,
-//   4. harvesting the DailyRngApplied event to learn the actual `finalWord`
-//      (rawWord + totalFlipReversals); on a freshly-deployed protocol with no
-//      coinflip activity, totalFlipReversals == 0 and finalWord == rawWord ==
-//      seed.
+//      _applyDailyRng emits DailyRngApplied(day, word, nudges) and the helper
+//      consumes the recorded raw `word` as its `randomWord` argument,
+//   4. harvesting the DailyRngApplied event to learn that word (nudges move
+//      only the coinflip), which equals the seed.
 //
 // At purchaseLevel == 1, the advance runs one trait draw on minted level 1
 // and one jackpot battle over the unminted future queues. The boundary harness
@@ -268,12 +266,12 @@ async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
 }
 
 async function harvestDailyRngFinalWord(receipts, advanceModule) {
-  // DailyRngApplied(uint32 day, uint256 rawWord, uint256 nudges, uint256 finalWord).
-  // Returns the finalWord (= randomWord parameter flowing into the helper).
+  // DailyRngApplied(uint24 day, uint256 word, uint256 nudges).
+  // Returns the recorded raw word (= randomWord parameter flowing into the helper).
   for (const { tx } of receipts) {
     const events = await getEvents(tx, advanceModule, "DailyRngApplied");
     if (events.length > 0) {
-      return BigInt(events[events.length - 1].args.finalWord);
+      return BigInt(events[events.length - 1].args.word);
     }
   }
   return null;

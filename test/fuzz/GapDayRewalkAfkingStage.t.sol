@@ -27,7 +27,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     uint256 private constant AFKING_RESET_OFF = 4;
 
     bytes32 private constant AFKING_DELIVERED_SIG = keccak256("AfkingDelivered(uint32,uint256)");
-    bytes32 private constant DAILY_RNG_APPLIED_SIG = keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)");
+    bytes32 private constant DAILY_RNG_APPLIED_SIG = keccak256("DailyRngApplied(uint24,uint256,uint256)");
     bytes32 private constant SUB_DRAW_WON_SIG = keccak256("SubDrawWon(uint32,uint24,uint24,uint256)");
 
     uint256 private constant WORD_NORMAL = 0xA11CE;
@@ -212,11 +212,11 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0
                 || logs[i].topics[0] != DAILY_RNG_APPLIED_SIG) continue;
-            (uint24 appliedDay, uint256 rawWord,, uint256 finalWord) =
-                abi.decode(logs[i].data, (uint24, uint256, uint256, uint256));
+            (uint24 appliedDay, uint256 rawWord, uint256 nudges) =
+                abi.decode(logs[i].data, (uint24, uint256, uint256));
             if (appliedDay != day) continue;
             assertEq(rawWord, word, "committed day receives its own raw word");
-            assertEq(finalWord, word, "committed day receives its own unnudged word");
+            assertEq(nudges, 0, "no nudges reach this day's coinflip");
             ++matches;
         }
         assertEq(matches, 1, "committed day's word applied exactly once");

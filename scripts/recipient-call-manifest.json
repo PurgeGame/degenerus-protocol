@@ -4467,9 +4467,9 @@
     "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._scheduleResetPassed",
     "kind": "recipient-helper",
-    "expression": "_sload(5)",
+    "expression": "_sload(DAILY_REQUEST_WALL_DAY_SLOT)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting. VRFCB: the hard-coded slot is now the named pinned DAILY_REQUEST_WALL_DAY_SLOT (Game slot 4 after the request-ID slot was removed); same read."
   },
   {
     "path": "contracts/LootboxCraps.sol",
@@ -6715,9 +6715,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.applyDailyWord_g1652",
     "kind": "external",
-    "expression": "coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day)",
+    "expression": "coinflip.processCoinflipPayouts(coinflipBonus, _applyDailyRng(day, currentWord), day)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged. VRFCB: same typed call and recipient; the word argument is the coin word (raw + frozen nudges) returned by the recorder."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",

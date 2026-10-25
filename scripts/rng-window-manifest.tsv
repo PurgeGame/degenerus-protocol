@@ -135,17 +135,15 @@ EXEMPT-ADVANCE	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpo
 PRODUCER	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	WRITE	Seal the committed logical-day board/level/seed with its exact day tag; recycle only an older parity slot.
 GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameRngModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
 EXEMPT-ADVANCE	_currentRngWord	publishRng_g4514	modules/DegenerusGameRngModule.sol	READ
-PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	modules/GameFacade.sol	READ	One slot0 SLOAD authenticates activity, identifies daily lock and supplies frozen nudge; callback never writes it.
-EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	modules/GameFacade.sol	READ
-PRODUCER	rngWordCurrent	rawFulfillRandomWords	modules/GameFacade.sol	WRITE	Coordinator, active-bit, request-ID and waiting checks authenticate the final encoded payload.
+PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	modules/GameFacade.sol	READ	One slot0 SLOAD reads only the request-active bit; the callback never reads nudges or writes slot0.
+PRODUCER	rngWordCurrent	rawFulfillRandomWords	modules/GameFacade.sol	WRITE	Coordinator, active-bit and request-ID checks authenticate the raw word; the coordinator answers each request once.
 PRODUCER	rngRequestDay	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngWordCurrent	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE
 EXEMPT-ADVANCE	_recordedDailyWord	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	exact tag authenticates processing word; public claims enforce the published-result frontier
 GATE	lootboxRngPacked	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	write-buffer Craps pending bit marks a closed window as request work; selects LINK floor and pending-value waiver, never a word
 PRODUCER	rngRequestDay	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngWordCurrent	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WRITE
-EXEMPT-ADVANCE	_nudgeCount	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder logs/clears the frozen receipt and never adds it again.
-EXEMPT-ADVANCE	_rawDailyRngWord	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder emits original raw word without changing finalized payload.
+EXEMPT-ADVANCE	_nudgeCount	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder adds the frozen receipt to the coinflip word only, logs and clears it; the recorded day word stays raw.
 CONSUMER-SEALED	_lootboxWord	_runTicketWork	modules/DegenerusGameTicketModule.sol	READ
 EXEMPT-ADVANCE	_recordedDailyWord	purchaseWhalePassForSdgnrs_g470	modules/DegenerusGameWhaleModule.sol	READ	exact tag authenticates processing word; public claims enforce the published-result frontier
 CONSUMER-SEALED	_lootboxWord	_runAfkingWork	modules/GameAfkingModule.sol	READ	Active published word; stampDay <= dailyIdx excludes pre-seal stamps; pending AFKing count prevents reuse until final open.
@@ -177,8 +175,6 @@ GATE	_recordedDailyWord	_minerMiddayEligible	storage/DegenerusGameStorage.sol	RE
 GATE	rngRequestDay	_nextMinerAction	storage/DegenerusGameStorage.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 ACCESSOR	_nudgeCount	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Nine-bit slot-0 accessor; neighboring flags are masked.
 ACCESSOR	rngFlagsAndNudges	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Extract frozen eight-bit count, capped255 by the only production buyer.
-PURE-DERIVE	_nudgeCount	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Daily-lock-frozen receipt retains exact original entropy.
-PURE-DERIVE	_rawDailyRngWord	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Undo callback nudge/normalization only for exact raw replay.
 PRODUCER	rngDayTags	_recordDailyRng	storage/DegenerusGameStorage.sol	WRITE	advance-only ring write after committed consumers complete
 PRODUCER	rngWordByDay	_recordDailyRng	storage/DegenerusGameStorage.sol	WRITE	advance-only ring write after committed consumers complete
 ACCESSOR	_recordedDailyWord	_recordedDailyWord	storage/DegenerusGameStorage.sol	READ	authenticate two-slot day tag before reading reused payload

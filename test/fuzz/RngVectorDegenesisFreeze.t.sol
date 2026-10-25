@@ -22,7 +22,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///         being atomic with its request on every day of the week, and a mid-day word never
 ///         binding a cohort.
 contract RngVectorDegenesisFreeze is DegenesisHarness {
-    bytes32 internal constant SIG_DAILY_APPLIED = keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)");
+    bytes32 internal constant SIG_DAILY_APPLIED = keccak256("DailyRngApplied(uint24,uint256,uint256)");
     bytes4 internal constant ERR_RNG_LOCKED = bytes4(keccak256("RngLocked()"));
 
     address[5] internal buyers;
@@ -94,7 +94,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0 || logs[i].topics[0] != SIG_DAILY_APPLIED) {
                 continue;
             }
-            (uint24 d,,, uint256 fin) = abi.decode(logs[i].data, (uint24, uint256, uint256, uint256));
+            (uint24 d, uint256 fin,) = abi.decode(logs[i].data, (uint24, uint256, uint256));
             if (d == day) w = fin;
         }
     }

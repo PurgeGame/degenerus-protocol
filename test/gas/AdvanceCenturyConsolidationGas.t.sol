@@ -764,7 +764,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         assertEq(_dailyLegLogs(logs), 0, "native application cannot pay a daily leg");
         emit log_named_uint("century_word_apply_including_intrinsic", used);
         assertEq(
-            _countTopic(logs, keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")),
+            _countTopic(logs, keccak256("DailyRngApplied(uint24,uint256,uint256)")),
             1,
             "fresh RNG must apply in the word-apply call"
         );

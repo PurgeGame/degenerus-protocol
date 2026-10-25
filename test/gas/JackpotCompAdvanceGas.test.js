@@ -32,7 +32,7 @@ const POT_TOPIC = ethers.id("CrapsBattlePaid(uint256,bytes32,uint32,uint256)");
 const PASS_TOPIC = ethers.id("CrapsPassesCredited(uint32,bool,uint256)");
 // 5214f7498 added the hottest-shooter award: 10% of a scheduled main pot, paid as liquid FLIP.
 const HOTTEST_TOPIC = ethers.id("CrapsHottestShooterPaid(uint256,bytes32,uint32,uint16,uint256)");
-const RNG_APPLIED_TOPIC = ethers.id("DailyRngApplied(uint24,uint256,uint256,uint256)");
+const RNG_APPLIED_TOPIC = ethers.id("DailyRngApplied(uint24,uint256,uint256)");
 
 const SHARES = 50; // COIN_DRAW_SHARES
 const FF_BIT = 1n << 22n;

@@ -133,8 +133,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         uint256 currentWord = _currentRngWord();
         if (currentWord == 0) revert RngNotReady();
         // Normal daily RNG processing (request from current day)
-        currentWord = _applyDailyRng(day, currentWord);
-        coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
+        coinflip.processCoinflipPayouts(coinflipBonus, _applyDailyRng(day, currentWord), day);
         // Settlement paid any owed bonus. Preserve a newly armed turbo.
         if ((jackpotFlags & TURBO_BONUS_PENDING) != 0) jackpotFlags &= JACKPOT_TURBO;
         // Quests belong to this logical commitment even when delivery crosses resets.

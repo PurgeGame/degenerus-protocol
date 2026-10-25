@@ -205,11 +205,8 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
 
     function _actionReverseFlip(uint256 expectedCost) internal  {
         if (rngLockedFlag) revert RngLocked();
-        // A nudge shifts the next word by +1, and the terminal path applies pending
-        // nudges to the word it publishes. Past the liveness trigger that word is the
-        // committed terminal word, already public and already known to select the
-        // winning traits, so a nudge bought here is a post-reveal steer of the final
-        // payout rather than an influence on an unknown future word.
+        // A nudge adds one to the next daily coinflip word, reversing its win bit. Past the
+        // liveness trigger no daily coinflip resolves, so a nudge bought here would only burn FLIP.
         if (_livenessTriggered()) revert E();
         uint256 reversals = _nudgeCount();
         if (reversals >= RNG_NUDGE_CAP) revert GameFacade.NudgeCapReached();

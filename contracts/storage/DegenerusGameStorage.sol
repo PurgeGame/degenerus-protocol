@@ -570,11 +570,6 @@ abstract contract DegenerusGameStorage {
         uint16 cleared = old & ~RNG_NUDGE_BITS;
         if (old != cleared) rngFlagsAndNudges = cleared;
     }
-    /// @dev Recover the pre-nudge raw word for gap derivation and replay events.
-    /// The counter stays frozen under the daily lock until the day recorder clears it.
-    function _rawDailyRngWord(uint256 finalWord) internal view returns (uint256 rawWord) {
-        unchecked { rawWord = finalWord - _nudgeCount(); }
-    }
 
     // =========================================================================
     // EVM SLOT 1: Prize Pools

@@ -489,7 +489,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (_rngRequestActive() && currentWord != 0) {
             if (!MineFlipGas.canRun(meter, GasBounds.DAILY_APPLY, GasBounds.TERMINAL_TAIL)) return;
             day = rngRequestDay;
-            currentWord = _applyDailyRng(day, currentWord);
+            _applyDailyRng(day, currentWord);
             // A settling sDGNRS redemption batch whose live settlement never started resolves at
             // a flat 100: every ending pays it at 100, never from a word.
             dgnrs.resolveTerminalRedemptions();
@@ -1172,7 +1172,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
         // with irreversible FLIP burns before or during the stall. They carry over
-        // and apply to the first post-swap VRF word via _applyDailyRng. Resetting
+        // and apply to the first post-swap coinflip word via _applyDailyRng. Resetting
         // would steal user value (burned FLIP for zero effect).
 
         emit VrfCoordinatorUpdated(current, newCoordinator);

@@ -726,15 +726,15 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     /// @notice TST-01 — autoBuy-during-lock SAFE + the router same-tx freeze byte-identity,
-    ///         proven NON-VACUOUS against the frozen `cw += totalFlipReversals` consume.
+    ///         proven NON-VACUOUS against the VRF word it consumes.
     /// @dev Snapshot -> nudge totalFlipReversals nonzero PRE-lock (reverseFlip reverts under
     ///      rngLock, so the move must happen before the boundary) -> advance to the VRF
     ///      boundary so rngLocked() is true -> fire doWork()/autoBuy(0) in the locked window
     ///      -> deliver the SAME word + capture the consumed per-index word -> revert ->
     ///      re-advance -> re-deliver the SAME word WITHOUT the perturbation -> baseline.
     ///      Byte-identity proves the consumed read is frozen across the keeper perturbation;
-    ///      a zero-reversals CONTROL run yields a DIFFERENT word — that is the non-vacuity
-    ///      guard (the proof cannot pass if totalFlipReversals were a no-op on the consume).
+    ///      a zero-reversals CONTROL consumes the same word (nudges reach only the coinflip),
+    ///      and a different VRF word consumes a different one — the non-vacuity guard.
     function testFuzz_RngLockDeterminism_AutoBuyDuringLockSafe(uint256 seed) public {
         uint256 vrfWord = uint256(keccak256(abi.encode("tst01-autobuy-word", seed)));
         // Bias the perturbation to the two v49 keeper classes (9 doWork / 10 autoBuy) so the
@@ -813,9 +813,8 @@ contract RngLockDeterminism is DeployProtocol {
             "TST-01: the advance-consumed per-index word must be byte-identical with vs without the same-tx keeper perturbation (ADV-04 freeze)"
         );
 
-        // ---- NON-VACUITY (B): a zero-reversals CONTROL must yield a DIFFERENT consumed word ----
-        // Proves the captured word genuinely incorporates totalFlipReversals (the consume is the
-        // frozen `cw += totalFlipReversals`), so the byte-identity above cannot pass vacuously.
+        // ---- (B) Nudges reach only the coinflip: a zero-reversals control consumes the SAME
+        // word, and a different VRF word consumes a different one, so the oracle is not vacuous. ----
         _revertToPreLock(preLockSnap);
         _zeroTotalFlipReversals();
         assertEq(_readTotalFlipReversals(), 0, "TST-01 control: reversals zeroed");
@@ -824,10 +823,14 @@ contract RngLockDeterminism is DeployProtocol {
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
         uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertTrue(
-            controlWord != baselineWord,
-            "TST-01 non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads _nudgeCount(); otherwise the freeze proof is vacuous)"
-        );
+        assertEq(controlWord, baselineWord, "TST-01: nudges never reach the consumed word");
+        _revertToPreLock(preLockSnap);
+        game.mineFlip(0);
+        uint256 otherReqId = mockVRF.lastRequestId();
+        vm.recordLogs();
+        _deliverMockVrf(otherReqId, vrfWord ^ 2);
+        uint256 otherWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
+        assertTrue(otherWord != baselineWord, "TST-01 non-vacuity: the consumed word follows the VRF word");
     }
 
     /// @notice Storage slot for the `whalePassClaims` mapping (verified via
@@ -866,8 +869,7 @@ contract RngLockDeterminism is DeployProtocol {
     /// @dev Snapshot pre-lock -> pre-load `whalePassClaims[claimant] > 0` so the claim has
     ///      work to do (otherwise the perturbation is vacuous via the `halfPasses == 0`
     ///      short-circuit at WhaleModule:1021) -> nudge `totalFlipReversals` nonzero PRE-lock
-    ///      so the consumed word genuinely incorporates it (matches the AutoBuy template's
-    ///      non-vacuity guard A on a state element that DOES enter the VRF formula) ->
+    ///      (matches the AutoBuy template) ->
     ///      advance to the VRF boundary so `rngLocked()` is true -> fire `claimWhalePass()`
     ///      in the locked window (try/catch — WHALE-04 §2 far-future band reverts at
     ///      Storage:661 and the whole call reverts under `_livenessTriggered()` at
@@ -875,9 +877,9 @@ contract RngLockDeterminism is DeployProtocol {
     ///      the SAME word + capture the consumed per-index word -> revert -> re-advance ->
     ///      re-deliver the SAME word WITHOUT the perturbation -> baseline. Byte-identity
     ///      proves the consumed read is frozen across the claimWhalePass perturbation.
-    ///      The non-vacuity guard (B) zeroes `totalFlipReversals` and re-runs the baseline
-    ///      path — that MUST yield a DIFFERENT consumed word, proving the test harness can
-    ///      detect a change (and so the byte-identity above did not pass vacuously).
+    ///      Guard (B): zeroing `totalFlipReversals` consumes the same word (nudges reach only
+    ///      the coinflip), while a different VRF word consumes a different one, so the
+    ///      byte-identity above did not pass vacuously.
     function testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe(uint256 seed) public {
         uint256 vrfWord = uint256(keccak256(abi.encode("tst01-claim-word", seed)));
 
@@ -909,11 +911,8 @@ contract RngLockDeterminism is DeployProtocol {
             "TST-01 claim: pre-load whalePassClaims[claimant] must take effect (vm.store oracle)"
         );
 
-        // Move totalFlipReversals nonzero PRE-lock so the consumed word genuinely incorporates
-        // it — same non-vacuity-A pattern as testFuzz_RngLockDeterminism_AutoBuyDuringLockSafe.
-        // The consume site is `cw += totalFlipReversals` (DegenerusGameAdvanceModule.sol:257);
-        // a zero-reversals control run would yield the same word as a nudged run, making the
-        // byte-identity oracle vacuous. The nudge here is the same shape as the AutoBuy template.
+        // Move totalFlipReversals nonzero PRE-lock, the same shape as the AutoBuy template; (B)
+        // shows the nudges never reach the consumed word and a different VRF word does.
         uint256 nudges = 1 + (seed % 3);
         _fundFlip(buyer, 100_000 ether); // ample FLIP for the compounding nudge cost
         for (uint256 n = 0; n < nudges; n++) {
@@ -922,7 +921,7 @@ contract RngLockDeterminism is DeployProtocol {
             try game.reverseFlip(cost) {} catch { break; }
         }
         uint256 movedReversals = _readTotalFlipReversals();
-        // NON-VACUITY (A): the consume genuinely reads totalFlipReversals (non-zero pre-lock).
+        // NON-VACUITY (A): the nudges are staged pre-lock.
         assertGt(movedReversals, 0, "TST-01 claim non-vacuity: reverseFlip must move _nudgeCount() pre-lock");
 
         uint256 preLockSnap = _snapshotPreLock();
@@ -1001,9 +1000,8 @@ contract RngLockDeterminism is DeployProtocol {
             "TST-01 claim: the advance-consumed per-index word must be byte-identical with vs without the same-tx claimWhalePass perturbation (WHALE-04 freeze)"
         );
 
-        // ---- NON-VACUITY (B): a zero-reversals CONTROL must yield a DIFFERENT consumed word ----
-        // Proves the captured word genuinely incorporates totalFlipReversals (the consume is the
-        // frozen `cw += totalFlipReversals`), so the byte-identity above cannot pass vacuously.
+        // ---- (B) Nudges reach only the coinflip: a zero-reversals control consumes the SAME
+        // word, and a different VRF word consumes a different one, so the oracle is not vacuous. ----
         // Per T-336-01-03 STRIDE row: ALWAYS _revertToPreLock(snapshotId) BEFORE re-staging the
         // second env. The helper at lines 130-144 enforces revert-before-re-stage by construction.
         _revertToPreLock(preLockSnap);
@@ -1014,10 +1012,14 @@ contract RngLockDeterminism is DeployProtocol {
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
         uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertTrue(
-            controlWord != baselineWord,
-            "TST-01 claim non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads _nudgeCount(); otherwise the freeze proof is vacuous)"
-        );
+        assertEq(controlWord, baselineWord, "TST-01 claim: nudges never reach the consumed word");
+        _revertToPreLock(preLockSnap);
+        game.mineFlip(0);
+        uint256 otherReqId = mockVRF.lastRequestId();
+        vm.recordLogs();
+        _deliverMockVrf(otherReqId, vrfWord ^ 2);
+        uint256 otherWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
+        assertTrue(otherWord != baselineWord, "TST-01 claim non-vacuity: the consumed word follows the VRF word");
     }
 
     /// @notice TST-01 — no box opens during rngLock: boxesPending() is false and a keeper mineFlip

@@ -23,7 +23,7 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
         game.rawFulfillRandomWords(id, words);
         uint256 used = vm.snapshotGasLastCall("cold-nudge-callback");
         assertEq(game.extsload_g2807007(bytes32(0)), state, "nudge and flags are never written in fulfillment");
-        assertEq(RecyclingState.currentWord(address(game)), 1_000_000 + nudges);
+        assertEq(RecyclingState.currentWord(address(game)), 1_000_000, "raw word for every request");
         emit log_named_uint("daily nudges", nudges);
         emit log_named_uint("cold daily callback transaction gas", used);
     }

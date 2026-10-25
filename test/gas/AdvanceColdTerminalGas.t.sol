@@ -104,7 +104,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
                     awarded += amount;
                 }
                 if (topic == keccak256("DeityPassRefundsSettled(uint256)")) refunds += abi.decode(logs[i].data, (uint256));
-                if (topic == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++rngApplied;
+                if (topic == keccak256("DailyRngApplied(uint24,uint256,uint256)")) ++rngApplied;
             }
             if (used > largestCall) largestCall = used;
             totalGas += used;
@@ -199,7 +199,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
         uint256 results;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applied;
+            if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256)")) ++applied;
             if (logs[i].emitter == address(coinflip)
                 && logs[i].topics[0] == keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)")) {
                 ++results;

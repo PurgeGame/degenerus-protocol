@@ -39,7 +39,7 @@ contract StorageReuseNativeDailyContext is DeployProtocol, NativeGasExport {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
             if (logs[i].topics[0] == keccak256("ProtocolBoonDrawAwarded(uint32,uint32,uint24,uint8,uint32,uint8)")) ++awards;
-            if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applies;
+            if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256)")) ++applies;
         }
         assertEq(awards, 6, "all maximum-depth boon draws executed");
         assertEq(applies, 1, "fresh daily word applied");

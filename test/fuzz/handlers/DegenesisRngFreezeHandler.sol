@@ -116,7 +116,7 @@ contract DegenesisRngFreezeHandler is Test {
     bytes32 internal constant SIG_BUY = keccak256("DegenesisBuy(uint32,uint8,uint32,uint256,uint256)");
     bytes32 internal constant SIG_PRICED = keccak256("DegenesisCohortPriced(uint8,uint256,uint256,uint24)");
     bytes32 internal constant SIG_CLOSED = keccak256("DegenesisCohortClosed(uint8,uint256)");
-    bytes32 internal constant SIG_DAILY_APPLIED = keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)");
+    bytes32 internal constant SIG_DAILY_APPLIED = keccak256("DailyRngApplied(uint24,uint256,uint256)");
     bytes32 internal constant SIG_LOCKED = keccak256("JackpotBattleLocked(uint64,uint24,uint256,uint256)");
     bytes32 internal constant SIG_STARTED = keccak256("JackpotBattleStarted(uint64,uint24,uint256,uint256,uint256)");
     uint256 internal constant UNIT = 0.0001 ether;
@@ -466,7 +466,7 @@ contract DegenesisRngFreezeHandler is Test {
     }
 
     function _onDailyApplied(Vm.Log memory l) internal {
-        (uint24 day,,, uint256 fin) = abi.decode(l.data, (uint24, uint256, uint256, uint256));
+        (uint24 day, uint256 fin,) = abi.decode(l.data, (uint24, uint256, uint256));
         if (snapLive && day == snapBoundDay) {
             snapWord = fin;
             snapWordSeen = true;

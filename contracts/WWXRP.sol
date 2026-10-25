@@ -93,8 +93,7 @@ import {RngTags} from "./libraries/RngTags.sol";
  *      day d+1 while entry is open is structurally impossible — the same
  *      settlement-blindness model as coinflip deposits, which also stay open
  *      through the daily lock and settle on the next word. reverseFlip
- *      nudges are committed blind (blocked while a request is in flight) at
- *      compounding FLIP cost. No fallback word exists: a game whose VRF
+ *      nudges move only the coinflip; this draw reads the raw recorded word. No fallback word exists: a game whose VRF
  *      dies ends deterministically without any word, so entry carries no
  *      stall gate; burns into a dead game's days simply never settle. The draw has
  *      no owner, no parameter mutation, and no override of RNG, winner,
