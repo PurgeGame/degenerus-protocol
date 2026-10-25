@@ -48,9 +48,8 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
         _setRngComplete(false);
         _recordDailyRng(day, word);
         dailyTicketBudgetsPacked = 0;
-        uint256 future = _getFuturePrizePool();
-        _setFuturePrizePool(future - future / 100);
-        _setPendingPools(0, uint128(future / 100));
+        // The request's freeze: the buffer holds only the sentinel the last unlock left.
+        prizePoolPendingPacked = POOL_PENDING_SENTINEL;
         prizePoolFrozen = true;
 
         JackpotWork storage work = jackpotWork;

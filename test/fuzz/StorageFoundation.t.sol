@@ -155,19 +155,23 @@ contract StorageFoundationTest is Test {
         assertEq(uint256(next2), sentinel2 & POOL_HALF, "prizePoolsPacked not at slot 2 (next)");
         assertEq(uint256(future2), sentinel2 >> 128, "prizePoolsPacked not at slot 2 (future)");
 
-        // Write a known value to the pending-pool slot via vm.store, then read back via harness getter
-        uint256 sentinel11 = 0x0000000000000000000000000000000300000000000000000000000000000004;
+        // Write a known value to the pending-pool slot via vm.store, then read back via harness getter.
+        // Bit 255 is the pending sentinel: the getter masks it off the future half.
+        uint256 sentinel11 = 0x8000000000000000000000000000000300000000000000000000000000000004;
         vm.store(address(harness), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED), bytes32(sentinel11));
         harness.setPrizePoolFrozen(true);
         (uint128 next11, uint128 future11) = harness.exposed_getPendingPools();
         assertEq(uint256(next11), sentinel11 & POOL_HALF, "prizePoolPendingPacked at the pinned slot (next)");
-        assertEq(uint256(future11), sentinel11 >> 128, "prizePoolPendingPacked at the pinned slot (future)");
+        assertEq(uint256(future11), 3, "prizePoolPendingPacked at the pinned slot (future, sentinel masked)");
     }
 
     /// @dev Widest value either pool half holds. Each half is a full uint128 — ~3.4e38
     ///      wei, ~2.8e21x the total ETH supply — so the ceiling is unreachable from real
     ///      value and exists only as a liveness backstop.
     uint256 private constant POOL_HALF = type(uint128).max;
+    /// @dev Bit 255 of the pending slot is its nonzero sentinel; the future half beneath it is 127 bits.
+    uint256 private constant PENDING_SENTINEL = uint256(1) << 255;
+    uint256 private constant PENDING_FUTURE_MAX = type(uint128).max >> 1;
 
     /// @dev Both halves round-trip their full range, in both slots. A setter has nothing
     ///      to clamp: its arguments are already uint128 and each owns half the word.
@@ -177,15 +181,16 @@ contract StorageFoundationTest is Test {
         assertEq(uint256(n), POOL_HALF, "next must hold a full uint128");
         assertEq(uint256(f), POOL_HALF, "future must hold a full uint128");
 
-        harness.exposed_setPendingPools(type(uint128).max, type(uint128).max);
+        // The pending future half holds 127 bits beneath the sentinel.
+        harness.exposed_setPendingPools(type(uint128).max, uint128(PENDING_FUTURE_MAX));
         harness.setPrizePoolFrozen(true);
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
         assertEq(uint256(pn), POOL_HALF, "pending next must hold a full uint128");
-        assertEq(uint256(pf), POOL_HALF, "pending future must hold a full uint128");
+        assertEq(uint256(pf), PENDING_FUTURE_MAX, "pending future must hold 127 bits");
 
         // A maxed word is exactly both halves set, with no bits left over.
         assertEq(harness.exposed_rawLivePools(), type(uint256).max, "live word is two halves");
-        assertEq(harness.exposed_rawPendingPools(), type(uint256).max, "pending word is two halves");
+        assertEq(harness.exposed_rawPendingPools(), type(uint256).max, "pending word is two halves and the sentinel");
     }
 
     /// @dev The purchase-path adder SATURATES rather than reverting: it sits on the hot
@@ -224,8 +229,8 @@ contract StorageFoundationTest is Test {
     }
 
     /// @dev A frozen add routes to the pending buffer, and the fold ADDS each half into
-    ///      its own, saturating independently, then hides the retained pending slot.
-    function testFoldAddsHalvesSaturatingAndHidesPending() public {
+    ///      its own, saturating independently, then leaves only the sentinel behind.
+    function testFoldAddsHalvesSaturatingAndEmptiesPending() public {
         harness.exposed_setPrizePools(2 ether, 1 ether);
         harness.setPrizePoolFrozen(true);
         harness.exposed_addPrizeContribution(5 ether, 3 ether);
@@ -238,7 +243,7 @@ contract StorageFoundationTest is Test {
         (n, f) = harness.exposed_getPrizePools();
         assertEq(uint256(n), 7 ether, "the fold must add the next halves");
         assertEq(uint256(f), 4 ether, "the fold must add the future halves");
-        assertEq(harness.exposed_rawPendingPools(), uint256(5 ether) | (uint256(3 ether) << 128));
+        assertEq(harness.exposed_rawPendingPools(), PENDING_SENTINEL, "the fold empties the buffer");
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
         assertEq(pn, 0, "folded next is no longer pending");
         assertEq(pf, 0, "folded future is no longer pending");
@@ -251,6 +256,17 @@ contract StorageFoundationTest is Test {
         (n, f) = harness.exposed_getPrizePools();
         assertEq(uint256(n), POOL_HALF, "the fold must clamp next, not wrap");
         assertEq(uint256(f), 3 ether, "a clamped next must not disturb future");
+    }
+
+    /// @dev A frozen add clamps the pending future half below the sentinel and keeps the sentinel.
+    function testFrozenAddClampsPendingFutureBelowSentinel() public {
+        harness.exposed_setPendingPools(1 ether, uint128(PENDING_FUTURE_MAX));
+        harness.setPrizePoolFrozen(true);
+        harness.exposed_addPrizeContribution(2 ether, 5 ether);
+        (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
+        assertEq(uint256(pn), 3 ether, "a clamped future must not touch next");
+        assertEq(uint256(pf), PENDING_FUTURE_MAX, "pending future clamps at 2^127 - 1");
+        assertEq(harness.exposed_rawPendingPools() & PENDING_SENTINEL, PENDING_SENTINEL, "sentinel kept");
     }
 
     /// @dev Pin `levelDgnrsPacked` to its compiled slot (GameSlots): one retained current-level word,
@@ -343,18 +359,23 @@ contract StorageFoundationTest is Test {
 
     function testPendingPoolPackingMaxFuture() public {
         harness.setPrizePoolFrozen(true);
-        harness.exposed_setPendingPools(0, uint128(POOL_HALF));
+        harness.exposed_setPendingPools(0, uint128(PENDING_FUTURE_MAX));
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(n, 0);
-        assertEq(uint256(f), POOL_HALF);
+        assertEq(uint256(f), PENDING_FUTURE_MAX);
     }
 
     function testPendingPoolPackingMaxBoth() public {
         harness.setPrizePoolFrozen(true);
-        harness.exposed_setPendingPools(uint128(POOL_HALF), uint128(POOL_HALF));
+        harness.exposed_setPendingPools(uint128(POOL_HALF), uint128(PENDING_FUTURE_MAX));
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(uint256(n), POOL_HALF);
-        assertEq(uint256(f), POOL_HALF);
+        assertEq(uint256(f), PENDING_FUTURE_MAX);
+    }
+
+    function testPendingPoolSetterSetsSentinel() public {
+        harness.exposed_setPendingPools(0, 0);
+        assertEq(harness.exposed_rawPendingPools(), PENDING_SENTINEL, "an empty write still carries the sentinel");
     }
 
     function testPendingPoolPackingArbitrary() public {
@@ -459,17 +480,18 @@ contract StorageFoundationTest is Test {
     // Freeze Tests
     // =====================================================================
 
-    /// @dev First freeze: sets prizePoolFrozen=true, zeros pending accumulators.
+    /// @dev Fresh freeze: sets prizePoolFrozen=true and leaves the empty buffer untouched.
     function testSwapAndFreezeActivates() public {
-        harness.exposed_setPendingPools(100, 200);
+        harness.exposed_setPendingPools(0, 0);
         assertFalse(harness.getPrizePoolFrozen());
 
         harness.exposed_swapAndFreeze(0);
 
         assertTrue(harness.getPrizePoolFrozen(), "prizePoolFrozen should be true");
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
-        assertEq(pn, 0, "pending next should be zeroed on first freeze");
-        assertEq(pf, 0, "pending future should be zeroed on first freeze");
+        assertEq(pn, 0, "pending next starts empty");
+        assertEq(pf, 0, "pending future starts empty");
+        assertEq(harness.exposed_rawPendingPools(), PENDING_SENTINEL, "the freeze writes nothing to pending");
     }
 
     /// @dev Already frozen: swap succeeds, pending accumulators preserved.
@@ -504,6 +526,7 @@ contract StorageFoundationTest is Test {
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
         assertEq(pn, 0, "pending next should be zeroed after unfreeze");
         assertEq(pf, 0, "pending future should be zeroed after unfreeze");
+        assertEq(harness.exposed_rawPendingPools(), PENDING_SENTINEL, "only the sentinel remains");
 
         assertFalse(harness.getPrizePoolFrozen(), "prizePoolFrozen should be cleared");
     }

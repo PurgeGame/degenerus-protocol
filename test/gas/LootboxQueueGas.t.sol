@@ -30,7 +30,7 @@ contract LootboxQueueGasSeeder is DegenerusGamePayoutUtils {
         rngLockedFlag = false;
         phaseTransitionActive = false;
         _setPrizePools(10 ether, 10 ether);
-        prizePoolPendingPacked = uint256(1 ether) | (uint256(1 ether) << 128);
+        prizePoolPendingPacked = POOL_PENDING_SENTINEL;
     }
 
     /// @dev Leave a stale three-entry word under every queue word the next `count` positions of

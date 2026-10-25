@@ -500,7 +500,8 @@ contract V61AfpayWaterfall is DeployProtocol {
             ? uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOL_PENDING_SLOT)))) : 0;
         uint256 halfMask = (uint256(1) << 128) - 1;
         uint256 sum = (active & halfMask) + ((active >> 128) & halfMask);
-        sum += (pending & halfMask) + ((pending >> 128) & halfMask);
+        // Bit 255 is the pending slot's sentinel, not pool value.
+        sum += (pending & halfMask) + ((pending >> 128) & (halfMask >> 1));
         return sum;
     }
 

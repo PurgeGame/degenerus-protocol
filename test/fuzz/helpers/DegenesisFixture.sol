@@ -214,8 +214,9 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
         return uint128(_slot(GameSlots.PRIZE_POOL_PENDING_PACKED));
     }
 
+    /// @dev Bit 255 is the pending slot's sentinel, not pool value.
     function _pendingFuture() internal view returns (uint256) {
-        return _slot(GameSlots.PRIZE_POOL_PENDING_PACKED) >> 128;
+        return (_slot(GameSlots.PRIZE_POOL_PENDING_PACKED) >> 128) & (type(uint128).max >> 1);
     }
 
     /// @dev Live future pool plus the pending buffer when frozen.

@@ -288,13 +288,13 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         return uint256(vm.load(address(game), GameSlotKeys.balances(SDGNRS_ID))) >> 128;
     }
 
-    /// @dev Future pool including the frozen pending buffer (the request's freeze seeds that
-    ///      buffer with 1% of the live future pool right after the split).
+    /// @dev Future pool including the frozen pending buffer (bit 255 of its slot is the sentinel).
     function _futureTotal() internal view returns (uint256 f) {
         f = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED))) >> 128;
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         if ((slot0 >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) & 0xff != 0) {
-            f += uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED))) >> 128;
+            f += (uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED))) >> 128)
+                & (type(uint128).max >> 1);
         }
     }
 

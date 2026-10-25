@@ -18,12 +18,12 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///         sum gets wrong:
 ///
 ///         1. FREEZE-WINDOW PENDING BUFFER (must be INCLUDED). During the daily-RNG freeze window,
-///            `_swapAndFreeze` (DegenerusGameStorage.sol:755) moves 1% of futurePrizePool into
-///            `prizePoolPendingPacked` (slot 11, packed `[future:128 | next:128]`). That buffer has NO
-///            external view, so `futurePrizePoolView()` drops by the seed while the ETH is still in
-///            balance and still owed. The contract counts it (`distributeYieldSurplus` adds
-///            `pNext + pFuture`, JackpotModule:710-711), so the harness must too. Reads 0 when not
-///            frozen (the buffer is cleared by `_unfreezePool`).
+///            revenue credited to the pools routes to `prizePoolPendingPacked` (packed
+///            `[sentinel:1 | future:127 | next:128]`). That buffer has NO external view, so the live
+///            pool views miss it while the ETH is in balance and owed. The contract counts it
+///            (`distributeYieldSurplus` adds `pNext + pFuture`), so the harness must too. Bit 255 is
+///            the slot's nonzero sentinel, never value. Reads 0 when not frozen (`_unfreezePool`
+///            folds the buffer and leaves only the sentinel).
 ///
 ///         2. DEAD POST-GAME-OVER LIVE POOLS (must be EXCLUDED). After the terminal drain
 ///            (DegenerusGameGameOverModule.sol:78) the live pools are zeroed and `available =
@@ -40,10 +40,8 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///         contract-guarded at HEAD, and this helper keeps `claimablePool` in the post-GO set so any
 ///         regression of that guard is still caught.)
 library SolvencyObligations {
-    /// @dev Authoritative slot for `prizePoolPendingPacked` on DegenerusGame, re-attested at the
-    ///      frozen audit subject c4d48008 via `forge inspect DegenerusGame storageLayout`
-    ///      (prizePoolPendingPacked: slot 11, offset 0, full uint256). Packed
-    ///      `[future:128 | next:128]`, matching _setPendingPools.
+    /// @dev Authoritative slot for `prizePoolPendingPacked` on DegenerusGame (GameSlots, pinned by
+    ///      StorageSlotPins). Packed `[sentinel:1 | future:127 | next:128]`, matching _setPendingPools.
     uint256 internal constant PRIZE_POOL_PENDING_PACKED_SLOT = GameSlots.PRIZE_POOL_PENDING_PACKED;
 
     // Cheatcode address (forge-std Vm). Used to read the no-external-view pending buffer.
@@ -93,22 +91,19 @@ library SolvencyObligations {
     }
 
     /// @notice Read the freeze-window pending buffer (no external view exists for it).
-    /// @return next  The pending next-pool accumulator (low 128 bits of slot 11).
-    /// @return future The pending future-pool accumulator (bits 128-255 of slot 11).
+    /// @return next  The pending next-pool accumulator (low 128 bits of the slot).
+    /// @return future The pending future-pool accumulator (bits 128-254; bit 255 is the sentinel).
     function pendingPools(DegenerusGame game)
         internal
         view
         returns (uint256 next, uint256 future)
     {
-        // Mirrors _getPendingPools: an unfrozen game's retained buffer is already folded.
-        bytes32 flags = Vm(VM_ADDRESS).load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN));
-        if (uint8(uint256(flags) >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) == 0) return (0, 0);
+        // Mirrors _getPendingPools: unfrozen, the buffer holds only the sentinel.
         bytes32 packed = Vm(VM_ADDRESS).load(
             address(game),
             bytes32(PRIZE_POOL_PENDING_PACKED_SLOT)
         );
-        uint256 halfMask = (uint256(1) << 128) - 1;
-        next = uint256(packed) & halfMask;
-        future = (uint256(packed) >> 128) & halfMask;
+        next = uint256(packed) & ((uint256(1) << 128) - 1);
+        future = (uint256(packed) >> 128) & ((uint256(1) << 127) - 1);
     }
 }

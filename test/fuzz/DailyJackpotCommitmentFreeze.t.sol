@@ -11,6 +11,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {PendingPools} from "../helpers/PendingPools.sol";
 
 /// @dev Initial conditions only: a funded first jackpot day with already-materialized
 /// ticket owners. No settlement or request is performed under this runtime.
@@ -125,7 +126,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         uint256 flags = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN)));
         if (uint8(flags >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) == 0) return (0, 0);
         uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
-        return (uint128(packed), packed >> 128);
+        return (PendingPools.next(packed), PendingPools.future(packed));
     }
 
     /// @dev Live budget fields only; bit 73 is the retained-word sentinel.
@@ -284,7 +285,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         assertGt(request, 0);
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
-        assertEq(game.futurePrizePoolView(), 99 ether, "freeze's 1% pending seed");
+        assertEq(game.futurePrizePoolView(), 100 ether, "the freeze leaves the live future pool whole");
         if (perturb) {
             _perturb();
             ++result.mutations;
@@ -335,12 +336,12 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
                 assertEq(game.claimablePoolView(), 4.896 ether, "liability equals all recipient ETH credits");
                 if (!sealedNow) {
                     // The seal (main leg) merges pending revenue; checked at the end instead.
-                    assertEq(game.nextPrizePoolView(), 34.194 ether, "main and early ticket backing moved exactly");
-                    assertEq(game.futurePrizePoolView(), 96.03 ether, "early budget debited from frozen future pool");
+                    assertEq(game.nextPrizePoolView(), 34.224 ether, "main and early ticket backing moved exactly");
+                    assertEq(game.futurePrizePoolView(), 97 ether, "early budget debited from frozen future pool");
                 }
                 if (!laterLeg) {
                     assertEq(uint64(_budgets() >> 8), 244, "main entry budget latched once");
-                    assertEq(uint64(_budgets() >> 144), 594, "early entry budget latched once");
+                    assertEq(uint64(_budgets() >> 144), 600, "early entry budget latched once");
                 }
             }
             if (paidEth && !early && uint64(_budgets() >> 144) == 0) {
@@ -366,9 +367,9 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         assertEq(game.rngWordForDay(day), word, "daily word is the delivered commitment");
         assertEq(game.currentPrizePoolView(), 73.88 ether);
         assertEq(game.claimablePoolView(), 4.896 ether);
-        assertEq(game.nextPrizePoolView(), 34.194 ether + result.pendingNext, "unfreeze merges actual pending next");
+        assertEq(game.nextPrizePoolView(), 34.224 ether + result.pendingNext, "unfreeze merges actual pending next");
         assertEq(
-            game.futurePrizePoolView(), 96.03 ether + result.pendingFuture, "unfreeze merges actual pending future"
+            game.futurePrizePoolView(), 97 ether + result.pendingFuture, "unfreeze merges actual pending future"
         );
         (uint256 pendingNext, uint256 pendingFuture) = _pending();
         assertEq(pendingNext + pendingFuture, 0, "pending buffer clears at seal");

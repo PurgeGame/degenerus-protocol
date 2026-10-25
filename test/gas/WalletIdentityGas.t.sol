@@ -28,7 +28,7 @@ contract WalletIdentityGasSeeder is DegenerusGamePayoutUtils {
         phaseTransitionActive = false;
         degenesisClosed = 7;
         _setPrizePools(10 ether, 10 ether);
-        prizePoolPendingPacked = uint256(1 ether) | (uint256(1 ether) << 128);
+        prizePoolPendingPacked = POOL_PENDING_SENTINEL;
     }
 
     function seedBalances(address player, uint256 claimable, uint256 afking) external {

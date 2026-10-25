@@ -10,6 +10,8 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {SolvencyObligations} from "../fuzz/helpers/SolvencyObligations.sol";
+import {PendingPools} from "../helpers/PendingPools.sol";
 
 /// @dev Advance the environment without replaying hundreds of unrelated game days.
 ///      Claims and draws still run through the production facade and modules.
@@ -60,6 +62,7 @@ contract FoilClaimBatch is DeployProtocol {
 
     error LengthMismatch();
     error StaleBatch();
+    error RngLocked();
 
     struct Tuple {
         uint32 id;
@@ -277,6 +280,130 @@ contract FoilClaimBatch is DeployProtocol {
         game.claimFoilMatch(good[0].id, good[0].day, good[0].ticketIndex);
         vm.expectRevert(bytes4(keccak256("NoClaimableMatch()")));
         game.claimFoilMatch(good[1].id, good[1].day, good[1].ticketIndex);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Daily RNG lock: claims wait for the day seal
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @dev Take the next day's daily request: the lock and the pool freeze start together.
+    function _lockNextDay() internal {
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _finishReadConsumers();
+        for (uint256 i; i < 20 && !game.rngLocked(); ++i) {
+            // A mid-day request still in flight must land before the daily one can go out.
+            _fulfillPendingVrf();
+            _advance();
+        }
+        assertTrue(game.rngLocked(), "the next daily request took the lock");
+        assertTrue(_poolFrozen(), "the request froze the pools");
+    }
+
+    /// @dev Deliver the request's word and run the day to its seal.
+    function _sealLockedDay() internal {
+        uint256 reqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(reqId, _seed(777, reqId));
+        _lastFulfilledReqId = reqId;
+        for (uint256 i; i < 50 && game.rngLocked(); ++i) _advance();
+        assertFalse(game.rngLocked(), "the day sealed");
+        assertFalse(_poolFrozen(), "the seal unfroze the pools");
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED))), uint256(1) << 255,
+            "the unfreeze leaves only the pending sentinel");
+    }
+
+    function _poolFrozen() internal view returns (bool) {
+        uint256 flags = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN)));
+        return uint8(flags >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) != 0;
+    }
+
+    /// @dev Claimable tuples on the newest draw day: still inside their window after one more seal.
+    function _latestDayClaimable(uint256 want) internal returns (Tuple[] memory found) {
+        Tuple[] memory all = _findClaimable(64);
+        Tuple[] memory buf = new Tuple[](want);
+        uint256 n;
+        for (uint256 i; i < all.length && n < want; ++i) {
+            if (all[i].day == _endDay) buf[n++] = all[i];
+        }
+        found = new Tuple[](n);
+        for (uint256 i; i < n; ++i) found[i] = buf[i];
+    }
+
+    /// @notice A claim under the daily lock reverts with RngLocked and changes nothing; the same
+    ///         tuple settles once the day seals.
+    function test_lockedClaimRevertsThenSettlesAfterUnlock() public {
+        Tuple[] memory good = _latestDayClaimable(1);
+        require(good.length == 1, "scenario produced no claimable tuple on the newest draw");
+        Tuple memory t = good[0];
+
+        _lockNextDay();
+        vm.expectRevert(RngLocked.selector);
+        game.claimFoilMatch(t.id, t.day, t.ticketIndex);
+
+        _sealLockedDay();
+        vm.recordLogs();
+        game.claimFoilMatch(t.id, t.day, t.ticketIndex);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 claimed;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == FOIL_CLAIMED_SIG) ++claimed;
+        }
+        assertEq(claimed, 1, "the tuple settles after the seal");
+        vm.expectRevert(bytes4(keccak256("NoClaimableMatch()")));
+        game.claimFoilMatch(t.id, t.day, t.ticketIndex);
+    }
+
+    /// @notice A batch under the daily lock reverts up front with RngLocked: not StaleBatch, not a
+    ///         partial sweep. Every tuple is still claimable after the seal.
+    function test_lockedBatchRevertsCleanlyBeforeAnyTuple() public {
+        Tuple[] memory good = _latestDayClaimable(2);
+        require(good.length == 2, "scenario produced too few claimable tuples on the newest draw");
+        (uint32[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(good);
+
+        _lockNextDay();
+        vm.expectRevert(RngLocked.selector);
+        game.claimFoilMatchMany(p, d, ti);
+
+        // A dead opener under the lock still reports the lock, not a swept list.
+        Tuple[] memory deadFirst = new Tuple[](2);
+        deadFirst[0] = _deadTuple(_fid[0]);
+        deadFirst[1] = good[0];
+        (uint32[] memory p2, uint24[] memory d2, uint8[] memory ti2) = _explode(deadFirst);
+        vm.expectRevert(RngLocked.selector);
+        game.claimFoilMatchMany(p2, d2, ti2);
+
+        _sealLockedDay();
+        game.claimFoilMatchMany(p, d, ti);
+        for (uint256 i; i < good.length; ++i) {
+            vm.expectRevert(bytes4(keccak256("NoClaimableMatch()")));
+            game.claimFoilMatch(good[i].id, good[i].day, good[i].ticketIndex);
+        }
+    }
+
+    /// @notice The freeze moves no value: obligations are unchanged by the request, a purchase
+    ///         under the freeze lands in the pending buffer as an obligation of exactly its value,
+    ///         and the seal folds it into the live pools leaving only the sentinel.
+    function test_freezeWindowObligationsAreExact() public {
+        _lockNextDay();
+        uint256 pendingRaw = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
+        assertEq(PendingPools.value(pendingRaw), 0, "the freeze opens an empty buffer");
+        uint256 live = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
+        uint256 obligationsBefore = SolvencyObligations.obligations(game);
+
+        address buyer = makeAddr("freeze-window-buyer");
+        vm.deal(buyer, 10 ether);
+        uint256 price = PriceLookupLib.priceForLevel(game.level() + 1);
+        vm.prank(buyer);
+        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+
+        pendingRaw = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
+        assertEq(pendingRaw >> 255, 1, "the credit keeps the sentinel");
+        assertEq(PendingPools.next(pendingRaw) + PendingPools.future(pendingRaw), price, "the buy is pending");
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED))), live, "live pools frozen");
+        assertEq(SolvencyObligations.obligations(game), obligationsBefore + price, "obligation of exactly the buy");
+        assertGe(SolvencyObligations.backing(game), SolvencyObligations.obligations(game), "solvent under the freeze");
+
+        _sealLockedDay();
+        assertGe(SolvencyObligations.backing(game), SolvencyObligations.obligations(game), "solvent after the seal");
     }
 
     // ──────────────────────────────────────────────────────────────────────

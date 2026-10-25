@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
@@ -39,8 +40,16 @@ contract FreezeHarness is DegenerusGameAdvanceModule, WalletSeed {
         return prizePoolPendingPacked;
     }
 
+    function setRawPendingPools(uint256 raw) external {
+        prizePoolPendingPacked = raw;
+    }
+
     function addPrizeContribution(uint128 next, uint128 future) external {
         _addPrizeContribution(next, future);
+    }
+
+    function sentinel() external pure returns (uint256) {
+        return POOL_PENDING_SENTINEL;
     }
 
     // --- Direct field access ---
@@ -61,6 +70,9 @@ contract FreezeHarness is DegenerusGameAdvanceModule, WalletSeed {
 /// @title FreezeLifecycleTest -- Unit tests for FREEZE-01 through FREEZE-04
 contract FreezeLifecycleTest is Test {
     FreezeHarness harness;
+    uint256 internal constant SENTINEL = uint256(1) << 255;
+    uint256 internal constant FUTURE_MAX = type(uint128).max >> 1;
+    bytes32 internal constant PENDING_SLOT = bytes32(uint256(9));
 
     function setUp() public {
         // The freeze push calls the parimutuel at its fixed address; this harness deploys
@@ -70,11 +82,26 @@ contract FreezeLifecycleTest is Test {
         harness = new FreezeHarness();
     }
 
+    /// @dev The steady state every unfreeze leaves: the buffer holds only the sentinel.
+    function _settle() internal {
+        harness.setFrozen(true);
+        harness.exposed_unfreezePool();
+        assertEq(harness.rawPendingPools(), SENTINEL, "unfreeze leaves only the sentinel");
+    }
+
+    function testSentinelConstantIsTopBit() public view {
+        assertEq(harness.sentinel(), SENTINEL);
+    }
+
+    function testPendingSlotPin() public {
+        harness.setRawPendingPools(0xabc);
+        assertEq(uint256(vm.load(address(harness), PENDING_SLOT)), 0xabc, "prizePoolPendingPacked is slot 9");
+    }
+
     // =====================================================================
-    // FREEZE-01: _swapAndFreeze sets frozen flag
+    // FREEZE-01: _freezePool sets the flag and touches nothing else
     // =====================================================================
 
-    /// @dev Calling _swapAndFreeze sets prizePoolFrozen = true.
     function testSwapAndFreezeSetsFrozenFlag() public {
         assertFalse(harness.getFrozen(), "should start unfrozen");
 
@@ -83,33 +110,32 @@ contract FreezeLifecycleTest is Test {
         assertTrue(harness.getFrozen(), "prizePoolFrozen should be true after swapAndFreeze");
     }
 
-    /// @dev _swapAndFreeze zeros pending pools when not already frozen.
-    function testSwapAndFreezeZerosPending() public {
-        // Pre-seed pending with nonzero values
-        harness.exposed_setPendingPools(500, 1000);
-        assertFalse(harness.getFrozen());
+    /// @dev No seed: the freeze leaves the live pools and the (empty) buffer exactly as they were.
+    function testFreezeLeavesPoolsAndBufferUntouched() public {
+        harness.exposed_setPrizePools(10_000, 20_000);
+        _settle();
 
         harness.exposed_swapAndFreeze(0);
 
+        (uint128 next, uint128 future) = harness.exposed_getPrizePools();
+        assertEq(next, 10_000, "live next untouched by the freeze");
+        assertEq(future, 20_000, "live future untouched by the freeze: no seed");
+        assertEq(harness.rawPendingPools(), SENTINEL, "freeze writes nothing to pending");
         (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
-        assertEq(pNext, 0, "pending next should be zeroed on fresh freeze");
-        assertEq(pFuture, 0, "pending future should be zeroed on fresh freeze");
+        assertEq(pNext, 0);
+        assertEq(pFuture, 0);
     }
 
     // =====================================================================
     // FREEZE-04 (critical): Accumulators preserved when already frozen
     // =====================================================================
 
-    /// @dev Calling _swapAndFreeze when already frozen does NOT zero pending pools.
     function testSwapAndFreezePreservesAccumulatorsWhenAlreadyFrozen() public {
-        // First freeze
         harness.exposed_swapAndFreeze(0);
         assertTrue(harness.getFrozen());
 
-        // Simulate purchases during freeze
         harness.exposed_setPendingPools(300, 600);
 
-        // Second swapAndFreeze (simulating next jackpot day's daily RNG)
         harness.exposed_swapAndFreeze(0);
 
         assertTrue(harness.getFrozen(), "should remain frozen");
@@ -119,10 +145,9 @@ contract FreezeLifecycleTest is Test {
     }
 
     // =====================================================================
-    // FREEZE-03: _unfreezePool merges pending into live and clears flag
+    // FREEZE-03: _unfreezePool folds pending into live, leaves the sentinel, clears the flag
     // =====================================================================
 
-    /// @dev _unfreezePool adds pending to live and hides the retained buffer by clearing the flag.
     function testUnfreezeMergesPendingIntoLive() public {
         harness.exposed_setPrizePools(1000, 2000);
         harness.exposed_setPendingPools(150, 250);
@@ -130,118 +155,197 @@ contract FreezeLifecycleTest is Test {
 
         harness.exposed_unfreezePool();
 
-        // Live pools should have absorbed pending
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
         assertEq(next, 1150, "live next should include pending");
-        assertEq(future, 2250, "live future should include pending");
+        assertEq(future, 2250, "live future should include pending, sentinel excluded");
 
-        // Pending should be zeroed
         (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
-        assertEq(pNext, 0, "pending next should be zeroed after unfreeze");
-        assertEq(pFuture, 0, "pending future should be zeroed after unfreeze");
+        assertEq(pNext, 0, "pending next empty after unfreeze");
+        assertEq(pFuture, 0, "pending future empty after unfreeze");
+        assertEq(harness.rawPendingPools(), SENTINEL, "only the sentinel remains");
 
-        // Flag should be cleared
         assertFalse(harness.getFrozen(), "prizePoolFrozen should be false after unfreeze");
     }
 
-    /// @dev _unfreezePool is a no-op when not frozen.
-    function testUnfreezeNoopWhenNotFrozen() public {
+    /// @dev A freeze that took no credit folds nothing and leaves both slots as they were.
+    function testUnfreezeQuietFreezeLeavesSlots() public {
         harness.exposed_setPrizePools(1000, 2000);
-        harness.exposed_setPendingPools(150, 250);
-        assertFalse(harness.getFrozen());
+        _settle();
+        harness.exposed_swapAndFreeze(0);
 
         harness.exposed_unfreezePool();
 
-        // Live pools unchanged
+        (uint128 next, uint128 future) = harness.exposed_getPrizePools();
+        assertEq(next, 1000);
+        assertEq(future, 2000);
+        assertEq(harness.rawPendingPools(), SENTINEL);
+        assertFalse(harness.getFrozen());
+    }
+
+    /// @dev A never-written slot (zero) still folds cleanly and comes out holding the sentinel.
+    function testUnfreezeFromZeroWritesSentinel() public {
+        harness.exposed_setPrizePools(1000, 2000);
+        assertEq(harness.rawPendingPools(), 0);
+        harness.setFrozen(true);
+
+        harness.exposed_unfreezePool();
+
+        (uint128 next, uint128 future) = harness.exposed_getPrizePools();
+        assertEq(next, 1000);
+        assertEq(future, 2000);
+        assertEq(harness.rawPendingPools(), SENTINEL);
+    }
+
+    function testUnfreezeNoopWhenNotFrozen() public {
+        harness.exposed_setPrizePools(1000, 2000);
+        _settle();
+
+        harness.exposed_unfreezePool();
+
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
         assertEq(next, 1000, "live next should be unchanged");
         assertEq(future, 2000, "live future should be unchanged");
+        assertEq(harness.rawPendingPools(), SENTINEL);
+    }
 
-        // The inactive payload remains stored, but must not be reported as a liability.
+    // =====================================================================
+    // Sentinel: set on every write, masked on every read
+    // =====================================================================
+
+    function testSetterOrsSentinelAndGetterMasksIt(uint128 next, uint128 future) public {
+        future = uint128(bound(future, 0, FUTURE_MAX));
+        harness.exposed_setPendingPools(next, future);
+
+        uint256 raw = harness.rawPendingPools();
+        assertEq(raw & SENTINEL, SENTINEL, "setter ORs the sentinel in");
+        assertEq(raw, SENTINEL | (uint256(future) << 128) | next);
         (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
-        assertEq(pNext, 0);
-        assertEq(pFuture, 0);
-        assertEq(harness.rawPendingPools(), uint256(150) | (uint256(250) << 128));
+        assertEq(pNext, next, "next half read exactly");
+        assertEq(pFuture, future, "future half read without the sentinel");
+    }
+
+    function testContributionKeepsSentinel(uint128 a, uint128 b, uint128 c, uint128 d) public {
+        a = uint128(bound(a, 0, 1e30));
+        b = uint128(bound(b, 0, 1e30));
+        c = uint128(bound(c, 0, 1e30));
+        d = uint128(bound(d, 0, 1e30));
+        _settle();
+        harness.setFrozen(true);
+
+        harness.addPrizeContribution(a, b);
+        harness.addPrizeContribution(c, d);
+
+        uint256 raw = harness.rawPendingPools();
+        assertEq(raw & SENTINEL, SENTINEL, "read-add-write keeps the sentinel");
+        (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
+        assertEq(pNext, uint256(a) + c);
+        assertEq(pFuture, uint256(b) + d);
+    }
+
+    /// @dev The future half saturates below the sentinel and never carries into it.
+    function testContributionFutureSaturatesBelowSentinel() public {
+        harness.exposed_setPendingPools(7, uint128(FUTURE_MAX - 5));
+        harness.setFrozen(true);
+
+        harness.addPrizeContribution(1, 100);
+
+        uint256 raw = harness.rawPendingPools();
+        assertEq(raw & SENTINEL, SENTINEL, "sentinel intact at the ceiling");
+        (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
+        assertEq(pNext, 8, "next half unaffected by the future clamp");
+        assertEq(pFuture, FUTURE_MAX, "future clamps at 2^127 - 1");
+    }
+
+    /// @dev The fold adds the masked future half: the sentinel never reaches the live pools.
+    function testFoldExcludesSentinel(uint128 liveNext, uint128 liveFuture, uint128 pNext, uint128 pFuture) public {
+        liveNext = uint128(bound(liveNext, 0, 1e30));
+        liveFuture = uint128(bound(liveFuture, 0, 1e30));
+        pNext = uint128(bound(pNext, 0, 1e30));
+        pFuture = uint128(bound(pFuture, 0, 1e30));
+        harness.exposed_setPrizePools(liveNext, liveFuture);
+        _settle();
+        harness.exposed_swapAndFreeze(0);
+        harness.addPrizeContribution(pNext, pFuture);
+
+        harness.exposed_unfreezePool();
+
+        (uint128 next, uint128 future) = harness.exposed_getPrizePools();
+        assertEq(next, uint256(liveNext) + pNext);
+        assertEq(future, uint256(liveFuture) + pFuture);
+        assertEq(harness.rawPendingPools(), SENTINEL);
+    }
+
+    /// @dev After an unfreeze, the next freeze's first credit rewrites a nonzero slot: the
+    ///      SSTORE is nonzero-to-nonzero, never a fresh zero-to-nonzero write.
+    function testFirstFreezeCreditWritesNonzeroSlot() public {
+        _settle();
+        harness.exposed_swapAndFreeze(0);
+
+        vm.startStateDiffRecording();
+        harness.addPrizeContribution(100, 200);
+        Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        uint256 writes;
+        for (uint256 i; i < accesses.length; ++i) {
+            Vm.StorageAccess[] memory s = accesses[i].storageAccesses;
+            for (uint256 j; j < s.length; ++j) {
+                if (s[j].account != address(harness) || s[j].slot != PENDING_SLOT || !s[j].isWrite) continue;
+                ++writes;
+                assertEq(uint256(s[j].previousValue), SENTINEL, "the write lands on the sentinel-only slot");
+                assertEq(uint256(s[j].newValue), SENTINEL | (uint256(200) << 128) | 100);
+            }
+        }
+        assertEq(writes, 1, "one pending write");
     }
 
     // =====================================================================
     // FREEZE-02: Freeze branch routing tests
     // =====================================================================
 
-    /// @dev When frozen, adding to pending increases pending and leaves live unchanged.
     function testFrozenPurchaseBranchRoutesPending() public {
-        // Set initial live pools
         harness.exposed_setPrizePools(5000, 10000);
-        // Freeze
+        _settle();
         harness.setFrozen(true);
-        // Clear pending
-        harness.exposed_setPendingPools(0, 0);
 
-        // Simulate freeze branch pattern: load pending, add shares, store
-        uint128 nextShare = 100;
-        uint128 futureShare = 200;
+        harness.addPrizeContribution(100, 200);
+
         (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
-        harness.exposed_setPendingPools(pNext + nextShare, pFuture + futureShare);
-
-        // Verify pending increased
-        (pNext, pFuture) = harness.exposed_getPendingPools();
         assertEq(pNext, 100, "pending next should have purchase share");
         assertEq(pFuture, 200, "pending future should have purchase share");
 
-        // Verify live unchanged
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
         assertEq(next, 5000, "live next must be unchanged during freeze");
         assertEq(future, 10000, "live future must be unchanged during freeze");
     }
 
-    /// @dev When not frozen, adding to live increases live and leaves pending unchanged.
     function testUnfrozenPurchaseBranchRoutesLive() public {
-        // Set initial live pools
         harness.exposed_setPrizePools(5000, 10000);
-        // Not frozen (default)
-        assertFalse(harness.getFrozen());
-        // Set pending to nonzero to prove it's not touched
-        harness.exposed_setPendingPools(999, 888);
+        _settle();
 
-        // Simulate unfrozen branch pattern: load live, add shares, store
-        uint128 nextShare = 100;
-        uint128 futureShare = 200;
+        harness.addPrizeContribution(100, 200);
+
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
-        harness.exposed_setPrizePools(next + nextShare, future + futureShare);
-
-        // Verify live increased
-        (next, future) = harness.exposed_getPrizePools();
         assertEq(next, 5100, "live next should have purchase share");
         assertEq(future, 10200, "live future should have purchase share");
-
-        // The inactive payload is unchanged and logically empty.
-        (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
-        assertEq(pNext, 0);
-        assertEq(pFuture, 0);
-        assertEq(harness.rawPendingPools(), uint256(999) | (uint256(888) << 128));
+        assertEq(harness.rawPendingPools(), SENTINEL, "unfrozen credit leaves the buffer empty");
     }
 
-    function testRetainedPendingCannotBeCountedTwiceAcrossFreezeCycles() public {
+    function testPendingNeverCountedTwiceAcrossFreezeCycles() public {
         harness.exposed_setPrizePools(10000, 20000);
         for (uint128 cycle = 1; cycle <= 5; ++cycle) {
             (uint128 beforeNext, uint128 beforeFuture) = harness.exposed_getPrizePools();
             harness.exposed_swapAndFreeze(0);
             (uint128 pendingNext, uint128 pendingFuture) = harness.exposed_getPendingPools();
-            assertEq(pendingNext, 0, "new freeze replaces the old next payload");
-            assertEq(pendingFuture, beforeFuture / 100, "only the new seed is pending");
+            assertEq(pendingNext, 0, "each freeze opens on an empty buffer");
+            assertEq(pendingFuture, 0, "each freeze opens on an empty buffer");
             harness.addPrizeContribution(cycle * 100, cycle * 200);
-            uint256 retained = harness.rawPendingPools();
             harness.exposed_unfreezePool();
-            assertEq(harness.rawPendingPools(), retained, "unfreeze retains the payload");
+            assertEq(harness.rawPendingPools(), SENTINEL, "unfreeze empties the buffer");
             harness.exposed_unfreezePool();
             harness.addPrizeContribution(10, 20);
-            assertEq(harness.rawPendingPools(), retained, "unfrozen contributions leave it alone");
+            assertEq(harness.rawPendingPools(), SENTINEL, "unfrozen contributions leave it alone");
             (uint128 next, uint128 future) = harness.exposed_getPrizePools();
             assertEq(next, beforeNext + cycle * 100 + 10);
             assertEq(future, beforeFuture + cycle * 200 + 20);
-            (pendingNext, pendingFuture) = harness.exposed_getPendingPools();
-            assertEq(pendingNext, 0);
-            assertEq(pendingFuture, 0);
         }
     }
 
@@ -250,27 +354,16 @@ contract FreezeLifecycleTest is Test {
     // =====================================================================
 
     /// @dev Simulate 5 jackpot days: freeze persists, accumulators grow, unfreeze merges all.
-    ///      The first _swapAndFreeze pre-seeds the pending FUTURE buffer with 1% of the live
-    ///      future pool (futureBal / 100) and subtracts that seed from the live future pool
-    ///      (DegenerusGameStorage:778-790). So pending future carries an extra `seed` over the
-    ///      raw day accumulation, live future drops by `seed` at the first freeze, and the seed
-    ///      rolls back into live future at unfreeze (net live future = original + accumulated).
     function testMultiDayAccumulatorPersistence() public {
-        // Initial live pool values
         harness.exposed_setPrizePools(10000, 20000);
-        uint128 seed = uint128(20000) / 100; // _swapAndFreeze seeds pending future with 1% of live future
 
-        // Day 1: First swapAndFreeze -> activates freeze, seeds pending future with `seed`,
-        // and debits `seed` from the live future pool.
         harness.exposed_swapAndFreeze(0);
         assertTrue(harness.getFrozen());
 
         uint128 totalNextAdded;
         uint128 totalFutureAdded;
 
-        // Simulate 5 days of purchases + daily swaps
         for (uint256 day = 1; day <= 5; day++) {
-            // Simulate purchases during this day (different amounts each day)
             uint128 dayNextShare = uint128(100 * day);
             uint128 dayFutureShare = uint128(200 * day);
 
@@ -280,92 +373,71 @@ contract FreezeLifecycleTest is Test {
             totalNextAdded += dayNextShare;
             totalFutureAdded += dayFutureShare;
 
-            // Verify pending grows monotonically (future carries the +seed pre-seed)
             (pNext, pFuture) = harness.exposed_getPendingPools();
             assertEq(pNext, totalNextAdded, "pending next should grow monotonically");
-            assertEq(pFuture, seed + totalFutureAdded, "pending future = seed + accumulated");
+            assertEq(pFuture, totalFutureAdded, "pending future should grow monotonically");
 
-            // Verify live pools unchanged throughout (future is debited by `seed` at first freeze)
             (uint128 next, uint128 future) = harness.exposed_getPrizePools();
             assertEq(next, 10000, "live next must remain constant during jackpot phase");
-            assertEq(future, 20000 - seed, "live future is debited by the 1% freeze seed");
+            assertEq(future, 20000, "live future must remain constant during jackpot phase");
 
-            // Days 2-5: subsequent swapAndFreeze (already frozen) is pool-neutral (ticket-slot swap only)
             if (day < 5) {
                 harness.exposed_swapAndFreeze(0);
                 assertTrue(harness.getFrozen(), "must remain frozen between jackpot days");
 
-                // Verify accumulators survived the re-freeze
                 (pNext, pFuture) = harness.exposed_getPendingPools();
                 assertEq(pNext, totalNextAdded, "pending next must survive re-freeze");
-                assertEq(pFuture, seed + totalFutureAdded, "pending future must survive re-freeze");
+                assertEq(pFuture, totalFutureAdded, "pending future must survive re-freeze");
             }
         }
 
-        // totalNextAdded = 100+200+300+400+500 = 1500
-        // totalFutureAdded = 200+400+600+800+1000 = 3000
         assertEq(totalNextAdded, 1500, "sanity: total next");
         assertEq(totalFutureAdded, 3000, "sanity: total future");
 
-        // Unfreeze: all 5 days of pending (incl. the seed) merge into live; the seed rolls back
-        // into live future so net live future = original 20000 + accumulated 3000.
         harness.exposed_unfreezePool();
 
         assertFalse(harness.getFrozen(), "should be unfrozen after jackpot phase");
 
         (uint128 finalNext, uint128 finalFuture) = harness.exposed_getPrizePools();
         assertEq(finalNext, 10000 + 1500, "live next should absorb all 5 days of pending");
-        assertEq(finalFuture, 20000 + 3000, "live future = original + accumulated (seed rolled back)");
+        assertEq(finalFuture, 20000 + 3000, "live future should absorb all 5 days of pending");
 
-        // Pending should be zeroed
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
         assertEq(pn, 0, "pending next should be zero after unfreeze");
         assertEq(pf, 0, "pending future should be zero after unfreeze");
+        assertEq(harness.rawPendingPools(), SENTINEL);
     }
 
     // =====================================================================
     // Round-trip lifecycle test
     // =====================================================================
 
-    /// @dev Full lifecycle: set live -> freeze -> add pending -> unfreeze -> verify live = original + pending.
-    ///      The freeze pre-seeds pending future with 1% of live future (futureBal / 100) and debits that
-    ///      seed from the live future pool (DegenerusGameStorage:778-790). The explicit setPendingPools
-    ///      below overwrites that seed, so at unfreeze the live future absorbs only the overwritten pending
-    ///      against the seed-debited live future (net: original - seed + pendingFuture).
     function testFreezeUnfreezeRoundTrip() public {
-        // Set initial live values
         harness.exposed_setPrizePools(7777, 8888);
-        uint128 seed = uint128(8888) / 100; // pending-future pre-seed = 1% of live future
 
-        // Freeze
         harness.exposed_swapAndFreeze(0);
         assertTrue(harness.getFrozen());
 
-        // Pending future is pre-seeded with `seed` (1% of live future); pending next stays 0
         (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
         assertEq(pNext, 0);
-        assertEq(pFuture, seed, "freeze pre-seeds pending future with 1% of live future");
+        assertEq(pFuture, 0, "the freeze seeds nothing");
 
-        // Live future is debited by the seed; live next unchanged
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
         assertEq(next, 7777, "live next unchanged during freeze");
-        assertEq(future, 8888 - seed, "live future debited by the freeze seed");
+        assertEq(future, 8888, "live future unchanged during freeze");
 
-        // Simulate purchase: overwrite pending with explicit values
         harness.exposed_setPendingPools(333, 444);
 
-        // Unfreeze
         harness.exposed_unfreezePool();
 
-        // Verify: live = seed-debited-live + overwritten pending
         (next, future) = harness.exposed_getPrizePools();
         assertEq(next, 7777 + 333, "live next = original + pending after unfreeze");
-        assertEq(future, (8888 - seed) + 444, "live future = seed-debited live + pending after unfreeze");
+        assertEq(future, 8888 + 444, "live future = original + pending after unfreeze");
 
-        // Verify: pending zeroed, flag cleared
         (pNext, pFuture) = harness.exposed_getPendingPools();
         assertEq(pNext, 0);
         assertEq(pFuture, 0);
+        assertEq(harness.rawPendingPools(), SENTINEL);
         assertFalse(harness.getFrozen());
     }
 }

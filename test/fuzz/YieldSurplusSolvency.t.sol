@@ -35,7 +35,8 @@ contract YieldHarness is DegenerusGameJackpotModule {
     }
 
     function callUnfreezePool() external {
-        // Mirror AdvanceModule._unfreezePool (fold pending into live, clear freeze). This
+        // Mirror AdvanceModule._unfreezePool (fold pending into live, leave only the sentinel,
+        // clear freeze). This
         // JackpotModule-based harness can't reach the moved internal; the real function is
         // unit-tested in PrizePoolFreeze. Here it models the end-of-day settlement this
         // solvency test exercises against distributeYieldSurplus.
@@ -43,7 +44,16 @@ contract YieldHarness is DegenerusGameJackpotModule {
         (uint128 pNext, uint128 pFuture) = _getPendingPools();
         (uint128 next, uint128 future) = _getPrizePools();
         _setPrizePools(next + pNext, future + pFuture);
+        prizePoolPendingPacked = POOL_PENDING_SENTINEL;
         prizePoolFrozen = false;
+    }
+
+    function rawPending() external view returns (uint256) {
+        return prizePoolPendingPacked;
+    }
+
+    function setRawPending(uint256 v) external {
+        prizePoolPendingPacked = v;
     }
 
     // --- Views ---
@@ -160,8 +170,25 @@ contract YieldSurplusSolvencyTest is Test {
         );
     }
 
+    /// @dev The pending sentinel (bit 255) is never an obligation, frozen or not: a buffer holding
+    ///      only the sentinel leaves the whole real surplus distributable.
+    function testPendingSentinelIsNeverAnObligation() public {
+        assertEq(harness.rawPending() >> 255, 1, "the setter carries the sentinel");
+        harness.setRawPending(uint256(1) << 255);
+        for (uint256 frozen; frozen < 2; ++frozen) {
+            uint256 snap = vm.snapshotState();
+            harness.setFrozen(frozen == 1);
+            vm.deal(address(harness), O + 100 ether);
+            harness.distributeYieldSurplus(RNG);
+            assertEq(harness.getClaimablePool(), CP + 69 ether, "sentinel adds no obligation");
+            assertEq(harness.getYieldAccumulator(), YA + 23 ether);
+            vm.revertToState(snap);
+        }
+    }
+
     function testRetainedPendingDoesNotHideYieldAfterUnfreeze() public {
         harness.callUnfreezePool();
+        assertEq(harness.rawPending(), uint256(1) << 255, "the unfreeze leaves only the sentinel");
         vm.deal(address(harness), O + P + 100 ether);
         harness.distributeYieldSurplus(RNG);
         assertEq(harness.getClaimablePool(), CP + 69 ether);

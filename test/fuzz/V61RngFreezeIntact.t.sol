@@ -407,7 +407,7 @@ contract V61RngFreezeIntact is DeployProtocol {
             (active & ((uint256(1) << 128) - 1)) +
             ((active >> 128) & ((uint256(1) << 128) - 1)) +
             (pending & ((uint256(1) << 128) - 1)) +
-            ((pending >> 128) & ((uint256(1) << 128) - 1));
+            ((pending >> 128) & ((uint256(1) << 127) - 1)); // bit 255 is the pending sentinel
     }
 
     function _afkingSpentAmount(address who) internal returns (uint256) {

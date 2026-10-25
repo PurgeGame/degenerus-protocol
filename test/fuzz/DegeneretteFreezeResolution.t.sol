@@ -1026,10 +1026,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         return (packed >> 128) & ((uint256(1) << 128) - 1);
     }
 
-    /// @notice Read pending future from packed slot (future half, bits 128-255 of prizePoolPendingPacked, slot 11).
+    /// @notice Read pending future from packed slot (bits 128-254 of prizePoolPendingPacked; bit 255 is the sentinel).
     function _readPendingFuture() internal view returns (uint256) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PENDING_PACKED_SLOT))));
-        return (packed >> 128) & ((uint256(1) << 128) - 1);
+        return (packed >> 128) & ((uint256(1) << 127) - 1);
     }
 
     /// @notice Read prizePoolFrozen from slot 0, bit 208.
@@ -1044,27 +1044,6 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
         uint256 newPacked = (currentPacked & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
-    }
-
-    /// @notice Seed pending future (future half, bits 128-255 of prizePoolPendingPacked, slot 11).
-    /// @dev Preserves the next half.
-    function _seedPendingFuture(uint256 targetFuture) internal {
-        uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PENDING_PACKED_SLOT))));
-        uint256 newPacked = (currentPacked & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
-        vm.store(address(game), bytes32(uint256(PENDING_PACKED_SLOT)), bytes32(newPacked));
-    }
-
-    /// @notice Set prizePoolFrozen flag (slot 0, bit 208).
-    /// @dev Preserves all other bytes in slot 0.
-    function _setFrozenFlag(bool frozen) internal {
-        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
-        // Clear the frozen byte (bit 208)
-        s0 = s0 & ~(uint256(0xFF) << FROZEN_BIT_SHIFT);
-        // Set the frozen byte
-        if (frozen) {
-            s0 = s0 | (uint256(1) << FROZEN_BIT_SHIFT);
-        }
-        vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(s0));
     }
 
     /// @notice Inject a lootbox RNG word for a given index.

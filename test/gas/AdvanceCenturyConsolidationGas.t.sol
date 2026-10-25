@@ -1187,31 +1187,31 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
 
 contract AdvanceCenturyConsolidationGas is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(3500 ether, 25_372_163_398_292_257_697, 158_126_247_524_580_441_470, 100, 1, true);
+        return Shape(3500 ether, 25_118_441_764_309_335_121, 158_126_247_524_580_441_470, 100, 1, true);
     }
 }
 
 contract AdvanceCenturyAtHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 477_954_620_213_945_795_466, 100 ether, 102, 0, false);
+        return Shape(100 ether, 473_175_074_011_806_337_512, 100 ether, 102, 0, false);
     }
 }
 
 contract AdvanceCenturyAboveHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 477_954_620_213_945_796_476, 100 ether + 200, 100, 1, false);
+        return Shape(100 ether, 473_175_074_011_806_338_512, 100 ether + 200, 100, 1, false);
     }
 }
 
 contract AdvanceCenturyFarDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 883_277_852_537_178_118_698, 180 ether, 100, 1, false);
+        return Shape(100 ether, 874_445_074_011_806_337_512, 180 ether, 100, 1, false);
     }
 }
 
 contract AdvanceCenturyLargeDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 1_489_338_458_597_784_179_305, 300 ether, 96, 3, false);
+        return Shape(100 ether, 1_474_445_074_011_806_337_512, 300 ether, 96, 3, false);
     }
 }
 
@@ -1219,7 +1219,7 @@ contract AdvanceCenturyLargeDeferred is CenturyConsolidationFixture {
 ///      3.06 ETH leg rolls twice.
 contract AdvanceCenturyFirstScatterDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 2_448_934_418_193_743_775_264, 490 ether, 48, 27, false);
+        return Shape(100 ether, 2_424_445_074_011_806_337_512, 490 ether, 48, 27, false);
     }
 }
 
@@ -1227,7 +1227,7 @@ contract AdvanceCenturyFirstScatterDeferred is CenturyConsolidationFixture {
 ///      head lootbox half defer to whale passes.
 contract AdvanceCenturyAllTicketsDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 9_065_096_034_355_359_936_880, 1800 ether, 0, 99, false);
+        return Shape(100 ether, 8_974_445_074_011_806_337_512, 1800 ether, 0, 99, false);
     }
 }
 
@@ -1235,7 +1235,7 @@ contract AdvanceCenturyAllTicketsDeferred is CenturyConsolidationFixture {
 ///      the doubled schedule's most roll-heavy shape.
 contract AdvanceCenturyDoubledRounds is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 3_004_489_973_749_299_330_820, 600 ether, 192, 3, false);
+        return Shape(100 ether, 2_974_445_074_011_806_337_512, 600 ether, 192, 3, false);
     }
 }
 
@@ -1251,7 +1251,7 @@ contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
         // 178.04 ETH, inside the (100, 200) ETH band with the destination-heavy award shape:
         // 2-roll scatter legs and head halves, the top award's half deferred to whale passes.
         // This pool's level cut falls short of one whole high pass: no house pass.
-        return Shape(3000 ether, 397_359_325_926_647_615_319, 178_035_451_782_491_666_369, 100, 1, false);
+        return Shape(3000 ether, 393_385_732_667_381_139_166, 178_035_451_782_491_666_369, 100, 1, false);
     }
 }
 

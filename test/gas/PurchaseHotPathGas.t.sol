@@ -27,7 +27,7 @@ contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
         prizePoolFrozen = frozen;
         // Pre-existing pools make the measurements independent of zero-pool initialization.
         _setPrizePools(10 ether, 10 ether);
-        prizePoolPendingPacked = uint256(1 ether) | (uint256(1 ether) << 128);
+        prizePoolPendingPacked = POOL_PENDING_SENTINEL;
         balancesPacked[_seedWallet(buyer)] = uint256(100 ether) | (uint256(100 ether) << 128);
         claimablePool = 200 ether;
     }

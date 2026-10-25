@@ -98,10 +98,11 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         balancesPacked[SDGNRS_WALLET_ID] = claimable | (afking << 128);
         claimablePool = uint128(claimablePool + claimable + afking - uint128(prior) - (prior >> 128));
     }
+    /// @dev A live game's pending slot always carries its sentinel before game over.
     function hostPools(uint256 packed, bool frozen, uint256 pending) external {
         prizePoolsPacked = packed;
         prizePoolFrozen = frozen;
-        prizePoolPendingPacked = pending;
+        prizePoolPendingPacked = pending | POOL_PENDING_SENTINEL;
     }
 
     function hostSeedBoons(uint32 id, uint256 amount, uint256 seed) external {
@@ -818,7 +819,7 @@ contract DegenesisTopUpGas is DegenesisGasBase {
 /// @title DegenesisTerminalGas -- terminal setup's Degenesis legs, cold
 /// @notice Seven unsplit nonempty cohorts, an empty Vault budget (the split creates it and the
 ///         release clears it) and an empty prize-pool word with the pools frozen (the split's
-///         pending write is fresh), then the release and the active clear.
+///         pending write lands on the sentinel-only buffer), then the release and the active clear.
 contract DegenesisTerminalGas is DegenesisGasBase {
     function setUp() public {
         _deployProtocol();

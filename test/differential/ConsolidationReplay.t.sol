@@ -316,16 +316,19 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         console.log(string.concat("DIFFALLOCATION|", baseline ? "baseline" : "candidate", "|", vm.toString(quarters),
             "|", vm.toString(futureDelta), "|", vm.toString(insuranceDelta)));
         if (!baseline || game.gameOver()) return;
-        // Daily requests freeze immediately after the split; only their 1% seed moves with it.
+        // Daily requests freeze immediately after the split. The baseline runtime still moves 1% of
+        // future into the pending buffer at the request; the candidate moves nothing, so return the
+        // baseline seed to the live pool. The baseline's own unfreeze would fold a bit-255 sentinel
+        // as value, so its emptied buffer is the zero word.
         assertTrue(game.rngLocked(), "allocation adaptation requires daily request");
         uint256 pools = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
         uint256 pending = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
         uint256 totalFuture = (pools >> 128) + (pending >> 128);
         assertEq(uint128(pending), 0, "no pending next contribution at request");
-        assertEq(pending >> 128, totalFuture / 100, "exact request seed before adaptation");
+        assertEq(pending >> 128, totalFuture / 100, "exact baseline request seed before adaptation");
         totalFuture -= quarters;
-        vm.store(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED), bytes32(uint256(uint128(pools)) | ((totalFuture - totalFuture / 100) << 128)));
-        vm.store(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED), bytes32((totalFuture / 100) << 128));
+        vm.store(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED), bytes32(uint256(uint128(pools)) | (totalFuture << 128)));
+        vm.store(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED), bytes32(uint256(0)));
         bytes32 slot = bytes32(GameSlots.YIELD_ACCUMULATOR);
         bytes32 before = vm.load(address(game), slot);
         vm.store(address(game), slot, bytes32(uint256(before) + quarters));

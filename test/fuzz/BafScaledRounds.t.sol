@@ -28,14 +28,11 @@ contract BafScaleHost is DegenerusGame {
         return (work.kind, work.winner, work.traits, work.paid);
     }
 
-    /// @dev The daily request's pool freeze (`_freezePool` in the RNG module): a hundredth of the
-    ///      future pool seeds the pending buffer, which takes every pool credit until the unlock.
+    /// @dev The daily request's pool freeze (`_freezePool` in the RNG module): the pending buffer,
+    ///      left holding only its sentinel by the last unlock, takes every pool credit until the unlock.
     function freeze() external {
+        prizePoolPendingPacked = POOL_PENDING_SENTINEL;
         prizePoolFrozen = true;
-        uint256 futureBal = _getFuturePrizePool();
-        uint256 seed = futureBal / 100;
-        _setFuturePrizePool(futureBal - seed);
-        _setPendingPools(0, uint128(seed));
     }
 
     function seedFuture(uint256 amount) external {
@@ -88,7 +85,8 @@ contract BafScaledRoundsTest is DeployProtocol {
         host.freeze();
         (uint256 claimable0, uint256 future0, uint256 pending0, bool frozen0) = host.pools();
         assertTrue(frozen0, "the request froze the pools");
-        assertEq(pending0, 30 ether, "the freeze seeds the pending future pool");
+        assertEq(pending0, 0, "the freeze opens an empty pending buffer");
+        assertEq(future0, 3_000 ether, "the freeze leaves the live future pool whole");
         uint256 reserve = host.arm(2_000 ether, 10, WORD);
         assertGt(reserve, 0, "reservation is a pure function of the pool");
         (, , uint32 count, uint128 reserved) = host.bafWork();
