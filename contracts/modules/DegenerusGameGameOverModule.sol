@@ -1201,6 +1201,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 extraArgs: VRF_NATIVE_EXTRA_ARGS
             })
         ));
+        // A zero low-64 ID could never match a callback.
+        if (id == 0) revert ExternalRequestRefused();
     }
 }
 
