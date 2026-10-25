@@ -17,7 +17,7 @@ contract CenturyRedemptionSessionFixture is DegenerusGame {
         rngLockedFlag = false;
         ticketsFullyProcessed = true;
         humanReadComplete = true;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(false);
         _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);

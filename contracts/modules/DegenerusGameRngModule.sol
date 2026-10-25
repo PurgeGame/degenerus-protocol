@@ -31,7 +31,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         if (address(this) != ContractAddresses.GAME || !_rngRequestActive() || _rngSessionPublished()
             || _currentRngWord() == 0 || _livenessTriggered()) revert RngNotReady();
         _finalizeLootboxRng(_currentRngWord());
-        if (!rngLockedFlag) _setRngRequestActive(false);
+        if (!rngLockedFlag) _clearRngRequest();
     }
 
 
@@ -59,10 +59,8 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         rngRequestTime = uint48(block.timestamp);
         _rearmRngRetry();
         rngWordCurrent = RNG_WORD_WAITING;
-        _setRngRequestActive(false);
-        uint256 id = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS, meter);
-        vrfRequestId = uint64(id);
-        _setRngRequestActive(true);
+        // Daily completion already required the previous session closed.
+        _setRngRequest(_requestVrfWord(VRF_REQUEST_CONFIRMATIONS, meter));
         emit Advance(STAGE_RNG_REQUESTED, level);
     }
 
@@ -70,11 +68,10 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
     function retryRng() external {
         if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
         if (gameOver || _livenessTriggered() || !_rngRetryDue(uint48(block.timestamp))) revert RngNotReady();
-        _setRngRequestActive(false);
+        // The superseded request loses callback authority before the replacement is sent.
+        _clearRngRequest();
         _spendRngRetry();
-        uint256 id = _requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4));
-        vrfRequestId = uint64(id);
-        _setRngRequestActive(true);
+        _setRngRequest(_requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4)));
         emit Advance(STAGE_RNG_REQUESTED, level);
     }
 
@@ -196,13 +193,11 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         // A failed request rolls back this swap, queue resets and any credit charge.
         _sealRngWriteBuffer();
         rngRequestDay = 0;
-        _setRngRequestActive(false);
         rngWordCurrent = RNG_WORD_WAITING;
         rngRequestTime = uint48(block.timestamp);
         _rearmRngRetry();
-        uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS, meter);
-        vrfRequestId = uint64(id);
-        _setRngRequestActive(true);
+        // Read completion already required the previous session closed.
+        _setRngRequest(_requestVrfWord(VRF_MIDDAY_CONFIRMATIONS, meter));
     }
 
     /// @notice Bank the donor's native request credit (Admin only).

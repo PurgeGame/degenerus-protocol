@@ -358,7 +358,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             }
             _finalizeLootboxRng(preFreeze);
             if (rngLockedFlag) _clearAppliedNudges();
-            _setRngRequestActive(false);
+            _clearRngRequest();
             rngLockedFlag = false;
             work.progressed = true;
             MineFlipGas.markProgress(meter);
@@ -455,8 +455,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             return false;
         }
         _swapRngBuffers();
-        vrfRequestId = uint64(id);
-        _setRngRequestActive(true);
+        _setRngRequest(id);
         rngWordCurrent = RNG_WORD_WAITING;
         // Acceptance retains the separately committed timeout origin.
         rngLockedFlag = true;
@@ -473,7 +472,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     function _latchDeadEnding() private {
         _goWrite(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK, 0);
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(false);
         rngWordCurrent = RNG_WORD_WAITING;
     }

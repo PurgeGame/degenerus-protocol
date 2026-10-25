@@ -54,7 +54,7 @@ contract LootboxQueueGasHost is DegenerusGame {
     function sealAndPublish(uint256 word) external {
         _swapRngBuffers();
         rngWordCurrent = word;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         rngLockedFlag = false;
         ticketsFullyProcessed = true;

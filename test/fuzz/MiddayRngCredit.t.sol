@@ -178,8 +178,8 @@ contract MiddayRngCreditTest is DeployProtocol {
     }
 
     /// @notice A delivered mid-day word is published only by the keeper, exactly once, with the
-    ///         request ID and timestamp retained; neither the retained ID nor a stale one can
-    ///         fill the session again.
+    ///         timestamp retained and the request ID cleared; neither the closed request nor a
+    ///         stale one can fill the session again.
     function test_MiddaySessionRequiresKeeperPublicationAndRetainsMetadata() public pricedBlock {
         // Finish the fixture's primed day through production stages, including the
         // empty ticket frontier; marking only dailyIdx would leave genesis tickets pending.
@@ -222,10 +222,11 @@ contract MiddayRngCreditTest is DeployProtocol {
         }
         assertEq(count, 1, "keeper publishes exactly once");
         assertFalse(game.isRngFulfilled(), "keeper retires callback authority");
-        assertEq(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID)), requestSlot, "keeper retains nonzero request ID");
+        assertEq(uint64(uint256(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 0,
+            "keeper closes the session: no request in flight");
         assertEq((uint256(game.extsload_g2807007(bytes32(0))) >> 48) & type(uint48).max, requestTime, "keeper retains timestamp");
         mockVRF.fulfillRandomWordsRaw(id, address(game), 99);
-        assertEq(RecyclingState.currentWord(address(game)), 42, "retained ID cannot authorize a duplicate");
+        assertEq(RecyclingState.currentWord(address(game)), 42, "a closed session cannot accept a late answer");
         // The real daily stage also awards tickets. Drain those through the required
         // production advance category before completing the box frontier.
         for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineFlip(0);

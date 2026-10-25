@@ -65,9 +65,8 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         } else {
             rngWordCurrent = RNG_WORD_WAITING;
         }
-        _setRngRequestActive(locked);
+        if (locked) _setRngRequest(777); else _clearRngRequest();
         _setRngSessionPublished(!locked);
-        vrfRequestId = locked ? 777 : 1;
         // A delivered request is inside its own 14-day window. The independent
         // completion clock still forces a hard ending in jackpot/transition states.
         rngRequestTime = locked ? uint48(block.timestamp - (preFreezeWord > 1 ? 2 days : 120 days)) : 1;
@@ -114,7 +113,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         rngWordCurrent = RNG_WORD_WAITING;
         _recordDailyRng(day, 0);
         vrfRequestId = 777;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp - 14 days);
 
@@ -486,7 +485,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertGt(stamp, 1, "first attempt arms a real refusal timer");
         assertEq((state >> 254) & 1, 0, "failed request has no callback authority");
         assertEq((state >> 255) & 1, 0, "terminal session remains unpublished");
-        assertEq(uint64(uint256(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 1, "the previous ID is retained");
+        assertEq(uint64(uint256(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 0, "no request in flight after the refusal");
         mockVRF.fulfillRandomWordsRaw(1, address(game), 42);
         assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
         for (uint256 i; i < 3; ++i) {

@@ -18,7 +18,7 @@ contract BudgetReadFixture is DegenerusGame {
         _swapRngBuffers();
         rngWordCurrent = 0xBEEF1234;
         _setRngSessionPublished(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         rngLockedFlag = false;
         ticketsFullyProcessed = true;
         _pendingBoxCount = 0;

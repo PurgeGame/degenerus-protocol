@@ -20,7 +20,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         rngLockedFlag = true;
         rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 777;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp - 15 days);
         ticketsFullyProcessed = true;
@@ -91,7 +91,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         rngLockedFlag = true;
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         vrfRequestId = 777;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         // Publication commits as its own unit before the stuck apply, so a delivered word is in use.
         _setRngSessionPublished(word >= 2);
         rngRequestTime = uint48(block.timestamp - 30 days);
@@ -126,7 +126,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 1;
         rngRequestTime = 1;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         ticketsFullyProcessed = true;
         prizePoolFrozen = false;
         // This fixture models an already requested, delivered cohort; index zero is unused.

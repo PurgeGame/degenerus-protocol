@@ -71,7 +71,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         rngRequestDay = 0;
         rngRequestTime = uint48(block.timestamp);
         rngLockedFlag = false;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         // A reachable large target remains unmet by the empty next pool.
         _setLevelPrizePool(lvl, 100_000 ether);
         _recordDailyRng(day, rngWord); // the last sealed day's word; the ending requests its own

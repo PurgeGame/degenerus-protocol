@@ -19,7 +19,7 @@ contract RedemptionBatchGameSeeder is DegenerusGame {
         _swapRngBuffers();
         rngWordCurrent = word;
         _setRngSessionPublished(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         rngLockedFlag = false;
         humanReadComplete = boxReadCount == 0 && degeneretteReadCount == 0;
     }

@@ -21,7 +21,7 @@ contract CertifyReadSeeder is DegenerusGame {
         rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = word;
         rngFlagsAndNudges &= ~(uint16(1) << 13);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(false);
         _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);

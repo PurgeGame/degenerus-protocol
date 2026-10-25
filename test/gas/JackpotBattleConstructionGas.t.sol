@@ -63,7 +63,7 @@ contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _setRngComplete(false);
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _recordDailyRng(day - 1, word);
         _recordDailyRng(day, word);

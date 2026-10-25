@@ -23,7 +23,7 @@ contract FoilMatchTimeSeeder is DegenerusGame {
         lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
         rngLockedFlag = false;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         if (newLevel != 0) level = newLevel;
         _recordDailyRng(dailyIdx - 1, 12345);
         _recordDailyRng(dailyIdx, 67890);
@@ -41,7 +41,7 @@ contract FoilMatchTimeSeeder is DegenerusGame {
         lastDailyCompletedAt = uint48(block.timestamp);
         lastDailyRequestWallDay = _wallDay();
         purchaseStartDay = dailyIdx;
-        _setRngRequestActive(false);
+        _clearRngRequest();
     }
 }
 

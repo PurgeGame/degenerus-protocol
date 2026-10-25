@@ -39,7 +39,7 @@ contract MinerProgressHarness is MinerHarness {
         if (action == MinerAction.Terminal) gameOver = true;
         if (action == MinerAction.Wait || action == MinerAction.Publish) {
             _setRngComplete(false);
-            _setRngRequestActive(true);
+            _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
             _setRngSessionPublished(false);
             if (action == MinerAction.Wait) rngWordCurrent = RNG_WORD_WAITING;
         }
@@ -100,7 +100,7 @@ contract MinerProgressHarness is MinerHarness {
         lastDailyRequestWallDay = _wallDay() - 1;
         lastDailyCompletedAt = uint48(block.timestamp - 1 days);
         _setRngComplete(false);
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(false);
         rngWordCurrent = RNG_WORD_WAITING;
         rngRequestTime = uint48(block.timestamp - (dead ? 15 days : 1 days));

@@ -18,7 +18,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
     function latchDeadTally() external {
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(false);
         rngWordCurrent = RNG_WORD_WAITING;
         _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);

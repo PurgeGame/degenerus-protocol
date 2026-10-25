@@ -135,8 +135,7 @@ EXEMPT-ADVANCE	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpo
 PRODUCER	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	WRITE	Seal the committed logical-day board/level/seed with its exact day tag; recycle only an older parity slot.
 GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameRngModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
 EXEMPT-ADVANCE	_currentRngWord	publishRng_g4514	modules/DegenerusGameRngModule.sol	READ
-PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	modules/GameFacade.sol	READ	One slot0 SLOAD reads only the request-active bit; the callback never reads nudges or writes slot0.
-PRODUCER	rngWordCurrent	rawFulfillRandomWords	modules/GameFacade.sol	WRITE	Coordinator, active-bit and request-ID checks authenticate the raw word; the coordinator answers each request once.
+PRODUCER	rngWordCurrent	rawFulfillRandomWords	modules/GameFacade.sol	WRITE	One SLOAD of the coordinator slot authenticates the caller and the open request ID (0 = none); the coordinator answers each request once.
 PRODUCER	rngRequestDay	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngWordCurrent	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE
 EXEMPT-ADVANCE	_recordedDailyWord	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	exact tag authenticates processing word; public claims enforce the published-result frontier
@@ -190,7 +189,8 @@ GATE	lootboxRngPacked	_rngConsumersComplete	storage/DegenerusGameStorage.sol	REA
 ACCESSOR	rngFlagsAndNudges	_setNudgeCount	storage/DegenerusGameStorage.sol	WRITE	Nudge purchase before daily lock; masked setter preserves every lifecycle bit.
 ACCESSOR	rngFlagsAndNudges	_setGrowthSettlePending	storage/DegenerusGameStorage.sol	WRITE	Masked setter of the growth settlement-pending bit (bit 11): set by the level-transition seal, cleared by the mining settlement stage; preserves every nudge and lifecycle bit and never touches a VRF word.
 ACCESSOR	rngFlagsAndNudges	_setRngComplete	storage/DegenerusGameStorage.sol	WRITE	Masked completion setter preserves nudge bits.
-ACCESSOR	rngFlagsAndNudges	_setRngRequestActive	storage/DegenerusGameStorage.sol	WRITE	Masked callback-authority setter preserves nudge bits; retained IDs cannot grant authority.
+ACCESSOR	rngFlagsAndNudges	_setRngRequest	storage/DegenerusGameStorage.sol	WRITE	Opens the session: stores the request ID and sets the mirrored active bit; nudge bits preserved.
+ACCESSOR	rngFlagsAndNudges	_clearRngRequest	storage/DegenerusGameStorage.sol	WRITE	Closes the session: zeroes the request ID and clears the mirrored active bit; nudge bits preserved.
 ACCESSOR	rngFlagsAndNudges	_setRngSessionPublished	storage/DegenerusGameStorage.sol	WRITE	Masked mandatory-publication setter preserves nudge bits.
 ACCESSOR	rngFlagsAndNudges	_setTicketRedemptionOpen	storage/DegenerusGameStorage.sol	WRITE	Masked lifecycle setter preserves nudge bits.
 EXEMPT-ADVANCE	rngFlagsAndNudges	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Normal completion gate precedes seal; terminal bypass kills unfinished box/bet/Craps work. Retry never swaps.

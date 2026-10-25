@@ -525,10 +525,18 @@ abstract contract DegenerusGameStorage {
     function _setRngComplete(bool on) internal {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 8)) | (on ? uint16(1) << 8 : 0);
     }
-    /// @dev Retained nonzero request metadata is historical; only this bit grants callback authority.
+    /// @dev Open request session. Bit 14 mirrors `vrfRequestId != 0` for slot-0 readers; the
+    ///      callback reads only the ID. Both change together, only through the two helpers below.
     function _rngRequestActive() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 14) != 0; }
-    function _setRngRequestActive(bool on) internal {
-        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 14)) | (on ? uint16(1) << 14 : 0);
+    /// @dev Open the session for request `id`; its low 64 bits grant callback authority.
+    function _setRngRequest(uint256 id) internal {
+        vrfRequestId = uint64(id);
+        rngFlagsAndNudges |= uint16(1) << 14;
+    }
+    /// @dev Close the session: ID 0 means no request may be answered.
+    function _clearRngRequest() internal {
+        vrfRequestId = 0;
+        rngFlagsAndNudges &= ~(uint16(1) << 14);
     }
     function _rngSessionPublished() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 15) != 0; }
     function _setRngSessionPublished(bool on) internal {
@@ -3336,9 +3344,9 @@ abstract contract DegenerusGameStorage {
     ///      slot, so requests read both with one SLOAD. Rotated only with the coordinator.
     uint32 internal vrfCallbackGasLimit;
 
-    /// @dev Low 64 bits of the latest VRF request ID, in the coordinator's slot so the callback
-    ///      reads its caller check and ID with one SLOAD. Callback authority also requires the
-    ///      packed active bit. A superseded request (retry, re-issue) never matches again.
+    /// @dev Low 64 bits of the open session's VRF request ID; 0 when no request may be answered.
+    ///      In the coordinator's slot, so the callback reads its whole authority with one SLOAD.
+    ///      A superseded request (retry, re-issue) never matches again.
     uint64 internal vrfRequestId;
 
     /// @dev VRF key hash identifying the oracle and gas lane.

@@ -47,7 +47,7 @@ contract SweepViewer is DegenerusGame {
         _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp);
         vrfRequestId = uint64(requestId);
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
     }
 
     /// @dev Run only the engine's AFKing stage worker (the live delegatecall-only worker mineFlip
@@ -66,7 +66,7 @@ contract SweepViewer is DegenerusGame {
     function sealWriteCohort(uint256 word) external {
         _swapRngBuffers();
         rngWordCurrent = word;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
     }
 }

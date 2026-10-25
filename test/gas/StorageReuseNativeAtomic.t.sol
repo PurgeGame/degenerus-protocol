@@ -20,7 +20,7 @@ contract StorageReuseAtomicHost is DegenerusGame {
         rngWordCurrent = 987654321;
         rngLockedFlag = true;
         ticketsFullyProcessed = true;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         // A terminal callback has arrived but publication belongs to its apply.
         _setRngSessionPublished(!terminal);
         _setRngComplete(false);

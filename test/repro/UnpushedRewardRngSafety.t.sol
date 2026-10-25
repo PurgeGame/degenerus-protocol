@@ -28,7 +28,7 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
         lastDailyCompletedAt = uint48(block.timestamp);
         rngLockedFlag = false;
         rngWordCurrent = word;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(complete);
         ticketsFullyProcessed = true;

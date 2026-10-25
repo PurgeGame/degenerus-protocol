@@ -43,7 +43,7 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
         rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = word;
         rngRequestDay = day;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
         _recordDailyRng(day, word);

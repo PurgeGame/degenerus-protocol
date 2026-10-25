@@ -29,7 +29,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
             require(decBattleQueue == 0 && word > RNG_WORD_WAITING, "session not ready");
             rngWordCurrent = word;
             _setRngSessionPublished(true);
-            _setRngRequestActive(false);
+            _clearRngRequest();
             ticketsFullyProcessed = true;
             humanReadComplete = true;
             dailyIdx = _wallDay();

@@ -18,6 +18,7 @@ import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGas
 import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUtils.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract RequestCloseProbe is DegenerusGameRngUtils {
     function closeOnly() external { _closeRedemptionBatch(); }
@@ -37,7 +38,7 @@ contract RequestGameSeeder is DegenerusGame {
         rngRequestTime = uint48(block.timestamp - 1 hours);
         rngLockedFlag = false;
         rngWordCurrent = 1234;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(!certify);
         ticketsFullyProcessed = true;
@@ -264,7 +265,13 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         assertEq(coordinator.requests(address(game)), 1, "one VRF request");
         (uint48 read, uint48 write, uint256 request, uint24 day) = host.committed();
         assertTrue(read != write, "cohorts remain distinct");
-        assertTrue(coordinator.commitments(request) != bytes32(0), "real-shaped commitment written");
+        // Game keeps the ID's low 64 bits; the full ID is the coordinator's derivation for this nonce.
+        bytes32 keyHash = vm.load(address(game), bytes32(GameSlots.VRF_KEY_HASH));
+        uint256 subId = uint256(vm.load(address(game), bytes32(GameSlots.VRF_SUBSCRIPTION_ID)));
+        uint256 preSeed = uint256(keccak256(abi.encode(keyHash, address(game), subId, coordinator.requests(address(game)))));
+        uint256 fullId = uint256(keccak256(abi.encode(keyHash, preSeed)));
+        assertEq(request, uint64(fullId), "the game stores the real ID's low 64 bits");
+        assertTrue(coordinator.commitments(fullId) != bytes32(0), "real-shaped commitment written");
         assertEq(day, _daily() ? DAY : 0, "request identity");
         assertFalse(game.rngComplete(), "new cohort frozen");
         assertEq(game.rngLocked(), _daily(), "daily-only lock");

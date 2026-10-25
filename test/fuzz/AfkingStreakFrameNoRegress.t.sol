@@ -20,7 +20,7 @@ contract AfkingFrameHost is AfkingStethHost {
         _subCursor = 0;
         subsFullyProcessed = false;
         rngLockedFlag = false;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(false);
         _setRngComplete(true);
         humanReadComplete = true;

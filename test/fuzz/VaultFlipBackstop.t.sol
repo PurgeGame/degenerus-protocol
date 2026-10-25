@@ -21,7 +21,7 @@ contract VaultBackstopHost is DegenerusGame {
         rngWordCurrent = 123;
         rngLockedFlag = true;
         ticketsFullyProcessed = true;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
         _recordDailyRng(day, 123);

@@ -99,7 +99,7 @@ contract DispatchRequestWorker is DegenerusGameStorage {
         rngWordCurrent = RNG_WORD_WAITING;
         rngLockedFlag = true;
         _setRngComplete(false);
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
     }
 }
 

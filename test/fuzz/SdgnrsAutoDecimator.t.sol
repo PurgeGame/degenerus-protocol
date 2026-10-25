@@ -39,7 +39,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         rngRequestDay = day;
         ticketsFullyProcessed = true;
         rngLockedFlag = true;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
@@ -67,7 +67,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         lastDailyRequestWallDay = _wallDay() - 1;
         rngRequestTime = 1;
         vrfRequestId = 1;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         rngWordCurrent = RNG_WORD_WAITING;
         rngLockedFlag = false;
         lastPurchaseDay = false;

@@ -25,7 +25,7 @@ contract DecimatorScheduleHost is DegenerusGameAdvanceModule {
         _afkingResetDay = day;
         _setRngComplete(!sealing);
         _setRngSessionPublished(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         rngWordCurrent = 777;
         _setPrizePools(uint128(1000000 ether), 0);
         if (sealing) {

@@ -171,6 +171,41 @@ contract VrfCallbackGasTest is DeployProtocol {
         revert("no daily apply");
     }
 
+    /// @dev Consume: the mining transaction that publishes a mid-day word and closes its session.
+    function test_MiddayPublishTransaction() public {
+        uint256 id = _middayRequest();
+        mockVRF.fulfillRandomWords(id, 1_000_000);
+        bytes32 applied = keccak256("LootboxRngApplied(uint48,uint256,uint256)");
+        for (uint256 i; i < 50; ++i) {
+            vm.recordLogs();
+            game.mineFlip(0);
+            uint256 used = vm.snapshotGasLastCall("vrf-publish");
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length; ++j) {
+                if (logs[j].emitter == address(game) && logs[j].topics[0] == applied) {
+                    emit log_named_uint("midday publish tx gas", used);
+                    return;
+                }
+            }
+        }
+        revert("no publication");
+    }
+
+    /// @dev Consume: the mining transaction that releases the daily lock and closes its session.
+    function test_DailyUnlockTransaction() public {
+        uint256 id = _dailyRequest(0);
+        mockVRF.fulfillRandomWords(id, 1_000_000);
+        for (uint256 i; i < 200 && game.rngLocked(); ++i) {
+            game.mineFlip(0);
+            uint256 used = vm.snapshotGasLastCall("vrf-unlock");
+            if (!game.rngLocked()) {
+                emit log_named_uint("daily unlock tx gas", used);
+                return;
+            }
+        }
+        revert("no unlock");
+    }
+
     function _swap() private returns (MockVRFCoordinator next) {
         next = new MockVRFCoordinator();
         uint256 sub = next.createSubscription();

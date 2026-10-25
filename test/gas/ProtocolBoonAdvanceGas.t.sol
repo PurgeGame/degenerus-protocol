@@ -22,7 +22,7 @@ contract ProtocolDrawGasSeeder is DegenerusGameStorage {
         subsFullyProcessed = true;
         _afkingResetDay = day;
         rngLockedFlag = true;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(false);
         _setRngComplete(false);
         rngRequestTime = uint48(block.timestamp);

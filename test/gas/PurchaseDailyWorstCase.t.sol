@@ -82,7 +82,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         // The daily phase of a delivered, published request: the engine selects DailyPhase only
         // for an active, published, not-yet-complete session.
         rngRequestDay = day;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
         dailyJackpotCoinTicketsPending = false;
@@ -164,7 +164,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         _recordDailyRng(day, 0);
         vrfRequestId = 1;
         rngRequestTime = 1;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(false);
         _setRngComplete(true);
         humanReadComplete = true;

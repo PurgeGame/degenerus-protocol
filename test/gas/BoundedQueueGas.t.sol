@@ -29,7 +29,7 @@ contract BoundedQueueHost is DegenerusGame, WalletSeed {
     function seal(bool bets) external {
         _swapRngBuffers();
         rngWordCurrent = 0x5eed00000000000000000000000000000000000000000000000000000000beef;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         rngLockedFlag = false;
         ticketsFullyProcessed = true;

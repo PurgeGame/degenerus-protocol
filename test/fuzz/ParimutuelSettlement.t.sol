@@ -849,7 +849,7 @@ contract GrowthSelectorHarness is MinerHarness {
         if (action == MinerAction.Terminal) gameOver = true;
         if (action == MinerAction.Wait || action == MinerAction.Publish) {
             _setRngComplete(false);
-            _setRngRequestActive(true);
+            _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
             _setRngSessionPublished(false);
             if (action == MinerAction.Wait) rngWordCurrent = RNG_WORD_WAITING;
         }
@@ -920,7 +920,7 @@ contract GrowthSelectorHarness is MinerHarness {
         subsFullyProcessed = f & (1 << 3) != 0;
         _setRngComplete(f & (1 << 4) != 0);
         _setRngSessionPublished(f & (1 << 5) != 0);
-        _setRngRequestActive(f & (1 << 6) != 0);
+        if (f & (1 << 6) != 0) _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId); else _clearRngRequest();
         rngWordCurrent = f & (1 << 7) != 0 ? 0 : 1234;
         ticketsFullyProcessed = f & (1 << 8) != 0;
         rngLockedFlag = f & (1 << 9) != 0;

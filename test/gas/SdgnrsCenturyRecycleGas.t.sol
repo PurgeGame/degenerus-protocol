@@ -17,7 +17,7 @@ import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 contract RecycleSessionSeeder is DegenerusGame {
     function openDailyPhase() external {
         rngRequestDay = _wallDay();
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
     }

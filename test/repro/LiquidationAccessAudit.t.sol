@@ -24,7 +24,7 @@ contract LiquidationAuditHost is DegenerusGame {
         subsFullyProcessed = true;
         _recordDailyRng(day - 1, 123_456);
         _setRngComplete(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         rngLockedFlag = false;
     }
 
@@ -57,7 +57,7 @@ contract LiquidationAuditHost is DegenerusGame {
         subsFullyProcessed = false;
         rngLockedFlag = false;
         _setRngComplete(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _sdgnrsBonusLevel = level;
         (bool ok, bytes memory result) = ContractAddresses.GAME_AFKING_MODULE
             .delegatecall(abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)", day, uint256(10_000_000)));

@@ -45,7 +45,7 @@ contract ChainPinStageHarness is DegenerusGame {
     function seed(Seed calldata s) external {
         gameOver = s.gameOver;
         rngLockedFlag = s.locked;
-        _setRngRequestActive(s.active);
+        if (s.active) _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId); else _clearRngRequest();
         _setRngSessionPublished(s.published);
         _setRngComplete(s.complete);
         ticketsFullyProcessed = s.ticketsDone;

@@ -23,7 +23,7 @@ contract CompactOrderGasSeed is DegenerusGame {
         purchaseStartDay = dailyIdx;
         _afkingResetDay = dailyIdx;
         subsFullyProcessed = true;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngComplete(false);
         _setRngSessionPublished(true);
         rngLockedFlag = false;

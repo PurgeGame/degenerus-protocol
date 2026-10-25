@@ -44,7 +44,7 @@ contract ChainPinGoHarness is DegenerusGameGameOverModule {
         _setPrizePools(m & 2 != 0 ? 11 ether : 9 ether, 0);
         if (m & 8 != 0) {
             rngRequestTime = uint48(block.timestamp - 15 days);
-            _setRngRequestActive(true);
+            _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
             _setRngSessionPublished(false);
             rngWordCurrent = RNG_WORD_WAITING;
             vrfRequestId = 7;
@@ -66,7 +66,7 @@ contract ChainPinGoHarness is DegenerusGameGameOverModule {
         vrfRequestId = 9;
         _setRngSessionPublished(false);
         rngWordCurrent = RNG_WORD_WAITING;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         rngLockedFlag = true;
     }
 
@@ -309,7 +309,7 @@ contract ChainPinDrainHarness is DegenerusGameGameOverModule, BucketSeed {
             rngRequestDay = day;
             rngRequestTime = uint48(block.timestamp);
             vrfRequestId = 9;
-            _setRngRequestActive(true);
+            _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
             rngLockedFlag = true;
         }
     }
@@ -407,7 +407,7 @@ contract ChainPinSeeder is DeadVrfSeeder {
         rngLockedFlag = false;
         rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 777;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp - 15 days);
         ticketsFullyProcessed = true;

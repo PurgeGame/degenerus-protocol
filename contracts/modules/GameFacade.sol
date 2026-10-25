@@ -1255,27 +1255,26 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
 
     /// @notice Chainlink VRF callback for random word fulfillment.
-    /// @dev Stores the raw word answering the active request; publication is a later miner
+    /// @dev Stores the raw word answering the open request; publication is a later miner
     ///      action. Raw values 0/1 leave the request pending for retry. The coordinator fulfills
-    ///      each request once, so only a superseded request (retry or re-issue) can arrive late;
-    ///      its ID no longer matches and it is ignored, not reverted. Runs in the base contract
-    ///      so the Native-paid callback carries no delegatecall overhead.
+    ///      each request once, so only a superseded request (retry or re-issue) or one whose
+    ///      session closed (consumed, dead-VRF latch) can arrive late; its ID no longer matches
+    ///      and it is ignored, not reverted. Runs in the base contract so the Native-paid callback
+    ///      carries no delegatecall overhead.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         uint256 vrf;
-        // The coordinator and request ID share one slot.
-        assembly ("memory-safe") { vrf := sload(vrfCoordinator.slot) }
-        if (msg.sender != address(uint160(vrf))) revert OnlyCoordinator();
-        bool active;
-        uint64 id;
         uint256 word;
+        // The coordinator and the open request's ID share one slot: the whole authority.
         assembly ("memory-safe") {
-            // Request-active bit: flags bit 14.
-            active := and(shr(add(mul(rngFlagsAndNudges.offset, 8), 14), sload(rngFlagsAndNudges.slot)), 1)
-            id := shr(mul(vrfRequestId.offset, 8), vrf)
+            vrf := sload(vrfCoordinator.slot)
             // The coordinator always sends the one requested word; no further decoding.
             word := calldataload(randomWords.offset)
         }
-        if (!active || uint64(requestId) != id) return;
+        if (msg.sender != address(uint160(vrf))) revert OnlyCoordinator();
+        uint64 id;
+        assembly ("memory-safe") { id := shr(mul(vrfRequestId.offset, 8), vrf) }
+        // ID 0: no request may be answered. A superseded request no longer matches.
+        if (id == 0 || uint64(requestId) != id) return;
         // The two reserved values leave this request waiting for its existing retry path.
         if (word < 2) return;
         rngWordCurrent = word;

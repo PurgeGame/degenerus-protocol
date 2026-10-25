@@ -37,7 +37,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         ticketsFullyProcessed = true;
         humanReadComplete = true;
         rngLockedFlag = false;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(false);
         _setRngComplete(true);
         _sdgnrsBonusLevel = level;

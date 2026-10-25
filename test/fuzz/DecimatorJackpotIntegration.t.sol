@@ -66,7 +66,7 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
         jackpotFlags = JACKPOT_TURBO;
         rngLockedFlag = true;
         rngWordCurrent = word;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(false);
         ticketsFullyProcessed = true;

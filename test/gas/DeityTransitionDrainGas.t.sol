@@ -32,7 +32,7 @@ contract DeityTransitionQueueSeeder is DegenerusGameStorage, WalletSeed {
     ///      selects DailyPhase only for an active, published, not-yet-complete session.
     function openDailyPhase() external {
         rngRequestDay = _wallDay();
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
     }

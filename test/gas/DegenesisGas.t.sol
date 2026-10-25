@@ -171,7 +171,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         rngRequestTime = uint48(block.timestamp - 1 hours);
         rngLockedFlag = false;
         rngWordCurrent = 1234;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(true);
         ticketsFullyProcessed = true;
@@ -1050,7 +1050,7 @@ contract DegenesisBattleGameSeed is DegenerusGameStorage, WalletSeed {
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _setRngComplete(false);
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _recordDailyRng(day - 1, word);
         _recordDailyRng(day, word);

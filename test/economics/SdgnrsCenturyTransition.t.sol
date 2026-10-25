@@ -36,7 +36,7 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
         dailyComplete = false;
         lastDailyCompletedAt = uint48(block.timestamp - 1 days);
         lastDailyRequestWallDay = _wallDay();
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
         TQ.retireCompleted(address(this), 100);
@@ -59,7 +59,7 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
         _recordDailyRng(day, 0);
         rngRequestTime = 1;
         vrfRequestId = 1;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(false);
         _setRngComplete(true);
         humanReadComplete = true;

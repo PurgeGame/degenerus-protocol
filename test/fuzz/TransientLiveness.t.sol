@@ -19,7 +19,7 @@ contract TransientLivenessHarness is DegenerusGameStorage {
     function latch() external { _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1); _setRngTerminal(); }
     function commitment(uint48 time, bool published) external {
         rngRequestTime = time; rngRequestDay = dailyIdx;
-        _setRngRequestActive(true); _setRngSessionPublished(published);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId); _setRngSessionPublished(published);
         rngWordCurrent = published ? 777 : 1;
     }
     function liveness() external view returns (bool) { return _livenessTriggered(); }

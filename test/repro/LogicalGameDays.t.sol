@@ -23,7 +23,7 @@ contract LogicalDayHeaders is DegenerusGameStorage {
     function publish() external { _setRngSessionPublished(true); }
     function blockLaterConsumers() external {
         rngLockedFlag = false;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         ticketsFullyProcessed = true;
         humanReadComplete = false;

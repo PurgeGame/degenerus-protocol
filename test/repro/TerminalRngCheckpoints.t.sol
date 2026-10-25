@@ -51,7 +51,7 @@ contract TerminalRngCheckpointHarness is DegenerusGameGameOverModule {
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
         _setRngTerminal();
         _setRngSessionPublished(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         rngWordCurrent = 777;
         rngRequestDay = 0;
         rngRequestTime = 0;

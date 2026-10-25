@@ -53,7 +53,7 @@ contract QueueHost is GamePurchaseBox, DegenerusGame {
     function sealAndPublish(uint256 word) external {
         _swapRngBuffers();
         rngWordCurrent = word;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         rngLockedFlag = false;
         ticketsFullyProcessed = true;
@@ -65,12 +65,12 @@ contract QueueHost is GamePurchaseBox, DegenerusGame {
     function sealUnpublished() external {
         _swapRngBuffers();
         rngWordCurrent = RNG_WORD_WAITING;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
     }
 
     function publish(uint256 word) external {
         rngWordCurrent = word;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         ticketsFullyProcessed = true;
     }

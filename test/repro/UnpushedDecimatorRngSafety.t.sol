@@ -29,7 +29,7 @@ contract UnpushedDecimatorSessionSeeder is DegenerusGame {
         _recordDailyRng(dailyIdx, word);
         rngWordCurrent = word;
         rngLockedFlag = false;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(true);
         ticketsFullyProcessed = true;

@@ -73,7 +73,7 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         vrfRequestId = 1;
         // The daily phase of a delivered, published request.
         rngRequestDay = day;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
         dailyJackpotCoinTicketsPending = true;

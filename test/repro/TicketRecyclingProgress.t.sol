@@ -40,7 +40,7 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         // A daily request records its day; the chained daily apply reads it.
         rngLockedFlag = true; rngRequestTime = uint48(block.timestamp); rngRequestDay = day;
         // A request always clears the completion marker; ticket work is selected only under it.
-        vrfRequestId = 777; _setRngRequestActive(true); _setRngSessionPublished(false); _setRngComplete(false);
+        vrfRequestId = 777; _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId); _setRngSessionPublished(false); _setRngComplete(false);
         rngWordCurrent = 2; _setNudgeCount(3);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((2) & 1) << 12);
         _setRngSessionPublished(false);

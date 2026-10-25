@@ -85,7 +85,7 @@ contract GameIsolationHost is DegenerusGame {
         _afkingResetDay = day; subsFullyProcessed = true;
         ticketsFullyProcessed = true; humanReadComplete = true;
         rngRequestTime = uint48(block.timestamp); rngRequestDay = 0; rngWordCurrent = 777;
-        _setRngRequestActive(false); _setRngSessionPublished(true); _setRngComplete(!prefix);
+        _clearRngRequest(); _setRngSessionPublished(true); _setRngComplete(!prefix);
         _recordDailyRng(day, 777);
         _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1);
         _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, 0);
@@ -94,7 +94,7 @@ contract GameIsolationHost is DegenerusGame {
         level = 10; dailyIdx = _wallDay() - 31;
         lastDailyCompletedAt = uint48(block.timestamp - (drain ? 14 days : 0));
         degenesisClosed = 7; _setRngComplete(false); _setRngTerminal();
-        _setRngRequestActive(false); _setRngSessionPublished(false);
+        _clearRngRequest(); _setRngSessionPublished(false);
         rngRequestDay = 0; rngRequestTime = 0; rngWordCurrent = RNG_WORD_WAITING;
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 0);

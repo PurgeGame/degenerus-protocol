@@ -31,7 +31,7 @@ contract MissingWordDrainHarness is DegenerusGameGameOverModule, BucketSeed {
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
         _setRngTerminal();
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         rngLockedFlag = true;
         rngWordCurrent = RNG_WORD_WAITING;

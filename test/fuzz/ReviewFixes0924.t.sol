@@ -239,7 +239,7 @@ contract ReviewClaimSeeder is DegenerusGame, WalletSeed {
         uint256 word = 777;
         rngWordCurrent = word;
         _setRngSessionPublished(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngComplete(false);
         humanReadComplete = true;
     }

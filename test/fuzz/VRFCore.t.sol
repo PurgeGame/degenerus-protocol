@@ -62,6 +62,12 @@ contract VRFCore is DeployProtocol {
         return RecyclingState.writeBuffer(address(game));
     }
 
+    /// @dev The slot-0 request-active bit mirrors a nonzero request ID.
+    function _assertSessionMirror() internal view {
+        bool active = (uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0)))) >> 254) & 1 != 0;
+        assertEq(active, _readVrfRequestId() != 0, "active bit mirrors the request ID");
+    }
+
     /// @dev Read vrfRequestId directly from the coordinator's slot.
     function _readVrfRequestId() internal view returns (uint256) {
         return uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET));
@@ -367,6 +373,7 @@ contract VRFCore is DeployProtocol {
         // vrfRequestId should match
         assertEq(_readVrfRequestId(), reqId, "vrfRequestId should match mock's lastRequestId");
         assertTrue(reqId > 0, "Request ID should be nonzero");
+        _assertSessionMirror();
 
         // Fulfill
         mockVRF.fulfillRandomWords(reqId, 0xDEAD);
@@ -379,7 +386,8 @@ contract VRFCore is DeployProtocol {
         assertFalse(game.rngLocked(), "Should be unlocked after full processing");
 
         // After _unlockRng: vrfRequestId should be 0
-        assertEq(_readVrfRequestId(), reqId, "idle request ID is retained after unlock");
+        assertEq(_readVrfRequestId(), 0, "unlock closes the session: no request in flight");
+        _assertSessionMirror();
         assertFalse(game.isRngFulfilled(), "idle callback authority is disarmed");
     }
 
@@ -413,7 +421,7 @@ contract VRFCore is DeployProtocol {
         _setupForMidDayRng(true);
 
         // Before mid-day request, vrfRequestId should be 0 (cleared by _unlockRng from day 2)
-        assertEq(_readVrfRequestId(), mockVRF.lastRequestId(), "idle request ID is retained before midpoint");
+        assertEq(_readVrfRequestId(), 0, "no request in flight before the midpoint");
 
         // Fire mid-day request
         uint256 reqId = _mineMiddayRequest();
@@ -427,7 +435,7 @@ contract VRFCore is DeployProtocol {
         // After mid-day branch: vrfRequestId cleared to 0
         assertTrue(game.isRngFulfilled(), "callback leaves publication pending");
         game.mineFlip(0);
-        assertEq(_readVrfRequestId(), reqId, "publication retains the idle ID");
+        assertEq(_readVrfRequestId(), 0, "publication closes the session");
         assertFalse(game.isRngFulfilled(), "publication disarms callback authority");
         // rngRequestTime also cleared
         assertGt(_readRngRequestTime(), 1, "idle timestamp is retained");
@@ -615,7 +623,7 @@ contract VRFCore is DeployProtocol {
         // Both should be cleared
         assertTrue(game.isRngFulfilled());
         game.mineFlip(0);
-        assertEq(_readVrfRequestId(), reqId, "publication retains idle request ID");
+        assertEq(_readVrfRequestId(), 0, "publication closes the session");
         assertFalse(game.isRngFulfilled());
         assertGt(_readRngRequestTime(), 1, "idle request timestamp retained");
     }

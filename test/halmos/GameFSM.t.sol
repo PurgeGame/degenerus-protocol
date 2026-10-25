@@ -144,7 +144,7 @@ contract FSMAdvanceHarness is MinerHarness {
         rngFlagsAndNudges = (uint16(1) << 8) | (uint16(1) << 15);
         rngWordCurrent = RNG_WORD_WAITING;
         rngRequestTime = 1;
-        vrfRequestId = 1;
+        vrfRequestId = 0;
         humanReadComplete = true;
         _redemptionReserveStored = 1;
         vrfCoordinator = IVRFCoordinator(ContractAddresses.VRF_COORDINATOR);
@@ -340,7 +340,7 @@ contract GameFSMProductionTransitionTest is Test {
         }
         assert(dailyLegs == 1 && machine.sealedDay() == requested);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
-        assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
+        assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 0);
         assert(machine.level() == 1);
         (bool repeated,) = address(machine).call(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
         assert(!repeated && machine.sealedDay() == requested);

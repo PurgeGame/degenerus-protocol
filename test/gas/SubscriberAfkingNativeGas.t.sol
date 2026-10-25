@@ -31,7 +31,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         ticketsFullyProcessed = true;
         humanReadComplete = true;
         rngLockedFlag = false;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(false);
         _setRngComplete(true);
         _sdgnrsBonusLevel = whale ? 0 : level;
@@ -92,7 +92,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         dailyIdx = day;
         rngRequestDay = day;
         rngWordCurrent = word < 2 ? 99 : word;
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngSessionPublished(true);
         _setRngComplete(false);
         rngLockedFlag = false;

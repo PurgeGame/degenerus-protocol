@@ -5,6 +5,7 @@ import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -34,7 +35,7 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
         lastDailyCompletedAt = uint48(block.timestamp - uint256(sealedAge) * 1 days);
         lastDailyRequestWallDay = _wallDayAt(lastDailyCompletedAt);
         rngRequestTime = requestTime;
-        _setRngRequestActive(requestTime > 1);
+        if (requestTime > 1) _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId); else _clearRngRequest();
         _setRngSessionPublished(requestTime <= 1);
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         // The last daily word was applied on the last sealed day (an unattended gap since then).
@@ -65,9 +66,8 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
 
     function seedMiddayRequest(uint48 t) external {
         rngRequestTime = t;
-        _setRngRequestActive(t > 1);
+        if (t > 1) _setRngRequest(777); else _clearRngRequest();
         _setRngSessionPublished(false);
-        vrfRequestId = 777;
         rngLockedFlag = false;
         _recordDailyRng(_wallDayAt(t), 123);
     }
@@ -75,7 +75,7 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
     function latchDeadMidday() external {
         _setRngTerminal();
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
-        _setRngRequestActive(false);
+        _clearRngRequest();
     }
 
     function liveness() external view returns (bool) {
@@ -419,6 +419,30 @@ contract DeadVrfEndingTest is DeployProtocol {
         for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineFlip(0);
         assertTrue(game.gameOver(), "dead ending reached game over");
         assertTrue(_sawPayoutFixed(vm.getRecordedLogs()), "the deterministic ending");
+        assertEq(game.rngWordForDay(r), 0, "the late word was never applied");
+    }
+
+    /// @notice The dead-VRF latch clears the request ID, so the unanswered request's answer,
+    ///         arriving afterwards, is a silent no-op.
+    function test_fulfilmentAfterTheDeadLatchIsANoOp() public {
+        vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+        DeadlineSeeder(payable(address(game))).seed(5);
+        _restore();
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
+        uint24 r = game.currentDayView();
+        uint256 req = mockVRF.lastRequestId();
+        assertTrue(game.rngLocked(), "day R requested");
+
+        vm.warp(block.timestamp + 14 days);
+        for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineFlip(0);
+        assertTrue(game.gameOver(), "dead ending reached game over");
+        uint256 vrf = uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID)));
+        assertEq(uint64(vrf >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 0, "the latch cleared the request ID");
+        bytes32 word = vm.load(address(game), bytes32(GameSlots.RNG_WORD_CURRENT));
+
+        mockVRF.fulfillRandomWords(req, 0xDEAD);
+        assertEq(vm.load(address(game), bytes32(GameSlots.RNG_WORD_CURRENT)), word, "late answer stored nothing");
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))), vrf, "authority slot unchanged");
         assertEq(game.rngWordForDay(r), 0, "the late word was never applied");
     }
 

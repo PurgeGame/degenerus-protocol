@@ -31,7 +31,7 @@ contract DirectAdvanceSeeder is DegenerusGame, BucketSeed {
         rngWordCurrent = word;
         _setRngComplete(false);
         _setRngSessionPublished(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _recordDailyRng(day, word);
         dailyJackpotCoinTicketsPending = true;
         dailyTicketBudgetsPacked = 1 | (uint256(480 * 4) << 8);

@@ -11,7 +11,7 @@ contract BoundedRedemptionStageSeeder is DegenerusGameStorage {
         gameOver = false;
         rngLockedFlag = false;
         rngFlagsAndNudges &= ~(uint16(1) << 13);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngComplete(false);
         _setRngSessionPublished(true);
         rngWordCurrent = 2;

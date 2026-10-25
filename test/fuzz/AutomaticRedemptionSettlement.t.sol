@@ -13,7 +13,7 @@ contract RedemptionTerminalSeeder is DegenerusGame {
     function seedLiveRedemptionWord(uint256 word) external {
         rngWordCurrent = word;
         _setRngSessionPublished(true);
-        _setRngRequestActive(false);
+        _clearRngRequest();
         _setRngComplete(false);
         ticketsFullyProcessed = true;
         rngLockedFlag = false;

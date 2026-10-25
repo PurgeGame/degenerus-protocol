@@ -138,7 +138,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
 contract BoundarySessionSeeder is DegenerusGame {
     function openDailyPhase() external {
         rngRequestDay = dailyIdx;
-        _setRngRequestActive(true);
+        _setRngRequest(vrfRequestId == 0 ? 1 : vrfRequestId);
         _setRngSessionPublished(true);
         _setRngComplete(false);
     }
