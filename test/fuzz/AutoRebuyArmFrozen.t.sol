@@ -43,7 +43,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         uint256 reqR = _requestFreshDaily();
-        uint24 R = game.currentDayView();
+        uint24 R = game.currentDayView_g542950();
         _t += 3 days;
         vm.warp(_t);
         assertEq(game.currentDayView_g542950(), R, "a stall creates no further game day");
@@ -68,7 +68,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         // R seals on its late word. Once R's read cohort drains, the same crank chain issues the
         // next day's request under the lock: there is no unlocked window between them.
         uint256 fresh = _requestFreshDaily();
-        assertEq(game.currentDayView(), R + 1, "the next request advances exactly one logical day");
+        assertEq(game.currentDayView_g542950(), R + 1, "the next request advances exactly one logical day");
         vm.prank(armed);
         vm.expectRevert(RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, false, 0);

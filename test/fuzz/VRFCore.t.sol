@@ -254,7 +254,7 @@ contract VRFCore is DeployProtocol {
         vm.assume(lateWord > 1 && lateWord != 0xBEEF0001);
         game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         mockVRF.fulfillRandomWords(reqId, 0xBEEF0001);
         for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineFlip(0);
         assertFalse(game.rngLocked(), "the day consumed its word");

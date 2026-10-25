@@ -1054,7 +1054,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // the delivered cohort's read consumers are the engine's only work, so mineFlip stops when
         // the cohort completes instead of preparing the next day.
         // Restamping the request mirror keeps the elapsed wall time from making a daily request due.
-        _seedLogicalFixtureDay(game.currentDayView());
+        _seedLogicalFixtureDay(game.currentDayView_g542950());
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192)));
     }

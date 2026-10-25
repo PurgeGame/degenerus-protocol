@@ -50,7 +50,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
             total += _sample(string.concat(prefix, "-place-", vm.toString(i + 1)), address(game));
         }
         RecyclingState.seedWord(address(game), 1, bytes32(WORD));
-        _seedLogicalFixtureDay(game.currentDayView());
+        _seedLogicalFixtureDay(game.currentDayView_g542950());
         uint256 state = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(state | (uint256(1) << 192)));
         vm.record();
@@ -121,14 +121,14 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
     }
 
     function test_CrapsOneFreshAndReused() public {
-        uint24 day = game.currentDayView() + 1;
+        uint24 day = game.currentDayView_g542950() + 1;
         _crapsCycle(day, 1, "craps-one-fresh");
         vm.warp(block.timestamp + 63 days);
         _seedLogicalFixtureDay(day + 63);
         _crapsCycle(day + 64, 1, "craps-one-reused");
     }
     function test_CrapsThreeFreshAndReused() public {
-        uint24 day = game.currentDayView() + 1;
+        uint24 day = game.currentDayView_g542950() + 1;
         _crapsCycle(day, 3, "craps-three-fresh");
         vm.warp(block.timestamp + 63 days);
         _seedLogicalFixtureDay(day + 63);

@@ -154,7 +154,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     ///         work (NoWork) and pays nothing; no path pays for it twice.
     function testReResolveResolvedBetRevertsNoSecondReward() public {
         // The day's request is not due, so the first crank stops after the queue it resolves.
-        _seedLogicalFixtureDay(game.currentDayView());
+        _seedLogicalFixtureDay(game.currentDayView_g542950());
         uint64 betId = _placeLosingBet(player);
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         _openSweepFor(INDEX);
@@ -290,7 +290,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         //        3 ETH 25 spins, 4 FLIP 15 spins. Caps keep every bet inside one crank's budget.
         uint8 shape = shapeSel % 5;
         // The day's request is not due, so the sweep call is the bets' resolution alone.
-        _seedLogicalFixtureDay(game.currentDayView());
+        _seedLogicalFixtureDay(game.currentDayView_g542950());
         uint16[5] memory caps = [uint16(48), 300, 48, 21, 95];
         uint8[5] memory spinsOf = [uint8(1), 1, 1, 25, 15];
         uint256 n = (uint256(nSel) % caps[shape]) + 1;

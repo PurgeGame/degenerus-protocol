@@ -622,8 +622,8 @@ contract V61SolvencyAfpayDegenesis is V61SolvencyAfpay {
     /// @dev The handler's own heartbeat (a ticket, mineFlip and VRF fulfilment per round) until the
     ///      logical day reaches `day`. Wall time alone never opens a day.
     function _driveToLogicalDay(uint24 day) internal {
-        for (uint256 i; i < 16 && game.currentDayView() < day; ++i) solvencyHandler.advance(1, 7 + i);
-        assertEq(game.currentDayView(), day, "fixture: the daily request opened the logical day");
+        for (uint256 i; i < 16 && game.currentDayView_g542950() < day; ++i) solvencyHandler.advance(1, 7 + i);
+        assertEq(game.currentDayView_g542950(), day, "fixture: the daily request opened the logical day");
     }
 
     function _degenesisNonVacuity() internal override {

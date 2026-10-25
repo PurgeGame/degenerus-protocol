@@ -534,7 +534,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             uint256 header = uint256(vm.load(address(game), bytes32(0)));
             vm.store(address(game), bytes32(0), bytes32(header & ~(uint256(0xff) << 136)));
         }
-        _setRequestedFixtureDay(game.currentDayView() + 31);
+        _setRequestedFixtureDay(game.currentDayView_g542950() + 31);
         for (uint256 d = 0; d < 8 && !game.gameOver(); d++) {
             _runFullDay();
             _fulfillPending();

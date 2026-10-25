@@ -229,7 +229,7 @@ contract BigRecordArmingTest is DeployProtocol {
         _injectLootboxRngWord(buffer, word);
         // The logical day is already sealed: restamp the wall-day request mirror so the elapsed wall
         // time does not make a new daily request due, and mark the daily ticket leg drained.
-        _seedLogicalFixtureDay(game.currentDayView());
+        _seedLogicalFixtureDay(game.currentDayView_g542950());
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192)));
         _finishReadConsumers();

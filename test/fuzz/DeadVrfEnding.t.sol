@@ -429,7 +429,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         DeadlineSeeder(payable(address(game))).seed(5);
         _restore();
         for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
-        uint24 r = game.currentDayView();
+        uint24 r = game.currentDayView_g542950();
         uint256 req = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "day R requested");
 

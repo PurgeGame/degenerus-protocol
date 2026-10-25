@@ -1645,7 +1645,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(L1, 2, "Must reach at least level 2");
         // Ticket purchases target the game's purchase level: level + 1 in the purchase phase, the
         // promoted level itself once the jackpot phase has opened.
-        (uint24 lvl1, bool jackpot1, , , ) = game.purchaseInfo();
+        (uint24 lvl1, bool jackpot1, , , ) = game.purchaseInfo_g1027();
         uint24 target1 = jackpot1 ? lvl1 : lvl1 + 1;
         uint24 readKey1 = _readKeyForLevel(target1);
         uint24 writeKey1 = _writeKeyForLevel(target1);
@@ -1684,7 +1684,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // The writeSlot should have toggled (or been toggled multiple times).
         // Regardless of the current value, the isolation must hold.
 
-        (uint24 lvl2, bool jackpot2, , , ) = game.purchaseInfo();
+        (uint24 lvl2, bool jackpot2, , , ) = game.purchaseInfo_g1027();
         uint24 target2 = jackpot2 ? lvl2 : lvl2 + 1;
         uint24 readKey2 = _readKeyForLevel(target2);
         uint24 writeKey2 = _writeKeyForLevel(target2);

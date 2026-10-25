@@ -234,7 +234,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         _fundFlip(p, 10_000);
         // The deploy day's quests are already rolled; take the next logical day's fresh roll.
         vm.warp(block.timestamp + 1 days);
-        _setRequestedFixtureDay(game.currentDayView() + 1);
+        _setRequestedFixtureDay(game.currentDayView_g542950() + 1);
         uint24 lvl = _openWindow();
         _rollDecimatorQuest();
         uint256 price = game.mintPrice();
@@ -276,7 +276,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         // A fresh quest day whose slot 1 is the Decimator quest (an afker's slot 1 is never locked).
         _t += 1 days;
         vm.warp(_t);
-        _setRequestedFixtureDay(game.currentDayView() + 1);
+        _setRequestedFixtureDay(game.currentDayView_g542950() + 1);
         uint24 lvl = _openWindow();
         uint24 today = _rollDecimatorQuest();
         _fundFlip(p, 10_000);

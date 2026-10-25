@@ -342,7 +342,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         for (uint256 i; i < 150 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
         // The request opened the logical day the entries below belong to.
-        day = game.currentDayView();
+        day = game.currentDayView_g542950();
         assertEq(game.rngWordForDay(day), 0);
         vm.prank(bettor); _bet(0, 0.005 ether);
         vm.prank(bettor); _bet(6, 0.005 ether);
