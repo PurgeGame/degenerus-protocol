@@ -106,9 +106,11 @@ contract DegeneretteSweep is DeployProtocol {
     ///      when the cohort completes instead of preparing the next day.
     function _landWord(uint48 idx, uint256 word) private {
         RecyclingState.seedWord(address(game), idx, bytes32(word));
+        // The logical day is already sealed: restamp the wall-day request mirror so the elapsed wall
+        // time does not make a new daily request due, and mark the daily ticket leg drained.
+        _seedLogicalFixtureDay(game.currentDayView());
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
-        vm.store(address(game), bytes32(0), bytes32(slot0));
+        vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192)));
     }
 
     /// @dev Bets resolve as the Degenerette read consumer of the published word, reached only by

@@ -1053,9 +1053,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
         // the delivered cohort's read consumers are the engine's only work, so mineFlip stops when
         // the cohort completes instead of preparing the next day.
+        // Restamping the request mirror keeps the elapsed wall time from making a daily request due.
+        _seedLogicalFixtureDay(game.currentDayView());
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
-        vm.store(address(game), bytes32(0), bytes32(slot0));
+        vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192)));
     }
 
     /// @dev Bets resolve as the Degenerette read consumer of the published word, reached only by
