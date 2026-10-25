@@ -63,7 +63,7 @@ interface IDegenerusGamePlayer {
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization.
-    function resolveAccount_g502(uint32 id, address caller)
+    function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
     /// @notice Check if the liveness-timeout game-over trigger is active (fires before gameOver latches).
     function livenessTriggered() external view returns (bool);
@@ -1348,7 +1348,7 @@ contract sDGNRS {
             return (msg.sender, game.walletIdOf_g3120(msg.sender));
         }
         bool authorized;
-        (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
+        (, payee, authorized) = game.resolveAccount_g7029(id, msg.sender);
         if (!authorized) {
             uint32 buyer = game.acquiredBuyer(id);
             if (buyer == 0) revert Unauthorized();

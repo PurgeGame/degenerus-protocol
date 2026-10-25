@@ -95,11 +95,12 @@ interface IDegenerusQuests {
     ///      staked player's deposit.
     /// @param id Wallet ID of the funder whose quest progresses
     /// @param flipCredit The amount of flip credit used
+    /// @param day The Game's current logical day, as the caller holds it
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleFlip(uint32 id, uint256 flipCredit)
+    function handleFlip_g217(uint32 id, uint256 flipCredit, uint24 day)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
@@ -154,7 +155,7 @@ interface IDegenerusQuests {
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleAffiliate(uint32 id, uint256 amount)
+    function handleAffiliate_g55809(uint32 id, uint256 amount)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
@@ -165,11 +166,12 @@ interface IDegenerusQuests {
     /// @param amount The bet amount (wei for ETH, base units for FLIP)
     /// @param paidWithEth True if the bet was paid with ETH, false if paid with FLIP
     /// @param mintPrice Current ticket price in wei (0 for FLIP bets)
+    /// @param day The Game's current logical day
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleDegenerette(uint32 id, uint256 amount, bool paidWithEth, uint256 mintPrice)
+    function handleDegenerette_g3(uint32 id, uint256 amount, bool paidWithEth, uint256 mintPrice, uint24 day)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
@@ -177,6 +179,7 @@ interface IDegenerusQuests {
     /// @dev Called by MintModule for the unified purchase path. Combines the mint + lootbox
     ///      quest legs into a single cross-contract call. Returns streak for compute-once
     ///      score forwarding. The caller credits the returned reward.
+    /// @param day The Game's current logical day
     /// @param id Wallet ID of the buyer
     /// @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
     ///        (fresh + recycled), credited 1:1 to MINT_ETH quest
@@ -189,7 +192,8 @@ interface IDegenerusQuests {
     /// @return streak The player's current quest streak (for score forwarding)
     /// @return completed Whether a quest was completed by this action
     /// @return afking Whether the buyer has an afking run (live streak resolved by Game)
-    function handlePurchase_g4831(
+    function handlePurchase_g23478(
+        uint24 day,
         uint32 id,
         uint256 ethMintSpendWei,
         uint32 flipMintQty,
@@ -327,8 +331,9 @@ interface IDegenerusQuests {
     /// @notice effectiveBaseStreak plus the player's afking-run flag, from one quest-state read.
     /// @dev Game's activity score passes the ID from the mint word it already holds.
     /// @param id Wallet ID of the player to query (0 returns (0, false)).
+    /// @param day The Game's current logical day.
     /// @return streak The effective (decay-applied) reward streak.
     /// @return afking True while the player is mid afking-run.
-    function effectiveBaseStreakAndAfking_g2654(uint32 id) external view returns (uint32 streak, bool afking);
+    function effectiveBaseStreakAndAfking_g1521(uint32 id, uint24 day) external view returns (uint32 streak, bool afking);
 
 }

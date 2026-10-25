@@ -219,7 +219,7 @@ EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol
 EXEMPT-ADVANCE	rngRequestDay	_drawBafPair	modules/DegenerusGameJackpotDrawModule.sol	READ	tags candidate events with the locked request day; no selection input, existing request-day freeze coverage applies
 EXEMPT-ADVANCE	lootboxRngPacked	_sealHeroWagers	storage/DegenerusGameStorage.sol	READ	Fresh daily commitment reads the hero write-buffer selector; retries and midday requests never call this helper.
 EXEMPT-ADVANCE	lootboxRngPacked	_sealHeroWagers	storage/DegenerusGameStorage.sol	WRITE	Fresh daily commitment flips bit38, records its day, and clears only the next accumulating buffer validity. Other RNG fields are preserved.
-GATE	_recordedDailyWord	dailyScheduleOpen	modules/GameFacade.sol	READ	Scheduled admissions need current logical terms, an actual current request window, and no ending eligibility.
+GATE	_recordedDailyWord	dailyScheduleOpen_g214	modules/GameFacade.sol	READ	Scheduled admissions need current logical terms, an actual current request window, and no ending eligibility.
 EXEMPT-ADVANCE	rngRequestDay	_emitLevelOneWinningTraits	modules/DegenerusGameJackpotModule.sol	READ	Daily jackpot events and draw tags use the active committed round; dailyIdx already advanced at request.
 EXEMPT-ADVANCE	rngRequestDay	_runDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	Daily jackpot events and draw tags use the active committed round; dailyIdx already advanced at request.
 EXEMPT-ADVANCE	rngRequestDay	_runTicketWork	modules/DegenerusGameJackpotModule.sol	READ	Daily jackpot events and draw tags use the active committed round; dailyIdx already advanced at request.

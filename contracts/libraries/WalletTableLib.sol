@@ -13,11 +13,11 @@ library WalletTableLib {
     ///      Element zero and unallocated elements return zero.
     function ownerOf(uint32 id) internal view returns (address) {
         IDegenerusGame game = IDegenerusGame(ContractAddresses.GAME);
-        uint256 element = uint256(game.extsload_g8132(bytes32(OWNERS_BASE + id)));
+        uint256 element = uint256(game.extsload_g2807007(bytes32(OWNERS_BASE + id)));
         uint32 ownerId = uint32(element >> 160);
-        if (ownerId != 0) element = uint256(game.extsload_g8132(bytes32(OWNERS_BASE + ownerId)));
+        if (ownerId != 0) element = uint256(game.extsload_g2807007(bytes32(OWNERS_BASE + ownerId)));
         ownerId = uint32(element >> 160);
-        if (ownerId != 0) element = uint256(game.extsload_g8132(bytes32(OWNERS_BASE + ownerId)));
+        if (ownerId != 0) element = uint256(game.extsload_g2807007(bytes32(OWNERS_BASE + ownerId)));
         return address(uint160(element));
     }
 }

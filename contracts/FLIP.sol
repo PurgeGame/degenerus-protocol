@@ -773,7 +773,7 @@ contract FLIP {
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (key, payee, authorized) = degenerusGame.resolveAccount_g502(id, msg.sender);
+            (key, payee, authorized) = degenerusGame.resolveAccount_g7029(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 
@@ -798,6 +798,7 @@ contract FLIP {
     ///      write finds the ID already in place. The activity score is read after the quest, so a
     ///      quest this burn completes counts toward its multiplier.
     function _recordDecimatorBurn(address key, uint32 id, uint256 amount, uint24 lvl, uint32 chips) private {
+        if (id == 0) id = degenerusGame.walletIdOf_g3120(key);
         if (id == 0) id = degenerusGame.registerWallet_g9539(key, true);
 
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
@@ -805,7 +806,7 @@ contract FLIP {
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (whole points); the curve self-saturates at its cap.
-        uint256 bonusPoints = degenerusGame.playerActivityScoreCachedById(id);
+        uint256 bonusPoints = degenerusGame.playerActivityScoreCachedById_g975(id);
         uint256 decBurnMultBps = ActivityCurveLib.decBattleMultBps(bonusPoints);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
@@ -816,7 +817,7 @@ contract FLIP {
             baseAmount += boost;
         }
 
-        uint64 entryId = degenerusGame.recordDecBurn_g5574(id, lvl, baseAmount, decBurnMultBps, chips);
+        uint64 entryId = degenerusGame.recordDecBurn_g1271(id, lvl, baseAmount, decBurnMultBps, chips);
 
         emit DecimatorBurn(id, amount, entryId);
     }

@@ -118,7 +118,7 @@ interface IDrawGame {
     function rngWordForDay(uint24 day) external view returns (uint256);
 
     /// @notice Activity score for an existing account; may refresh its affiliate-score cache.
-    function playerActivityScoreCachedById(uint32 id) external returns (uint256 score);
+    function playerActivityScoreCachedById_g975(uint32 id) external returns (uint256 score);
 
     /// @notice Game's wallet-ID hook: the existing ID, or with `allocate` a new one (paid
     ///         admission applies; a non-ETH token burn cannot bypass the free-ID threshold).
@@ -130,7 +130,7 @@ interface IDrawGame {
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. `enter` requires `authorized`.
-    function resolveAccount_g502(uint32 id, address caller)
+    function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
 
     /// @notice DegenerusGame's current level.
@@ -141,7 +141,7 @@ interface IDrawGame {
     function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16);
 
     /// @notice DegenerusGame's raw storage read (read-only).
-    function extsload_g8132(bytes32 slot) external view returns (bytes32);
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32);
 }
 
 /// @dev DGVE governance executor check for the trusted-minter registry.
@@ -644,7 +644,7 @@ contract WWXRP {
             if (id == 0) return 0;
         } else {
             bool authorized;
-            (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount_g7029(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
         return _withdrawPrize(id, payee, amount);
@@ -688,7 +688,7 @@ contract WWXRP {
         if (id == 0) revert InsufficientBalance();
         uint256 shortfall = _consumePrize(id, amount);
         if (shortfall != 0) {
-            (, address payee, ) = game.resolveAccount_g502(id, address(0));
+            (, address payee, ) = game.resolveAccount_g7029(id, address(0));
             _burn(payee, shortfall);
         }
     }
@@ -793,11 +793,11 @@ contract WWXRP {
     function enter(uint32 id, uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
         // The requested logical day lives in Game slot 0 bits 24..47.
-        uint256 gameHeader = uint256(game.extsload_g8132(bytes32(0)));
+        uint256 gameHeader = uint256(game.extsload_g2807007(bytes32(0)));
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount_g7029(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 
@@ -805,8 +805,9 @@ contract WWXRP {
         // Self entrants resolve or register through the canonical Game registry before
         // activity and reward records use the ID. Registration follows the free-ID policy;
         // this token burn does not provide a qualifying ETH quote beyond that limit.
+        if (id == 0) id = game.walletIdOf_g3120(msg.sender);
         if (id == 0) id = game.registerWallet_g9539(msg.sender, true);
-        uint256 score = game.playerActivityScoreCachedById(id);
+        uint256 score = game.playerActivityScoreCachedById_g975(id);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // both daily and century weights floor to whole WWXRP at the same BPS boundaries.
         // The Game's consume returns 0 with no write and no event when the WWXRP lane's tier is
@@ -867,7 +868,7 @@ contract WWXRP {
             // Struct member addressing wraps, as Solidity's own does.
             slot = bytes32(uint256(keccak256(abi.encode(id, GAME_BOON_PACKED_SLOT))) + 1);
         }
-        return (uint256(game.extsload_g8132(slot)) >> GAME_WWXRP_LANE_SHIFT) & GAME_LANE_TIER_MASK != 0;
+        return (uint256(game.extsload_g2807007(slot)) >> GAME_WWXRP_LANE_SHIFT) & GAME_LANE_TIER_MASK != 0;
     }
 
     /// @dev Both multipliers are at least 1x. Amounts above the century's uint192 cap can

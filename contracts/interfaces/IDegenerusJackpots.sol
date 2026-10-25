@@ -88,7 +88,7 @@ interface IDegenerusJackpots {
     /// @dev Permissionless: anyone may execute; the score is keyed by the account's wallet ID and
     ///      the WWXRP mints to the account's PAYEE. `id == 0` is the caller (ID from Game
     ///      `walletIdOf_g3120(msg.sender)`, payee = caller). A nonzero `id` resolves its payee through
-    ///      Game `resolveAccount_g502(id, msg.sender)`, ignoring `authorized`. VAULT's consolation
+    ///      Game `resolveAccount_g7029(id, msg.sender)`, ignoring `authorized`. VAULT's consolation
     ///      escrows into its WWXRP mint allowance via the token's vault routing.
     /// @param id Score owner (0 = caller).
     /// @param lvl Skipped bracket level to claim.

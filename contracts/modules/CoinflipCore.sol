@@ -554,7 +554,7 @@ abstract contract CoinflipCore {
             state.claimableStored = storedAfter;
         }
         // claimableStored / lastClaim / carry are finalized here — nothing below mutates them
-        // (burnForCoinflip and handleFlip never reach a claimable writer, _addDailyFlip writes
+        // (burnForCoinflip and handleFlip_g217 never reach a claimable writer, _addDailyFlip writes
         // only per-day stake). One emit covers both exits.
         _emitClaimState(id);
 
@@ -584,7 +584,7 @@ abstract contract CoinflipCore {
             uint8 questType,
             uint32 streak,
             bool completed
-        ) = _coinflipQuest(questId, amount);
+        ) = _coinflipQuest(questId, amount, uint24(cachedDays >> 176));
         uint256 questReward = _questApplyReward(
             questId,
             reward,
@@ -761,7 +761,9 @@ abstract contract CoinflipCore {
     ///      allocating only when requested and permitted by Game's registration policy.
     function _walletId(address key, uint32 id, bool allocate) private returns (uint32) {
         if (id != 0) return id;
-        return allocate ? degenerusGame.registerWallet_g9539(key, true) : degenerusGame.walletIdOf_g3120(key);
+        id = degenerusGame.walletIdOf_g3120(key);
+        if (id == 0 && allocate) id = degenerusGame.registerWallet_g9539(key, true);
+        return id;
     }
 
     function _viewWalletId(address player) private view returns (uint32) {
@@ -937,8 +939,8 @@ abstract contract CoinflipCore {
         // sDGNRS gets no BAF score: skip the recordBafFlip call entirely for it (the
         // daily coinflip resolution auto-claims sDGNRS through this walk).
         if (totals.winningBafCredit != 0 && id != SDGNRS_WALLET_ID) {
-            (uint24 cachedLevel, , , , ) = coinflipGame.purchaseInfo();
-            // purchaseInfo.lvl is the ACTUAL game level (one snapshot, no separate
+            (uint24 cachedLevel, , , , ) = coinflipGame.purchaseInfo_g1027();
+            // purchaseInfo_g1027.lvl is the ACTUAL game level (one snapshot, no separate
             // level() read); the bracket keys on the real level, not the routed buy
             // level (which diverges on the final jackpot day).
             //
@@ -1393,7 +1395,7 @@ abstract contract CoinflipCore {
     function sweepAccountCoinflips(uint32 id) external coinflipContext onlyDegenerusGameContract returns (uint256) {
         uint32 buyer = degenerusGame.acquiredBuyer(id);
         if (buyer != 0) return _claimAcquiredCoinflips(id, buyer);
-        (address key, address payee,) = degenerusGame.resolveAccount_g502(id, address(this));
+        (address key, address payee,) = degenerusGame.resolveAccount_g7029(id, address(this));
         return _claimCoinflipsAmount(key, payee, id, type(uint256).max, true);
     }
 
@@ -2134,7 +2136,7 @@ abstract contract CoinflipCore {
     ///      call); any other ID resolves through Game `resolveAccount` (reverts `E` when unallocated).
     function _resolve(uint32 id) private view returns (address key, address payee, bool authorized) {
         if (id == 0) return (msg.sender, msg.sender, true);
-        return degenerusGame.resolveAccount_g502(id, msg.sender);
+        return degenerusGame.resolveAccount_g7029(id, msg.sender);
     }
 
     /// @dev Account `id` for an authorized action: reverts NotApproved unless the caller is the
@@ -2145,9 +2147,9 @@ abstract contract CoinflipCore {
         if (!authorized) revert NotApproved();
     }
 
-    function _coinflipQuest(uint32 id, uint256 amount) internal virtual
+    function _coinflipQuest(uint32 id, uint256 amount, uint24 day) internal virtual
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        return IDegenerusQuests(ContractAddresses.QUESTS).handleFlip(id, amount);
+        return IDegenerusQuests(ContractAddresses.QUESTS).handleFlip_g217(id, amount, day);
     }
 }

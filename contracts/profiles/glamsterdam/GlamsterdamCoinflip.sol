@@ -10,10 +10,10 @@ contract GlamsterdamCoinflip is DegenerusQuests, DegenerusAffiliate, CoinflipCor
     constructor(address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
         address[] memory players, bytes32[] memory refs) DegenerusAffiliate(owners, codes, kicks, players, refs) {}
 
-    function _coinflipQuest(uint32 id, uint256 amount) internal override
+    function _coinflipQuest(uint32 id, uint256 amount, uint24 day) internal override
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        return _handleFlip(id, amount);
+        return _handleFlip(id, amount, day);
     }
 
     // These bridges are statically bound and absent from the public ABI. Each

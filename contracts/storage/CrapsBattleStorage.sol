@@ -1216,7 +1216,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      from the Game: `allocate` registers a new wallet (a paying action); otherwise an
     ///      unregistered wallet reverts. The ID is never persisted here.
     function _walletWord(address who, bool allocate) internal returns (uint256 word) {
-        uint32 id = IGameCrapsWorkStage(_GAME).registerWallet_g9539(who, allocate);
+        uint32 id = _gameWalletId(who);
+        if (id == 0) id = IGameCrapsWorkStage(_GAME).registerWallet_g9539(who, allocate);
         if (id == 0) revert NoWalletId();
         word = (_passCreditsById[id] & ~(uint256(type(uint32).max) << CrapsPreferenceLib.ID_SHIFT)) | (uint256(id) << CrapsPreferenceLib.ID_SHIFT);
     }

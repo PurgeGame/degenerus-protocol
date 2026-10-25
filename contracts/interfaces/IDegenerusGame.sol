@@ -76,7 +76,7 @@ interface IDegenerusGame {
     ///         one subject to paid admission. Non-allocating calls return zero for unregistered wallets.
     function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
     function registerWalletIdentity(address owner) external returns (uint32 id);
-    function walletIdentityOf(address owner) external view returns (uint32);
+    function walletIdentityOf_g8516(address owner) external view returns (uint32);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyerId);
 
     /// @notice A wallet's current gameplay ID, or zero before registration/after liquidation.
@@ -87,7 +87,7 @@ interface IDegenerusGame {
     ///      Subaccounts store an owner ID, resolved to an ordinary wallet for payouts.
     ///      Authorization is the current payee, or an operator approval on an unsold account.
     ///      Authorization failure returns false; zero or unallocated IDs revert E.
-    function resolveAccount_g502(uint32 id, address caller)
+    function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
 
     /// @notice Approve or revoke `operator` for account `id` (game-wide delegated control).
@@ -136,7 +136,7 @@ interface IDegenerusGame {
     function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
 
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
 
     /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
     function rngConsumerStage_g379() external view returns (uint8);
@@ -182,7 +182,7 @@ interface IDegenerusGame {
     /// @return lastPurchaseDay_ True once the level's prize target is met (jackpot transition pending); purchases stay open.
     /// @return rngLocked_ True during daily RNG processing, from request through the day seal.
     /// @return priceWei Current buy-now mint price in wei (at the routed ticket level).
-    function purchaseInfo()
+    function purchaseInfo_g1027()
         external
         view
         returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei);
@@ -199,7 +199,7 @@ interface IDegenerusGame {
     /// @notice Account activity score, including effective quest streak.
     function playerActivityScoreById(uint32 id) external view returns (uint256);
     /// @notice Account activity score; refreshes its current-level affiliate cache.
-    function playerActivityScoreCachedById(uint32 id) external returns (uint256);
+    function playerActivityScoreCachedById_g975(uint32 id) external returns (uint256);
 
     /// @notice Everything the growth-bet parimutuel reads out of the game.
     /// @param round The round to report pool terms for; 0 skips the pool reads.
@@ -306,7 +306,7 @@ interface IDegenerusGame {
     /// @param multBps Multiplier in basis points (10000 = 1x).
     /// @param chips The entry's board: zero to seven named chips, as a normal battle takes them.
     /// @return entryId The wallet's accumulated battle entry.
-    function recordDecBurn_g5574(
+    function recordDecBurn_g1271(
         uint32 player,
         uint24 lvl,
         uint256 baseAmount,
@@ -369,11 +369,11 @@ interface IDegenerusGame {
     function rngComplete() external view returns (bool);
 
     /// @notice Current day index.
-    function currentDayView() external view returns (uint24);
+    function currentDayView_g542950() external view returns (uint24);
     function currentWallDayView() external view returns (uint24);
     function dailySessionState() external view returns (bool complete, uint24 requestWallDay, uint48 completedAt);
     function latestDailyResultDay() external view returns (uint24);
-    function dailyScheduleOpen() external view returns (bool);
+    function dailyScheduleOpen_g214() external view returns (bool);
 
     /// @notice Admin-only transport retry of an unanswered request after its 20-hour timeout.
     function retryRng() external;
@@ -784,7 +784,7 @@ interface IDegenerusGame {
     ///      sub; `id == 0` is a no-op. Never reverts for the authorized caller.
     /// @param id Wallet ID of the afking subscriber whose secondary completion is recorded.
     /// @param amount The streak increment (1 for a daily secondary, more for a level quest).
-    function recordAfkingSecondary(uint32 id, uint16 amount) external;
+    function recordAfkingSecondary_g3316(uint32 id, uint16 amount) external;
 
     /// @notice QUESTS-only: raise a live afking run's streak to at least `floor`, the same
     ///         foil-pack quest-streak guarantee a manual player's streak receives.

@@ -172,8 +172,8 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
         }
         _placeDegeneretteBetCore(c);
         _collectBetFunds(c.burnFrom, c.funderId, c.currency, c.totalBet, c.symbol);
-        quests.handleDegenerette(c.funderId, c.totalBet, c.currency == CURRENCY_ETH,
-            c.currency == CURRENCY_ETH ? PriceLookupLib.priceForLevel(c.lvl + 1) : 0);
+        quests.handleDegenerette_g3(c.funderId, c.totalBet, c.currency == CURRENCY_ETH,
+            c.currency == CURRENCY_ETH ? PriceLookupLib.priceForLevel(c.lvl + 1) : 0, dailyIdx);
     }
 
     function _placeDegeneretteBetCore(BetPlacement memory c) internal {

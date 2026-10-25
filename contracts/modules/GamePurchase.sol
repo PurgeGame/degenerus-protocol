@@ -412,7 +412,8 @@ abstract contract GamePurchase is
                     cachedLevel + 1
                 );
                 (uint256 questReward, , , bool questCompleted, ) = quests
-                    .handlePurchase_g4831(
+                    .handlePurchase_g23478(
+                        dailyIdx,
                         buyerId,
                         0,
                         uint32(entryQuantityScaled / (4 * QTY_SCALE)),
@@ -842,7 +843,8 @@ abstract contract GamePurchase is
                 uint32 streak,
                 bool questCompleted,
                 bool afking
-            ) = quests.handlePurchase_g4831(
+            ) = quests.handlePurchase_g23478(
+                    dailyIdx,
                     buyerId,
                     c.totalCost,
                     0, // This body funds tickets with ETH, claimable or AFKing balances.

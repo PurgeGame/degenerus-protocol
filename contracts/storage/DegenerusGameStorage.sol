@@ -3857,7 +3857,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Packed boon state by wallet ID; nothing is ever written under ID 0, so its lanes
     ///      read empty. Public getter returns (uint256 slot0, uint256 slot1); bit layout above.
     ///      Slot0 bit 255 and slot1 bit 24 record allocation, not live boons.
-    ///      UI readers combine with currentDayView() to compute per-category expiry. WWXRP.enter
+    ///      UI readers combine with currentDayView_g542950() to compute per-category expiry. WWXRP.enter
     ///      reads slot1's WWXRP lane by raw slot `keccak256(id, slot) + 1` (its
     ///      GAME_BOON_PACKED_SLOT / GAME_WWXRP_LANE_SHIFT / GAME_LANE_TIER_MASK mirror this
     ///      mapping's slot, BP_WWXRP_LANE_SHIFT and BP_LANE_TIER_MASK): moving any of them
@@ -4215,7 +4215,7 @@ abstract contract DegenerusGameStorage {
         // Most players are not afking subs, so learn the afking flag from the quest-streak read we
         // make anyway: a non-afker returns here with no subscriber lookup. ID 0 has no quest
         // state: (0, false).
-        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
+        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking_g1521(id, dailyIdx);
         if (!afking) return manualStreak;
         (bool live, uint32 a) = _liveAfkingStreak(id);
         return live ? a : manualStreak;

@@ -444,5 +444,6 @@ CONSUMER-SEALED	PARAM	word	runRedemptionWork	sDGNRS.sol	GAME-only entry forwards
 PURE-DERIVE	PARAM	word	sample	libraries/DecimatorSamplingLib.sol	H(SAMPLE_TAG,word,lvl,uint256(stratum)) selects within disjoint floor-rounded strata before the common rotation; overload only forwards cached values.
 NOT-RNG	PARAM	word	score	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
 PURE-DERIVE	PARAM	word	settleBattle	CrapsEngine.sol	pure full-cap engine; frozen header, board, field and slot; awarded header domain separates dice/scatter from paid run; per-id rounding is independent of batching
+PURE-DERIVE	PARAM	word	settleBattleCompact_g439244	CrapsEngine.sol	pure wrapper: forwards the word unchanged to settleBattle and returns four of its result words; derives nothing itself
 CONSUMER-SEALED	PARAM	wordBatch	_settleBatch	modules/CrapsBattleCore.sol	wordBatch.word = _wordAt(_slotIndex[slot]-1), index bound at arm to _currentIndex()+1 (unworded); seats 1..entrants and their headers froze at entry close, before the arm; the seat->betId map recomputes ownN = entrants - dayTickets at settle, sound because the _dayTickets low bits stop at period-0 close
 PURE-DERIVE	PARAM	words	shuffle	libraries/PackedTicketShuffle.sol	packed owner lanes rotated in memory only

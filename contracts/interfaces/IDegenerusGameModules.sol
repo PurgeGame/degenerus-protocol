@@ -200,7 +200,7 @@ interface IDegenerusGameDecimatorModule {
     /// @param multBps Multiplier in basis points (10000 = 1x).
     /// @param chips The entry's board: zero to seven named chips, as a normal battle takes them.
     /// @return entryId The wallet's accumulated battle entry.
-    function recordDecBurn_g5574(
+    function recordDecBurn_g1271(
         uint32 player,
         uint24 lvl,
         uint256 baseAmount,

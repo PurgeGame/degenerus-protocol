@@ -315,7 +315,7 @@
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.read",
     "kind": "external",
-    "expression": "ICrapsStorageReader(table).extsload_g8132(bytes32(slot))",
+    "expression": "ICrapsStorageReader(table).extsload_g2807007(bytes32(slot))",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -515,7 +515,7 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin._governanceId",
     "kind": "external",
-    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf(wallet)",
+    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(wallet)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -811,7 +811,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate._affiliateQuestReward",
     "kind": "external",
-    "expression": "affiliateQuests.handleAffiliate(id, amount)",
+    "expression": "affiliateQuests.handleAffiliate_g55809(id, amount)",
     "count": 1,
     "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
   },
@@ -899,7 +899,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate._referralTarget",
     "kind": "external",
-    "expression": "game.extsload_g8132(bytes32(WalletTableLib.OWNERS_SLOT))",
+    "expression": "game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -931,7 +931,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.affiliateCode",
     "kind": "external",
-    "expression": "game.extsload_g8132(bytes32(WalletTableLib.OWNERS_SLOT))",
+    "expression": "game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -939,7 +939,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.affiliateCode",
     "kind": "external",
-    "expression": "game.walletIdentityOf(owner)",
+    "expression": "game.walletIdentityOf_g8516(owner)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -1227,9 +1227,17 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens._effectiveQuestStreakMirror",
     "kind": "external",
-    "expression": "quests.effectiveBaseStreakAndAfking_g2654(id)",
+    "expression": "quests.effectiveBaseStreakAndAfking_g1521(id, _dailyIdx(game))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens._effectiveQuestStreakMirror",
+    "kind": "recipient-helper",
+    "expression": "_dailyIdx(game)",
+    "count": 1,
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -1307,7 +1315,7 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens._sload",
     "kind": "external",
-    "expression": "IDegenerusGameLensSource(game).extsload_g8132(slot)",
+    "expression": "IDegenerusGameLensSource(game).extsload_g2807007(slot)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -1451,9 +1459,9 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.activityScoreBreakdownById",
     "kind": "recipient-helper",
-    "expression": "_effectiveQuestStreakMirror(id, lane, position1, _afkingEndpointMirror(game))",
+    "expression": "_effectiveQuestStreakMirror(game, id, lane, position1, _afkingEndpointMirror(game))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -2035,9 +2043,9 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.subInfoFullById",
     "kind": "recipient-helper",
-    "expression": "_effectiveQuestStreakMirror(id, lane, position1, s.endpoint)",
+    "expression": "_effectiveQuestStreakMirror(game, id, lane, position1, s.endpoint)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -2299,7 +2307,7 @@
     "path": "contracts/DegenerusParimutuel.sol",
     "scope": "DegenerusParimutuel.placeBet",
     "kind": "external",
-    "expression": "game.resolveAccount_g502(id, msg.sender)",
+    "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -2339,7 +2347,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._awardStreakBonus",
     "kind": "external",
-    "expression": "questGame.recordAfkingSecondary(id, amount)",
+    "expression": "questGame.recordAfkingSecondary_g3316(id, amount)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2347,9 +2355,9 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._awardStreakBonus",
     "kind": "recipient-helper",
-    "expression": "_currentQuestDayFast()",
+    "expression": "_questGameDay()",
     "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2371,33 +2379,25 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._crapsJoinQuest",
     "kind": "recipient-helper",
-    "expression": "_currentQuestDay(quests)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._crapsJoinQuest",
-    "kind": "recipient-helper",
     "expression": "_questCompleteWithPair( id, state, quests, slotIndex, quest, currentDay, 0 )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._currentQuestDay",
+    "scope": "DegenerusQuests._currentQuestDay(struct DegenerusQuests.DailyQuest[2]:memory)",
     "kind": "recipient-helper",
     "expression": "_questGameDay()",
     "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._currentQuestDayFast",
+    "scope": "DegenerusQuests._currentQuestDayFast()",
     "kind": "recipient-helper",
     "expression": "_questGameDay()",
     "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2430,14 +2430,6 @@
     "expression": "_questCompleteWithPair(id, state, quests, slotIndex, quest, currentDay, 0)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._handleFlip",
-    "kind": "recipient-helper",
-    "expression": "_currentQuestDay(quests)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2483,7 +2475,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._handleLevelQuestProgress",
     "kind": "external",
-    "expression": "questGame.recordAfkingSecondary(id, LEVEL_QUEST_STREAK_BONUS)",
+    "expression": "questGame.recordAfkingSecondary_g3316(id, LEVEL_QUEST_STREAK_BONUS)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2507,9 +2499,49 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._handlePurchase",
     "kind": "recipient-helper",
-    "expression": "_purchaseQuestWork(p, quests)",
+    "expression": "_handleLevelQuestProgress(p.id, QUEST_TYPE_LOOTBOX, p.lootBoxAmount, p.levelQuestPrice)",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handlePurchase",
+    "kind": "recipient-helper",
+    "expression": "_handleLevelQuestProgress(p.id, QUEST_TYPE_MINT_ETH, p.ethMintSpendWei, p.levelQuestPrice)",
+    "count": 1,
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handlePurchase",
+    "kind": "recipient-helper",
+    "expression": "_handleLevelQuestProgress(p.id, QUEST_TYPE_MINT_FLIP, p.flipMintQty, p.levelQuestPrice)",
+    "count": 1,
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handlePurchase",
+    "kind": "recipient-helper",
+    "expression": "_questCompleteWithPair( p.id, state, quests, slotIndex, quest, currentDay, p.mintPrice )",
+    "count": 1,
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handlePurchase",
+    "kind": "recipient-helper",
+    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 0, p.ethMintSpendWei, target, currentDay, p.mintPrice, QUEST_TYPE_MINT_ETH, p.ethMintSpendWei, p.levelQuestPrice )",
+    "count": 1,
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handlePurchase",
+    "kind": "recipient-helper",
+    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 1, p.flipMintQty, target, currentDay, 0, QUEST_TYPE_MINT_FLIP, p.flipMintQty, p.levelQuestPrice )",
+    "count": 1,
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2537,65 +2569,9 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._purchaseQuestWork",
-    "kind": "recipient-helper",
-    "expression": "_currentQuestDay(quests)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._purchaseQuestWork",
-    "kind": "recipient-helper",
-    "expression": "_handleLevelQuestProgress(p.id, QUEST_TYPE_LOOTBOX, p.lootBoxAmount, p.levelQuestPrice)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._purchaseQuestWork",
-    "kind": "recipient-helper",
-    "expression": "_handleLevelQuestProgress(p.id, QUEST_TYPE_MINT_ETH, p.ethMintSpendWei, p.levelQuestPrice)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._purchaseQuestWork",
-    "kind": "recipient-helper",
-    "expression": "_handleLevelQuestProgress(p.id, QUEST_TYPE_MINT_FLIP, p.flipMintQty, p.levelQuestPrice)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._purchaseQuestWork",
-    "kind": "recipient-helper",
-    "expression": "_questCompleteWithPair( p.id, state, quests, slotIndex, quest, currentDay, p.mintPrice )",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._purchaseQuestWork",
-    "kind": "recipient-helper",
-    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 0, p.ethMintSpendWei, target, currentDay, p.mintPrice, QUEST_TYPE_MINT_ETH, p.ethMintSpendWei, p.levelQuestPrice )",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._purchaseQuestWork",
-    "kind": "recipient-helper",
-    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 1, p.flipMintQty, target, currentDay, 0, QUEST_TYPE_MINT_FLIP, p.flipMintQty, p.levelQuestPrice )",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Purchase handler parameters and reward totals now share memory records to avoid spills. Quest selection/progress and the authorized Coinflip credit use the same account and computed reward."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._questComplete",
     "kind": "external",
-    "expression": "questGame.recordAfkingSecondary(id, 1)",
+    "expression": "questGame.recordAfkingSecondary_g3316(id, 1)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2675,9 +2651,9 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.awardQuestStreakBonus",
     "kind": "recipient-helper",
-    "expression": "_awardStreakBonus(id, amount, currentDay)",
+    "expression": "_awardStreakBonus(id, amount, currentDay, 0)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2700,14 +2676,6 @@
     "scope": "DegenerusQuests.effectiveBaseStreak",
     "kind": "recipient-helper",
     "expression": "_currentQuestDay(_materializeActiveQuestsForView())",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.effectiveBaseStreakAndAfking_g2654",
-    "kind": "recipient-helper",
-    "expression": "_currentQuestDayFast()",
     "count": 1,
     "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
@@ -2761,7 +2729,7 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleAffiliate",
+    "scope": "DegenerusQuests.handleAffiliate_g55809",
     "kind": "recipient-helper",
     "expression": "_handleAffiliate(id, amount)",
     "count": 1,
@@ -2801,15 +2769,7 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleDegenerette",
-    "kind": "recipient-helper",
-    "expression": "_currentQuestDay(quests)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleDegenerette",
+    "scope": "DegenerusQuests.handleDegenerette_g3",
     "kind": "recipient-helper",
     "expression": "_handleLevelQuestProgress(id, targetType, amount, mintPrice)",
     "count": 1,
@@ -2817,7 +2777,7 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleDegenerette",
+    "scope": "DegenerusQuests.handleDegenerette_g3",
     "kind": "recipient-helper",
     "expression": "_questCreditFlip(id, reward)",
     "count": 1,
@@ -2825,7 +2785,7 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleDegenerette",
+    "scope": "DegenerusQuests.handleDegenerette_g3",
     "kind": "recipient-helper",
     "expression": "_questHandleProgressSlot( id, state, quests, quest, slotIndex, amount, target, currentDay, mintPrice, targetType, amount, mintPrice )",
     "count": 1,
@@ -2833,19 +2793,11 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleFlip",
+    "scope": "DegenerusQuests.handleFlip_g217",
     "kind": "recipient-helper",
-    "expression": "_handleFlip(id, flipCredit)",
+    "expression": "_handleFlip(id, flipCredit, day)",
     "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleFoilPurchase",
-    "kind": "recipient-helper",
-    "expression": "_currentQuestDay(quests)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2867,17 +2819,25 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.handleFoilPurchase",
     "kind": "recipient-helper",
-    "expression": "_handlePurchase( id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice, quests )",
+    "expression": "_handlePurchase( PurchaseQuestInputs(id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice, gameDay), quests )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handlePurchase_g4831",
+    "scope": "DegenerusQuests.handleFoilPurchase",
     "kind": "recipient-helper",
-    "expression": "_handlePurchase( id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice, _loadActiveQuests() )",
+    "expression": "_questGameDay()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.handlePurchase_g23478",
+    "kind": "recipient-helper",
+    "expression": "_handlePurchase( PurchaseQuestInputs(id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice, day), _loadActiveQuests() )",
+    "count": 1,
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2899,25 +2859,17 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordCrapsAction_g14623",
     "kind": "recipient-helper",
-    "expression": "_awardStreakBonus( id, actionFlags & CRAPS_FLAG_STREAK_HIGH != 0 ? CRAPS_DAY_STREAK_HIGH : CRAPS_DAY_STREAK, _questGameDay() )",
+    "expression": "_awardStreakBonus( id, actionFlags & CRAPS_FLAG_STREAK_HIGH != 0 ? CRAPS_DAY_STREAK_HIGH : CRAPS_DAY_STREAK, gameDay, gameDay )",
     "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordCrapsAction_g14623",
     "kind": "recipient-helper",
-    "expression": "_crapsJoinQuest(id)",
+    "expression": "_crapsJoinQuest(id, gameDay)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.recordCrapsAction_g14623",
-    "kind": "recipient-helper",
-    "expression": "_currentQuestDayFast()",
-    "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2955,7 +2907,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordGrowthBet",
     "kind": "external",
-    "expression": "questGame.recordAfkingSecondary(id, GROWTH_QUEST_STREAK_BONUS)",
+    "expression": "questGame.recordAfkingSecondary_g3316(id, GROWTH_QUEST_STREAK_BONUS)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3627,7 +3579,7 @@
     "path": "contracts/FLIP.sol",
     "scope": "FLIP._recordDecimatorBurn",
     "kind": "external",
-    "expression": "degenerusGame.playerActivityScoreCachedById(id)",
+    "expression": "degenerusGame.playerActivityScoreCachedById_g975(id)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3635,7 +3587,7 @@
     "path": "contracts/FLIP.sol",
     "scope": "FLIP._recordDecimatorBurn",
     "kind": "external",
-    "expression": "degenerusGame.recordDecBurn_g5574(id, lvl, baseAmount, decBurnMultBps, chips)",
+    "expression": "degenerusGame.recordDecBurn_g1271(id, lvl, baseAmount, decBurnMultBps, chips)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -3646,6 +3598,14 @@
     "expression": "degenerusGame.registerWallet_g9539(key, true)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+  },
+  {
+    "path": "contracts/FLIP.sol",
+    "scope": "FLIP._recordDecimatorBurn",
+    "kind": "external",
+    "expression": "degenerusGame.walletIdOf_g3120(key)",
+    "count": 1,
+    "review": "P9GAS: existing-wallet lookup before registration. A registered wallet returns the same ID registerWallet_g9539 would; an unregistered self action still registers through registerWallet_g9539 with the original policy. Fixed Game recipient; no new payee or authorization path."
   },
   {
     "path": "contracts/FLIP.sol",
@@ -3763,7 +3723,7 @@
     "path": "contracts/FLIP.sol",
     "scope": "FLIP.decimatorBurn",
     "kind": "external",
-    "expression": "degenerusGame.resolveAccount_g502(id, msg.sender)",
+    "expression": "degenerusGame.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -3867,7 +3827,7 @@
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS.hasVoted",
     "kind": "external",
-    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf(voter)",
+    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3939,7 +3899,7 @@
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS.vote",
     "kind": "external",
-    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf(voter)",
+    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3987,7 +3947,7 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._accountId",
     "kind": "external",
-    "expression": "IGameCraps(_GAME).resolveAccount_g502(id, msg.sender)",
+    "expression": "IGameCraps(_GAME).resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -4539,7 +4499,7 @@
     "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._extsload",
     "kind": "external",
-    "expression": "IGameSlotReader(_GAME).extsload_g8132(slot)",
+    "expression": "IGameSlotReader(_GAME).extsload_g2807007(slot)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -4553,6 +4513,14 @@
   },
   {
     "path": "contracts/LootboxCraps.sol",
+    "scope": "LootboxCraps._gameWalletId",
+    "kind": "recipient-helper",
+    "expression": "_extsload(bytes32(slot))",
+    "count": 1,
+    "review": "P9GAS: existing-wallet lookup before registration. A registered wallet returns the same ID registerWallet_g9539 would; an unregistered self action still registers through registerWallet_g9539 with the original policy. Fixed Game recipient; no new payee or authorization path."
+  },
+  {
+    "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._scheduleResetPassed",
     "kind": "recipient-helper",
     "expression": "_sload(5)",
@@ -4563,7 +4531,7 @@
     "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._scheduledAdmissionsOpen",
     "kind": "external",
-    "expression": "IGameSlotReader(_GAME).dailyScheduleOpen()",
+    "expression": "IGameSlotReader(_GAME).dailyScheduleOpen_g214()",
     "count": 1,
     "review": "LOGICAL_DAYS: typed STATICCALL to the immutable Game for logical identity, schedule/ending readiness or authenticated retained result. No value, player-controlled destination, mutation or callback."
   },
@@ -4619,7 +4587,7 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP._holdsWwxrpBoon",
     "kind": "external",
-    "expression": "game.extsload_g8132(slot)",
+    "expression": "game.extsload_g2807007(slot)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -4643,7 +4611,7 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.burnForAccount",
     "kind": "external",
-    "expression": "game.resolveAccount_g502(id, address(0))",
+    "expression": "game.resolveAccount_g7029(id, address(0))",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -4691,7 +4659,7 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.enter",
     "kind": "external",
-    "expression": "game.extsload_g8132(bytes32(0))",
+    "expression": "game.extsload_g2807007(bytes32(0))",
     "count": 1,
     "review": "LDAYS2: trusted Game static read of slot 0 combines logical day and irreversible terminal latch. No player-controlled callee, write or callback; close before terminal entropy can settle that day."
   },
@@ -4707,7 +4675,7 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.enter",
     "kind": "external",
-    "expression": "game.playerActivityScoreCachedById(id)",
+    "expression": "game.playerActivityScoreCachedById_g975(id)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -4723,9 +4691,17 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.enter",
     "kind": "external",
-    "expression": "game.resolveAccount_g502(id, msg.sender)",
+    "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP.enter",
+    "kind": "external",
+    "expression": "game.walletIdOf_g3120(msg.sender)",
+    "count": 1,
+    "review": "P9GAS: existing-wallet lookup before registration. A registered wallet returns the same ID registerWallet_g9539 would; an unregistered self action still registers through registerWallet_g9539 with the original policy. Fixed Game recipient; no new payee or authorization path."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4819,7 +4795,7 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.withdraw",
     "kind": "external",
-    "expression": "game.resolveAccount_g502(id, msg.sender)",
+    "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -4899,7 +4875,7 @@
     "path": "contracts/libraries/GameTimeLib.sol",
     "scope": "GameTimeLib.gameDayIndex",
     "kind": "external",
-    "expression": "IDegenerusGame(ContractAddresses.GAME).currentDayView()",
+    "expression": "IDegenerusGame(ContractAddresses.GAME).currentDayView_g542950()",
     "count": 1,
     "review": "LOGICAL_DAYS: typed STATICCALL to the immutable Game for logical identity, schedule/ending readiness or authenticated retained result. No value, player-controlled destination, mutation or callback."
   },
@@ -4915,7 +4891,7 @@
     "path": "contracts/libraries/WalletTableLib.sol",
     "scope": "WalletTableLib.ownerOf",
     "kind": "external",
-    "expression": "game.extsload_g8132(bytes32(OWNERS_BASE + id))",
+    "expression": "game.extsload_g2807007(bytes32(OWNERS_BASE + id))",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -4923,7 +4899,7 @@
     "path": "contracts/libraries/WalletTableLib.sol",
     "scope": "WalletTableLib.ownerOf",
     "kind": "external",
-    "expression": "game.extsload_g8132(bytes32(OWNERS_BASE + ownerId))",
+    "expression": "game.extsload_g2807007(bytes32(OWNERS_BASE + ownerId))",
     "count": 2,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -5059,7 +5035,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint256:default)",
     "kind": "external",
-    "expression": "coinflipGame.purchaseInfo()",
+    "expression": "coinflipGame.purchaseInfo_g1027()",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5091,9 +5067,9 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._coinflipQuest",
     "kind": "external",
-    "expression": "IDegenerusQuests(ContractAddresses.QUESTS).handleFlip(id, amount)",
+    "expression": "IDegenerusQuests(ContractAddresses.QUESTS).handleFlip_g217(id, amount, day)",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
@@ -5131,9 +5107,9 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._depositCoinflip",
     "kind": "recipient-helper",
-    "expression": "_coinflipQuest(questId, amount)",
+    "expression": "_coinflipQuest(questId, amount, uint24(cachedDays >> 176))",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
@@ -5155,7 +5131,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._resolve",
     "kind": "external",
-    "expression": "degenerusGame.resolveAccount_g502(id, msg.sender)",
+    "expression": "degenerusGame.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5491,7 +5467,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.sweepAccountCoinflips",
     "kind": "external",
-    "expression": "degenerusGame.resolveAccount_g502(id, address(this))",
+    "expression": "degenerusGame.resolveAccount_g7029(id, address(this))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5539,9 +5515,9 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._crapsSettleBattle",
     "kind": "external",
-    "expression": "ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle(betId, header, chipFlip, bankroll, goal, bound, field, word)",
+    "expression": "ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattleCompact_g439244(betId, header, chipFlip, bankroll, goal, bound, field, word)",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+    "review": "P9GAS: compact pure-engine settlement. The engine runs the unchanged settleBattle and returns its payment, scaled bankroll, rank and hottest hand, the only Settlement words the table reads. Fixed engine recipient; no state or value."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
@@ -5803,7 +5779,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._resolveAccount",
     "kind": "external",
-    "expression": "IGameCraps(_GAME).resolveAccount_g502(id, msg.sender)",
+    "expression": "IGameCraps(_GAME).resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -7195,7 +7171,7 @@
     "path": "contracts/modules/DegenerusGameDecimatorModule.sol",
     "scope": "DegenerusGameDecimatorModule._runGenerated",
     "kind": "external",
-    "expression": "IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload_g8132(preferenceSlot)",
+    "expression": "IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload_g2807007(preferenceSlot)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -10203,9 +10179,9 @@
     "path": "contracts/modules/GameDegeneretteBet.sol",
     "scope": "GameDegeneretteBet._placeDegeneretteBet",
     "kind": "external",
-    "expression": "quests.handleDegenerette(c.funderId, c.totalBet, c.currency == CURRENCY_ETH, c.currency == CURRENCY_ETH ? PriceLookupLib.priceForLevel(c.lvl + 1) : 0)",
+    "expression": "quests.handleDegenerette_g3(c.funderId, c.totalBet, c.currency == CURRENCY_ETH, c.currency == CURRENCY_ETH ? PriceLookupLib.priceForLevel(c.lvl + 1) : 0, dailyIdx)",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/modules/GameDegeneretteBet.sol",
@@ -10737,7 +10713,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.playerActivityScoreCachedById",
+    "scope": "GameFacade.playerActivityScoreCachedById_g975",
     "kind": "recipient-helper",
     "expression": "_activityScoreCached(id)",
     "count": 1,
@@ -10801,7 +10777,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.recordAfkingSecondary",
+    "scope": "GameFacade.recordAfkingSecondary_g3316",
     "kind": "recipient-helper",
     "expression": "_gameRecordAfkingSecondary(id, amount)",
     "count": 1,
@@ -10809,7 +10785,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.recordDecBurn_g5574",
+    "scope": "GameFacade.recordDecBurn_g1271",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data)",
     "count": 1,
@@ -11235,9 +11211,9 @@
     "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._purchaseForWithCached",
     "kind": "external",
-    "expression": "quests.handlePurchase_g4831( buyerId, c.totalCost, 0, c.lootBoxAmount, quote.priceWei, quote.cachedJpFlag ? PriceLookupLib.priceForLevel(quote.cachedLevel + 1) : quote.priceWei )",
+    "expression": "quests.handlePurchase_g23478( dailyIdx, buyerId, c.totalCost, 0, c.lootBoxAmount, quote.priceWei, quote.cachedJpFlag ? PriceLookupLib.priceForLevel(quote.cachedLevel + 1) : quote.priceWei )",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: The same purchase funding/affiliate settlement reads temporary totals from a memory record. Account, affiliate code, price and credit recipients are unchanged; both legs still combine their pool write before the external handlers."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
@@ -11307,9 +11283,9 @@
     "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._redeemFlipFor",
     "kind": "external",
-    "expression": "quests .handlePurchase_g4831( buyerId, 0, uint32(entryQuantityScaled / (4 * QTY_SCALE)), 0, nextLevelPrice, nextLevelPrice )",
+    "expression": "quests .handlePurchase_g23478( dailyIdx, buyerId, 0, uint32(entryQuantityScaled / (4 * QTY_SCALE)), 0, nextLevelPrice, nextLevelPrice )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
@@ -11515,9 +11491,9 @@
     "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
     "scope": "GlamsterdamCoinflip._coinflipQuest",
     "kind": "recipient-helper",
-    "expression": "_handleFlip(id, amount)",
+    "expression": "_handleFlip(id, amount, day)",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
@@ -11899,7 +11875,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._claimant",
     "kind": "external",
-    "expression": "game.resolveAccount_g502(id, msg.sender)",
+    "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
@@ -12352,6 +12328,14 @@
     "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
   {
+    "path": "contracts/storage/CrapsBattleStorage.sol",
+    "scope": "CrapsBattleStorage._walletWord",
+    "kind": "recipient-helper",
+    "expression": "_gameWalletId(who)",
+    "count": 1,
+    "review": "P9GAS: existing-wallet lookup before registration. A registered wallet returns the same ID registerWallet_g9539 would; an unregistered self action still registers through registerWallet_g9539 with the original policy. Fixed Game recipient; no new payee or authorization path."
+  },
+  {
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._boundedStethBalance",
     "kind": "bounded-wrapper",
@@ -12371,9 +12355,9 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._effectiveQuestStreak",
     "kind": "external",
-    "expression": "quests.effectiveBaseStreakAndAfking_g2654(id)",
+    "expression": "quests.effectiveBaseStreakAndAfking_g1521(id, dailyIdx)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",

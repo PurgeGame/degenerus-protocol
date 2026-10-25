@@ -111,6 +111,16 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
             : FlipRoundLib.floorWholeFlip(paid);
     }
 
+    /// @notice `settleBattle` reduced to the four words the table reads: the payment, the
+    ///         scaled bankroll, the merit rank and the longest shared hand.
+    function settleBattleCompact_g439244(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
+        uint256 goal, uint48 bound, uint256 field, uint256 word)
+        external pure returns (uint256 paid, uint256 won, uint256 rank, uint256 hottestHand)
+    {
+        SlipResult memory r = settleBattle(betId, header, chipFlip, bankroll, goal, bound, field, word);
+        return (r.bankrollIn, r.bankrollOut, r.unitsPlayed, r.hottestHand);
+    }
+
     function _play(
         uint256 packedChips,
         uint256 chipFlip,

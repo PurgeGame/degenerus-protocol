@@ -63,7 +63,7 @@ interface IDegenerusQuestsAffiliate {
     ///      surplus returndata is ignored per ABI decoding rules. Affiliate passes the nonzero
     ///      stored ID of the winning owner or upline.
     /// @return reward Quest reward amount earned (0 if quest not completed).
-    function handleAffiliate(uint32 id, uint256 amount)
+    function handleAffiliate_g55809(uint32 id, uint256 amount)
         external returns (uint256 reward);
 }
 
@@ -324,12 +324,12 @@ contract DegenerusAffiliate {
     function affiliateCode(bytes32 code) external affiliateContext view returns (address owner, uint32 ownerId, uint8 kickback) {
         if (uint256(code) <= type(uint160).max) {
             owner = address(uint160(uint256(code)));
-            ownerId = game.walletIdentityOf(owner);
+            ownerId = game.walletIdentityOf_g8516(owner);
             return (ownerId == 0 ? owner : WalletTableLib.ownerOf(ownerId), ownerId, 0);
         }
         if (uint256(code) >> 32 == ACCOUNT_CODE_TAG >> 32) {
             ownerId = uint32(uint256(code));
-            if (ownerId == 0 || uint256(game.extsload_g8132(bytes32(WalletTableLib.OWNERS_SLOT))) <= ownerId) return (address(0), 0, 0);
+            if (ownerId == 0 || uint256(game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))) <= ownerId) return (address(0), 0, 0);
             return (WalletTableLib.ownerOf(ownerId), ownerId, 0);
         }
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
@@ -844,7 +844,7 @@ contract DegenerusAffiliate {
         }
         if (c >> 32 == ACCOUNT_CODE_TAG >> 32) {
             uint32 id = uint32(c);
-            if (id == 0 || id == senderId || uint256(game.extsload_g8132(bytes32(WalletTableLib.OWNERS_SLOT))) <= id) return (0, 0);
+            if (id == 0 || id == senderId || uint256(game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))) <= id) return (0, 0);
             return (id, bytes32(DEFAULT_ID_TAG | id));
         }
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
@@ -1281,7 +1281,7 @@ contract DegenerusAffiliate {
 
 
     function _affiliateQuestReward(uint32 id, uint256 amount) internal virtual returns (uint256) {
-        return affiliateQuests.handleAffiliate(id, amount);
+        return affiliateQuests.handleAffiliate_g55809(id, amount);
     }
 
     function _affiliateCreditFlip(uint32 id, uint256 amount) internal virtual {

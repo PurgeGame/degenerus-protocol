@@ -227,7 +227,7 @@ contract GNRUS {
     /// @dev Historical levels return false; Voted events retain the permanent vote history.
     function hasVoted(uint24 level, address voter, uint8 slot) public view returns (bool) {
         if (level != currentLevel || slot >= MAX_ACTIVE_SLOTS) return false;
-        uint32 voterId = IDegenerusGame(ContractAddresses.GAME).walletIdentityOf(voter);
+        uint32 voterId = IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter);
         uint256 word = _voterLane(voterId);
         return uint24(word >> 20) == level && (word & (uint256(1) << slot)) != 0;
     }
@@ -680,7 +680,7 @@ contract GNRUS {
         // 3. Load the reusable word; a different level starts with an empty mask.
         uint24 level = currentLevel;
         address voter = msg.sender;
-        uint32 voterId = IDegenerusGame(ContractAddresses.GAME).walletIdentityOf(voter);
+        uint32 voterId = IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter);
         uint256 word = _voterLane(voterId);
         if (uint24(word >> 20) != level) word = uint256(level) << 20;
         uint256 bit = uint256(1) << slot;

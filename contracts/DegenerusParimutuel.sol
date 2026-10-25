@@ -213,7 +213,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount_g7029(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 

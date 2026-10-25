@@ -9,7 +9,7 @@ interface IGameActionModule {
     function drainAffiliateBases(uint256 ids, uint256 uplines) external returns (uint256, uint256, uint256);
     function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
     function registerWalletIdentity(address owner) external returns (uint32 id);
-    function recordAfkingSecondary(uint32 id, uint16 amount) external;
+    function recordAfkingSecondary_g3316(uint32 id, uint16 amount) external;
     function floorAfkingStreakBase(uint32 id, uint16 floor) external;
     function payRecordSdgnrs(
         uint32 id,

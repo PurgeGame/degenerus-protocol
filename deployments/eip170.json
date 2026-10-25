@@ -64,15 +64,6 @@
       "fixtureType": "DegenerusGameAdvanceModule"
     },
     {
-      "key": "GAME_RNG_MODULE",
-      "contract": "Eip170Rng",
-      "aliases": [
-        "GAME_RNG_MODULE"
-      ],
-      "fixtureField": "rngModule",
-      "fixtureType": "DegenerusGameRngModule"
-    },
-    {
       "key": "GAME_JACKPOT_MODULE",
       "contract": "Eip170Jackpot",
       "aliases": [
@@ -164,12 +155,19 @@
     },
     {
       "key": "GAME_MINER_MODULE",
-      "contract": "Eip170Miner",
+      "contract": "Eip170MinerRng",
       "aliases": [
-        "GAME_MINER_MODULE"
+        "GAME_MINER_MODULE",
+        "GAME_RNG_MODULE"
       ],
       "fixtureField": "minerModule",
-      "fixtureType": "DegenerusGame"
+      "fixtureType": "DegenerusGame",
+      "fixtureAliases": {
+        "GAME_RNG_MODULE": {
+          "field": "rngModule",
+          "type": "DegenerusGameRngModule"
+        }
+      }
     },
     {
       "key": "COIN",

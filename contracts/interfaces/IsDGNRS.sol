@@ -81,7 +81,7 @@ interface IsDGNRS {
 
     /// @notice Claim account `id`'s resolved gambling-burn redemption in batch `batchId`.
     /// @dev Authorized: `id == 0` is the caller (ID from Game.walletIdOf); a nonzero
-    ///      `id` needs Game `resolveAccount_g502(id, msg.sender).authorized` (the account's key, a
+    ///      `id` needs Game `resolveAccount_g7029(id, msg.sender).authorized` (the account's key, a
     ///      smurf's owner, or an approved operator). The direct half credits the account's Game
     ///      claimable by ID and the lootbox half resolves for the account; after game over the
     ///      terminal ETH/stETH (including an open-batch unwind) pays the account's PAYEE.

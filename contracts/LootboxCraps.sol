@@ -8,11 +8,11 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 ///      (DegenerusGame.sol:509) because the RNG lifecycle and shared word payload are
 ///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
-    function dailyScheduleOpen() external view returns (bool);
+    function dailyScheduleOpen_g214() external view returns (bool);
     function rngWordForDay(uint24 day) external view returns (uint256);
 
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
 }
 
 /// @title LootboxCraps
@@ -56,6 +56,7 @@ contract LootboxCraps is Craps {
     ///      against the frozen tree exactly like those two, and covered by the same drift gate.
     uint256 internal constant RNG_WORD_BY_DAY_SLOT = 589;
     uint256 internal constant RNG_DAY_TAGS_SLOT = 26;
+    uint256 internal constant WALLET_IDS_SLOT = 62;
 
     // ---------------------------------------------------------------------------------------
     // Reading the protocol
@@ -111,13 +112,24 @@ contract LootboxCraps is Craps {
     }
 
     function _scheduledAdmissionsOpen() internal view returns (bool) {
-        return IGameSlotReader(_GAME).dailyScheduleOpen();
+        return IGameSlotReader(_GAME).dailyScheduleOpen_g214();
     }
 
     function _scheduleResetPassed() internal view returns (bool) {
         uint24 sent = uint24(_sload(5) >> 216);
         uint24 wall = uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
         return wall > sent;
+    }
+
+    /// @dev `who`'s current Game wallet ID, zero when unregistered.
+    function _gameWalletId(address who) internal view returns (uint32) {
+        uint256 slot;
+        assembly ("memory-safe") {
+            mstore(0, who)
+            mstore(32, WALLET_IDS_SLOT)
+            slot := keccak256(0, 64)
+        }
+        return uint32(uint256(_extsload(bytes32(slot))));
     }
 
     function _currentDayIndex() internal view returns (uint24) {
@@ -140,6 +152,6 @@ contract LootboxCraps is Craps {
         // A zero GAME — the un-pinned placeholder this repo ships on `main` — has no code, so this
         // high-level call reverts on its extcodesize check: every read fails closed until CRAPS is
         // deployed against a pinned game.
-        return IGameSlotReader(_GAME).extsload_g8132(slot);
+        return IGameSlotReader(_GAME).extsload_g2807007(slot);
     }
 }

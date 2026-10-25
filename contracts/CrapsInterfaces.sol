@@ -10,6 +10,10 @@ interface ICrapsEngine {
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
         uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (Craps.SlipResult memory);
 
+    function settleBattleCompact_g439244(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
+        uint256 goal, uint48 bound, uint256 field, uint256 word)
+        external pure returns (uint256 paid, uint256 won, uint256 rank, uint256 hottestHand);
+
     function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256);
 }
 
@@ -51,7 +55,7 @@ interface IGameCraps {
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. Player doors require `authorized`;
     ///         `vaultComp` uses only the key.
-    function resolveAccount_g502(uint32 id, address caller)
+    function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
     function level() external view returns (uint24);
     /// @notice Daily request through final day seal, including a fulfilled, pending jackpot battle.

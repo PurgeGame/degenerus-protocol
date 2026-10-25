@@ -562,7 +562,7 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
     ///      key nor the payee is needed.
     function _accountId(uint32 id) private returns (uint32) {
         if (id == 0) return uint32(_walletWord(msg.sender, false) >> CrapsPreferenceLib.ID_SHIFT);
-        (,, bool authorized) = IGameCraps(_GAME).resolveAccount_g502(id, msg.sender);
+        (,, bool authorized) = IGameCraps(_GAME).resolveAccount_g7029(id, msg.sender);
         if (!authorized) revert NotApproved();
         return id;
     }

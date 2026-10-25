@@ -52,7 +52,7 @@ library GameTimeLib {
      * @return Current logical index.
      */
     function gameDayIndex() internal view returns (uint24) {
-        return IDegenerusGame(ContractAddresses.GAME).currentDayView();
+        return IDegenerusGame(ContractAddresses.GAME).currentDayView_g542950();
     }
 
     /// @notice Actual 22:57 reset window relative to deployment, independent of gameplay.

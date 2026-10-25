@@ -411,7 +411,7 @@ contract DegenerusAdmin {
     }
 
     function _governanceId(address wallet) private view returns (uint32) {
-        return IDegenerusGame(ContractAddresses.GAME).walletIdentityOf(wallet);
+        return IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(wallet);
     }
 
     /// @dev No account selector: voting weight and identity both belong to the caller.

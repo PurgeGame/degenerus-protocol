@@ -42,7 +42,7 @@ interface IDegenerusGameLensSource {
     function rngWordForDay(uint24 day) external view returns (uint256);
 
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
 
     /// @notice DegenerusGame's aggregate activity-score read for `player`.
     function playerActivityScoreById(uint32 id) external view returns (uint256);
@@ -344,7 +344,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
 
     /// @dev One extsload read, as uint256.
     function _sload(address game, bytes32 slot) private view returns (uint256) {
-        return uint256(IDegenerusGameLensSource(game).extsload_g8132(slot));
+        return uint256(IDegenerusGameLensSource(game).extsload_g2807007(slot));
     }
 
     /// @dev Current default gameplay ID from the registry's low 32 bits.
@@ -393,7 +393,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     function subInfoFullById(address game, uint32 id) public view returns (SubFull memory s) {
         (uint256 lane, uint256 position1, uint256 meta) = _subLaneMirror(game, id);
         s.endpoint = _afkingEndpointMirror(game);
-        s.effectiveStreak = _effectiveQuestStreakMirror(id, lane, position1, s.endpoint);
+        s.effectiveStreak = _effectiveQuestStreakMirror(game, id, lane, position1, s.endpoint);
         if (position1 == 0) return s;
         s.member = true;
         s.removalPending = lane & SUB_REMOVAL_BIT != 0;
@@ -464,12 +464,13 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     /// @dev Mirror of DegenerusGameStorage._effectiveQuestStreak over an extsload-sourced lane:
     ///      a live afking run reads its derived streak, everyone else the manual streak.
     function _effectiveQuestStreakMirror(
+        address game,
         uint32 id,
         uint256 lane,
         uint256 position1,
         uint24 endpoint
     ) private view returns (uint32) {
-        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
+        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking_g1521(id, _dailyIdx(game));
         if (!afking || position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return manualStreak;
         uint256 a = _subStreakAt(lane, endpoint);
         if (a == 0) return manualStreak;
@@ -591,7 +592,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
 
         {
             (uint256 lane, uint256 position1, ) = _subLaneMirror(game, id);
-            b.questStreak = _effectiveQuestStreakMirror(id, lane, position1, _afkingEndpointMirror(game));
+            b.questStreak = _effectiveQuestStreakMirror(game, id, lane, position1, _afkingEndpointMirror(game));
         }
         b.questStreakPoints = uint256(b.questStreak) / 2;
 

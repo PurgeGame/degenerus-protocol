@@ -38,7 +38,7 @@ interface IDegenerusParimutuel {
     );
     /// @notice Bet the fixed FLIP stake on round's OVER or UNDER side for account `id`.
     /// @dev Authorized: `id == 0` is the caller, whose ID comes from the Game registry. A nonzero `id` needs Game
-    ///      `resolveAccount_g502(id, msg.sender).authorized` (the account's key, a smurf's owner, or an
+    ///      `resolveAccount_g7029(id, msg.sender).authorized` (the account's key, a smurf's owner, or an
     ///      approved operator); the gates and growth-bet reward use that ID. The
     ///      stake burns from the account's PAYEE (`burnCoin(payee, STAKE)`); the bet, the
     ///      settlement credit (`creditFlipBatch` by ID) and the quest reward are the account's.

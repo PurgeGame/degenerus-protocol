@@ -40,7 +40,7 @@ import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDecimatorBoardPreference {
 
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
 }
 
 /// @dev Pinned stateless engine. The pure ABI ensures a STATICCALL from the Game context.
@@ -123,7 +123,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
 
     /// @param chips The entry's board as a normal battle takes it: ten three-bit leg counts naming
     ///        zero to seven chips; the dice scatter the rest of the ten. Each burn sets it.
-    function recordDecBurn_g5574(uint32 playerId, uint24 lvl, uint256 baseAmount, uint256 multBps, uint32 chips)
+    function recordDecBurn_g1271(uint32 playerId, uint24 lvl, uint256 baseAmount, uint256 multBps, uint32 chips)
         public
         returns (uint64 id)
     {
@@ -323,7 +323,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         // Every lane and deity holds a nonzero wallet ID; Craps validates boards when saving them.
         bytes32 preferenceSlot = keccak256(abi.encode(owner, CrapsPreferenceLib.PASS_SLOT));
         (uint32 chips,) = CrapsPreferenceLib.decode(uint256(
-            IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload_g8132(preferenceSlot)
+            IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload_g2807007(preferenceSlot)
         ));
         // A generated entry is not a wallet: its survival salt is a 160-bit hash of its own id.
         Craps.SlipResult memory run = _settleRun(

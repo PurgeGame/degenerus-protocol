@@ -328,7 +328,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
 
     /// @dev The Game's `resolveAccount` for the caller: key, payee and authorization of `id`.
     function _resolveAccount(uint32 id) private view returns (address, address, bool) {
-        return IGameCraps(_GAME).resolveAccount_g502(id, msg.sender);
+        return IGameCraps(_GAME).resolveAccount_g7029(id, msg.sender);
     }
 
     /// @dev A paying door's prologue: its account (`_door`, allocating for a new caller) and the
@@ -637,7 +637,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///         surfaces deploy without touching this contract. Read-only — storage is already
     ///         public to off-chain readers via eth_getStorageAt; this mirrors that visibility to
     ///         eth_call/staticcall consumers.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }
@@ -2009,7 +2009,9 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         }
     }
 
-    function _crapsSettleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll, uint256 goal, uint48 bound, uint256 field, uint256 word) internal view virtual returns (Craps.SlipResult memory) {
-        return ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle(betId, header, chipFlip, bankroll, goal, bound, field, word);
+    /// @dev The table reads only the four words `Settlement` names; the others stay zero.
+    function _crapsSettleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll, uint256 goal, uint48 bound, uint256 field, uint256 word) internal view virtual returns (Craps.SlipResult memory r) {
+        (r.bankrollIn, r.bankrollOut, r.unitsPlayed, r.hottestHand) =
+            ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattleCompact_g439244(betId, header, chipFlip, bankroll, goal, bound, field, word);
     }
 }

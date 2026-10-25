@@ -20,7 +20,7 @@ abstract contract GameActionEntries is GameActions {
         return _actionRegisterWalletIdentity(owner);
     }
 
-    function recordAfkingSecondary(uint32 id, uint16 amount) external {
+    function recordAfkingSecondary_g3316(uint32 id, uint16 amount) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         _actionRecordAfkingSecondary(id, amount);
     }

@@ -380,6 +380,13 @@
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
+      "file": "LootboxCraps.sol",
+      "function": "_gameWalletId",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
       "file": "modules/CrapsLifecycleViews.sol",
       "function": "_jackpotBonusRoll",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_SCHEDULE,word,period==_BONUS_PERIODS_PER_DAY-2?0:period)",

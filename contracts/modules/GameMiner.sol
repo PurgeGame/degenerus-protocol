@@ -11,7 +11,7 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 
 import {IDegenerusGameAdvanceModule, IDegenerusGameRngModule, IDegenerusGameTicketModule,
     IDegenerusGameDegeneretteModule, IDegenerusGameDecimatorModule, IGameAfkingModule,
-    IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
+    IDegenerusGameDegenesisModule, IDegenerusGameMinerModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 
 interface IMinerCrapsWork {
@@ -23,7 +23,6 @@ interface IMinerCrapsWork {
 /// @notice The single permissionless state engine. Workers never choose global priority.
 abstract contract GameMiner is DegenerusGameMintStreakUtils {
     error NoWork();
-    error RngNotReady();
 
     // Covers calldata construction, call/decoding, category normalization and loop exit.
     uint256 private constant WORKER_BOUNDARY = GasBounds.ENGINE_BOUNDARY;
@@ -59,7 +58,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));
         MinerAction first = _nextMinerAction(msg.sender, meter);
         if (first == MinerAction.Idle) revert NoWork();
-        if (first == MinerAction.Wait) revert RngNotReady();
+        if (first == MinerAction.Wait) revert IDegenerusGameMinerModule.RngNotReady();
         bool rewardEligible = first != MinerAction.Terminal;
         uint256 rewardPrice = PriceLookupLib.priceForLevel(_activeTicketLevel());
         uint256 rewardDueAt = _minerRewardDueAt();
@@ -341,7 +340,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
         if (data.length != 4) return false;
         bytes4 selector = bytes4(data);
         return selector == MineFlipGas.InsufficientExecutionGas.selector || selector == MineFlipGas.WorkGasBound.selector
-            || selector == EmptyRevert.selector || selector == NoWork.selector || selector == RngNotReady.selector;
+            || selector == EmptyRevert.selector || selector == NoWork.selector || selector == IDegenerusGameMinerModule.RngNotReady.selector;
     }
 
     function _revertWork(bytes memory data) private pure {

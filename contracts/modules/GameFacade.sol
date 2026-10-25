@@ -369,7 +369,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///         can deploy without touching this contract. Read-only — storage is
     ///         already public to off-chain readers via eth_getStorageAt; this
     ///         mirrors that visibility to eth_call/staticcall consumers.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }
@@ -386,7 +386,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Wallet-bound identity; does not change when its gameplay account is sold.
-    function walletIdentityOf(address owner) external view returns (uint32) {
+    function walletIdentityOf_g8516(address owner) external view returns (uint32) {
         return uint32(walletIds[owner] >> 32);
     }
 
@@ -422,7 +422,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     /// @notice Record a secondary/level quest completion against an afking sub's streak base.
     /// @dev QUESTS-only; the shared hook checks the caller.
-    function recordAfkingSecondary(uint32 id, uint16 amount) external {
+    function recordAfkingSecondary_g3316(uint32 id, uint16 amount) external {
         _gameRecordAfkingSecondary(id, amount);
     }
 
@@ -466,7 +466,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///         act for it (the key, a smurf's owner, or an operator approved for `id`). Never
     ///         reverts on authorization.
     /// @custom:reverts E If `id == 0` or `id` is unallocated.
-    function resolveAccount_g502(uint32 id, address caller)
+    function resolveAccount_g7029(uint32 id, address caller)
         external
         view
         returns (address key, address payee, bool authorized)
@@ -495,7 +495,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       +======================================================================+*/
 
     /// @notice Most recently requested normal logical round; bootstrap is day 1.
-    function currentDayView() external view returns (uint24) {
+    function currentDayView_g542950() external view returns (uint24) {
         return _gameDay();
     }
 
@@ -511,7 +511,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     function latestDailyResultDay() external view returns (uint24) { return _latestDailyResultDay(); }
 
     /// @notice Scheduled admissions require the current reset's request and published terms.
-    function dailyScheduleOpen() external view returns (bool) {
+    function dailyScheduleOpen_g214() external view returns (bool) {
         return !_livenessTriggered() && !_dailyRequestDue() && _recordedDailyWord(dailyIdx) != 0;
     }
 
@@ -822,7 +822,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       +========================================================================================+*/
 
     /// @notice Add chips to a wallet's accumulated Decimator battle entry (COIN only).
-    function recordDecBurn_g5574(uint32, uint24, uint256, uint256, uint32) external returns (uint64) {
+    function recordDecBurn_g1271(uint32, uint24, uint256, uint256, uint32) external returns (uint64) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data);
         if (!ok) _revertGameDelegate(data);
         return abi.decode(data, (uint64));
@@ -1618,7 +1618,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @return lastPurchaseDay_ True if prize pool target is met.
     /// @return rngLocked_ True during daily RNG processing, from request through the day seal.
     /// @return priceWei Current buy-now mint price in wei (at the routed ticket level).
-    function purchaseInfo()
+    function purchaseInfo_g1027()
         external
         view
         returns (
@@ -1724,7 +1724,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return _playerActivityScore(id, _effectiveQuestStreak(id));
     }
 
-    function playerActivityScoreCachedById(uint32 id) external returns (uint256) {
+    function playerActivityScoreCachedById_g975(uint32 id) external returns (uint256) {
         return _activityScoreCached(id);
     }
 
