@@ -27,6 +27,7 @@ pragma solidity 0.8.38;
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
+import {BoundedCall} from "./libraries/BoundedCall.sol";
 
 /// @notice Minimal interface for sDGNRS balance snapshots used by GNRUS governance.
 interface ISDGNRSSnapshot {
@@ -390,7 +391,7 @@ contract GNRUS {
     function _redeemTo(address account, uint256 amount, uint256 acctBal, uint256 supply, address recipient) private {
         if (acctBal < amount) revert InsufficientBalance();
         uint256 ethBal = address(this).balance;
-        uint256 stethBal = steth.balanceOf(address(this));
+        uint256 stethBal = BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
         uint256 claimable = game.claimableWinningsOf(address(this));
         if (claimable > 1) { unchecked { claimable -= 1; } } else { claimable = 0; }
 
@@ -400,7 +401,7 @@ contract GNRUS {
         if (owed > ethBal + stethBal) {
             game.claimClaimable(0);
             ethBal = address(this).balance;
-            stethBal = steth.balanceOf(address(this));
+            stethBal = BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
         }
 
         uint256 ethOut = owed <= ethBal ? owed : ethBal;
@@ -488,7 +489,7 @@ contract GNRUS {
         if (block.timestamp < uint256(sweptAt) + RESIDUAL_RECOVERY_DELAY) revert TooEarly();
 
         uint256 ethBal = address(this).balance;
-        uint256 stethBal = steth.balanceOf(address(this));
+        uint256 stethBal = BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
 
         // stETH transfer first (ERC20), ETH transfer last (raw call — CEI)
         if (stethBal != 0) {

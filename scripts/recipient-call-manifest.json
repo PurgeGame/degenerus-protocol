@@ -3010,10 +3010,10 @@
   {
     "path": "contracts/DegenerusVault.sol",
     "scope": "DegenerusVault._stethBalance",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this))",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "ISOLATED: a failed or short stETH answer reads as zero, so a dead token never blocks an ETH-only holder exit; the pinned token is trusted and read with all gas, no fixed cap."
   },
   {
     "path": "contracts/DegenerusVault.sol",
@@ -3714,10 +3714,10 @@
   {
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS._redeemTo",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this))",
     "count": 2,
-    "review": "OFF_CHAIN: holder-initiated charity redemption."
+    "review": "ISOLATED: a failed or short stETH answer reads as zero, so a dead token never blocks an ETH-only holder exit; the pinned token is trusted and read with all gas, no fixed cap."
   },
   {
     "path": "contracts/GNRUS.sol",
@@ -3770,10 +3770,10 @@
   {
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS.sweepResidualToVault",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this))",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "ISOLATED: a failed or short stETH answer reads as zero, so a dead token never blocks an ETH-only holder exit; the pinned token is trusted and read with all gas, no fixed cap."
   },
   {
     "path": "contracts/GNRUS.sol",
@@ -4798,6 +4798,14 @@
     "expression": "_remaining(meter, minimum, reserve, CALL_OVERHEAD)",
     "count": 1,
     "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
+  },
+  {
+    "path": "contracts/libraries/BoundedCall.sol",
+    "scope": "BoundedCall.stethBalanceOrZero",
+    "kind": "opcode-or-value",
+    "expression": "token.staticcall(abi.encodeWithSelector(IStETH.balanceOf.selector, account))",
+    "count": 1,
+    "review": "ISOLATED: a failed or short stETH answer reads as zero, so a dead token never blocks an ETH-only holder exit; the pinned token is trusted and read with all gas, no fixed cap."
   },
   {
     "path": "contracts/libraries/GameTimeLib.sol",
@@ -7642,10 +7650,18 @@
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleFinalSweep",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.admitFirst(meter, BoundedCall.STETH_READ_MIN_GAS, GasBounds.TERMINAL_SWEEP_AFTER_READ)",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "ISOLATED: pre-call admission of the one-shot sweep's stETH read; reverts InsufficientExecutionGas when the first unit starts short, so a zero read means a dead token, never a shortage of gas. No external call."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule._handleFinalSweep",
+    "kind": "recipient-helper",
+    "expression": "_boundedStethBalance(meter, GasBounds.TERMINAL_SWEEP_AFTER_READ)",
+    "count": 1,
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. A failed stETH read counts as 0 and the sweep skips the stETH legs, leaving stETH in place."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -11890,10 +11906,10 @@
   {
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._redemptionBacking",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this))",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido dependency, read only when withCustody (after game over); chain reachability and isolation are tracked in external-call-census.md."
+    "review": "ISOLATED: a failed or short stETH answer reads as zero, so a dead token never blocks an ETH-only holder exit; the pinned token is trusted and read with all gas, no fixed cap."
   },
   {
     "path": "contracts/sDGNRS.sol",
