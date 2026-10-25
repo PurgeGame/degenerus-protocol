@@ -81,10 +81,10 @@ contract BoundedCallHarness {
         return BoundedCall.staticWordRemaining(MineFlipGas.fromCall(0), target, budget, 50_000, input);
     }
 
-    function firstUnit(address target, uint256 budget) external returns (bool, bytes memory) {
+    function firstUnit(address target, uint256 budget, uint256 mode) external returns (bool, bytes memory) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(0, 10_000, true));
         require(MineFlipGas.canRun(meter, budget, 0));
-        return BoundedCall.callRemaining(meter, target, budget, 50_000, abi.encode(uint256(1)), 32);
+        return BoundedCall.callRemaining(meter, target, budget, 50_000, abi.encode(mode), 32);
     }
 }
 
@@ -203,12 +203,17 @@ contract BoundedCallTest is Test {
         assertEq(output, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
     }
 
-    function testFirstUnitCannotBypassAdmission() public {
+    /// @dev The mandatory first unit owns all available gas: scaled minima and tail reservations
+    ///      admit optional continuation only, so an underfunded first unit still attempts its call
+    ///      (the same supply refuses an optional call, see testUnderfundedCallRevertsBeforeFailureBranch).
+    function testFirstUnitOwnsAllAvailableGas() public {
         (bool ok, bytes memory output) = address(harness).call{gas: BUDGET + 5_000}(
-            abi.encodeCall(harness.firstUnit, (address(target), BUDGET))
+            abi.encodeCall(harness.firstUnit, (address(target), BUDGET, 10))
         );
-        assertFalse(ok);
-        assertEq(output, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
+        assertTrue(ok, "the first unit attempts its call instead of refusing admission");
+        (bool callOk, bytes memory result) = abi.decode(output, (bool, bytes));
+        assertTrue(callOk);
+        assertGt(abi.decode(result, (uint256)), BUDGET - 10_000, "the first unit's callee gets all available gas");
     }
 
     function testValueTransferRetainsItsLargerTail() public {
