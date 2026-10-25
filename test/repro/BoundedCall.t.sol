@@ -86,6 +86,10 @@ contract BoundedCallHarness {
         require(MineFlipGas.canRun(meter, budget, 0));
         return BoundedCall.callRemaining(meter, target, budget, 50_000, abi.encode(mode), 32);
     }
+
+    function admit(bool mustProgress, uint256 minimum, uint256 reserve) external view {
+        BoundedCall.admitFirst(MineFlipGas.start(MineFlipGas.budget(0, 10_000, mustProgress)), minimum, reserve);
+    }
 }
 
 contract BoundedCallTest is Test {
@@ -214,6 +218,21 @@ contract BoundedCallTest is Test {
         (bool callOk, bytes memory result) = abi.decode(output, (bool, bytes));
         assertTrue(callOk);
         assertGt(abi.decode(result, (uint256)), BUDGET - 10_000, "the first unit's callee gets all available gas");
+    }
+
+    /// @dev The coordinator calls forward everything, so a first unit too short for them is refused
+    ///      before the call, never classified as a dependency failure after it.
+    function testAdmitFirstRefusesAShortFirstUnitBeforeTheCall() public {
+        bytes memory input = abi.encodeCall(harness.admit, (true, BUDGET, 50_000));
+        (bool ok, bytes memory output) = address(harness).staticcall{gas: BUDGET + 5_000}(input);
+        assertFalse(ok);
+        assertEq(output, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
+        (ok,) = address(harness).staticcall{gas: 2_000_000}(input);
+        assertTrue(ok, "a first unit holding minimum plus reserve is admitted");
+    }
+
+    function testAdmitFirstIgnoresOptionalWork() public view {
+        harness.admit{gas: BUDGET + 5_000}(false, BUDGET, 50_000);
     }
 
     function testValueTransferRetainsItsLargerTail() public {
