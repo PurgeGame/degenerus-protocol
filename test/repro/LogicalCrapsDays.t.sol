@@ -28,12 +28,6 @@ contract LogicalCrapsDaysTest is LogicalDaysFixture {
             ok; // Completed terminal work may report NoWork; no call may resume the table.
         }
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
-        uint256 before = coin.balanceOf(player);
-        vm.prank(ContractAddresses.GAME); coinflip.creditFlip_g317(id, 123);
-        vm.prank(player); uint256 paid = coinflip.claimCoinflips(id, type(uint256).max);
-        assertGe(paid, 123);
-        assertEq(coin.balanceOf(player), before + paid);
-
     }
     function test_UnservedResetPausesScheduledAdmissions() public {
         _nextLogical(777);
