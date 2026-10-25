@@ -7923,15 +7923,7 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule.updateVrfCoordinatorAndSub",
     "kind": "recipient-helper",
-    "expression": "_requestVrfWord(VRF_MIDDAY_CONFIRMATIONS)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule.updateVrfCoordinatorAndSub",
-    "kind": "recipient-helper",
-    "expression": "_requestVrfWord(VRF_REQUEST_CONFIRMATIONS)",
+    "expression": "_requestVrfWord(locked ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },

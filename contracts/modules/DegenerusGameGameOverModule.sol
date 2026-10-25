@@ -1150,23 +1150,18 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // If the new coordinator also stalls, the vault owner's one retry is
         // the remaining recourse, and a request unanswered _VRF_DEAD_TIMEOUT from its original
         // send reaches the VRF-dead ending.
-        if (!rngLockedFlag) {
-            // Reissue only an active unanswered mid-day request. Delivery does not clear
-            // its ID; a delivered word awaiting miner publication must remain unchanged.
-            if (_rngRequestActive() && rngWordCurrent == RNG_WORD_WAITING) vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
-        } else {
-            // Daily in flight: KEEP rngLockedFlag=true.
-            if (rngWordCurrent == RNG_WORD_WAITING) {
-                // Daily word not yet delivered: re-request on the new coordinator. The swap spends
-                // the vault owner's single retry (the stamp itself does not move): the retry is the
-                // last resort before a swap, and re-armed here it could discard the new
-                // coordinator's first answer. A replacement that stalls too is recovered by
-                // another swap or reaches the VRF-dead ending.
-                _spendRngRetry();
-                vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
-            }
-            // else: daily word already delivered and valid -> preserve it; no re-issue
-            // (its request was fulfilled once and the new coordinator never issued it).
+        // One re-issue site. Mid-day: only an active unanswered request; delivery does not clear
+        // its ID, and a delivered word awaiting miner publication must remain unchanged.
+        // Daily in flight (rngLockedFlag stays true): only a word not yet delivered. The swap
+        // spends the vault owner's single retry (the stamp itself does not move): the retry is
+        // the last resort before a swap, and re-armed here it could discard the new
+        // coordinator's first answer. A replacement that stalls too is recovered by another
+        // swap or reaches the VRF-dead ending. A delivered daily word is preserved: its
+        // request was fulfilled once and the new coordinator never issued it.
+        bool locked = rngLockedFlag;
+        if (rngWordCurrent == RNG_WORD_WAITING && (locked || _rngRequestActive())) {
+            if (locked) _spendRngRetry();
+            vrfRequestId = _requestVrfWord(locked ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS);
         }
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
