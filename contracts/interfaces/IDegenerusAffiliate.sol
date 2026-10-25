@@ -42,7 +42,7 @@ interface IDegenerusAffiliate {
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
 
     /// @param senderId The player's wallet ID (seeds the winner roll).
-    /// @param lvl Current game level (for leaderboard tracking).
+    /// @param levelDay Leaderboard level in the low 24 bits and the Game's logical day in the next 24 (day 0 = Quests reads it).
     /// @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
     /// @param lootboxActivityScore Buyer's activity score in whole points for lootbox taper (0 = no taper).
     /// @return playerKickback Amount of kickback to credit to the player.
@@ -50,7 +50,7 @@ interface IDegenerusAffiliate {
         uint256 amount,
         bytes32 code,
         uint32 senderId,
-        uint24 lvl,
+        uint256 levelDay,
         bool isFreshEth,
         uint16 lootboxActivityScore
     ) external returns (uint256 playerKickback);

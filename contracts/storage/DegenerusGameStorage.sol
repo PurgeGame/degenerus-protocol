@@ -3268,6 +3268,12 @@ abstract contract DegenerusGameStorage {
         return dailyIdx;
     }
 
+    /// @dev Affiliate leaderboard level in the low 24 bits and the logical day in the next 24, so
+    ///      the winner's quest hop does not read the day back from the Game.
+    function _affiliateLevelDay(uint24 lvl) internal view returns (uint256) {
+        return (uint256(dailyIdx) << 24) | lvl;
+    }
+
     /// @dev One ending authority for mining dispatch, views and paid-entry guards.
     enum EndingReason { None, PurchaseTimeout, HardStall }
 

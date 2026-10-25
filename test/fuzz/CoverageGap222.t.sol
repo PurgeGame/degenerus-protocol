@@ -700,7 +700,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(affiliate).call(
             abi.encodeWithSignature(
-                "payAffiliate(uint256,bytes32,uint32,uint24,bool,uint16)",
+                "payAffiliate(uint256,bytes32,uint32,uint256,bool,uint16)",
                 uint256(1 ether),
                 code,
                 buyer,

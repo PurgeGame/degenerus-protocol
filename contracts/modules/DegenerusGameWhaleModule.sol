@@ -512,6 +512,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // in one Coinflip write.
         {
             uint256 passPriceWei = PriceLookupLib.priceForLevel(passLevel);
+            uint256 levelDay = _affiliateLevelDay(passLevel);
             uint256 kickback;
             if (freshPaid != 0) {
                 uint256 freshFlip = (freshPaid * PRICE_COIN_UNIT) / passPriceWei;
@@ -523,7 +524,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     freshFlip,
                     affiliateCode,
                     buyerId,
-                    passLevel,
+                    levelDay,
                     true,
                     0
                 );
@@ -534,7 +535,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     (recycled * PRICE_COIN_UNIT) / passPriceWei,
                     affiliateCode,
                     buyerId,
-                    passLevel,
+                    levelDay,
                     false,
                     0
                 );
@@ -722,13 +723,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // in one Coinflip write.
         {
             uint256 passPriceWei = startLevelPrice;
+            uint256 levelDay = _affiliateLevelDay(currentLevel + 1);
             uint256 kickback;
             if (freshPaid != 0) {
                 kickback = affiliate.payAffiliate(
                     (freshPaid * PRICE_COIN_UNIT) / passPriceWei,
                     affiliateCode,
                     buyerId,
-                    currentLevel + 1,
+                    levelDay,
                     true,
                     0
                 );
@@ -739,7 +741,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     (recycled * PRICE_COIN_UNIT) / passPriceWei,
                     affiliateCode,
                     buyerId,
-                    currentLevel + 1,
+                    levelDay,
                     false,
                     0
                 );

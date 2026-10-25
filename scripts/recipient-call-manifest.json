@@ -8827,7 +8827,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule._deliverWhalePass",
     "kind": "external",
-    "expression": "affiliate.payAffiliate( (recycled * PRICE_COIN_UNIT) / passPriceWei, affiliateCode, buyerId, passLevel, false, 0 )",
+    "expression": "affiliate.payAffiliate( (recycled * PRICE_COIN_UNIT) / passPriceWei, affiliateCode, buyerId, levelDay, false, 0 )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8835,7 +8835,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule._deliverWhalePass",
     "kind": "external",
-    "expression": "affiliate.payAffiliate( freshFlip, affiliateCode, buyerId, passLevel, true, 0 )",
+    "expression": "affiliate.payAffiliate( freshFlip, affiliateCode, buyerId, levelDay, true, 0 )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -9043,7 +9043,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseLazyPass",
     "kind": "external",
-    "expression": "affiliate.payAffiliate( (freshPaid * PRICE_COIN_UNIT) / passPriceWei, affiliateCode, buyerId, currentLevel + 1, true, 0 )",
+    "expression": "affiliate.payAffiliate( (freshPaid * PRICE_COIN_UNIT) / passPriceWei, affiliateCode, buyerId, levelDay, true, 0 )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -9051,7 +9051,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseLazyPass",
     "kind": "external",
-    "expression": "affiliate.payAffiliate( (recycled * PRICE_COIN_UNIT) / passPriceWei, affiliateCode, buyerId, currentLevel + 1, false, 0 )",
+    "expression": "affiliate.payAffiliate( (recycled * PRICE_COIN_UNIT) / passPriceWei, affiliateCode, buyerId, levelDay, false, 0 )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -12419,7 +12419,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.payAffiliate",
     "kind": "recipient-helper",
-    "expression": "_settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, 0)",
+    "expression": "_settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, uint24(levelDay >> 24))",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },

@@ -383,7 +383,7 @@ abstract contract DegenerusGameFoilCore is
         // afking-drawn principal) at the fresh rate, the claimable portion at the recycle
         // rate, both frozen at level + 1 like the ticket affiliate (score 0, same as
         // tickets). FLIP kickbacks accumulate and are credited once below.
-        uint24 affLevel = level + 1;
+        uint256 affLevel = _affiliateLevelDay(level + 1);
         uint256 kickback;
         uint256 freshBasis = cost - claimableUsed;
         if (freshBasis != 0) {

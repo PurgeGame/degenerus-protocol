@@ -597,7 +597,9 @@ contract DegenerusAffiliate {
 
      * @param senderId The player's wallet ID (seeds the winner roll; the winner leg equal to it
      *        is skipped). A zero `amount` rolls no winner, so it may be 0 then.
-     * @param lvl Current game level (for join tracking and leaderboard).
+     * @param levelDay Leaderboard level (for join tracking and leaderboard) in the low 24 bits and the
+     *        Game's current logical day in the next 24, passed on to the winner's quest hop; day 0 makes
+     *        Quests read it.
      * @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
      * @param lootboxActivityScore Buyer's activity score (whole points) for lootbox taper (0 = no taper; 100+ triggers linear taper to 25% floor at 255).
      * @return playerKickback Amount of kickback to credit to the player (caller handles minting and batching).
@@ -606,7 +608,7 @@ contract DegenerusAffiliate {
         uint256 amount,
         bytes32 code,
         uint32 senderId,
-        uint24 lvl,
+        uint256 levelDay,
         bool isFreshEth,
         uint16 lootboxActivityScore
     ) external affiliateContext returns (uint256 playerKickback) {
@@ -615,6 +617,7 @@ contract DegenerusAffiliate {
         // -----------------------------------------------------------------
         // SECURITY: Only the game contract can distribute affiliate rewards.
         if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
+        uint24 lvl = uint24(levelDay);
 
         // -----------------------------------------------------------------
         // REFERRAL RESOLUTION
@@ -655,7 +658,7 @@ contract DegenerusAffiliate {
             }
 
             (uint32 winner, uint256 credit) =
-                _settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, 0);
+                _settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, uint24(levelDay >> 24));
             if (credit != 0) _affiliateCreditFlip(winner, credit);
         }
 
