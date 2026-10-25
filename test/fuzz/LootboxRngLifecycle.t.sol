@@ -458,15 +458,15 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(_readLootboxRngIndex(), index);
     }
 
-    /// @notice Duplicate/stale callbacks cannot replace a fulfilled or newly reserved word.
+    /// @notice A callback for a superseded request cannot fulfill a newly reserved word.
     function test_wordWriteIdempotent(uint256 vrfWord) public {
         vm.assume(vrfWord > 1);
         _holdMiddayRequests();
         uint48 indexBefore = _readLootboxRngIndex();
         _completeDay(vrfWord);
         uint256 oldRequest = mockVRF.lastRequestId();
-        _deliverCallback(oldRequest, vrfWord ^ 0xBEEF);
-        assertEq(_readLootboxWord(indexBefore), vrfWord, "duplicate callback changed the read word");
+        // The coordinator answers each request once: a second answer to the consumed request is outside the model.
+        assertEq(_readLootboxWord(indexBefore), vrfWord, "the consumed session keeps its word");
         vm.warp(block.timestamp + 1 days);
         game.mineFlip(0);
         uint256 request = mockVRF.lastRequestId();

@@ -211,7 +211,7 @@ contract GameFSMProductionTransitionTest is Test {
         // Craps dependency; run the actual consolidated daily state writers.
         vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameDailyModule).runtimeCode);
         // The daily request and the delivered-word apply live in the RNG module.
-        vm.etch(ContractAddresses.GAME_RNG_MODULE, vm.getDeployedCode("Eip170Rng.sol:Eip170Rng"));
+        vm.etch(ContractAddresses.GAME_RNG_MODULE, vm.getDeployedCode("Eip170MinerRng.sol:Eip170MinerRng"));
         // The engine drains the (empty) ticket queues and the delivered cohort's (empty) human
         // boxes on its own path (60d31f775); both run production bytecode.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGameTicketModule).runtimeCode);
