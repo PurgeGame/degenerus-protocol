@@ -9,12 +9,12 @@ interface IGamePurchaseModule {
     function redeemFlip(uint32 id, uint256 entryQuantityScaled) external;
     function withdrawAfkingFunding(uint32 id, uint256 amount) external;
     function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external;
-    function repay(uint32 id) external payable;
+    function clearDebtNow(uint32 id) external payable;
     function sweepAccounts(uint32[] calldata ids) external returns (uint256, uint256);
 }
 
 interface IGameMinerModule {
-    function mineFlip(uint32 gasMultiplierBps) external;
+    function mineRun(uint32 gasMultiplierBps) external;
     function minerAction() external returns (uint8);
 }
 
@@ -24,11 +24,11 @@ interface IGameBingoModule {
 }
 
 interface IGameBetModule {
-    function placeDegeneretteBet(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol) external payable;
+    function betDegenerette(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol) external payable;
 }
 
 interface IGameBoonActionsModule {
     function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16);
     function consumeDecimatorBoon(uint32 id) external returns (uint16);
-    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
+    function giveBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
 }

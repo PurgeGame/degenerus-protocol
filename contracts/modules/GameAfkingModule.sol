@@ -112,7 +112,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     // authorized for the account.
     /// @dev subscribe(_, 0) cancel where the account has no subscription.
     error NotSubscribed();
-    /// @dev mineFlip() found all router categories empty — the clean no-work signal
+    /// @dev mineRun() found all router categories empty — the clean no-work signal
     ///      (the unbounded-scan-free early-return on no pending work).
     error NoWork();
 

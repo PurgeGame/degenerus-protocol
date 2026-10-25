@@ -989,7 +989,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         if (uint24(packed >> BitPackingLib.LEVEL_COUNT_SHIFT) > 2
             || ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1) != 0) return false;
         uint256 lastMintLevel = uint24(packed);
-        return lastMintLevel == 0 || lastMintLevel + 1 < IGameCraps(_GAME).level();
+        return lastMintLevel == 0 || lastMintLevel + 1 < IGameCraps(_GAME).currentLvl();
     }
 
     /// @dev ONE encoder for the plain burns. The lapse sweep's guarded burn stays direct —

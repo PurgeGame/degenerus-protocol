@@ -76,7 +76,7 @@ interface ICrapsPassDelivery {
  * ## Functions
  *
  * - Box opening (resolveHumanBoxOrder, resolveAfkingBox, resolveLootboxDirect, resolveRedemptionLootbox)
- * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
+ * - Deity-boon event declarations shared with DegenerusGameBoonModule (giveBoon lives there)
  */
 abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBox {
     // =========================================================================

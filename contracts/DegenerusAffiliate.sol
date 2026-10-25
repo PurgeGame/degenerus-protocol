@@ -99,7 +99,7 @@ interface IGameAfkingDrain {
 
     /// @notice Current game level (the claim-time level basis for the leaderboard write).
     /// @return Current jackpot level (starts at 0).
-    function level() external view returns (uint24);
+    function currentLvl() external view returns (uint24);
 }
 
 /**
@@ -916,7 +916,7 @@ contract DegenerusAffiliate {
             _affiliateCreditFlipPair(VAULT_ID, baseSum - sdgnrsShare, SDGNRS_ID, sdgnrsShare);
             return;
         }
-        uint24 lvl = afkingDrain.level() + 1;
+        uint24 lvl = afkingDrain.currentLvl() + 1;
         uint256 earningsWord = _affiliateStorage().affiliateCoinEarned[a];
         uint256 uplines;
         {

@@ -102,7 +102,7 @@ abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
         return position1 != 0 && lane & SUB_REMOVAL_BIT == 0;
     }
 
-    /// @notice Cashout-curse SET (delegatecall target from the Game's claimWinnings): a stale
+    /// @notice Cashout-curse SET (delegatecall target from the Game's claimClaimable): a stale
     ///         ghost-cashout adds a saturating +2 stack. Cheapest-first bails skip the SSTORE
     ///         for infra addresses (protects the sDGNRS redemption-snapshot score), gameOver, a
     ///         non-stale claimant, deity holders, active lazy/whale-pass holders, an

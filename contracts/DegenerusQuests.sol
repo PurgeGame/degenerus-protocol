@@ -1782,7 +1782,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Decimator quests are unlocked at specific level boundaries.
      *
      *      Availability Rules:
-     *      1. decWindow() must be true (set by game during decimator windows)
+     *      1. decimatorActive() must be true (set by game during decimator windows)
      *      2. Resolution level 100, 200, 300... (multiples of DECIMATOR_SPECIAL_LEVEL)
      *      3. Resolution level 5, 15, 25, 35... ending in 5 (except 95, 195, etc.)
      *
@@ -1795,8 +1795,8 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function _canRollDecimatorQuest() private view returns (bool) {
         IDegenerusGame game_ = questGame;
-        if (!game_.decWindow()) return false;
-        uint24 lvl = game_.level() + 1;
+        if (!game_.decimatorActive()) return false;
+        uint24 lvl = game_.currentLvl() + 1;
         // Always available at 100-level milestones
         if (lvl != 0 && (lvl % DECIMATOR_SPECIAL_LEVEL) == 0) return true;
         // Available at X5 levels (5, 15, 25, 35...) except X95
@@ -2598,7 +2598,7 @@ contract DegenerusQuests is IDegenerusQuests {
             version = uint8(_questsStorage().activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT) + 1;
             // advanceGame must never gain a revert; level is a uint24 the game
             // increments once per level, so the +1 cannot reach the boundary.
-            questLevel = questGame.level() + 1;
+            questLevel = questGame.currentLvl() + 1;
         }
         _storeLevelQuest(rolled, version);
         emit LevelQuestRolled(
@@ -2718,7 +2718,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (uint256(progress) >= target) {
             // Gate eligibility only at completion; the level is fetched once and
             // shared with the completion event.
-            uint24 lvl = questGame.level();
+            uint24 lvl = questGame.currentLvl();
             if (!_isLevelQuestEligible(id, lvl)) {
                 packed = uint256(currentVersion) | (uint256(progress) << 8);
                 _questsStorage().levelQuestPlayerState[id] = packed;
@@ -2810,7 +2810,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///        (keys the quest record and the credit).
     /// @param lvl The level the bet was placed on. Taken from the caller rather than read
     ///        back off the game: PARIMUTUEL is the only permitted caller and it read this
-    ///        from the game in the same call, so the value is the same one questGame.level()
+    ///        from the game in the same call, so the value is the same one questGame.currentLvl()
     ///        would return, for one less external call.
     /// @param reward FLIP to credit on first completion this level.
     /// @return paid The FLIP actually credited (0 when ineligible or already completed).
@@ -2886,7 +2886,7 @@ contract DegenerusQuests is IDegenerusQuests {
             completed = (packed >> 136) & 1 == 1;
         }
 
-        uint24 lvl = questGame.level();
+        uint24 lvl = questGame.currentLvl();
         target = _levelQuestTargetValue(
             questType,
             PriceLookupLib.priceForLevel(lvl + 1)

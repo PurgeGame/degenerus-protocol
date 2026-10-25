@@ -217,8 +217,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             if (!authorized) revert NotApproved();
         }
 
-        (, , , uint24 round, bool open, uint8 phaseDay) = game.growthState(0);
-        // Round 0 is the sole unscoreable round — growthState reports no ratchet terms
+        (, , , uint24 round, bool open, uint8 phaseDay) = game.getGrowth(0);
+        // Round 0 is the sole unscoreable round — getGrowth reports no ratchet terms
         // for it, so it could never settle and a stake left there would strand.
         if (!open || round == 0) revert MarketClosed();
 
@@ -482,11 +482,11 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             uint256 payout
         )
     {
-        // growthState(0): the ratchet terms are not a settlement input — the outcome is a
+        // getGrowth(0): the ratchet terms are not a settlement input — the outcome is a
         // bit this contract holds — so the view asks only for the routing half, and round 0
         // skips the three ratchet reads.
         {
-            (, , , uint24 lvl, bool open, uint8 phaseDay) = game.growthState(0);
+            (, , , uint24 lvl, bool open, uint8 phaseDay) = game.getGrowth(0);
             if (open && lvl != 0) openRound = lvl;
             questReward = _questReward(phaseDay);
         }

@@ -53,7 +53,7 @@ abstract contract GameActionEntries is GameActions {
         _actionSetMiddayMaxBasefee(newGwei);
     }
 
-    function claimWinnings(uint32 id) external {
+    function claimClaimable(uint32 id) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         _actionClaimWinnings(id);
     }

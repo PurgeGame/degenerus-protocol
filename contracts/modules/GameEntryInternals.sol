@@ -30,7 +30,7 @@ abstract contract GameEntryInternals is GameComponentCall {
     }
 
     function _gameRepay(uint32 id) internal virtual {
-        _componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.repay.selector, id));
+        _componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.clearDebtNow.selector, id));
     }
 
     function _gameSweepAccounts(uint32[] calldata ids) internal virtual returns (uint256, uint256) {
@@ -38,7 +38,7 @@ abstract contract GameEntryInternals is GameComponentCall {
     }
 
     function _gameMineFlip(uint32 gasMultiplierBps) internal virtual {
-        _componentDelegate(ContractAddresses.GAME_MINER_MODULE, abi.encodeWithSelector(IGameMinerModule.mineFlip.selector, gasMultiplierBps));
+        _componentDelegate(ContractAddresses.GAME_MINER_MODULE, abi.encodeWithSelector(IGameMinerModule.mineRun.selector, gasMultiplierBps));
     }
 
     function _gameMinerAction() internal virtual returns (uint8) {
@@ -54,7 +54,7 @@ abstract contract GameEntryInternals is GameComponentCall {
     }
 
     function _gamePlaceBet(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol) internal virtual {
-        _componentDelegate(ContractAddresses.GAME_DEGENERETTE_MODULE, abi.encodeWithSelector(IGameBetModule.placeDegeneretteBet.selector, id, currency, amountPerSpin, spinCount, symbol));
+        _componentDelegate(ContractAddresses.GAME_DEGENERETTE_MODULE, abi.encodeWithSelector(IGameBetModule.betDegenerette.selector, id, currency, amountPerSpin, spinCount, symbol));
     }
 
     function _gameConsumeActionBoon(uint32 id) internal virtual returns (uint16) {
@@ -66,7 +66,7 @@ abstract contract GameEntryInternals is GameComponentCall {
     }
 
     function _gameIssueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) internal virtual {
-        _componentDelegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSelector(IGameBoonActionsModule.issueDeityBoon.selector, deityId, recipientId, slot));
+        _componentDelegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSelector(IGameBoonActionsModule.giveBoon.selector, deityId, recipientId, slot));
     }
     function _gameRaiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) internal virtual {
         _componentDelegate(ContractAddresses.GAME_ACTIONS_MODULE, abi.encodeWithSelector(IGameActionModule.raiseSmurfBaseAllowance.selector, mainId, newBase));

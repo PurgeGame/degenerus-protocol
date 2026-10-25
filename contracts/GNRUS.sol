@@ -37,7 +37,7 @@ interface ISDGNRSSnapshot {
 /// @notice Minimal interface for DegenerusGame donation-facing functions used by GNRUS.
 interface IDegenerusGameDonations {
     /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller; GNRUS passes 0).
-    function claimWinnings(uint32 id) external;
+    function claimClaimable(uint32 id) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
 }
@@ -384,7 +384,7 @@ contract GNRUS {
     ///      proportional ETH + stETH share to `recipient`. Backing = on-hand ETH + stETH plus the
     ///      game-side claimable (less the 1-wei sentinel); the game is drawn from only when on-hand
     ///      is short. CEI: supply/balance are updated and events emitted before any external value
-    ///      transfer; the only pre-burn external call is game.claimWinnings, which cannot write GNRUS
+    ///      transfer; the only pre-burn external call is game.claimClaimable, which cannot write GNRUS
     ///      balances, so `acctBal` (read by the caller) is still fresh at the burn. The explicit
     ///      balance check rejects over-burning before reading backing or computing a payout.
     function _redeemTo(address account, uint256 amount, uint256 acctBal, uint256 supply, address recipient) private {
@@ -398,7 +398,7 @@ contract GNRUS {
 
         // Pay from on-hand first (ETH-preferred), pull remainder from game
         if (owed > ethBal + stethBal) {
-            game.claimWinnings(0);
+            game.claimClaimable(0);
             ethBal = address(this).balance;
             stethBal = steth.balanceOf(address(this));
         }
@@ -809,7 +809,7 @@ contract GNRUS {
     //                         RECEIVE FUNCTION
     // =====================================================================
 
-    /// @notice Accept ETH from game claimWinnings and direct deposits
+    /// @notice Accept ETH from game claimClaimable and direct deposits
     receive() external payable {}
     /// @notice Pending edit queue. Recipient value at slot index; sentinel via `pendingEditSet` bitmap.
     /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no

@@ -753,7 +753,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      owed to it — claimable plus prepaid afking — then splits the remainder ~1/3
     ///      each (GNRUS absorbs the rounding wei). All other unclaimed player balances
     ///      are forfeited.
-    ///      After GO_SWEPT=1, claimWinnings() reverts, so this is the last
+    ///      After GO_SWEPT=1, claimClaimable() reverts, so this is the last
     ///      chance for the three sinks to receive what they earned in-game.
     ///      Also shuts down the VRF subscription and sweeps native ETH to vault.
     /// @custom:reverts TransferFailed When ETH or stETH transfer fails

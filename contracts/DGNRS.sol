@@ -48,7 +48,7 @@ interface IDegenerusGame {
     /// @notice Timestamp the game ended, 0 if still active, as implemented by DegenerusGame.
     function gameOverTimestamp() external view returns (uint48);
     /// @notice The game's current level, as implemented by DegenerusGame.
-    function level() external view returns (uint24);
+    function currentLvl() external view returns (uint24);
 }
 
 /**
@@ -266,7 +266,7 @@ contract DGNRS {
     /// @dev 50B at deploy, then 5B per level, all to the Vault. Fully vested at level 30.
     ///      Anyone may trigger the release; the recipient is always the Vault.
     function claimVested() external {
-        uint256 vested = VAULT_INITIAL + game.level() * VEST_PER_LEVEL;
+        uint256 vested = VAULT_INITIAL + game.currentLvl() * VEST_PER_LEVEL;
         if (vested > VAULT_TOTAL) vested = VAULT_TOTAL;
         if (vested <= _vestingReleased) revert Insufficient();
         uint256 claimable;

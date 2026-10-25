@@ -42,7 +42,7 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
  * @notice Core game contract managing state machine, VRF integration, jackpots, and prize pools.
  *
  * @dev ARCHITECTURE:
- *      - Level-centered lifecycle; mineFlip() is permissionless (caller tier gates only the miner bounty)
+ *      - Level-centered lifecycle; mineRun() is permissionless (caller tier gates only the miner bounty)
  *      - jackpotPhaseFlag selects the daily payout mode within a level: PURCHASE(false) / JACKPOT(true)
  *      - gameOver flag is terminal
  *      - Degenesis: seven daily cohorts from GameTimeLib.DEGENESIS_START_DAY, gated by purchase credit
@@ -58,7 +58,7 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
  *      - Unsplit Degenesis volume, the Vault's Degenesis budget and sDGNRS AFKing funding ride in claimablePool
  *
  * @dev SECURITY:
- *      - Pull pattern for ETH/stETH withdrawals (claimWinnings)
+ *      - Pull pattern for ETH/stETH withdrawals (claimClaimable)
  *      - RNG lock prevents state manipulation during VRF callback window
  *      - Access control via msg.sender checks
  *      - Delegatecall modules use constant addresses from ContractAddresses
@@ -317,7 +317,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @notice Run the next ordered game actions through safe gas checkpoints.
     /// @dev Rewards follow measured progress. Worker caps, refusal handling and committed prefixes remain in the engine.
     /// @param gasMultiplierBps Gas-estimate factor: 0 or 10,000 = 1x; minimum 2,500 = 0.25x.
-    function mineFlip(uint32 gasMultiplierBps) external { _gameMineFlip(gasMultiplierBps); }
+    function mineRun(uint32 gasMultiplierBps) external { _gameMineFlip(gasMultiplierBps); }
 
     /// @notice The next action for a caller holding no mid-day credit.
     function nextMinerAction() external view returns (uint8) {
@@ -396,7 +396,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         _gameBorrow(id, dueLevel, amount, minEthOut);
     }
 
-    function repay(uint32 id) external payable {
+    function clearDebtNow(uint32 id) external payable {
         _gameRepay(id);
     }
 
@@ -569,7 +569,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///        snap exponent) in the same tx. The foil leg is one-per-cycle and adds to — never
     ///        replaces — the ticket and lootbox legs, sharing the combined spend's affiliate,
     ///        quest, and streak recording so a foil pack counts exactly like a ticket purchase.
-    function purchase(
+    function purchaseOrderFor(
         uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
@@ -603,7 +603,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Purchase tickets with FLIP.
-    /// @dev Main entry point for FLIP ticket purchases. Mirrors purchase() but for FLIP payments.
+    /// @dev Main entry point for FLIP ticket purchases. Mirrors purchaseOrderFor() but for FLIP payments.
     ///      SECURITY: The redemption window latches open only with no RNG in flight;
     ///      once open it stays usable through the jackpot days' locks until the final
     ///      jackpot request clears it.
@@ -620,10 +620,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @notice Buy a credit-gated Degenesis box with ETH and/or claimable.
     /// @dev Gated by degenesisCredit (25% of qualifying spend), consumed 1:1; the order joins
     ///      today's cohort and settles after the cohort is priced.
-    ///      Signature: buyDegenesisBox(uint32 id, uint256 amount) — the account receiving the order
+    ///      Signature: purchaseDegenesisBox(uint32 id, uint256 amount) — the account receiving the order
     ///      (0 = caller) and the Degenesis ETH. The module resolves the account, so the
     ///      arguments use the module's low-selector entry; caller and value are preserved.
-    function buyDegenesisBox(uint32, uint256) external payable {
+    function purchaseDegenesisBox(uint32, uint256) external payable {
         (uint32 id, uint256 amount) = abi.decode(msg.data[4:], (uint32, uint256));
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameDegenesisModule.buyDegenesisBox_g1442.selector, id, amount)
@@ -736,7 +736,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Place a funded ETH or FLIP bet for an account; an unauthorised funder pays for its gift.
-    function placeDegeneretteBet(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol)
+    function betDegenerette(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol)
         external payable
     {
         _gamePlaceBet(id, currency, amountPerSpin, spinCount, symbol);
@@ -803,7 +803,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Issue one deity account's daily boon to an existing recipient account.
-    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
+    function giveBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
         _gameIssueDeityBoon(deityId, recipientId, slot);
     }
 
@@ -900,7 +900,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |                    CLAIMING WINNINGS (ETH)                                             |
       +========================================================================================+
       |  Players claim accumulated winnings from ContractAddresses.JACKPOTS, affiliates,       |
-      |  and endgame payouts through the claimWinnings() function.                             |
+      |  and endgame payouts through the claimClaimable() function.                            |
       |                                                                                        |
       |  SECURITY:                                                                             |
       |  • Uses CEI pattern (Checks-Effects-Interactions)                                      |
@@ -929,7 +929,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///
     ///      SECURITY: Reverts if balance ≤ 1 wei (nothing to claim).
     ///      Debits account `id` and pays its payee; the caller must be authorized for it.
-    function claimWinnings(uint32 id) external {
+    function claimClaimable(uint32 id) external {
         _gameClaimWinnings(id);
     }
 
@@ -1018,7 +1018,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  storage directly, so it lives in-game by construction.              |
       +======================================================================+*/
 
-    /// @notice O(1) discovery: does mineFlip() have pending work for a creditless caller?
+    /// @notice O(1) discovery: does mineRun() have pending work for a creditless caller?
     /// @dev Queries the same derived action selector used by the miner engine.
     function advanceDue() external view returns (bool) {
         uint8 action = uint8(_nextMinerAction(address(this)));
@@ -1165,9 +1165,9 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  Chainlink VRF V2.5 integration for provably fair randomness.        |
       |                                                                      |
       |  LIFECYCLE:                                                          |
-      |  1. mineFlip() calls requestDailyRng() as its final normal action    |
+      |  1. mineRun() calls requestDailyRng() as its final normal action     |
       |  2. Chainlink calls rawFulfillRandomWords(); the word is stored      |
-      |  3. A later mineFlip() calls publishRng() to publish the word        |
+      |  3. A later mineRun() calls publishRng() to publish the word         |
       |  4. After processing, _unlockRng() resets for next cycle             |
       |                                                                      |
       |  SECURITY:                                                           |
@@ -1505,8 +1505,14 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  Status views for decimator window and purchase state.               |
       +======================================================================+*/
 
+    /// @notice Get the current jackpot level.
+    /// @return Current jackpot level (starts at 0).
+    function currentLvl() external view returns (uint24) {
+        return level;
+    }
+
     /// @notice Check if decimator window is currently open.
-    function decWindow() external view returns (bool) {
+    function decimatorActive() external view returns (bool) {
         return _decWindowOpen() && !gameOver;
     }
 
@@ -1577,7 +1583,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @return phaseDay Physical jackpot draws completed: 0 before the first draw,
     ///         then 1 or 2 while a standard phase remains open. The third draw closes
     ///         betting; turbo's only draw closes its phase without opening a market.
-    function growthState(
+    function getGrowth(
         uint24 round
     )
         external

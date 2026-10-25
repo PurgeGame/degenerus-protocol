@@ -6,7 +6,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {GameMiner} from "./GameMiner.sol";
 
 abstract contract GameMinerEntries is GameMiner {
-    function mineFlip(uint32 gasMultiplierBps) external {
+    function mineRun(uint32 gasMultiplierBps) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         _mineFlip(gasMultiplierBps);
     }

@@ -6,7 +6,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {GameDegeneretteBet} from "./GameDegeneretteBet.sol";
 
 abstract contract GameBetEntries is GameDegeneretteBet {
-    function placeDegeneretteBet(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol) external payable {
+    function betDegenerette(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         _placeBet(id, currency, amountPerSpin, spinCount, symbol);
     }

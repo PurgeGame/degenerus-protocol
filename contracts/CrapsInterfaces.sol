@@ -57,7 +57,7 @@ interface IGameCraps {
     ///         `vaultComp` uses only the key.
     function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
-    function level() external view returns (uint24);
+    function currentLvl() external view returns (uint24);
     /// @notice Daily request through final day seal, including a fulfilled, pending jackpot battle.
     function rngLocked() external view returns (bool);
 }

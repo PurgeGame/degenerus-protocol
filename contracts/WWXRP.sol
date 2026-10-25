@@ -134,7 +134,7 @@ interface IDrawGame {
         external view returns (address key, address payee, bool authorized);
 
     /// @notice DegenerusGame's current level.
-    function level() external view returns (uint24);
+    function currentLvl() external view returns (uint24);
 
     /// @notice Consume wallet `id`'s WWXRP boon through the caller-specific Game dispatch
     ///         (0 returns 0).
@@ -841,7 +841,7 @@ contract WWXRP {
         // Level-x99 burns double as century BAF-incinerator entries: the same
         // burn and activity/boon multipliers also arm the next x00 bracket's skip
         // draw (at whole-token precision there — no whole-token truncation).
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         if (lvl % 100 == 99) {
             _recordIncineratorEntry(lvl + 1, id, amount, fullWeight);
         }

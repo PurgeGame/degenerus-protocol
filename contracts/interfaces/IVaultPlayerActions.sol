@@ -4,12 +4,6 @@ pragma solidity 0.8.38;
 // Solidity cannot take .selector from an overloaded method name. These aliases
 // disambiguate only those overloads; all other selectors use canonical interfaces.
 // check-vault-player-actions.js verifies these signatures against the compiled targets.
-interface IVaultWinnings {
-    function claimWinnings(uint32) external;
-}
-interface IVaultPartialWinnings {
-    function claimWinnings(uint32, uint256) external;
-}
 interface IVaultAffiliateClaim {
     function claimAffiliateDgnrs(uint32) external;
 }

@@ -57,12 +57,12 @@ enum MintPaymentKind {
 ///        funding source) are IDs that must already exist: 0 or an unallocated ID reverts `E`.
 interface IDegenerusGame {
     /// @notice Execute ordered game work. Zero selects the 10,000-bps default estimate factor.
-    function mineFlip(uint32 gasMultiplierBps) external;
+    function mineRun(uint32 gasMultiplierBps) external;
 
     /// @notice Borrow up to `amount` against far-future tickets, due when the game enters `dueLevel`.
     function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external;
     /// @notice Repay an open loan before its due level; excess ETH funds the account's AFKing.
-    function repay(uint32 id) external payable;
+    function clearDebtNow(uint32 id) external payable;
     /// @notice Sweep up to 32 owned subaccounts into their current main accounts.
     /// @dev Permissionless only for sDGNRS-owned accounts; otherwise each source requires its
     ///      payee or approved operator. Moves claimable ETH internally (retaining 1 wei), and
@@ -143,7 +143,7 @@ interface IDegenerusGame {
 
     /// @notice Get the current jackpot level.
     /// @return Current jackpot level (starts at 0).
-    function level() external view returns (uint24);
+    function currentLvl() external view returns (uint24);
 
     /// @notice Get the current game phase using jackpot semantics.
     /// @return True if jackpot phase is active, false if purchase phase.
@@ -167,7 +167,7 @@ interface IDegenerusGame {
 
     /// @notice Check if decimator window is currently open.
     /// @return True if decimator entries are allowed.
-    function decWindow() external view returns (bool);
+    function decimatorActive() external view returns (bool);
 
     /// @notice Selected jackpot duration: one day for turbo, otherwise three days.
     function jackpotDuration() external view returns (uint8);
@@ -216,7 +216,7 @@ interface IDegenerusGame {
     /// @return phaseDay Physical jackpot draws completed: 0 before the first draw,
     ///         then 1 or 2 while a standard phase remains open. The third draw closes
     ///         betting; turbo's only draw closes its phase without opening a market.
-    function growthState(uint24 round)
+    function getGrowth(uint24 round)
         external
         view
         returns (
@@ -280,7 +280,7 @@ interface IDegenerusGame {
     /// @custom:reverts NotApproved If the caller may not act for `deityId`.
     /// @custom:reverts E If `deityId` or `recipientId` is unallocated, or `recipientId == 0`.
     /// @custom:reverts SelfBoon If the resolved deity ID equals `recipientId`.
-    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
+    function giveBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
 
     /// @notice Initialize both protocol deities in one post-deployment batch (creator only, once).
     function initProtocolDeity() external;
@@ -408,7 +408,7 @@ interface IDegenerusGame {
     ///        2^38 units of 0.0001 ETH (about 27.5M ETH).
     /// @custom:reverts NotApproved If the caller may not act for `id`.
     /// @custom:reverts E If `id` is unallocated, outside the sale, over credit, or out of bounds.
-    function buyDegenesisBox(uint32 id, uint256 amount) external payable;
+    function purchaseDegenesisBox(uint32 id, uint256 amount) external payable;
 
     /// @notice Vault-only: spend the Vault's Degenesis budget on an ordinary purchase for an
     ///         allocated recipient at its normal price. The unspent part of `maxCost` returns to the budget.
@@ -440,7 +440,7 @@ interface IDegenerusGame {
     /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
     /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     /// @custom:reverts E If `id` is unallocated (gift or not).
-    function placeDegeneretteBet(
+    function betDegenerette(
         uint32 id,
         uint8 currency,
         uint128 amountPerSpin,
@@ -557,7 +557,7 @@ interface IDegenerusGame {
     ///        foil leg is one-per-cycle and adds to, never replaces, the ticket/lootbox legs.
     /// @custom:reverts NotApproved If the caller may not act for `id`.
     /// @custom:reverts E If `id` is unallocated.
-    function purchase(
+    function purchaseOrderFor(
         uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
@@ -645,10 +645,10 @@ interface IDegenerusGame {
     /// @custom:reverts E If `id` is unallocated.
     /// @custom:reverts NothingToClaim If nothing is claimable.
     /// @custom:reverts AlreadySwept After the final sweep.
-    function claimWinnings(uint32 id) external;
+    function claimClaimable(uint32 id) external;
 
     /// @notice Claim up to `amount` of account `id`'s accrued ETH winnings (partial cashout).
-    /// @dev As `claimWinnings(uint32)`, capped at `amount` of claimable.
+    /// @dev As `claimClaimable(uint32)`, capped at `amount` of claimable.
     /// @param id Account to claim for (0 = caller).
     /// @param amount Maximum wei of claimable winnings to take.
     /// @custom:reverts NotApproved If the caller may not act for `id`.

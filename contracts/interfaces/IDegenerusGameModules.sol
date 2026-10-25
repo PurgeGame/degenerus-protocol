@@ -48,7 +48,7 @@ interface IDegenerusGameTicketModule {
 interface IDegenerusGameMinerModule {
     error NoWork();
     error RngNotReady();
-    function mineFlip(uint32 gasMultiplierBps) external;
+    function mineRun(uint32 gasMultiplierBps) external;
     function minerAction() external returns (uint8);
 }
 
@@ -651,7 +651,7 @@ interface IDegenerusGameFoilPackModule {
 interface IDegenerusGameDegenesisModule {
 
 
-    /// @notice Buy a credit-gated Degenesis box. Raw msg.data target of Game.buyDegenesisBox.
+    /// @notice Buy a credit-gated Degenesis box. Raw msg.data target of Game.purchaseDegenesisBox.
     /// @param id Account receiving the order (0 = caller; account rule)
     /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the per-order bound
     function buyDegenesisBox_g1442(uint32 id, uint256 amount) external payable;

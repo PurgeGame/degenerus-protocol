@@ -37,7 +37,7 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
 interface IDegenerusGamePlayer {
     /// @notice Crank the unified miner router (advance + box opens), paying any earned bounty.
-    function mineFlip(uint32 gasMultiplierBps) external;
+    function mineRun(uint32 gasMultiplierBps) external;
     /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
     /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes with
     ///      `id == 0`. SDGNRS's subscription is exempt from the seat burn, so `seatId` is
@@ -49,7 +49,7 @@ interface IDegenerusGamePlayer {
         uint256 seatId
     ) external payable;
     /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller); pays the payee.
-    function claimWinnings(uint32 id) external;
+    function claimClaimable(uint32 id) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
 
@@ -808,7 +808,7 @@ contract sDGNRS {
     ///      reverts NoWork() when nothing is due.
     /// @param gasMultiplierBps Forwarded to mineFlip unchanged; 0 selects the 1x default.
     function gameAdvance(uint32 gasMultiplierBps) external {
-        game.mineFlip(gasMultiplierBps);
+        game.mineRun(gasMultiplierBps);
     }
 
     // =====================================================================
@@ -1065,7 +1065,7 @@ contract sDGNRS {
         uint256 ethBal = address(this).balance;
         (uint256 custody,) = _redemptionBacking(0, true);
         if ((value > ethBal || value + _pendingRedemptionEthValue > custody) && _claimableWinnings() != 0) {
-            game.claimWinnings(0);
+            game.claimClaimable(0);
             ethBal = address(this).balance;
             (custody,) = _redemptionBacking(0, true);
         }
@@ -1215,7 +1215,7 @@ contract sDGNRS {
         }
 
         // Direct half: credit into the player's game claimable (a permissionless trigger must
-        // not push ETH at the player); the player withdraws via the access-gated claimWinnings.
+        // not push ETH at the player); the player withdraws via the access-gated claimClaimable.
         if (ethDirect != 0) game.creditRedemptionDirect(walletId, ethDirect);
 
         // Forfeited dust-lootbox half → sDGNRS's OWN claimable on the Game (SDGNRS_WALLET_ID),

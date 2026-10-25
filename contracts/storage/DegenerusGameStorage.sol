@@ -369,7 +369,7 @@ abstract contract DegenerusGameStorage {
     ///
     ///      SECURITY: uint24 supports ~16M levels — game would take millennia
     ///      to overflow at realistic progression rates.
-    uint24 public level = 0;
+    uint24 internal level = 0;
 
     /// @notice Current game phase flag.
     ///      false = purchase phase
@@ -2688,7 +2688,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Boxes one purchase may hold. Sized so a maximum entry — every box rolled, plus one
     ///      recirculated box per ETH spin — resolves inside a block alongside the afking leg
-    ///      that shares the `mineFlip()` transaction. Not a spend limit: a player wanting more
+    ///      that shares the `mineRun()` transaction. Not a spend limit: a player wanting more
     ///      exposure buys a larger custom, or another entry.
     uint256 internal constant MAX_BOXES_PER_ORDER = 100;
 

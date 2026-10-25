@@ -17,9 +17,7 @@ import {WWXRP} from "../WWXRP.sol";
 import {DGNRS} from "../DGNRS.sol";
 import {AFKingSubscriptionToken} from "../AFKingSubscriptionToken.sol";
 import {GNRUS} from "../GNRUS.sol";
-import {
-    IVaultWinnings, IVaultPartialWinnings, IVaultAffiliateClaim, IVaultBatchAffiliateClaim
-} from "../interfaces/IVaultPlayerActions.sol";
+import {IVaultAffiliateClaim, IVaultBatchAffiliateClaim} from "../interfaces/IVaultPlayerActions.sol";
 
 /// @notice Fixed player-call surface for the Vault. No configurable targets or selectors.
 /// @dev The canonical selectors and overload aliases are ABI-checked by check-vault-player-actions.js. The destination enforces account
@@ -30,22 +28,22 @@ import {
 library VaultPlayerActions {
     function isAllowed(address target, bytes4 selector) internal pure returns (bool) {
         if (target == ContractAddresses.GAME) {
-            return selector == IDegenerusGame.mineFlip.selector || selector == IDegenerusGame.subscribe.selector
-                || selector == IDegenerusGame.purchase.selector || selector == IDegenerusGame.redeemFlip.selector
-                || selector == IDegenerusGame.buyDegenesisBox.selector
+            return selector == IDegenerusGame.mineRun.selector || selector == IDegenerusGame.subscribe.selector
+                || selector == IDegenerusGame.purchaseOrderFor.selector || selector == IDegenerusGame.redeemFlip.selector
+                || selector == IDegenerusGame.purchaseDegenesisBox.selector
                 || selector == IDegenerusGame.purchaseWhalePass.selector
                 || selector == IDegenerusGame.purchaseLazyPass.selector
                 || selector == IDegenerusGame.purchaseDeityPass.selector
-                || selector == IDegenerusGame.placeDegeneretteBet.selector
+                || selector == IDegenerusGame.betDegenerette.selector
                 || selector == IDegenerusGame.reverseFlip.selector || selector == IDegenerusGame.decurse.selector
-                || selector == IDegenerusGame.smite.selector || selector == IDegenerusGame.issueDeityBoon.selector
+                || selector == IDegenerusGame.smite.selector || selector == IDegenerusGame.giveBoon.selector
                 || selector == IDegenerusGame.createSmurf.selector
                 || selector == IDegenerusGame.setOperatorApproval.selector
                 || selector == IDegenerusGame.sweepAccounts.selector
                 || selector == IDegenerusGame.depositAfkingFunding.selector
                 || selector == IDegenerusGame.withdrawAfkingFunding.selector
-                || selector == IVaultWinnings.claimWinnings.selector
-                || selector == IVaultPartialWinnings.claimWinnings.selector
+                || selector == IDegenerusGame.claimClaimable.selector
+                || selector == IDegenerusGame.claimWinnings.selector
                 || selector == IDegenerusGame.claimWinningsStethFirst.selector
                 || selector == IDegenerusGame.claimAfkingFlip.selector
                 || selector == IDegenerusGame.claimBingo.selector

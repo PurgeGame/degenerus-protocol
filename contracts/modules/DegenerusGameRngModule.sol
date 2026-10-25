@@ -76,7 +76,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
 
 
 
-    /// @notice The mid-day request, reached only through mineFlip (msg.sender is the miner).
+    /// @notice The mid-day request, reached only through mineRun (msg.sender is the miner).
     ///         The caller's donated credit pays the threshold gate when pending work sits
     ///         below it.
     function requestMinerRng_g4954() external {

@@ -31,7 +31,7 @@ abstract contract GamePurchaseEntries is GamePurchase {
         _borrow(id, dueLevel, amount, minEthOut);
     }
 
-    function repay(uint32 id) external payable {
+    function clearDebtNow(uint32 id) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         _repay(id);
     }

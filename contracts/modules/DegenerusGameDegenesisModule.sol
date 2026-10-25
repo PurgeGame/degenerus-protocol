@@ -144,7 +144,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @dev Sale-day, size and Vault gates, 1:1 credit consume, payment, then the whole amount is
     ///      held in claimablePool until the cohort split and the order joins today's cohort. No
     ///      affiliate, quest, streak or activity work at purchase; a settlement boon may grant
-    ///      activity or quest shields in addition to the exclusive primary reward. Raw msg.data target of Game.buyDegenesisBox.
+    ///      activity or quest shields in addition to the exclusive primary reward. Raw msg.data target of Game.purchaseDegenesisBox.
     /// @param id Account receiving the order (0 = caller; account rule).
     /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the
     ///        per-order bound.

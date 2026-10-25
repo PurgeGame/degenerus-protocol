@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-interface IGameClaimAll { function claimWinnings(uint32 id) external; }
+interface IGameClaimAll { function claimClaimable(uint32 id) external; }
 interface IGameClaimAmount { function claimWinnings(uint32 id, uint256 amount) external; }
 
 interface IGameActionModule {
@@ -18,7 +18,7 @@ interface IGameActionModule {
     function setOperatorApproval(uint32 id, address operator, bool approved) external;
     function setLootboxRngThreshold(uint256 newThreshold) external;
     function setMiddayMaxBasefee(uint256 newGwei) external;
-    function claimWinnings(uint32 id) external;
+    function claimClaimable(uint32 id) external;
     function claimWinnings(uint32 id, uint256 amount) external;
     function claimWinningsStethFirst() external;
     function depositAfkingFunding(uint32 id) external payable;

@@ -785,7 +785,7 @@ contract DegenerusVault {
         // so the withdrawal is capped at what is left.
         if (claimValue > combined) {
             if (claimable != 0) {
-                gamePlayer.claimWinnings(0);
+                gamePlayer.claimClaimable(0);
                 ethBal = address(this).balance;
                 stBal = _stethBalance();
             }

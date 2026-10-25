@@ -16,7 +16,7 @@ abstract contract GameBoonActionsEntries is GameBoonActions {
         return _consumeDecimatorBoost(id);
     }
 
-    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
+    function giveBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         _issueDeityBoon(deityId, recipientId, slot);
     }
