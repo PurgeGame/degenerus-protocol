@@ -187,7 +187,7 @@ contract LoanAutoRepayGas is LoanSeizureGasBase {
 }
 
 /// @notice Game over's loan checkpoint through the full engine stack, cold: the decision ran in
-///         setUp (a VRF-alive deadman), so the measured call settles the worst six-account deity
+///         setUp (the purchase deadline, VRF alive), so the measured call settles the worst six-account deity
 ///         family and scans every later due level in one transaction.
 abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
     uint256 private constant GO_LOAN_STEP_SHIFT = 64;

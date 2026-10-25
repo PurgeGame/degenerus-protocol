@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {TerminalLoanBase} from "./TerminalLoanSettlement.t.sol";
 
 /// @title RngVectorTerminalLoans -- the terminal word is requested only after every loan has
@@ -50,6 +51,10 @@ contract RngVectorTerminalLoans is TerminalLoanBase {
         }
     }
 
+    function _lootboxRngWord() private view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(GameSlots.LOOTBOX_RNG_PACKED))));
+    }
+
     function test_TerminalRequestFollowsEverySettlementAndFreezesLoans() public {
         uint32 a = _account(alice);
         _borrow(alice, a, 10);
@@ -92,6 +97,7 @@ contract RngVectorTerminalLoans is TerminalLoanBase {
 
         _driveEnding(30_000_000, true, 200);
         assertTrue(game.gameOver(), "ending finished");
+        assertEq((_lootboxRngWord() >> 232) & 0xFF, 0, "the normal ending never latched the dead ending (LR_GO_DEAD)");
         assertEq(_loanDigest(false), records, "loan records and owners unchanged through the terminal payout");
         assertEq(_payee(b), address(sdgnrs), "bob defaulted before the request");
         assertEq(_payee(a), alice, "alice repaid before the request");

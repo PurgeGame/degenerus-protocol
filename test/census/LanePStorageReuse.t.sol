@@ -18,9 +18,9 @@ contract LanePStorageReuseCensus is StorageCensus {
         vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.balanceOf.selector, ALICE), abi.encode(uint256(100e12)));
         _censusBegin("lane-p-generations");
         uint256 startTime = vm.getBlockTimestamp();
-        uint24 startDay = game.currentDayView_g542950();
+        uint24 startDay = game.currentWallDayView();
         for (uint24 generation; generation < 6; ++generation) {
-            assertEq(game.currentDayView_g542950(), startDay + generation, "fresh census day");
+            assertEq(game.currentWallDayView(), startDay + generation, "fresh census wall day");
             uint24 level_ = 99 + generation * 100;
             uint256 word = uint256(vm.load(address(game), bytes32(0)));
             vm.store(address(game), bytes32(0), bytes32((word & ~(uint256(type(uint24).max) << 96)) | (uint256(level_) << 96)));

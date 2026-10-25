@@ -351,13 +351,10 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         _off();
     }
 
-    // ------------------------------------------------------------------ game over (VRF alive) and sweep
+    // ------------------------------------------------------------------ game over (hard stall, purchase timeout) and sweep
 
-    /// @notice Live level-3 game with open loans, subscriptions, coinflip stakes and an sDGNRS
-    ///         batch; purchases stop, the 30-day purchase deadline fires, the terminal path runs with
-    ///         VRF answering, then the 30-day final sweep, then post-game-over claims and burns.
-    function testGameOverVrfAlive() public {
-        vm.pauseGasMetering();
+    /// @dev A live level-3 game with open loans, coinflip stakes and an sDGNRS batch.
+    function _liveGameWithBook() private {
         _playToLevel(3, 80, 1);
         for (uint256 i; i < 6; ++i) {
             _act("purchaseWhalePass", i, address(game), 10 ether,
@@ -375,22 +372,10 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
             sdgnrs.transferFromPool(sDGNRS.Pool.Reward, cast[i], 20_000 * 1e12);
             _act("sdgnrsBurn", i, address(sdgnrs), 0, abi.encodeCall(sdgnrs.burn, (uint256(5_000 * 1e12))));
         }
-        // Idle days alone never end this game: the protocol's own AFKing subscriptions (Vault,
-        // sDGNRS) keep buying and the levels keep moving. The ending used here is the deadman: no
-        // one cranks for 31 days, then the next cranks find liveness fired and run the terminal
-        // path with VRF answering every request.
-        _on("gameOver");
-        _day(NO_BUY);
-        uint24 quiet = _today() + 32;
-        _warpDay(quiet, 1 hours);
-        uint256 rounds;
-        for (; rounds < 40 && !game.gameOver(); ++rounds) {
-            _cMineAll(3000, quiet + rounds);
-            if (!game.gameOver()) vm.warp(vm.getBlockTimestamp() + 2 hours);
-        }
-        console.log(string.concat("CENSUSNOTE|gameOver|crankRoundsToGameOver|", vm.toString(rounds),
-            "|level|", vm.toString(uint256(game.level())), "|gameOver|", game.gameOver() ? "1" : "0"));
-        // Final sweep window.
+    }
+
+    /// @dev The 30-day final sweep, then post-game-over claims and burns. Ends the census.
+    function _sweepAndClaim() private {
         uint24 d = _today() + 31;
         _warpDay(d, 1 hours);
         _cMineAll(3000, d);
@@ -407,6 +392,70 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         }
         _off();
         require(game.gameOver(), "game over latched");
+    }
+
+    function _lootboxRngWord() private view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
+    }
+
+    /// @notice Live level-3 game with open loans, coinflip stakes and an sDGNRS batch; no one cranks
+    ///         for 31 days. That is a hard stall (no day completed for 14 days): VRF would answer, but
+    ///         the ending always takes the deterministic path. Then the 30-day final sweep, then
+    ///         post-game-over claims and burns.
+    function testGameOverHardStall() public {
+        vm.pauseGasMetering();
+        _liveGameWithBook();
+        _on("gameOver");
+        _day(NO_BUY);
+        uint24 quiet = _today() + 32;
+        _warpDay(quiet, 1 hours);
+        assertTrue(game.livenessTriggered(), "a hard stall ends the game");
+        uint256 rounds;
+        for (; rounds < 40 && !game.gameOver(); ++rounds) {
+            _cMineAll(3000, quiet + rounds);
+            if (!game.gameOver()) vm.warp(vm.getBlockTimestamp() + 2 hours);
+        }
+        console.log(string.concat("CENSUSNOTE|gameOver|crankRoundsToGameOver|", vm.toString(rounds),
+            "|level|", vm.toString(uint256(game.level())), "|gameOver|", game.gameOver() ? "1" : "0"));
+        assertEq((_lootboxRngWord() >> 232) & 0xFF, 1, "a hard stall latched the deterministic ending");
+        _sweepAndClaim();
+    }
+
+    /// @notice The purchase deadline: every day completes (cranks answered, VRF alive) but nothing
+    ///         is bought until the 30-game-day timeout fires. The normal ending sends its own
+    ///         terminal request, VRF fulfils it, and the terminal jackpot pays; the deterministic
+    ///         ending never latches. Then the final sweep and post-game-over claims.
+    function testGameOverPurchaseTimeout() public {
+        vm.pauseGasMetering();
+        _liveGameWithBook();
+        _on("gameOverPurchaseTimeout");
+        uint256 idleDays;
+        for (; idleDays < 80 && !game.livenessTriggered(); ++idleDays) _day(NO_BUY);
+        require(game.livenessTriggered(), "the purchase deadline fired");
+        (bool complete,, uint48 completedAt) = game.dailySessionState();
+        assertTrue(complete, "every day completed");
+        assertLt(block.timestamp, uint256(completedAt) + 14 days, "no hard stall: days kept completing");
+        uint256 requestsAtDeadline = mockVRF.lastRequestId();
+        uint24 d = _today();
+        uint256 rounds;
+        for (; rounds < 40 && !game.gameOver(); ++rounds) {
+            _cMineAll(3000, d + 5_000 + rounds);
+            if (!game.gameOver()) vm.warp(vm.getBlockTimestamp() + 2 hours);
+        }
+        console.log(string.concat("CENSUSNOTE|gameOverPurchaseTimeout|idleDays|", vm.toString(idleDays),
+            "|crankRoundsToGameOver|", vm.toString(rounds), "|level|", vm.toString(uint256(game.level()))));
+        require(game.gameOver(), "game over latched");
+        // The terminal request: sent after the deadline froze purchases, answered, and the
+        // terminal jackpot paid from its word; the deterministic ending never latched.
+        uint256 lastRequest = mockVRF.lastRequestId();
+        assertGt(lastRequest, requestsAtDeadline, "the ending sent its own terminal request");
+        (,, bool fulfilled) = mockVRF.pendingRequests(lastRequest);
+        assertTrue(fulfilled, "VRF fulfilled the terminal request");
+        assertEq((_lootboxRngWord() >> 248) & 0xFF, 1, "terminal request latched (LR_GO_SWAP)");
+        assertEq((_lootboxRngWord() >> 232) & 0xFF, 0, "the deadline never takes the dead ending (LR_GO_DEAD)");
+        assertTrue(uint8(uint256(vm.load(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED))) >> 48) != 0,
+            "terminal jackpot paid");
+        _sweepAndClaim();
     }
 }
 
