@@ -962,7 +962,7 @@ contract ParimutuelSettlementSelectorTest is Test {
         vm.mockCall(
             ContractAddresses.VRF_COORDINATOR,
             abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
-            abi.encode(uint96(100 ether), uint96(0), uint64(0), address(0), new address[](0))
+            abi.encode(uint96(0), uint96(100 ether), uint64(0), address(0), new address[](0))
         );
         game.wireCoordinator();
     }

@@ -42,6 +42,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
 
     bytes32 internal constant SIG_ADVANCE = keccak256("Advance(uint8,uint24)");
     bytes32 internal constant SIG_AFKING_FUNDED = keccak256("AfkingFunded(uint32,uint256)");
+    bytes32 internal constant SIG_VRF_FUNDED = keccak256("VrfFunded(uint24,uint256,uint256)");
     bytes4 internal constant ERR_GAS = bytes4(keccak256("InsufficientExecutionGas()"));
     bytes4 internal constant ERR_EMPTY = bytes4(keccak256("EmptyRevert()"));
 
@@ -745,6 +746,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     function _scan(Vm.Log[] memory logs, bool request, Books memory b0) internal {
         uint256 splitVol;
         uint256 afkFunded;
+        uint256 vrfFromSdgnrs;
         uint24 today = game.currentDayView_g542950();
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
@@ -754,6 +756,10 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
                 splitVol += _onSplit(l, today, request);
             } else if (t == SIG_AFKING_FUNDED) {
                 if (uint256(l.topics[1]) == SDGNRS_ID && request) afkFunded += abi.decode(l.data, (uint256));
+            } else if (t == SIG_VRF_FUNDED) {
+                // The request tops up the VRF subscription natively, debiting the sDGNRS AFKing credit.
+                (,, uint256 fromSdgnrs) = abi.decode(l.data, (uint24, uint256, uint256));
+                if (request) vrfFromSdgnrs += fromSdgnrs;
             } else if (t == SIG_PRICED) {
                 _onPriced(l, today);
             } else if (t == SIG_RESOLVED) {
@@ -773,11 +779,11 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
             uint256 q = splitVol / 4;
             assertEq(q * 4, splitVol, "split volume divides into exact quarters");
             assertEq(afkFunded, q, "sDGNRS AFKing funded a quarter (event)");
-            assertEq(b0.claimablePool - game.claimablePoolView(), 2 * q, "split: claimablePool -V/2");
+            assertEq(b0.claimablePool - game.claimablePoolView(), 2 * q + vrfFromSdgnrs, "split: claimablePool -V/2 (plus the native VRF top-up)");
             assertEq(_futureTotal() - b0.future, q, "split: future pool +V/4");
             assertEq(game.yieldAccumulatorView() - b0.insurance, q, "split: insurance +V/4");
             assertEq(_vaultBudget() - b0.vaultBudget, q, "split: Vault budget +V/4");
-            assertEq(_sdgnrsAfking() - b0.sdgnrsAfking, q, "split: sDGNRS AFKing +V/4");
+            assertEq(_sdgnrsAfking() + vrfFromSdgnrs - b0.sdgnrsAfking, q, "split: sDGNRS AFKing +V/4 (before the native VRF top-up)");
             splitsMeasured += splitVol;
         }
     }

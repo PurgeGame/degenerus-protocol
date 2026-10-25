@@ -186,22 +186,36 @@ contract DegenesisAccounting is DegenesisFixture {
         game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (bool found, uint8 day, uint256 volume) = _splitIn(logs);
+        (uint256 fromYield, uint256 fromSdgnrs) = _vrfFundedIn(logs);
         assertTrue(found, "the request split a cohort");
         assertTrue(game.rngLocked(), "fixture: the call was the request");
         Books memory b = _books();
         assertEq(day, c, "the expected cohort split");
         assertEq(volume, v, "split volume");
         assertTrue(_cohortSplit(c), "split flag set");
-        assertEq(a.claimablePool - b.claimablePool, v / 2, "claimablePool -= V/2 exactly");
+        // The request also tops up the VRF subscription natively: the sDGNRS AFKing credit it spends
+        // leaves claimablePool with the ETH, and untracked yield pays the rest.
+        assertEq(a.claimablePool - b.claimablePool, v / 2 + fromSdgnrs, "claimablePool -= V/2 exactly (plus the native VRF top-up)");
         // The request then freezes the pools, moving 1% of the live future pool into pending.
         assertEq(b.future + b.pendingFuture - a.future, v / 4, "future pool += V/4 exactly (live + pending)");
         assertEq(b.insurance - a.insurance, v / 4, "insurance += V/4");
         assertEq(b.next + b.pendingNext, a.next, "next pool untouched");
         assertEq(b.vaultBudget - a.vaultBudget, v / 4, "Vault budget += V/4");
-        assertEq(b.sdgnrsAfking - a.sdgnrsAfking, v / 4, "sDGNRS AFKing += V/4");
-        assertEq(b.balance, a.balance, "no ETH moves");
+        assertEq(b.sdgnrsAfking + fromSdgnrs - a.sdgnrsAfking, v / 4, "sDGNRS AFKing += V/4");
+        assertEq(a.balance - b.balance, fromYield + fromSdgnrs, "only the native VRF top-up moves ETH");
         assertEq(a.unsplit - b.unsplit, v, "nothing of V left unsplit");
         _assertSolvent();
+    }
+
+    function _vrfFundedIn(Vm.Log[] memory logs) internal view returns (uint256 fromYield, uint256 fromSdgnrs) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length == 1
+                && logs[i].topics[0] == keccak256("VrfFunded(uint24,uint256,uint256)")) {
+                (, uint256 y, uint256 s) = abi.decode(logs[i].data, (uint24, uint256, uint256));
+                fromYield += y;
+                fromSdgnrs += s;
+            }
+        }
     }
 
     function _splitIn(Vm.Log[] memory logs) internal view returns (bool found, uint8 c, uint256 volume) {

@@ -35,7 +35,7 @@ contract MinerMiddayEligibilityTest is Test {
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
         vm.mockCall(ContractAddresses.VRF_COORDINATOR, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
-            abi.encode(uint96(100 ether), uint96(0), uint64(0), address(0), new address[](0)));
+            abi.encode(uint96(0), uint96(100 ether), uint64(0), address(0), new address[](0)));
         game.seed(DegenerusGameStorage.MinerAction.Idle);
         game.wireCoordinator();
     }
@@ -92,8 +92,14 @@ contract MinerMiddayEligibilityTest is Test {
         game.seedValue(0, type(uint32).max, 0, true);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday));
         game.maxBasefee(1);
-        vm.fee(1 gwei + 1);
+        // A pending Craps window gets four times the ordinary gas price cap.
+        vm.fee(4 gwei + 1);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle));
+        vm.fee(4 gwei);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday));
+        game.seedValue(1, 1, 0, false);
+        vm.fee(1 gwei + 1);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "ordinary value keeps the 1x cap");
         vm.fee(1 gwei);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday));
     }
