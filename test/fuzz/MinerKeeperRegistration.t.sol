@@ -50,7 +50,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         preSnapshot = vm.snapshotState();
         for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
             vm.prank(preparer);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "the request took the daily lock");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256("registration_word")));
@@ -65,7 +65,7 @@ contract MinerKeeperRegistration is DeployProtocol {
             address buyer = makeAddr(string(abi.encodePacked("day_ticket_buyer", vm.toString(i))));
             vm.deal(buyer, 10 ether);
             vm.prank(buyer);
-            game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
     }
 
@@ -103,7 +103,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         require(msg.sender == address(this), "fixture self-call");
         vm.fee(fee);
         vm.prank(who);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     function _mine(address who) private returns (Outcome memory o) {
@@ -269,7 +269,7 @@ contract MinerKeeperRegistration is DeployProtocol {
             address caller = address(uint160(0x7E3A1000 + i));
             vm.recordLogs();
             vm.prank(caller);
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 // The terminal cohort waits on its word: deliver it and keep cranking.
                 assertEq(bytes4(reason), bytes4(keccak256("RngNotReady()")), "only a word wait stops the terminal path");
                 mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256(abi.encode("terminal_word", i))));
@@ -298,7 +298,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         // A game-over mineFlip (if any work remains) never registers either.
         address late = address(0x7E3A2000);
         vm.prank(late);
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         assertEq(game.walletIdOf_g3120(late), 0, "game-over caller has no ID");
     }
 }

@@ -126,8 +126,8 @@ contract OpenBountyCarry is DeployProtocol {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
         vm.prank(keeper);
-        if (allowance == 0) game.mineFlip(0);
-        else game.mineFlip{gas: allowance}(0);
+        if (allowance == 0) game.mineRun(0);
+        else game.mineRun{gas: allowance}(0);
     }
 
     uint256 private _restPay;
@@ -168,14 +168,14 @@ contract OpenBountyCarry is DeployProtocol {
             }
             _finishReadConsumers();
             if (!game.advanceDue() && game.rngComplete()) return;
-            if (game.advanceDue()) game.mineFlip(0);
+            if (game.advanceDue()) game.mineRun(0);
         }
         revert("harness: cohorts never settled");
     }
 
     /// @dev Maximum calibration stops after the first mandatory checkpoint.
     function _stepMinimal() internal {
-        game.mineFlip{gas: 30_000_000}(type(uint32).max);
+        game.mineRun{gas: 30_000_000}(type(uint32).max);
     }
 
     function _pendingCount() internal view returns (uint256) {
@@ -210,7 +210,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -220,7 +220,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

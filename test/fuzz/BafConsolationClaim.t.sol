@@ -251,7 +251,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         bool injected = false;
 
         for (uint256 day = 0; day < 600; day++) {
-            uint24 currentLevel = game.level();
+            uint24 currentLevel = game.currentLvl();
             if (game.gameOver()) break;
             if (currentLevel > 10) break;
 
@@ -276,14 +276,14 @@ contract BafConsolationClaimTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfEven();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
         }
 
         assertTrue(injected, "BAF scores were injected");
-        assertGt(game.level(), 10, "game advanced past level 10");
+        assertGt(game.currentLvl(), 10, "game advanced past level 10");
 
         // Every word was even => the level-10 BAF skipped through mineFlip.
         for (uint256 i = 0; i < players.length; i++) {
@@ -332,7 +332,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     /// @dev Fulfill any pending VRF request with an even word (bit 0 = 0), so
@@ -346,7 +346,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         if (fulfilled) return;
 
         uint256 randomWord = uint256(
-            keccak256(abi.encode("baf_skip_word", block.timestamp, game.level(), reqId))
+            keccak256(abi.encode("baf_skip_word", block.timestamp, game.currentLvl(), reqId))
         ) & ~uint256(1);
         if (randomWord == 0) randomWord = 2;
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}

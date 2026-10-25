@@ -79,7 +79,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     it("instant-apply slot is votable in the same level", async function () {
       const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
       const level = await charity.currentLevel();
       expect(await charity.slotApproveWeight(level, 5)).to.equal(100n);
     });
@@ -166,7 +166,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient2.address);
       // Slot 5 still active in current slate → vote succeeds against the OLD recipient.
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
       const level = await charity.currentLevel();
       expect(await charity.slotApproveWeight(level, 5)).to.equal(100n);
     });
@@ -204,11 +204,11 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
     it("voters CAN vote on locked slot 0 (locked-slot guard lives only in setCharity)", async function () {
       // D-256-LOCKED-SLOT-01 positive case. The locked-slot guard is intentionally
-      // confined to setCharity (contracts/GNRUS.sol L375); vote(uint8) has no such
+      // confined to setCharity (contracts/GNRUS.sol L375); castBallot(uint8) has no such
       // restriction, so once a locked slot is filled it is a normal voting target.
       const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 0, recipient1.address);
-      await charity.connect(voter1).vote(0);
+      await charity.connect(voter1).castBallot(0);
       const level = await charity.currentLevel();
       expect(await charity.slotApproveWeight(level, 0)).to.equal(100n);
     });
@@ -310,8 +310,8 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       // Both voters cast for slot 5 — they observe slot 5 as filled (currentSlate[5] = recipient1
       // until pickCharity flush, which now runs AFTER payout per FIX-01).
-      await charity.connect(voter1).vote(5);
-      await charity.connect(voter2).vote(5);
+      await charity.connect(voter1).castBallot(5);
+      await charity.connect(voter2).castBallot(5);
 
       const level = await charity.currentLevel();
       expect(await charity.slotApproveWeight(level, 5)).to.equal(200n);
@@ -356,7 +356,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       // Queue remove (`setCharity(5, 0)`); slot still active in current slate.
       await setCharityFromVaultOwner(charity, deployer, 5, ZERO_ADDRESS);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
       const level = await charity.currentLevel();
       expect(await charity.slotApproveWeight(level, 5)).to.equal(100n);
     });
@@ -380,7 +380,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       // Cast a vote so the level resolves with a winner (skip-path B otherwise drops us
       // through to LevelSkipped — flush still happens, but we want to assert post-flush state
       // either way; voting on slot 5 keeps the post-flush sequence cleanly distinguishable).
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
 
       const level = await charity.currentLevel();
       const tx = await runLevelTransitionViaGame(charity, gameAddress, level);
@@ -414,7 +414,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     it("single-slot vote applies full sDGNRS weight and emits Voted", async function () {
       const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      const tx = await charity.connect(voter1).vote(5);
+      const tx = await charity.connect(voter1).castBallot(5);
       const ev = await getEvent(tx, charity, "Voted");
       expect(ev.args.level).to.equal(0n);
       expect(ev.args.slot).to.equal(5n);
@@ -433,9 +433,9 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       await setCharityFromVaultOwner(charity, deployer, 5, recipient2.address);
       await setCharityFromVaultOwner(charity, deployer, 7, recipient3.address);
 
-      const tx3 = await charity.connect(voter1).vote(3);
-      const tx5 = await charity.connect(voter1).vote(5);
-      const tx7 = await charity.connect(voter1).vote(7);
+      const tx3 = await charity.connect(voter1).castBallot(3);
+      const tx5 = await charity.connect(voter1).castBallot(5);
+      const tx7 = await charity.connect(voter1).castBallot(7);
 
       const ev3 = await getEvent(tx3, charity, "Voted");
       const ev5 = await getEvent(tx5, charity, "Voted");
@@ -458,7 +458,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     it("hasVoted is set per (level, voter, slot) tuple after vote", async function () {
       const { charity, deployer, recipient1, voter1, voter2 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
 
       // Positive: the exact (level, voter, slot) tuple is set.
       expect(await charity.hasVoted(0, voter1.address, 5)).to.equal(true);
@@ -478,33 +478,33 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
         await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await setCharityFromVaultOwner(charity, deployer, 7, recipient2.address);
-      await charity.connect(voter1).vote(5);
-      await charity.connect(voter1).vote(7);
+      await charity.connect(voter1).castBallot(5);
+      await charity.connect(voter1).castBallot(7);
       await runLevelTransitionViaGame(charity, gameAddress, 0);
       expect(await charity.hasVoted(0, voter1.address, 5)).to.equal(false);
       expect(await charity.hasVoted(1, voter1.address, 5)).to.equal(false);
       expect(await charity.hasVoted(1, voter1.address, 7)).to.equal(false);
       const winner = await charity.lastWinningRecipient();
       const slot = winner === recipient1.address ? 7 : 5;
-      await charity.connect(voter1).vote(slot);
+      await charity.connect(voter1).castBallot(slot);
       expect(await charity.hasVoted(1, voter1.address, slot)).to.equal(true);
       expect(await charity.hasVoted(1, voter1.address, slot === 5 ? 7 : 5)).to.equal(false);
       expect(await charity.slotApproveWeight(0, 5)).to.equal(100n);
-      await expect(charity.connect(voter1).vote(slot))
+      await expect(charity.connect(voter1).castBallot(slot))
         .to.be.revertedWithCustomError(charity, "VoteRejected").withArgs(REJECT_ALREADY_VOTED);
     });
 
     it("InvalidSlot on slot == 20 (boundary)", async function () {
       const { charity, voter1 } = await loadFixture(deployGNRUSFixture);
       await expect(
-        charity.connect(voter1).vote(20)
+        charity.connect(voter1).castBallot(20)
       ).to.be.revertedWithCustomError(charity, "InvalidSlot");
     });
 
     it("InvalidSlot on slot == 255 (uint8 max)", async function () {
       const { charity, voter1 } = await loadFixture(deployGNRUSFixture);
       await expect(
-        charity.connect(voter1).vote(255)
+        charity.connect(voter1).castBallot(255)
       ).to.be.revertedWithCustomError(charity, "InvalidSlot");
     });
 
@@ -512,7 +512,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       // Slot 7 is in-bounds (< 20) but currentSlate[7] == address(0); contracts/GNRUS.sol L563.
       const { charity, voter1 } = await loadFixture(deployGNRUSFixture);
       await expect(
-        charity.connect(voter1).vote(7)
+        charity.connect(voter1).castBallot(7)
       )
         .to.be.revertedWithCustomError(charity, "VoteRejected")
         .withArgs(REJECT_EMPTY_SLOT);
@@ -521,9 +521,9 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     it("VoteRejected(REJECT_ALREADY_VOTED) on second vote for same (level, voter, slot)", async function () {
       const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
       await expect(
-        charity.connect(voter1).vote(5)
+        charity.connect(voter1).castBallot(5)
       )
         .to.be.revertedWithCustomError(charity, "VoteRejected")
         .withArgs(REJECT_ALREADY_VOTED);
@@ -543,7 +543,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await expect(
-        charity.connect(subWhole).vote(5)
+        charity.connect(subWhole).castBallot(5)
       )
         .to.be.revertedWithCustomError(charity, "VoteRejected")
         .withArgs(REJECT_ZERO_WEIGHT);
@@ -556,7 +556,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       // only InvalidSlot is observable.
       const { charity, voter1 } = await loadFixture(deployGNRUSFixture);
       await expect(
-        charity.connect(voter1).vote(20)
+        charity.connect(voter1).castBallot(20)
       ).to.be.revertedWithCustomError(charity, "InvalidSlot");
     });
   });
@@ -575,7 +575,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       // Setup: slot 5 = recipient1; voter1 casts for slot 5 in level L.
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
 
       // Resolve level L — recipient1 wins; lastWinningRecipient = recipient1.
       const level = await charity.currentLevel();
@@ -585,7 +585,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       // Slot 5 still holds recipient1 (no queued edit between L and L+1) — vote(5) at L+1 must revert.
       expect(await charity.getCharity(5)).to.equal(recipient1.address);
       await expect(
-        charity.connect(voter2).vote(5)
+        charity.connect(voter2).castBallot(5)
       ).to.be.revertedWithCustomError(charity, "PreviousWinnerNotVotable");
     });
 
@@ -595,7 +595,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       // Setup: slot 5 = recipient1; voter1 casts for slot 5 in level L.
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
       const levelL = await charity.currentLevel();
 
       // Resolve level L — recipient1 wins; the queue-replace setCharity(5, recipient2) is staged
@@ -608,7 +608,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
 
       // vote(5) at L+1 succeeds because currentSlate[5] = recipient2 != lastWinningRecipient.
-      await expect(charity.connect(voter2).vote(5)).to.not.be.reverted;
+      await expect(charity.connect(voter2).castBallot(5)).to.not.be.reverted;
       const levelLp1 = await charity.currentLevel();
       expect(levelLp1).to.equal(levelL + 1n);
       expect(await charity.slotApproveWeight(levelLp1, 5)).to.be.gt(0n);
@@ -620,7 +620,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       // Level L-1: setup, vote, resolve — recipient1 wins; lastWinningRecipient = recipient1.
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
       const levelLm1 = await charity.currentLevel();
       await runLevelTransitionViaGame(charity, gameAddress, levelLm1);
       expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
@@ -638,7 +638,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       // Level L+1: slot 5 still holds recipient1 → PreviousWinnerNotVotable still fires.
       expect(await charity.getCharity(5)).to.equal(recipient1.address);
       await expect(
-        charity.connect(voter2).vote(5)
+        charity.connect(voter2).castBallot(5)
       ).to.be.revertedWithCustomError(charity, "PreviousWinnerNotVotable");
     });
   });
@@ -705,7 +705,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       const { charity, deployer, recipient1, voter1, gameAddress } =
         await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
       await runLevelTransitionViaGame(charity, gameAddress, 0);
       expect(await charity.currentLevel()).to.equal(1n);
     });
@@ -714,7 +714,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       const { charity, charityAddress, deployer, recipient1, voter1, gameAddress } =
         await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
 
       // Snapshot unallocated before transition so we can compute expected distribution.
       const unallocatedBefore = await charity.balanceOf(charityAddress);
@@ -737,8 +737,8 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
         await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await setCharityFromVaultOwner(charity, deployer, 7, recipient2.address);
-      await charity.connect(voter1).vote(5); // weight 100
-      await charity.connect(voter3).vote(7); // weight 200
+      await charity.connect(voter1).castBallot(5); // weight 100
+      await charity.connect(voter3).castBallot(7); // weight 200
 
       const tx = await runLevelTransitionViaGame(charity, gameAddress, 0);
       const ev = await getEvent(tx, charity, "LevelResolved");
@@ -753,9 +753,9 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
         await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 3, recipient1.address);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient2.address);
-      await charity.connect(voter3).vote(3); // 200
-      await charity.connect(voter1).vote(5); // 100
-      await charity.connect(voter2).vote(5); // 100 → slot 5 total = 200
+      await charity.connect(voter3).castBallot(3); // 200
+      await charity.connect(voter1).castBallot(5); // 100
+      await charity.connect(voter2).castBallot(5); // 100 → slot 5 total = 200
 
       const tx = await runLevelTransitionViaGame(charity, gameAddress, 0);
       const ev = await getEvent(tx, charity, "LevelResolved");
@@ -777,10 +777,10 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       for (const v of tieVoters) {
         await giveSDGNRS(sdgnrs, gameAddress, v.address, hre.ethers.parseUnits("100", 12));
       }
-      await charity.connect(tieVoters[0]).vote(3);
-      await charity.connect(tieVoters[1]).vote(5);
-      await charity.connect(tieVoters[2]).vote(7);
-      await charity.connect(tieVoters[3]).vote(11);
+      await charity.connect(tieVoters[0]).castBallot(3);
+      await charity.connect(tieVoters[1]).castBallot(5);
+      await charity.connect(tieVoters[2]).castBallot(7);
+      await charity.connect(tieVoters[3]).castBallot(11);
       // Sanity — all four slots at 100.
       expect(await charity.slotApproveWeight(0, 3)).to.equal(100n);
       expect(await charity.slotApproveWeight(0, 5)).to.equal(100n);
@@ -847,7 +847,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       // Active slot + vote so winner phase finds a non-zero weight (path B does not fire).
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).castBallot(5);
 
       const gameSigner = await impersonate(gameAddress);
       const tx = await charity.connect(gameSigner).pickCharity(0);
@@ -911,7 +911,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       ).to.not.be.reverted;
       // vote from a sDGNRS-funded voter against the freshly-applied slot — must not revert.
       await expect(
-        charity.connect(voter1).vote(5)
+        charity.connect(voter1).castBallot(5)
       ).to.not.be.reverted;
     });
   });
@@ -962,11 +962,11 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       for (const v of extraVoters) {
         await giveSDGNRS(sdgnrs, gameAddress, v.address, hre.ethers.parseUnits("100", 12));
       }
-      await charity.connect(voter1).vote(0);
-      await charity.connect(voter2).vote(1);
-      await charity.connect(voter3).vote(2);
+      await charity.connect(voter1).castBallot(0);
+      await charity.connect(voter2).castBallot(1);
+      await charity.connect(voter3).castBallot(2);
       for (let i = 0; i < 17; i++) {
-        await charity.connect(extraVoters[i]).vote(3 + i);
+        await charity.connect(extraVoters[i]).castBallot(3 + i);
       }
 
       // (c) Queue 17 pending replaces on slots 3..19 (slots 0/1/2 are locked — cannot queue).

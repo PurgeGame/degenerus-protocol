@@ -54,7 +54,7 @@ contract CohortRecyclingHarness is WalletSeed {
 }
 
 contract NoPendingCohortRedemptions {
-    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 }
 
 contract RngCohortRecyclingTest is Test {
@@ -137,7 +137,7 @@ contract GameCrapsPendingMirrorTest is DeployProtocol {
         uint256 state = uint256(game.extsload_g2807007(bytes32(0))) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(state));
         assertTrue(game.boxesPending(), "empty read frontier must be traversed");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertFalse(game.boxesPending());
         vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(0, true);
         assertTrue(game.boxesPending(), "Craps-only work is discoverable");

@@ -81,7 +81,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -108,7 +108,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(caller);
-        game.mineFlip{gas: 15_000_000}(0);
+        game.mineRun{gas: 15_000_000}(0);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
@@ -161,7 +161,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         bool lockedAtStart = game.rngLocked();
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Read the recorded logs ONCE (vm.getRecordedLogs drains them) and derive BOTH the count and the
         // credited amount in a single pass, so the amount is not lost to a prior drain.
@@ -244,11 +244,11 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function testRngLockedWorkPaysDouble() public {
         _settleGame(0x10CC0001);
         vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); i++) game.mineFlip(0);
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); i++) game.mineRun(0);
         assertTrue(game.rngLocked(), "pre: the daily request holds the lock");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0x10CC0002);
 
-        uint24 readKey = _readKey(uint24(game.level()) + 1);
+        uint24 readKey = _readKey(uint24(game.currentLvl()) + 1);
         for (uint256 i; i < 200; i++) {
             _seedReadSlotTickets(readKey, makeAddr(string(abi.encodePacked("locked_player_", _u(i)))), 3);
         }
@@ -270,7 +270,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         // Compute the mid-day purchaseLevel + read key exactly as the contract does (purchase phase,
         // not lastPurchaseDay, not rngLocked => purchaseLevel = level + 1; read key honours ticketWriteSlot).
-        uint24 purchaseLevel = uint24(game.level()) + 1;
+        uint24 purchaseLevel = uint24(game.currentLvl()) + 1;
         uint24 readKey = _readKey(purchaseLevel);
 
         uint256 M = 200;
@@ -291,7 +291,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         bool lockedAtStart = game.rngLocked();
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip{gas: 9_500_000}(0);
+        game.mineRun{gas: 9_500_000}(0);
 
         uint256 count;
         (count, amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed, lockedAtStart);
@@ -318,7 +318,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(bytes4(keccak256("NoWork()"))); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Nothing credited (the revert rolls back, but assert zero regardless of the count oracle).
         assertEq(
@@ -614,7 +614,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost + 1 ether) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _fulfillVrfIfPending(uint256 word) internal {
@@ -633,7 +633,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         address poolFiller = makeAddr("ff_pool_filler");
         vm.deal(poolFiller, 1_000_000 ether);
         for (uint256 d; d < 300; d++) {
-            if (game.level() >= L) break;
+            if (game.currentLvl() >= L) break;
             if (game.gameOver()) break;
             simTime += 1 days + 1;
             vm.warp(simTime);
@@ -646,7 +646,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
             // starves the drain and manufactures a fake liveness trip.
             for (uint256 j; j < 4000; j++) {
                 _fulfillVrfIfPending(uint256(keccak256(abi.encode(simTime, j, "ffdrain"))));
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }

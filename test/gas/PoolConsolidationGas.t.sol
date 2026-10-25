@@ -94,7 +94,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         vm.deal(address(game), uint256(NEXT_POOL) + FUTURE_POOL + 68.25 ether + uint256(NEXT_POOL) / 400);
         mockStETH.mint(address(game), 50 ether);
         _armFreshWord(_word(), DAY);
-        assertEq(game.level(), lvl, "the real request pre-increments the level");
+        assertEq(game.currentLvl(), lvl, "the real request pre-increments the level");
         if (lvl % 100 == 0) CenturyBafScores.seedHead(address(jackpots), address(coinflip), address(game), DAY);
         if (_incineratorEntries() != 0) incineratorWinner = _seedIncinerator(lvl, _incineratorEntries(), _word());
 

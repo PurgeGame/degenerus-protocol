@@ -54,7 +54,7 @@ describe("JackpotDuration", function () {
 
   /** Buy N full tickets. 1 full ticket = qty 400 = costs priceWei. */
   async function buyFullTickets(game, buyer, n, totalEth) {
-    return game.connect(buyer).purchase(
+    return game.connect(buyer).purchaseOrderFor(
       0,
       BigInt(n) * 400n,
       0n,
@@ -164,18 +164,18 @@ describe("JackpotDuration", function () {
    * until level advances. purchaseDays=2 triggers standard (three-day schedule).
    */
   async function driveTurboCompletion(game, deployer, mockVRF, advanceModule) {
-    const levelBefore = await game.level();
+    const levelBefore = await game.currentLvl();
     // Advance to next day so mineFlip doesn't revert with NotTimeYet
     await advanceToNextDay();
     // First cycle — triggers standard (purchaseDays=2)
     await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
     // Drive additional cycles if needed for full jackpot processing
     for (let i = 0; i < 20; i++) {
-      const currentLevel = await game.level();
+      const currentLevel = await game.currentLvl();
       if (currentLevel > levelBefore) return true;
       await driveOneCycle(game, deployer, mockVRF, advanceModule, BigInt(i * 1000 + 99));
     }
-    return (await game.level()) > levelBefore;
+    return (await game.currentLvl()) > levelBefore;
   }
 
   // ---------------------------------------------------------------------------
@@ -317,7 +317,7 @@ describe("JackpotDuration", function () {
 
       // Advance to day 2 before calling mineFlip → purchaseDays = 2 - 1 = 1
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       // purchaseDays=1 triggers turbo (one-day schedule)
       const days = await game.jackpotDuration();
       expect(days).to.equal(1, "Turbo should activate on day 2 (purchaseDays=1)");
@@ -333,13 +333,13 @@ describe("JackpotDuration", function () {
       const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      const levelBefore = await game.level();
+      const levelBefore = await game.currentLvl();
       // Drive standard jackpot to completion
       const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
       expect(reached).to.equal(true, "Should reach jackpot phase");
       expect(await game.jackpotDuration()).to.equal(3);
       await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
-      const levelAfter = await game.level();
+      const levelAfter = await game.currentLvl();
 
       expect(levelAfter).to.be.gt(levelBefore, "Level should advance after standard");
     });
@@ -521,7 +521,7 @@ describe("JackpotDuration", function () {
           await buyFullTickets(game, alice, 10, 0.1);
           await driveOneCycle(game, deployer, mockVRF, advanceModule, BigInt(day * 1000));
           expect(await game.jackpotPhase()).to.equal(false);
-          expect(await game.level()).to.equal(0n);
+          expect(await game.currentLvl()).to.equal(0n);
         }
         await heavyPurchases(game, [bob, carol, dan, eve, ...others.slice(0, 15)]);
 
@@ -573,7 +573,7 @@ describe("JackpotDuration", function () {
       const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      const levelBefore = await game.level();
+      const levelBefore = await game.currentLvl();
 
       // Single advanceToNextDay → day 2, purchaseDays=1 → turbo path eligible.
       await advanceToNextDay();
@@ -585,7 +585,7 @@ describe("JackpotDuration", function () {
       // turbo flag survives phase end as the coinflip bonus-day latch (the
       // collapsed phase never spans a flip settlement, so the bonus shifts to
       // the next level's first purchase day).
-      expect(await game.level()).to.equal(levelBefore + 1n, "Level should advance by 1");
+      expect(await game.currentLvl()).to.equal(levelBefore + 1n, "Level should advance by 1");
       expect(await game.jackpotPhase()).to.equal(false, "Should be back in purchase phase");
       expect(await game.jackpotDuration()).to.equal(3);
       expect((BigInt(await game.extsload_g2807007(ZERO_BYTES32)) >> 184n) & 2n).to.equal(2n, "Turbo bonus remains owed");
@@ -608,12 +608,12 @@ describe("JackpotDuration", function () {
       const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      const levelBefore = await game.level();
+      const levelBefore = await game.currentLvl();
 
       // Level 1 turbo (day 2, purchaseDays=1)
       await advanceToNextDay();
       await drainTurboSameDay(game, deployer, mockVRF, advanceModule, 42n);
-      expect(await game.level()).to.equal(levelBefore + 1n);
+      expect(await game.currentLvl()).to.equal(levelBefore + 1n);
       // Bonus-day latch armed; the next day is itself a last-purchase (turbo)
       // day, so the latch defers rather than consuming.
       expect(await game.jackpotDuration()).to.equal(3);
@@ -627,7 +627,7 @@ describe("JackpotDuration", function () {
       await advanceToNextDay();
       await drainTurboSameDay(game, deployer, mockVRF, advanceModule, 777n);
 
-      expect(await game.level()).to.equal(levelBefore + 2n, "Second level should also advance");
+      expect(await game.currentLvl()).to.equal(levelBefore + 2n, "Second level should also advance");
       expect(await game.jackpotPhase()).to.equal(false);
       // Chain latch still armed after the second collapse; the first normal
       // purchase day settles and consumes it.

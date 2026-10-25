@@ -69,7 +69,7 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
         crapsBattle.setPreferredBoard(0, 3);
         for (uint160 i = 1; i <= 40; ++i) {
             address player = address(0xD000 + i);
-            vm.prank(address(game)); coin.mintForGame(player, 2000);
+            vm.prank(address(game)); coin.mintForGame_g152734(player, 2000);
             vm.prank(player); coin.decimatorBurn(0, 2000, 0);
         }
         assertFalse(game.rngLocked());
@@ -84,14 +84,14 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
             uint256 beforeRequest = mockVRF.lastRequestId();
             for (uint256 calls; mockVRF.lastRequestId() == beforeRequest; ++calls) {
                 assertLt(calls, 1000, "public request stalled");
-                game.mineFlip{gas: 10_000_000}(0);
+                game.mineRun{gas: 10_000_000}(0);
             }
             ++requests;
             assertTrue(game.rngLocked());
             mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD + day);
             for (uint256 calls; calls < 1000; ++calls) {
                 vm.recordLogs();
-                game.mineFlip{gas: 10_000_000}(0);
+                game.mineRun{gas: 10_000_000}(0);
                 Vm.Log[] memory logs = vm.getRecordedLogs();
                 for (uint256 i; i < logs.length; ++i) {
                     if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
@@ -141,7 +141,7 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
         assertTrue(originalsRan);
         assertFalse(game.rngLocked());
         assertEq(game.rngWordForDay(closingDay), fast ? WORD : WORD + 1);
-        assertEq(game.level(), 5);
+        assertEq(game.currentLvl(), 5);
         assertLe(round.winners, (uint256(round.count) + plan.generatedEntries) / 2);
     }
 }

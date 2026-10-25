@@ -244,7 +244,7 @@ contract ChainPinGameDrive is DeployProtocol {
         uint256 d;
         for (; d < MAX_DAYS; ++d) {
             if (halted || game.gameOver()) break;
-            if (game.level() >= TARGET_LEVEL && !game.jackpotPhase()) break;
+            if (game.currentLvl() >= TARGET_LEVEL && !game.jackpotPhase()) break;
             if (haltCountdown != 0 && --haltCountdown == 0) break;
             try this.playDay(d) {} catch (bytes memory why) {
                 revert(string.concat("playDay ", vm.toString(d), " reverted: ", vm.toString(why), " at ", vm.envOr("PIN_WHERE", string(""))));
@@ -339,7 +339,7 @@ contract ChainPinGameDrive is DeployProtocol {
     }
 
     function _mine(uint256 g) private returns (bool ok, bytes memory ret) {
-        (ok, ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok, ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
     }
 
     /// @dev The smallest allowance (within 12%) that succeeds: a failed attempt leaves no state, so the
@@ -506,7 +506,7 @@ contract ChainPinGameDrive is DeployProtocol {
         uint256 price = game.mintPrice();
         address who = actors[j % 4];
         vm.prank(who);
-        try game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         ChainPinProbe.Snap memory s = _snap();
         if (!s.ticketsDone && !s.dead) {
             ++cWindowPokes;
@@ -519,7 +519,7 @@ contract ChainPinGameDrive is DeployProtocol {
         uint256 cost = tickets * price + boxWei;
         if (cost == 0) return;
         vm.prank(actors[who]);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0, tickets * 400, boxWei == 0 ? 0 : BoxOrderLib.boCustomFloor(boxWei), bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
     }
@@ -587,18 +587,18 @@ contract ChainPinGameDrive is DeployProtocol {
     function _degenerette(uint256 d) private {
         for (uint256 j; j < 3; ++j) {
             vm.prank(actors[(d + j) % PLAYERS]);
-            try game.placeDegeneretteBet{value: 0.05 ether}(0, 0, uint128(0.01 ether), 5, uint8((d + j) % 24)) {
+            try game.betDegenerette{value: 0.05 ether}(0, 0, uint128(0.01 ether), 5, uint8((d + j) % 24)) {
                 ++cBets;
             } catch {}
         }
     }
 
     function _decimator(uint256 d) private {
-        if (!game.decWindow()) return;
+        if (!game.decimatorActive()) return;
         for (uint256 j; j < 4; ++j) {
             address p = actors[(d + j) % PLAYERS];
             vm.prank(address(game));
-            coin.mintForGame(p, 50_000);
+            coin.mintForGame_g152734(p, 50_000);
             vm.prank(p);
             try coin.decimatorBurn(0, 5_000, 0) {} catch {}
         }
@@ -644,7 +644,7 @@ contract ChainPinGameDrive is DeployProtocol {
 
     function _report() private {
         emit log_named_uint("days", cDays);
-        emit log_named_uint("level", game.level());
+        emit log_named_uint("level", game.currentLvl());
         emit log_named_uint("engine steps", cSteps);
         emit log_named_uint("Tickets steps run at 16M", cTicketsHard);
         emit log_named_uint("Tickets steps starting mid-queue", cTicketsMidQueue);
@@ -684,7 +684,7 @@ contract ChainPinGameDrive is DeployProtocol {
         }
         if (bytes(bad).length != 0) revert(string.concat("PIN VIOLATIONS: ", bad));
         // Non-vacuity of the drive itself.
-        require(game.level() >= 201, "drive: never reached level 201");
+        require(game.currentLvl() >= 201, "drive: never reached level 201");
         require(cTicketsHard >= 50, "drive: too few Tickets steps at 16M");
         require(cTicketsMidQueue >= 1, "drive: no Tickets step started mid-queue");
         require(cWindowPokes >= 20, "drive: no write-side traffic inside ticket windows");

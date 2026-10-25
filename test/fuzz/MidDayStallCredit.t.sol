@@ -121,7 +121,7 @@ abstract contract StallCreditBase is DeployProtocol {
     /// @dev Advance as a caller who is not the vault owner (never fires the owner's retry).
     function _adv() internal {
         vm.prank(stranger);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     /// @dev During a stall: advance as a stranger until the advance reverts (the day's afking
@@ -129,7 +129,7 @@ abstract contract StallCreditBase is DeployProtocol {
     function _advUntilBlocked() internal {
         for (uint256 i; i < 40; ++i) {
             vm.prank(stranger);
-            try game.mineFlip(0) {} catch (bytes memory err) {
+            try game.mineRun(0) {} catch (bytes memory err) {
                 assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "blocked waiting for the word");
                 assertFalse(game.rngLocked(), "blocked with no daily lock");
                 return;
@@ -164,7 +164,7 @@ abstract contract StallCreditBase is DeployProtocol {
         (, uint256 id) = _stamps();
         if (id == 0) return;
         vm.prank(stranger);
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
     }
 
     function _answer() internal {
@@ -208,7 +208,7 @@ abstract contract StallCreditBase is DeployProtocol {
         address donor = makeAddr("midday-donor");
         vm.deal(donor, 1 ether);
         vm.prank(donor);
-        game.purchase{value: 0.01 ether}(
+        game.purchaseOrderFor{value: 0.01 ether}(
             0, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
@@ -221,12 +221,12 @@ abstract contract StallCreditBase is DeployProtocol {
             if (action == 17) break;
             assertEq(action, 15, "only scheduled maintenance precedes the donor request");
             vm.prank(donor);
-            game.mineFlip(type(uint32).max);
+            game.mineRun(type(uint32).max);
         }
         vm.prank(donor);
         assertEq(game.minerAction(), 17, "harness: the donor's next engine action is the mid-day request");
         vm.prank(donor);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     function _warpDays(uint256 n) internal {
@@ -366,7 +366,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         _warpToDay(s + 1);
         assertTrue(game.livenessTriggered(), "caught-up day past the deadline");
         vm.prank(stranger);
-        game.mineFlip(0);
+        game.mineRun(0);
         (bool goLvl,) = _latches();
         assertTrue(goLvl, "a plain keeper crank latched the ending");
         _warpToDay(s + 2);
@@ -651,14 +651,14 @@ contract MidDayStallCreditGas is StallCreditBase {
         _answer();
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(stranger);
-        game.mineFlip(0);
+        game.mineRun(0);
         _log("GAS dailyApplyAfterLateMidday used/refund");
     }
 
     function _measureRequestAdvance(string memory label) private {
         for (uint256 i; i < 60; ++i) {
             vm.prank(stranger);
-            game.mineFlip(0);
+            game.mineRun(0);
             Vm.Gas memory g = vm.lastCallGas(); // before the rngLocked() probe replaces it
             if (game.rngLocked()) {
                 console.log(label);

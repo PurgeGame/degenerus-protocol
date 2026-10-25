@@ -75,7 +75,7 @@ contract CompositionHandler is Test {
         if (ticketCost == 0 || ticketCost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: ticketCost}(
+        try game.purchaseOrderFor{value: ticketCost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             ghost_purchases++;
@@ -83,7 +83,7 @@ contract CompositionHandler is Test {
 
         // Now advance
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ghost_mineFlips++;
         } catch {}
 
@@ -121,7 +121,7 @@ contract CompositionHandler is Test {
         uint256 ticketCost = (priceWei * qty) / 400;
         if (ticketCost > 0 && ticketCost <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: ticketCost}(
+            try game.purchaseOrderFor{value: ticketCost}(
                 0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ) {
                 ghost_purchases++;
@@ -144,7 +144,7 @@ contract CompositionHandler is Test {
                 }
             }
             vm.prank(currentActor);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ghost_mineFlips++;
             } catch {}
         }
@@ -167,7 +167,7 @@ contract CompositionHandler is Test {
         uint256 ticketCost = (priceWei * 100) / 400;
         if (ticketCost > 0 && ticketCost <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: ticketCost}(
+            try game.purchaseOrderFor{value: ticketCost}(
                 0, 100, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ) {
                 ghost_purchases++;
@@ -177,7 +177,7 @@ contract CompositionHandler is Test {
         // Try to advance 3 times (may trigger VRF, jackpot, etc.)
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ghost_mineFlips++;
             } catch {}
         }
@@ -195,7 +195,7 @@ contract CompositionHandler is Test {
 
         // Advance again after VRF
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ghost_mineFlips++;
         } catch {}
 
@@ -230,7 +230,7 @@ contract CompositionHandler is Test {
         if (ticketCost == 0 || ticketCost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: ticketCost}(
+        try game.purchaseOrderFor{value: ticketCost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             ghost_purchases++;
@@ -259,7 +259,7 @@ contract CompositionHandler is Test {
 
     /// @dev Check level only increases
     function _checkLevelMonotonicity() private {
-        uint256 currentLevel = game.level();
+        uint256 currentLevel = game.currentLvl();
         if (currentLevel < ghost_lastSeenLevel) {
             ghost_levelDecreased++;
         }

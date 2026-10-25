@@ -55,7 +55,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         vm.prank(owner);
         child = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
         vm.prank(address(game));
-        coin.mintForGame(owner, 100_000);
+        coin.mintForGame_g152734(owner, 100_000);
     }
 
     function _idle() private {
@@ -66,25 +66,25 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(request, 0xA11D17);
             }
             if (game.rngComplete() && !game.advanceDue()) return;
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         fail("engine failed to reach idle");
     }
 
     function _queue(address payer, uint32 id, uint256 boxes) private {
         vm.startPrank(payer);
-        game.purchase{value: boxes * 0.01 ether}(
+        game.purchaseOrderFor{value: boxes * 0.01 ether}(
             id, 0, BoxOrderLib.boCustoms(boxes, 0.01 ether), 0, MintPaymentKind.DirectEth, false
         );
-        game.placeDegeneretteBet{value: 0.125 ether}(id, 0, 0.005 ether, 25, 3);
-        game.placeDegeneretteBet(id, 1, 100, 15, 7);
+        game.betDegenerette{value: 0.125 ether}(id, 0, 0.005 ether, 25, 3);
+        game.betDegenerette(id, 1, 100, 15, 7);
         vm.stopPrank();
     }
 
     function _requestMidday(uint256 word) private returns (uint48 read) {
         uint256 previous = mockVRF.lastRequestId();
         for (uint256 i; i < 100 && mockVRF.lastRequestId() == previous; ++i) {
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         assertGt(mockVRF.lastRequestId(), previous, "fresh request actually issued");
         assertFalse(game.rngLocked(), "test exercises unlocked midday window");
@@ -97,7 +97,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         vm.recordLogs();
         for (uint256 i; i < 200 && !game.rngComplete(); ++i) {
             vm.prank(keeper);
-            game.mineFlip{gas: gasBudget}(0);
+            game.mineRun{gas: gasBudget}(0);
             ++calls;
         }
         assertTrue(game.rngComplete(), "sealed cohort drains without a permanent revert");
@@ -144,7 +144,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
             if (cycle == 0) _queue(owner, child, count);
             // Keep the request above the threshold without enlarging the tested order.
             vm.prank(owner);
-            game.purchase{value: 1.1 ether}(root, 0, BoxOrderLib.boCustom(1.1 ether), 0, MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 1.1 ether}(root, 0, BoxOrderLib.boCustom(1.1 ether), 0, MintPaymentKind.DirectEth, false);
             uint48 write = RecyclingState.writeBuffer(address(game));
             uint256 expected = cycle == 0 ? 4 : 2;
             assertEq(RecyclingState.betCount(address(game), write), expected);
@@ -162,7 +162,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         uint256 price = game.mintPrice();
         vm.prank(seller);
         uint32 sellerChild = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        vm.prank(address(game)); coin.mintForGame(seller, 100_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(seller, 100_000);
         // A real whale purchase gives the root far-future inventory and a positive loan quote.
         vm.prank(seller); game.purchaseWhalePass{value: 2.4 ether}(sellerRoot, 1, 0);
         _queue(seller, sellerChild, 100);
@@ -171,7 +171,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         uint256 snapshot = vm.snapshotState();
         (bytes32 beforeSale,,) = _drain(6_000_000, address(0xCA11));
         assertTrue(vm.revertToStateAndDelete(snapshot));
-        uint24 due = game.level() + 1;
+        uint24 due = game.currentLvl() + 1;
         DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), sellerRoot, due, type(uint256).max);
         assertTrue(q.eligible);
         assertGt(q.principal, 0);

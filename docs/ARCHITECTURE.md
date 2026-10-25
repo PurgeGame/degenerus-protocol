@@ -102,7 +102,7 @@ claimable and prepaid parts qualify; FLIP-paid parts, reward grants, daily AFKin
 purchases and the Vault and sDGNRS bodies earn nothing. Credit is permission to spend, not payment, and
 expires unused when the window closes.
 
-**Purchase.** `buyDegenesisBox(uint32 id, uint256 amount)` is payable, a standalone entry
+**Purchase.** `purchaseDegenesisBox(uint32 id, uint256 amount)` is payable, a standalone entry
 forwarded by the Game facade to the module. Sale day 2..8 and liveness are required, `amount` is at
 least 0.01 ETH in whole 0.0001-ETH units, and the unit count fits 38 bits (about 27.5M ETH per order).
 It consumes `amount` of credit 1:1, pays from `msg.value`, then the buyer's claimable, then prepaid
@@ -409,7 +409,7 @@ releases the uncredited reservation into the distributable total.
 
 The x0 last-purchase seal arms the next day's weighted depositor draw and, in the same step,
 settles the vault's coinflip position through that day's applied result
-(`depositCoinflip(VAULT, 0)`), so the vault's bracket score holds every winning flip the bracket
+(`playCoinflip(VAULT, 0)`), so the vault's bracket score holds every winning flip the bracket
 counts, as for a player who claims at the close of that day. The BAF day's own flip settles after
 the next request and scores the next bracket. On an x0 purchase day every leg that can seal keeps
 `BAF_VAULT_SETTLE` (one full 90-day claim walk) in its tail. A separate daily-phase checkpoint

@@ -10,7 +10,7 @@ import { compiledStorageLayout } from "../helpers/storageLayout.js";
 const BET = hre.ethers.parseEther("0.005");
 const UNITS = BET / 100_000_000_000_000n;
 async function bet(game, signer, quadrant, symbol) {
-  await game.connect(signer).placeDegeneretteBet(0, 0, BET, 1, quadrant * 8 + symbol, { value: BET });
+  await game.connect(signer).betDegenerette(0, 0, BET, 1, quadrant * 8 + symbol, { value: BET });
 }
 async function winner(game, day) {
   const [quadrant, symbol, amount] = await game.getDailyHeroWinner(day);
@@ -24,7 +24,7 @@ async function dailyIdx(game) {
 }
 async function requestNextDay(game) {
   await advanceToNextDay();
-  for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0, { gasLimit: 16_777_216 });
+  for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineRun(0, { gasLimit: 16_777_216 });
   expect(await game.rngLocked(), "a real daily request sealed the pool").to.equal(true);
   return (await game.currentDayView_g542950()) - 1n;
 }

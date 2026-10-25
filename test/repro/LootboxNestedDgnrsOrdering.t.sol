@@ -55,11 +55,11 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             address filler = makeAddr("nested-filler");
             vm.deal(filler, 1 ether);
             vm.prank(filler);
-            game.purchase{value: 1 ether}(
+            game.purchaseOrderFor{value: 1 ether}(
                 0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
             );
             vm.prank(filler);
-            game.mineFlip(0);
+            game.mineRun(0);
             _settleIdle(0xB00758);
         }
         assertEq(RecyclingState.writeBuffer(address(game)), PARENT_BUFFER);
@@ -77,14 +77,14 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             }
             _finishReadConsumers();
             if (!game.advanceDue() && game.rngComplete()) return;
-            if (game.advanceDue()) game.mineFlip(0);
+            if (game.advanceDue()) game.mineRun(0);
         }
         revert("harness: cohorts never settled");
     }
 
     /// @dev Maximum calibration stops after the first mandatory checkpoint.
     function _stepMinimal() private {
-        game.mineFlip{gas: 30_000_000}(type(uint32).max);
+        game.mineRun{gas: 30_000_000}(type(uint32).max);
     }
 
     /// @dev PLAYER buys the three-box parent entry into PARENT_BUFFER (its write buffer).
@@ -92,7 +92,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         _parentPos = RecyclingState.boxCount(address(game), PARENT_BUFFER);
         vm.deal(PLAYER, 31 ether);
         vm.prank(PLAYER);
-        game.purchase{value: 30 ether}(0, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 30 ether}(0, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(RecyclingState.boxCount(address(game), PARENT_BUFFER), _parentPos + 1, "one parent entry");
         assertEq(game.walletIdOf_g3120(PLAYER), 5, "RNG_WORD was derived for wallet ID 5");
         assertEq(_parentPos, 0, "RNG_WORD was derived for position 0");
@@ -109,7 +109,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         _buyParent();
         _landWord(RNG_WORD);
         vm.prank(address(game));
-        IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Whale, address(sdgnrs), 100_000_000_000 ether);
+        IsDGNRS(address(sdgnrs)).transferFromPool_g106128(IsDGNRS.Pool.Whale, address(sdgnrs), 100_000_000_000 ether);
 
         uint256 snapshot = vm.snapshotState();
         uint256 balanceBefore = sdgnrs.balanceOf(PLAYER);
@@ -117,7 +117,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         // box owner regardless of caller. PARENT_BUFFER holds PLAYER's entry (a real purchase
         // through the production path).
         vm.prank(address(0xCA11));
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 beforeRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
         assertGt(beforeRefillAward, 0, "known winner was actually settled by another address");
 
@@ -126,13 +126,13 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         sdgnrs.recycleCentury(100, RNG_WORD);
         uint256 poolBefore = _lootboxPool();
         vm.prank(address(0xCA11));
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 afterRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
         assertGt(afterRefillAward, beforeRefillAward, "unresolved award retains live-pool pricing");
         assertEq(poolBefore - _lootboxPool(), afterRefillAward, "nested awards debit funded inventory");
         uint256 balanceAfter = sdgnrs.balanceOf(PLAYER);
         // Whatever the engine does next (or NoWork / a pending word) is acceptable; no second payout.
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         assertEq(sdgnrs.balanceOf(PLAYER), balanceAfter);
     }
 
@@ -153,7 +153,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         r.balanceBefore = sdgnrs.balanceOf(PLAYER);
         vm.recordLogs();
         uint256 gasBefore = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         r.gasUsed = gasBefore - gasleft();
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
@@ -199,7 +199,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             uint256 snap = vm.snapshotState();
             if (trim != 0) {
                 vm.prank(address(game));
-                IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Lootbox, address(0xdead), trim);
+                IsDGNRS(address(sdgnrs)).transferFromPool_g106128(IsDGNRS.Pool.Lootbox, address(0xdead), trim);
             }
             NestedOpen memory r = _openAndParse();
             (uint256 fresh, uint256 stale) = _thirdRoll(r);
@@ -216,7 +216,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         uint256 trim = _distinguishingPoolTrim();
         if (trim != 0) {
             vm.prank(address(game));
-            IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Lootbox, address(0xdead), trim);
+            IsDGNRS(address(sdgnrs)).transferFromPool_g106128(IsDGNRS.Pool.Lootbox, address(0xdead), trim);
         }
         emit log_named_uint("lootbox_pool_trim", trim);
 
@@ -269,7 +269,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     ///      publication is stepped rather than run with unbounded gas.)
     function _landWord(uint256 vrfWord) private {
         vm.prank(PLAYER);
-        game.mineFlip(0);
+        game.mineRun(0);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), vrfWord);
         for (uint256 i; i < 50 && game.nextMinerAction() != 9; ++i) _stepMinimal(); // HumanBoxes
         assertEq(game.nextMinerAction(), 9, "the entry is the next read consumer");
@@ -281,7 +281,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -291,7 +291,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

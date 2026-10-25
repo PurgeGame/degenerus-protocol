@@ -25,7 +25,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     uint256 internal constant ID_SHIFT = CrapsPreferenceLib.ID_SHIFT;
     uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 65;
     bytes4 internal constant GAME_E = bytes4(keccak256("E()"));
-    bytes4 internal constant BURN_FOR_CRAPS = bytes4(keccak256("burnCoinForCraps(address,uint32,uint256)"));
+    bytes4 internal constant BURN_FOR_CRAPS = bytes4(keccak256("burnCoinForCraps_g292454(address,uint32,uint256)"));
     bytes4 internal constant RECORD_CRAPS = bytes4(keccak256("recordCrapsAction_g14623(uint32,uint8)"));
     bytes4 internal constant RESOLVE_ACCOUNT = bytes4(keccak256("resolveAccount_g7029(uint32,address)"));
     bytes32 internal constant COMP_SPENT = keccak256("CrapsCompSpent(uint32,uint256)");
@@ -70,14 +70,14 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         slot = JackpotBattle(address(crapsBattle)).createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
         vm.prank(ContractAddresses.CRAPS);
-        coin.creditCrapsComps(1e12);
+        coin.creditCrapsComps_g37225(1e12);
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────
 
     function _mint(address who, uint256 amount) internal {
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     function _createSmurf(address o) internal returns (uint32 id, uint32 account) {
@@ -347,7 +347,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         uint256 ownerBefore = coin.balanceOf(owner);
         vm.recordLogs();
         vm.prank(owner);
-        uint256 betId = crapsBattle.enterBonusBattle(smurfId, 1, BOARD, 1);
+        uint256 betId = crapsBattle.throwCraps(smurfId, 1, BOARD, 1);
         (uint32 slipId,) = _slipOwner(vm.getRecordedLogs());
         assertEq(slipId, smurfId);
         assertEq(uint32(crapsBattle.betWordOf(betId)), smurfId);

@@ -22,7 +22,7 @@ contract StorageCensusProbeTest is StorageCensus {
             (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
             uint256 cost = priceWei * 10 + 1 ether;
             (bool ok,) = _ctx("purchase", false, p, address(game), cost, abi.encodeCall(
-                game.purchase, (uint32(0), 4000, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false)
+                game.purchaseOrderFor, (uint32(0), 4000, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false)
             ));
             assertTrue(ok, "purchase");
             _cMineAll(80, day);

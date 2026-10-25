@@ -392,7 +392,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
     function _seat(address who, uint256 period) internal {
         game.setScore(who, craps.SYBIL_SCORE_FLOOR());
         vm.prank(who);
-        craps.enterBonusBattle(period, SEVEN, 1);
+        craps.throwCraps(period, SEVEN, 1);
     }
 
     /// @dev Drive the cursor forward — feeding each armed slot its word — until it stands on

@@ -13,7 +13,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title AccountRuleBafSettle -- the BAF-level seal settles the vault's coinflips by ID
 /// @notice At an x0 level's last-purchase-day seal the advance calls
-///         `coinflip.depositCoinflip(VAULT_WALLET_ID = 1, 0)`. Coinflip resolves ID 1 through
+///         `coinflip.playCoinflip(VAULT_WALLET_ID = 1, 0)`. Coinflip resolves ID 1 through
 ///         `Game.resolveAccount_g7029(1, GAME)`: unapproved, the zero-amount call is a gift that only
 ///         settles the vault's own claims; approved (`operatorApprovals[1][GAME]`), it is an
 ///         authorized zero deposit. Either way the advance must not revert. The drive turbo-chains
@@ -59,7 +59,7 @@ contract AccountRuleBafSettle is DeployProtocol {
     function _driveAndAssert() private {
         vm.pauseGasMetering();
         vm.expectCall(
-            address(coinflip), abi.encodeWithSignature("depositCoinflip(uint32,uint256)", uint32(1), uint256(0)), 1
+            address(coinflip), abi.encodeWithSignature("playCoinflip(uint32,uint256)", uint32(1), uint256(0)), 1
         );
         vm.expectCall(address(game), abi.encodeCall(game.resolveAccount_g7029, (uint32(1), address(game))));
         _driveToLevelTenLatchDay();
@@ -130,7 +130,7 @@ contract AccountRuleBafSettle is DeployProtocol {
         if (game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return false;
         uint256[6] memory ladder = [uint256(1_500_000), 2_500_000, 3_500_000, 5_000_000, 9_000_000, 16_777_216];
         for (uint256 r; r < ladder.length; ++r) {
-            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) return true;
             if (bytes4(err) != MineFlipGas.InsufficientExecutionGas.selector) return false;
         }
@@ -157,7 +157,7 @@ contract AccountRuleBafSettle is DeployProtocol {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
-        game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _seedNextPrizePool(uint256 targetNext) private {

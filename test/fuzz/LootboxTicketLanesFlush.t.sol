@@ -44,7 +44,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
     function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(caller);
-        game.mineFlip(0);
+        game.mineRun(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -54,12 +54,12 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -78,7 +78,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
         }
         // A fresh request waits for every read consumer of the day's cohort to finish. A shut
         // craps window the day bound to the write buffer rides the next request, which the engine
@@ -93,7 +93,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
             if (!game.advanceDue() && game.rngComplete()) break;
             if (!game.advanceDue()) continue; // a fresh request waits for its word
             vm.prank(actor);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
@@ -146,9 +146,9 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         // Thirty 0.05 ETH boxes spread over the target band; the 1.5 ETH order clears the
         // mid-day request threshold.
         vm.prank(actor);
-        game.purchase{value: priceWei + 2.5 ether}(0, 400, BoxOrderLib.boCustoms(30, 0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: priceWei + 2.5 ether}(0, 400, BoxOrderLib.boCustoms(30, 0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 reqId = _mineMiddayRequest(actor);
-        uint256 base = game.level();
+        uint256 base = game.currentLvl();
 
         // Search the word for a draw whose lanes include an isolated high-nibble offset, so every
         // step of the walk is exercised; the word only moves the boxes' targets.
@@ -162,7 +162,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
             // The engine publishes the word and opens the read cohort's order as a read consumer.
             vm.recordLogs();
             vm.prank(actor);
-            game.mineFlip(0);
+            game.mineRun(0);
             (announced, queued, boxes) = _tally(vm.getRecordedLogs(), ref, base);
             assertGt(_word(N), 0, "the word landed at the order's index");
             assertTrue(game.boxIndexComplete(N), "the walk opened the order");

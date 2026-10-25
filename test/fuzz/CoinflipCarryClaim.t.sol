@@ -85,14 +85,14 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
     function _enterRebuyWithStake(uint256 takeProfit) internal returns (uint256 stake) {
         stake = 100_000;
         vm.prank(GAME);
-        coin.mintForGame(player, stake);
+        coin.mintForGame_g152734(player, stake);
         uint32 playerId = _giveWalletId(player);
         vm.prank(player);
         game.setOperatorApproval(0, operator, true);
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(0, true, takeProfit);
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, stake);
+        coinflip.playCoinflip(playerId, stake);
     }
 
     /// @dev Win payout for `stake` on day `epoch`, plus the capped recycle bonus the
@@ -356,9 +356,9 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
 
         // --- a fresh deposit rides TOMORROW, never the unapplied day ---
         vm.prank(GAME);
-        coin.mintForGame(player, 10_000);
+        coin.mintForGame_g152734(player, 10_000);
         vm.prank(player);
-        coinflip.depositCoinflip(0, 10_000);
+        coinflip.playCoinflip(0, 10_000);
 
         (, , uint256 carry1, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry1, carry0, "no reachable path moved the carry riding the unapplied day");
@@ -374,9 +374,9 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
         uint32 id = game.walletIdOf_g3120(player);
         bytes32 base = keccak256(abi.encode(uint256(id), uint256(2)));
         _resolveDay(3, true);
-        vm.prank(player); coinflip.depositCoinflip(0, 0);
+        vm.prank(player); coinflip.playCoinflip(0, 0);
         _resolveDay(4, false);
-        vm.prank(player); coinflip.depositCoinflip(0, 0);
+        vm.prank(player); coinflip.playCoinflip(0, 0);
         (bool enabled, uint256 stop, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(id);
         assertTrue(enabled); assertEq(stop, 0); assertEq(carry, 0);
         assertGt(uint256(vm.load(address(coinflip), base)), 0);

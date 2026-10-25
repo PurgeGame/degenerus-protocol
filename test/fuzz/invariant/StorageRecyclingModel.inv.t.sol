@@ -10,7 +10,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 /// @dev This storage model has no redemption consumer. The production completion
 /// check still queries its pinned external frontier, which must exist in the fixture.
 contract StorageRecyclingSdgnrsFrontier {
-    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 }
 
 /// @dev Independent lifetime books against the production binary storage primitives.

@@ -23,12 +23,12 @@ contract StallResilience is DeployProtocol {
     /// @dev Complete a full day: mineFlip -> VRF fulfill -> loop until unlocked.
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
     }
@@ -71,7 +71,7 @@ contract StallResilience is DeployProtocol {
     /// @dev One engine step. The miner's explicit stop signals (waiting on a word, nothing to
     ///      do) end a drive loop; any other revert is a real failure and fails the test.
     function _step() internal returns (bool moved) {
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             return true;
         } catch (bytes memory err) {
             bytes4 sel = bytes4(err);
@@ -92,7 +92,7 @@ contract StallResilience is DeployProtocol {
         // Day 1: purchase with lootbox amount
         // lootboxRngIndex = 1, so this writes to lootboxEth[1][buyer]
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Complete day 1 (VRF request reserves lootbox index 1, fulfillment writes word for index 1)
         // After this: lootboxRngIndex = 2
@@ -107,11 +107,11 @@ contract StallResilience is DeployProtocol {
         // Purchase with lootbox amount BEFORE mineFlip so lootboxEth[preStallIndex][buyer] has value
         // lootboxRngIndex is still preStallIndex (2), so this writes to lootboxEth[2][buyer]
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // mineFlip triggers VRF request, which reserves lootbox index preStallIndex (2)
         // and increments lootboxRngIndex to 3
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 2 VRF pending");
 
         // The stalled request reserved preStallIndex
@@ -130,7 +130,7 @@ contract StallResilience is DeployProtocol {
         // first action of the next call, before any consumer reads the word.
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0x1007CAFE);
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Reserved index finalized by the reissued word");
 
         // The engine steps on that index without an unexpected error, and the box bought into

@@ -34,7 +34,7 @@ async function distributeGNRUS(charity, deployer, recipientAddr, gameAddress, vo
   // 1. Vault-owner sets recipient into empty slot (instant-apply branch).
   await ownerAction(charity.connect(deployer), "setCharity", [slot, recipientAddr]);
   // 2. Voter casts a vote so bestWeight > 0 → distribution path fires (not LevelSkipped).
-  await charity.connect(voter).vote(slot);
+  await charity.connect(voter).castBallot(slot);
   // 3. Game impersonates and resolves.
   const gameSigner = await impersonate(gameAddress);
   await charity.connect(gameSigner).pickCharity(level);

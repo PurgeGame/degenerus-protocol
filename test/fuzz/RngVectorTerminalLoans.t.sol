@@ -62,7 +62,7 @@ contract RngVectorTerminalLoans is TerminalLoanBase {
         _setBalances(a, owedA + 1, 0); // claimable keeps its 1-wei sentinel
         uint32 b = _account(bob);
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, bob, 1e15);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, bob, 1e15);
         _borrow(bob, b, 3);
         _setBalances(b, 0, 0);
         uint32 c = _account(carol);
@@ -91,7 +91,7 @@ contract RngVectorTerminalLoans is TerminalLoanBase {
         game.borrow(a, 20, type(uint256).max, 0);
         vm.prank(carol);
         vm.expectRevert();
-        game.repay{value: 1 ether}(c);
+        game.clearDebtNow{value: 1 ether}(c);
         for (uint256 i; i < 3; ++i) _mine(30_000_000);
         assertEq(_loanDigest(true), digest, "loans and balances frozen while the terminal word is out");
 

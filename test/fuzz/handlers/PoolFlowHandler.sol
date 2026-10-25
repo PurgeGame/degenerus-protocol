@@ -113,7 +113,7 @@ contract PoolFlowHandler is Test {
         if (sent > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: sent}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: sent}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {
             success_buy++;
             ghost_realInflow += sent; // real ETH that crossed into the contract
         } catch {}
@@ -137,14 +137,14 @@ contract PoolFlowHandler is Test {
         uint256 gate = (priceWei * 400) / 400; // one whole ticket to satisfy the daily purchase gate
         if (gate != 0 && gate <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: gate}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchaseOrderFor{value: gate}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
                 ghost_realInflow += gate;
             } catch {}
         }
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ghost_advances++; // a consolidation/skim/jackpot transfer pass ran — non-vacuity witness
             } catch {}
             uint256 reqId = vrf.lastRequestId();
@@ -172,7 +172,7 @@ contract PoolFlowHandler is Test {
         calls_claim++;
         uint256 balBefore = currentActor.balance;
         vm.prank(currentActor);
-        try game.claimWinnings(0) {
+        try game.claimClaimable(0) {
             success_claim++;
             if (currentActor.balance > balBefore) {
                 ghost_realOutflow += currentActor.balance - balBefore;
@@ -190,14 +190,14 @@ contract PoolFlowHandler is Test {
     ///         20-32 every run and makes the campaign ~50x slower without adding a new transition kind.
     function driveLevelUp(uint256 wordSeed) external {
         if (game.gameOver() || ghost_levelUps >= MAX_DRIVEN_LEVELS) return;
-        uint24 start = game.level();
-        for (uint256 d; d < DRIVE_MAX_DAYS && game.level() == start && !game.gameOver(); ++d) {
+        uint24 start = game.currentLvl();
+        for (uint256 d; d < DRIVE_MAX_DAYS && game.currentLvl() == start && !game.gameOver(); ++d) {
             vm.warp(vm.getBlockTimestamp() + 1 days + 1);
             (, , , bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked) {
                 uint256 sent = priceWei * 10 + DRIVE_BOX;
                 vm.prank(driver);
-                try game.purchase{value: sent}(
+                try game.purchaseOrderFor{value: sent}(
                     0, 4000, BoxOrderLib.boCustomFloor(DRIVE_BOX), bytes32(0), MintPaymentKind.DirectEth, false
                 ) {
                     success_buy++;
@@ -213,13 +213,13 @@ contract PoolFlowHandler is Test {
                     }
                 }
                 vm.prank(driver);
-                try game.mineFlip(0) {
+                try game.mineRun(0) {
                     ghost_advances++;
                 } catch {
                     break;
                 }
             }
         }
-        if (game.level() > start) ghost_levelUps++;
+        if (game.currentLvl() > start) ghost_levelUps++;
     }
 }

@@ -11,7 +11,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteResolveRepeg -- sweep-budget invariance of queued-bet resolution.
 /// @notice Bets are queued per RNG index (`degeneretteQueue[index & 1]`, id = queue position + 1) and
-///         resolve ONLY through the permissionless in-order sweep (`game.mineFlip`, rewarded to the CALLER based on the walk-unit work actually done --
+///         resolve ONLY through the permissionless in-order sweep (`game.mineRun`, rewarded to the CALLER based on the walk-unit work actually done --
 ///         see KeeperFaucetResistance.t.sol and DegeneretteSweep.t.sol for that reward's own
 ///         faucet-safety and equivalence proofs), strictly in queue order. There is no per-id
 ///         door: the flat ~1-FLIP "loser" reward, the >=3-successful-resolutions gate,
@@ -66,7 +66,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         // Fund the game with ETH to back any pool / winning credit.
         vm.deal(address(game), 500 ether);
 
-        // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0; seed it to 1
+        // betDegenerette reverts with E() when lootboxRngIndex == 0; seed it to 1
         // (the word at index 1 starts at 0 = no pending RNG, the state bet placement needs).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         RecyclingState.seedWriteBuffer(address(game), 1);
@@ -168,7 +168,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     {
         uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(0, currency, perTicket, spins, uint8(ticket & 7));
+        game.betDegenerette{value: ethValue}(0, currency, perTicket, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), 1);
     }
 
@@ -210,8 +210,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     function _crank(uint256 allowance) internal returns (uint256 resolved) {
         vm.recordLogs();
         vm.prank(makeAddr("degen_resolve_crank"));
-        if (allowance == type(uint256).max) game.mineFlip(0);
-        else game.mineFlip{gas: allowance}(0);
+        if (allowance == type(uint256).max) game.mineRun(0);
+        else game.mineRun{gas: allowance}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == DQ.RESOLVED_SIG) ++resolved;
     }
@@ -227,7 +227,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.prank(makeAddr("degen_resolve_crank"));
             vm.recordLogs();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 n;
             if (ok) {
                 Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -259,9 +259,9 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         return uint256(uint128(s1 >> 128));
     }
 
-    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (keeps supply consistent).
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame_g152734 (keeps supply consistent).
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 }

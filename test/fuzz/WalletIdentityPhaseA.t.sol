@@ -58,13 +58,13 @@ contract WalletIdentityPhaseATest is DeployProtocol {
 
     function _length() private returns (uint256 n) { n = _probe().walletsLength(); _restore(); }
 
-    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
+    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.currentLvl() + 1); }
 
     function _buyTickets(address buyer, uint256 tickets) private {
         uint256 value = _price() * tickets;
         vm.deal(buyer, value + 1 ether);
         vm.prank(buyer);
-        game.purchase{value: value}(0, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
     }
 
     function _registeredLogs(Vm.Log[] memory logs) private view returns (uint256 n) {
@@ -152,7 +152,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         uint256 price = _price();
         vm.deal(boxBuyer, 10 ether);
         vm.prank(boxBuyer);
-        game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
         assertGt(game.walletIdOf_g3120(boxBuyer), 0, "box-only buyer");
 
         address whale = address(0x3A1E);
@@ -180,7 +180,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         address bettor = address(0xBE77);
         vm.deal(bettor, 1 ether);
         vm.prank(bettor);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
+        game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         assertGt(game.walletIdOf_g3120(bettor), 0, "bet owner registered");
     }
 
@@ -196,7 +196,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.deal(small, 10 ether);
         vm.prank(small);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
 
         uint256 tickets = (0.04 ether + price - 1) / price;
         _buyTickets(small, tickets);
@@ -232,7 +232,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.deal(next, value);
         vm.prank(next);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.purchase{value: value}(0, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
         _buyTickets(last, 1);
     }
 
@@ -270,9 +270,9 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         uint256 price = _price();
         vm.prank(fresh);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.purchase{value: price * 2}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price * 2}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         vm.prank(fresh);
-        game.purchase{value: price}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         assertEq(game.walletIdOf_g3120(fresh), 0, "operator stays unregistered");
     }
 
@@ -283,7 +283,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.prank(ContractAddresses.AFFILIATE);
         uint32 id = game.registerWallet_g9539(owner, true);
         assertGt(id, 0);
-        (bool mayBet,,) = quests.marketBetGates(game.walletIdOf_g3120(owner), game.level() + 1);
+        (bool mayBet,,) = quests.marketBetGates(game.walletIdOf_g3120(owner), game.currentLvl() + 1);
         assertFalse(mayBet, "registration alone does not open the markets");
     }
 
@@ -299,7 +299,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
                 uint256 price = _price();
                 vm.deal(who, price + 1 ether);
                 vm.prank(who);
-                game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
+                game.purchaseOrderFor{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
             }
         }
         uint256 end = _length();

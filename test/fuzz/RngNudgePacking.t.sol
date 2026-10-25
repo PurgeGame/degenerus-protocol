@@ -44,13 +44,13 @@ contract RngNudgeCapTest is DeployProtocol {
     function setUp() public { _deployProtocol(); }
     function test_255thNudgeAcceptedAnd256thRejectedBeforeBurn() public {
         RecyclingState.seedNudges(address(game), 254);
-        vm.mockCall(ContractAddresses.COIN, abi.encodeWithSignature("burnCoin(address,uint256)"), abi.encode());
+        vm.mockCall(ContractAddresses.COIN, abi.encodeWithSignature("burnCoin_g27673(address,uint256)"), abi.encode());
         (uint256 queued, uint256 cost) = game.rngNudgeQuote();
         assertEq(queued, 254); assertGt(cost, 0);
         game.reverseFlip(cost);
         (queued, cost) = game.rngNudgeQuote();
         assertEq(queued, 255); assertEq(cost, 0);
-        vm.mockCallRevert(ContractAddresses.COIN, abi.encodeWithSignature("burnCoin(address,uint256)"), "burn must not run at cap");
+        vm.mockCallRevert(ContractAddresses.COIN, abi.encodeWithSignature("burnCoin_g27673(address,uint256)"), "burn must not run at cap");
         vm.expectRevert(bytes4(keccak256("NudgeCapReached()")));
         game.reverseFlip(0);
         assertEq(RecyclingState.nudgeCount(address(game)), 255);

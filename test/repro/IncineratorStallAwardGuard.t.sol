@@ -109,7 +109,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, amount);
         vm.prank(player);
-        wwxrp.enter(0, amount);
+        wwxrp.enterDraw(0, amount);
     }
 
     /// @dev Mirror of the contract's winner-roll derivation.
@@ -143,14 +143,14 @@ contract IncineratorStallAwardGuard is DeployProtocol {
     }
 
     function _advance() internal returns (bool ok) {
-        (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
     }
 
     function testStalledCenturyIncineratorStaysCoupledToTheArmedDay() public {
         uint256 simTime = block.timestamp;
 
         for (uint256 d = 0; d < 100; d++) {
-            if (game.level() >= 2) break;
+            if (game.currentLvl() >= 2) break;
             simTime += 1 days + 1;
             vm.warp(simTime);
             _seedNextPrizePool(49.9 ether);
@@ -158,7 +158,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
             _buyTickets(buyer, 4000);
             for (uint256 j = 0; j < 80; j++) { _fulfillVrf(false); if (!_advance()) break; }
         }
-        assertGe(game.level(), 2, "bootstrap reached a live cadence");
+        assertGe(game.currentLvl(), 2, "bootstrap reached a live cadence");
 
         vm.mockCall(ContractAddresses.GNRUS, abi.encodeWithSignature("pickCharity(uint24)"), abi.encode());
         _setLevel(98);
@@ -168,7 +168,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         uint24 prevArmed;
         (prevArmed, , ) = coinflip.bafDrawInfo();
         for (uint256 d = 0; d < 600 && armedDay == 0; d++) {
-            uint24 currentLevel = game.level();
+            uint24 currentLevel = game.currentLvl();
             if (game.gameOver()) break;
             if (currentLevel > 100) break;
 
@@ -233,7 +233,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         assertFalse(fulfilled, "a fresh request is outstanding after the retry");
         mockVRF.fulfillRandomWords(reqId, word);
 
-        emit log_named_uint("level at fulfilment", game.level());
+        emit log_named_uint("level at fulfilment", game.currentLvl());
         vm.recordLogs();
         // One advance backfills the gap (and defers the transition), the next transitions.
         // Keep the level fed so the transition can complete rather than stalling on a target.
@@ -241,13 +241,13 @@ contract IncineratorStallAwardGuard is DeployProtocol {
             _seedNextPrizePool(400 ether);
             _seedFuturePrizePool(300 ether);
             for (uint256 j = 0; j < 40; j++) { if (!_advance()) break; }
-            if (game.level() > 100) break;
+            if (game.currentLvl() > 100) break;
             simTime += 1 days + 1;
             vm.warp(simTime);
             _buyTickets(buyer, 4000);
             for (uint256 j = 0; j < 40; j++) { _fulfillVrf(false); if (!_advance()) break; }
         }
-        emit log_named_uint("level after the stall", game.level());
+        emit log_named_uint("level after the stall", game.currentLvl());
 
         (uint16 rewardPercent, bool armedWin) = coinflip.getCoinflipDayResult(armedDay);
         assertTrue(rewardPercent != 0 || armedWin, "the armed day resolved");
@@ -289,7 +289,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
     function testControlNoStallPaysOnlyAgainstALosingArmedDay() public {
         uint256 simTime = block.timestamp;
         for (uint256 d = 0; d < 100; d++) {
-            if (game.level() >= 2) break;
+            if (game.currentLvl() >= 2) break;
             simTime += 1 days + 1;
             vm.warp(simTime);
             _seedNextPrizePool(49.9 ether);
@@ -306,7 +306,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         uint24 prevArmed;
         (prevArmed, , ) = coinflip.bafDrawInfo();
         for (uint256 d = 0; d < 600; d++) {
-            uint24 currentLevel = game.level();
+            uint24 currentLevel = game.currentLvl();
             if (game.gameOver() || currentLevel > 100) break;
             if (currentLevel == 99 && !entered) {
                 _enterAs(alice, 100);
@@ -354,9 +354,9 @@ contract IncineratorStallAwardGuard is DeployProtocol {
     ///      carries BAF draw weight on an armed day).
     function _selfDeposit(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(0, amount);
+        coinflip.playCoinflip(0, amount);
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
@@ -385,7 +385,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     /// @dev Fulfill any pending VRF request with a parity-forced word: even
@@ -400,7 +400,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         if (fulfilled) return;
 
         uint256 randomWord = uint256(
-            keccak256(abi.encode("incin_word", block.timestamp, game.level(), reqId))
+            keccak256(abi.encode("incin_word", block.timestamp, game.currentLvl(), reqId))
         );
         randomWord = odd ? (randomWord | 1) : (randomWord & ~uint256(1));
         if (randomWord < 2) randomWord = 2;

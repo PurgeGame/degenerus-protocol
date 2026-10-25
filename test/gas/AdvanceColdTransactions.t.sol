@@ -145,7 +145,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(id, uint256(keccak256("cold-subscriber-setup")) | 1);
             }
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("setup did not settle");
     }
@@ -191,7 +191,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
             vm.recordLogs();
             vm.startStateDiffRecording();
             uint256 before = gasleft();
-            game.mineFlip{gas: allowance}(0);
+            game.mineRun{gas: allowance}(0);
             uint256 used = before - gasleft() + INTRINSIC;
             assertTrue(_storageChanged(vm.stopAndReturnStateDiff()), "a successful call makes engine progress");
             Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -213,13 +213,13 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
         uint256 lo = 200_000;
         hi = REALISTIC_ALLOWANCE;
         uint256 snap = vm.snapshotState();
-        (bool ok,) = address(game).call{gas: hi}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok,) = address(game).call{gas: hi}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         vm.revertToState(snap);
         assertTrue(ok, "next chunk admitted under a realistic 10M allowance");
         while (hi - lo > 5_000) {
             uint256 mid = (lo + hi) / 2;
             bytes memory err;
-            (ok, err) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (ok, err) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             vm.revertToState(snap);
             if (ok) {
                 hi = mid;

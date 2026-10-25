@@ -55,7 +55,7 @@ contract FoilAfkingFunding is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _foilCost() internal view returns (uint256) {
-        return FOIL_PACK_TICKETS * PriceLookupLib.priceForLevel(game.level() + 1);
+        return FOIL_PACK_TICKETS * PriceLookupLib.priceForLevel(game.currentLvl() + 1);
     }
 
     /// @dev Set `who`'s claimable winnings to `amt`, keeping the afking half, the `claimablePool`
@@ -95,7 +95,7 @@ contract FoilAfkingFunding is DeployProtocol {
 
     function _buyFoil(address who, uint256 ethSent, MintPaymentKind kind) internal {
         vm.prank(who);
-        game.purchase{value: ethSent}(0, 0, 0, bytes32(0), kind, true);
+        game.purchaseOrderFor{value: ethSent}(0, 0, 0, bytes32(0), kind, true);
     }
 
     function _newPlayer(string memory label) internal returns (address who) {
@@ -113,7 +113,7 @@ contract FoilAfkingFunding is DeployProtocol {
         vm.deal(who, who.balance + 1_000 ether);
         vm.prank(who);
         vm.expectRevert(bytes4(keccak256("FoilAlreadyBought()")));
-        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -197,14 +197,14 @@ contract FoilAfkingFunding is DeployProtocol {
         _fundAfking(a, cost - 1);
         vm.prank(a);
         vm.expectRevert(insolvent);
-        game.purchase{value: 0}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: 0}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
 
         address b = _newPlayer("foilShortCombined");
         _seedClaimable(b, cost / 4);
         _fundAfking(b, cost / 4);
         vm.prank(b);
         vm.expectRevert(insolvent);
-        game.purchase{value: 0}(0, 0, 0, bytes32(0), MintPaymentKind.Combined, true);
+        game.purchaseOrderFor{value: 0}(0, 0, 0, bytes32(0), MintPaymentKind.Combined, true);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -285,7 +285,7 @@ contract FoilAfkingFundingDegenesis is DegenesisDeployProtocol {
     }
 
     function _foilCost() internal view returns (uint256) {
-        return 10 * PriceLookupLib.priceForLevel(game.level() + 1);
+        return 10 * PriceLookupLib.priceForLevel(game.currentLvl() + 1);
     }
 
     function _player(string memory label) internal returns (address who) {
@@ -299,7 +299,7 @@ contract FoilAfkingFundingDegenesis is DegenesisDeployProtocol {
 
         address freshBuyer = _player("foilCreditFresh");
         vm.prank(freshBuyer);
-        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         assertEq(game.degenesisCreditOf(freshBuyer), cost / 4, "fresh-funded foil accrues 25% of the gross premium");
 
         address afkBuyer = _player("foilCreditAfk");
@@ -307,7 +307,7 @@ contract FoilAfkingFundingDegenesis is DegenesisDeployProtocol {
         vm.prank(afkBuyer);
         game.depositAfkingFunding{value: cost}(afkId);
         vm.prank(afkBuyer);
-        game.purchase(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         assertEq(game.degenesisCreditOf(afkBuyer), cost / 4, "afking-funded foil accrues the same credit");
     }
 }

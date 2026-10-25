@@ -126,7 +126,7 @@ contract StethLossLiveness is RedemptionFixture {
     function _scenario(uint256 lossBps, uint8 when) private {
         _buildRunningGame();
         assertGt(mockStETH.balanceOf(address(game)), 0, "fixture: the Game must hold stETH");
-        uint24 levelBefore = game.level();
+        uint24 levelBefore = game.currentLvl();
 
         if (when == MID_GAME) _cutStETH(lossBps);
 
@@ -136,9 +136,9 @@ contract StethLossLiveness is RedemptionFixture {
         uint256 wordsBefore = answeredWords;
         _playUntilLevel(levelBefore + 3, 90);
         assertGt(answeredWords, wordsBefore, "no VRF word was fulfilled through the daily cycle");
-        assertGe(game.level(), levelBefore + 3, "level transitions stalled");
+        assertGe(game.currentLvl(), levelBefore + 3, "level transitions stalled");
         assertGt(cranks, crankedBefore, "mineFlip made no progress");
-        assertGe(game.level(), loanDue, "the scenario never reached the loan's due level");
+        assertGe(game.currentLvl(), loanDue, "the scenario never reached the loan's due level");
         assertEq(lens.loanOf(address(game), borrowerId).principal, 0, "the due loan was neither repaid nor seized");
 
         // 2. Game over by liveness timeout; the terminal payouts complete.
@@ -175,7 +175,7 @@ contract StethLossLiveness is RedemptionFixture {
     ///      two levels on, an AFKing subscription and a pending sDGNRS redemption batch.
     function _buildRunningGame() private {
         _playUntilLevel(3, 40);
-        assertGe(game.level(), 3, "fixture: the game must be mid-run");
+        assertGe(game.currentLvl(), 3, "fixture: the game must be mid-run");
 
         // Outstanding player claimable: the driver's real jackpot wins, plus a bystander who holds
         // only a credit. The credit is ETH-backed at the Game (obligations stay covered).
@@ -184,7 +184,7 @@ contract StethLossLiveness is RedemptionFixture {
 
         // An open loan: the borrower holds far-future tickets; the sDGNRS account lends.
         borrowerId = _giveWalletId(borrower);
-        loanDue = game.level() + 2;
+        loanDue = game.currentLvl() + 2;
         _seeder(borrowerId, uint24(loanDue + 4), 600, 0, 0);
         _seeder(SDGNRS_ID, 0, 0, 100 ether, 0);
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), borrowerId, loanDue, type(uint256).max);
@@ -242,13 +242,13 @@ contract StethLossLiveness is RedemptionFixture {
     // ---------------------------------------------------------------- driving
 
     function _playUntilLevel(uint24 target, uint256 maxDays) private {
-        for (uint256 day; day < maxDays && game.level() < target && !game.gameOver(); ++day) {
+        for (uint256 day; day < maxDays && game.currentLvl() < target && !game.gameOver(); ++day) {
             vm.warp(vm.getBlockTimestamp() + 1 days + 1);
             (, , , bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked) {
                 uint256 box = 60 ether;
                 vm.prank(driver);
-                try game.purchase{value: priceWei * 10 + box}(
+                try game.purchaseOrderFor{value: priceWei * 10 + box}(
                     0, 4000, BoxOrderLib.boCustomFloor(box), bytes32(0), MintPaymentKind.DirectEth, false
                 ) {} catch {}
             }
@@ -281,7 +281,7 @@ contract StethLossLiveness is RedemptionFixture {
             bool answered = _fulfillPending(uint256(keccak256(abi.encode("stlive", cranks, i))) | 1);
             if (answered) ++answeredWords;
             vm.prank(keeper);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ++cranks;
             } catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
@@ -317,7 +317,7 @@ contract StethLossLiveness is RedemptionFixture {
             if (claimDeadShares) _claimDeadShares(who[i]);
             uint256 owed = game.claimableWinningsOf(who[i]);
             vm.prank(who[i]);
-            try game.claimWinnings(0) {
+            try game.claimClaimable(0) {
                 ++paidClaims;
             } catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);

@@ -36,11 +36,11 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         // A real paid ticket guarantees a read-side step after word publication.
         vm.deal(ALICE, 1 ether);
         vm.prank(ALICE);
-        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _request() private {
-        for (uint256 i; i < 200 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 200 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "real request established");
     }
 
@@ -48,7 +48,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         for (uint256 i; i < 500 && !game.rngComplete(); ++i) {
             // A scheduled Craps window can open a mid-day request; mining waits for its word.
             OpenVrfRequest.answer(mockVRF, 0xB008);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngComplete(), "all committed work completes");
     }
@@ -67,7 +67,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         vm.mockCall(address(sdgnrs), abi.encodeWithSignature("runRedemptionWork(uint256,uint256)"),
             abi.encode(false, false, uint256(0)));
         for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 1; ++i) {
-            try game.mineFlip{gas: 10_000_000}(0) {} catch {
+            try game.mineRun{gas: 10_000_000}(0) {} catch {
                 assertEq(game.rngConsumerStage_g379(), 1, "only the held worker may stop progress");
             }
         }
@@ -81,7 +81,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
     /// @dev Price resolution is already complete; one mandatory unit retires one FIFO head.
     function _mineOneClaim() private {
         (,, uint32 beforeCursor,) = sdgnrs.redemptionBatchState();
-        game.mineFlip{gas: 16_700_000}(type(uint32).max);
+        game.mineRun{gas: 16_700_000}(type(uint32).max);
         (,, uint32 afterCursor,) = sdgnrs.redemptionBatchState();
         assertEq(afterCursor, beforeCursor + 1, "one beneficiary retires at the checkpoint");
     }
@@ -129,7 +129,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         assertEq(_owed(ALICE), 0, "the first call settles the FIFO head");
         assertEq(_owed(BOB), bob, "later beneficiaries are untouched");
         assertEq(_owed(CAROL), carol, "later beneficiaries are untouched");
-        assertTrue(sdgnrs.redemptionSettlementPending());
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837());
         // A consumed head cannot be taken again through any door in a live game.
         vm.expectRevert(_batchRoll(burnDay) == 0 ? sDGNRS.NotResolved.selector : sDGNRS.NotGameOver.selector);
         vm.prank(ALICE);
@@ -141,7 +141,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
 
         _complete();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "keeper resumes at next beneficiary");
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
     }
 
     function test_LastBeneficiaryKeepsCohortGateThenNextBurnCanEnter() public {
@@ -151,7 +151,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         assertEq(_owed(ALICE), 0); assertEq(_owed(BOB), 0);
         uint128 carol = _owed(CAROL);
         assertGt(carol, 0, "the last beneficiary is still owed");
-        assertTrue(sdgnrs.redemptionSettlementPending(), "the unfinished cohort stays live");
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837(), "the unfinished cohort stays live");
         assertEq(game.rngConsumerStage_g379(), 1, "the cohort keeps its stage until its last claim settles");
         assertFalse(game.rngComplete());
         assertEq(game.nextMinerAction(), 7, "no request can cut in ahead of MinerAction.Redemption");
@@ -159,11 +159,11 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         bool done = sdgnrs.runRedemptionWork(7419, 11_000).done;
         assertFalse(done);
         assertEq(_owed(CAROL), carol, "tiny budget cannot settle the last claim");
-        assertTrue(sdgnrs.redemptionSettlementPending(), "tiny budget cannot erase the cohort");
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837(), "tiny budget cannot erase the cohort");
         _complete();
         assertEq(_owed(CAROL), 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         uint256 nextBurn = sdgnrs.balanceOf(ALICE);
         (uint256 burnValue,) = sdgnrs.previewBurnValue(nextBurn);
         assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: next burn meets minimum");

@@ -126,14 +126,14 @@ contract DegenesisDayMapping is DegenesisHarness {
         assertEq(_closed(), 7);
         vm.prank(a);
         vm.expectRevert();
-        game.buyDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
+        game.purchaseDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
     }
 
     function test_CalendarBoundaryDoesNotAssignANewCohort() public {
         _warpTo(2, 0);
         vm.prank(a);
         vm.expectRevert();
-        game.buyDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
+        game.purchaseDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
         _drive(0);
         _buy(a, 0.01 ether);
         vm.warp(_dayStart(3) - 1);
@@ -170,7 +170,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         uint256 vault0 = _vaultBudget();
         uint256 afk0 = _sdgnrsAfking();
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(game.currentDayView_g542950(), 3);
         assertEq(claimable0 - game.claimablePoolView(), 2 * q);
@@ -192,7 +192,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         _buy(a, 0.4321 ether);
         _warpTo(3, 1 hours);
         _stepToRequest();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 stalled = mockVRF.lastRequestId();
         lastFulfilledReq = stalled;
         assertEq(game.currentDayView_g542950(), 3);
@@ -202,7 +202,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         _warpTo(4, 6 hours);
         _buy(c3, 0.0707 ether);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         _warpTo(5, 2 hours);
         _buy(a, 0.02 ether);
         assertEq(_volumeUnits(2) * UNIT, 1.5907 ether);

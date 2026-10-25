@@ -121,17 +121,17 @@ contract LootboxQueueGasTest is DeployProtocol {
 
     function _restoreGame() private { vm.etch(address(game), gameCode); }
 
-    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
+    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.currentLvl() + 1); }
 
     function _ticket(address buyer, uint256 quantity) private {
         uint256 value = _price() * quantity / 400;
         vm.prank(buyer);
-        game.purchase{value: value}(0, quantity, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, quantity, 0, 0, MintPaymentKind.DirectEth, false);
     }
 
     function _box(address buyer, uint256 order, uint256 value) private {
         vm.prank(buyer);
-        game.purchase{value: value}(0, 0, order, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, 0, order, 0, MintPaymentKind.DirectEth, false);
     }
 
     function _report(string memory scenario) private {
@@ -233,7 +233,7 @@ contract LootboxQueueGasTest is DeployProtocol {
         _restoreGame();
         uint256 price = _price();
         vm.prank(REG);
-        game.purchase{value: price * 2}(0, 400, 1, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price * 2}(0, 400, 1, 0, MintPaymentKind.DirectEth, false);
         _report("box_and_ticket_registered_recycled");
     }
 
@@ -242,22 +242,22 @@ contract LootboxQueueGasTest is DeployProtocol {
     /// @dev Same scenario as WalletIdentityGas.degenerette_eth_registered.
     function test_Gas_DegeneretteEthRegistered() public {
         vm.prank(REG);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
+        game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         _report("degenerette_eth_registered");
     }
 
     function test_Gas_DegeneretteEthRepeat() public {
         vm.prank(REG);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
+        game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         vm.prank(REG);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
+        game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         _report("degenerette_eth_repeat");
     }
 
     function test_Gas_FoilTicket() public {
         uint256 price = _price();
         vm.prank(REG);
-        game.purchase{value: price * 11}(0, 400, 0, 0, MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: price * 11}(0, 400, 0, 0, MintPaymentKind.DirectEth, true);
         _report("foil_ticket_registered");
     }
 

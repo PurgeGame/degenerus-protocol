@@ -126,13 +126,13 @@ contract CrapsRngSeal is DeployProtocol {
         _openFirstDay();
         who = handler.actors(0);
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, 1_000_000 ether);
+        coin.mintForGame_g152734(who, 1_000_000 ether);
         Craps.Bets memory board;
         board.passLine = 3;
         board.place8 = 3;
         board.place9 = 1;
         vm.prank(who);
-        betId = crapsBattle.enterBonusBattle(0, board, 1);
+        betId = crapsBattle.throwCraps(0, board, 1);
         slot = uint64(betId >> 64);
     }
 
@@ -154,14 +154,14 @@ contract CrapsRngSeal is DeployProtocol {
         // window makes the mid-day request free for any caller.
         for (uint256 i; i < 8 && mockVRF.lastRequestId() == reqBefore; ++i) {
             vm.prank(address(0x5ea1));
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertEq(crapsBattle.currentIndex(), cursorBefore ^ 1, "the ordinary request must seal the armed buffer");
 
         uint256 reqId = mockVRF.lastRequestId();
         assertGt(reqId, reqBefore, "the ordinary request asked for the word");
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("seal-pin")) | 1);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertGt(crapsBattle.wordAt(index), 0, "the sealing request lands on the armed leaf");
         assertEq(crapsBattle.wordAt(index ^ 1), 0, "the leaf above stays unworded for the next arm");
     }
@@ -249,10 +249,10 @@ contract CrapsRngSeal is DeployProtocol {
         // (read consumers run in the keeper's order, 6d0e64b09/60d31f775); the handler counts it.
         assertEq(handler.ghost_settlesWithWord(), 1, "the first field settled on its word");
         assertEq(handler.ghost_settlesWithoutWord(), 0);
-        for (uint256 i; i < 64 && !game.boxIndexComplete(i0); ++i) game.mineFlip(0);
+        for (uint256 i; i < 64 && !game.boxIndexComplete(i0); ++i) game.mineRun(0);
         assertTrue(game.boxIndexComplete(i0), "the human read must also finish before a fresh request");
         for (uint256 i; i < 128 && uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 248) == 0; ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 248) != 0,
             "all prior consumers must finish before the second request");

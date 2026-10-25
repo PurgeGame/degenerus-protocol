@@ -966,11 +966,11 @@ contract CrapsBattleTest is CrapsPins {
         // The fixture clock already sits past the opener's close, so the day is part-spent.
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        craps.enterBonusDay(_seven(), 1);
+        craps.playCraps(_seven(), 1);
 
         // And the windows still open remain takeable one at a time.
         vm.prank(alice);
-        craps.enterBonusBattle(PER, _seven(), 1);
+        craps.throwCraps(PER, _seven(), 1);
         assertEq(craps.battleOf(_keyOf(PER)).entrants, 1, "the window door refused a part-spent day");
     }
 
@@ -989,7 +989,7 @@ contract CrapsBattleTest is CrapsPins {
         _openDay();
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
-        craps.enterBonusBattle(PER, both, 1);
+        craps.throwCraps(PER, both, 1);
 
         // And an amendment cannot smuggle it in after the fact.
         uint256 betId = _placeBattle(bob, _boardA(), LW * 2, LW * 10, SU);
@@ -1023,7 +1023,7 @@ contract CrapsBattleTest is CrapsPins {
         for (uint256 i = 0; i < 48; ++i) {
             address who = makeAddr(string(abi.encodePacked("scatter", i)));
             vm.prank(who);
-            craps.enterBonusBattle(PER, _blank(), 1);
+            craps.throwCraps(PER, _blank(), 1);
         }
         _warpPastClose(PER);
         uint48 index = _armAt(PER);
@@ -1435,9 +1435,9 @@ contract CrapsBattleTest is CrapsPins {
         // Turnout does not move what a window puts up.
         uint256 was = craps.boostBaseAt(_slotAt(PER));
         vm.prank(alice);
-        craps.enterBonusBattle(PER, _seven(), 1);
+        craps.throwCraps(PER, _seven(), 1);
         vm.prank(bob);
-        craps.enterBonusBattle(PER, _seven(), 1);
+        craps.throwCraps(PER, _seven(), 1);
         assertEq(craps.boostBaseAt(_slotAt(PER)), was, "the base moved with the field");
     }
 
@@ -1737,7 +1737,7 @@ contract CrapsBattleTest is CrapsPins {
         // A scoreless third seat, which the door now admits without complaint.
         address fresh = makeAddr("freshSeat");
         vm.prank(fresh);
-        craps.enterBonusBattle(PER, _seven(), 1);
+        craps.throwCraps(PER, _seven(), 1);
 
         _warpPastClose(PER);
         uint64 slot = _slotAt(PER);
@@ -1838,7 +1838,7 @@ contract CrapsBattleTest is CrapsPins {
 
         assertEq(quests.streakCalls(alice), 0, "a streak was credited before the ticket");
         vm.prank(alice);
-        uint256 placed = craps.enterBonusDay(_seven(), 1);
+        uint256 placed = craps.playCraps(_seven(), 1);
         // ONE ticket covering all seven, not seven bets.
         assertEq(placed, craps.BONUS_PERIODS_PER_DAY(), "the day lane did not take the whole day");
         assertEq(craps.dayTicketsOf(craps.currentDayIndex()), 3, "the ticket did not join the day field");
@@ -1850,13 +1850,13 @@ contract CrapsBattleTest is CrapsPins {
         // The day seat is one per address per day, so the credit cannot be farmed by re-entering.
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusDay(_seven(), 1);
+        craps.playCraps(_seven(), 1);
         assertEq(quests.streakAwarded(alice), 1, "a refused re-entry still credited a streak");
 
         // And a player who never took the whole day gets nothing from the per-window door.
         game.setScore(bob, type(uint96).max);
         vm.prank(bob);
-        craps.enterBonusBattle(PER, _seven(), 1);
+        craps.throwCraps(PER, _seven(), 1);
         assertEq(quests.streakCalls(bob), 0, "a single-window entry credited a streak");
     }
 
@@ -1877,7 +1877,7 @@ contract CrapsBattleTest is CrapsPins {
         game.setScore(bob, type(uint96).max);
 
         vm.prank(alice);
-        craps.enterBonusDay(_seven(), uint16(hm));
+        craps.playCraps(_seven(), uint16(hm));
         assertEq(quests.streakCalls(alice), 1, "the high day ticket credited no streak");
         assertEq(quests.streakAwarded(alice), 5, "a high day ticket is not worth five");
         assertEq(quests.lastDay(), today, "the streak was credited against another day");
@@ -1885,13 +1885,13 @@ contract CrapsBattleTest is CrapsPins {
         // The ORDINARY day seat on the very same day is still worth one, so the five is the high
         // multiple's doing and not the day lane's.
         vm.prank(bob);
-        craps.enterBonusDay(_seven(), 1);
+        craps.playCraps(_seven(), 1);
         assertEq(quests.streakAwarded(bob), 1, "an ordinary day ticket moved off one");
 
         // One per address per day either way: a refused re-entry credits nothing further.
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusDay(_seven(), uint16(hm));
+        craps.playCraps(_seven(), uint16(hm));
         assertEq(quests.streakAwarded(alice), 5, "a refused high re-entry credited a second streak");
     }
 
@@ -2058,7 +2058,7 @@ contract CrapsBattleTest is CrapsPins {
         if (bar > standing) standing = bar;
         game.setScore(who, standing);
         vm.prank(who);
-        return craps.enterBonusBattle(period, _seven(), 1);
+        return craps.throwCraps(period, _seven(), 1);
     }
 
     /// @dev A named player's seat in `period` — found by walking the field, since a bet is
@@ -2369,7 +2369,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // Scoreless, straight in — the window sets no bar at all.
         vm.prank(alice);
-        uint256 betId = craps.enterBonusBattle(PER, _seven(), 1);
+        uint256 betId = craps.throwCraps(PER, _seven(), 1);
         assertEq(craps.battleKeyOf(betId), _keyOf(PER), "a scoreless entry did not seat");
 
         // A custom battle sets its own bar, and a zero one is open to anybody.
@@ -2493,9 +2493,9 @@ contract CrapsBattleTest is CrapsPins {
         game.setScore(alice, craps.SYBIL_SCORE_FLOOR());
         game.setScore(bob, craps.SYBIL_SCORE_FLOOR());
         vm.prank(alice);
-        craps.enterBonusBattle(period, _seven(), 1);
+        craps.throwCraps(period, _seven(), 1);
         vm.prank(bob);
-        craps.enterBonusBattle(period, _seven(), 1);
+        craps.throwCraps(period, _seven(), 1);
     }
 
     /// @dev A donation is FLIP burned now against a pot paid later, so it is the one part of a
@@ -2776,7 +2776,7 @@ contract CrapsBattleTest is CrapsPins {
         craps.donate(false, PER, 7);
         game.setScore(alice, 0);
         vm.prank(alice);
-        craps.enterBonusBattle(PER, _seven(), 1);
+        craps.throwCraps(PER, _seven(), 1);
         _warpPastClose(PER);
         uint48 index = _armAt(PER);
         uint64 slot = _slotAt(PER);
@@ -2833,7 +2833,7 @@ contract CrapsBattleTest is CrapsPins {
         _enter(alice, 0);
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusDay(_seven(), 1);
+        craps.playCraps(_seven(), 1);
     }
 
     /// @dev A BOARD STOPS MOVING WHEN THE FIELD STOPS FORMING — at the entry close, not at the
@@ -2890,7 +2890,7 @@ contract CrapsBattleTest is CrapsPins {
         over.place8 = 3;
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
-        craps.enterBonusBattle(PER, over, 1);
+        craps.throwCraps(PER, over, 1);
 
         // Three is the boundary, and a seven-chip board seats across three legs.
         Craps.Bets memory atCap;
@@ -2898,7 +2898,7 @@ contract CrapsBattleTest is CrapsPins {
         atCap.place6 = 3;
         atCap.place8 = 3;
         vm.prank(alice);
-        uint256 betId = craps.enterBonusBattle(PER, atCap, 1);
+        uint256 betId = craps.throwCraps(PER, atCap, 1);
         assertEq(
             craps.betOf(betId).chips,
             1 | (uint256(3) << 9) | (uint256(3) << 12),
@@ -3103,7 +3103,7 @@ contract CrapsBattleTest is CrapsPins {
         address scoreless = makeAddr("scorelessEntrant");
         assertEq(game.score(scoreless), 0, "the fixture is not scoreless");
         vm.prank(scoreless);
-        uint256 betId = craps.enterBonusBattle(PER, _seven(), 1);
+        uint256 betId = craps.throwCraps(PER, _seven(), 1);
         assertEq(craps.battleKeyOf(betId), _keyOf(PER), "a scoreless address was turned away");
         assertEq((craps.betWordOf(betId) >> 190) & 0xFFFF, 0, "entry wrote score bits");
     }
@@ -3120,7 +3120,7 @@ contract CrapsBattleTest is CrapsPins {
         for (uint24 placed = 0; placed <= 7; ++placed) {
             address who = makeAddr(string(abi.encodePacked("scheduled-shape", placed)));
             vm.prank(who);
-            ids[placed] = craps.enterBonusBattle(PER, _spread(placed), 1);
+            ids[placed] = craps.throwCraps(PER, _spread(placed), 1);
             assertEq(craps.battleKeyOf(ids[placed]), key, "an accepted count split the field");
             assertEq(craps.placedCountOf(ids[placed]), placed, "the ticket stored the wrong count");
         }
@@ -3130,7 +3130,7 @@ contract CrapsBattleTest is CrapsPins {
             address who = makeAddr(string(abi.encodePacked("scheduled-over", placed)));
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
-            craps.enterBonusBattle(PER, _spread(placed), 1);
+            craps.throwCraps(PER, _spread(placed), 1);
         }
 
         _warpPastClose(PER);
@@ -3154,7 +3154,7 @@ contract CrapsBattleTest is CrapsPins {
         Craps.Bets memory blank;
         game.setScore(alice, BON_SCORE);
         vm.prank(alice);
-        uint256 a = craps.enterBonusBattle(PER, blank, 1);
+        uint256 a = craps.throwCraps(PER, blank, 1);
         // Chips-all-zero IS the blank ticket: the mode needs no field of its own.
         assertEq(craps.betOf(a).chips, 0, "a blank ticket named something");
 
@@ -3252,7 +3252,7 @@ contract CrapsBattleTest is CrapsPins {
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusBattle(PER, _seven(), 1);
+        craps.throwCraps(PER, _seven(), 1);
 
         // Another player still gets theirs.
         _enter(bob, PER);

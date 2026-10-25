@@ -98,7 +98,7 @@ contract MiddayRngCreditTest is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(id, 0xC0FFEE);
             }
             if (game.rngComplete() && !game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         revert("fixture: engine did not reach idle");
     }
@@ -118,7 +118,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _mineRequest(address who) internal returns (uint256 id) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(who);
-        game.mineFlip(0);
+        game.mineRun(0);
         id = mockVRF.lastRequestId();
         assertGt(id, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -131,7 +131,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(_actionFor(who), 0, "the refused request is not selected (Idle)");
         vm.prank(who);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(mockVRF.lastRequestId(), prior, "a refused request asked for no word");
     }
 
@@ -139,7 +139,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     ///      lootbox leg (entryQuantityScaled = 0) so `value` covers only the lootbox amount.
     function _purchaseBelowThreshold() internal {
         vm.prank(outsider);
-        game.purchase{value: 0.5 ether}(
+        game.purchaseOrderFor{value: 0.5 ether}(
             0, 0, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
@@ -147,7 +147,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     /// @dev Create pending lootbox ETH that clears the threshold on its own.
     function _purchaseAboveThreshold() internal {
         vm.prank(outsider);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
@@ -184,7 +184,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         // empty ticket frontier; marking only dailyIdx would leave genesis tickets pending.
         uint24 day = game.currentDayView_g542950();
         for (uint256 i; i < 100 && (uint24(uint256(game.extsload_g2807007(bytes32(0))) >> 24) != day || game.rngLocked()); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertEq(uint24(uint256(game.extsload_g2807007(bytes32(0))) >> 24), day, "real daily stage completed");
         _idleRequestRouter();
@@ -209,7 +209,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertTrue(game.advanceDue(), "the delivered cohort owes a keeper publication");
         assertTrue(game.isRngFulfilled());
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory published = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < published.length; ++i) {
@@ -229,7 +229,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.store(address(game), bytes32(GameSlots.RNG_WORD_CURRENT), bytes32(uint256(42))); // restore for the rest of the run
         // The real daily stage also awards tickets. Drain those through the required
         // production advance category before completing the box frontier.
-        for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineRun(0);
         assertEq(mockVRF.lastRequestId(), id, "drain does not create another request");
         _finishReadConsumers();
         assertTrue(game.rngComplete(), "the session traverses the production completion frontier");
@@ -328,7 +328,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.expectCall(address(mockVRF), requestSelector);
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(donor);
-        (bool ignored,) = address(game).call(abi.encodeCall(game.mineFlip, (0)));
+        (bool ignored,) = address(game).call(abi.encodeCall(game.mineRun, (0)));
         ignored;
         assertEq(game.middayRngCredits(donor), beforeCredit);
         assertEq(mockVRF.lastRequestId(), prior);
@@ -414,7 +414,7 @@ contract MiddayRngCreditTest is DeployProtocol {
 
         vm.prank(donor);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(game.middayRngCredits(donor), charge * 2, "the request was charged more than once");
     }
 
@@ -423,9 +423,9 @@ contract MiddayRngCreditTest is DeployProtocol {
     function test_creditPaysForAFlipOnlyQueue() public pricedBlock {
         // A FLIP Degenerette bet is pending FLIP work with no pending ETH.
         vm.prank(address(game));
-        coin.mintForGame(outsider, 1_000);
+        coin.mintForGame_g152734(outsider, 1_000);
         vm.prank(outsider);
-        game.placeDegeneretteBet(0, 1, 200, 1, 0);
+        game.betDegenerette(0, 1, 200, 1, 0);
         // lootboxRngPacked: bits 48..87 pending ETH, bits 184..223 pending FLIP.
         uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         assertEq((packed >> 48) & type(uint40).max, 0, "harness: no pending ETH");
@@ -455,7 +455,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         address topUp = makeAddr("midday_topup");
         vm.deal(topUp, 2 ether);
         vm.prank(topUp);
-        game.purchase{value: 1 ether}(
+        game.purchaseOrderFor{value: 1 ether}(
             0, 0, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_actionFor(outsider), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "at the threshold every caller sees the request");

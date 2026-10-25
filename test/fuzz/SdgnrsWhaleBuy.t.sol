@@ -46,9 +46,9 @@ contract WhaleModuleForwarder is DegenerusGameStorage {
 ///         of sDGNRS's game-side claimable (cap 1,000 paid passes), nothing below one group. The
 ///         proof of firing is the `WhalePassPurchased(SDGNRS, qty, price)` log plus the claimable
 ///         debit, the aggregate ticket shape across the 100-level span, and the batched DGNRS
-///         minter reward (poolBalance read once, ONE transferFromPool, per-pass 1% rounding kept).
+///         minter reward (poolBalance read once, ONE transferFromPool_g106128, per-pass 1% rounding kept).
 ///         Pins every external callee the automatic purchase reaches on the crank
-///         (payAffiliate / creditFlip_g317 / creditPasses / poolBalance / transferFromPool /
+///         (payAffiliate / creditFlip_g317 / creditPasses / poolBalance / transferFromPool_g106128 /
 ///         recordCoverBox / mintSeatFor) under the adversarial states the STAGE can meet.
 ///         Test-only: ZERO contracts/*.sol mutation.
 contract SdgnrsWhaleBuy is DeployProtocol {
@@ -289,7 +289,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
     /// @notice The batched minter reward equals the per-pass recurrence exactly: the Whale pool
     ///         (read once via poolBalance) loses sum_{i<qty} 1% of what each prior pass left, and a
-    ///         self-award burns that amount from supply in one transferFromPool.
+    ///         self-award burns that amount from supply in one transferFromPool_g106128.
     function test_RewardBurn_MatchesPerPassRecurrence() public {
         uint256 pool0 = sdgnrs.poolBalance(sDGNRS.Pool.Whale);
         uint256 supply0 = sdgnrs.totalSupply();
@@ -324,7 +324,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         uint256 remaining = pool0;
         for (uint256 i; i < qty; ++i) remaining -= remaining / 100;
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Whale), remaining, "pool after == recurrence");
-        assertEq(whaleTransfers, 1, "ONE transferFromPool for the batched reward");
+        assertEq(whaleTransfers, 1, "ONE transferFromPool_g106128 for the batched reward");
         assertEq(whaleAward, pool0 - remaining, "self-award burned exactly the reward");
         // The same settled day also resolves sDGNRS's own boxes (the engine completes the session's
         // read consumers in the run), whose sDGNRS self-awards burn too: every supply reduction in
@@ -517,7 +517,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

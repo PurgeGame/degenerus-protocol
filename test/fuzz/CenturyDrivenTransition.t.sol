@@ -106,10 +106,10 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
 
     /// @dev A century level's recorded achieved pool, read through the same public view the
     ///      growth market uses. Reading it rather than the raw slot keeps this test honest
-    ///      about layout drift: the entry lives in centuryPrizePools, and growthState is
+    ///      about layout drift: the entry lives in centuryPrizePools, and getGrowth is
     ///      what resolves a century level to it. 0 until that century completes.
     function _centurySnapshot(uint24 centuryLvl) internal view returns (uint256 achieved) {
-        (, achieved, , , , ) = game.growthState(centuryLvl);
+        (, achieved, , , , ) = game.getGrowth(centuryLvl);
     }
 
     function _targetView() internal view returns (uint256) {
@@ -126,7 +126,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
         uint256 randomWord = uint256(
-            keccak256(abi.encode(block.timestamp, game.level(), reqId))
+            keccak256(abi.encode(block.timestamp, game.currentLvl(), reqId))
         );
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
@@ -142,7 +142,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         for (uint256 j = 0; j < 300; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -176,10 +176,10 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         // compresses the jackpot days, so _endPhase can reset _levelPrizePool(100)
         // within the same drive. The snapshot is the durable observable.)
         _seedNextPool(10_000 ether);
-        for (uint256 i = 0; i < 10 && game.level() < 100; i++) {
+        for (uint256 i = 0; i < 10 && game.currentLvl() < 100; i++) {
             _driveDay();
         }
-        assertEq(game.level(), 100, "target-met pool must advance into level 100");
+        assertEq(game.currentLvl(), 100, "target-met pool must advance into level 100");
 
         uint256 achieved = _centurySnapshot(100);
         assertGe(
@@ -189,13 +189,13 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         );
 
         // --- Phase C: _endPhase resets the x01 base; the snapshot survives ---
-        for (uint256 i = 0; i < 15 && game.level() < 101; i++) {
+        for (uint256 i = 0; i < 15 && game.currentLvl() < 101; i++) {
             if (!_jackpotPhase() && !_rngLocked()) {
                 _seedNextPool(_targetView() + 0.01 ether);
             }
             _driveDay();
         }
-        assertEq(game.level(), 101, "game must continue past the century");
+        assertEq(game.currentLvl(), 101, "game must continue past the century");
         assertEq(sdgnrs.lastRecycledCentury(), 1, "first century recycled through real progression");
         assertLe(sdgnrs.totalSupply(), sdgnrs.centurySupplyCheckpoint());
         assertLt(sdgnrs.centurySupplyCheckpoint(), 1e24, "actual first-century burns keep supply below genesis");
@@ -215,7 +215,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         // the future pool empty on every purchase day of this drive so the ratchet stays at
         // bootstrap scale and the floor-vs-ratchet selection is what the assertions exercise.
         for (uint256 day = 0; day < 1500; day++) {
-            if (game.level() >= 199 && !_jackpotPhase() && !_rngLocked()) break;
+            if (game.currentLvl() >= 199 && !_jackpotPhase() && !_rngLocked()) break;
             assertFalse(game.gameOver(), "game must not die during the drive");
             if (!_jackpotPhase() && !_rngLocked()) {
                 _clearFuturePool();
@@ -223,7 +223,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
             }
             _driveDay();
         }
-        assertEq(game.level(), 199, "drive must reach level 199");
+        assertEq(game.currentLvl(), 199, "drive must reach level 199");
         assertFalse(_jackpotPhase(), "level 199 must be in purchase phase");
         uint256 floor = 2 * achieved; // 2x tier: snapshot far below 500k ETH
         uint256 ratchet199 = _levelPrizePool(199);
@@ -249,7 +249,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
             _clearFuturePool();
             _driveDay();
         }
-        assertEq(game.level(), 199, "sub-floor pool must not advance the century");
+        assertEq(game.currentLvl(), 199, "sub-floor pool must not advance the century");
         assertFalse(
             _jackpotPhase(),
             "sub-floor pool must not enter the century jackpot"
@@ -258,10 +258,10 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
 
         // --- Phase E: above the floor the transition proceeds; snapshot advances ---
         _seedNextPool(floor + 0.01 ether);
-        for (uint256 i = 0; i < 10 && game.level() < 200; i++) {
+        for (uint256 i = 0; i < 10 && game.currentLvl() < 200; i++) {
             _driveDay();
         }
-        assertEq(game.level(), 200, "supra-floor pool must advance into level 200");
+        assertEq(game.currentLvl(), 200, "supra-floor pool must advance into level 200");
         uint256 achieved200 = _centurySnapshot(200);
         assertGt(
             achieved200,
@@ -278,14 +278,14 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
     ///      purchase phase is reached with the day drained and no RNG in flight.
     function _driveToLevelPurchasePhase(uint24 lvl, uint256 maxDays) internal {
         for (uint256 day = 0; day < maxDays; day++) {
-            if (game.level() >= lvl && !_jackpotPhase() && !_rngLocked()) break;
+            if (game.currentLvl() >= lvl && !_jackpotPhase() && !_rngLocked()) break;
             assertFalse(game.gameOver(), "game must not die during the drive");
             if (!_jackpotPhase() && !_rngLocked()) {
                 _seedNextPool(_targetView() + 0.01 ether);
             }
             _driveDay();
         }
-        assertEq(game.level(), lvl, "drive must reach the requested level");
+        assertEq(game.currentLvl(), lvl, "drive must reach the requested level");
         assertFalse(_jackpotPhase(), "requested level must be in purchase phase");
     }
 }

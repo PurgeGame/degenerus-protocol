@@ -66,7 +66,7 @@ contract MultiLevelHandler is Test {
     constructor(DegenerusGame game_, MockVRFCoordinator vrf_, uint256 numActors) {
         game = game_;
         vrf = vrf_;
-        ghost_maxLevel = game_.level();
+        ghost_maxLevel = game_.currentLvl();
         for (uint256 i = 0; i < numActors; i++) {
             address actor = address(uint160(0xAA000 + i));
             actors.push(actor);
@@ -86,7 +86,7 @@ contract MultiLevelHandler is Test {
         vm.deal(driver, 100_000 ether);
         // vm.getBlockTimestamp(): a hoisted block.timestamp can be stale after vm.warp under via-IR.
         uint256 t = vm.getBlockTimestamp();
-        for (uint256 day; day < OPENING_MAX_DAYS && game.level() < OPENING_LEVEL; ++day) {
+        for (uint256 day; day < OPENING_MAX_DAYS && game.currentLvl() < OPENING_LEVEL; ++day) {
             t += 1 days + 1;
             vm.warp(t);
             ++openingDays;
@@ -95,7 +95,7 @@ contract MultiLevelHandler is Test {
             if (!locked && !game.gameOver()) {
                 uint256 cost = priceWei * 10 + OPENING_BOX;
                 vm.prank(driver);
-                try game.purchase{value: cost}(
+                try game.purchaseOrderFor{value: cost}(
                     0, 4000, BoxOrderLib.boCustomFloor(OPENING_BOX), bytes32(0), MintPaymentKind.DirectEth, false
                 ) {
                     ghost_totalDeposited += cost;
@@ -105,9 +105,9 @@ contract MultiLevelHandler is Test {
 
             for (uint256 j; j < 80; ++j) {
                 _fulfillPendingVrf();
-                uint256 levelBefore = game.level();
+                uint256 levelBefore = game.currentLvl();
                 vm.prank(driver);
-                try game.mineFlip(0) {
+                try game.mineRun(0) {
                     ghost_advances++;
                 } catch {
                     break;
@@ -136,10 +136,10 @@ contract MultiLevelHandler is Test {
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0 || cost > currentActor.balance) return;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
 
         vm.prank(currentActor);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0,
             qty,
             0,
@@ -180,10 +180,10 @@ contract MultiLevelHandler is Test {
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0 || cost > currentActor.balance) return;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
 
         vm.prank(currentActor);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0,
             qty,
             0,
@@ -204,10 +204,10 @@ contract MultiLevelHandler is Test {
 
         if (game.gameOver()) return;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
 
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ghost_advances++;
         } catch {}
 
@@ -225,7 +225,7 @@ contract MultiLevelHandler is Test {
         (, , bool fulfilled) = vrf.pendingRequests(reqId);
         if (fulfilled) return;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
 
         try vrf.fulfillRandomWords(reqId, randomWord) {
             ghost_vrfFulfillments++;
@@ -263,7 +263,7 @@ contract MultiLevelHandler is Test {
     }
 
     function _checkLevelTransition(uint256 levelBefore) private {
-        uint256 levelAfter = game.level();
+        uint256 levelAfter = game.currentLvl();
         if (levelAfter > levelBefore) {
             ghost_levelTransitions++;
             if (levelAfter > ghost_maxLevel) {

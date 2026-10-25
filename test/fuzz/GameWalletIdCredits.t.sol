@@ -123,7 +123,7 @@ contract GameWalletIdCredits is DeployProtocol {
     }
 
     function _price() private view returns (uint256) {
-        return PriceLookupLib.priceForLevel(game.level() + 1);
+        return PriceLookupLib.priceForLevel(game.currentLvl() + 1);
     }
 
     function _mockKickback(uint256 kickback) private {
@@ -198,7 +198,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint32 id = game.walletIdOf_g3120(buyer);
         assertGt(id, 0, "the foil purchase registered the buyer");
         (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
@@ -210,7 +210,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
     function test_FoilFlipSpinCreditsBuyerId() public {
         (address player, uint32 id) = _wallet("foil_spin_player");
-        uint24 L = game.level() + 1;
+        uint24 L = game.currentLvl() + 1;
         uint24 day = game.currentDayView_g542950();
         // Ticket 0 shares every quadrant's symbol with the draw but no colour: score 4.
         uint32 sel;
@@ -253,7 +253,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
     function test_GoldenTicketClaimCreditsPackOwnerId() public {
         (address player, uint32 id) = _wallet("golden_player");
-        uint24 L = game.level() + 1;
+        uint24 L = game.currentLvl() + 1;
         uint24 day = game.currentDayView_g542950();
         // Three gold quadrants (colour bits 3..5 == 7) on the first line.
         uint32 line = uint32(0x38) | (uint32(0x38 | 0x40) << 8) | (uint32(0x38 | 0x80) << 16) | (uint32(0xC1) << 24);
@@ -291,7 +291,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
     function test_JackpotGoldenTicketGrandCreditsWinnerId() public {
         (, uint32 id) = _wallet("golden_grand");
-        uint24 L = game.level() + 1;
+        uint24 L = game.currentLvl() + 1;
         ext.x_setPools(10 ether, 40 ether);
         uint256 before = _lane(id);
 
@@ -406,7 +406,7 @@ contract GameWalletIdCredits is DeployProtocol {
     function test_RedeemQuestCreditsNewFlipPayerId() public {
         address buyer = makeAddr("redeem_buyer");
         vm.prank(address(game));
-        coin.mintForGame(buyer, 1_000_000 ether);
+        coin.mintForGame_g152734(buyer, 1_000_000 ether);
         // Open the redemption window: next pool above the level-1 target.
         uint256 pools = uint256(vm.load(address(game), bytes32(uint256(2))));
         vm.store(address(game), bytes32(uint256(2)), bytes32((pools & ~uint256(type(uint128).max)) | 60 ether));
@@ -451,7 +451,7 @@ contract GameWalletIdCredits is DeployProtocol {
         );
         uint256 b0 = _lane(buyerId);
         vm.prank(buyer);
-        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 baseline = _lane(buyerId) - b0;
         vm.revertToState(snap);
 
@@ -465,7 +465,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.record();
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 buyerCredit,) = _credits(logs, buyerId);
@@ -596,7 +596,7 @@ contract GameWalletIdCredits is DeployProtocol {
         _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
+        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -604,7 +604,7 @@ contract GameWalletIdCredits is DeployProtocol {
         }
         for (uint256 i; i < 50; ++i) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
     }

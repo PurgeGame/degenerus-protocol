@@ -51,7 +51,7 @@ contract LootboxPendingEthLane is DeployProtocol {
         // Two 0.25 ETH customs: cost is the order's nominal.
         uint256 cost1 = 0.5 ether;
         vm.prank(actor);
-        game.purchase{value: cost1 + 1 ether}(
+        game.purchaseOrderFor{value: cost1 + 1 ether}(
             0, 400, BoxOrderLib.boCustoms(2, 0.25 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint48 idx1, uint64 pend1, uint64 thr1, uint40 flip1) = _lanes();
@@ -63,7 +63,7 @@ contract LootboxPendingEthLane is DeployProtocol {
         // A second order at the same index accumulates.
         uint256 cost2 = 3 * 5 * priceWei;
         vm.prank(actor);
-        game.purchase{value: cost2 + 1 ether}(
+        game.purchaseOrderFor{value: cost2 + 1 ether}(
             0, 400, BoxOrderLib.boOrder(0, 3, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint48 idx2, uint64 pend2, uint64 thr2,) = _lanes();

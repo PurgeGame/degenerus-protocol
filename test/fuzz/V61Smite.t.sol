@@ -33,7 +33,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///
 /// @dev The deity-pass NFT used by the ownerOf gate is minted via the GAME-gated DegenerusDeityPass.mint
 ///   (tokenId = symbolId 0-31) — distinct from the mintPacked_ HAS_DEITY_PASS score-bonus bit. FLIP minted
-///   via the GAME-gated coin.mintForGame; balances read via coin.balanceOf. The active-afker setup uses a real
+///   via the GAME-gated coin.mintForGame_g152734; balances read via coin.balanceOf. The active-afker setup uses a real
 ///   funded subscription (depositAfkingFunding + subscribe). dailyIdx is seeded to 100 (the staleness/day basis)
 ///   for parity with the curse harness, irrelevant to smite itself. Test-only: ZERO contracts/*.sol mutation.
 contract V61Smite is DeployProtocol {
@@ -259,7 +259,7 @@ contract V61Smite is DeployProtocol {
         uint256 cost = _oneTicketCost();
         vm.deal(smitee, cost);
         vm.prank(smitee);
-        game.purchase{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(smitee), 0, "single >=1-ticket buy cleared BOTH sources");
     }
 
@@ -319,7 +319,7 @@ contract V61Smite is DeployProtocol {
 
     /// @dev Cost of one whole ticket (400 units) at the active purchase level.
     function _oneTicketCost() internal view returns (uint256) {
-        uint24 targetLevel = game.jackpotPhase() ? game.level() : game.level() + 1;
+        uint24 targetLevel = game.jackpotPhase() ? game.currentLvl() : game.currentLvl() + 1;
         return PriceLookupLib.priceForLevel(targetLevel);
     }
 
@@ -385,7 +385,7 @@ contract V61Smite is DeployProtocol {
 
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {

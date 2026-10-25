@@ -37,7 +37,7 @@ contract PostGameOverShortfall is DeployProtocol {
         vm.warp(block.timestamp + 370 days);
         for (uint256 i; i < 40 && !game.gameOver(); i++) {
             vm.prank(keeper);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
                 (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -69,7 +69,7 @@ contract PostGameOverShortfall is DeployProtocol {
 
         vm.prank(alice);
         vm.expectRevert(bytes("STOPPED"));
-        game.claimWinnings(0);
+        game.claimClaimable(0);
 
         vm.prank(alice);
         game.claimWinnings(0, 4 ether);
@@ -82,7 +82,7 @@ contract PostGameOverShortfall is DeployProtocol {
     ///         of panicking every burn.
     function test_aDeficitPricesAnSdgnrsBurnAtZero() public {
         vm.prank(address(game));
-        IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Reward, alice, 1_000 ether);
+        IsDGNRS(address(sdgnrs)).transferFromPool_g106128(IsDGNRS.Pool.Reward, alice, 1_000 ether);
         uint256 held = sdgnrs.balanceOf(alice);
         assertGt(held, 0, "fixture: alice holds no sDGNRS");
         _driveToGameOver();

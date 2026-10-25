@@ -293,7 +293,7 @@ describe("DegenerusVault", function () {
       await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
       await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0x1000000000000000000"]);
       try {
-        await coin.connect(await hre.ethers.getSigner(gameAddr)).mintForGame(await vault.getAddress(), flip("1000"));
+        await coin.connect(await hre.ethers.getSigner(gameAddr)).mintForGame_g152734(await vault.getAddress(), flip("1000"));
       } finally {
         await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
       }
@@ -396,7 +396,7 @@ describe("DegenerusVault", function () {
     it("mining through playerAction reverts when caller is not vault owner", async function () {
       const { vault, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineRun", [0]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -407,7 +407,7 @@ describe("DegenerusVault", function () {
       await expect(
         vault
           .connect(alice)
-          .playerAction(await game.getAddress(), game.interface.encodeFunctionData("purchase", [0, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false]), 0)
+          .playerAction(await game.getAddress(), game.interface.encodeFunctionData("purchaseOrderFor", [0, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -428,7 +428,7 @@ describe("DegenerusVault", function () {
     it("coinflip deposit through playerAction reverts when caller is not vault owner", async function () {
       const { vault, alice, coinflip } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).playerAction(await coinflip.getAddress(), coinflip.interface.encodeFunctionData("depositCoinflip", [0, flip("1")]), 0)
+        vault.connect(alice).playerAction(await coinflip.getAddress(), coinflip.interface.encodeFunctionData("playCoinflip", [0, flip("1")]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -437,7 +437,7 @@ describe("DegenerusVault", function () {
       await advanceToNextDay();
       // Deployer holds 100% DGVE initially
       await expect(
-        ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0])
+        ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("mineRun", [0]), 0])
       ).to.not.be.reverted;
     });
 

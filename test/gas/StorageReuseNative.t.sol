@@ -115,7 +115,7 @@ contract StorageReuseNativeTest is DeployProtocol, NativeGasExport {
         _cursor(id, DAY - 90, true);
         _nativeFixture("exit_90_rebuy", PLAYER, address(coinflip), abi.encodeCall(coinflip.setCoinflipAutoRebuy, (0, false, 0)));
         _history(1, 90, false);
-        _nativeFixture("vault_90", address(game), address(coinflip), abi.encodeCall(coinflip.depositCoinflip, (1, 0)));
+        _nativeFixture("vault_90", address(game), address(coinflip), abi.encodeCall(coinflip.playCoinflip, (1, 0)));
     }
 
     function test_nativeVaultCheckpoint() public {
@@ -132,13 +132,13 @@ contract StorageReuseNativeTest is DeployProtocol, NativeGasExport {
         vm.etch(address(game), original);
         _history(1, 76, false);
         vm.fee(1 gwei);
-        _nativeFixture("vault_miner_checkpoint_76", PLAYER, address(game), abi.encodeCall(game.mineFlip, (0)));
+        _nativeFixture("vault_miner_checkpoint_76", PLAYER, address(game), abi.encodeCall(game.mineRun, (0)));
     }
 
     function test_nativeClaimAndDeposit() public {
         _history(id, 14, false);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000);
-        _nativeFixture("claim_and_deposit_14", PLAYER, address(coinflip), abi.encodeCall(coinflip.depositCoinflip, (0, 1000)));
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 10_000);
+        _nativeFixture("claim_and_deposit_14", PLAYER, address(coinflip), abi.encodeCall(coinflip.playCoinflip, (0, 1000)));
     }
 
     function test_nativeBafFreshExistingAndReuse() public {

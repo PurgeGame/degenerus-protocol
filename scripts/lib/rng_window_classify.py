@@ -32,7 +32,7 @@ EXEMPT_ADVANCE = {
 }
 CONSUMER_SEALED = {
     "_tryClaimFoilMatch", "_payFoilTier", "_runFoilWork", "_resolveBet",
-    "_openBoxBoth", "_runHumanBoxWork", "_openLootBoxLeg", "issueDeityBoon",
+    "_openBoxBoth", "_runHumanBoxWork", "_openLootBoxLeg", "giveBoon",
     "_runTicketWork", "_runAfkingWork", "_runDecimatorWork", "_runDegeneretteWork",
     "_lootboxWord", "runDegenesisWork", "_shareOf", "_keepScheduled", "_keepRngCohort", "_windowTerms",
 }

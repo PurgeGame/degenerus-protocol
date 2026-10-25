@@ -25,7 +25,7 @@ contract VRFLifecycle is DeployProtocol {
 
         // Trigger a VRF request by calling mineFlip
         // At deploy time (timestamp=86400), dayIndex=1 > dailyIdx=0, so mineFlip proceeds
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // VRF request should have been sent
         assertTrue(game.rngLocked(), "rngLocked should be true after mineFlip");
@@ -42,14 +42,14 @@ contract VRFLifecycle is DeployProtocol {
 
     /// @notice Full VRF daily cycle: purchase -> warp day -> mineFlip -> VRF fulfill -> unlock
     function test_fullVrfDailyCycle() public {
-        assertEq(game.level(), 0, "Game should start at level 0");
+        assertEq(game.currentLvl(), 0, "Game should start at level 0");
 
         // Buy some tickets at level 0
         address buyer = makeAddr("buyer");
         vm.deal(buyer, 100 ether);
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(
+            game.purchaseOrderFor{value: 0.01 ether}(
                 0,
                 400,
                 0,
@@ -63,7 +63,7 @@ contract VRFLifecycle is DeployProtocol {
 
         // Trigger VRF request. The engine runs one action per checkpoint and may first prepare
         // the day (subscriptions, scheduled Craps maintenance) before the request (60d31f775).
-        for (uint256 i = 0; i < 16 && !game.rngLocked(); i++) game.mineFlip(0);
+        for (uint256 i = 0; i < 16 && !game.rngLocked(); i++) game.mineRun(0);
         assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         // Fulfill VRF
@@ -73,19 +73,19 @@ contract VRFLifecycle is DeployProtocol {
         // Drive advances until RNG unlocks
         for (uint256 i = 0; i < 30; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
 
         assertFalse(game.rngLocked(), "rngLocked should be false after full cycle");
         // Level stays at 0 in purchase phase (prize target not met) -- this is correct
-        assertEq(game.level(), 0, "Level 0 stays until prize target met");
+        assertEq(game.currentLvl(), 0, "Level 0 stays until prize target met");
     }
 
     /// @notice Game advances past level 0 when enough ETH accumulates in the prize pool
     /// @dev This test purchases enough ETH via lootboxes to hit the 50 ETH prize target,
     ///      then drives through the jackpot phase transition to prove level advancement works.
     function test_vrfLifecycle_levelAdvancement() public {
-        assertEq(game.level(), 0, "Game should start at level 0");
+        assertEq(game.currentLvl(), 0, "Game should start at level 0");
 
         // Fund a buyer with enough ETH to hit the 50 ETH nextPrizePool target.
         // At c4d48008 each 1.01-ETH lootbox+ticket buy contributes ~0.109 ETH to
@@ -102,7 +102,7 @@ contract VRFLifecycle is DeployProtocol {
             vm.deal(buyer, 1000 ether);
             for (uint256 i = 0; i < constant_buysPerBuyer; i++) {
                 vm.prank(buyer);
-                game.purchase{value: 1.01 ether}(
+                game.purchaseOrderFor{value: 1.01 ether}(
                     0,
                     400,       // 1 full ticket
                     BoxOrderLib.boCustomFloor(1 ether),   // lootbox amount
@@ -118,7 +118,7 @@ contract VRFLifecycle is DeployProtocol {
         //   2. Process via daily advance (triggers lastPurchaseDay=true)
         //   3. Process jackpot phase (multiple days of jackpot draws)
         //   4. Complete phase transition -> level increments
-        uint24 initialLevel = game.level();
+        uint24 initialLevel = game.currentLvl();
         uint256 ts = block.timestamp;
         uint256 lastFulfilledId;
 
@@ -127,7 +127,7 @@ contract VRFLifecycle is DeployProtocol {
         // triggers turbo mode (jackpotFlags=2) at level 0, causing a
         // purchaseLevel=0 underflow in _consolidatePoolsAndRewardJackpots.
         {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) {
                 uint256 reqId = mockVRF.lastRequestId();
                 if (reqId > 0) {
@@ -148,7 +148,7 @@ contract VRFLifecycle is DeployProtocol {
                             } catch {}
                         }
                     }
-                    (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                    (ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                     if (!ok) break;
                 }
             }
@@ -170,7 +170,7 @@ contract VRFLifecycle is DeployProtocol {
             }
 
             // Try mineFlip -- may revert if not ready
-            try game.mineFlip(0) {} catch { continue; }
+            try game.mineRun(0) {} catch { continue; }
 
             // Fulfill VRF if a new request was fired
             reqId = mockVRF.lastRequestId();
@@ -195,15 +195,15 @@ contract VRFLifecycle is DeployProtocol {
                         } catch {}
                     }
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) break;
             }
 
             // Check if level changed
-            if (game.level() > initialLevel) break;
+            if (game.currentLvl() > initialLevel) break;
         }
 
-        assertTrue(game.level() > initialLevel, "Game should advance past level 0");
+        assertTrue(game.currentLvl() > initialLevel, "Game should advance past level 0");
     }
 
     /// @notice VRFHandler ghost tracking works correctly
@@ -215,7 +215,7 @@ contract VRFLifecycle is DeployProtocol {
         assertEq(vrfHandler.ghost_vrfFulfillments(), 0, "No-op when no requests");
 
         // Trigger a VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         // Fulfill via handler

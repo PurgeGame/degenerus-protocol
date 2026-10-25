@@ -67,43 +67,43 @@ contract AccountIdentityGasTest is DeployProtocol {
 
     function test_Gas_PurchaseSelfByZero() public {
         vm.prank(plain);
-        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         _report("purchase_self_zero");
     }
 
     function test_Gas_PurchaseSelfById() public {
         vm.prank(plain);
-        game.purchase{value: price}(plainId, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(plainId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         _report("purchase_self_id");
     }
 
     function test_Gas_PurchaseSmurfByOwner() public {
         vm.prank(owner);
-        game.purchase{value: price}(smurfId, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(smurfId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         _report("purchase_smurf_owner");
     }
 
     function test_Gas_PurchaseSmurfByOperator() public {
         vm.prank(operator);
-        game.purchase{value: price}(smurfId, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(smurfId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         _report("purchase_smurf_operator");
     }
 
     function test_Gas_BetSelfById() public {
         vm.prank(plain);
-        game.placeDegeneretteBet{value: 0.01 ether}(plainId, 0, 0.01 ether, 1, 3);
+        game.betDegenerette{value: 0.01 ether}(plainId, 0, 0.01 ether, 1, 3);
         _report("bet_self_id");
     }
 
     function test_Gas_BetSmurfByOwner() public {
         vm.prank(owner);
-        game.placeDegeneretteBet{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
+        game.betDegenerette{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
         _report("bet_smurf_owner");
     }
 
     function test_Gas_BetSmurfByOperator() public {
         vm.prank(operator);
-        game.placeDegeneretteBet{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
+        game.betDegenerette{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
         _report("bet_smurf_operator");
     }
 

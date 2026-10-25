@@ -70,7 +70,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         uint32 recipientIdOf = game.walletIdOf_g3120(recipient);
         vm.recordLogs();
         vm.prank(DEITY);
-        game.issueDeityBoon(deityId, recipientIdOf, slot);
+        game.giveBoon(deityId, recipientIdOf, slot);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 issued;
         for (uint256 i; i < logs.length; ++i) {
@@ -162,7 +162,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         for (uint8 i; i < 3; ++i) assertEq(slots[i], 0);
         vm.expectRevert(GameBoxInternals.RngNotReady.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(deityId, recipientId, 0);
+        game.giveBoon(deityId, recipientId, 0);
     }
 
     function test_FirstDayHasNoPreviousSeed() public {
@@ -174,7 +174,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         assertEq(day, 1);
         vm.expectRevert(GameBoxInternals.RngNotReady.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(deityId, recipientId, 0);
+        game.giveBoon(deityId, recipientId, 0);
         (uint8[3] memory tomorrow, uint24 tomorrowDay) = viewer.deityBoonSlotsTomorrow(address(game), DEITY);
         assertEq(tomorrowDay, 2);
         for (uint8 i; i < 3; ++i) assertEq(tomorrow[i], _expected(TODAY_WORD, 2, i));
@@ -185,7 +185,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         uint32 otherId = game.walletIdOf_g3120(address(0xB002));
         vm.expectRevert(GameBoonActions.SlotAlreadyUsed.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(deityId, otherId, 0);
+        game.giveBoon(deityId, otherId, 0);
         _issue(RECIPIENT, 1, TODAY, _expected(YESTERDAY_WORD, TODAY, 1));
     }
 
@@ -200,6 +200,6 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         _seed(TODAY + 9, TODAY_WORD, false);
         vm.expectRevert(GameBoonActions.RecipientBoonCapReached.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(deityId, recipientId, 0);
+        game.giveBoon(deityId, recipientId, 0);
     }
 }

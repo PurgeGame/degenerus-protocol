@@ -62,11 +62,11 @@ contract AccountIdOnlyTest is DeployProtocol {
         vm.deal(operator, price * 2);
         vm.prank(operator);
         vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
-        game.purchase{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
         vm.prank(owner);
         game.setOperatorApproval(a, operator, true);
         vm.prank(operator);
-        game.purchase{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
         assertNotEq(game.mintPackedOfId_g5372(a), beforeA);
         assertEq(game.mintPackedOfId_g5372(b), beforeB);
         assertEq(game.mintPackedOfId_g5372(ownerId), (uint256(2) << 224) | (uint256(2) << 240));
@@ -74,22 +74,22 @@ contract AccountIdOnlyTest is DeployProtocol {
         game.setOperatorApproval(a, operator, false);
         vm.prank(operator);
         vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
-        game.purchase{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
     }
 
     function test_CoinflipAndWwxrpStayOnSelectedIdAndTokensReachOwner() public {
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(owner, 10_000);
+        coin.mintForGame_g152734(owner, 10_000);
         uint256 beforeB = coinflip.coinflipAmountById(b);
         uint256 beforeA = coinflip.coinflipAmountById(a);
         vm.prank(owner);
-        coinflip.depositCoinflip(a, 2_000);
+        coinflip.playCoinflip(a, 2_000);
         assertGt(coinflip.coinflipAmountById(a), beforeA);
         assertEq(coinflip.coinflipAmountById(b), beforeB);
         vm.prank(ContractAddresses.GAME);
         wwxrp.creditPrize(a, 100 ether);
         vm.prank(owner);
-        wwxrp.enter(a, 25 ether);
+        wwxrp.enterDraw(a, 25 ether);
         assertEq(wwxrp.claimable(a), 75 ether);
         assertEq(wwxrp.claimable(b), 0);
         assertEq(wwxrp.balanceOf(owner), 0);
@@ -103,7 +103,7 @@ contract AccountIdOnlyTest is DeployProtocol {
         voter = address(uint160(0xA000 + i));
         id = _giveWalletId(voter);
         vm.prank(ContractAddresses.GAME);
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, voter, (i + 1) * 1e12);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, voter, (i + 1) * 1e12);
     }
 
     function test_GnrusFiveVoterLanesPreserveNeighborsAndRejectReplay() public {
@@ -117,7 +117,7 @@ contract AccountIdOnlyTest is DeployProtocol {
         for (uint256 i; i < 5; ++i) {
             (voters[i], ids[i]) = _voter(i);
             vm.prank(voters[i]);
-            gnrus.vote(3);
+            gnrus.castBallot(3);
         }
         uint256 word = uint256(vm.load(address(gnrus), keccak256(abi.encode(ids[0] / 5, uint256(3)))));
         for (uint256 i; i < 5; ++i) {
@@ -125,7 +125,7 @@ contract AccountIdOnlyTest is DeployProtocol {
             assertTrue(gnrus.hasVoted(level, voters[i], 3));
             vm.prank(voters[i]);
             vm.expectRevert(abi.encodeWithSignature("VoteRejected(uint8)", uint8(1)));
-            gnrus.vote(3);
+            gnrus.castBallot(3);
         }
     }
 

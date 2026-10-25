@@ -42,7 +42,7 @@ contract VRFCore is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -50,7 +50,7 @@ contract VRFCore is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
             _finishReadConsumers();
@@ -136,7 +136,7 @@ contract VRFCore is DeployProtocol {
                 mockVRF.fulfillRandomWords(rid, uint256(keccak256(abi.encode("midday", rid))));
                 _lastFulfilledReqId = rid;
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
         fail("mid-day requests did not settle");
@@ -145,7 +145,7 @@ contract VRFCore is DeployProtocol {
     /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
     function _mineMiddayRequest() internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
-        game.mineFlip(0);
+        game.mineRun(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -181,7 +181,7 @@ contract VRFCore is DeployProtocol {
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Fund the VRF subscription (the mock records the native balance)
         // Admin created subscription 1 during deploy; fund it
@@ -197,7 +197,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Callback never reverts on daily fulfillment with any fuzzed word.
     function test_callbackNeverReverts_daily(uint256 randomWord) public {
         // Trigger daily VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         uint256 reqId = mockVRF.lastRequestId();
@@ -218,7 +218,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Callback silently returns (no revert) when requestId doesn't match.
     function test_callbackNeverReverts_staleId(uint256 staleId, uint256 randomWord) public {
         // Trigger daily VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 realReqId = mockVRF.lastRequestId();
 
         // The game matches the low 64 bits; the coordinator's other IDs differ there.
@@ -238,7 +238,7 @@ contract VRFCore is DeployProtocol {
     ///         callback, so a delivered word is never replaced by a second answer for its ID.
     function test_coordinatorAnswersEachRequestOnce(uint256 randomWord) public {
         vm.assume(randomWord > 1);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, randomWord);
         assertEq(_readRngWordCurrent(), randomWord, "First fulfillment should store word");
@@ -252,11 +252,11 @@ contract VRFCore is DeployProtocol {
     /// @dev Relies on the coordinator answering each request once (v2.5 deletes the commitment first).
     function test_secondAnswerToConsumedRequestOverwritesOnlyTheSessionWord(uint256 lateWord) public {
         vm.assume(lateWord > 1 && lateWord != 0xBEEF0001);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         uint24 day = game.currentDayView_g542950();
         mockVRF.fulfillRandomWords(reqId, 0xBEEF0001);
-        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineFlip(0);
+        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineRun(0);
         assertFalse(game.rngLocked(), "the day consumed its word");
         bytes32 word = vm.load(address(game), bytes32(SLOT_RNG_WORD_CURRENT));
         bytes32 header = vm.load(address(game), bytes32(SLOT_PACKED_0));
@@ -273,7 +273,7 @@ contract VRFCore is DeployProtocol {
         vm.assume(lateWord > 1);
         _completeDay(0xBEEF0001);
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 superseded = mockVRF.lastRequestId();
         vm.warp(block.timestamp + 21 hours);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
@@ -284,13 +284,13 @@ contract VRFCore is DeployProtocol {
         assertEq(_readRngWordCurrent(), 0, "superseded answer ignored while the retry waits");
         mockVRF.fulfillRandomWords(replacement, 0xBEEF0002);
         _lastFulfilledReqId = replacement;
-        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineFlip(0);
+        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineRun(0);
         assertFalse(game.rngLocked(), "the replacement completed the day");
 
         _finishReadConsumers();
         vm.warp(block.timestamp + 1 days);
         for (uint256 i = 0; i < 40 && mockVRF.lastRequestId() == replacement; i++) {
-            try game.mineFlip(0) {} catch { vm.warp(block.timestamp + 12 hours); }
+            try game.mineRun(0) {} catch { vm.warp(block.timestamp + 12 hours); }
         }
         uint256 next = mockVRF.lastRequestId();
         assertTrue(next != replacement, "a later request waits");
@@ -306,7 +306,7 @@ contract VRFCore is DeployProtocol {
         vm.assume(lateWord > 1);
         _completeDay(0xBEEF0001);
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 superseded = mockVRF.lastRequestId();
         uint256 newSubId = mockVRF.createSubscription();
         mockVRF.addConsumer(newSubId, address(game));
@@ -324,7 +324,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Callback reverts when msg.sender is not the VRF coordinator.
     function test_callbackReverts_unauthorizedSender() public {
         // Trigger daily VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
 
         // Attempt direct call from non-coordinator address
@@ -339,7 +339,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Gas budget: daily callback path under 300k gas.
     function test_callbackGasBudget_daily() public {
         // Trigger daily VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
 
         // Measure gas for fulfillment (includes mock overhead)
@@ -372,7 +372,7 @@ contract VRFCore is DeployProtocol {
         randomWord = 0;
 
         // Trigger daily VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
 
         // Fulfill with word=0
@@ -392,7 +392,7 @@ contract VRFCore is DeployProtocol {
         assertEq(_readVrfRequestId(), 0, "no request ID before the first request");
 
         // Trigger daily VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
 
         // vrfRequestId should match
@@ -406,7 +406,7 @@ contract VRFCore is DeployProtocol {
         // Process until unlocked (daily branch: rngWordCurrent set, mineFlip processes)
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertFalse(game.rngLocked(), "Should be unlocked after full processing");
 
@@ -422,7 +422,7 @@ contract VRFCore is DeployProtocol {
         assertEq(mockVRF.lastCallbackGasLimit(), 150_000, "wired default");
 
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "daily in flight");
         MockVRFCoordinator newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
@@ -432,7 +432,7 @@ contract VRFCore is DeployProtocol {
         assertEq(newVRF.lastCallbackGasLimit(), 1_250_000, "re-issued request uses the new limit");
 
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0xCAFE0002);
-        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineFlip(0);
+        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineRun(0);
         assertFalse(game.rngLocked(), "day completes");
         uint256 slot = uint256(vm.load(address(game), bytes32(uint256(GameSlots.VRF_COORDINATOR))));
         assertEq(address(uint160(slot)), address(newVRF), "coordinator shares the slot");
@@ -459,7 +459,7 @@ contract VRFCore is DeployProtocol {
 
         // After mid-day branch: vrfRequestId cleared to 0
         assertTrue(game.isRngFulfilled(), "callback leaves publication pending");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_readVrfRequestId(), reqId, "publication keeps the answered ID");
         assertFalse(game.isRngFulfilled(), "publication disarms callback authority");
         // rngRequestTime also cleared
@@ -472,7 +472,7 @@ contract VRFCore is DeployProtocol {
         uint48 indexBefore = _lootboxRngIndex();
 
         // Trigger fresh daily VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // lootboxRngIndex should have incremented (fresh request)
         uint48 indexAfter = _lootboxRngIndex();
@@ -486,7 +486,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: warp to next day, trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 2 VRF request pending");
 
         // Record lootboxRngIndex after initial request
@@ -519,7 +519,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // A successful case must execute a fresh request and its real replacement.
         uint256 currentReqId = mockVRF.lastRequestId();
@@ -556,7 +556,7 @@ contract VRFCore is DeployProtocol {
         _lastFulfilledReqId = newReqId;
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
 
         // Index should still be the same (no double increment)
@@ -578,14 +578,14 @@ contract VRFCore is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
 
         // Trigger daily VRF request -> rngLockedFlag = true
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Daily RNG should lock");
 
         // No mid-day request is reachable: the engine waits on the daily word.
         uint256 dailyReqId = mockVRF.lastRequestId();
         assertEq(game.nextMinerAction(), 2, "the locked engine waits (Wait), it does not request");
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(mockVRF.lastRequestId(), dailyReqId, "no mid-day request was issued under the lock");
     }
 
@@ -618,7 +618,7 @@ contract VRFCore is DeployProtocol {
         mockVRF.fulfillRandomWords(dailyReqId, 0xBEEF);
         uint256 lastFulfilled = dailyReqId;
         for (uint256 i = 0; i < 50; i++) {
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 rid = mockVRF.lastRequestId();
             if (rid != lastFulfilled && rid > 0) {
                 mockVRF.fulfillRandomWords(rid, 0xD00D);
@@ -647,7 +647,7 @@ contract VRFCore is DeployProtocol {
 
         // Both should be cleared
         assertTrue(game.isRngFulfilled());
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_readVrfRequestId(), reqId, "publication keeps the answered ID");
         assertFalse(game.isRngFulfilled());
         assertGt(_readRngRequestTime(), 1, "idle request timestamp retained");
@@ -675,7 +675,7 @@ contract VRFCore is DeployProtocol {
         // Drain the read slot + process the new day (fulfilling the daily VRF when requested).
         uint256 lastFulfilled = reqId;
         for (uint256 i = 0; i < 50; i++) {
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 rid = mockVRF.lastRequestId();
             if (rid != lastFulfilled && rid > 0) {
                 mockVRF.fulfillRandomWords(rid, 0xDEAD0003);
@@ -707,12 +707,12 @@ contract VRFCore is DeployProtocol {
         vm.warp(nextDayBoundary - 1 minutes);
         // Craps windows that closed since setup leave table maintenance, which is not a request.
         for (uint256 i; i < 16 && game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.Maintenance); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         uint256 priorReq = mockVRF.lastRequestId();
         assertEq(game.nextMinerAction(), 0, "the final minute selects no mid-day request");
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(mockVRF.lastRequestId(), priorReq, "no request in the final minute");
     }
 
@@ -725,7 +725,7 @@ contract VRFCore is DeployProtocol {
 
         // Warp to day 2, trigger daily VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Daily RNG should lock");
         assertTrue(_readVrfRequestId() != 0, "vrfRequestId should be set");
         assertTrue(_readRngRequestTime() != 0, "rngRequestTime should be set");
@@ -744,7 +744,7 @@ contract VRFCore is DeployProtocol {
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0xCAFE0002);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertFalse(game.rngLocked(), "Day completes after re-issued request fulfilled");
     }
@@ -760,7 +760,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 2 VRF request pending");
         uint48 requestTime = _readRngRequestTime();
         uint256 oldReqId = _readVrfRequestId();
@@ -793,7 +793,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 2 VRF request pending");
         uint48 requestTime = _readRngRequestTime();
 
@@ -818,7 +818,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint48 requestTime = _readRngRequestTime();
         uint256 oldReqId = _readVrfRequestId();
         uint24 requestDay = game.currentDayView_g542950();
@@ -849,7 +849,7 @@ contract VRFCore is DeployProtocol {
         _lastFulfilledReqId = retryReqId;
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked() || _readVrfRequestId() != retryReqId) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngWordForDay(requestDay) != 0, "Day completes on the retried request's word");
 
@@ -869,7 +869,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: request stalls; governance swaps an hour later
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint48 requestTime = _readRngRequestTime();
         vm.warp(uint256(requestTime) + 1 hours);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
@@ -887,7 +887,7 @@ contract VRFCore is DeployProtocol {
         newVRF.fulfillRandomWords(swapReqId, 0xC0FFEE02);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertFalse(game.rngLocked(), "Day completes on the swap's request");
     }
@@ -902,7 +902,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 oldReqId = mockVRF.lastRequestId();
 
         // Timeout + retry
@@ -936,7 +936,7 @@ contract VRFCore is DeployProtocol {
 
         // Day 2: trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint48 indexAfterRequest = _lootboxRngIndex();
 
         // Timeout + retry
@@ -949,7 +949,7 @@ contract VRFCore is DeployProtocol {
         mockVRF.fulfillRandomWords(newReqId, word);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
 
         // Index should remain the same (retry path, no double increment)
@@ -967,7 +967,7 @@ contract VRFCore is DeployProtocol {
         // Trigger VRF request for the next day using absolute timestamp
         uint256 nextDayStart = _relTs(3 * 86400);
         vm.warp(nextDayStart);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Next day VRF pending");
         uint256 reqId = mockVRF.lastRequestId();
 
@@ -983,7 +983,7 @@ contract VRFCore is DeployProtocol {
         // mineFlip on the following day: rngGate sees rngWordCurrent != 0 but requestDay < current day.
         // The game redirects the stale word to lootbox and processes both days inline.
         // A new VRF request may or may not be fired depending on the contract's rngGate logic.
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Process until unlocked (may take multiple mineFlip calls for batched ticket work)
         for (uint256 i = 0; i < 50; i++) {
@@ -994,7 +994,7 @@ contract VRFCore is DeployProtocol {
                 mockVRF.fulfillRandomWords(latestReqId, 0xDA300003);
                 _lastFulfilledReqId = latestReqId;
             }
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertFalse(game.rngLocked(), "Should be unlocked after processing");
 

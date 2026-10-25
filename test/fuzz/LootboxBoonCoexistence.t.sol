@@ -45,7 +45,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -53,7 +53,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
     }
@@ -130,7 +130,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         assertFalse(game.rngLocked(), "seeded boon fixture must be unlocked");
         assertGt(RecyclingState.boxEntry(address(game), index, 0), 0, "seeded box must exist");
         vm.prank(player);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 cursors = uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR)));
         assertEq(
             uint48(cursors >> (GameSlots.BOX_CURSOR_OFFSET * 8)), 1,

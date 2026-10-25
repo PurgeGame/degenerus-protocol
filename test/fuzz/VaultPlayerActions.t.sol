@@ -29,7 +29,7 @@ contract VaultPlayerActionsTest is SeatFixture {
         vm.deal(stranger, 10 ether);
         vm.deal(address(vault), 100 ether);
         vm.prank(address(game));
-        coin.mintForGame(address(vault), 1_000_000);
+        coin.mintForGame_g152734(address(vault), 1_000_000);
     }
 
     receive() external payable {}
@@ -135,7 +135,7 @@ contract VaultPlayerActionsTest is SeatFixture {
         uint256 claimable = game.claimableWinningsOf(address(vault));
         _act(
             address(game),
-            abi.encodeCall(IDegenerusGame.purchase, (0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false))
+            abi.encodeCall(IDegenerusGame.purchaseOrderFor, (0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false))
         );
         assertEq(address(vault).balance, 0, "purchase uses Game-side funds");
         assertLt(game.claimableWinningsOf(address(vault)), claimable);
@@ -147,15 +147,15 @@ contract VaultPlayerActionsTest is SeatFixture {
         vm.prank(owner);
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             address(game),
-            abi.encodeCall(IDegenerusGame.purchase, (0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true)),
+            abi.encodeCall(IDegenerusGame.purchaseOrderFor, (0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true)),
             50 ether
         )), 0), (bytes));
         assertEq(address(vault).balance, 50 ether);
         DegenerusGameLens lens = new DegenerusGameLens();
-        DegenerusGameLens.FoilRecordEntry memory foil = lens.foilRecordOf(address(game), game.level(), address(vault));
-        if (!foil.present) foil = lens.foilRecordOf(address(game), game.level() + 1, address(vault));
+        DegenerusGameLens.FoilRecordEntry memory foil = lens.foilRecordOf(address(game), game.currentLvl(), address(vault));
+        if (!foil.present) foil = lens.foilRecordOf(address(game), game.currentLvl() + 1, address(vault));
         assertTrue(foil.present, "pack belongs to Vault");
-        assertFalse(lens.foilRecordOf(address(game), game.level(), owner).present, "controller did not buy it");
+        assertFalse(lens.foilRecordOf(address(game), game.currentLvl(), owner).present, "controller did not buy it");
     }
 
     function test_afkingPauseResumeAndQuantity() public {
@@ -182,7 +182,7 @@ contract VaultPlayerActionsTest is SeatFixture {
 
     function test_carryClaimReturnsAmountAndKeepsRebuyEnabled() public {
         _act(address(coinflip), abi.encodeCall(ICoinflip.setCoinflipAutoRebuy, (0, true, 0)));
-        _act(address(coinflip), abi.encodeCall(ICoinflip.depositCoinflip, (0, 1000)));
+        _act(address(coinflip), abi.encodeCall(ICoinflip.playCoinflip, (0, 1000)));
         uint24 tomorrow = game.currentDayView_g542950() + 1;
         vm.warp(block.timestamp + 1 days);
         vm.prank(address(game));
@@ -215,7 +215,7 @@ contract VaultPlayerActionsTest is SeatFixture {
     function test_growthBetBurnsVaultAllowance() public {
         vm.mockCall(
             address(game),
-            abi.encodeCall(IDegenerusGame.growthState, (0)),
+            abi.encodeCall(IDegenerusGame.getGrowth, (0)),
             abi.encode(0, 0, 0, uint24(10), true, uint8(1))
         );
         vm.mockCall(
@@ -273,7 +273,7 @@ contract VaultPlayerActionsTest is SeatFixture {
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.dgnrsUnwrapTo, (address(vault), 1e12)), 0);
         vm.prank(owner);
         OwnerTargetCall.call(address(gnrus), abi.encodeCall(gnrus.setCharity, (3, stranger)), 0);
-        _act(address(gnrus), abi.encodeCall(gnrus.vote, (3)));
+        _act(address(gnrus), abi.encodeCall(gnrus.castBallot, (3)));
         assertTrue(gnrus.hasVoted(gnrus.currentLevel(), address(vault), 3));
         assertFalse(gnrus.hasVoted(gnrus.currentLevel(), owner, 3));
     }
@@ -307,10 +307,10 @@ contract VaultPlayerActionsTest is SeatFixture {
         // Neither the Vault nor any account it owns can open or service a loan.
         _reject(address(game), abi.encodeCall(IDegenerusGame.borrow, (0, 5, 1 ether, 0)));
         _reject(address(game), abi.encodeCall(IDegenerusGame.borrow, (VAULT_ID + 100, 5, 1 ether, 0)));
-        _reject(address(game), abi.encodeCall(IDegenerusGame.repay, (VAULT_ID + 100)));
+        _reject(address(game), abi.encodeCall(IDegenerusGame.clearDebtNow, (VAULT_ID + 100)));
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vm.expectRevert(bytes4(keccak256("Unauthorized()")));
-        vault.playerAction(address(game), abi.encodeCall(IDegenerusGame.issueDeityBoon, (0, SDGNRS_ID, 0)), 0);
+        vault.playerAction(address(game), abi.encodeCall(IDegenerusGame.giveBoon, (0, SDGNRS_ID, 0)), 0);
     }
 
     function _reject(address target, bytes memory data) private {
@@ -336,9 +336,9 @@ contract VaultPlayerActionsTest is SeatFixture {
         _reject(ContractAddresses.ADMIN, abi.encodeWithSignature("proposeFeedSwap(address)", stranger));
         _reject(ContractAddresses.ADMIN, abi.encodeWithSignature("voteFeedSwap(uint256,bool)", 1, true));
         _reject(address(vault), abi.encodeCall(vault.burnEth, (1)));
-        _reject(stranger, abi.encodeCall(IDegenerusGame.mineFlip, (0)));
+        _reject(stranger, abi.encodeCall(IDegenerusGame.mineRun, (0)));
         _reject(ContractAddresses.GAME_AFKING_MODULE, abi.encodeCall(IDegenerusGame.subscribe, (0, false, 1, 0)));
-        _reject(address(coin), abi.encodeCall(ICoinflip.depositCoinflip, (0, 1)));
+        _reject(address(coin), abi.encodeCall(ICoinflip.playCoinflip, (0, 1)));
         _reject(address(game), hex"");
         _reject(address(game), hex"123456");
     }

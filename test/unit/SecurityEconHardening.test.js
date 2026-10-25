@@ -40,7 +40,7 @@ async function triggerGameOverAtLevel0(game, caller, mockVRF) {
   for (let i = 0; i < 12; i++) {
     const reqBefore = await getLastVRFRequestId(mockVRF);
     try {
-      await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 });
     } catch {
       /* may revert mid-sequence; keep driving */
     }
@@ -59,7 +59,7 @@ async function triggerGameOverAtLevel0(game, caller, mockVRF) {
  * 1 full ticket = qty 400, costs priceWei.
  */
 async function buyFullTickets(game, buyer, n, totalEth) {
-  return game.connect(buyer).purchase(
+  return game.connect(buyer).purchaseOrderFor(
     0,
     BigInt(n) * 400n,
     0n,
@@ -373,7 +373,7 @@ describe("SecurityEconHardening", function () {
 
       // Calling mineFlip again should not increase claimable (drain already done)
       try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       } catch {
         // May revert or be a no-op
       }
@@ -392,7 +392,7 @@ describe("SecurityEconHardening", function () {
         await loadFixture(deployFullProtocol);
 
       // First, make a normal ETH purchase to give alice some activity
-      await game.connect(alice).purchase(
+      await game.connect(alice).purchaseOrderFor(
         0,
         400n,
         0n,
@@ -456,7 +456,7 @@ describe("SecurityEconHardening", function () {
       expect(claimBefore).to.be.gte(eth(20));
 
       // Claim winnings
-      await game.connect(alice)["claimWinnings(uint32)"](0);
+      await game.connect(alice)["claimClaimable(uint32)"](0);
 
       // After claim, 1 wei sentinel should remain
       const claimAfter = await game.claimableWinningsOf(alice.address);
@@ -475,12 +475,12 @@ describe("SecurityEconHardening", function () {
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       // First claim succeeds
-      await game.connect(alice)["claimWinnings(uint32)"](0);
+      await game.connect(alice)["claimClaimable(uint32)"](0);
       expect(await game.claimableWinningsOf(alice.address)).to.equal(1n);
 
       // Second claim should revert (only 1 wei = sentinel, nothing to claim)
       await expect(
-        game.connect(alice)["claimWinnings(uint32)"](0)
+        game.connect(alice)["claimClaimable(uint32)"](0)
       ).to.be.revertedWithCustomError(errorAbi("NothingToClaim()"), "NothingToClaim");
     });
 
@@ -497,13 +497,13 @@ describe("SecurityEconHardening", function () {
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       // Claim to leave just 1 wei sentinel
-      await game.connect(alice)["claimWinnings(uint32)"](0);
+      await game.connect(alice)["claimClaimable(uint32)"](0);
       expect(await game.claimableWinningsOf(alice.address)).to.equal(1n);
 
       // Attempting to purchase with Claimable mode should revert
       // since balance is only 1 wei (sentinel)
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,
           400n,
           0n,
@@ -566,7 +566,7 @@ describe("SecurityEconHardening", function () {
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,
           400n,
           0n,

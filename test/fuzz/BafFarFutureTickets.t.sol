@@ -48,7 +48,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         bool bafInjected = false;
 
         for (uint256 day = 0; day < 600; day++) {
-            uint24 currentLevel = game.level();
+            uint24 currentLevel = game.currentLvl();
             if (game.gameOver()) break;
             if (currentLevel > 10) break;
 
@@ -68,7 +68,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
             _crankDay(vrfSeed);
         }
 
-        uint24 finalLevel = game.level();
+        uint24 finalLevel = game.currentLvl();
         assertGt(finalLevel, 10, "Game must advance past level 10 (BAF fires here)");
         assertTrue(bafInjected, "BAF players were injected");
     }
@@ -85,7 +85,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         bool bafInjected = false;
 
         for (uint256 day = 0; day < 600; day++) {
-            uint24 currentLevel = game.level();
+            uint24 currentLevel = game.currentLvl();
             if (game.gameOver()) break;
             if (currentLevel > 10) break;
 
@@ -104,7 +104,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
             _crankDay(vrfSeed);
         }
 
-        uint24 finalLevel = game.level();
+        uint24 finalLevel = game.currentLvl();
         assertTrue(bafInjected, "BAF players were injected");
         assertGt(finalLevel, 10, "Game must advance past level 10 (BAF fires here)");
     }
@@ -131,7 +131,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         for (uint256 j = 0; j < MAX_CRANKS_PER_DAY; j++) {
             _fulfillVrfIfPending(vrfSeed);
             (bool ok, bytes memory err) = address(game).call{gas: CRANK_GAS}(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (ok) continue;
             bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
@@ -185,7 +185,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending(uint256 seed) internal {
@@ -195,7 +195,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
 
-        uint256 randomWord = uint256(keccak256(abi.encode(seed, block.timestamp, game.level(), reqId)));
+        uint256 randomWord = uint256(keccak256(abi.encode(seed, block.timestamp, game.currentLvl(), reqId)));
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 }

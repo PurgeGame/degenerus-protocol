@@ -75,7 +75,7 @@ describe("Deploy Pipeline", function () {
       const f = await loadFixture(deployFullProtocol);
       const game = f.game;
       // level() should return 0 initially
-      expect(await game.level()).to.equal(0);
+      expect(await game.currentLvl()).to.equal(0);
     });
 
     it("DegenerusGame: mintPrice returns initial price", async function () {

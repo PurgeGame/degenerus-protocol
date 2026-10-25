@@ -73,7 +73,7 @@ describe("LivenessMidJackpot", function () {
   }
 
   async function buyFullTickets(game, buyer, n, totalEth) {
-    return game.connect(buyer).purchase(
+    return game.connect(buyer).purchaseOrderFor(
       0,
       BigInt(n) * 400n,
       0n,
@@ -100,7 +100,7 @@ describe("LivenessMidJackpot", function () {
   async function driveToGameOver(game, deployer) {
     for (let i = 0; i < 600; i++) {
       if (await game.gameOver()) return true;
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
     }
     return await game.gameOver();
   }
@@ -225,7 +225,7 @@ describe("LivenessMidJackpot", function () {
 
     // mineFlip now takes the dead-VRF terminal path instead of the jackpot
     // ticket-queue path; it must not revert, and the RNG lock must not stick.
-    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+    await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
     expect(await game.rngLocked()).to.equal(false);
   });

@@ -11,7 +11,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @dev The uncovered path. `burnCoin` values the reserve as
 ///      `vaultMintAllowance() + previewClaimCoinflips(vault)`. Its payout leg used to split that
 ///      into a claimed portion paid by `flipToken.transfer` and a remainder paid by `vaultMintTo`.
-///      The transfer leg could never work: `claimCoinflips` pays through `FLIP.mintForGame` ->
+///      The transfer leg could never work: `claimCoinflips` pays through `FLIP.mintForGame_g152734` ->
 ///      `FLIP._mint`, which intercepts every VAULT-destined mint into `vaultAllowance` and returns
 ///      before touching `balanceOf`. `FLIP._transfer`'s own shortfall top-up routes through that
 ///      same intercept, so `balanceOf[VAULT]` is structurally zero and `balanceOf[from] = balance -

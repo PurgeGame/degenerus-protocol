@@ -106,7 +106,7 @@ contract CrapsFinalSeatNativeGasTest is CrapsProgressiveTest, NativeGasExport {
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
         vm.expectCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("armDiceRunRecord(uint32,uint256)"));
-        vm.expectCall(ContractAddresses.COIN, abi.encodeWithSignature("creditCrapsComps(uint256)"));
+        vm.expectCall(ContractAddresses.COIN, abi.encodeWithSignature("creditCrapsComps_g37225(uint256)"));
         bytes memory data = abi.encodeWithSignature("settleGas(uint64,uint256)", slot, uint256(30_000_000));
         (bool ok,) = address(craps).call{gas: 40_000_000}(data);
         assertTrue(ok, "final seat settles");
@@ -168,7 +168,7 @@ contract CrapsNativeCreditStub {
     function creditFlip_g317(uint32, uint256) external pure {}
     function creditFlipBatch(uint32[] calldata, uint256[] calldata) external pure {}
     function armDiceRunRecord(uint32, uint256) external pure returns (uint256) { return 0; }
-    function creditCrapsComps(uint256) external pure {}
+    function creditCrapsComps_g37225(uint256) external pure {}
 }
 contract CrapsNativeGameStub {
     address private immutable ORIGINAL;
@@ -228,7 +228,7 @@ contract CrapsCalleeNativeGasTest is DeployProtocol, NativeGasExport {
         coinflip.fundRecordPool(1_000_000);
         uint32 recordId = _giveWalletId(address(0xC7A100));
         uint256 record = g7AsCraps(address(coinflip), abi.encodeWithSignature("armDiceRunRecord(uint32,uint256)", recordId, uint256(1e15)));
-        uint256 comps = g7AsCraps(address(coin), abi.encodeWithSignature("creditCrapsComps(uint256)", uint256(123_456)));
+        uint256 comps = g7AsCraps(address(coin), abi.encodeWithSignature("creditCrapsComps_g37225(uint256)", uint256(123_456)));
         // A pending bit to clear, then the clear (Game._tryCompleteRng runs on false).
         vm.prank(address(crapsBattle));
         game.setCrapsRngPending_g1406(0, true);
@@ -244,7 +244,7 @@ contract CrapsCalleeNativeGasTest is DeployProtocol, NativeGasExport {
         emit log_named_uint("G7 CALLEE creditFlip fresh recipient (worst of 4)", worstFresh);
         emit log_named_uint("G7 CALLEE creditFlip repeat recipient", repeat);
         emit log_named_uint("G7 CALLEE armDiceRunRecord new record", record);
-        emit log_named_uint("G7 CALLEE FLIP.creditCrapsComps", comps);
+        emit log_named_uint("G7 CALLEE FLIP.creditCrapsComps_g37225", comps);
         emit log_named_uint("G7 CALLEE Game.setCrapsRngPending(false)", pending);
         emit log_named_uint("G7 CALLEE creditFlipBatch 96 fresh recipients", batch);
         emit log_named_uint("G7 CALLEE creditFlipBatch per recipient", batch / 96);

@@ -428,7 +428,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         }
         assertTrue(game.rngLocked(), "the daily lock is held before consolidation");
         word = host.btDailyWord();
-        lvl = game.level();
+        lvl = game.currentLvl();
         assertTrue(word != 0, "the day's word is recorded");
         assertEq(uint256(keccak256(abi.encode(uint256(61), word))) & 1, _expectBaf() ? 1 : 0, "the tagged BAF gate selects the fixture's branch");
         _score();
@@ -1217,7 +1217,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         uint256 beforeRequest = mockVRF.lastRequestId();
         for (uint256 calls; mockVRF.lastRequestId() == beforeRequest; ++calls) {
             assertLt(calls, 512, "request preparation stalled");
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
         }
         assertEq(mockVRF.lastRequestId(), beforeRequest + 1, "one real daily request");
         mockVRF.fulfillRandomWords(beforeRequest + 1, w);
@@ -1268,7 +1268,7 @@ abstract contract CenturyBafTranscript is BafTranscriptFixture {
         vm.deal(address(game), uint256(nextPool) + futurePool + 68.25 ether + uint256(nextPool) / 400);
         mockStETH.mint(address(game), 50 ether);
         _armWord(WORD);
-        assertEq(game.level(), 100, "the request pre-increments the level");
+        assertEq(game.currentLvl(), 100, "the request pre-increments the level");
         address[] memory depositors = new address[](64);
         for (uint256 i; i < 64; ++i) depositors[i] = address(0xD3F0517);
         _armDepositDraw(depositors);
@@ -1373,7 +1373,7 @@ abstract contract PlainBafTranscript is BafTranscriptFixture {
         vm.deal(address(game), uint256(nextPool) + futurePool + 110 ether);
         mockStETH.mint(address(game), 50 ether);
         _armWord(_word());
-        assertEq(game.level(), target, "the request pre-increments the level");
+        assertEq(game.currentLvl(), target, "the request pre-increments the level");
         for (uint256 i; i < PLAYERS; ++i) {
             uint32 id = game.walletIdOf_g3120(address(PLAYER_BASE + uint160(i)));
             vm.prank(ContractAddresses.COINFLIP);

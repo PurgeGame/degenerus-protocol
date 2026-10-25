@@ -181,7 +181,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         _warpTo(GameTimeLib.MAIN_LAUNCH_DAY, 1 hours);
         tight = true;
         _stepToRequestMetered(plan);
-        assertEq(game.level(), 0, "level 0 up to the index-9 request");
+        assertEq(game.currentLvl(), 0, "level 0 up to the index-9 request");
         assertFalse(_lastPurchaseFlag(), "no latch before the index-9 request");
         assertEq(closedC, 5, "cohorts 1..5 closed");
         assertEq(activeC, 6, "cohort 6 active at the index-9 request");
@@ -192,7 +192,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         console2.log("next pool at the index-9 request (wei)", game.nextPrizePoolView());
 
         _mine(plan.dayAllowance); // the index-9 request
-        assertEq(game.level(), 1, "the index-9 request made the level 1");
+        assertEq(game.currentLvl(), 1, "the index-9 request made the level 1");
         assertTrue(_lastPurchaseFlag(), "lastPurchaseDay latched");
         assertEq(_flags() & JACKPOT_TURBO, JACKPOT_TURBO, "with JACKPOT_TURBO");
         assertEq(splitN[7], 1, "cohort 7 split at the index-9 request");
@@ -232,10 +232,10 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         assertGe(lastResolveDay, 12, "settlement extended to index 12");
 
         // ---- ordinary play ----
-        uint24 l0 = game.level();
+        uint24 l0 = game.currentLvl();
         console2.log("level when the backlog drained", l0);
         _playLevels(l0 + 3, 13, 40);
-        assertGe(game.level(), l0 + 3, "three more levels");
+        assertGe(game.currentLvl(), l0 + 3, "three more levels");
         _withdrawAll();
         _report("above-target");
     }
@@ -262,7 +262,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         console2.log("next pool at the index-9 request (wei)", game.nextPrizePoolView());
 
         _mine(plan.dayAllowance); // the index-9 request
-        assertEq(game.level(), 0, "level 0 continues");
+        assertEq(game.currentLvl(), 0, "level 0 continues");
         assertFalse(_lastPurchaseFlag(), "no latch at or below the target");
         assertEq(_flags() & JACKPOT_TURBO, 0, "no turbo");
         assertEq(splitN[7], 1, "cohort 7 split at the index-9 request");
@@ -271,7 +271,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         assertEq(purchaseDailyStages[GameTimeLib.MAIN_LAUNCH_DAY], 1, "the normal level-0 daily path ran on day 9");
         assertEq(degenesisDayStages[GameTimeLib.MAIN_LAUNCH_DAY], 0, "day 9 is not a Degenesis day");
         assertEq(enteredJackpot[1], 0, "no jackpot phase");
-        assertEq(game.level(), 0, "level 0 after day 9");
+        assertEq(game.currentLvl(), 0, "level 0 after day 9");
         assertLt(closedC, 7, "backlog still open after day 9");
         tight = false;
 
@@ -328,7 +328,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     function _sale(Plan memory plan) internal {
         for (uint256 c = 1; c <= 7; ++c) {
             _saleDay(c, plan);
-            assertEq(game.level(), 0, "level 0 through index 8");
+            assertEq(game.currentLvl(), 0, "level 0 through index 8");
             assertFalse(_lastPurchaseFlag(), "no latch during Degenesis");
             assertFalse(game.jackpotPhase(), "no jackpot phase during Degenesis");
             assertGt(earlyOrders[c], 0, "orders inside the early-bonus window");
@@ -426,7 +426,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         uint256 boxWei = spend - ticketWei;
         vm.deal(p, p.balance + spend);
         vm.prank(p);
-        game.purchase{value: spend}(
+        game.purchaseOrderFor{value: spend}(
             0, ticketWei / price * 400, boxWei == 0 ? 0 : BoxOrderLib.boCustom(boxWei), bytes32(0),
             MintPaymentKind.DirectEth, false
         );
@@ -438,7 +438,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     function _ordinaryBox(address p, uint256 amount) internal {
         vm.deal(p, p.balance + amount);
         vm.prank(p);
-        game.purchase{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false);
         ordinaryEth += amount;
     }
 
@@ -446,7 +446,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         uint256 cost = game.mintPrice() * tickets;
         vm.deal(p, p.balance + cost);
         vm.prank(p);
-        game.purchase{value: cost}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         ordinaryEth += cost;
     }
 
@@ -506,7 +506,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     ///      players buy tickets (enough to pass the next level's target) and lootboxes, then
     ///      the day is driven to idle.
     function _playLevels(uint24 targetLevel, uint24 fromDay, uint24 maxDays) internal {
-        for (uint24 d = fromDay; d < fromDay + maxDays && game.level() < targetLevel; ++d) {
+        for (uint24 d = fromDay; d < fromDay + maxDays && game.currentLvl() < targetLevel; ++d) {
             _warpTo(d, 30 minutes);
             uint256 next = game.nextPrizePoolView();
             uint256 target = game.prizePoolTargetView();
@@ -523,7 +523,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
             _run(MAX_ALLOWANCE, MAX_ALLOWANCE, NO_CAP);
             _warpTo(d, 13 hours);
             _run(MAX_ALLOWANCE, MAX_ALLOWANCE, NO_CAP);
-            if (game.level() < 5) _checkClaimableIdentity();
+            if (game.currentLvl() < 5) _checkClaimableIdentity();
             _checkSolvencyFull();
         }
         _flush();
@@ -545,7 +545,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
                 uint256 bal0 = p.balance + mockStETH.balanceOf(p);
                 uint256 pool0 = game.claimablePoolView();
                 vm.prank(p);
-                game.claimWinnings(0);
+                game.claimClaimable(0);
                 assertEq(p.balance + mockStETH.balanceOf(p) - bal0, claimable - 1, "claim pays everything above the sentinel");
                 assertEq(pool0 - game.claimablePoolView(), claimable - 1, "claimablePool debited by the payout");
                 assertEq(game.claimableWinningsOf(p), 1, "sentinel kept");
@@ -647,7 +647,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         for (;;) {
             vm.prank(miner);
             uint256 g0 = gasleft();
-            try game.mineFlip{gas: allowance}(0) {
+            try game.mineRun{gas: allowance}(0) {
                 uint256 used = g0 - gasleft();
                 // `used` includes the call site's own few thousand gas.
                 assertLe(used, allowance + 10_000, "mineFlip within its allowance");
@@ -714,7 +714,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         uint256 snap = vm.snapshotState();
         uint256 marker = _settleMarker();
         vm.prank(miner);
-        (ok,) = address(game).call{gas: gas_}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok,) = address(game).call{gas: gas_}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         rolled = _settleMarker() != marker;
         vm.revertToStateAndDelete(snap);
     }
@@ -865,7 +865,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         }
         ++closedN[c];
         closedOn[c] = today;
-        closedAtLevel[c] = game.level();
+        closedAtLevel[c] = game.currentLvl();
         closedC = uint8(c);
         activeC = 0;
     }
@@ -1004,7 +1004,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         console2.log("last day index with a resolution", lastResolveDay);
         console2.log("orders resolved from index 9 on", resolvedFromIndex9);
         console2.log("orders resolved after level 1's jackpot ended", resolvedAfterL1Jackpot);
-        console2.log("final level", game.level());
+        console2.log("final level", game.currentLvl());
         console2.log("mineFlip calls (progressed)", mineCalls);
         console2.log("idle calls", idleCalls);
         console2.log("settlement calls", settleCalls);

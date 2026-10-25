@@ -41,7 +41,7 @@ contract LootboxOpenBoundsTest is DeployProtocol {
         vm.deal(alice, 10 ether);
         uint256 price = 0.01 ether;
         vm.prank(alice);
-        host.purchase{value: price}(0, 0, 1, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchaseOrderFor{value: price}(0, 0, 1, bytes32(0), MintPaymentKind.DirectEth, false);
         aliceId = host.walletIdOf_g3120(alice);
         // Drain the registration purchase so each test opens exactly its own entry.
         host.sealAndPublish(WORD ^ 0xff);

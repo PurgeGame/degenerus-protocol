@@ -30,7 +30,7 @@ describe("Mint-lootbox routing is independent of volume", function () {
   async function buyLootbox(game, signer, amount) {
     return game
       .connect(signer)
-      .purchase(
+      .purchaseOrderFor(
         0,
         0n,
         boCustom(amount),

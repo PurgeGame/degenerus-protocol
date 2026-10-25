@@ -89,7 +89,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
 
     function _restoreGame() private { vm.etch(address(game), gameCode); _syncCoinflipFixtureDay(game.currentDayView_g542950()); }
 
-    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
+    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.currentLvl() + 1); }
 
     function _report(string memory scenario) private {
         uint256 used = vm.snapshotGasLastCall("wallet-id-phase-f", scenario);
@@ -120,14 +120,14 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
 
     function _ticketWithCode(address caller, address account, bytes32 code) private {
         bytes memory data = abi.encodeWithSignature(
-            "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+            "purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)",
             _acct(caller, account), 400, 0, code, uint8(MintPaymentKind.DirectEth), false);
         _call(caller, address(game), _price(), data);
     }
 
     function _ticketWithCode(address caller, uint32 account, bytes32 code) private {
         bytes memory data = abi.encodeWithSignature(
-            "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+            "purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)",
             _acct(caller, account), 400, 0, code, uint8(MintPaymentKind.DirectEth), false);
         _call(caller, address(game), _price(), data);
     }
@@ -155,27 +155,27 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
 
     function _bet(address caller, address account) private {
         bytes memory data = abi.encodeWithSignature(
-            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
+            "betDegenerette(uint32,uint8,uint128,uint8,uint8)",
             _acct(caller, account), uint8(0), uint128(0.01 ether), uint8(1), uint8(3));
         _call(caller, address(game), 0.01 ether, data);
     }
 
     function _bet(address caller, uint32 account) private {
         bytes memory data = abi.encodeWithSignature(
-            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
+            "betDegenerette(uint32,uint8,uint128,uint8,uint8)",
             _acct(caller, account), uint8(0), uint128(0.01 ether), uint8(1), uint8(3));
         _call(caller, address(game), 0.01 ether, data);
     }
 
     function _claimWinnings(address caller, address account) private {
         bytes memory data = abi.encodeWithSignature(
-            "claimWinnings(uint32)", _acct(caller, account));
+            "claimClaimable(uint32)", _acct(caller, account));
         _call(caller, address(game), 0, data);
     }
 
     function _claimWinnings(address caller, uint32 account) private {
         bytes memory data = abi.encodeWithSignature(
-            "claimWinnings(uint32)", _acct(caller, account));
+            "claimClaimable(uint32)", _acct(caller, account));
         _call(caller, address(game), 0, data);
     }
 
@@ -191,21 +191,21 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
 
     function _flipDeposit(address caller, address account, uint256 amount) private {
         bytes memory data = abi.encodeWithSignature(
-            "depositCoinflip(uint32,uint256)",
+            "playCoinflip(uint32,uint256)",
             _acct(caller, account), amount);
         _call(caller, address(coinflip), 0, data);
     }
 
     function _flipDeposit(address caller, uint32 account, uint256 amount) private {
         bytes memory data = abi.encodeWithSignature(
-            "depositCoinflip(uint32,uint256)",
+            "playCoinflip(uint32,uint256)",
             _acct(caller, account), amount);
         _call(caller, address(coinflip), 0, data);
     }
 
     function _mintFlip(address to, uint256 amount) private {
         vm.prank(address(game));
-        coin.mintForGame(to, amount);
+        coin.mintForGame_g152734(to, amount);
     }
 
     function _whalePass(address caller, address account) private {

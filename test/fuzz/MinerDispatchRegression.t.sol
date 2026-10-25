@@ -113,7 +113,7 @@ contract MinerDispatchRegressionTest is Test {
         game = MinerDispatchHarness(ContractAddresses.GAME);
         vm.etch(ContractAddresses.GAME_AFKING_MODULE, address(new DispatchAfkingWorker()).code);
         vm.etch(ContractAddresses.GAME_RNG_MODULE, address(new DispatchRequestWorker()).code);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionBatchState()"),
             abi.encode(uint32(1), uint32(0), uint32(0), uint256(0)));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
@@ -137,27 +137,27 @@ contract MinerDispatchRegressionTest is Test {
     function test_ResultStillRequiresTheThirdAbiWord() public {
         _tickets(1);
         vm.expectRevert();
-        game.mineFlip(0);
+        game.mineRun(0);
         _assertRolledBack();
     }
 
     function test_ResultStillRejectsNoncanonicalProgressBool() public {
         _tickets(2);
         vm.expectRevert();
-        game.mineFlip(0);
+        game.mineRun(0);
         _assertRolledBack();
     }
 
     function test_ResultStillRejectsNoncanonicalDoneBool() public {
         _tickets(3);
         vm.expectRevert();
-        game.mineFlip(0);
+        game.mineRun(0);
         _assertRolledBack();
     }
 
     function test_DoneWithoutProgressNormalizesTicketsAndReselectsHumanWork() public {
         _tickets(0);
-        game.mineFlip(0);
+        game.mineRun(0);
         (bool complete, bool ticketsDone, bool humanDone,, uint48 boxPos,,,) = game.state();
         assertTrue(complete, "all read consumers must certify in the same call");
         assertTrue(ticketsDone);
@@ -167,7 +167,7 @@ contract MinerDispatchRegressionTest is Test {
 
     function test_CertificationContinueReselectsPreparationThenRequest() public {
         game.seed(true, true, true);
-        game.mineFlip(0);
+        game.mineRun(0);
         (bool complete,,,,, uint24 requestDay, bool active,) = game.state();
         assertFalse(complete, "the new commitment invalidates the completed read certificate");
         assertTrue(active);
@@ -176,7 +176,7 @@ contract MinerDispatchRegressionTest is Test {
 
     function test_PartialWorkerStopsBeforeAnyLaterConsumer() public {
         _tickets(4);
-        game.mineFlip(0);
+        game.mineRun(0);
         (bool complete, bool ticketsDone, bool humanDone, uint32 ticketPos, uint48 boxPos,,,) = game.state();
         assertFalse(complete);
         assertFalse(ticketsDone);
@@ -189,7 +189,7 @@ contract MinerDispatchRegressionTest is Test {
         _tickets(5);
         vm.recordLogs();
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(vm.getRecordedLogs().length, 0, "a no-op must not emit paid work");
         _assertRolledBack();
     }
@@ -197,7 +197,7 @@ contract MinerDispatchRegressionTest is Test {
     function test_WorkerGasBoundFailureStillBubbles() public {
         _tickets(6);
         vm.expectRevert(MineFlipGas.WorkGasBound.selector);
-        game.mineFlip(0);
+        game.mineRun(0);
         _assertRolledBack();
     }
 }

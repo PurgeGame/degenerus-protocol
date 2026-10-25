@@ -134,7 +134,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol, NativeGasExport {
         vm.recordLogs();
         vm.startStateDiffRecording();
         uint256 before = gasleft();
-        game.mineFlip{gas: KEEPER_ALLOWANCE}(0);
+        game.mineRun{gas: KEEPER_ALLOWANCE}(0);
         used = before - gasleft();
         VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used, accesses, address(game));
@@ -154,8 +154,8 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol, NativeGasExport {
             uint256 repriced = _lastRepriced;
             assertTrue(vm.revertToState(snapshot));
             this.exportNativeFixture(string.concat("subscriber_whale_", vm.toString(passes)), address(this),
-                address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
-            game.mineFlip{gas: KEEPER_ALLOWANCE}(0);
+                address(game), abi.encodeCall(game.mineRun, (uint32(0))));
+            game.mineRun{gas: KEEPER_ALLOWANCE}(0);
             _lastRepriced = repriced;
         }
     }

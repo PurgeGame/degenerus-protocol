@@ -97,7 +97,7 @@ contract RedemptionAccounting is RedemptionFixture {
     }
     function invariant_INV_13_OnlyOneSettlingBatch() public view {
         (uint32 open,uint32 settling,,) = sdgnrs.redemptionBatchState();
-        assertEq(sdgnrs.redemptionSettlementPending(), settling != 0);
+        assertEq(sdgnrs.redemptionSettlementPending_g153837(), settling != 0);
         if (settling != 0) assertEq(settling + 1, open);
     }
     function invariant_balanceCoversPendingRedemptionEth() public view {

@@ -21,7 +21,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      the exact failure the try/catch exists for — and is cleared after each test.
 contract CrapsOpenerFailOpen is DeployProtocol {
     address internal keeper = address(0xBEEF);
-    bytes internal constant BURN_SEL = abi.encodeWithSignature("burnCoin(address,uint256)");
+    bytes internal constant BURN_SEL = abi.encodeWithSignature("burnCoin_g27673(address,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -55,7 +55,7 @@ contract CrapsOpenerFailOpen is DeployProtocol {
         vm.warp(_dayStart() + 1 days + 5 minutes);
         (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(keeper);
-        game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         for (uint256 i; i < 6; i++) {
             _crank();
             if (game.rngLocked()) break;
@@ -70,7 +70,7 @@ contract CrapsOpenerFailOpen is DeployProtocol {
 
     function _crank() internal {
         vm.prank(keeper);
-        try game.mineFlip(0) {}
+        try game.mineRun(0) {}
         catch (bytes memory err) {
             bytes4 sel = bytes4(err);
             if (sel == bytes4(keccak256("NotTimeYet()")) || sel == bytes4(keccak256("RngNotReady()"))) return;

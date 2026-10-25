@@ -31,7 +31,7 @@ contract MinerMiddayEligibilityTest is Test {
         vm.fee(1 gwei);
         vm.etch(ContractAddresses.GAME, address(new MinerMiddayEligibilityHarness()).code);
         game = MinerMiddayEligibilityHarness(ContractAddresses.GAME);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
         vm.mockCall(ContractAddresses.VRF_COORDINATOR, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
@@ -46,7 +46,7 @@ contract MinerMiddayEligibilityTest is Test {
         assertFalse(game.advanceDue());
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
         vm.expectRevert(GameMiner.NoWork.selector);
-        game.mineFlip{gas: 16_700_000}(0);
+        game.mineRun{gas: 16_700_000}(0);
     }
 
     function test_BelowThresholdKeepsTicketProgressWithoutRequestAttempt() public {
@@ -56,7 +56,7 @@ contract MinerMiddayEligibilityTest is Test {
             abi.encode(true, true, uint256(65)));
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
         vm.recordLogs();
-        game.mineFlip{gas: 16_700_000}(0);
+        game.mineRun{gas: 16_700_000}(0);
         assertTrue(game.rngComplete());
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle));
         Vm.Log[] memory logs = vm.getRecordedLogs();

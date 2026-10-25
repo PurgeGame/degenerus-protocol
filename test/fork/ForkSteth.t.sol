@@ -63,7 +63,7 @@ contract ForkStethTest is ForkDeployProtocol {
     ///      claimable reserve through Lido.submit; those Submitted events are tallied.
     function _runningGame() private {
         _play(3, 40);
-        assertGe(game.level(), 3, "fixture: the game must be mid-run");
+        assertGe(game.currentLvl(), 3, "fixture: the game must be mid-run");
     }
 
     function _play(uint24 target, uint256 maxDays) private {
@@ -232,7 +232,7 @@ contract ForkStethTest is ForkDeployProtocol {
         _assertSolvent("after rebase");
 
         // The game keeps running on the rebased token.
-        _play(game.level() + 1, 20);
+        _play(game.currentLvl() + 1, 20);
         _assertSolvent("after playing on the rebased token");
     }
 
@@ -249,7 +249,7 @@ contract ForkStethTest is ForkDeployProtocol {
         _giveWalletId(alice);
         uint256 share = sdgnrs.totalSupply() / 50;
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, alice, share);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, alice, share);
         address holder = makeAddr("dgnrsHolder");
         _dgnrsFromVault(holder, dgnrs.balanceOf(ContractAddresses.VAULT) / 10);
 
@@ -271,7 +271,7 @@ contract ForkStethTest is ForkDeployProtocol {
             uint256 stBefore = lido.balanceOf(who[i]);
             vm.recordLogs();
             vm.prank(who[i]);
-            game.claimWinnings(0);
+            game.claimClaimable(0);
             uint256 payout = _claimedPayout(vm.getRecordedLogs());
             uint256 got = _received(who[i]) - before;
             if (lido.balanceOf(who[i]) > stBefore) ++stethLegs;
@@ -373,7 +373,7 @@ contract ForkStethTest is ForkDeployProtocol {
         _giveWalletId(alice);
         uint256 share = sdgnrs.totalSupply() / 50;
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, alice, share);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, alice, share);
 
         // sDGNRS holds a backed game claimable (its redemption reserve source). The vault owner
         // stakes everything the guard allows — sDGNRS's claimable is stETH-settleable — and the
@@ -381,7 +381,7 @@ contract ForkStethTest is ForkDeployProtocol {
         _seedClaimable(game.walletIdOf_g3120(ContractAddresses.SDGNRS), 500 ether);
         if (game.claimableWinningsOf(driver) > 1) {
             vm.prank(driver);
-            game.claimWinnings(0);
+            game.claimClaimable(0);
         }
         _adminStake(_stakeable());
         assertGt(lido.balanceOf(address(game)), 0, "fixture: the game holds real stETH backing");
@@ -402,7 +402,7 @@ contract ForkStethTest is ForkDeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 64 && !game.rngLocked(); ++i) {
             vm.prank(keeper);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "fixture: daily request");
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();

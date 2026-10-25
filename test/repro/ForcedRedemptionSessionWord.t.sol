@@ -17,14 +17,14 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
     uint256 private constant OWNERS = 30;
 
     function _request() private {
-        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "real daily request");
     }
 
     function _complete() private {
         uint256 requestBefore = mockVRF.lastRequestId();
         for (uint256 i; i < 500 && !game.rngComplete() && mockVRF.lastRequestId() == requestBefore; ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         // After a stall the call that completes the session also issues the overdue daily request;
         // that request proves completion, since a fresh request waits for every read consumer.
@@ -38,11 +38,11 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         for (uint256 g = 800_000; g <= 9_000_000; g += 25_000) {
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             bool settled = ok && sdgnrs.pendingRedemptionEthValue() != reserved;
             assertTrue(vm.revertToState(snap));
             if (settled) {
-                game.mineFlip{gas: g}(0);
+                game.mineRun{gas: g}(0);
                 return;
             }
         }
@@ -73,7 +73,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             uint256 snap = vm.snapshotState();
             bool stepped;
             for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
-                try game.mineFlip{gas: g}(0) {
+                try game.mineRun{gas: g}(0) {
                     // Stop with at least two claims still unsettled for later engine calls.
                     if (_unsettled(day) >= 2) stepped = true;
                     else assertTrue(vm.revertToState(snap));
@@ -124,7 +124,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         vm.prank(address(game)); sdgnrs.runRedemptionWork(WORD, 200_000);
         assertGt(_batchRoll(burnDay), 0, "cohort resolved");
         assertFalse(game.rngLocked(), "daily work released the lock");
-        assertTrue(sdgnrs.redemptionSettlementPending(), "read cohort remains outstanding");
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837(), "read cohort remains outstanding");
         assertFalse(game.rngComplete(), "reuse blocked before remaining claims settle");
         assertEq(game.nextMinerAction(), 7, "no request can cut in ahead of MinerAction.Redemption");
 
@@ -159,7 +159,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             for (uint256 i; i < 1000 && !game.gameOver(); ++i) {
                 // While the unanswered terminal request waits out its dead-VRF timeout the engine
                 // reports RngNotReady (nothing to do yet), not progress.
-                try game.mineFlip(0) {} catch (bytes memory err) {
+                try game.mineRun(0) {} catch (bytes memory err) {
                     assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "only waiting on the terminal word");
                 }
                 if (game.rngLocked() && !game.isRngFulfilled()) vm.warp(vm.getBlockTimestamp() + 13 hours);
@@ -183,7 +183,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             return;
         }
         _complete();
-        assertFalse(sdgnrs.redemptionSettlementPending(), "no retained obligation");
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837(), "no retained obligation");
         for (uint256 i; i < OWNERS; ++i) {
             (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(_owner(i)), burnDay);
             assertEq(base, 0, "all paid claims consumed");

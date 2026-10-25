@@ -129,12 +129,12 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
     /// @dev Fund the mandatory next open; extreme calibration prevents later requests.
     function _keep() private {
-        game.mineFlip{gas: 12_000_000}(type(uint32).max);
+        game.mineRun{gas: 12_000_000}(type(uint32).max);
     }
 
     function _underfundedKeep() private {
         (bool ok,) = address(game).call{gas: 20_000}(
-            abi.encodeCall(game.mineFlip, (type(uint32).max)));
+            abi.encodeCall(game.mineRun, (type(uint32).max)));
         assertFalse(ok, "underfunded mandatory open must roll back");
     }
 
@@ -144,7 +144,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
     function _buyWriteBox() private {
         vm.prank(PLAYER);
-        game.purchase{value: 1 ether}(
+        game.purchaseOrderFor{value: 1 ether}(
             0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
@@ -188,21 +188,21 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertTrue(game.nextMinerAction() != 8, "prior published word cannot open a new STAGE stamp"); // Afking
 
         uint256 oldRequest = mockVRF.lastRequestId();
-        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip(0);
+        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), oldRequest, "new stamps do not deadlock their first request");
         assertEq(_openedDay(), day - 1, "prior published word cannot open a new STAGE stamp");
         assertFalse(game.rngComplete());
         assertTrue(game.rngLocked());
         // Under the request lock the engine only waits for the word.
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_pending(), 1, "request lock also retains the stamp");
 
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), SESSION_WORD);
         // The new session's read consumers run right after the unlock, in the keeper's own flow
         // (60d31f775); the stamp must resolve on the NEW word with its own day, whoever opens it.
         _expectStampedResolve(day);
-        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineRun(0);
         assertFalse(game.rngLocked(), "daily work reaches unlock");
         _mineAll(64);
         _assertStampedResolve(vm.getRecordedLogs());
@@ -234,7 +234,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         // The no-orphan rule retains the stamp while the eventual request binds its own day.
         vm.warp(vm.getBlockTimestamp() + 3 days);
         uint256 oldRequest = mockVRF.lastRequestId();
-        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip(0);
+        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineRun(0);
         assertTrue(game.rngLocked());
         assertGt(mockVRF.lastRequestId(), oldRequest);
 
@@ -318,10 +318,10 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         uint8 next = game.minerAction();
         assertEq(next, 17, "the drained session admits the donor's mid-day request"); // RequestMidday
         vm.prank(PLAYER);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertFalse(game.rngComplete());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xF12345);
-        for (uint256 i; i < 256 && !game.rngComplete(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && !game.rngComplete(); ++i) game.mineRun(0);
         assertTrue(game.rngComplete(), "next midday session drains normally");
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day, "completed AFKing stamp is not consumed a second time");

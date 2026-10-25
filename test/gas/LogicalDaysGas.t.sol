@@ -16,7 +16,7 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
         mockVRF.fundSubscription(1, 1_000 ether);
         playerId = _giveWalletId(player);
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(player, 1_000_000);
+        coin.mintForGame_g152734(player, 1_000_000);
     }
 
     function measure(address to, address caller, bytes calldata input) external returns (uint256 used) {
@@ -48,7 +48,7 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
 
     function test_DepositWithinTransactionColdWarm() public {
         (uint256 first, uint256 second) = this.measurePair(address(coinflip), player,
-            abi.encodeCall(coinflip.depositCoinflip, (playerId, 1_000)));
+            abi.encodeCall(coinflip.playCoinflip, (playerId, 1_000)));
         emit log_named_uint("deposit_tx_cold", first);
         emit log_named_uint("deposit_tx_warm", second);
     }
@@ -56,7 +56,7 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
     function test_WwxrpEntryWithinTransactionColdWarm() public {
         vm.prank(ContractAddresses.GAME); wwxrp.mintPrize(player, 1_000);
         (uint256 first, uint256 second) = this.measurePair(address(wwxrp), player,
-            abi.encodeCall(wwxrp.enter, (playerId, 100)));
+            abi.encodeCall(wwxrp.enterDraw, (playerId, 100)));
         emit log_named_uint("wwxrp_entry_tx_cold", first);
         emit log_named_uint("wwxrp_entry_tx_warm", second);
     }
@@ -73,11 +73,11 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
 
     function test_RebetWithinTransactionColdWarm() public {
         _settleBenchmarkDay(2, false);
-        vm.prank(player); coinflip.depositCoinflip(playerId, 100_000);
+        vm.prank(player); coinflip.playCoinflip(playerId, 100_000);
         _settleBenchmarkDay(3, true);
         vm.prank(player); coinflip.claimCoinflips(playerId, 0);
         (uint256 first, uint256 second) = this.measurePair(address(coinflip), player,
-            abi.encodeCall(coinflip.depositCoinflip, (playerId, 1_000)));
+            abi.encodeCall(coinflip.playCoinflip, (playerId, 1_000)));
         emit log_named_uint("rebet_tx_cold", first);
         emit log_named_uint("rebet_tx_warm", second);
     }
@@ -91,7 +91,7 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
     }
 
     function test_DepositColdWarm() public {
-        bytes memory data = abi.encodeCall(coinflip.depositCoinflip, (playerId, 1_000));
+        bytes memory data = abi.encodeCall(coinflip.playCoinflip, (playerId, 1_000));
         emit log_named_uint("deposit_cold", this.measure(address(coinflip), player, data));
         emit log_named_uint("deposit_warm", this.measure(address(coinflip), player, data));
     }
@@ -107,14 +107,14 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
 
     function test_FreshDailyRequest() public {
         vm.warp(block.timestamp + 1 days);
-        uint256 used = this.measure(address(game), player, abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        uint256 used = this.measure(address(game), player, abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         assertTrue(game.rngLocked());
         emit log_named_uint("fresh_daily_request", used);
     }
 
     function test_DegenesisPurchase() public {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         vm.warp(block.timestamp + 1 hours);
         // Credit is an input to this purchase, independent of its funding transaction.
         vm.store(address(game), keccak256(abi.encode(playerId, GameSlots.DEGENESIS_CREDIT)), bytes32(uint256(1 ether)));
@@ -125,7 +125,7 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
     function measurePurchase() external returns (uint256 used) {
         require(msg.sender == address(this));
         vm.prank(player);
-        game.buyDegenesisBox{value: 0.1 ether}(playerId, 0.1 ether);
+        game.purchaseDegenesisBox{value: 0.1 ether}(playerId, 0.1 ether);
         used = vm.lastCallGas().gasTotalUsed;
     }
 
@@ -142,11 +142,11 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
         (bool logical,) = address(coinflip).staticcall(abi.encodeWithSignature("requestedDailyIdx()"));
         uint8 requestAction = logical ? 16 : 17;
         for (uint256 i; i < 100 && game.nextMinerAction() != requestAction; ++i) {
-            game.mineFlip(type(uint32).max);
+            game.mineRun(type(uint32).max);
         }
         assertEq(game.nextMinerAction(), requestAction, "prepare the request without consuming it");
         emit log_named_uint("post_degenesis_request", this.measure(address(game), player,
-            abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
+            abi.encodeWithSignature("mineRun(uint32)", uint32(0))));
         assertTrue(game.rngLocked());
     }
 
@@ -163,16 +163,16 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
         session = (session & ~(uint256(0xffffff) << 216)) | (uint256(2) << 216);
         vm.store(address(game), bytes32(GameSlots.RNG_REQUEST_DAY), bytes32(session));
         vm.warp(block.timestamp + 1 days);
-        emit log_named_uint("completion_certificate", this.measure(address(game), player, abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
+        emit log_named_uint("completion_certificate", this.measure(address(game), player, abi.encodeWithSignature("mineRun(uint32)", uint32(0))));
         assertTrue(game.rngComplete());
     }
 
     function test_TerminalEntry() public {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked());
         vm.warp(block.timestamp + 14 days);
-        emit log_named_uint("terminal_entry", this.measure(address(game), player, abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
+        emit log_named_uint("terminal_entry", this.measure(address(game), player, abi.encodeWithSignature("mineRun(uint32)", uint32(0))));
         assertTrue(game.livenessTriggered());
     }
 
@@ -190,10 +190,10 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
 
     function test_ClaimableRebetColdWarm() public {
         _settleBenchmarkDay(2, false);
-        vm.prank(player); coinflip.depositCoinflip(playerId, 100_000);
+        vm.prank(player); coinflip.playCoinflip(playerId, 100_000);
         _settleBenchmarkDay(3, true);
         vm.prank(player); coinflip.claimCoinflips(playerId, 0);
-        bytes memory data = abi.encodeCall(coinflip.depositCoinflip, (playerId, 1_000));
+        bytes memory data = abi.encodeCall(coinflip.playCoinflip, (playerId, 1_000));
         emit log_named_uint("rebet_cold", this.measure(address(coinflip), player, data));
         emit log_named_uint("rebet_warm", this.measure(address(coinflip), player, data));
     }
@@ -202,7 +202,7 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
         _settleBenchmarkDay(2, false);
         emit log_named_uint("autorebuy_enable", this.measure(address(coinflip), player,
             abi.encodeCall(coinflip.setCoinflipAutoRebuy, (playerId, true, 0))));
-        vm.prank(player); coinflip.depositCoinflip(playerId, 100_000);
+        vm.prank(player); coinflip.playCoinflip(playerId, 100_000);
         _settleBenchmarkDay(3, true);
     }
 

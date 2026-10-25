@@ -36,7 +36,7 @@ contract WalletIdTruthDegenesisWeek is WalletIdTruthInvariant, DegenesisWeekOpen
             vm.deal(a, 10_000 ether);
             _dgnrsFromVault(a, 1_000_000e12);
             vm.startPrank(address(game));
-            coin.mintForGame(a, 5_000_000);
+            coin.mintForGame_g152734(a, 5_000_000);
             wwxrp.mintPrize(a, 200_000);
             vm.stopPrank();
             if (i < 4) {

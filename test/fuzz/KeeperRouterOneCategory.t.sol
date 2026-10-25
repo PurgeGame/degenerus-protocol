@@ -26,7 +26,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
 ///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip_g317 double-pay disposition.
 ///
-/// @notice The v55 router (`game.mineFlip(0)`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
+/// @notice The v55 router (`game.mineRun(0)`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
 ///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
 ///         There are exactly TWO router categories — advance (the buy folded into mineFlip's required-path
 ///         STAGE, so it rides the advance bounty) and the box open (afking boxes first, then human boxes with
@@ -62,7 +62,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///   (testMintFlipOpensHumanBoxAndPaysBounty).
 ///
 /// @dev The five call-site deltas applied (D-351-01):
-///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip(0)` (all sites).
+///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineRun(0)` (all sites).
 ///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE — driven via a new-day mineFlip()
 ///      + the `_settleGame` VRF drain; the standalone `autoBuy(count)` has NO successor.
 ///   Δ5 views: `afKing.subscriberCount()`/`autoBuyProgress()` -> read `_subscribers.length`/`_subCursor` via
@@ -140,7 +140,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -162,7 +162,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
             uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
             if (packed & (uint256(1) << (250 + RecyclingState.writeBuffer(address(game)))) == 0) break;
             // A shut window waives the mid-day value gates, so the engine requests its word.
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 reqId = mockVRF.lastRequestId();
             (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
             if (!fulfilled) mockVRF.fulfillRandomWords(reqId, vrfWord + i);
@@ -187,7 +187,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         // Isolation starts a new transaction at this adapter; set BASEFEE inside it.
         vm.fee(1 gwei);
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     function testAdvanceBranchCreditsExactlyOnce() public {
@@ -258,7 +258,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(bytes4(keccak256("NoWork()"))); // no sweep pending, no free idle crank
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // ZERO creditFlips — the idle crank reverted before any bounty could pay.
         assertEq(_countCoinflipStakeUpdated(), 0, "GAMEOVER idle: zero creditFlip_g317 emissions on the NoWork revert");
@@ -284,7 +284,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(bytes4(keccak256("NoWork()"))); // GameAfkingModule.NoWork()
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Nothing credited (the revert rolls back, but assert the count is zero regardless).
         assertEq(_countCoinflipStakeUpdated(), 0, "NoWork: zero creditFlip_g317 emissions on the empty-work revert");
@@ -297,7 +297,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @notice Pin the single engine dispatcher, its single CEI-last keeper-credit site, its trusted
     ///         worker targets, and the absence of ETH-push hooks. The v55 router functions in
     ///         GameAfkingModule (`_runWork`/`_runAdvance`/`_runRngConsumers`/`_creditWorkBounty`) are gone:
-    ///         60d31f775 moved dispatch into DegenerusGameMinerModule.mineFlip, which reselects one action
+    ///         60d31f775 moved dispatch into DegenerusGameMinerModule.mineRun, which reselects one action
     ///         from storage per iteration and credits once after the loop.
     function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
         string memory miner = _stripComments(vm.readFile(MINER_SRC));
@@ -630,7 +630,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> the inlined boxPlayers push.
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);
-        game.purchase{value: lootboxAmount + 0.01 ether}(
+        game.purchaseOrderFor{value: lootboxAmount + 0.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }

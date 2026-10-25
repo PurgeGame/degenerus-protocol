@@ -31,7 +31,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         bettor = makeAddr("sweepGasBettor");
         vm.deal(bettor, 10_000 ether);
         vm.prank(address(game));
-        coin.mintForGame(bettor, 100_000_000 ether);
+        coin.mintForGame_g152734(bettor, 100_000_000 ether);
         uint256 lr = uint256(vm.load(address(game), bytes32(LR_PACKED_SLOT)));
         RecyclingState.seedWriteBuffer(address(game), IDX);
         uint256 pools = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_SLOT)));
@@ -50,7 +50,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         who = address(uint160(0xB0B000 + i));
         vm.deal(who, 1_000 ether);
         vm.prank(address(game));
-        coin.mintForGame(who, 1_000_000 ether);
+        coin.mintForGame_g152734(who, 1_000_000 ether);
     }
 
     function _sweep(uint256 n, uint8 currency, uint128 perSpin, uint8 spins, uint256 word)
@@ -60,7 +60,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = _bettor(i);
             vm.prank(who);
-            game.placeDegeneretteBet{value: currency == 0 ? uint256(perSpin) * spins : 0}(
+            game.betDegenerette{value: currency == 0 ? uint256(perSpin) * spins : 0}(
                 0, currency, perSpin, spins, SYMBOL
             );
         }
@@ -83,7 +83,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         _cool();
         vm.recordLogs();
         uint256 g = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         gasUsed = g - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 resolved;

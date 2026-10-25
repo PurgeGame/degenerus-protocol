@@ -135,7 +135,7 @@ contract LoanSeizureTest is DeployProtocol {
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending() private {
@@ -143,7 +143,7 @@ contract LoanSeizureTest is DeployProtocol {
         if (reqId == 0) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
-        uint256 randomWord = uint256(keccak256(abi.encode(block.timestamp, game.level(), reqId)));
+        uint256 randomWord = uint256(keccak256(abi.encode(block.timestamp, game.currentLvl(), reqId)));
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 
@@ -157,11 +157,11 @@ contract LoanSeizureTest is DeployProtocol {
             _seedNextPrizePool(500 ether);
             _buyTickets(buyer, 4000);
             for (uint256 j; j < 80; ++j) {
-                if (game.level() >= target) return;
+                if (game.currentLvl() >= target) return;
                 _fulfillVrfIfPending();
-                if (game.level() >= target) return;
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-                if (game.level() >= target) return;
+                if (game.currentLvl() >= target) return;
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+                if (game.currentLvl() >= target) return;
                 if (!ok) break;
             }
         }
@@ -186,19 +186,19 @@ contract LoanSeizureTest is DeployProtocol {
         assertGt(principal, 0);
         _driveToTransition(1);
 
-        assertEq(game.level(), 1, "the transition request entered the due level");
+        assertEq(game.currentLvl(), 1, "the transition request entered the due level");
         assertTrue(game.rngLocked(), "inside the transition's RNG lock");
         (bool on, ) = _pending();
         assertTrue(on, "the request armed the seizure");
         assertEq(game.nextMinerAction(), ACTION_SEIZE_LOANS, "seizure outranks the wait for the word");
         assertEq(_payee(root), borrower, "not seized yet");
-        vm.prank(borrower); vm.expectRevert(bytes4(keccak256("E()"))); game.repay{value: 10 ether}(root);
+        vm.prank(borrower); vm.expectRevert(bytes4(keccak256("E()"))); game.clearDebtNow{value: 10 ether}(root);
 
         uint256 reqId = mockVRF.lastRequestId();
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         assertFalse(fulfilled, "the word has not arrived");
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_seizedCount(vm.getRecordedLogs()), 1);
         assertEq(_payee(root), address(sdgnrs), "the lender took the account");
         assertEq(game.acquiredBuyer(root), 2);
@@ -212,7 +212,7 @@ contract LoanSeizureTest is DeployProtocol {
         // The level continues normally afterwards.
         _fulfillVrfIfPending();
         _mineAll(200);
-        assertEq(game.level(), 1);
+        assertEq(game.currentLvl(), 1);
     }
 
     function test_SeizureOrderAheadOfPublishAndTickets() public {
@@ -220,13 +220,13 @@ contract LoanSeizureTest is DeployProtocol {
         _driveToTransition(1);
         _fulfillVrfIfPending();
         assertEq(game.nextMinerAction(), ACTION_SEIZE_LOANS, "still first once the word has landed");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_payee(root), address(sdgnrs));
     }
 
     function _giveSdgnrsTo(address player, uint256 amount) private {
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, player, amount);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, player, amount);
     }
 
     // ---------------------------------------------------------------- chunking
@@ -251,7 +251,7 @@ contract LoanSeizureTest is DeployProtocol {
             if (!on) break;
             // A seizure admits only while the worst-case bound still fits, so a capped call stops
             // short and the next call resumes from the stored cursor.
-            game.mineFlip{gas: 1_000_000}(0);
+            game.mineRun{gas: 1_000_000}(0);
         }
         assertGt(calls, 1, "a capped call cannot take every loan: the stage resumes from its cursor");
         assertEq(_seizedCount(vm.getRecordedLogs()), n, "each loan seized exactly once");
@@ -270,7 +270,7 @@ contract LoanSeizureTest is DeployProtocol {
             _borrow(owner, ids[i], 1);
         }
         _enterDue(1);
-        game.mineFlip{gas: 1_000_000}(0);
+        game.mineRun{gas: 1_000_000}(0);
         (bool on, uint32 cursor) = _pending();
         assertTrue(on);
         assertGt(cursor, 0);
@@ -304,12 +304,12 @@ contract LoanSeizureTest is DeployProtocol {
         _borrow(borrower, root, 1);
         _setBalances(root, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(deityPass.ownerOf(3), address(sdgnrs), "the pass follows its account");
         assertEq(deityPass.balanceOf(borrower), 0);
         assertEq(game.acquiredBuyer(root), 2);
         vm.prank(borrower); vm.expectRevert(bytes4(keccak256("Unauthorized()"))); game.smite(3, root);
-        vm.prank(borrower); vm.expectRevert(bytes4(keccak256("NotApproved()"))); game.issueDeityBoon(root, 2, 0);
+        vm.prank(borrower); vm.expectRevert(bytes4(keccak256("NotApproved()"))); game.giveBoon(root, 2, 0);
     }
 
     function test_DeitySmurfDefaultAloneMovesOnlyItsPass() public {
@@ -319,7 +319,7 @@ contract LoanSeizureTest is DeployProtocol {
         _seedLevel(child, 8, 400);
         _borrow(borrower, child, 1);
         _enterDue(1);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(deityPass.ownerOf(4), address(sdgnrs));
         assertEq(_payee(root), borrower, "the main stays with its owner");
         assertEq(game.walletIdOf_g3120(borrower), root);
@@ -330,7 +330,7 @@ contract LoanSeizureTest is DeployProtocol {
         _buyDeity(borrower, root, 10);
         _setBalances(root, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(deityPass.ownerOf(10), address(sdgnrs));
     }
 
@@ -347,11 +347,11 @@ contract LoanSeizureTest is DeployProtocol {
         _setBalances(root, 0, 0);
         _setBalances(child, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(deityPass.ownerOf(5), address(vault), "the family and its pass went to the Vault");
         _fund(2, 500 ether);
         _enterDue(2);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(deityPass.ownerOf(5), address(sdgnrs), "the smurf's own default moves it on");
         assertEq(game.acquiredBuyer(child), 2);
         vm.prank(ContractAddresses.CREATOR); vm.expectRevert(bytes4(keccak256("Soulbound()")));

@@ -100,7 +100,7 @@ contract TerminalLoanAdmissionWalk is TerminalLoanBase {
         vm.recordLogs();
         uint256 before = gasleft();
         (bool ok, bytes memory ret) =
-            address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         uint256 used = before - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // A reverted call has no effect; forge still records the logs it emitted.

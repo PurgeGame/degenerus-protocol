@@ -17,7 +17,7 @@ section below once it records a battery on this source.
 New and changed surface:
 
 - `DegenerusGameDegenesisModule` (new delegatecall module, `GAME_DEGENESIS_MODULE`): the standalone
-  `buyDegenesisBox`, `prepareDegenesis` (split and pricing at the daily request), `runDegenesisWork`
+  `purchaseDegenesisBox`, `prepareDegenesis` (split and pricing at the daily request), `runDegenesisWork`
   (the `DegenesisSettle` miner stage), `splitDegenesis` (terminal), `topUpSdgnrsAfking` and
   `spendDegenesis` (the Vault's restricted purchase). See [architecture](ARCHITECTURE.md#degenesis-sale).
 - Storage: slot 0 byte 27 `degenesisClosed`, slot 15 `degenesisVaultBudget`, slot 16 `degenesisCredit`,

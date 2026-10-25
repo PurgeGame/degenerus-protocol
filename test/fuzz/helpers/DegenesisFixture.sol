@@ -75,7 +75,7 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
                 if (!answer || !_fulfillPending()) return;
                 continue;
             }
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("fixture: engine did not go idle");
     }
@@ -89,13 +89,13 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
             if (game.nextMinerAction() == action) return;
             _fulfillPending();
             if (game.nextMinerAction() == action) return;
-            game.mineFlip{gas: 16_700_000}(type(uint32).max);
+            game.mineRun{gas: 16_700_000}(type(uint32).max);
         }
         revert("fixture: action never came up");
     }
 
     function _mineWithGas(uint256 gas_) internal returns (bool ok) {
-        (ok,) = address(game).call{gas: gas_}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok,) = address(game).call{gas: gas_}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
     }
 
     /// @dev Warp to day index `d` (one hour in) and process it completely.
@@ -121,7 +121,7 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
     function _buyTickets(address p, uint256 tickets) internal returns (uint256 cost) {
         cost = game.mintPrice() * tickets;
         vm.prank(p);
-        game.purchase{value: cost}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Earn `credit` of Degenesis credit with fresh-ETH ticket buys (4x spend).
@@ -135,7 +135,7 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
     function _buyDegenesis(address p, uint256 amount) internal {
         vm.deal(p, p.balance + amount);
         vm.prank(p);
-        game.buyDegenesisBox{value: amount}(0, amount);
+        game.purchaseDegenesisBox{value: amount}(0, amount);
     }
 
     // ------------------------------------------------------------------ readers
@@ -295,7 +295,7 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
 
     /// @dev One engine call that may find nothing to do (or only a request to wait on).
     function _tryMine() internal returns (bool ok) {
-        (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
     }
 
     // ------------------------------------------------------------------ logs

@@ -599,9 +599,9 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         // PoolConsolidationGas measures the funded consolidation.
         mockVRF.fundSubscription(1, 1 ether);
         _armCenturyWord(word, centuryDay);
-        assertEq(game.level(), 100, "real request must pre-increment the level");
+        assertEq(game.currentLvl(), 100, "real request must pre-increment the level");
         assertEq(game.rngWordForDay(centuryDay), 0, "the word-apply transaction must apply fresh RNG");
-        assertFalse(game.decWindow(), "real century request closes the burn window");
+        assertFalse(game.decimatorActive(), "real century request closes the burn window");
 
         this.seedBafScores(rounds, centuryDay);
         assertEq(uint8(CenturyBafScores.levelWord(address(jackpots)) >> 64), 4, "bafLevel layout: four board entries");
@@ -614,10 +614,10 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         uint256 burn = sdgnrs.totalSupply() / 1000;
         address burner = address(0xCE470);
         _giveWalletId(burner); // reward recipients are game players with wallet IDs
-        vm.prank(address(game)); sdgnrs.transferFromPool(sDGNRS.Pool.Reward, burner, burn);
+        vm.prank(address(game)); sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, burner, burn);
         vm.prank(burner); sdgnrs.burn(burn);
         uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
-        vm.prank(address(game)); sdgnrs.closeRedemptionBatch(claimable);
+        vm.prank(address(game)); sdgnrs.closeRedemptionBatch_g165517(claimable);
         (,uint32 settling,,) = sdgnrs.redemptionBatchState();
         assertGt(settling, 0);
         assertGt(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -685,7 +685,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         // very first mineFlip can skip directly to the request.
         for (uint256 calls; mockVRF.lastRequestId() == beforeRequest; ++calls) {
             assertLt(calls, 512, "century request preparation stalled");
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
         }
         assertEq(mockVRF.lastRequestId(), beforeRequest + 1, "one real daily request");
         mockVRF.fulfillRandomWords(beforeRequest + 1, word);
@@ -718,7 +718,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         for (uint256 a; a < allowances.length; ++a) {
             uint256 snapshot = vm.snapshotState();
             vm.recordLogs();
-            (bool ok,) = address(game).call{gas: allowances[a]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: allowances[a]}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 used = vm.lastCallGas().gasTotalUsed;
             if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_192;
             assertTrue(ok, "a realistic miner allowance succeeds");

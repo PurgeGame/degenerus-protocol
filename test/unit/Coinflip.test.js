@@ -19,7 +19,7 @@ import {
  * ========================
  * Covers:
  *  - Constructor / immutable addresses
- *  - depositCoinflip (happy path, min amount, access control)
+ *  - playCoinflip (happy path, min amount, access control)
  *  - processCoinflipPayouts (onlyGame, win/loss outcomes, record pool drip)
  *  - claimCoinflips (happy path, rngLocked guard)
  *  - claimCoinflipsFromFlip / consumeCoinflipsForBurn (onlyFlip)
@@ -37,7 +37,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Mint FLIP to `player` through FLIP.mintForGame, impersonating an authorized
+ * Mint FLIP to `player` through FLIP.mintForGame_g152734, impersonating an authorized
  * minter (the coinflip contract).
  */
 async function giveFlip(coin, player, amount, minterAddr) {
@@ -47,7 +47,7 @@ async function giveFlip(coin, player, amount, minterAddr) {
   ]);
   await hre.ethers.provider.send("hardhat_impersonateAccount", [minterAddr]);
   const minterSigner = await hre.ethers.getSigner(minterAddr);
-  await coin.connect(minterSigner).mintForGame(player.address, amount);
+  await coin.connect(minterSigner).mintForGame_g152734(player.address, amount);
   await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [minterAddr]);
 }
 
@@ -57,7 +57,7 @@ async function giveFlip(coin, player, amount, minterAddr) {
  * player's balance — no approval needed.
  */
 async function deposit(coinflip, player, amount) {
-  return coinflip.connect(player).depositCoinflip(0, amount);
+  return coinflip.connect(player).playCoinflip(0, amount);
 }
 
 /**
@@ -127,9 +127,9 @@ describe("Coinflip", function () {
   });
 
   // =========================================================================
-  // 2. depositCoinflip
+  // 2. playCoinflip
   // =========================================================================
-  describe("depositCoinflip", function () {
+  describe("playCoinflip", function () {
     it("reverts when amount is below 100 FLIP minimum", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
@@ -196,12 +196,12 @@ describe("Coinflip", function () {
       const { coinflip, coin, bob, alice, vault, game } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
       // bob is NOT an approved operator for alice and funds the deposit himself:
-      // depositCoinflip is a permissionless gift (caller pays, the stake is the
+      // playCoinflip is a permissionless gift (caller pays, the stake is the
       // player's). Fund bob, then gift to alice.
       await giveFlip(coin, bob, flip(500), await coinflip.getAddress());
       // A gift recipient pays nothing, so it must already hold a wallet ID.
       const aliceId = await giveWalletId(game, alice.address);
-      const tx = await coinflip.connect(bob).depositCoinflip(aliceId, flip(200));
+      const tx = await coinflip.connect(bob).playCoinflip(aliceId, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
       expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.creditedFlip).to.equal(flip(200));
@@ -387,7 +387,7 @@ describe("Coinflip", function () {
       // (player != msg.sender) never arms the flip record, however large.
       await giveFlip(coin, bob, flip(400_000), await coinflip.getAddress());
       const aliceId = await giveWalletId(game, alice.address);
-      const tx = await coinflip.connect(bob).depositCoinflip(aliceId, flip(300_000));
+      const tx = await coinflip.connect(bob).playCoinflip(aliceId, flip(300_000));
       const evs = await getEvents(tx, coinflip, "BigRecordUpdated");
       expect(evs.length).to.equal(0);
       expect(await coinflip.biggestFlipEver()).to.equal(0n);

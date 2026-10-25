@@ -35,7 +35,7 @@ contract DegenesisSmurfPayee is DegenesisHarness {
         smurfId = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
         // The main buys an ordinary lootbox for the smurf: the credit accrues to the smurf's ID.
         vm.prank(mainOwner);
-        game.purchase{value: 20 ether}(smurfId, 0, BoxOrderLib.boCustom(20 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 20 ether}(smurfId, 0, BoxOrderLib.boCustom(20 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         _driveDay(2, 0);
     }
 
@@ -51,7 +51,7 @@ contract DegenesisSmurfPayee is DegenesisHarness {
 
         for (uint256 i; i < 4; ++i) {
             vm.prank(mainOwner);
-            game.buyDegenesisBox{value: 0.5 ether}(smurfId, 0.5 ether);
+            game.purchaseDegenesisBox{value: 0.5 ether}(smurfId, 0.5 ether);
         }
         assertEq(uint32(_lane(1, 0)), smurfId, "order keyed to the smurf ID");
 

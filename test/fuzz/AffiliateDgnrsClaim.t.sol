@@ -76,7 +76,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         address buyer = address(uint160(0xB0000 + buyerNonce++));
         vm.deal(buyer, 5 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false
         );
     }
@@ -135,7 +135,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
     /// @notice Scores route to level + 1 during purchase phase
     function test_scoresRouteToLevelPlusOne() public {
-        assertEq(game.level(), 0);
+        assertEq(game.currentLvl(), 0);
         _buyOne(CODE_ALICE);
 
         assertEq(affiliate.affiliateScore(0, game.walletIdOf_g3120(alice)), 0, "No score at level 0");

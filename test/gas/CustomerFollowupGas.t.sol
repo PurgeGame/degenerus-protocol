@@ -79,7 +79,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(PLAYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 10_000_000);
         uint24 day = uint24(game.currentDayView_g542950());
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
@@ -193,7 +193,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
     }
     function _degen(uint8 currency, uint8 symbol, uint256 fresh) private {
         vm.prank(PLAYER);
-        game.placeDegeneretteBet{value:fresh}(0, currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
+        game.betDegenerette{value:fresh}(0, currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
     }
     function test_Gas_DegeneretteEthFirst() public { _begin(); _degen(0, 3, 0.01 ether); _end("degen_eth_first"); }
     function test_Gas_DegeneretteEthRepeat() public {
@@ -219,7 +219,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
     function test_Gas_DegeneretteFlip() public { _begin(); _degen(1, 3, 0); _end("degen_flip"); }
     function test_Gas_DegeneretteBankedFlip() public {
         uint256 balance = coin.balanceOf(PLAYER);
-        vm.prank(address(game)); coin.burnCoin(PLAYER, balance);
+        vm.prank(address(game)); coin.burnCoin_g27673(PLAYER, balance);
         _bank(1_000_000); _begin(); _degen(1, 3, 0); _end("degen_banked_flip");
     }
     function test_Gas_DegeneretteClaimableEth() public { _begin(); _degen(0, 3, 0); _end("degen_claimable_eth"); }
@@ -234,7 +234,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         _existingMint(); _begin(); _degen(0, 3, 0.01 ether); _end("degen_existing_mint");
     }
     function _prepareDecimator() private {
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 1_000_000 ether);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 1_000_000 ether);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(CustomerFollowupSeeder).runtimeCode);
         CustomerFollowupSeeder(address(game)).decimator();
@@ -268,7 +268,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         _begin(); vm.prank(address(coin)); game.consumeDecimatorBoon(id); _end("decimator_empty_dispatch");
     }
     function _fundWwxrp() private { vm.prank(address(game)); wwxrp.mintPrize(PLAYER, 10_000); }
-    function _enter() private { vm.prank(PLAYER); wwxrp.enter(0, 100); }
+    function _enter() private { vm.prank(PLAYER); wwxrp.enterDraw(0, 100); }
     function test_Gas_WwxrpFirst() public { _fundWwxrp(); _begin(); _enter(); _end("wwxrp_first"); }
     function test_Gas_WwxrpExistingMint() public {
         _existingMint(); _fundWwxrp(); _begin(); _enter(); _end("wwxrp_existing_mint");

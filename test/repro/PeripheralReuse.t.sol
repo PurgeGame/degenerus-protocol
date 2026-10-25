@@ -23,7 +23,7 @@ contract PeripheralReuseTest is DeployProtocol {
     function _incin(uint24 level_, uint256 amount) private {
         _level(level_);
         vm.prank(address(game)); wwxrp.creditPrize(id, amount);
-        vm.prank(ALICE); wwxrp.enter(0, amount);
+        vm.prank(ALICE); wwxrp.enterDraw(0, amount);
     }
 
     function testIncineratorTagCountAndWholeWordReplacement() public {
@@ -53,11 +53,11 @@ contract PeripheralReuseTest is DeployProtocol {
         vm.store(address(gnrus), slot, bytes32(type(uint256).max));
         uint24 lvl = gnrus.currentLevel();
         assertEq(gnrus.slotApproveWeight(lvl, 0), 0);
-        vm.prank(ALICE); gnrus.vote(0);
+        vm.prank(ALICE); gnrus.castBallot(0);
         assertEq(gnrus.slotApproveWeight(lvl, 0), 100);
         assertEq(uint256(vm.load(address(gnrus), slot)), (uint256(lvl) << 232) | 100);
         vm.store(address(gnrus), bytes32(uint256(2)), bytes32(uint256(lvl + 1)));
-        vm.prank(ALICE); gnrus.vote(0);
+        vm.prank(ALICE); gnrus.castBallot(0);
         assertEq(gnrus.slotApproveWeight(lvl, 0), 0);
         assertEq(gnrus.slotApproveWeight(lvl + 1, 0), 100);
     }
@@ -98,16 +98,16 @@ contract PeripheralReuseTest is DeployProtocol {
 
     function testBafDrawUsesOneBankAndRejectsOldDayAndTail() public {
         uint24 day = game.currentDayView_g542950() + 1;
-        vm.prank(address(game)); coin.mintForGame(ALICE, 1_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(ALICE, 1_000);
         vm.prank(address(game)); coinflip.armBafDraw(day);
-        vm.prank(ALICE); coinflip.depositCoinflip(0, 100);
-        vm.prank(ALICE); coinflip.depositCoinflip(0, 200);
+        vm.prank(ALICE); coinflip.playCoinflip(0, 100);
+        vm.prank(ALICE); coinflip.playCoinflip(0, 200);
         bytes32 slot = _map(0, 8);
         vm.store(address(coinflip), slot, bytes32(type(uint256).max));
         // Deposits target the next logical round: advance the Game-owned request mirror.
         vm.prank(address(game)); coinflip.onDailyRequest(day);
         vm.prank(address(game)); coinflip.armBafDraw(day + 1);
-        vm.prank(ALICE); coinflip.depositCoinflip(0, 100);
+        vm.prank(ALICE); coinflip.playCoinflip(0, 100);
         (uint32 owner, uint96 total) = coinflip.bafDrawEntryAt(day + 1, 0);
         assertEq(owner, id); assertEq(total, 100);
         assertEq(uint256(vm.load(address(coinflip), slot)), (uint256(id) << 96) | 100);

@@ -60,7 +60,7 @@ interface IWidOwnerOf {
 ///      levels x4/x99, so the burn doors open it for `level + 1` the way the advance does (window
 ///      flag, round's `openedDay` and shared entry-buffer level) and shut the flag after the burn.
 ///      A queued battle must drain before that buffer can be reused. The growth market opens
-///      only in a jackpot phase at level >= 1, so the bet doors mock `growthState(0)` as open for
+///      only in a jackpot phase at level >= 1, so the bet doors mock `getGrowth(0)` as open for
 ///      that one bet when the real market is shut. Neither touches an ID path.
 ///      The handler never pranks as a smurf key and never transfers anything to one: user
 ///      transfers to smurf keys are outside the invariant (PHASE-F-INVENTORY M14).
@@ -268,7 +268,7 @@ contract WalletIdTruthHandler is Test {
         a = address(uint160(uint256(keccak256(abi.encode("wallet-id-truth", freshCount++)))));
         vm.deal(a, 300 ether);
         vm.startPrank(GAME);
-        (bool ok1,) = COIN.call(abi.encodeWithSignature("mintForGame(address,uint256)", a, 5_000_000));
+        (bool ok1,) = COIN.call(abi.encodeWithSignature("mintForGame_g152734(address,uint256)", a, 5_000_000));
         (bool ok2,) = WWXRP.call(abi.encodeWithSignature("mintPrize(address,uint256)", a, 200_000));
         vm.stopPrank();
         vm.prank(ContractAddresses.CREATOR);
@@ -452,7 +452,7 @@ contract WalletIdTruthHandler is Test {
         returns (bytes memory)
     {
         return abi.encodeWithSelector(
-            GameFacade.purchase.selector, id, qty, boxAmt == 0 ? 0 : BoxOrderLib.boCustomFloor(boxAmt), code,
+            GameFacade.purchaseOrderFor.selector, id, qty, boxAmt == 0 ? 0 : BoxOrderLib.boCustomFloor(boxAmt), code,
             combined ? MintPaymentKind.Combined : MintPaymentKind.DirectEth, foil);
     }
 
@@ -467,7 +467,7 @@ contract WalletIdTruthHandler is Test {
         uint256 credit = game.degenesisCreditOf(p);
         uint256 spare = credit > 0.01 ether ? (credit - 0.01 ether) / 1e14 : 0;
         uint256 amount = 0.01 ether + (amtSeed % (spare + 1)) * 1e14;
-        _call(2, p, GAME, amount, abi.encodeWithSignature("buyDegenesisBox(uint32,uint256)", uint32(0), amount), false);
+        _call(2, p, GAME, amount, abi.encodeWithSignature("purchaseDegenesisBox(uint32,uint256)", uint32(0), amount), false);
     }
 
     function g_degenerette(uint256 a, uint256 oSeed, uint256 cSeed, uint256 aSeed, uint256 sSeed, uint256 sym)
@@ -497,12 +497,12 @@ contract WalletIdTruthHandler is Test {
             spins = uint8(1 + sSeed % 15);
         }
         data = abi.encodeWithSignature(
-            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)", id, currency, amt, spins, uint8(sym % 24));
+            "betDegenerette(uint32,uint8,uint128,uint8,uint8)", id, currency, amt, spins, uint8(sym % 24));
     }
 
     function g_whalePass(uint256 a, uint256 codeSel, uint256 over) external {
         address p = _actor(a);
-        uint256 value = game.level() <= 3 ? 2.4 ether : 4 ether;
+        uint256 value = game.currentLvl() <= 3 ? 2.4 ether : 4 ether;
         _call(4, p, GAME, value + (over % 5 == 0 ? 0.01 ether : 0), abi.encodeWithSignature(
             "purchaseWhalePass(uint32,uint256,bytes32)", uint32(0), uint256(1), _code(codeSel, p)), false);
     }
@@ -564,7 +564,7 @@ contract WalletIdTruthHandler is Test {
 
     function g_claimWinnings(uint256 a) external {
         address p = _actor(a);
-        _call(11, p, GAME, 0, abi.encodeWithSignature("claimWinnings(uint32)", uint32(0)), true);
+        _call(11, p, GAME, 0, abi.encodeWithSignature("claimClaimable(uint32)", uint32(0)), true);
     }
 
     function g_approve(uint256 a, uint256 oSeed) external {
@@ -591,7 +591,7 @@ contract WalletIdTruthHandler is Test {
         uint256 m = mode % 3;
         if (m == 1) id = _idFor(_approverOf(p, oSeed), p);
         else if (m == 2) id = _idFor(_other(oSeed), p);
-        _call(13, p, COINFLIP, 0, abi.encodeWithSignature("depositCoinflip(uint32,uint256)", id, bound(amt, 100, 50_000)), false);
+        _call(13, p, COINFLIP, 0, abi.encodeWithSignature("playCoinflip(uint32,uint256)", id, bound(amt, 100, 50_000)), false);
     }
 
     function cf_claim(uint256 a, uint256 amt) external {
@@ -619,11 +619,11 @@ contract WalletIdTruthHandler is Test {
     }
 
     function _openDecWindow() internal returns (bool forced) {
-        if (game.decWindow() || game.gameOver()) return false;
+        if (game.decimatorActive() || game.gameOver()) return false;
         // Production drains sealed battles before opening the next window. The
         // reachability shortcut must not overwrite a queued battle's entries.
         if (uint256(vm.load(GAME, bytes32(GameSlots.DEC_BATTLE_QUEUE))) != 0) return false;
-        uint24 lvl = game.level() + 1;
+        uint24 lvl = game.currentLvl() + 1;
         bytes32 roundSlot = keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS));
         uint256 round = uint256(vm.load(GAME, roundSlot));
         if ((round >> 224) & 0xFF != 0) return false; // sealed (phase != 0)
@@ -678,11 +678,11 @@ contract WalletIdTruthHandler is Test {
         returns (bytes memory)
     {
         return abi.encodeWithSignature(
-            "enterBonusBattle(uint32,uint256,uint32,uint16)", id, period % 7, _validChips(chipSeed), _multiple(multSeed));
+            "throwCraps(uint32,uint256,uint32,uint16)", id, period % 7, _validChips(chipSeed), _multiple(multSeed));
     }
 
     function _bonusDayData(uint32 id, uint256 chipSeed, uint256 multSeed) internal view returns (bytes memory) {
-        return abi.encodeWithSignature("enterBonusDay(uint32,uint32,uint16)", id, _validChips(chipSeed), _multiple(multSeed));
+        return abi.encodeWithSignature("playCraps(uint32,uint32,uint16)", id, _validChips(chipSeed), _multiple(multSeed));
     }
 
     function _futureDaysData(uint32 id, uint256 off, uint256 count, bool high, uint256 chipSeed)
@@ -769,7 +769,7 @@ contract WalletIdTruthHandler is Test {
 
     function wx_enter(uint256 a, uint256 amt) external {
         _call(29, _actor(a), WWXRP, 0, abi.encodeWithSignature(
-            "enter(uint32,uint256)", uint32(0), bound(amt, 25, 5_000)), false);
+            "enterDraw(uint32,uint256)", uint32(0), bound(amt, 25, 5_000)), false);
     }
 
     function wx_claim(uint256 a, uint256 daySel, uint256 idx) external {
@@ -795,15 +795,15 @@ contract WalletIdTruthHandler is Test {
         if (ok) _notePmBet(round, over ? 1 : 2, index, id == 0 ? _fwd(caller) : id);
     }
 
-    /// @dev The open round, mocking `growthState(0)` open for this bet when the market is shut
+    /// @dev The open round, mocking `getGrowth(0)` open for this bet when the market is shut
     ///      (round 0 after game over: no bet).
     function _openGrowthMarket() internal returns (uint24 round, bool mocked) {
         bool open;
-        (,,, round, open,) = game.growthState(0);
+        (,,, round, open,) = game.getGrowth(0);
         if (open && round != 0) return (round, false);
         if (game.gameOver()) return (0, false);
         round = round == 0 ? 1 : round;
-        vm.mockCall(GAME, abi.encodeWithSignature("growthState(uint24)", uint24(0)),
+        vm.mockCall(GAME, abi.encodeWithSignature("getGrowth(uint24)", uint24(0)),
             abi.encode(uint256(0), uint256(0), uint256(0), round, true, uint8(0)));
         mocked = true;
     }
@@ -884,11 +884,11 @@ contract WalletIdTruthHandler is Test {
 
     function prog_mineFlip(uint256 a) external {
         address keeper = _actor(a);
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         vm.fee(1 gwei);
-        _call(36, keeper, GAME, 0, abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), false);
+        _call(36, keeper, GAME, 0, abi.encodeWithSignature("mineRun(uint32)", uint32(0)), false);
         vm.fee(0);
-        if (game.level() > lvl) ghost_levels += game.level() - lvl;
+        if (game.currentLvl() > lvl) ghost_levels += game.currentLvl() - lvl;
     }
 
     function prog_fulfillVrf(uint256 word) external {
@@ -903,33 +903,33 @@ contract WalletIdTruthHandler is Test {
 
     function prog_driveDay(uint256 a, uint256 word) external {
         address keeper = _actor(a);
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         vm.warp(block.timestamp + 1 days);
         vm.fee(1 gwei);
         for (uint256 i; i < 40; ++i) {
             _fulfill(39, uint256(keccak256(abi.encode(word, i))));
-            (bool ok,) = _call(39, keeper, GAME, 0, abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), false);
+            (bool ok,) = _call(39, keeper, GAME, 0, abi.encodeWithSignature("mineRun(uint32)", uint32(0)), false);
             if (!ok && !_fulfill(39, uint256(keccak256(abi.encode(word, i, "r"))))) break;
         }
         vm.fee(0);
-        if (game.level() > lvl) ghost_levels += game.level() - lvl;
+        if (game.currentLvl() > lvl) ghost_levels += game.currentLvl() - lvl;
     }
 
     /// @notice Drive the next day from its first minute, so the period-0 craps window (the only
     ///         time a whole-day ticket sells) is open afterwards.
     function prog_driveDayAligned(uint256 a, uint256 word) external {
         address keeper = _actor(a);
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 ts = block.timestamp;
         vm.warp(ts - ((ts - 82_620) % 1 days) + 1 days + 60);
         vm.fee(1 gwei);
         for (uint256 i; i < 40; ++i) {
             _fulfill(42, uint256(keccak256(abi.encode(word, i, "aligned"))));
-            (bool ok,) = _call(42, keeper, GAME, 0, abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), false);
+            (bool ok,) = _call(42, keeper, GAME, 0, abi.encodeWithSignature("mineRun(uint32)", uint32(0)), false);
             if (!ok && !_fulfill(42, uint256(keccak256(abi.encode(word, i, "aligned-r"))))) break;
         }
         vm.fee(0);
-        if (game.level() > lvl) ghost_levels += game.level() - lvl;
+        if (game.currentLvl() > lvl) ghost_levels += game.currentLvl() - lvl;
     }
 
     function prog_bigBuy(uint256 a, uint256 eth) external {
@@ -938,7 +938,7 @@ contract WalletIdTruthHandler is Test {
         eth = bound(eth, 1 ether, 40 ether);
         if (priceWei == 0) return;
         _call(40, p, GAME, eth, abi.encodeWithSelector(
-            GameFacade.purchase.selector, uint32(0), eth * 400 / priceWei, uint256(0), bytes32(0),
+            GameFacade.purchaseOrderFor.selector, uint32(0), eth * 400 / priceWei, uint256(0), bytes32(0),
             MintPaymentKind.DirectEth, false), false);
     }
 
@@ -947,7 +947,7 @@ contract WalletIdTruthHandler is Test {
         ++oks[41];
         address p = actors[a % actors.length];
         vm.startPrank(GAME);
-        (bool ok1,) = COIN.call(abi.encodeWithSignature("mintForGame(address,uint256)", p, 1_000_000));
+        (bool ok1,) = COIN.call(abi.encodeWithSignature("mintForGame_g152734(address,uint256)", p, 1_000_000));
         (bool ok2,) = WWXRP.call(abi.encodeWithSignature("mintPrize(address,uint256)", p, 50_000));
         vm.stopPrank();
         ok1;
@@ -1188,7 +1188,7 @@ contract WalletIdTruthHandler is Test {
                 "redeemFlip(uint32,uint256)", id, 400 * (1 + p1 % 4)), AUTH | F_CR);
         } else if (action == 46) {
             bytes memory data = p1 % 2 == 0
-                ? abi.encodeWithSignature("claimWinnings(uint32)", id)
+                ? abi.encodeWithSignature("claimClaimable(uint32)", id)
                 : abi.encodeWithSignature("claimWinnings(uint32,uint256)", id, 1 + p2 % 1 ether);
             _acctCall(action, caller, id, GAME, 0, data, AUTH | F_NP | F_CR);
         } else if (action == 47) {
@@ -1208,7 +1208,7 @@ contract WalletIdTruthHandler is Test {
             _acctPass(id, caller, p1, p2);
         } else if (action == 52) {
             _acctCall(action, caller, id, GAME, 0, abi.encodeWithSignature(
-                "issueDeityBoon(uint32,uint32,uint8)", id, _acctId(p1), uint8(p2 % 3)), AUTH | F_NP | F_CR);
+                "giveBoon(uint32,uint32,uint8)", id, _acctId(p1), uint8(p2 % 3)), AUTH | F_NP | F_CR);
         } else {
             _acctCurse(id, caller, p1);
         }
@@ -1245,7 +1245,7 @@ contract WalletIdTruthHandler is Test {
     function _passData(uint32 id, uint256 p1, bytes32 code) internal view returns (uint256 value, bytes memory data) {
         uint256 kind = p1 % 3;
         if (kind == 0) {
-            value = game.level() <= 3 ? 2.4 ether : 4 ether;
+            value = game.currentLvl() <= 3 ? 2.4 ether : 4 ether;
             data = abi.encodeWithSignature("purchaseWhalePass(uint32,uint256,bytes32)", id, uint256(1), code);
         } else if (kind == 1) {
             value = 0.24 ether;
@@ -1276,7 +1276,7 @@ contract WalletIdTruthHandler is Test {
         uint256 amt = p1 % 2 == 0 ? type(uint256).max : p1 % 100_000;
         if (action == 54) {
             _acctCall(action, caller, id, COINFLIP, 0, abi.encodeWithSignature(
-                "depositCoinflip(uint32,uint256)", id, bound(p1, 100, 50_000)), GIFT);
+                "playCoinflip(uint32,uint256)", id, bound(p1, 100, 50_000)), GIFT);
         } else if (action == 55) {
             _acctCall(action, caller, id, COINFLIP, 0, abi.encodeWithSignature(
                 "claimCoinflips(uint32,uint256)", id, amt), AUTH | F_NP | F_CR);
@@ -1303,9 +1303,9 @@ contract WalletIdTruthHandler is Test {
             _pmBet(action, caller, id, bettor, p1 % 2 == 0);
         } else if (action == 61) {
             _acctCall(action, caller, id, WWXRP, 0, abi.encodeWithSignature(
-                "enter(uint32,uint256)", id, bound(p1, 25, 5_000)), AUTH | F_CR);
+                "enterDraw(uint32,uint256)", id, bound(p1, 25, 5_000)), AUTH | F_CR);
         } else if (action == 62) {
-            uint256 top = ((uint256(game.level()) + 9) / 10) * 10;
+            uint256 top = ((uint256(game.currentLvl()) + 9) / 10) * 10;
             uint256 back = 10 * (p1 % 3);
             _acctCall(action, caller, id, JACKPOTS, 0, abi.encodeWithSignature(
                 "claimBafConsolation(uint32,uint24)", id, uint24(top >= back ? top - back : top)), OPEN | F_NP);
@@ -1604,7 +1604,7 @@ contract WalletIdTruthHandler is Test {
     /// @dev Earnings-word upline caches and level leaders, every level the run can have touched.
     function _checkEarnings() internal view {
         uint256 len = _tableLength();
-        uint256 maxLvl = uint256(game.level()) + 2;
+        uint256 maxLvl = uint256(game.currentLvl()) + 2;
         for (uint256 lvl; lvl <= maxLvl; ++lvl) {
 
             for (uint32 id = 1; id < len; ++id) {
@@ -1639,7 +1639,7 @@ contract WalletIdTruthHandler is Test {
             (uint32 id,) = IWidWwxrp(WWXRP).entryAt(e.day, e.bucket, e.index);
             if (id != e.entrant) _fail("WWXRP", "entry differs from emitted ID", address(0), id, e.entrant);
         }
-        uint24 bracket = (game.level() / 100 + 1) * 100;
+        uint24 bracket = (game.currentLvl() / 100 + 1) * 100;
         (, uint32 n) = IWidWwxrp(WWXRP).incineratorInfo(bracket);
         for (uint32 i; i < n; ++i) {
             (uint32 id,) = IWidWwxrp(WWXRP).incineratorEntryAt(bracket, i);

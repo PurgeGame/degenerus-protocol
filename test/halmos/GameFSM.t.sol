@@ -28,7 +28,7 @@ contract FSMEmptyDependencies {
     uint256 public burns;
     uint256 public vaultSettles;
 
-    function depositCoinflip(uint32 id, uint256 amount) external {
+    function playCoinflip(uint32 id, uint256 amount) external {
         require(id == 1 && amount == 0, "only the Vault banking checkpoint");
         ++vaultSettles;
     }
@@ -44,7 +44,7 @@ contract FSMEmptyDependencies {
     function minerMaintenancePending_g11976() external pure returns (bool) { return false; }
 
     /// @dev sDGNRS read-consumer probe (`_rngConsumerStage`): no live redemption.
-    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 
     // Checkpoint witnesses written by the empty jackpot legs at the moment each runs, so a single
     // composed mineFlip (60d31f775) still proves what the day looked like at each checkpoint.
@@ -72,7 +72,7 @@ contract FSMEmptyDependencies {
         return (0, 0);
     }
 
-    function closeRedemptionBatch(uint256) external pure returns (uint256) { return 0; }
+    function closeRedemptionBatch_g165517(uint256) external pure returns (uint256) { return 0; }
     function resolveTerminalRedemptions() external pure {}
 
     function burnAtGameOver() external {
@@ -254,19 +254,19 @@ contract GameFSMProductionTransitionTest is Test {
         vm.warp(block.timestamp + uint256(elapsedDays) * 1 days);
         // Before the 30-day sweep a finished ending has no engine work: mineFlip reverts NoWork and
         // changes nothing (an idle engine refuses the call instead of returning, be793ed7c).
-        (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
+        (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(MinerHarness.mineRun, (uint32(0))));
         assert(!ok);
         assert(result.length == 4 && bytes4(result) == GameMiner.NoWork.selector);
         assert(machine.gameOver());
         assert(machine.sealedDay() == 10);
-        assert(machine.level() == initialLevel);
+        assert(machine.currentLvl() == initialLevel);
     }
 
     function _lastPurchase_promotesOnceAcrossRetry(uint16 initialLevel) private {
         vm.warp(_dayStart(31) + 120);
         machine.seed(initialLevel, 30, 30, true);
-        _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
-        assert(machine.level() == uint24(initialLevel) + 1);
+        _mustCall(abi.encodeCall(MinerHarness.mineRun, (uint32(0))));
+        assert(machine.currentLvl() == uint24(initialLevel) + 1);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(locked && requestId == 1);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
@@ -280,7 +280,7 @@ contract GameFSMProductionTransitionTest is Test {
         assert(stillLocked && retryId == 2);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 2);
         assert(retryTime == requestTime && machine.retrySpent());
-        assert(machine.level() == uint24(initialLevel) + 1);
+        assert(machine.currentLvl() == uint24(initialLevel) + 1);
         assert(machine.sealedDay() == 31);
         assert(FSMEmptyDependencies(ContractAddresses.GNRUS).charityPicks() == 1);
         assert(FSMEmptyDependencies(ContractAddresses.CRAPS).battleLocks() == 1);
@@ -310,7 +310,7 @@ contract GameFSMProductionTransitionTest is Test {
         uint24 wall = requested + uint24(gap);
         vm.warp(_dayStart(wall) + 120);
         machine.seed(1, initialDay, initialDay, false);
-        _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
+        _mustCall(abi.encodeCall(MinerHarness.mineRun, (uint32(0))));
         assert(machine.sealedDay() == requested);
         FSMEmptyDependencies deps = FSMEmptyDependencies(ContractAddresses.COINFLIP);
         assert(deps.requestedDailyIdx() == requested);
@@ -318,7 +318,7 @@ contract GameFSMProductionTransitionTest is Test {
         machine.recordDeliveredWord(42);
         vm.recordLogs();
         for (uint256 i; i < 8 && !machine.complete(); ++i)
-            _mustCall(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
+            _mustCall(abi.encodeCall(MinerHarness.mineRun, (uint32(0))));
         assert(machine.complete());
         assert(machine.wordAt(requested) == 42);
         assert(deps.settlements() == 1 && deps.lastSettlementDay() == requested);
@@ -346,8 +346,8 @@ contract GameFSMProductionTransitionTest is Test {
         assert(dailyLegs == 1 && machine.sealedDay() == requested);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
-        assert(machine.level() == 1);
-        (bool repeated,) = address(machine).call(abi.encodeCall(MinerHarness.mineFlip, (uint32(0))));
+        assert(machine.currentLvl() == 1);
+        (bool repeated,) = address(machine).call(abi.encodeCall(MinerHarness.mineRun, (uint32(0))));
         assert(!repeated && machine.sealedDay() == requested);
     }
 

@@ -236,7 +236,7 @@ contract DeadVrfEndingTest is DeployProtocol {
     }
 
     function _endGame() private {
-        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineRun(0);
         assertTrue(game.gameOver(), "dead ending reached game over");
     }
 
@@ -360,7 +360,7 @@ contract DeadVrfEndingTest is DeployProtocol {
     function test_sdgnrsDeterministicBurnWorksAfterTheDeadEnding() public {
         address holder = makeAddr("sdgnrs-holder");
         vm.prank(address(game));
-        uint256 got = sdgnrs.transferFromPool(sDGNRS.Pool.Reward, holder, 1000e18);
+        uint256 got = sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, holder, 1000e18);
         assertGt(got, 0, "holder funded");
         vm.deal(address(sdgnrs), address(sdgnrs).balance + 10 ether);
 
@@ -380,7 +380,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _seedHoldings();
         _endGame();
         vm.warp(block.timestamp + 31 days);
-        game.mineFlip(0); // final sweep
+        game.mineRun(0); // final sweep
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
         uint32 daveId = game.walletIdOf_g3120(dave);
@@ -406,7 +406,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
         // The synthetic 200-day setup also owes expired scheduled-day maintenance (one engine
         // checkpoint per call) before the daily commitment, as in test_swapSpendsTheDailyRetry.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineRun(0);
         uint24 r = game.currentDayView_g542950();
         uint256 req = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "day R requested");
@@ -416,7 +416,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         mockVRF.fulfillRandomWords(req, 0xDEAD); // lands late, before anyone advanced
         assertTrue(game.livenessTriggered(), "a word not published inside the window keeps VRF dead");
         vm.recordLogs();
-        for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineRun(0);
         assertTrue(game.gameOver(), "dead ending reached game over");
         assertTrue(_sawPayoutFixed(vm.getRecordedLogs()), "the deterministic ending");
         assertEq(game.rngWordForDay(r), 0, "the late word was never applied");
@@ -428,13 +428,13 @@ contract DeadVrfEndingTest is DeployProtocol {
         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
         DeadlineSeeder(payable(address(game))).seed(5);
         _restore();
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineRun(0);
         uint24 r = game.currentDayView_g542950();
         uint256 req = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "day R requested");
 
         vm.warp(block.timestamp + 14 days);
-        for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineRun(0);
         assertTrue(game.gameOver(), "dead ending reached game over");
         uint256 vrf = uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID)));
         assertEq(uint64(vrf >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 0, "the latch cleared the request ID");
@@ -459,7 +459,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256 before = mockVRF.lastRequestId();
         vm.recordLogs();
         for (uint256 i; i < 20 && !game.gameOver(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 id = mockVRF.lastRequestId();
             if (id != before) {
                 (,, bool done) = mockVRF.pendingRequests(id);
@@ -512,12 +512,12 @@ contract DeadVrfEndingTest is DeployProtocol {
     ///      `caller`'s mineFlip issues the mid-day request, the engine's last stage.
     function _mineMiddayRequest(address caller) private returns (uint256 id) {
         uint48 read = RecyclingState.readBuffer(address(game));
-        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineFlip{gas: 2_000_000}(type(uint32).max);
+        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineRun{gas: 2_000_000}(type(uint32).max);
         assertTrue(game.boxIndexComplete(read), "the test's prior delivered read cohort must finish");
         uint256 before = mockVRF.lastRequestId();
         vm.fee(1 gwei); // Set immediately before the isolated priced transaction.
         vm.prank(caller);
-        game.mineFlip(0);
+        game.mineRun(0);
         id = mockVRF.lastRequestId();
         assertGt(id, before, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "the request is a mid-day one");
@@ -532,11 +532,11 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
 
         // The synthetic 200-day setup owes expired scheduled-day maintenance first.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineRun(0);
         uint256 dailyId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "deadline day's daily request");
         mockVRF.fulfillRandomWords(dailyId, 0xBEEF);
-        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineRun(0);
         assertFalse(game.rngLocked(), "deadline day sealed");
         assertFalse(game.livenessTriggered(), "deadline day remains open");
 
@@ -548,7 +548,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         address buyer = makeAddr("midday-buyer");
         vm.deal(buyer, 2 ether);
         vm.prank(buyer);
-        game.purchase{value: 1 ether}(
+        game.purchaseOrderFor{value: 1 ether}(
             0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertFalse(game.livenessTriggered(), "small box buy did not meet the pool target");
@@ -558,7 +558,7 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         vm.warp(sent + 1 days);
         assertTrue(game.livenessTriggered(), "unmet purchase deadline fires");
-        game.mineFlip(0); // terminal path latches and waits on the mid-day request
+        game.mineRun(0); // terminal path latches and waits on the mid-day request
         assertFalse(game.gameOver(), "the request is still inside its window");
 
         vm.warp(sent + 14 days - 1);
@@ -579,7 +579,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
 
         // The synthetic 200-day setup owes expired scheduled-day maintenance first.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "deadline day requested; VRF stalls");
 
         vm.warp(block.timestamp + 21 hours);
@@ -591,7 +591,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         address buyer = makeAddr("stall-buyer");
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         MockVRFCoordinator fresh = new MockVRFCoordinator();
         uint256 sub = fresh.createSubscription();
@@ -603,10 +603,10 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256 t = block.timestamp;
         for (uint256 d; d < 8; ++d) {
             for (uint256 i; i < 200; ++i) {
-                if (game.level() == 2 && !game.jackpotPhase() && !game.rngLocked()) return;
+                if (game.currentLvl() == 2 && !game.jackpotPhase() && !game.rngLocked()) return;
                 assertFalse(game.gameOver(), "rescued level must not end");
                 _answer(fresh); // the swap re-sent the request and spent the retry: answer it first
-                game.mineFlip(0);
+                game.mineRun(0);
                 uint256 id = fresh.lastRequestId();
                 if (id != 0) {
                     (,, bool done) = fresh.pendingRequests(id);
@@ -627,7 +627,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         for (uint256 i; i < 1024; ++i) {
             if (game.gameOver()) return;
             _answer(vrf); // a request already in flight must land before the advance can use it
-            game.mineFlip(0);
+            game.mineRun(0);
             _answer(vrf);
             if (!game.rngLocked() && !game.advanceDue()) return;
         }
@@ -665,7 +665,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         address donor = makeAddr("midday-donor");
         vm.deal(donor, 1 ether);
         vm.prank(donor);
-        game.purchase{value: 0.5 ether}(
+        game.purchaseOrderFor{value: 0.5 ether}(
             0, 0, BoxOrderLib.boCustom(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertFalse(game.advanceDue(), "a creditless caller has no mid-day request below the threshold");
@@ -677,7 +677,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertLt(game.middayRngCredits(donor), 1 ether, "the donor's credit paid the threshold gate");
 
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertFalse(game.gameOver(), "the ending waits on the request in flight");
 
         MockVRFCoordinator fresh = _freshCoordinator();
@@ -719,7 +719,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
         // The synthetic 200-day setup also owes expired scheduled-day maintenance.
         // Wait for the actual daily commitment before testing its retry allowance.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "daily request stalls");
 
         vm.warp(block.timestamp + 13 hours);
@@ -776,7 +776,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         // the reference batch is a 10M call, not an unbounded one): one call's cost, then the
         // cost of the call that swaps and sends the terminal request.
         uint256 g0 = gasleft();
-        game.mineFlip{gas: 10_000_000}(0);
+        game.mineRun{gas: 10_000_000}(0);
         uint256 batchGas = g0 - gasleft();
         (uint256 readLen,, uint256 swapped) = _terminalQueues();
         assertEq(swapped, 0, "a batch call leaves the swap window open");
@@ -784,7 +784,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256 requestGas;
         for (uint256 i; i < 400 && swapped == 0; ++i) {
             g0 = gasleft();
-            game.mineFlip{gas: 10_000_000}(0);
+            game.mineRun{gas: 10_000_000}(0);
             requestGas = g0 - gasleft();
             (,, swapped) = _terminalQueues();
         }
@@ -804,7 +804,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256 step = batchGas / 128;
         for (uint256 g = batchGas; g >= 20_000; g -= g > 2 * step ? step : 2_000) {
             snap = vm.snapshotState();
-            try game.mineFlip{gas: g}(0) {
+            try game.mineRun{gas: g}(0) {
                 (,, swapped) = _terminalQueues();
                 if (leakGas == 0 && (swapped != 0 || mockVRF.lastRequestId() != req0)) leakGas = g;
             } catch (bytes memory err) {
@@ -828,10 +828,10 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         // End to end: a starved call first (the leak if one exists, else the witness), then full
         // gas. The read side drains, the write cohort swaps in and draws on the terminal word.
-        try game.mineFlip{gas: leakGas != 0 ? leakGas : witnessGas}(0) {} catch {}
+        try game.mineRun{gas: leakGas != 0 ? leakGas : witnessGas}(0) {} catch {}
         if (refusing) vm.clearMockedCalls();
         for (uint256 i; i < 80 && !game.gameOver(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             _answer(mockVRF);
         }
         assertTrue(game.gameOver(), "ended");

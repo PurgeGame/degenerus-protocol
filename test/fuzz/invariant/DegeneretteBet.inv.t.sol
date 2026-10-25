@@ -9,7 +9,7 @@ import {GameHandler} from "../handlers/GameHandler.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title DegeneretteBetInvariant -- Proves Degenerette ETH bet accounting invariant
-/// @notice NEVER PREVIOUSLY FUZZED. Targets the Degenerette slot machine (placeDegeneretteBet /
+/// @notice NEVER PREVIOUSLY FUZZED. Targets the Degenerette slot machine (betDegenerette /
 ///         resolveBets) to verify:
 ///         1. ETH wager in = ETH in futurePool increase (no ETH created during betting)
 ///         2. ETH payouts from resolve <= pool at time of resolution
@@ -48,7 +48,7 @@ contract DegeneretteBetInvariant is DeployProtocol {
 
         // SEED the fuzzer onto a reachable bet sequence. Without an explicit selector allow-list the
         // unguided fuzzer hammers mineFlip/warpTime and drives the game to game-over (where
-        // placeDegeneretteBet is permanently unreachable) before a single bet is ever placed -- so
+        // betDegenerette is permanently unreachable) before a single bet is ever placed -- so
         // invariant_solvencyUnderDegenerette passes VACUOUSLY (measured: betsPlaced == 0, 0 reverts).
         // The property under test is Degenerette-bet solvency, so the Degenerette handler exposes only
         // the bet lifecycle (place/resolve/purchase/fulfill) -- NOT mineFlip -- keeping the game live

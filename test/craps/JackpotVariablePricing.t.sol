@@ -137,13 +137,13 @@ contract JackpotVariablePricingTest is CrapsPins {
             if (p != 0) { assertTrue(vm.revertToState(root)); root = vm.snapshotState(); }
             uint256 price = prices[p];
             _open(price, 100);
-            vm.prank(ALICE); table.enterBonusBattle(5, 0, 1);
+            vm.prank(ALICE); table.throwCraps(5, 0, 1);
             uint256 dayCost;
             for (uint256 period; period < 6; ++period) {
                 (uint128 bank,,,uint256 bounty,,) = table.bonusTermsFor(day, period);
                 dayCost += bank + bounty;
             }
-            vm.prank(BOB); table.enterBonusDay(0, 100);
+            vm.prank(BOB); table.playCraps(0, 100);
             assertEq(flip.burned(ALICE), price);
             assertEq(flip.burned(BOB), dayCost * 100);
             _lock(50_000);
@@ -219,7 +219,7 @@ contract JackpotVariablePricingTest is CrapsPins {
             vm.warp(start);
             _open(price, 10);
             game.setMintHistory(ALICE, 0);
-            vm.prank(ALICE); table.enterBonusBattle(5, 0, 1);
+            vm.prank(ALICE); table.throwCraps(5, 0, 1);
             assertEq(flip.burned(ALICE), price * 105 / 100);
             uint256 compCode = uint256(_idFor(compPlayer)) | (uint256(5) << 176);
             vm.prank(ContractAddresses.VAULT);
@@ -267,7 +267,7 @@ contract JackpotVariablePricingTest is CrapsPins {
     function test_MegaTailPreservesCapsAndRemainderAtMaximumAwards() public {
         uint256[16] memory words = _words();
         _open(10000, 100);
-        vm.prank(BOB); table.enterBonusBattle(5, 0, 100);
+        vm.prank(BOB); table.throwCraps(5, 0, 100);
         _lock(1_000_000_000);
         assertEq(_round().awardTarget, 500);
         uint256[] memory field = new uint256[](50);
@@ -297,7 +297,7 @@ contract JackpotVariablePricingTest is CrapsPins {
 
     function test_RetiredWordAndRetriesPreservePackedFieldsAndBothResults() public {
         _open(10000, 100);
-        vm.prank(ALICE); table.enterBonusBattle(5, 0, 100);
+        vm.prank(ALICE); table.throwCraps(5, 0, 100);
         _setDailyWord(day, 0);
         assertEq(CrapsLensReader.jackpotEntryPriceOf(address(cold), slot), 10000);
         _lock(150_000);
@@ -365,10 +365,10 @@ contract JackpotVariablePricingTest is CrapsPins {
 
     function test_LockClosesAllControlsBeforeEitherHiddenResult() public {
         _open(6000, 10);
-        vm.prank(ALICE); uint256 bet = table.enterBonusBattle(5, 0, 1);
+        vm.prank(ALICE); uint256 bet = table.throwCraps(5, 0, 1);
         _lock(50_000);
         assertEq(_round().subsidyMultiplierBps, 0);
-        vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.enterBonusBattle(5, 0, 1);
+        vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.throwCraps(5, 0, 1);
         vm.prank(ALICE); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.amendSlip(bet, 1);
         vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.donate(false, 5, 1);
         vm.prank(ContractAddresses.GAME);

@@ -160,7 +160,7 @@ contract DegenesisClosingBurn is DegenesisHarness {
         // Backlog: one chunk of cohort 1 on day 3, the day-4 request runs with orders left.
         vm.revertToState(snap);
         _driveToSettle();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertLt(_activeCursor(), 420, "backlog");
         _warpTo(4, 1 hours);
         vm.recordLogs();

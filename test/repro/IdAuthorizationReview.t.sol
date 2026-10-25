@@ -76,7 +76,7 @@ contract IdReviewSeller {
         }
         // Re-register through a real paid door, then allocate a child.
         uint256 price = game.mintPrice();
-        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         replacement = game.walletIdOf_g3120(address(this));
         (bool created, bytes memory reason) = address(game).call{value: price}(
             abi.encodeCall(game.createSmurf, (bytes32(0), MintPaymentKind.DirectEth))
@@ -105,7 +105,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(request, 0x1DA0D17);
             }
             if (game.rngComplete() && !game.advanceDue()) break;
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         assertTrue(game.rngComplete());
         owner = address(new IdReviewSeller());

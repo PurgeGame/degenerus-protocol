@@ -79,7 +79,7 @@ describe("WhaleBundle", function () {
         await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
-          .issueDeityBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
+          .giveBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
         return discountBps;
       }
     }
@@ -461,7 +461,7 @@ describe("WhaleBundle", function () {
         .connect(alice)
         .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
-      expect(await game.level()).to.equal(0n);
+      expect(await game.currentLvl()).to.equal(0n);
       // deityPassRefundable should be set since level == 0
     });
   });
@@ -690,7 +690,7 @@ describe("WhaleBundle", function () {
    * a different RNG seed than the game proxy.  We use DeityBoonViewer,
    * which reads game.deityBoonData() for the correct daily seed.
    *
-   * Each iteration settles one day of RNG so issueDeityBoon can work
+   * Each iteration settles one day of RNG so giveBoon can work
    * and the slot query returns the correct types.  After the boon is
    * issued, the caller should immediately call purchaseLazyPass on the
    * same day (deity-sourced boons expire on day change).
@@ -715,7 +715,7 @@ describe("WhaleBundle", function () {
         await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
-          .issueDeityBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
+          .giveBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
         return discountBps;
       }
     }

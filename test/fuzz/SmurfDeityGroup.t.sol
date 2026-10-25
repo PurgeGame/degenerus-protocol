@@ -7,13 +7,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
-/// @title SmurfDeityGroup -- one deity per main wallet, and issueDeityBoon by account ID
+/// @title SmurfDeityGroup -- one deity per main wallet, and giveBoon by account ID
 /// @notice A deity purchase scans the existing deities (at most 32, the VAULT and SDGNRS protocol
 ///         deities among them) and reverts `AlreadyOwnsDeityPass` when any shares the buyer's
 ///         main wallet (its payee: the owner for a smurf) (G5, F-game spec item 7). The buying
 ///         account keeps `HAS_DEITY_PASS` and every deity behaviour — tickets, boons, the price
 ///         paid that an early game over refunds — under its own ID; the NFT mints to the main
-///         wallet, which therefore smites. `issueDeityBoon(deityId, recipientId, slot)` resolves
+///         wallet, which therefore smites. `giveBoon(deityId, recipientId, slot)` resolves
 ///         the deity account against the caller, requires an allocated recipient (`E` for 0 or
 ///         unallocated) and rejects `deityId == recipientId` (0 resolving to the caller) with
 ///         `SelfBoon` (item 8).
@@ -41,7 +41,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         siblingId = _createSmurf(owner);
         (other, otherId) = _wallet("deity_other");
         (stranger, strangerId) = _wallet("deity_stranger");
-        // issueDeityBoon reads the preceding day's recorded word.
+        // giveBoon reads the preceding day's recorded word.
         RecyclingState.seedDailyWord(address(game), game.currentDayView_g542950() - 1, uint256(keccak256("deity_prev_word")));
     }
 
@@ -125,7 +125,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
     // ---------------------------------------------------------------------
 
     function test_SmurfDeityStateFollowsItsId() public {
-        uint24 passLevel = game.level() + 1;
+        uint24 passLevel = game.currentLvl() + 1;
         uint32 smurfEntries = _fixtureEntries(passLevel, smurfId);
         uint32 ownerEntries = _fixtureEntries(passLevel, owner);
 
@@ -152,7 +152,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
 
         vm.recordLogs();
         vm.prank(owner);
-        game.issueDeityBoon(smurfId, strangerId, 0);
+        game.giveBoon(smurfId, strangerId, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool issued;
         for (uint256 i; i < logs.length; ++i) {
@@ -172,18 +172,18 @@ contract SmurfDeityGroupTest is SmurfFixture {
         // The owner's own account holds no deity bit, so it cannot issue as itself.
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
-        game.issueDeityBoon(0, otherId, 1);
+        game.giveBoon(0, otherId, 1);
 
         // A stranger cannot issue as the smurf deity.
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.issueDeityBoon(smurfId, otherId, 1);
+        game.giveBoon(smurfId, otherId, 1);
     }
 
     function test_OwnerSmitesWithTheSmurfsPass() public {
         _buyDeity(owner, smurfId, 3);
         vm.prank(address(game));
-        coin.mintForGame(owner, 1_000);
+        coin.mintForGame_g152734(owner, 1_000);
         uint8 curse = game.curseCountOf(stranger);
 
         vm.prank(owner);
@@ -193,50 +193,50 @@ contract SmurfDeityGroupTest is SmurfFixture {
 
         // Only the NFT holder smites.
         vm.prank(address(game));
-        coin.mintForGame(stranger, 1_000);
+        coin.mintForGame_g152734(stranger, 1_000);
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
         game.smite(3, otherId);
     }
 
     // ---------------------------------------------------------------------
-    // issueDeityBoon: recipient and self-boon rules
+    // giveBoon: recipient and self-boon rules
     // ---------------------------------------------------------------------
 
     function test_IssueDeityBoon_RecipientZeroOrUnallocatedRevertsE() public {
         _buyDeity(owner, smurfId, 3);
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSignature("E()"));
-        game.issueDeityBoon(smurfId, 0, 0);
+        game.giveBoon(smurfId, 0, 0);
 
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSignature("E()"));
-        game.issueDeityBoon(smurfId, 1_000_000, 0);
+        game.giveBoon(smurfId, 1_000_000, 0);
     }
 
     function test_IssueDeityBoon_SelfBoonBySmurfDeityId() public {
         _buyDeity(owner, smurfId, 3);
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSignature("SelfBoon()"));
-        game.issueDeityBoon(smurfId, smurfId, 0);
+        game.giveBoon(smurfId, smurfId, 0);
     }
 
     function test_IssueDeityBoon_SelfBoonWhenZeroResolvesToCaller() public {
         _buyDeity(other, 0, 4);
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSignature("SelfBoon()"));
-        game.issueDeityBoon(0, otherId, 0);
+        game.giveBoon(0, otherId, 0);
 
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSignature("SelfBoon()"));
-        game.issueDeityBoon(otherId, otherId, 0);
+        game.giveBoon(otherId, otherId, 0);
     }
 
     function test_IssueDeityBoon_SmurfDeityMayBoonItsOwner() public {
         _buyDeity(owner, smurfId, 3);
         vm.recordLogs();
         vm.prank(owner);
-        game.issueDeityBoon(smurfId, ownerId, 2);
+        game.giveBoon(smurfId, ownerId, 2);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool issued;
         for (uint256 i; i < logs.length; ++i) {
@@ -251,7 +251,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
     function test_IssueDeityBoon_SmurfDeityMayBoonASibling() public {
         _buyDeity(owner, smurfId, 3);
         vm.prank(owner);
-        game.issueDeityBoon(smurfId, siblingId, 1);
+        game.giveBoon(smurfId, siblingId, 1);
         (,, uint8 mask,,) = game.deityBoonDataById(smurfId);
         assertEq(mask, 2, "slot 1 used");
     }

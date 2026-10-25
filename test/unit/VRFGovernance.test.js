@@ -61,7 +61,7 @@ describe("VRF Governance", function () {
         }
       }
       if (delivered && await game.lastVrfProcessed() > before && !(await game.rngLocked())) return;
-      await game.connect(caller).mineFlip(0, { gasLimit: 12_000_000 });
+      await game.connect(caller).mineRun(0, { gasLimit: 12_000_000 });
     }
     throw new Error("VRF recovery did not request, deliver and apply a new daily word");
   }
@@ -84,7 +84,7 @@ describe("VRF Governance", function () {
     const gameSigner = await hre.ethers.getSigner(gameAddr);
     await sdgnrs
       .connect(gameSigner)
-      .transferFromPool(Pool.Reward, recipient, amount);
+      .transferFromPool_g106128(Pool.Reward, recipient, amount);
     await hre.network.provider.request({
       method: "hardhat_stopImpersonatingAccount",
       params: [gameAddr],
@@ -452,7 +452,7 @@ describe("VRF Governance", function () {
       // Advance to next day and call mineFlip to trigger VRF request,
       // which sets rngLockedFlag = true
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       await expect(
         ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, amount])

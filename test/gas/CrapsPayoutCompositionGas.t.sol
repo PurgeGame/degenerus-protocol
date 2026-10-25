@@ -9,14 +9,14 @@ interface CrapsPayoutCoinflip {
     function creditFlip_g317(uint32 id, uint256 amount) external;
     function armDiceRunRecord(uint32 id, uint256 score) external returns (uint256);
 }
-interface CrapsPayoutFlip { function creditCrapsComps(uint256 amount) external; }
+interface CrapsPayoutFlip { function creditCrapsComps_g37225(uint256 amount) external; }
 interface CrapsPayoutGame { function setCrapsRngPending_g1406(uint48 index, bool pending) external; }
 
 /// @dev Reproduce finalization's actual external-call order in one cold frame.
 /// All callees retain their production code; only the calling table is a seam.
 contract CrapsPayoutSequence {
     function pay(uint32 hot, uint32 main, uint32 lane) external {
-        CrapsPayoutFlip(ContractAddresses.COIN).creditCrapsComps(123_456);
+        CrapsPayoutFlip(ContractAddresses.COIN).creditCrapsComps_g37225(123_456);
         CrapsPayoutCoinflip cf = CrapsPayoutCoinflip(ContractAddresses.COINFLIP);
         cf.creditFlip_g317(hot, 79_400);
         cf.creditFlip_g317(main, 863_400);

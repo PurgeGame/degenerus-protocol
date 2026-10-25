@@ -43,7 +43,7 @@ describe("GameOver", function () {
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        transactions.push(await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }));
+        transactions.push(await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 }));
       } catch {
         /* may revert mid-sequence; keep driving */
       }
@@ -64,7 +64,7 @@ describe("GameOver", function () {
   async function buyTickets(game, buyer, qty, valueEth) {
     await game
       .connect(buyer)
-      .purchase(
+      .purchaseOrderFor(
         0,
         BigInt(qty) * 100n,
         0n,
@@ -82,7 +82,7 @@ describe("GameOver", function () {
     it("gameOver becomes true after fourteen days at level 0", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
-      expect(await game.level()).to.equal(0n);
+      expect(await game.currentLvl()).to.equal(0n);
       expect(await game.gameOver()).to.equal(false);
 
       // Expire the real daily-progress clock.
@@ -102,7 +102,7 @@ describe("GameOver", function () {
       await advanceToNextDay();
 
       // mineFlip should not trigger game over (normal VRF path instead)
-      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
       expect(await game.gameOver()).to.equal(false);
@@ -128,7 +128,7 @@ describe("GameOver", function () {
 
       expect(await game.nextMinerAction()).to.equal(0n);
       const miner = game;
-      await expect(game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(miner, "NoWork");
+      await expect(game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(miner, "NoWork");
       expect(await game.isFinalSwept()).to.equal(false);
     });
   });
@@ -154,7 +154,7 @@ describe("GameOver", function () {
         .connect(alice)
         .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
-      expect(await game.level()).to.equal(0n);
+      expect(await game.currentLvl()).to.equal(0n);
 
       const claimBefore = await game.claimableWinningsOf(alice.address);
       await advanceTime(SECONDS_HARD_STALL + 86400);
@@ -232,7 +232,7 @@ describe("GameOver", function () {
       await expect(
         game
           .connect(alice)
-          .purchase(
+          .purchaseOrderFor(
             0,
             100n,
             0n,
@@ -281,7 +281,7 @@ describe("GameOver", function () {
       const timestamp = await game.gameOverTimestamp();
       const reserved = await game.claimablePoolView();
       const miner = game;
-      await expect(game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(miner, "NoWork");
+      await expect(game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(miner, "NoWork");
       expect(await game.isFinalSwept()).to.equal(false);
       expect(await game.gameOverTimestamp()).to.equal(timestamp);
       expect(await game.claimablePoolView()).to.equal(reserved);
@@ -300,7 +300,7 @@ describe("GameOver", function () {
       // 31 days post-gameover
       await advanceTime(SECONDS_30_DAYS + 86400);
 
-      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       expect((await tx.wait()).status).to.equal(1);
     });
   });
@@ -330,7 +330,7 @@ describe("GameOver", function () {
       expect(claimable).to.be.gte(eth(20));
 
       const balBefore = await hre.ethers.provider.getBalance(alice.address);
-      const tx = await game.connect(alice)["claimWinnings(uint32)"](0);
+      const tx = await game.connect(alice)["claimClaimable(uint32)"](0);
       const receipt = await tx.wait();
       const gasUsed = receipt.gasUsed * receipt.gasPrice;
       const balAfter = await hre.ethers.provider.getBalance(alice.address);

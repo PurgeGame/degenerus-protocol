@@ -18,7 +18,7 @@ contract OptCalldataRoutingTest is DeployProtocol {
     }
 
     function testFuzz_RoutePreservesArgumentsCallerValue(uint32 id, uint256 amount, bytes32 tail) public {
-        bytes4 original = game.buyDegenesisBox.selector;
+        bytes4 original = game.purchaseDegenesisBox.selector;
         bytes memory arguments = abi.encode(id, amount, tail);
         address caller = address(0xCA11);
         vm.deal(caller, 1 ether);
@@ -35,7 +35,7 @@ contract OptCalldataRoutingTest is DeployProtocol {
     }
 
     function test_InvalidAbiIsRejectedBeforeDelegate() public {
-        bytes4[1] memory selectors = [game.buyDegenesisBox.selector];
+        bytes4[1] memory selectors = [game.purchaseDegenesisBox.selector];
         for (uint256 i; i < selectors.length; ++i) {
             (bool shortOk, bytes memory shortReason) = address(game).call(bytes.concat(selectors[i], abi.encode(uint32(1))));
             assertFalse(shortOk); assertEq(shortReason.length, 0);

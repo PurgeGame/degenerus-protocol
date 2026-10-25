@@ -33,20 +33,20 @@ contract MintStreakPairCompletion is DeployProtocol {
     function _bet(address p) private {
         vm.deal(p, p.balance + 2 * price);
         vm.prank(p);
-        game.placeDegeneretteBet{value: 2 * price}(0, 0, uint128(2 * price), 1, 9);
+        game.betDegenerette{value: 2 * price}(0, 0, uint128(2 * price), 1, 9);
     }
 
     function _ticket(address p) private {
         vm.deal(p, p.balance + price);
         vm.prank(p);
-        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// Two small boxes only (2x price, no tickets).
     function _boxesOnly(address p) private {
         vm.deal(p, p.balance + 2 * price);
         vm.prank(p);
-        game.purchase{value: 2 * price}(0, 0, 2, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 2 * price}(0, 0, 2, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// Foil-only purchase: no ticket leg, no box leg -> straight to _buyFoilPack.
@@ -54,7 +54,7 @@ contract MintStreakPairCompletion is DeployProtocol {
         uint256 cost = 10 * price;
         vm.deal(p, p.balance + cost);
         vm.prank(p);
-        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 
     function _advanceDay(uint256 salt) private {

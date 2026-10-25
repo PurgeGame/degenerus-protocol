@@ -22,7 +22,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
 
     function _request() private returns (uint256 id) {
         assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), 1, "initialized waiting payload");
-        game.mineFlip(0);
+        game.mineRun(0);
         id = mockVRF.lastRequestId();
         assertGt(id, 0, "real request sent");
         assertTrue(game.rngLocked());
@@ -68,14 +68,14 @@ contract RngCurrentSentinelTest is DeployProtocol {
         if (reverse) {
             (, uint256 cost) = game.rngNudgeQuote();
             vm.prank(address(game));
-            coin.mintForGame(address(this), cost);
+            coin.mintForGame_g152734(address(this), cost);
             game.reverseFlip(cost);
         }
         uint256 id = _request();
         uint24 day = game.currentDayView_g542950();
         mockVRF.fulfillRandomWords(id, word);
         assertEq(RecyclingState.currentWord(address(game)), word, "callback stores the raw word");
-        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineRun(0);
         assertEq(game.rngWordForDay(day), word, "every other consumer reads the raw word");
         (, win) = coinflip.getCoinflipDayResult(day);
     }
@@ -133,13 +133,13 @@ contract RngCurrentSentinelTest is DeployProtocol {
     function test_ConsumedDailyLockRetainsWordUntilTheNextRequest() public {
         uint256 id = _request();
         mockVRF.fulfillRandomWords(id, 42);
-        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineRun(0);
         assertFalse(game.rngLocked(), "day completed");
         assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), 42, "read consumers retain the final word after daily unlock");
         assertFalse(game.isRngFulfilled());
         assertEq(game.rngWordForDay(game.currentDayView_g542950()), 42, "session word recorded unchanged");
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        for (uint256 i; i < 100 && mockVRF.lastRequestId() == id; ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && mockVRF.lastRequestId() == id; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), id, "next real request remains live");
         assertFalse(game.isRngFulfilled());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 2);

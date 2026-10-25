@@ -119,18 +119,18 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         paidDay = crapsBattle.currentDayIndex();
         slot = uint64(uint256(paidDay) * 8 + 6);
         vm.prank(address(game));
-        coin.mintForGame(ATTACKER, 10_000_000 ether);
+        coin.mintForGame_g152734(ATTACKER, 10_000_000 ether);
         uint16 highMultiple = uint16(crapsBattle.highMultForDay(paidDay));
         vm.prank(ATTACKER);
-        paidBet = crapsBattle.enterBonusBattle(5, BOARD, highMultiple);
+        paidBet = crapsBattle.throwCraps(5, BOARD, highMultiple);
         uint32 attackerId = game.walletIdOf_g3120(ATTACKER);
         vm.prank(address(game));
         crapsBattle.creditPasses(attackerId, 21, 1);
         // A day seat exercises the distinct paid-day-header path and its upgrade gate.
         vm.prank(address(game));
-        coin.mintForGame(NEWCOMER, 10_000_000 ether);
+        coin.mintForGame_g152734(NEWCOMER, 10_000_000 ether);
         vm.prank(NEWCOMER);
-        crapsBattle.enterBonusDay(0, 1);
+        crapsBattle.playCraps(0, 1);
         vm.warp(start);
         assertEq(game.gameOverTimestamp(), 0, "healthy live fixture");
         assertFalse(game.rngLocked());
@@ -166,7 +166,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         crapsBattle.upgradeDayWindows(0, paidDay, 1 << 5);
         vm.prank(address(0xF123));
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        crapsBattle.enterBonusBattle(5, 0, 1);
+        crapsBattle.throwCraps(5, 0, 1);
         // The locked field settles only inside the Game's own jackpot-battle stage.
         vm.prank(ATTACKER);
         vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
@@ -182,7 +182,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         uint256 before = mockVRF.lastRequestId();
         for (uint256 i; i < 1000 && mockVRF.lastRequestId() == before; ++i) {
             assertFalse(game.rngLocked(), "no lock before the daily request");
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "request did not engage the lock");
         (uint64 locked,, bool started,) = api.jackpotProgress();
@@ -207,7 +207,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
             vm.recordLogs();
             // Calibrate continuation estimates to force one 50-entry draw group,
             // independent of the first group's actual cost. Settlement can batch normally.
-            game.mineFlip{gas: ONE_GROUP_GAS}(beforeRound.drawnCount < 500 ? 50_000 : 0);
+            game.mineRun{gas: ONE_GROUP_GAS}(beforeRound.drawnCount < 500 ? 50_000 : 0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
                 // Include every table event (exact field/boards, seat outcomes and bounty
@@ -259,7 +259,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         assertTrue(reserve.resolved);
         assertGt(reserve.eligible, 0, "reserve draw must have a real high entrant");
         result.finalState = keccak256(abi.encode(round, board, cursor, reserve, CrapsLensReader.highRollerReserve(address(reader))));
-        for (uint256 i; i < 40 && game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 40 && game.rngLocked(); ++i) game.mineRun(0);
         assertFalse(game.rngLocked(), "completed daily chain did not unlock");
     }
 

@@ -39,9 +39,9 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         through `runTicketWork_g1150`) is structurally unreachable until the near-window loop
 ///         has returned (idx >= total for every windowed level), so the shared cursor can never
 ///         be clobbered mid-drain by construction. This test still exercises that invariant end
-///         to end via real `game.purchase`/`mineFlip` calls, so it needed no changes here.
+///         to end via real `game.purchaseOrderFor`/`mineFlip` calls, so it needed no changes here.
 ///
-///         The cohort is fed only by real permissionless `game.purchase` calls (no per-day buyer
+///         The cohort is fed only by real permissionless `game.purchaseOrderFor` calls (no per-day buyer
 ///         cap; per-address dedup at Storage:688). Jackpot-phase buys route to `level`
 ///         (MintModule:1967); the daily RNG-request swap turns that write slot into the read slot
 ///         the drain consumes. vm.store/vm.load touch ONLY test-side prize-pool seeding and
@@ -99,7 +99,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         require(!game.rngLocked(), "entry day must be unlocked before buying");
         require(!game.gameOver(), "must be live");
 
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         emit log_named_uint("jackpot level", lvl);
 
         // 2) Fill the current jackpot level's WRITE slot with N distinct permissionless buyers,
@@ -115,7 +115,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         // 3) Cross the wall-day. Advances first finish the previous word's consumers,
         //    then request the daily word and swap write->read (_swapAndFreeze).
         vm.warp(block.timestamp + 1 days + 1);
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineRun(0);
         require(game.rngLocked(), "daily VRF request is in flight (word swapped in)");
 
         uint24 rk = _readKey(lvl);
@@ -135,7 +135,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         for (uint256 i = 0; i < 200; i++) {
             iters++;
             _fulfillVrf();
-            (bool ok, ) = address(game).call{gas: 10_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call{gas: 10_000_000}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             require(ok, "mineFlip must not revert");
             require(!game.gameOver(), "must not escape via game-over");
 
@@ -176,7 +176,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
             if (game.jackpotPhase()) return;
 
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) {
                 vm.warp(block.timestamp + 1 days + 1);
                 _seedNextPrizePool(49.9 ether);
@@ -201,7 +201,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
                 if (done) return;
                 _fulfillVrf();
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
         revert("harness: mid-day work did not settle");
@@ -211,7 +211,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         for (uint256 i = 0; i < 120; i++) {
             if (!game.rngLocked()) return;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) return;
         }
     }
@@ -240,7 +240,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {

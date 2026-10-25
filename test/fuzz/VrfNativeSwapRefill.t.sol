@@ -38,7 +38,7 @@ contract VrfNativeSwapRefillTest is DeployProtocol {
                 (,, bool done) = c.pendingRequests(id);
                 if (!done) c.fulfillRandomWords(id, 0xC0FFEE + i);
             }
-            try game.mineFlip(0) {} catch (bytes memory err) {
+            try game.mineRun(0) {} catch (bytes memory err) {
                 require(err.length >= 4 && bytes4(err) == NO_WORK, "unexpected revert");
                 return;
             }
@@ -48,7 +48,7 @@ contract VrfNativeSwapRefillTest is DeployProtocol {
     function _pendingDaily() private {
         _drive(mockVRF);
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "daily request pending");
         assertGt(mockVRF.pendingCount(1), 0, "old subscription has a pending request");
     }

@@ -53,7 +53,7 @@ contract RngLockDeterminism is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -61,7 +61,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         for (uint256 i = 0; i < DRAIN_MAX_ITERATIONS; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
             _finishReadConsumers();
         _settleMidday();
@@ -84,7 +84,7 @@ contract RngLockDeterminism is DeployProtocol {
                 mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("midday", id))));
                 _lastFulfilledReqId = id;
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
         fail("harness: mid-day work did not settle");
@@ -126,7 +126,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      6-phase template fuzz functions that follow the daily-RNG cycle.
     function _advanceToVrfRequestBoundary() internal returns (uint256 reqId) {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         reqId = mockVRF.lastRequestId();
         require(reqId != 0, "harness: VRF request must be pending");
         require(game.rngLocked(), "harness: rngLock must engage");
@@ -150,7 +150,7 @@ contract RngLockDeterminism is DeployProtocol {
         for (uint256 i = 0; i < DRAIN_MAX_ITERATIONS; i++) {
             if (!game.rngLocked()) break;
             if (uint24(uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0)))) >> 24) > sealedBefore) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
     }
 
@@ -176,10 +176,10 @@ contract RngLockDeterminism is DeployProtocol {
 
     // 9 legacy v43 classes (0..8) + 2 engine classes (9..10) + 1 v50 whale-pass-claim
     // class (11).
-    // cls 9 = game.mineFlip(0) — the v55 unified router (the Δ3 doWork successor) fired
+    // cls 9 = game.mineRun(0) — the v55 unified router (the Δ3 doWork successor) fired
     //   same-tx inside the locked window (RD-1..5): the advance-consume `cw +=
     //   totalFlipReversals` (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
-    // cls 10 = game.mineFlip{gas: 1.5M}(0) — a bounded-allowance engine step fired during
+    // cls 10 = game.mineRun{gas: 1.5M}(0) — a bounded-allowance engine step fired during
     //   rngLock: it stops at its first checkpoint (or waits for the word), and must never
     //   abort the lock nor alter the consumed VRF-derived output.
     // cls 11 = GameFacade.claimWhalePass(player) — the v50 WHALE-04 freeze leg:
@@ -205,18 +205,18 @@ contract RngLockDeterminism is DeployProtocol {
             uint32 customTraits = 0;
             uint8 heroQuadrant = uint8((seed >> 16) % 4);
             vm.prank(actor);
-            try game.placeDegeneretteBet{value: uint256(amount) * ticketCount}(0, currency, amount, ticketCount, (uint8((uint32(customTraits) >> (uint256(heroQuadrant) * 8)) & 7) | (uint8(heroQuadrant) << 3))) {} catch { return; }
+            try game.betDegenerette{value: uint256(amount) * ticketCount}(0, currency, amount, ticketCount, (uint8((uint32(customTraits) >> (uint256(heroQuadrant) * 8)) & 7) | (uint8(heroQuadrant) << 3))) {} catch { return; }
         } else if (cls == 1) {
             vm.deal(actor, 100 ether);
             uint256 numCoins = 400 + (seed >> 8) % 200;
             uint256 lootboxAmount = 0;
             vm.prank(actor);
-            try game.purchase{value: 1 ether}(
+            try game.purchaseOrderFor{value: 1 ether}(
                 0, numCoins, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch { return; }
         } else if (cls == 2) {
             vm.prank(actor);
-            try game.claimWinnings(0) {} catch { return; }
+            try game.claimClaimable(0) {} catch { return; }
         } else if (cls == 3) {
             address recipient = address(uint160(uint256(keccak256(abi.encode("recipient", seed)))));
             if (recipient == address(0)) recipient = address(0xBEEF);
@@ -245,7 +245,7 @@ contract RngLockDeterminism is DeployProtocol {
             // Mid-day stall recovery is now folded into the daily advance: warp past the
             // stall timeout + a day boundary and crank mineFlip (the takeover path).
             vm.warp(block.timestamp + 1 days + 4 hours + 1);
-            try game.mineFlip(0) {} catch { return; }
+            try game.mineRun(0) {} catch { return; }
         } else if (cls == 9) {
             // v55 game-resident router (Δ3 doWork→mineFlip): fire the one-category router
             // same-tx inside the locked window. mineFlip routes advance → afking-box open by
@@ -255,14 +255,14 @@ contract RngLockDeterminism is DeployProtocol {
             // that (the freeze proof is the byte-identity of the consumed word, not whether
             // mineFlip found work).
             vm.prank(actor);
-            try game.mineFlip(0) {} catch { return; }
+            try game.mineRun(0) {} catch { return; }
         } else if (cls == 10) {
             // A bounded-allowance engine step inside the locked window: box stages are read
             // consumers that never run under the daily lock, so the step can only wait for the
             // word or take the lock's own next checkpoint. It must never abort the lock nor
             // alter the consumed VRF-derived output.
             vm.prank(actor);
-            try game.mineFlip{gas: 1_500_000}(0) {} catch { return; }
+            try game.mineRun{gas: 1_500_000}(0) {} catch { return; }
         } else if (cls == 11) {
             // v50 WHALE-04 freeze leg: the deferred whale-pass materialization endpoint
             // fired same-tx inside the locked window. Per 334-WHALE04-FREEZE-PROOF.md §2,
@@ -347,7 +347,7 @@ contract RngLockDeterminism is DeployProtocol {
             try vault.playerAction(
                 ContractAddresses.GAME,
                 abi.encodeWithSignature(
-                    "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                    "purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)",
                     0, tickets, 0, bytes32(0), MintPaymentKind.DirectEth, false
                 ),
                 0.01 ether
@@ -372,7 +372,7 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 9) {
             // Box opening is permissionless: mineFlip's in-order box stages credit the box
             // owner regardless of caller, so the perturbation drains whatever is pending.
-            try game.mineFlip(0) {} catch { return; }
+            try game.mineRun(0) {} catch { return; }
             return;
         }
         if (action == 10) {
@@ -392,7 +392,7 @@ contract RngLockDeterminism is DeployProtocol {
             try vault.playerAction(
                 ContractAddresses.GAME,
                 abi.encodeWithSignature(
-                    "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
+                    "betDegenerette(uint32,uint8,uint128,uint8,uint8)",
                     0, 0, amtPer, ticketCount, uint8((customTraits >> (hero*8)) & 7) | (hero << 3)
                 ),
                 total
@@ -416,7 +416,7 @@ contract RngLockDeterminism is DeployProtocol {
             vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.COINFLIP,
-                abi.encodeWithSignature("depositCoinflip(uint32,uint256)", 0, amt),
+                abi.encodeWithSignature("playCoinflip(uint32,uint256)", 0, amt),
                 0
             ) {} catch { return; }
             return;
@@ -451,7 +451,7 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 19) {
             // Permissionless: anyone cranks mineFlip, whose decimator leg settles winning entries
             // (the vault's included) in list order.
-            try game.mineFlip(0) {} catch { return; }
+            try game.mineRun(0) {} catch { return; }
             return;
         }
         if (action == 20) {
@@ -578,12 +578,12 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(holder, 100 ether);
 
         vm.prank(holder);
-        game.purchase{value: 1.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Transfer existing pool tokens and back the original entire burn range.
         // Failed admission is a fixture failure, never an assumed-away fuzz input.
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, holder, 100 ether);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, holder, 100 ether);
         GameFunding.credit(2, 20_000 ether);
         uint256 burnAmount = bound(burnAmountSeed, 1e18, 100e18);
         (uint256 preview,) = sdgnrs.previewBurnValue(burnAmount);
@@ -610,7 +610,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 preLockSnap = _snapshotPreLock();
 
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "StakedStonkRedemption: rngLock must engage");
         assertTrue(reqId != 0, "StakedStonkRedemption: VRF request must be pending");
@@ -634,7 +634,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         _revertToPreLock(preLockSnap);
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqIdBaseline = mockVRF.lastRequestId();
         _deliverMockVrf(reqIdBaseline, vrfWord);
         bytes32 baselineOutputs = _captureStonkRedemptionOutputs(batchId, holderId);
@@ -693,7 +693,7 @@ contract RngLockDeterminism is DeployProtocol {
     // _finalizeLootboxRng(cw)` (DegenerusGameAdvanceModule.sol:254-259) reads
     // `totalFlipReversals` INSIDE the daily drain. ADV-04 / v45-vrf-freeze-invariant
     // require that read to be FROZEN between the VRF request and the consume — even
-    // when the v55 unified router (game.mineFlip, the Δ3 doWork successor) or the box-open
+    // when the v55 unified router (game.mineRun, the Δ3 doWork successor) or the box-open
     // clear (game.autoOpen, the standalone-autoBuy-escape successor) fires same-tx inside the
     // locked window (RD-1..5).
     //
@@ -717,12 +717,12 @@ contract RngLockDeterminism is DeployProtocol {
         RecyclingState.seedNudges(address(game), 0);
     }
 
-    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (the project idiom,
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame_g152734 (the project idiom,
     ///      AfKingConcurrency.t.sol:761) so they can pay the reverseFlip nudge cost.
     function _fundFlip(address who, uint256 amount) internal {
         if (amount == 0) return;
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     /// @notice TST-01 — autoBuy-during-lock SAFE + the router same-tx freeze byte-identity,
@@ -750,7 +750,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Queue a lootbox so a per-index VRF word is finalized on the drain (the consume site).
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
@@ -769,7 +769,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 preLockSnap = _snapshotPreLock();
 
         // ---- perturbed run: doWork()/autoBuy(0) fires inside the locked window ----
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "TST-01: rngLock must engage at the VRF boundary");
         assertTrue(reqId != 0, "TST-01: VRF request must be pending");
@@ -801,7 +801,7 @@ contract RngLockDeterminism is DeployProtocol {
             _readTotalFlipReversals(), movedReversals,
             "TST-01: reversals must survive the revert (part of the frozen pre-lock state)"
         );
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 baselineReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(baselineReqId, vrfWord);
@@ -818,14 +818,14 @@ contract RngLockDeterminism is DeployProtocol {
         _revertToPreLock(preLockSnap);
         _zeroTotalFlipReversals();
         assertEq(_readTotalFlipReversals(), 0, "TST-01 control: reversals zeroed");
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 controlReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
         uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
         assertEq(controlWord, baselineWord, "TST-01: nudges never reach the consumed word");
         _revertToPreLock(preLockSnap);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 otherReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(otherReqId, vrfWord ^ 2);
@@ -893,7 +893,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Queue a lootbox so a per-index VRF word is finalized on the drain (the consume site).
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
@@ -927,7 +927,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 preLockSnap = _snapshotPreLock();
 
         // ---- perturbed run: claimWhalePass() fires inside the locked window ----
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "TST-01 claim: rngLock must engage at the VRF boundary");
         assertTrue(reqId != 0, "TST-01 claim: VRF request must be pending");
@@ -988,7 +988,7 @@ contract RngLockDeterminism is DeployProtocol {
             _readWhalePassClaims(claimant), preloadedClaims,
             "TST-01 claim: whalePassClaims pre-load must survive the revert (frozen pre-lock state)"
         );
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 baselineReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(baselineReqId, vrfWord);
@@ -1007,14 +1007,14 @@ contract RngLockDeterminism is DeployProtocol {
         _revertToPreLock(preLockSnap);
         _zeroTotalFlipReversals();
         assertEq(_readTotalFlipReversals(), 0, "TST-01 claim control: reversals zeroed");
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 controlReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
         uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
         assertEq(controlWord, baselineWord, "TST-01 claim: nudges never reach the consumed word");
         _revertToPreLock(preLockSnap);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 otherReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(otherReqId, vrfWord ^ 2);
@@ -1036,10 +1036,10 @@ contract RngLockDeterminism is DeployProtocol {
         // Queue a lootbox, then engage rngLock via the daily advance boundary.
         uint48 boxIndex = _readLootboxRngIndex();
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "autoOpen-noop: rngLock must be engaged");
 
         // boxesPending() is FALSE during rngLock (the router routes past the open leg).
@@ -1053,7 +1053,7 @@ contract RngLockDeterminism is DeployProtocol {
         address keeperCaller = makeAddr("tst01-autoopen-keeper");
         vm.prank(keeperCaller);
         // Either it finds other work or it waits on the word; any other failure is a bug.
-        try game.mineFlip(0) {} catch (bytes memory reason) {
+        try game.mineRun(0) {} catch (bytes memory reason) {
             assertEq(bytes4(reason), bytes4(keccak256("RngNotReady()")), "autoOpen-noop: only a word wait stops the call");
         }
         assertTrue(game.rngLocked(), "autoOpen-noop: the keeper call does not abort the lock");
@@ -1123,7 +1123,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Queue a real lootbox-mode box (first-deposit enqueue) at the round's index.
         uint48 boxIndex = _readLootboxRngIndex();
         vm.prank(boxOwner);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertTrue(
@@ -1138,7 +1138,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.prank(keeper);
         // The engine: must not abort the lock (box stages never run under it); it either finds
         // other work or waits on the word — any other failure is a bug.
-        try game.mineFlip(0) {} catch (bytes memory reason) {
+        try game.mineRun(0) {} catch (bytes memory reason) {
             assertEq(bytes4(reason), bytes4(keccak256("RngNotReady()")), "no-maroon: only a word wait stops the call");
         }
         assertTrue(
@@ -1176,7 +1176,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(boxOwner2, 100 ether);
         uint48 queuedIndex = _readLootboxRngIndex();
         vm.prank(boxOwner2);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertTrue(_boxQueued(queuedIndex, boxOwner2), "no-maroon: 2nd box queued at the round's index");
@@ -1190,7 +1190,7 @@ contract RngLockDeterminism is DeployProtocol {
         assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the finalized-index word lands");
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(
             _boxOpened(vm.getRecordedLogs(), boxOwner2),
             "no-maroon: the cursor-opened box materialized (signal zeroed) - none marooned"

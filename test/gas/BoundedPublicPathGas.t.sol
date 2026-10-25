@@ -50,7 +50,7 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
         playerId = game.walletIdOf_g3120(PLAYER);
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 1000 ether);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 10_000_000);
         uint24 day = game.currentDayView_g542950();
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
@@ -67,11 +67,11 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
         _measureBounded(label, target, sender, value, data, false);
     }
     function _purchaseData(uint256 boxes, bool foil) private view returns (bytes memory) {
-        return abi.encodeCall(game.purchase, (uint32(0), uint256(0), boxes, bytes32(0), MintPaymentKind.DirectEth, foil));
+        return abi.encodeCall(game.purchaseOrderFor, (uint32(0), uint256(0), boxes, bytes32(0), MintPaymentKind.DirectEth, foil));
     }
     function _buyBox() private {
         vm.prank(PLAYER);
-        game.purchase{value: 1 ether}(0, 0, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1 ether}(0, 0, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
     }
     function test_G10_BoxFirst() public {
         _measure("G10_box_first", address(game), PLAYER, 1 ether, _purchaseData(BoxOrderLib.boCustomFloor(1 ether), false));
@@ -144,32 +144,32 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
     }
     function _fundSdgnrs() private {
         uint256 amount = sdgnrs.totalSupply() / 1000;
-        vm.prank(address(game)); sdgnrs.transferFromPool(sDGNRS.Pool.Reward, PLAYER, amount);
+        vm.prank(address(game)); sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, PLAYER, amount);
     }
     function test_P4_Vote() public {
         _charity(19, address(0xC001)); _fundSdgnrs();
-        _measure("P4_vote", address(gnrus), PLAYER, 0, abi.encodeCall(gnrus.vote, (uint8(19))));
+        _measure("P4_vote", address(gnrus), PLAYER, 0, abi.encodeCall(gnrus.castBallot, (uint8(19))));
     }
 
     function _fundWwxrp() private {
         vm.prank(address(game)); wwxrp.mintPrize(PLAYER, 10000);
     }
-    function _enterWwxrp() private { vm.prank(PLAYER); wwxrp.enter(0, 100); }
+    function _enterWwxrp() private { vm.prank(PLAYER); wwxrp.enterDraw(0, 100); }
     function test_P5_DrawFirst() public {
         _fundWwxrp();
-        _measure("P5_first", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enter, (uint32(0), uint256(100))));
+        _measure("P5_first", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enterDraw, (uint32(0), uint256(100))));
     }
     function test_P5_DrawRepeat() public {
         _fundWwxrp(); _enterWwxrp();
-        _measure("P5_repeat", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enter, (uint32(0), uint256(100))));
+        _measure("P5_repeat", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enterDraw, (uint32(0), uint256(100))));
     }
     function test_P5_P6_IncineratorFirst() public {
         _fundWwxrp(); _seed(abi.encodeCall(BoundedPublicSeeder.setLevel, (uint24(99))));
-        _measure("P5_P6_incin_first", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enter, (uint32(0), uint256(100))));
+        _measure("P5_P6_incin_first", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enterDraw, (uint32(0), uint256(100))));
     }
     function test_P5_P6_IncineratorRepeat() public {
         _fundWwxrp(); _seed(abi.encodeCall(BoundedPublicSeeder.setLevel, (uint24(99)))); _enterWwxrp();
-        _measure("P5_P6_incin_repeat", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enter, (uint32(0), uint256(100))));
+        _measure("P5_P6_incin_repeat", address(wwxrp), PLAYER, 0, abi.encodeCall(wwxrp.enterDraw, (uint32(0), uint256(100))));
     }
 
     function test_C1_C2_OpenBonusDay() public {
@@ -182,17 +182,17 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
     function test_C1_C4_CrapsWindowFirst() public {
         _openDay();
         _measure("C1_C4_window_first", address(crapsBattle), PLAYER, 0,
-            abi.encodeCall(CrapsBattle(address(crapsBattle)).enterBonusBattle, (uint32(0), uint8(1), BOARD, uint8(1))));
+            abi.encodeCall(CrapsBattle(address(crapsBattle)).throwCraps, (uint32(0), uint8(1), BOARD, uint8(1))));
     }
     function test_C1_C4_CrapsWindowRepeat() public {
-        _openDay(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
+        _openDay(); vm.prank(PLAYER); crapsBattle.throwCraps(0, 1, BOARD, 1);
         _measure("C1_C4_window_repeat", address(crapsBattle), PLAYER, 0,
-            abi.encodeCall(CrapsBattle(address(crapsBattle)).enterBonusBattle, (uint32(0), uint8(2), BOARD, uint8(1))));
+            abi.encodeCall(CrapsBattle(address(crapsBattle)).throwCraps, (uint32(0), uint8(2), BOARD, uint8(1))));
     }
     function test_C1_C4_CrapsDay() public {
         vm.warp(block.timestamp - ((block.timestamp - 82620) % 1 days) + 1); _openDay();
         _measure("C1_C4_day", address(crapsBattle), PLAYER, 0,
-            abi.encodeCall(CrapsBattle(address(crapsBattle)).enterBonusDay, (uint32(0), BOARD, uint8(1))));
+            abi.encodeCall(CrapsBattle(address(crapsBattle)).playCraps, (uint32(0), BOARD, uint8(1))));
     }
     function test_C1_C4_ThirtyFutureDays() public {
         _measure("C1_C4_future30", address(crapsBattle), PLAYER, 0,

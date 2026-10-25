@@ -193,7 +193,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         assertTrue(game.livenessTriggered(), "thirty completed purchase days select the ending");
     }
 
-    /// @notice (b) Drive the REAL game.mineFlip(0) in a bounded loop at a realistic 10M allowance per call.
+    /// @notice (b) Drive the REAL game.mineRun(0) in a bounded loop at a realistic 10M allowance per call.
     ///         Owner gas rule (2026-10-03): the engine admits checkpoints while the supplied allowance
     ///         covers the next declared bound (MineFlipGasBounds), so a whole-call figure only measures
     ///         the allowance it was given; what is asserted is that EVERY call at a realistic allowance
@@ -209,7 +209,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         for (uint256 i = 0; i < maxTxIters; ++i) {
             vm.recordLogs();
             uint256 g0 = gasleft();
-            try game.mineFlip{gas: REALISTIC_CALL_GAS}(0) {}
+            try game.mineRun{gas: REALISTIC_CALL_GAS}(0) {}
             catch (bytes memory reason) {
                 emit log_named_bytes("mineFlip refused at a realistic allowance", reason);
                 fail("a terminal mineFlip at a realistic 10M allowance did not progress");

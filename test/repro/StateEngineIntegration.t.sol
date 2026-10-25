@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-// Exercises GameMiner._mineFlip through the public Game.mineFlip entry, including
+// Exercises GameMiner._mineFlip through the public Game.mineRun entry, including
 // the pinned external-worker dispatch and its progress/rollback behavior.
 
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
@@ -86,7 +86,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
         vm.fee(1 gwei);
         vm.prank(MINER);
         uint256 before = gasleft();
-        game.mineFlip{gas: supplied}(0);
+        game.mineRun{gas: supplied}(0);
         used = before - gasleft() + 21_192;
     }
 
@@ -112,7 +112,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
         _giveWalletId(ALICE);
         uint256 amount = sdgnrs.totalSupply() * 16 / 1000;
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, ALICE, amount);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, ALICE, amount);
         vm.prank(ALICE);
         sdgnrs.burn(amount);
         burnDay = _openBatch();
@@ -121,16 +121,16 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
             address player = address(uint160(0xB0000 + i));
             vm.deal(player, price * 100);
             vm.prank(player);
-            game.purchase{value: price * 100}(0, 0, BoxOrderLib.boSmalls(100), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: price * 100}(0, 0, BoxOrderLib.boSmalls(100), bytes32(0), MintPaymentKind.DirectEth, false);
         }
         vm.deal(ALICE, 1 ether);
         vm.prank(ALICE);
-        game.placeDegeneretteBet{value: 0.025 ether}(0, 0, 0.005 ether, 5, 0);
+        game.betDegenerette{value: 0.025 ether}(0, 0, 0.005 ether, 5, 0);
         vm.warp(vm.getBlockTimestamp() + 1 days);
     }
 
     function _outcome(uint32 burnDay) private view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(game.level(), game.currentDayView_g542950(), _batchRoll(burnDay),
+        digest = keccak256(abi.encode(game.currentLvl(), game.currentDayView_g542950(), _batchRoll(burnDay),
             sdgnrs.pendingRedemptionEthValue(), game.claimableWinningsOf(ALICE), coinflip.coinflipAmount(ALICE),
             mockVRF.lastRequestId(), game.rngComplete()));
         for (uint256 i; i < 6; ++i) {
@@ -259,7 +259,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
     }
 
     function _cycleBalances() private view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(game.level(), game.currentDayView_g542950(), mockVRF.lastRequestId(),
+        digest = keccak256(abi.encode(game.currentLvl(), game.currentDayView_g542950(), mockVRF.lastRequestId(),
             game.nextPrizePoolView(), game.futurePrizePoolView(), game.currentPrizePoolView()));
         for (uint256 i; i < 32; ++i) {
             address player = address(uint160(0xF1000 + i));
@@ -273,7 +273,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
             address player = address(uint160(0xF1000 + i));
             vm.deal(player, price * 100);
             vm.prank(player);
-            game.purchase{value: price * 100}(0, 40_000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: price * 100}(0, 40_000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         vm.deal(address(game), address(game).balance + 2000 ether);
         bytes memory production = address(game).code;

@@ -47,7 +47,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         vm.deal(cranker, 1000 ether);
         vm.deal(address(game), 1000 ether);
 
-        // Seed lootboxRngIndex = 1 (word stays 0 until injected) so placeDegeneretteBet's
+        // Seed lootboxRngIndex = 1 (word stays 0 until injected) so betDegenerette's
         // index!=0 / word==0 precondition (the freeze-window placement gate) holds.
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
@@ -94,7 +94,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "pre-condition: box index word not yet landed (frozen window)"
         );
         vm.prank(cranker);
-        game.mineFlip{gas: 2_000_000}(20_000);
+        game.mineRun{gas: 2_000_000}(20_000);
         assertGt(
             _boxUnsettled(idx, boxOwner),
             0,
@@ -105,7 +105,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // open advances the box cursor past the entry; the entry word itself is never rewritten.
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(
             _boxUnsettled(idx, boxOwner),
             0,
@@ -130,7 +130,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
+        game.betDegenerette{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
 
         assertEq(DQ.lastBetId(vm, address(game), INDEX), readBetsBefore, "no bet binds to the worded index");
         assertEq(DQ.lastBetId(vm, address(game), INDEX ^ 1), writeBetsBefore + 1, "the bet binds to the unworded write buffer");
@@ -154,7 +154,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // Re-seed FIXED behavior: use the engineered winning word at INDEX.
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(winTicket & 7));
+        game.betDegenerette{value: betAmount}(0, 0, betAmount, 1, uint8(winTicket & 7));
         uint64 betId = DQ.lastBetId(vm, address(game), INDEX);
 
         // Seed the live future prize pool so the winning ETH payout is solvent.
@@ -381,7 +381,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // this at WhaleModule:1030 — `uint24 startLevel = level + 1;` — and applies the
         // 100-level window to [startLevel .. startLevel+99] = [currentLevel+1 .. currentLevel+100].
         // -------------------------------------------------------------------
-        uint24 currentLevel = game.level();
+        uint24 currentLevel = game.currentLvl();
 
         // -------------------------------------------------------------------
         // Execute the claim. The facade at DegenerusGame.sol:1864 calls
@@ -460,7 +460,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     // =========================================================================
 
     function _lvl() internal view returns (uint24) {
-        return game.level() + 1;
+        return game.currentLvl() + 1;
     }
 
     function _activeLootboxIndex() internal view returns (uint48) {
@@ -474,14 +474,14 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
         vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
+        game.betDegenerette{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: lootboxAmount + 0.01 ether}(
+        game.purchaseOrderFor{value: lootboxAmount + 0.01 ether}(
             0,
             400,
             BoxOrderLib.boCustomFloor(lootboxAmount),
@@ -524,7 +524,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     function _crankBets(uint48 index, uint64 betId) internal {
         for (uint256 i; i < 8 && !_betProcessed(index, betId); ++i) {
             vm.prank(cranker);
-            game.mineFlip{gas: 2_000_000}(20_000);
+            game.mineRun{gas: 2_000_000}(20_000);
         }
     }
 
@@ -577,7 +577,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         (uint32 winTicket, uint256 word) = _findWinningCombo(atIndex);
         uint128 betAmount = 0.01 ether;
         vm.prank(who);
-        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(winTicket & 7));
+        game.betDegenerette{value: betAmount}(0, 0, betAmount, 1, uint8(winTicket & 7));
 
         _seedFuturePrizePool(10_000 ether);
         uint256 pre = game.claimableWinningsOf(who);

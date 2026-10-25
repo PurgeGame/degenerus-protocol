@@ -57,7 +57,7 @@ contract DecimatorPricingMeter {
 /// @notice Native Decimator worker progression under small and large gas allocations.
 ///         Real dice and forced heap/payout shapes preserve all semantic work boundaries.
 contract DecimatorPricingRedemptionState {
-    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 }
 
 contract DecimatorPricingTest is NativeMeasuredGasExport {

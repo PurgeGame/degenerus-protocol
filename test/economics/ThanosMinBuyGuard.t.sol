@@ -77,7 +77,7 @@ contract ThanosMinBuyGuard is DeployProtocol {
         // Pin the fixture. These are derived above, not assumed, but a price-table or floor change
         // that moved them would silently change what the tests below exercise — including moving
         // _minQty out of the gate, which would make every assertion vacuous.
-        assertEq(game.level(), BASE_LEVEL, "level poke did not land");
+        assertEq(game.currentLvl(), BASE_LEVEL, "level poke did not land");
         assertEq(_priceWei, 0.08 ether, "routed-level price drifted");
         assertEq(_minQty, 13, "min buy-in quantity drifted");
         assertLt(_minQty, SNAP_CHECK_MAX_UNITS, "min buy must sit INSIDE the guard's gate");
@@ -115,7 +115,7 @@ contract ThanosMinBuyGuard is DeployProtocol {
         vm.prank(_buyer);
         (ok, ) = address(game).call{value: cost}(
             abi.encodeWithSignature(
-                "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                "purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)",
                 uint32(0),
                 qty,
                 boxOrder,

@@ -180,7 +180,7 @@ contract BoundedMappingGasTest is BoundedDeployProtocol {
     }
 
     function _boonData() private view returns (bytes memory) {
-        return abi.encodeCall(game.issueDeityBoon, (deityId, playerId, uint8(0)));
+        return abi.encodeCall(game.giveBoon, (deityId, playerId, uint8(0)));
     }
 
     function test_D1_FirstReceiptCold() public { _measure("D1_first_cold", DEITY, 0, _boonData(), false); }
@@ -188,7 +188,7 @@ contract BoundedMappingGasTest is BoundedDeployProtocol {
 
     function _priorBoon() private {
         vm.prank(DEITY);
-        game.issueDeityBoon(deityId, playerId, 0);
+        game.giveBoon(deityId, playerId, 0);
         vm.warp(block.timestamp + 1 days);
         _seed(abi.encodeCall(BoundedGameSeeder.seedDay, ()));
     }
@@ -201,11 +201,11 @@ contract BoundedMappingGasTest is BoundedDeployProtocol {
     }
 
     function _betData(uint8 symbol) private view returns (bytes memory) {
-        return abi.encodeCall(game.placeDegeneretteBet, (uint32(0), uint8(0), uint128(0.01 ether), uint8(1), symbol));
+        return abi.encodeCall(game.betDegenerette, (uint32(0), uint8(0), uint128(0.01 ether), uint8(1), symbol));
     }
     function _bet(uint8 symbol) private {
         vm.prank(PLAYER);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, symbol);
+        game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, symbol);
     }
     function test_G6_FirstBetCold() public { _measure("G6_first_cold", PLAYER, 0.01 ether, _betData(3), false); }
     function test_G6_FirstBetWarm() public { _measure("G6_first_warm", PLAYER, 0.01 ether, _betData(3), true); }

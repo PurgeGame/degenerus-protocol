@@ -69,12 +69,12 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
             uint256 quantity = (20 ether / price) * 400;
             uint256 value = price * quantity / 400 + 1 ether + (foil ? price * 10 : 0);
             vm.prank(buyers[i]);
-            game.purchase{value: value}(0, quantity, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, foil);
+            game.purchaseOrderFor{value: value}(0, quantity, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, foil);
             purchaseRefund += _refundLastCall();
             purchaseGas += vm.snapshotGasLastCall("lifecycle-purchase");
             if (foil) boughtFoilAt[i] = active;
             vm.prank(buyers[i]);
-            game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 0);
+            game.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, 0);
             purchaseRefund += _refundLastCall();
             purchaseGas += vm.snapshotGasLastCall("lifecycle-bet");
         }
@@ -92,7 +92,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
                 }
             }
             vm.prank(buyers[0]);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 keeperRefund += _refundLastCall();
                 uint256 used = vm.snapshotGasLastCall("lifecycle-keeper");
                 keeperGas += used;
@@ -141,15 +141,15 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
                     lastStamp[slot] = stamp;
                 }
             }
-            uint24 lvl = game.level();
+            uint24 lvl = game.currentLvl();
             if (lvl > 0) _snapshotInventory(lvl - 1);
             _snapshotInventory(lvl);
             _snapshotInventory(lvl + 1);
             _snapshotInventory(lvl + 2);
         }
-        assertGe(game.level(), 3, "must exercise completed levels beyond genesis");
+        assertGe(game.currentLvl(), 3, "must exercise completed levels beyond genesis");
         if (recycled) assertGe(retirements, 3, "must observe actual parity buffer takeovers");
-        emit log_named_uint("final completed level", game.level());
+        emit log_named_uint("final completed level", game.currentLvl());
         emit log_named_uint("observed parity retirements", retirements);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 legacyTraits = keccak256("TraitsGenerated(uint32,uint256,uint32)");

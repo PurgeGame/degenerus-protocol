@@ -47,9 +47,9 @@ contract GrowthMathHarness is DegenerusGameAdvanceModule {
 ///         end to end: bet during a jackpot phase, transition, settlement — the push landing
 ///         from the real transition, nothing pranked.
 contract ParimutuelGrowthBetTest is DeployProtocol {
-    // growthState(uint24) — the scoring half mocks only the key-0 route tuple; ratchet
+    // getGrowth(uint24) — the scoring half mocks only the key-0 route tuple; ratchet
     // terms left the market's reads entirely (settlement arrives as a pushed bit).
-    bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
+    bytes4 private constant GROWTH_STATE = bytes4(keccak256("getGrowth(uint24)"));
     bytes4 private constant MARKET_GATES =
         bytes4(keccak256("marketBetGates(uint32,uint24)"));
 
@@ -89,10 +89,10 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     ///      quests answer (mintPackedFor == 0) is the subject.
     function _fundNoGate(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
-    /// @dev Pin game.growthState(round) to a fixed tuple.
+    /// @dev Pin game.getGrowth(round) to a fixed tuple.
     function _mockState(
         uint24 round,
         uint256 ratchetPrev,
@@ -116,7 +116,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         );
     }
 
-    /// @dev Open the market at `currentLevel`. growthState(0) is the one key every path
+    /// @dev Open the market at `currentLevel`. getGrowth(0) is the one key every path
     ///      asks now — placement, view and crank all read only the route tuple. The round
     ///      key is mocked too for older shapes, harmlessly.
     function _mockOpenAt(uint24 currentLevel, uint8 phaseDay, bool open) internal {
@@ -283,7 +283,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         }
     }
 
-    /// Round 0 is the sole skip: growthState reports no ratchet terms for it, so it could
+    /// Round 0 is the sole skip: getGrowth reports no ratchet terms for it, so it could
     /// never settle and a stake left there would strand.
     function testRoundZeroRefusesBets() public {
         _fund(alice, STAKE);
@@ -676,7 +676,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
         uint256 randomWord = uint256(
-            keccak256(abi.encode(block.timestamp, game.level(), reqId))
+            keccak256(abi.encode(block.timestamp, game.currentLvl(), reqId))
         );
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
@@ -687,7 +687,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         for (uint256 j = 0; j < 200; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -700,7 +700,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     ///      stages is observable. Needs live gas metering (the engine meters with gasleft()).
     function _mineStep() internal returns (bool ok) {
         for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
-            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) return true;
         }
     }
@@ -721,19 +721,19 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     /// @dev Drive the real game into a live, settled jackpot phase on an ordinary round
     ///      (level >= 2, clear of the century band) and return that round.
     function _driveToLiveJackpotPhase() internal returns (uint24 round) {
-        for (uint256 i = 0; i < 40 && game.level() < 2; i++) {
+        for (uint256 i = 0; i < 40 && game.currentLvl() < 2; i++) {
             // The seal needs the pool strictly over the level's target.
             if (!game.jackpotPhase()) _seedNextPool(game.prizePoolTargetView() + 1 ether);
             _driveDay();
         }
         for (uint256 i = 0; i < 40; i++) {
-            if (game.jackpotPhase() && !game.rngLocked() && game.level() >= 2) break;
+            if (game.jackpotPhase() && !game.rngLocked() && game.currentLvl() >= 2) break;
             if (!game.jackpotPhase()) _seedNextPool(200 ether);
             _driveDay();
         }
 
         require(game.jackpotPhase() && !game.rngLocked(), "harness: no live jackpot phase");
-        round = game.level();
+        round = game.currentLvl();
         require(round >= 2 && round % 100 > 1 && round % 100 != 99, "harness: skipped round");
     }
 
@@ -752,7 +752,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _finishReadConsumers();
         bool ok;
         for (uint256 i; i < 100 && !game.rngLocked(); ++i) {
-            (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             require(ok, "harness: prerequisites and daily request must progress");
         }
         require(game.rngLocked(), "harness: the day's word must be in flight");
@@ -842,7 +842,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
                 _fulfillVrfIfPending();
                 if (!_mineStep()) break;
                 if (game.jackpotPhase() && game.jackpotDuration() == 1) {
-                    (, , , , bool open, ) = game.growthState(0);
+                    (, , , , bool open, ) = game.getGrowth(0);
                     assertFalse(open, "a turbo phase must never take bets");
                     turboObservations++;
                 }
@@ -891,7 +891,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
                 // The span: draws ended, flag not yet dropped.
                 if (game.jackpotPhase()) {
                     vm.deleteStateSnapshot(snap);
-                    (, , , , bool open, uint8 phaseDay) = game.growthState(0);
+                    (, , , , bool open, uint8 phaseDay) = game.getGrowth(0);
                     if (!open) {
                         sawSpan = true;
                         _assertSpanClosed(phaseDay);
@@ -905,7 +905,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
                     slot0 = (slot0 & ~(uint256(0xFF) << 128)) | (uint256(1) << 160); // jackpotCounter = 0, phaseTransitionActive
                     vm.store(address(game), bytes32(0), bytes32(slot0));
                     assertTrue(game.jackpotPhase(), "the flag is still up in the span");
-                    (, , , , bool open, uint8 phaseDay) = game.growthState(0);
+                    (, , , , bool open, uint8 phaseDay) = game.getGrowth(0);
                     assertFalse(open, "the market is shut once the draws end");
                     sawSpan = true;
                     _assertSpanClosed(phaseDay);
@@ -913,9 +913,9 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
                 } else {
                     vm.deleteStateSnapshot(snap);
                 }
-                if (game.level() > round) break;
+                if (game.currentLvl() > round) break;
             }
-            if (game.level() > round) break;
+            if (game.currentLvl() > round) break;
         }
 
         assertTrue(sawSpan, "harness: never observed the post-draw span");
@@ -973,11 +973,11 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         assertEq(midOutcome, 0, "an in-flight round must not be settled");
 
         // Drive through the transition into the next level.
-        for (uint256 i = 0; i < 60 && game.level() <= round; i++) {
+        for (uint256 i = 0; i < 60 && game.currentLvl() <= round; i++) {
             if (!game.jackpotPhase()) _seedNextPool(5_000 ether);
             _driveDay();
         }
-        assertGt(game.level(), round, "the protocol must advance past the bet round");
+        assertGt(game.currentLvl(), round, "the protocol must advance past the bet round");
 
         (, , , , , , uint8 outcome, ) = parimutuel.marketState(alice, round);
         assertTrue(outcome == 1 || outcome == 2, "the round must settle after transition");

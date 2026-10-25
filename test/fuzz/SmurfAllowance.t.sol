@@ -70,7 +70,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         _score(0); _reject(LIMIT);
         assertEq(_info().remaining, 0);
         vm.prank(owner);
-        game.purchase{value: price}(first, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(first, 400, 0, 0, MintPaymentKind.DirectEth, false);
         _score(240); _reject(LIMIT);
         _score(359); _reject(LIMIT);
         _score(360); _create();
@@ -177,7 +177,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         _create();
         uint256 quota = _quotaWord() >> 224;
         vm.startPrank(owner);
-        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         game.purchaseWhalePass{value: 2.4 ether}(0, 1, 0);
         game.purchaseDeityPass{value: 30 ether}(0, 3, 0);
         vm.stopPrank();
@@ -211,7 +211,7 @@ contract SmurfAllowanceTest is DeployProtocol {
 
         uint256 quota = _quotaWord() >> 224;
         vm.prank(owner);
-        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         (mayBet,, id) = quests.marketBetGates(main, 1);
         assertTrue(mayBet, "a main ticket purchase still qualifies");
         assertEq(id, main);

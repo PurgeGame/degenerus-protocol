@@ -233,7 +233,7 @@ contract AnyInputHandler is Test {
     // =====================================================================================
 
     function cf_deposit(uint256 a, uint256 pSeed, uint256 amount) external act(a) {
-        _call(0, COINFLIP, 0, abi.encodeWithSignature("depositCoinflip(uint32,uint256)", _id(pSeed), amount));
+        _call(0, COINFLIP, 0, abi.encodeWithSignature("playCoinflip(uint32,uint256)", _id(pSeed), amount));
     }
 
     function cf_claim(uint256 a, uint256 pSeed, uint256 amount) external act(a) {
@@ -269,7 +269,7 @@ contract AnyInputHandler is Test {
         // payKind is folded onto 0..4 only so the 4-value enum is hit at all: 0..3 are the real kinds,
         // 4 reaches the contract out of range and must fail its ABI decode.
         _call(5, address(game), _val(value), abi.encodeWithSelector(
-            GameFacade.purchase.selector, _id(bSeed), qty, boxOrder, code, uint256(payKind % 5), foil));
+            GameFacade.purchaseOrderFor.selector, _id(bSeed), qty, boxOrder, code, uint256(payKind % 5), foil));
     }
 
     function g_redeemFlip(uint256 a, uint256 bSeed, uint256 qty) external act(a) {
@@ -277,13 +277,13 @@ contract AnyInputHandler is Test {
     }
 
     function g_borrow(uint256 a, uint256 pSeed, uint256 dueSeed) external act(a) {
-        uint24 due = uint24(uint256(game.level()) + 1 + dueSeed % 99);
+        uint24 due = uint24(uint256(game.currentLvl()) + 1 + dueSeed % 99);
         uint256 amount = dueSeed >> 128 == 0 ? type(uint256).max : dueSeed >> 128;
         _call(7, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256,uint256)", _id(pSeed), due, amount, uint256(0)));
     }
 
     function g_repay(uint256 a, uint256 pSeed, uint256 value) external act(a) {
-        _call(51, address(game), _val(value), abi.encodeWithSignature("repay(uint32)", _id(pSeed)));
+        _call(51, address(game), _val(value), abi.encodeWithSignature("clearDebtNow(uint32)", _id(pSeed)));
     }
 
     function g_claimBingo(uint256 a, uint256 pSeed, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external act(a) {
@@ -339,7 +339,7 @@ contract AnyInputHandler is Test {
     }
 
     function g_issueDeityBoon(uint256 a, uint256 dSeed, uint256 rSeed, uint8 slot) external act(a) {
-        _call(21, address(game), 0, abi.encodeWithSignature("issueDeityBoon(uint32,uint32,uint8)", _id(dSeed), _idNZ(rSeed), slot));
+        _call(21, address(game), 0, abi.encodeWithSignature("giveBoon(uint32,uint32,uint8)", _id(dSeed), _idNZ(rSeed), slot));
     }
 
     function g_subscribe(uint256 a, uint256 pSeed, bool useTickets, uint8 qty, uint256 sSeed, uint256 value)
@@ -364,11 +364,11 @@ contract AnyInputHandler is Test {
         uint256 value
     ) external act(a) {
         _call(24, address(game), _val(value), abi.encodeWithSignature(
-            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)", _id(pSeed), currency, amountPerSpin, spinCount, symbol));
+            "betDegenerette(uint32,uint8,uint128,uint8,uint8)", _id(pSeed), currency, amountPerSpin, spinCount, symbol));
     }
 
     function g_claimWinnings(uint256 a, uint256 pSeed) external act(a) {
-        _call(25, address(game), 0, abi.encodeWithSignature("claimWinnings(uint32)", _id(pSeed)));
+        _call(25, address(game), 0, abi.encodeWithSignature("claimClaimable(uint32)", _id(pSeed)));
     }
 
     function g_claimWinningsAmount(uint256 a, uint256 pSeed, uint256 amount) external act(a) {
@@ -398,7 +398,7 @@ contract AnyInputHandler is Test {
     }
 
     function g_buyDegenesisBox(uint256 a, uint256 bSeed, uint256 boxAmount, uint256 value) external act(a) {
-        _call(32, address(game), _val(value), abi.encodeWithSignature("buyDegenesisBox(uint32,uint256)", _id(bSeed), boxAmount));
+        _call(32, address(game), _val(value), abi.encodeWithSignature("purchaseDegenesisBox(uint32,uint256)", _id(bSeed), boxAmount));
     }
 
     function g_claimWinningsStethFirst(uint256 a) external act(a) {
@@ -470,7 +470,7 @@ contract AnyInputHandler is Test {
     }
 
     function gn_vote(uint256 a, uint8 slot) external act(a) {
-        _call(49, GNRUS_, 0, abi.encodeWithSignature("vote(uint8)", slot));
+        _call(49, GNRUS_, 0, abi.encodeWithSignature("castBallot(uint8)", slot));
     }
 
     // =====================================================================================
@@ -494,7 +494,7 @@ contract AnyInputHandler is Test {
     }
 
     function wx_enter(uint256 a, uint256 amount) external act(a) {
-        _call(56, WWXRP_, 0, abi.encodeWithSignature("enter(uint32,uint256)", uint32(0), amount));
+        _call(56, WWXRP_, 0, abi.encodeWithSignature("enterDraw(uint32,uint256)", uint32(0), amount));
     }
 
     function wx_claim(uint256 a, uint24 day, uint32 entryIndex) external act(a) {
@@ -515,12 +515,12 @@ contract AnyInputHandler is Test {
     }
 
     function cr_enterBonusBattle(uint256 a, uint256 period, uint32 chips, uint16 multiple) external act(a) {
-        (bool okB, bytes memory retB) = _call(60, CRAPS, 0, abi.encodeWithSignature("enterBonusBattle(uint32,uint256,uint32,uint16)", uint32(0), period, chips, multiple));
+        (bool okB, bytes memory retB) = _call(60, CRAPS, 0, abi.encodeWithSignature("throwCraps(uint32,uint256,uint32,uint16)", uint32(0), period, chips, multiple));
         _recordBet(okB, retB);
     }
 
     function cr_enterBonusDay(uint256 a, uint32 chips, uint16 multiple) external act(a) {
-        _call(61, CRAPS, 0, abi.encodeWithSignature("enterBonusDay(uint32,uint32,uint16)", uint32(0), chips, multiple));
+        _call(61, CRAPS, 0, abi.encodeWithSignature("playCraps(uint32,uint32,uint16)", uint32(0), chips, multiple));
     }
 
     function cr_amendSlip(uint256 a, uint256 betId, uint32 chips) external act(a) {
@@ -609,7 +609,7 @@ contract AnyInputHandler is Test {
         uint256 cost = priceWei * qty / 400 + lootboxAmt;
         if (cost > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0, qty, lootboxAmt == 0 ? 0 : BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             ++oks[77];
@@ -624,7 +624,7 @@ contract AnyInputHandler is Test {
         if (eth > currentActor.balance || priceWei == 0) return;
         uint256 qty = eth * 400 / priceWei;
         vm.prank(currentActor);
-        try game.purchase{value: eth}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: eth}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             ++oks[78];
         } catch {}
     }
@@ -632,13 +632,13 @@ contract AnyInputHandler is Test {
     function prog_mineFlip(uint256 a) external act(a) {
         _lastId = 79;
         ++calls[79];
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ++oks[79];
             ++ghost_mines;
         } catch {}
-        if (game.level() > lvl) ghost_levels += game.level() - lvl;
+        if (game.currentLvl() > lvl) ghost_levels += game.currentLvl() - lvl;
         if (game.gameOver()) ghost_gameOver = 1;
     }
 
@@ -661,13 +661,13 @@ contract AnyInputHandler is Test {
     function prog_driveDay(uint256 a, uint256 word) external act(a) {
         _lastId = 82;
         ++calls[82];
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         vm.warp(block.timestamp + 1 days);
         bool any;
         for (uint256 i; i < 40; ++i) {
             _fulfill(uint256(keccak256(abi.encode(word, i))));
             vm.prank(currentActor);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 any = true;
                 ++ghost_mines;
             } catch {
@@ -675,7 +675,7 @@ contract AnyInputHandler is Test {
             }
         }
         if (any) ++oks[82];
-        if (game.level() > lvl) ghost_levels += game.level() - lvl;
+        if (game.currentLvl() > lvl) ghost_levels += game.currentLvl() - lvl;
         if (game.gameOver()) ghost_gameOver = 1;
     }
 
@@ -686,7 +686,7 @@ contract AnyInputHandler is Test {
         ++oks[83];
         if (IAnyBalance(COIN).balanceOf(currentActor) < 100_000) {
             vm.prank(address(game));
-            (bool ok,) = COIN.call(abi.encodeWithSignature("mintForGame(address,uint256)", currentActor, 1_000_000));
+            (bool ok,) = COIN.call(abi.encodeWithSignature("mintForGame_g152734(address,uint256)", currentActor, 1_000_000));
             ok;
         }
         if (IAnyBalance(WWXRP_).balanceOf(currentActor) < 1_000) {
@@ -734,13 +734,13 @@ contract AnyInputHandler is Test {
     }
 
     function gd_borrow(uint256 a, uint256, uint256) external act(a) {
-        uint24 due = game.level() + 1;
+        uint24 due = game.currentLvl() + 1;
         _call(84, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256,uint256)", uint32(0), due, type(uint256).max, uint256(0)));
     }
 
     function gd_issueDeityBoon(uint256 a, uint256 rSeed, uint8 slot) external act(a) {
         currentActor = actors[(a % 3) * 2 % actors.length]; // actors 0, 2, 4 hold deity passes
-        _call(85, address(game), 0, abi.encodeWithSignature("issueDeityBoon(uint32,uint32,uint8)", uint32(0), _idNZ(rSeed), slot % 3));
+        _call(85, address(game), 0, abi.encodeWithSignature("giveBoon(uint32,uint32,uint8)", uint32(0), _idNZ(rSeed), slot % 3));
     }
 
     function gd_placeDegenerette(uint256 a, uint256 pSeed, uint256 cSeed, uint256 aSeed, uint256 sSeed, uint256 symSeed)
@@ -761,18 +761,18 @@ contract AnyInputHandler is Test {
             spins = uint8(1 + sSeed % 15);
         }
         _call(86, address(game), value, abi.encodeWithSignature(
-            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)", _id(pSeed), currency, amt, spins, uint8(symSeed % 24)));
+            "betDegenerette(uint32,uint8,uint128,uint8,uint8)", _id(pSeed), currency, amt, spins, uint8(symSeed % 24)));
     }
 
     function gd_enterBonusBattle(uint256 a, uint256 period, uint256 chipSeed, uint256 multSeed) external act(a) {
         (bool okB, bytes memory retB) = _call(87, CRAPS, 0, abi.encodeWithSignature(
-            "enterBonusBattle(uint32,uint256,uint32,uint16)", uint32(0), period % 6, _validChips(chipSeed), _multiple(multSeed)));
+            "throwCraps(uint32,uint256,uint32,uint16)", uint32(0), period % 6, _validChips(chipSeed), _multiple(multSeed)));
         _recordBet(okB, retB);
     }
 
     function gd_enterBonusDay(uint256 a, uint256 chipSeed, uint256 multSeed) external act(a) {
         _call(88, CRAPS, 0, abi.encodeWithSignature(
-            "enterBonusDay(uint32,uint32,uint16)", uint32(0), _validChips(chipSeed), _multiple(multSeed)));
+            "playCraps(uint32,uint32,uint16)", uint32(0), _validChips(chipSeed), _multiple(multSeed)));
     }
 
     function gd_createBattle(uint256 a, uint256 s) external act(a) {
@@ -875,12 +875,12 @@ contract AnyInputHandler is Test {
         uint256 ts = block.timestamp;
         uint256 start = ts - ((ts - 82_620) % 1 days);
         vm.warp(start + 1 days + 60);
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         bool any;
         for (uint256 i; i < 40; ++i) {
             _fulfill(uint256(keccak256(abi.encode(word, i, "aligned"))));
             vm.prank(currentActor);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 any = true;
                 ++ghost_mines;
             } catch {
@@ -888,7 +888,7 @@ contract AnyInputHandler is Test {
             }
         }
         if (any) ++oks[101];
-        if (game.level() > lvl) ghost_levels += game.level() - lvl;
+        if (game.currentLvl() > lvl) ghost_levels += game.currentLvl() - lvl;
         if (game.gameOver()) ghost_gameOver = 1;
     }
 
@@ -903,7 +903,7 @@ contract AnyInputHandler is Test {
         for (uint256 i; i < 80; ++i) {
             _fulfill(uint256(keccak256(abi.encode(gate, i, "deadman"))));
             vm.prank(currentActor);
-            try game.mineFlip(0) {} catch {
+            try game.mineRun(0) {} catch {
                 if (!_fulfill(uint256(keccak256(abi.encode(gate, i, "deadman-r"))))) break;
             }
         }
@@ -918,7 +918,7 @@ contract AnyInputHandler is Test {
         uint256 credit = game.degenesisCreditOf(currentActor);
         uint256 amount = credit > 0.01 ether ? 0.01 ether + amtSeed % (credit - 0.01 ether + 1) : 0.01 ether;
         uint256 value = amount <= currentActor.balance ? amount : 0;
-        _call(103, address(game), value, abi.encodeWithSignature("buyDegenesisBox(uint32,uint256)", uint32(0), amount));
+        _call(103, address(game), value, abi.encodeWithSignature("purchaseDegenesisBox(uint32,uint256)", uint32(0), amount));
     }
 
     function _fulfill(uint256 word) internal returns (bool) {

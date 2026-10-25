@@ -66,7 +66,7 @@ async function crank(day) {
       assert(id>0n,'Wait requires an actual VRF request');
       const word=BigInt(keccak256(abi.encode(['uint256','uint256'],[day,number])))|1n;
       await execute('vrfFulfill',vrf,'MockVRFCoordinator','fulfillRandomWords',[id,word]);
-    } else await execute(`mineFlip:${action}`,game,'DegenerusGame','mineFlip',[0]);
+    } else await execute(`mineFlip:${action}`,game,'DegenerusGame','mineRun',[0]);
   }
   throw Error('Lifecycle crank did not reach idle within 200 calls');
 }
@@ -84,24 +84,24 @@ try {
       tickets=(need/price+1n)*400n;
     }
     const boxValue=100_000_000_000_000_000n, box=(100n<<9n)|(3n<<7n)|1n;
-    await execute('purchase',game,'DegenerusGame','purchase',[0,tickets,box,'0x'+'00'.repeat(32),0,false],price*tickets/400n+boxValue);
+    await execute('purchase',game,'DegenerusGame','purchaseOrderFor',[0,tickets,box,'0x'+'00'.repeat(32),0,false],price*tickets/400n+boxValue);
     if(day<=8) {
       const credit=await read('degenesisCreditOf',[sender]);
       const amount=credit<10n**16n?credit:10n**16n;
       assert(amount>0n,'Degenesis purchase needs earned credit');
-      await execute('buyDegenesisBox',game,'DegenerusGame','buyDegenesisBox',[0,amount],amount);
+      await execute('purchaseDegenesisBox',game,'DegenerusGame','purchaseDegenesisBox',[0,amount],amount);
     }
     time+=6*3600;await crank(day);
     const claimable=await read('claimableWinningsOf',[sender]);
-    if(claimable>1n) await execute('claimWinnings',game,'DegenerusGame','claimWinnings(uint32)',[0]);
-    const level=await read('level');days.push({day,level,claimableBeforeClaim:claimable});save();
+    if(claimable>1n) await execute('claimWinnings',game,'DegenerusGame','claimClaimable(uint32)',[0]);
+    const level=await read('currentLvl');days.push({day,level,claimableBeforeClaim:claimable});save();
     if(level>=1n && (counts.LootBoxOpened??0)>0 && rows.some(r=>r.label==='claimWinnings'))break;
   }
-  const level=await read('level');
+  const level=await read('currentLvl');
   assert(level>=1n,'No level transition');
   assert((counts.LootBoxOpened??0)>0,'No boxes opened');
   assert(rows.some(r=>r.label==='claimWinnings'),'No positive claim');
-  assert(rows.some(r=>r.label==='buyDegenesisBox'),'No Degenesis purchase');
+  assert(rows.some(r=>r.label==='purchaseDegenesisBox'),'No Degenesis purchase');
   save({passed:true,finalLevel:level,finalStateAccounts:Object.keys(state).length});
   console.log(JSON.stringify({passed:true,transactions:rows.length,finalLevel:level.toString(),boxes:counts.LootBoxOpened,claims:rows.filter(r=>r.label==='claimWinnings').length}));
 } catch(error) {save({passed:false,error:error.error?.message??error.shortMessage??error.message});console.error(error.error?.message??error.shortMessage??error.message);process.exitCode=1;}

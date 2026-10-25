@@ -82,7 +82,7 @@ contract CoinflipPackedStake is DeployProtocol {
 
     function _mint(address to, uint256 amount) internal {
         vm.prank(GAME);
-        coin.mintForGame(to, amount);
+        coin.mintForGame_g152734(to, amount);
     }
 
     function _credit(address p, uint256 amount) internal {
@@ -257,7 +257,7 @@ contract CoinflipPackedStake is DeployProtocol {
         _mint(player, 200);
         vm.recordLogs();
         vm.prank(player);
-        coinflip.depositCoinflip(0, 100);
+        coinflip.playCoinflip(0, 100);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (, uint256 amount, uint256 total) = _stakeEvent(logs, player);
         assertEq(coin.balanceOf(player), 100, "only the principal leaves the wallet");
@@ -276,21 +276,21 @@ contract CoinflipPackedStake is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(CoinflipCore.AmountLTMin.selector);
-        coinflip.depositCoinflip(0, 99);
+        coinflip.playCoinflip(0, 99);
     }
 
     function test_SelfDepositOverTheCapRevertsAndRollsBack() public {
         _credit(player, CAP - 100_000);
         _mint(player, 200_000);
         vm.prank(player);
-        coinflip.depositCoinflip(0, 100);
+        coinflip.playCoinflip(0, 100);
         uint256 stake = coinflip.coinflipAmount(player);
         assertGe(stake, CAP - 100_000 + 100, "a deposit inside the cap is accepted");
         uint256 wallet = coin.balanceOf(player);
 
         vm.prank(player);
         vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
-        coinflip.depositCoinflip(0, 100_000);
+        coinflip.playCoinflip(0, 100_000);
         assertEq(coin.balanceOf(player), wallet, "the burn rolled back");
         assertEq(coinflip.coinflipAmount(player), stake, "nothing was added");
     }
@@ -300,7 +300,7 @@ contract CoinflipPackedStake is DeployProtocol {
         uint256 stake = 10_000;
         _mint(player, stake);
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, stake);
+        coinflip.playCoinflip(playerId, stake);
         _resolveDay(3, true);
         uint256 payout = coinflip.previewClaimCoinflips(player);
         assertGt(payout, 0, "fixture: a banked win");
@@ -310,12 +310,12 @@ contract CoinflipPackedStake is DeployProtocol {
         uint256 fill = CAP - payout - UNIT;
         _mint(gifter, fill);
         vm.prank(gifter);
-        coinflip.depositCoinflip(playerId, fill);
+        coinflip.playCoinflip(playerId, fill);
         assertEq(coinflip.coinflipAmount(player), fill);
 
         vm.prank(player);
         vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
-        coinflip.depositCoinflip(0, payout);
+        coinflip.playCoinflip(0, payout);
         assertEq(coinflip.previewClaimCoinflips(player), payout, "the claimable draw rolled back with the revert");
         assertEq(coinflip.coinflipAmount(player), fill, "nothing was added");
     }
@@ -327,11 +327,11 @@ contract CoinflipPackedStake is DeployProtocol {
 
         vm.prank(operator);
         vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
-        coinflip.depositCoinflip(playerId, 100);
+        coinflip.playCoinflip(playerId, 100);
 
         vm.prank(gifter);
         vm.expectRevert(CoinflipCore.StakeAboveDailyCap.selector);
-        coinflip.depositCoinflip(playerId, 100);
+        coinflip.playCoinflip(playerId, 100);
 
         assertEq(coin.balanceOf(player), 100);
         assertEq(coin.balanceOf(gifter), 100);
@@ -341,7 +341,7 @@ contract CoinflipPackedStake is DeployProtocol {
         _mint(gifter, 100);
         vm.prank(gifter);
         vm.expectRevert(CoinflipCore.AmountLTMin.selector);
-        coinflip.depositCoinflip(playerId, 100 - 1);
+        coinflip.playCoinflip(playerId, 100 - 1);
     }
 
     // =====================================================================
@@ -417,7 +417,7 @@ contract CoinflipPackedStake is DeployProtocol {
     function test_PreviewMatchesClaimAndRetainedLanesCannotReplay() public {
         _mint(player, 1_000);
         vm.prank(player);
-        coinflip.depositCoinflip(0, 1_000);
+        coinflip.playCoinflip(0, 1_000);
         uint256 stakeDay3 = coinflip.coinflipAmount(player);
         _resolveDay(3, true);
         (uint16 r,) = coinflip.getCoinflipDayResult(3);

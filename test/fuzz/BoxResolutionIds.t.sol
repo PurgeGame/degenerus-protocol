@@ -40,7 +40,7 @@ contract BoxResolutionIdsTest is SmurfFixture {
             word = k;
             break;
         }
-        uint24 lvl = game.level() + 1;
+        uint24 lvl = game.currentLvl() + 1;
         // One 0.01 ETH box (10 units, quantity 1) for the smurf.
         uint256 entry = uint256(smurfId) | (uint256(10) << 32) | (uint256(1) << 77);
         vm.record();
@@ -91,7 +91,7 @@ contract BoxResolutionIdsTest is SmurfFixture {
         _openBetBuffer();
         vm.recordLogs();
         vm.prank(makeAddr("resolution_owner"));
-        game.placeDegeneretteBet{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
+        game.betDegenerette{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
         (uint64 betId,) = _placedBetId(vm.getRecordedLogs());
         uint256 word = 2;
         for (;; ++word) {

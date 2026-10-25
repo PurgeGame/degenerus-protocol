@@ -32,7 +32,7 @@ contract FlipArithmeticDeltas is DeployProtocol {
 
         // _mint (FLIP:435-436): GAME mints to a fresh holder.
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(alice, mintAmt);
+        coin.mintForGame_g152734(alice, mintAmt);
         assertEq(coin.totalSupply(), supply0 + mintAmt, "mint: totalSupply += amount (FLIP:435)");
         assertEq(coin.balanceOf(alice), mintAmt, "mint: balanceOf[to] += amount (FLIP:436)");
 
@@ -46,7 +46,7 @@ contract FlipArithmeticDeltas is DeployProtocol {
 
         // _burn (FLIP:458-459): GAME burns from alice (balance >= amount skips the shortfall path).
         vm.prank(ContractAddresses.GAME);
-        coin.burnCoin(alice, burnAmt);
+        coin.burnCoin_g27673(alice, burnAmt);
         assertEq(coin.balanceOf(alice), mintAmt - xferAmt - burnAmt, "burn: balanceOf[from] -= amount (FLIP:458)");
         assertEq(coin.totalSupply(), supply0 + mintAmt - burnAmt, "burn: totalSupply -= amount (FLIP:459)");
     }

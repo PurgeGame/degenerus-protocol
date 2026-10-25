@@ -22,7 +22,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @dev The real deployed protocol (DeployProtocol). Days resolve through the GAME's own
 ///      `processCoinflipPayouts(bonus, word, day)` with the wall clock on that day, as the daily
 ///      advance does; word parity is forced only on the key days. FLIP funding uses
-///      `mintForGame` as GAME and credits use `creditFlip_g317` as GAME, the routes every ordinary
+///      `mintForGame_g152734` as GAME and credits use `creditFlip_g317` as GAME, the routes every ordinary
 ///      award takes. No storage writes; lastClaim is read with vm.load and cross-checked against
 ///      the public startDay getter.
 contract CoinflipCarryHindsight is DegenesisDeployProtocol {
@@ -124,7 +124,7 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
 
     function _fund(address who, uint256 amt) internal {
         vm.prank(GAME);
-        coin.mintForGame(who, amt);
+        coin.mintForGame_g152734(who, amt);
     }
 
     function _credit(uint32 id) internal {
@@ -146,16 +146,16 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
     function test_DormantCarryClaimGetsNothingAroundSettledLoss() public {
         _resolveRange(ARM_DAY + 1, 46);
         vm.prank(control);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         _assertCurrent(controlId, "control current mid-way");
         _resolveRange(47, 91);
 
         _fund(dormant, STAKE);
         _fund(control, STAKE);
         vm.prank(dormant);
-        coinflip.depositCoinflip(0, STAKE);
+        coinflip.playCoinflip(0, STAKE);
         vm.prank(control);
-        coinflip.depositCoinflip(0, STAKE);
+        coinflip.playCoinflip(0, STAKE);
         _assertCurrent(dormantId, "one deposit walk settles the whole 89-day backlog");
         _assertCurrent(controlId, "control current");
         assertEq(coinflip.coinflipAmountById(dormantId), coinflip.coinflipAmountById(controlId), "equal stakes");
@@ -179,13 +179,13 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
     function test_DormantKnownWinPaysExactlyTheControl() public {
         _resolveRange(ARM_DAY + 1, 91);
         vm.prank(control);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         _fund(dormant, STAKE);
         _fund(control, STAKE);
         vm.prank(dormant);
-        coinflip.depositCoinflip(0, STAKE);
+        coinflip.playCoinflip(0, STAKE);
         vm.prank(control);
-        coinflip.depositCoinflip(0, STAKE);
+        coinflip.playCoinflip(0, STAKE);
         _resolveDay(92, true);
         _resolveDay(93, true);
 
@@ -206,7 +206,7 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
     function test_CreditRouteAtWindowBoundaryGetsNothing() public {
         _resolveRange(ARM_DAY + 1, 92);
         vm.prank(control);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         _credit(dormantId);
         _credit(controlId);
         assertEq(_lastClaim(dormantId), ARM_DAY, "the credit did not walk the account");
@@ -230,7 +230,7 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
     function test_ExitAfterTwoWindowsReleasesNothingAroundSettledLoss() public {
         _resolveRange(ARM_DAY + 1, 181);
         vm.prank(control);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         _credit(dormantId);
         _credit(controlId);
         _resolveDay(182, true);
@@ -256,7 +256,7 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
         _credit(dormantId);
         _credit(controlId);
         vm.prank(control);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         _resolveDay(48, true);
         _resolveDay(49, false);
 
@@ -280,14 +280,14 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
     function test_RunPeakTakeProfitSelfFundedGetsNothing() public {
         _resolveRange(ARM_DAY + 1, 47);
         vm.prank(control);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         _resolveRange(48, 92);
         _fund(dormant, STAKE);
         _fund(control, STAKE);
         vm.prank(dormant);
-        coinflip.depositCoinflip(0, STAKE);
+        coinflip.playCoinflip(0, STAKE);
         vm.prank(control);
-        coinflip.depositCoinflip(0, STAKE);
+        coinflip.playCoinflip(0, STAKE);
         _assertCurrent(dormantId, "the deposit walk settled the 90-day backlog");
 
         _resolveDay(93, true);
@@ -318,7 +318,7 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
         _credit(dormantId);
         _credit(controlId);
         vm.prank(control);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         _resolveDay(49, true);
         _resolveDay(50, true);
         _resolveDay(51, false);

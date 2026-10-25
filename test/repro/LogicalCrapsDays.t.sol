@@ -10,7 +10,7 @@ contract LogicalCrapsDaysTest is LogicalDaysFixture {
         uint64 slot = crapsBattle.createBattle(100, 5, 10, 1, uint40(vm.getBlockTimestamp() + 1 hours), true, 0);
         address player = address(0xA11CE);
         uint32 id = _giveWalletId(player);
-        vm.prank(ContractAddresses.GAME); coin.mintForGame(player, 1_000_000);
+        vm.prank(ContractAddresses.GAME); coin.mintForGame_g152734(player, 1_000_000);
         vm.prank(player); crapsBattle.enterBattle(id, slot, 0, 1);
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         crapsBattle.closeBattle(slot);
@@ -19,12 +19,12 @@ contract LogicalCrapsDaysTest is LogicalDaysFixture {
         mockVRF.fulfillRandomWords(request, 0xC0FFEE);
         (,,uint48 completed) = game.dailySessionState();
         vm.warp(uint256(completed) + 14 days);
-        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineRun(0);
         assertTrue(game.gameOver());
         assertEq(crapsBattle.bonusCursorOf(slot), 0, "terminal Game never executes the battle");
         // No terminal settlement door remains, and normal work never resumes the table.
         for (uint256 i; i < 30; ++i) {
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             ok; // Completed terminal work may report NoWork; no call may resume the table.
         }
         assertEq(crapsBattle.bonusCursorOf(slot), 0);

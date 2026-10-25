@@ -225,7 +225,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(_fixtureId(buyer), shortfall);
         vm.prank(buyer);
-        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(game.claimableWinningsOf(buyer), claimableBefore, "DirectEth: claimable byte-UNCHANGED (skipped)");
         assertEq(afkingBefore - game.afkingFundingOf(buyer), shortfall, "DirectEth: afking debited by exactly the shortfall");
@@ -254,7 +254,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(_fixtureId(buyer), expAfkingUsed);
         vm.prank(buyer);
-        game.purchase{value: 0}(0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor{value: 0}(0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
 
         assertEq(game.claimableWinningsOf(buyer), 1, "Claimable: claimable drawn to EXACTLY the 1-wei sentinel");
         assertEq(afkingBefore - game.afkingFundingOf(buyer), expAfkingUsed, "Claimable: afking covers the remainder exactly");
@@ -284,7 +284,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(_fixtureId(buyer), expAfkingUsed);
         vm.prank(buyer);
-        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchaseOrderFor{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         assertEq(game.claimableWinningsOf(buyer), 1, "Combined: claimable drawn to EXACTLY the sentinel after msg.value");
         assertEq(afkingBefore - game.afkingFundingOf(buyer), expAfkingUsed, "Combined: afking covers the final remainder");
@@ -303,7 +303,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchaseOrderFor{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         _assertOnlyAfkingDrawEvent(buyer, 0);
         assertEq(game.claimableWinningsOf(buyer), 7 ether, "full ETH skips claimable");
@@ -330,7 +330,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
             vm.recordLogs();
             vm.prank(buyer);
-            game.purchase{value: ethSent}(0, 400, 0, bytes32(0), kind, false);
+            game.purchaseOrderFor{value: ethSent}(0, 400, 0, bytes32(0), kind, false);
 
             _assertOnlyAfkingDrawEvent(buyer, expectedDraw);
             assertEq(game.claimableWinningsOf(buyer), claimableSeed, "0/1 wei is never spendable");
@@ -352,7 +352,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
         vm.expectRevert(bytes4(keccak256("E()")));
         vm.prank(buyer);
-        game.purchase{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.Internal, false);
+        game.purchaseOrderFor{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.Internal, false);
 
         assertEq(game.claimableWinningsOf(buyer), 7 ether);
         assertEq(game.afkingFundingOf(buyer), 5 ether);
@@ -376,7 +376,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         qty = 4_000_000; // 10,000 tickets ⇒ cost = 100 ether ≫ ~2 ether usable
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("Insolvent()")));
-        game.purchase{value: 0}(0, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor{value: 0}(0, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
     }
 
     /// @notice AFPAY-03: a DirectEth LOOTBOX shortfall is now covered by afking — the pre-v61 DirectEth→revert
@@ -397,7 +397,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         // The DirectEth lootbox shortfall draws afking (AFPAY-03), so AfkingSpent fires; the box queues.
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: ethSent}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: ethSent}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertTrue(_sawAfkingSpent(buyer, shortfall), "AFPAY-03: DirectEth lootbox shortfall drew afking + emitted AfkingSpent");
         assertEq(game.claimableWinningsOf(buyer), claimableBefore, "AFPAY-03 DirectEth: claimable byte-UNCHANGED");
@@ -447,7 +447,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
     /// @dev Cost of one whole ticket (400 units) at the active purchase level (fresh game ⇒ level 1).
     function _oneTicketCost() internal view returns (uint256) {
-        uint24 targetLevel = game.jackpotPhase() ? game.level() : game.level() + 1;
+        uint24 targetLevel = game.jackpotPhase() ? game.currentLvl() : game.currentLvl() + 1;
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         return priceWei; // 400 units / (4 * TICKET_SCALE=100) == 1 ⇒ cost == priceWei
     }
@@ -558,7 +558,7 @@ contract V61AfpayWaterfall is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -568,7 +568,7 @@ contract V61AfpayWaterfall is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

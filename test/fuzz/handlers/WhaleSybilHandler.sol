@@ -133,7 +133,7 @@ contract WhaleSybilHandler is Test {
         if (cost == 0 || cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0,
             100,
             0,
@@ -156,7 +156,7 @@ contract WhaleSybilHandler is Test {
         uint256 balBefore = currentActor.balance;
 
         vm.prank(currentActor);
-        try game.claimWinnings(0) {
+        try game.claimClaimable(0) {
             uint256 balAfter = currentActor.balance;
             if (balAfter > balBefore) {
                 uint256 beforeClaimed = ghost_totalClaimed;
@@ -195,7 +195,7 @@ contract WhaleSybilHandler is Test {
         }
 
         vm.prank(caller);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ghost_advances++;
         } catch {}
     }

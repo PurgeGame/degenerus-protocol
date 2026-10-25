@@ -34,7 +34,7 @@ contract BoundedRedemptionGasTest is RedemptionFixture, BoundedGasProbe {
     function test_P1_CloseBatch() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _measureBounded("P1_close", address(sdgnrs), address(game), 0,
-            abi.encodeCall(sdgnrs.closeRedemptionBatch, (game.claimableWinningsOf(address(sdgnrs)))), false);
+            abi.encodeCall(sdgnrs.closeRedemptionBatch_g165517, (game.claimableWinningsOf(address(sdgnrs)))), false);
     }
     function test_P1_ResolveAndSettleBatch() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
@@ -53,7 +53,7 @@ contract BoundedRedemptionGasTest is RedemptionFixture, BoundedGasProbe {
             _burn(alice, sdgnrs.totalSupply() / 1000);
             _resolveLive(100);
             vm.prank(address(game)); sdgnrs.runRedemptionWork(settlementWord, 12_000_000);
-            assertFalse(sdgnrs.redemptionSettlementPending());
+            assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         }
         _measureBounded("P1_reused_burn", address(sdgnrs), alice, 0,
             abi.encodeCall(sdgnrs.burn, (sdgnrs.totalSupply() / 1000)), false);

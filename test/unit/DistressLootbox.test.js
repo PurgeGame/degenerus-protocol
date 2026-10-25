@@ -55,7 +55,7 @@ describe("Distress-Mode Lootboxes", function () {
     // the chain and revert on-chain (empty order), not throw a JS-side "bad wei"
     // error before the call is even made. Every other amount in this file is an
     // exact multiple of 0.001 ETH, so the floor is exact there too.
-    return game.connect(player).purchase(
+    return game.connect(player).purchaseOrderFor(
       0,
       0n,
       boCustomFloor(amount),

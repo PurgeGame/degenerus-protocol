@@ -8,6 +8,7 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract TicketQueueRingHarness is TicketLevelPrep, WalletSeed {
+    function currentLvl() external view returns (uint24) { return level; }
     function setLevel(uint24 lvl) external { level = lvl; jackpotPhaseFlag = false; }
     function enqueue(address player, uint24 lvl, uint32 n) external { _queueEntries(_seedWallet(player), lvl, n, false); }
     function append(uint24 key, uint32 pos) external { _tqAppend(key, pos); }
@@ -67,7 +68,7 @@ contract TicketQueueRingTest is Test {
             h.reveal(key, 7);
             assertEq(h.bucketOwner(lvl, 7, 0), ALICE);
             assertEq(h.count(key), 0);
-            assertEq(h.level(), lvl - 1);
+            assertEq(h.currentLvl(), lvl - 1);
         }
     }
 

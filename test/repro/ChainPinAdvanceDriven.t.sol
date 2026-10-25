@@ -224,7 +224,7 @@ abstract contract ChainPinBase is DeployProtocol {
             (bool ok, bytes4 sel) = this.mineOnce(ladder[r]);
             if (ok) {
                 if (checkCharityLevel) {
-                    assertEq(uint256(gnrus.currentLevel()), uint256(game.level()), "F1: GNRUS level != game level");
+                    assertEq(uint256(gnrus.currentLevel()), uint256(game.currentLvl()), "F1: GNRUS level != game level");
                 }
                 return true;
             }
@@ -238,7 +238,7 @@ abstract contract ChainPinBase is DeployProtocol {
     /// @dev One engine call in its own frame, so the driver's memory does not grow with the call count.
     function mineOnce(uint256 gasLimit) external returns (bool ok, bytes4 sel) {
         bytes memory err;
-        (ok, err) = address(game).call{gas: gasLimit}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok, err) = address(game).call{gas: gasLimit}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         sel = bytes4(err);
     }
 
@@ -291,7 +291,7 @@ abstract contract ChainPinBase is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i;; ++i) {
             require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
-            if (crossAt != 0 && !crossedMidnight && game.level() == crossAt && _requestInFlight()) {
+            if (crossAt != 0 && !crossedMidnight && game.currentLvl() == crossAt && _requestInFlight()) {
                 crossedMidnight = true;
                 simTime += 1 days;
                 vm.warp(simTime);
@@ -336,14 +336,14 @@ abstract contract ChainPinBase is DeployProtocol {
         (,,, bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
         if (locked) return;
         vm.prank(buyer);
-        try game.purchase{value: (priceWei * 4000) / 400}(
+        try game.purchaseOrderFor{value: (priceWei * 4000) / 400}(
             0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) { ++ticketBuys; } catch {}
     }
 
     function _tryCoinflipDeposit() internal {
         vm.prank(buyer);
-        try coinflip.depositCoinflip(0, 500) {} catch {}
+        try coinflip.playCoinflip(0, 500) {} catch {}
     }
 
     /// @dev A whale pass (far-future tickets), a foil pack and a lootbox, each by its own buyer.
@@ -353,11 +353,11 @@ abstract contract ChainPinBase is DeployProtocol {
         vm.prank(whale);
         try game.purchaseWhalePass{value: 10 ether}(0, 1, bytes32(0)) { ++whaleBuys; } catch {}
         vm.prank(foiler);
-        try game.purchase{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
+        try game.purchaseOrderFor{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
             ++foilBuys;
         } catch {}
         vm.prank(boxer);
-        try game.purchase{value: 1 ether}(
+        try game.purchaseOrderFor{value: 1 ether}(
             0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         ) { ++boxBuys; } catch {}
     }
@@ -436,10 +436,10 @@ abstract contract ChainPinBase is DeployProtocol {
         _settleToday();
         for (uint256 i; i < 200; ++i) {
             require(!game.gameOver(), "harness: gameOver");
-            if (game.level() >= targetLevel) return;
+            if (game.currentLvl() >= targetLevel) return;
             if (!game.jackpotPhase()) {
                 _fundSdgnrsFlip();
-                _seedNextPrizePool(_levelPrizePool(game.level()) + 25 ether);
+                _seedNextPrizePool(_levelPrizePool(game.currentLvl()) + 25 ether);
                 _buyTickets();
                 _tryCoinflipDeposit();
             }
@@ -463,7 +463,7 @@ abstract contract ChainPinBase is DeployProtocol {
         uint256 x0PurchaseDays;
         for (uint256 i; i < 300; ++i) {
             require(!game.gameOver(), "harness: gameOver before level 10");
-            uint24 lvl = game.level();
+            uint24 lvl = game.currentLvl();
             bool jp = game.jackpotPhase();
             if (lvl >= 10 && !jp && bafObs.length != 0) return;
             bool normalX0 = mode != Mode.Turbo && lvl == 9 && !jp;
@@ -492,12 +492,12 @@ abstract contract ChainPinBase is DeployProtocol {
         if (_requestInFlight()) return;
         if (_settleReadsUntilRequest()) return;
         vm.prank(buyer);
-        game.purchase{value: 2 ether}(
+        game.purchaseOrderFor{value: 2 ether}(
             0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         require(ok && mockVRF.lastRequestId() > priorReq, "harness: mineFlip must issue the mid-day request");
     }
 
@@ -511,7 +511,7 @@ abstract contract ChainPinBase is DeployProtocol {
             bool progressed;
             for (uint256 r; r < ladder.length && !progressed; ++r) {
                 (bool ok, bytes memory err) =
-                    address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                    address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (ok) progressed = true;
                 else if (bytes4(err) == NO_WORK) return false;
                 else require(bytes4(err) == MineFlipGas.InsufficientExecutionGas.selector, "harness: reads settle");
@@ -580,14 +580,14 @@ contract ChainPinAdvanceDriven is ChainPinBase {
         checkCharityLevel = true;
         _driveTurbo(3, 0);
         assertEq(uint256(gnrus.currentLevel()), 3, "GNRUS advanced with the game");
-        assertEq(uint256(game.level()), 3);
+        assertEq(uint256(game.currentLvl()), 3);
     }
 
     /// F3: the real arming block at level 4 (window open, decDayOne, entries level) lets applyDailyWord_g1652 burn
     /// sDGNRS's backing into level 5's decimator round.
     function test_F3_openingBurnAfterRealArming() public {
         _driveTurbo(4, 0);
-        assertTrue(game.decWindow(), "the level-4 arming opened the window");
+        assertTrue(game.decimatorActive(), "the level-4 arming opened the window");
         assertEq(sdgnrsBurns, 1, "sDGNRS burned once on the opening day");
         assertEq(sdgnrsRecorded[5], 1, "and the entry landed in level 5's round");
     }
@@ -597,7 +597,7 @@ contract ChainPinAdvanceDriven is ChainPinBase {
     function test_F3_requestPinnedBeforeMidnightStillBurns() public {
         _driveTurbo(5, 4);
         assertTrue(crossedMidnight, "harness: the clock crossed midnight with the arming request in flight");
-        assertEq(uint256(game.level()), 5, "the game carried on");
+        assertEq(uint256(game.currentLvl()), 5, "the game carried on");
         assertGe(sdgnrsBurns, 1, "the opening-day burn ran after midnight");
         assertEq(sdgnrsRecorded[5], 1, "and the entry landed in level 5's round");
     }
@@ -608,7 +608,7 @@ contract ChainPinAdvanceDriven is ChainPinBase {
         uint256 cur = sdgnrs.poolBalance(sDGNRS.Pool.Affiliate);
         if (poolWei < cur) {
             vm.prank(address(game));
-            sdgnrs.transferFromPool(sDGNRS.Pool.Affiliate, address(0xdead), cur - poolWei);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Affiliate, address(0xdead), cur - poolWei);
         } else {
             poolWei = cur;
         }

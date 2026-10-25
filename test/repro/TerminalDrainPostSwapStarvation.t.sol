@@ -115,9 +115,9 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "deadline passed, caught up, VRF alive");
 
         uint256 req0 = mockVRF.lastRequestId();
-        game.mineFlip(0); // decision: VRF alive, so the loan book settles first
-        game.mineFlip(0); // the (empty) loan book
-        game.mineFlip(0); // the one terminal swap + terminal request
+        game.mineRun(0); // decision: VRF alive, so the loan book settles first
+        game.mineRun(0); // the (empty) loan book
+        game.mineRun(0); // the one terminal swap + terminal request
         (uint256 rl, uint256 wl, uint256 sw) = _queues();
         assertEq(sw, 1, "swap latch set");
         assertEq(rl, owners, "the cohort moved to the read side");
@@ -127,7 +127,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
 
         uint24 normalDay = game.currentDayView_g542950();
         mockVRF.fulfillRandomWords(req, word);
-        game.mineFlip(0); // applies the terminal word; returns before any drain
+        game.mineRun(0); // applies the terminal word; returns before any drain
         assertEq(game.currentDayView_g542950(), normalDay, "terminal publication does not advance the normal day");
         assertTrue(game.rngWordForDay(normalDay + 1) != 0, "the separate terminal word is recorded");
         assertFalse(game.gameOver(), "not over yet");
@@ -138,7 +138,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
 
         for (uint256 i; i < preBatches; ++i) {
             _coolEngine();
-            game.mineFlip{gas: 3_500_000}(0);
+            game.mineRun{gas: 3_500_000}(0);
             assertFalse(game.gameOver(), "pre-batch returned before the payout");
         }
         (rl,,) = _queues();
@@ -168,7 +168,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
     function _finish() private {
         for (uint256 i; i < 100 && _jackpotPaid() == 0; ++i) {
             _coolEngine();
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
             _assertNoPrematurePayout();
         }
         assertTrue(game.gameOver(), "ending completes");
@@ -228,7 +228,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
             uint256 createdBefore = _bucketTotal();
             _coolEngine();
             vm.recordLogs();
-            (bool ok,) = address(game).call{gas: limits[i]}(abi.encodeCall(game.mineFlip, (uint32(0))));
+            (bool ok,) = address(game).call{gas: limits[i]}(abi.encodeCall(game.mineRun, (uint32(0))));
             _assertNoPrematurePayout();
             if (!game.gameOver()) ++pauses;
             (uint256 queued,,) = _queues();

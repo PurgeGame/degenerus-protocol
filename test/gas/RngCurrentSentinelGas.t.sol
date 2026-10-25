@@ -14,7 +14,7 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
     }
     function _coldDailyNudgeCallback(uint256 nudges) private {
         RecyclingState.seedNudges(address(game), nudges);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, 0); assertTrue(game.rngLocked());
         uint256[] memory words = new uint256[](1); words[0] = 1_000_000;
@@ -39,7 +39,7 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
             uint256 callback; uint256 request; uint256 crank;
             for (uint256 i; i < 5000 && !_sealed(day); ++i) {
                 uint256 beforeId = mockVRF.lastRequestId();
-                game.mineFlip(0);
+                game.mineRun(0);
                 uint256 used = vm.snapshotGasLastCall("sentinel-keeper");
                 uint256 id = mockVRF.lastRequestId();
                 if (id != beforeId) request += used;

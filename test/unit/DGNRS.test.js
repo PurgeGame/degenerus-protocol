@@ -38,7 +38,7 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [gameAddr] });
   await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
   const gameSigner = await hre.ethers.getSigner(gameAddr);
-  await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
+  await sdgnrs.connect(gameSigner).transferFromPool_g106128(Pool.Reward, recipient, amount);
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
   // Admit a gambling burn using the authenticated current-day parity word.
   await seedDailyWord(game, await game.currentDayView_g542950(), BigInt("0x" + "de".repeat(32)));
@@ -163,15 +163,15 @@ describe("DGNRS", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 2. transferFromPool (game-only)
+  // 2. transferFromPool_g106128 (game-only)
   // ---------------------------------------------------------------------------
-  describe("transferFromPool", function () {
+  describe("transferFromPool_g106128", function () {
     it("reverts when called by non-game address", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
         sdgnrs
           .connect(alice)
-          .transferFromPool(Pool.Reward, alice.address, dgnrsUnits("100"))
+          .transferFromPool_g106128(Pool.Reward, alice.address, dgnrsUnits("100"))
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
@@ -193,7 +193,7 @@ describe("DGNRS", function () {
       const amount = dgnrsUnits("100");
       const tx = await sdgnrs
         .connect(gameSigner)
-        .transferFromPool(Pool.Reward, alice.address, amount);
+        .transferFromPool_g106128(Pool.Reward, alice.address, amount);
 
       const ev = await getEvent(tx, sdgnrs, "PoolTransfer");
       expect(ev.args.pool).to.equal(BigInt(Pool.Reward));
@@ -227,7 +227,7 @@ describe("DGNRS", function () {
       // Request more than available
       const tx = await sdgnrs
         .connect(gameSigner)
-        .transferFromPool(Pool.Reward, alice.address, poolBal * 2n);
+        .transferFromPool_g106128(Pool.Reward, alice.address, poolBal * 2n);
       const ev = await getEvent(tx, sdgnrs, "PoolTransfer");
       // Should transfer only the available amount
       expect(ev.args.amount).to.equal(poolBal);
@@ -253,7 +253,7 @@ describe("DGNRS", function () {
 
       const transferred = await sdgnrs
         .connect(gameSigner)
-        .transferFromPool.staticCall(Pool.Reward, alice.address, 0n);
+        .transferFromPool_g106128.staticCall(Pool.Reward, alice.address, 0n);
       expect(transferred).to.equal(0n);
 
       await hre.network.provider.request({
@@ -278,7 +278,7 @@ describe("DGNRS", function () {
       await expect(
         sdgnrs
           .connect(gameSigner)
-          .transferFromPool(Pool.Whale, ZERO_ADDRESS, dgnrsUnits("100"))
+          .transferFromPool_g106128(Pool.Whale, ZERO_ADDRESS, dgnrsUnits("100"))
       ).to.be.revertedWithCustomError(sdgnrs, "ZeroAddress");
 
       await hre.network.provider.request({

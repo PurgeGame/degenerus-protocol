@@ -143,7 +143,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
         vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotPreferenceProbe).runtimeCode);
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorJackpotEngineProbe).runtimeCode);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
         h = DecimatorJackpotHarness(ContractAddresses.GAME);
         h.seedProtocolWallets();

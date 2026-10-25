@@ -116,7 +116,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _score(bettor, 0);
     }
     function _bet(uint8 symbol, uint128 amount) private {
-        game.placeDegeneretteBet{value: amount}(0, 0, amount, 1, symbol);
+        game.betDegenerette{value: amount}(0, 0, amount, 1, symbol);
     }
     function _fixtureCall(bytes memory data) private {
         bytes memory original = address(game).code;
@@ -159,7 +159,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
                 if (!done) mockVRF.fulfillRandomWords(request, seed);
             }
             if (!game.rngLocked() && game.currentDayView_g542950() >= minDay && game.rngWordForDay(game.currentDayView_g542950()) != 0) return;
-            if (game.advanceDue()) game.mineFlip(0);
+            if (game.advanceDue()) game.mineRun(0);
         }
         fail("daily advance must finish after the boon stage");
     }
@@ -293,8 +293,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
     function testInvalidOrUnfundedBetsCannotCreateEntries() public {
         vm.expectRevert(bytes4(keccak256("InvalidBet()"))); vm.prank(bettor); _bet(0, 0.005 ether - 1);
-        vm.expectRevert(bytes4(keccak256("Insolvent()"))); vm.prank(bettor); game.placeDegeneretteBet(0, 0, 0.005 ether, 1, 0);
-        vm.expectRevert(bytes4(keccak256("InvalidBet()"))); vm.prank(bettor); game.placeDegeneretteBet{value: 0.005 ether}(0, 0, 0.005 ether, 0, 0);
+        vm.expectRevert(bytes4(keccak256("Insolvent()"))); vm.prank(bettor); game.betDegenerette(0, 0, 0.005 ether, 1, 0);
+        vm.expectRevert(bytes4(keccak256("InvalidBet()"))); vm.prank(bettor); game.betDegenerette{value: 0.005 ether}(0, 0, 0.005 ether, 0, 0);
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()"))); boonModule.resolveProtocolBoonDraws(day + 1);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 0);
         assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day, 0).playerId, uint32(0));
@@ -339,7 +339,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).awardedMask, 7);
     }
     function testEthEntriesStayOpenBeforeAndAfterDailyVrfFulfillmentWhileLocked() public {
-        for (uint256 i; i < 150 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 150 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked());
         // The request opened the logical day the entries below belong to.
         day = game.currentDayView_g542950();
@@ -365,24 +365,24 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         uint32 bettorId = game.walletIdOf_g3120(bettor);
         vm.prank(address(vault)); game.setOperatorApproval(0, address(this), true);
         vm.expectRevert(DegenerusGameStorage.Unauthorized.selector);
-        game.issueDeityBoon(vaultId, bettorId, 0);
+        game.giveBoon(vaultId, bettorId, 0);
         vm.expectRevert(DegenerusGameStorage.Unauthorized.selector);
         vm.prank(address(vault));
-        game.issueDeityBoon(0, bettorId, 0);
+        game.giveBoon(0, bettorId, 0);
         vm.expectRevert(DegenerusGameStorage.Unauthorized.selector);
         vm.prank(address(sdgnrs));
-        game.issueDeityBoon(0, bettorId, 0);
+        game.giveBoon(0, bettorId, 0);
         // Issuance is now internal to Game: the Box bundle must expose no bypass.
         (bool ok,) = address(boonModule).call(
-            abi.encodeWithSelector(game.issueDeityBoon.selector, vaultId, bettorId, uint8(0))
+            abi.encodeWithSelector(game.giveBoon.selector, vaultId, bettorId, uint8(0))
         );
         assertFalse(ok, "removed module issuance selector must not be callable");
     }
     function testRecipientContractCannotRejectAutomaticDelivery() public {
         RejectingBoonRecipient receiver = new RejectingBoonRecipient();
         uint32 receiverId = _giveWalletId(address(receiver));
-        game.placeDegeneretteBet{value: 0.005 ether}(receiverId, 0, 0.005 ether, 1, 0);
-        game.placeDegeneretteBet{value: 0.005 ether}(receiverId, 0, 0.005 ether, 1, 6);
+        game.betDegenerette{value: 0.005 ether}(receiverId, 0, 0.005 ether, 1, 0);
+        game.betDegenerette{value: 0.005 ether}(receiverId, 0, 0.005 ether, 1, 6);
         _ready();
         vm.recordLogs();
         _resolve();
@@ -484,7 +484,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             }
             bool finished;
             for (uint256 i; i < 150; ++i) {
-                game.mineFlip(0);
+                game.mineRun(0);
                 uint256 request = mockVRF.lastRequestId();
                 if (request > fulfilled) {
                     mockVRF.fulfillRandomWords(request, 12345 + d);
@@ -533,7 +533,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
 
     function testOnlyEthAndProtocolSymbolsCreateEntries() public {
-        vm.prank(address(game)); coin.mintForGame(bettor, 1000);
+        vm.prank(address(game)); coin.mintForGame_g152734(bettor, 1000);
         vm.prank(address(game)); wwxrp.mintPrize(bettor, 10 ether);
         for (uint8 symbol; symbol < 32; ++symbol) {
             if (symbol >= 24) vm.expectRevert(bytes4(keccak256("InvalidBet()")));
@@ -541,9 +541,9 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         }
         for (uint8 i; i < 2; ++i) {
             uint8 symbol = i == 0 ? 0 : 6;
-            vm.prank(bettor); game.placeDegeneretteBet(0, 1, 100, 1, symbol);
+            vm.prank(bettor); game.betDegenerette(0, 1, 100, 1, symbol);
             vm.expectRevert(bytes4(keccak256("UnsupportedCurrency()")));
-            vm.prank(bettor); game.placeDegeneretteBet(0, 3, 1 ether, 1, symbol);
+            vm.prank(bettor); game.betDegenerette(0, 3, 1 ether, 1, symbol);
         }
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 1);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).entryCount, 1);
@@ -552,7 +552,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     function testRawPaidTotalAcrossSpinsExcludesBoonBoostAndMatchesHeroLedger() public {
         _score(bettor, 400);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.seedBoon, (bettor, day)));
-        vm.prank(bettor); game.placeDegeneretteBet{value: 0.03 ether}(0, 0, 0.01 ether, 3, 6);
+        vm.prank(bettor); game.betDegenerette{value: 0.03 ether}(0, 0, 0.01 ether, 3, 6);
         DegenerusGameStorage.ProtocolBoonPool memory pool = lens.protocolBoonPool(address(game), address(sdgnrs), day);
         assertEq(pool.totalWageredWei, 0.03 ether);
         assertEq(pool.totalWeight, 300 * 1600);
@@ -573,11 +573,11 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _score(recipient, 400);
         _score(bettor, 1200);
         uint32 recipientId = game.walletIdOf_g3120(recipient);
-        vm.prank(bettor); game.placeDegeneretteBet{value: 0.005 ether}(recipientId, 0, 0.005 ether, 1, 0);
+        vm.prank(bettor); game.betDegenerette{value: 0.005 ether}(recipientId, 0, 0.005 ether, 1, 0);
         DegenerusGameStorage.ProtocolBoonEntry memory entry = lens.protocolBoonEntryAt(address(game), address(vault), day, 0);
         assertEq(entry.playerId, game.walletIdOf_g3120(recipient)); assertEq(entry.scoreSnapshot, 400); assertEq(entry.cumulativeWeight, 80_000);
         vm.prank(bettor); game.setOperatorApproval(0, address(this), true);
-        game.placeDegeneretteBet{value: 0.005 ether}(game.walletIdOf_g3120(bettor), 0, 0.005 ether, 1, 6);
+        game.betDegenerette{value: 0.005 ether}(game.walletIdOf_g3120(bettor), 0, 0.005 ether, 1, 6);
         entry = lens.protocolBoonEntryAt(address(game), address(sdgnrs), day, 0);
         assertEq(entry.playerId, game.walletIdOf_g3120(bettor)); assertEq(entry.scoreSnapshot, 1200); assertEq(entry.cumulativeWeight, 120_000);
     }
@@ -585,7 +585,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     function testClaimableEthFundsTheSameWeightWithoutFreshValue() public {
         vm.deal(address(game), address(game).balance + 0.02 ether);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.claimable, (bettor, 0.02 ether)));
-        vm.prank(bettor); game.placeDegeneretteBet(0, 0, 0.02 ether, 1, 0);
+        vm.prank(bettor); game.betDegenerette(0, 0, 0.02 ether, 1, 0);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).totalWageredWei, 0.02 ether);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).totalWeight, 200 * 800);
     }
@@ -626,7 +626,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     function testEntryEventIdentifiesPaidStakeAndRecipient() public {
         _score(bettor, 400);
         vm.recordLogs();
-        vm.prank(bettor); game.placeDegeneretteBet{value: 0.02 ether}(0, 0, 0.005 ether, 4, 6);
+        vm.prank(bettor); game.betDegenerette{value: 0.02 ether}(0, 0, 0.005 ether, 4, 6);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 entries;
         for (uint256 i; i < logs.length; ++i) {

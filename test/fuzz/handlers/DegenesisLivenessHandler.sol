@@ -12,7 +12,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 import {MineFlipAdmission} from "../helpers/MineFlipAdmission.sol";
 
 interface IFlipMint {
-    function mintForGame(address to, uint256 amount) external;
+    function mintForGame_g152734(address to, uint256 amount) external;
 }
 
 /// @title DegenesisLivenessHandler -- mineFlip liveness on the Degenesis timeline
@@ -211,7 +211,7 @@ contract DegenesisLivenessHandler is Test {
             value = 2_000 ether;
         }
         vm.prank(a);
-        try game.purchase{value: value}(0, 0, order, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: value}(0, 0, order, bytes32(0), MintPaymentKind.DirectEth, false) {
             ++ghost_boxBuys;
             if (qty == 100 || kind == 4) ++ghost_bigBoxBuys;
         } catch {}
@@ -221,7 +221,7 @@ contract DegenesisLivenessHandler is Test {
         if (game.gameOver()) return;
         (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(_actor(actorSeed));
-        try game.purchase{value: price * 80}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
+        try game.purchaseOrderFor{value: price * 80}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
             ++ghost_foilBuys;
         } catch {}
     }
@@ -230,7 +230,7 @@ contract DegenesisLivenessHandler is Test {
     function actWhalePass(uint256 actorSeed, uint256 qtySeed) external action("whalePass") {
         if (game.gameOver()) return;
         uint256 qty = qtySeed % 16 == 0 ? 1000 : bound(qtySeed, 1, 10);
-        uint256 value = qty * (game.level() < 4 ? 2.4 ether : 4 ether);
+        uint256 value = qty * (game.currentLvl() < 4 ? 2.4 ether : 4 ether);
         vm.prank(_actor(actorSeed));
         try game.purchaseWhalePass{value: value}(0, qty, bytes32(0)) {
             ++ghost_whaleBuys;
@@ -256,7 +256,7 @@ contract DegenesisLivenessHandler is Test {
         if (credit < amount) {
             uint256 spend = (amount - credit) * 4 + 0.04 ether;
             vm.prank(a);
-            try game.purchase{value: spend}(0, 0, BoxOrderLib.boCustoms(1, _floorUnit(spend)), bytes32(0),
+            try game.purchaseOrderFor{value: spend}(0, 0, BoxOrderLib.boCustoms(1, _floorUnit(spend)), bytes32(0),
                 MintPaymentKind.DirectEth, false) {
                 ++ghost_boxBuys;
             } catch {}
@@ -271,7 +271,7 @@ contract DegenesisLivenessHandler is Test {
             try game.depositAfkingFunding{value: amount}(id) {} catch { return; }
         }
         vm.prank(a);
-        try game.buyDegenesisBox{value: value}(0, amount) {
+        try game.purchaseDegenesisBox{value: value}(0, amount) {
             ++ghost_degenesisBuys;
             if (amount == 0.01 ether) ++ghost_degenesisMinBuys;
             if (mode == 2) ++ghost_degenesisAfkingBuys;
@@ -285,7 +285,7 @@ contract DegenesisLivenessHandler is Test {
         if (game.gameOver()) return;
         address a = _actor(actorSeed);
         vm.prank(address(game));
-        IFlipMint(ContractAddresses.COIN).mintForGame(a, 1_000_000 ether);
+        IFlipMint(ContractAddresses.COIN).mintForGame_g152734(a, 1_000_000 ether);
         uint256 qty = bound(qtySeed, 1, 20) * 400;
         vm.prank(a);
         try game.redeemFlip(0, qty) {
@@ -394,7 +394,7 @@ contract DegenesisLivenessHandler is Test {
             uint8 a = game.minerAction();
             vm.prank(caller);
             (bool ok, bytes memory ret) =
-                address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) {
                 _observe();
                 return true;
@@ -440,12 +440,12 @@ contract DegenesisLivenessHandler is Test {
             uint24 today = game.currentDayView_g542950();
             finishLeftSale = today >= GameTimeLib.MAIN_LAUNCH_DAY;
             finishSettled = _degenesisClosed() == 7;
-            finishLevel = game.level();
+            finishLevel = game.currentLvl();
             if (finishLeftSale && finishSettled && finishLevel >= 1) {
                 finishDays = d;
                 return;
             }
-            if (game.level() == 0) _seedNextPool(LEVEL_ONE_SEED);
+            if (game.currentLvl() == 0) _seedNextPool(LEVEL_ONE_SEED);
             vm.warp(_nextDayStart() + 1 hours);
         }
         finishDays = type(uint256).max;
@@ -470,7 +470,7 @@ contract DegenesisLivenessHandler is Test {
         if (a == A_REQUEST_DAILY && sale) ++ghost_saleRequests;
         if ((a == A_DAILY_APPLY) && sale) ++ghost_saleApplies;
         vm.prank(caller);
-        (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         _observe();
         bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
         if (a == A_IDLE) {
@@ -514,7 +514,7 @@ contract DegenesisLivenessHandler is Test {
             gasGiven: g,
             minGas: minimum,
             day: game.currentDayView_g542950(),
-            level: game.level(),
+            level: game.currentLvl(),
             degenesisClosed: _degenesisClosed(),
             actionNo: ghost_actions,
             where: _where
@@ -544,7 +544,7 @@ contract DegenesisLivenessHandler is Test {
     ///      split flags, the active cohort, the settled-order count (closed cohorts' orders plus
     ///      the active cursor) and the seventh close.
     function _observe() internal {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         if (lvl > ghost_maxLevel) ghost_maxLevel = lvl;
         uint8 closed = _degenesisClosed();
         if (closed > ghost_maxClosed) ghost_maxClosed = closed;
@@ -576,7 +576,7 @@ contract DegenesisLivenessHandler is Test {
         if (game.gameOver()) return;
         (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(a);
-        try game.purchase{value: price * tickets}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: price * tickets}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             ++ghost_ticketBuys;
         } catch {}
     }

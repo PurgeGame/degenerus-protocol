@@ -10,7 +10,7 @@ contract DailyGapNativeGasTest is LogicalDaysFixture {
         vm.warp(vm.getBlockTimestamp() + elapsed * 1 days);
         mockVRF.fulfillRandomWords(id, word);
         for (uint256 i; i < 30 && game.rngWordForDay(2) == 0; ++i) {
-            game.mineFlip{gas: 3_000_000}(0);
+            game.mineRun{gas: 3_000_000}(0);
         }
         assertEq(game.rngWordForDay(2), word);
         assertEq(game.currentDayView_g542950(), 2);

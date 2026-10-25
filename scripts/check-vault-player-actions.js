@@ -32,7 +32,7 @@ const excluded = {
     "runDecimatorJackpot", "runTerminalJackpotWork", "setCrapsRngPending",
     "updateVrfCoordinatorAndSub", "initVrf",
     "spendDegenesis", // Dedicated Vault restricted-budget control.
-    "borrow", "repay", // The Vault never takes loans.
+    "borrow", "clearDebtNow", // The Vault never takes loans.
     // Direct DGVE-owner controls.
     "raiseSmurfBaseAllowance", "setLootboxRngThreshold", "setMiddayMaxBasefee", "setThanosLevel",
   ],
@@ -44,8 +44,8 @@ const excluded = {
   ],
   COIN: [
     "approve", "transfer", "transferFrom", "vaultMintTo", // DGVF backing must use share redemption.
-    "autoDecimatorBurn", "burnCoin", "burnCoinForCraps", "burnForCoinflip", "creditCrapsComps",
-    "mintForGame", "tombstoneAtGameOver",
+    "autoDecimatorBurn", "burnCoin", "burnCoinForCraps_g292454", "burnForCoinflip", "creditCrapsComps_g37225",
+    "mintForGame_g152734", "tombstoneAtGameOver",
   ],
   CRAPS: [
     // Consolidated JackpotBattle settlement: Game-only or table self-call-only.
@@ -71,9 +71,9 @@ const excluded = {
     "setGameMintScale", "setTrustedMinter", // Direct DGVE-owner controls.
   ],
   SDGNRS: [
-    "burnAtGameOver", "burnForLiquidation", "closeRedemptionBatch", "depositSteth",
+    "burnAtGameOver", "burnForLiquidation", "closeRedemptionBatch_g165517", "depositSteth",
     "recycleCentury", "resolveTerminalRedemptions", "runRedemptionWork",
-    "transferFromPool", "wrapperTransferTo",
+    "transferFromPool_g106128", "wrapperTransferTo",
     "gameAdvance", // Anyone can trigger this externally; bounty belongs to sDGNRS, not the caller.
   ],
   DGNRS: ["unwrapTo", "approve", "transfer", "transferFrom", "burnForSdgnrs"],

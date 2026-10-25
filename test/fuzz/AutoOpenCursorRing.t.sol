@@ -137,7 +137,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         address[] memory subs = _stampSealedOpenableSubs(5);
         for (uint256 i; i < 8 && uint8(game.nextMinerAction()) == 8; ++i) {
             uint16 beforeCursor = _openCursor();
-            game.mineFlip(type(uint32).max);
+            game.mineRun(type(uint32).max);
             assertGt(_openCursor(), beforeCursor);
         }
         for (uint256 i; i < subs.length; ++i) assertFalse(_isOpenable(subs[i]));
@@ -193,7 +193,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         vm.warp(_t);
         // Reach a real commitment with the normal keeper, then use guarded
         // production worker checkpoints to stop immediately before AFK opens.
-        for (uint256 i; i < 128 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 128 && !game.rngLocked(); ++i) game.mineRun(0);
         require(game.rngLocked(), "fixture: new daily request");
         _fulfillPending(vrfWord);
         bytes memory productionCode = address(game).code;
@@ -212,7 +212,7 @@ contract AutoOpenCursorRing is DeployProtocol {
             if (_daySealed()) break;
             _fulfillPending(vrfWord);
             if (_daySealed()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -222,7 +222,7 @@ contract AutoOpenCursorRing is DeployProtocol {
             if (_daySealed()) return;
             _fulfillPending(vrfWord);
             if (_daySealed()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

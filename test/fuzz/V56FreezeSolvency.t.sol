@@ -200,7 +200,7 @@ contract V56FreezeSolvency is DeployProtocol {
             uint256 poolBefore = _claimablePool();
             uint256 fundingBefore = game.afkingFundingOf(p);
             vm.recordLogs();
-            game.mineFlip(0);
+            game.mineRun(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint256 total;
             for (uint256 j; j < logs.length; ++j) {
@@ -373,7 +373,7 @@ contract V56FreezeSolvency is DeployProtocol {
         vm.recordLogs();
         _settleClean(0xC0FFEEFACE);
         vm.prank(makeAddr("freeze_opener"));
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         return _decodeLootBoxOpenedFor(afk);
     }
 
@@ -471,7 +471,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), before, "harness: the new day's request is in flight");
     }
 
@@ -481,7 +481,7 @@ contract V56FreezeSolvency is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -494,7 +494,7 @@ contract V56FreezeSolvency is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

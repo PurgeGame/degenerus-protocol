@@ -48,7 +48,7 @@ contract DegenesisWordBinding is DegenesisHarness {
         _requestOnly(w3);
         _driveToSettle();
         assertEq(_word(), w3, "word copied at recording");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertLt(_activeCursor(), n, "backlog left after one chunk");
         _warpTo(4, 1 hours);
         _driveToSettle();

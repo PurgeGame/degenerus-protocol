@@ -148,13 +148,13 @@ contract OpenWalkCompositionGas is DeployProtocol {
             if (!game.advanceDue() && !game.isRngFulfilled() && !game.rngLocked()) {
                 // Whatever the engine still finds (read-cohort settlement, maintenance, a mid-day
                 // request) runs here; a NoWork revert means the crank is quiet.
-                try game.mineFlip(0) {} catch { break; }
+                try game.mineRun(0) {} catch { break; }
             }
         }
         _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "probe"))));
         uint256 gasBefore = gasleft();
-        (bool ok, bytes memory reason) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok, bytes memory reason) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         gasUsed = gasBefore - gasleft();
         require(!ok, "fixture: the NoWork probe reverted as expected (drained ring, zero human work)");
         assertEq(reason, abi.encodeWithSignature("NoWork()"), "measure NoWork, not another refusal");
@@ -197,7 +197,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -209,7 +209,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

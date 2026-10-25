@@ -549,7 +549,7 @@ contract SeatCapHandler is Test {
         }
         if (uint128(balances) > 1) {
             vm.prank(a.caller);
-            try game.claimWinnings(a.id) {} catch {}
+            try game.claimClaimable(a.id) {} catch {}
         }
         _syncMints(0, token.freeClaims());
         _checkLive();
@@ -633,7 +633,7 @@ contract SeatCapHandler is Test {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 300; ++i) {
             _fulfill();
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ++dayCranks;
             } catch (bytes memory r) {
                 if (r.length == 4 && bytes4(r) == RNG_NOT_READY && _fulfill()) continue;
@@ -649,7 +649,7 @@ contract SeatCapHandler is Test {
     function mineFlip(uint256) external {
         ++calls[A_MINE];
         _fulfill();
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ++oks[A_MINE];
         } catch (bytes memory r) {
             _noteRevert(A_MINE, r);

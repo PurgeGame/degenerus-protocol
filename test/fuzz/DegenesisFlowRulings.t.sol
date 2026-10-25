@@ -147,11 +147,11 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
         _warpDay(d, 30 minutes);
         uint256 price = game.mintPrice();
         vm.prank(alice);
-        game.purchase{value: price * 4 + 0.05 ether}(
+        game.purchaseOrderFor{value: price * 4 + 0.05 ether}(
             0, 4 * 400, BoxOrderLib.boCustom(0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         vm.prank(bob);
-        game.purchase{value: price * 2}(0, 0, BoxOrderLib.boSmalls(2), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price * 2}(0, 0, BoxOrderLib.boSmalls(2), bytes32(0), MintPaymentKind.DirectEth, false);
         _warpDay(d, 1 hours);
         _drain();
         _warpDay(d, 13 hours);
@@ -200,7 +200,7 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
             // A foil pack and a whale pass also run the credit hook.
             if (d == startDay) {
                 vm.prank(alice);
-                game.purchase{value: 0.1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+                game.purchaseOrderFor{value: 0.1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
                 vm.prank(bob);
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
                 purchases += 2;
@@ -220,7 +220,7 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
 
 /// @title DegenesisOneTypePerBuy -- one box type per lootbox purchase, through the real Game
 /// @notice The purchase input carries one kind and one count; it cannot express two kinds. Through
-///         `game.purchase`: each kind alone buys, an input with a bit at or above 30, a preset
+///         `game.purchaseOrderFor`: each kind alone buys, an input with a bit at or above 30, a preset
 ///         carrying custom units, a zero or 101 count, or a custom outside 0.01..2,000 ETH reverts
 ///         with nothing charged and nothing credited; the 2,000 ETH custom maximum buys.
 contract DegenesisOneTypePerBuy is DegenesisFixture {
@@ -235,7 +235,7 @@ contract DegenesisOneTypePerBuy is DegenesisFixture {
         vm.prank(alice);
         (ok,) = address(game).call{value: value}(
             abi.encodeWithSignature(
-                "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                "purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)",
                 uint32(0), uint256(0), boxOrder, bytes32(0), uint8(MintPaymentKind.DirectEth), false
             )
         );

@@ -45,7 +45,7 @@ contract CoverageGap222 is DeployProtocol {
     // ====================================================================
 
     /// @notice Drive a full purchase -> mineFlip() cycle.
-    /// @dev Closes gaps: game.purchase, game.mineFlip, game.currentDayView_g542950
+    /// @dev Closes gaps: game.purchaseOrderFor, game.mineRun, game.currentDayView_g542950
     ///      (EXEMPT), game.purchaseInfo_g1027 (EXEMPT), initVrf (admin-path).
     ///      D-14 target: the purchase flow takes the DirectEth branch
     ///      of MintPaymentKind dispatch inside _purchaseFor.
@@ -56,12 +56,12 @@ contract CoverageGap222 is DeployProtocol {
         // (the next level during the purchase phase), which is where entriesOwedView increments.
         uint24 targetLvl = inJackpot ? lvl0 : lvl0 + 1;
 
-        // D-13 natural caller chain: caller is buyer, entry is game.purchase.
+        // D-13 natural caller chain: caller is buyer, entry is game.purchaseOrderFor.
         uint256 qty = 400;
         uint256 cost = (price0 * qty) / 400;
         uint32 ticketsBefore = game.entriesOwedView(targetLvl, buyer);
         vm.prank(buyer);
-        game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         // Observable effect: entriesOwedView increments strictly.
         uint32 ticketsAfter = game.entriesOwedView(targetLvl, buyer);
         assertGt(ticketsAfter, ticketsBefore, "tickets incremented by purchase");
@@ -69,7 +69,7 @@ contract CoverageGap222 is DeployProtocol {
         // Advance to next day: mineFlip runs the day's advance and requests its word.
         vm.warp(block.timestamp + 1 days);
         uint256 requestBefore = mockVRF.lastRequestId();
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Observable effect: the advance engaged the RNG lock behind a fresh VRF request.
         assertGt(mockVRF.lastRequestId(), requestBefore, "the day's advance requested a word");
@@ -122,7 +122,7 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_claimWinnings_zeroBalance() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("claimWinnings(uint32)", uint32(0))
+            abi.encodeWithSignature("claimClaimable(uint32)", uint32(0))
         );
         // Either reverts (no winnings) or succeeds silently; selector reachable.
         ok;
@@ -249,20 +249,20 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok2, "consumeDecimatorBoon rejected non-authorized caller");
     }
 
-    /// @notice Exercise issueDeityBoon (onlyGame-gated).
+    /// @notice Exercise giveBoon (onlyGame-gated).
     function test_gap_issueDeityBoon_guard() public {
         uint32 deity = _giveWalletId(makeAddr("deity"));
         uint32 recipient = _giveWalletId(makeAddr("boon_recipient"));
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "issueDeityBoon(uint32,uint32,uint8)",
+                "giveBoon(uint32,uint32,uint8)",
                 deity,
                 recipient,
                 uint8(0)
             )
         );
-        assertFalse(ok, "issueDeityBoon rejected non-game caller");
+        assertFalse(ok, "giveBoon rejected non-game caller");
     }
 
     /// @notice Exercise setAfKingMode (gated by operator approval).
@@ -338,7 +338,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(coin).call(
             abi.encodeWithSignature(
-                "mintForGame(address,uint256)",
+                "mintForGame_g152734(address,uint256)",
                 buyer,
                 uint256(1)
             )
@@ -354,7 +354,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o3, ) = address(coin).call(
             abi.encodeWithSignature(
-                "burnCoin(address,uint256)",
+                "burnCoin_g27673(address,uint256)",
                 buyer,
                 uint256(1)
             )
@@ -376,9 +376,9 @@ contract CoverageGap222 is DeployProtocol {
                 uint256(1)
             )
         );
-        assertFalse(o1, "coin.mintForGame rejected non-game caller");
+        assertFalse(o1, "coin.mintForGame_g152734 rejected non-game caller");
         assertFalse(o2, "coin.burnForCoinflip rejected non-game caller");
-        assertFalse(o3, "coin.burnCoin rejected non-game caller");
+        assertFalse(o3, "coin.burnCoin_g27673 rejected non-game caller");
         assertFalse(o4, "coin.decimatorBurn rejected non-game caller");
         assertFalse(o7, "coin.vaultMintTo rejected non-vault caller");
     }
@@ -392,7 +392,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "depositCoinflip(uint32,uint256)",
+                "playCoinflip(uint32,uint256)",
                 uint32(0),
                 uint256(1)
             )
@@ -436,8 +436,8 @@ contract CoverageGap222 is DeployProtocol {
                 buyer
             )
         );
-        // depositCoinflip is onlyFLIP-gated; EOA caller rejected.
-        assertFalse(o1, "coinflip.depositCoinflip rejected non-coin caller");
+        // playCoinflip is onlyFLIP-gated; EOA caller rejected.
+        assertFalse(o1, "coinflip.playCoinflip rejected non-coin caller");
         // claimCoinflips(buyer, 1) from EOA is self-service; no coinflip
         // balance → the call succeeds as a no-op for zero-balance caller.
         assertTrue(o2, "coinflip.claimCoinflips completed for zero-balance self-service caller");
@@ -851,7 +851,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(sdgnrs).call(
             abi.encodeWithSignature(
-                "transferFromPool(uint8,address,uint256)",
+                "transferFromPool_g106128(uint8,address,uint256)",
                 uint8(0),
                 buyer,
                 uint256(1)
@@ -865,7 +865,7 @@ contract CoverageGap222 is DeployProtocol {
                 uint256(1)
             )
         );
-        assertFalse(o1, "sdgnrs.transferFromPool rejected non-authorized caller");
+        assertFalse(o1, "sdgnrs.transferFromPool_g106128 rejected non-authorized caller");
         assertFalse(o3, "sdgnrs.wrapperTransferTo rejected non-authorized caller");
     }
 
@@ -873,7 +873,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(sdgnrs).call(
             abi.encodeWithSignature(
-                "closeRedemptionBatch(uint256)",
+                "closeRedemptionBatch_g165517(uint256)",
                 uint256(0)
             )
         );
@@ -897,7 +897,7 @@ contract CoverageGap222 is DeployProtocol {
         (bool o5, ) = address(sdgnrs).call(
             abi.encodeWithSignature("gameAdvance(uint32)", uint32(0))
         );
-        assertFalse(o1, "sdgnrs.closeRedemptionBatch rejected non-authorized caller");
+        assertFalse(o1, "sdgnrs.closeRedemptionBatch_g165517 rejected non-authorized caller");
         assertFalse(o2, "sdgnrs.claimRedemption rejected caller with no pending redemption");
         assertFalse(o3, "sdgnrs.burnAtGameOver rejected caller before game over");
         assertFalse(o4, "sdgnrs.depositSteth rejected non-authorized caller");
@@ -978,7 +978,7 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_vault_playerAction_requiresOwner() public {
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("NotVaultOwner()")));
-        vault.playerAction(address(game), abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), 0);
+        vault.playerAction(address(game), abi.encodeWithSignature("mineRun(uint32)", uint32(0)), 0);
     }
 
     function test_gap_vault_mintsAndShareBurns_keepTheirGuards() public {
@@ -1024,14 +1024,14 @@ contract CoverageGap222 is DeployProtocol {
         (bool o1, ) = address(gnrus).call(
             abi.encodeWithSignature("setCharity(uint8,address)", uint8(3), charity)
         );
-        // vote(uint8) is permissionless but rejects an empty slot / a zero-weight voter
+        // castBallot(uint8) is permissionless but rejects an empty slot / a zero-weight voter
         // (GNRUS:570-590). buyer holds no sDGNRS and slot 1 is empty at deploy -> rejected.
         vm.prank(buyer);
         (bool o2, ) = address(gnrus).call(
-            abi.encodeWithSignature("vote(uint8)", uint8(1))
+            abi.encodeWithSignature("castBallot(uint8)", uint8(1))
         );
         assertFalse(o1, "gnrus.setCharity rejected non-vault-owner caller");
-        assertFalse(o2, "gnrus.vote rejected empty-slot / zero-weight caller");
+        assertFalse(o2, "gnrus.castBallot rejected empty-slot / zero-weight caller");
     }
 
     function test_gap_gnrus_pickCharity_guard() public {
@@ -1110,9 +1110,9 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     // ====================================================================
-    //  SECTION M: DegenerusQuests.sol — quest handlers via game.purchase.
+    //  SECTION M: DegenerusQuests.sol — quest handlers via game.purchaseOrderFor.
     //             The quest handleXxx functions are onlyCoin-gated; the
-    //             natural caller chain is game.purchase -> coin -> quests.
+    //             natural caller chain is game.purchaseOrderFor -> coin -> quests.
     //             Tests exercise the guard-revert branch from EOA.
     // ====================================================================
 
@@ -1304,7 +1304,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
+                "betDegenerette(uint32,uint8,uint128,uint8,uint8)",
                 uint32(0),
                 uint8(0),
                 uint128(1),
@@ -1314,7 +1314,7 @@ contract CoverageGap222 is DeployProtocol {
         );
         // The manual game.resolveDegeneretteBets door is gone (doors removal): bets now resolve
         // only in the in-order sweep, so the selector no longer exists to be access-controlled.
-        assertFalse(o1, "game.placeDegeneretteBet rejected non-vault caller");
+        assertFalse(o1, "game.betDegenerette rejected non-vault caller");
     }
 
     function test_gap_game_vrf_admin_paths() public {

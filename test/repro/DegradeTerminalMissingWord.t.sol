@@ -11,7 +11,7 @@ contract TerminalSinkStub {
     uint256 public burns;
     function burnAtGameOver() external { ++burns; }
     function tombstoneAtGameOver() external { ++burns; }
-    function closeRedemptionBatch(uint256) external pure returns (uint256) { return 0; }
+    function closeRedemptionBatch_g165517(uint256) external pure returns (uint256) { return 0; }
     function resolveTerminalRedemptions() external pure {}
 }
 

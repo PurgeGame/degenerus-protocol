@@ -42,7 +42,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
             vm.deal(a, 10_000 ether);
             _dgnrsFromVault(a, 1_000_000e12);
             vm.startPrank(address(game));
-            coin.mintForGame(a, 5_000_000);
+            coin.mintForGame_g152734(a, 5_000_000);
             wwxrp.mintPrize(a, 200_000);
             vm.stopPrank();
             if (i < 4) {
@@ -218,7 +218,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 200; ++i) {
             _fulfillLast(salt * 1000 + i);
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 if (bytes4(reason) == NO_WORK) return;
                 if (bytes4(reason) == RNG_NOT_READY && _fulfillLast(salt * 1000 + i + 500)) continue;
                 return;
@@ -264,7 +264,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         handler.f_decimatorBurn(0, 5_000, 5);
         assertGt(handler.decEntryCount(), before, "burn must populate a real entry");
         uint256 tagged = uint256(vm.load(address(game), bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
-        assertEq(uint24(tagged >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET)), game.level() + 1,
+        assertEq(uint24(tagged >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET)), game.currentLvl() + 1,
             "shortcut must perform the production entry-buffer takeover");
         handler.checkAll();
 
@@ -273,12 +273,12 @@ contract WalletIdTruthInvariant is DeployProtocol {
         uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LEVEL)));
         uint256 shift = 8 * GameSlots.LEVEL_OFFSET;
         vm.store(address(game), bytes32(GameSlots.LEVEL),
-            bytes32((packed & ~(uint256(type(uint24).max) << shift)) | (uint256(game.level() + 1) << shift)));
+            bytes32((packed & ~(uint256(type(uint24).max) << shift)) | (uint256(game.currentLvl() + 1) << shift)));
         before = handler.decEntryCount();
         handler.f_decimatorBurn(0, 5_000, 5);
         assertGt(handler.decEntryCount(), before, "second window must accept a real burn");
         tagged = uint256(vm.load(address(game), bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
-        assertEq(uint24(tagged >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET)), game.level() + 1);
+        assertEq(uint24(tagged >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET)), game.currentLvl() + 1);
         handler.checkAll();
     }
 
@@ -332,11 +332,11 @@ contract WalletIdTruthInvariant is DeployProtocol {
         vm.recordLogs();
         (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(p);
-        game.purchase{value: price}(0, 400, 0, bytes32(uint256(uint160(ref))), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(uint256(uint160(ref))), MintPaymentKind.DirectEth, false);
         uint32 id = game.walletIdOf_g3120(p);
         assertGt(id, 3, "purchase registered the buyer");
         vm.prank(p);
-        coinflip.depositCoinflip(0, 1_000);
+        coinflip.playCoinflip(0, 1_000);
         vm.prank(p);
         crapsBattle.setPreferredBoard(0, 1 | (1 << 9));
         // Populate a real redemption record above the current minimum value.

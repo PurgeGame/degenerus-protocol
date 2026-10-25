@@ -110,7 +110,7 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         bool oneCall = mode == 2;
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: REALISTIC - INTRINSIC}(0);
+        game.mineRun{gas: REALISTIC - INTRINSIC}(0);
         uint256 used = beforeGas - gasleft() + INTRINSIC;
         emit log_named_uint("DEAD_VRF_COLD_INCLUDING_INTRINSIC", used);
         assertEq(game.gameOver(), oneCall, "empty queues and finishing batches may pay out");
@@ -157,7 +157,7 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         while (!game.gameOver() && calls < 64) {
             (uint256 p0, uint256 d0, uint256 i0, uint256 s0) = _progress();
             beforeGas = gasleft();
-            game.mineFlip{gas: REALISTIC - INTRINSIC}(0);
+            game.mineRun{gas: REALISTIC - INTRINSIC}(0);
             used = beforeGas - gasleft() + INTRINSIC;
             if (used > maxUsed) maxUsed = used;
             ++calls;
@@ -231,7 +231,7 @@ contract DeadVrfClaimGas is DeployProtocol {
         s.seedDeadStall(9);
         uint256 uncreated = s.seedFinalBatch(10);
         vm.etch(address(game), code);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.gameOver());
         expectedClaim = ((4400 ether * 25_600) / (25_600 + uncreated) / 256) * 256;
     }

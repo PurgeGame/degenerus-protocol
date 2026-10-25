@@ -100,7 +100,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         assertEq(game.claimableWinningsOf(address(sdgnrs)) + game.redemptionReserve(), beforeClaimable);
         assertEq(_pool(), beforePool, "the reserve stays inside claimablePool");
         assertEq(mockStETH.balanceOf(address(sdgnrs)), beforeSteth);
-        assertTrue(sdgnrs.redemptionSettlementPending());
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837());
     }
 
     function testLiveDirectLegMovesReserveToWalletWithoutPoolChange() public {
@@ -148,7 +148,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         for (uint256 mode; mode < 7; ++mode) {
             vm.etch(ContractAddresses.STETH_TOKEN, address(new RedemptionHostileBalance(mode)).code);
             _closeFunded();
-            assertTrue(sdgnrs.redemptionSettlementPending());
+            assertTrue(sdgnrs.redemptionSettlementPending_g153837());
             (, , uint96 base, , ,) = sdgnrs.redemptionBatches(1);
             assertGt(base, 0);
             assertLt(base, 100 ether);
@@ -227,8 +227,8 @@ contract RedemptionIsolationTest is RedemptionFixture {
         uint256 beforeGame = address(game).balance;
         uint256 snap = vm.snapshotState();
         for (uint256 mode; mode < 6; ++mode) {
-            vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.redemptionSettlementPending.selector), abi.encode(false));
-            vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.closeRedemptionBatch.selector), abi.encode(uint256(1 ether)));
+            vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.redemptionSettlementPending_g153837.selector), abi.encode(false));
+            vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.closeRedemptionBatch_g165517.selector), abi.encode(uint256(1 ether)));
             vm.etch(address(sdgnrs), address(new RedemptionHostileEth(mode)).code);
             _closeFunded();
             assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable - 1 ether);
@@ -246,7 +246,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         vm.expectCall(address(mockStETH), abi.encodeWithSelector(mockStETH.balanceOf.selector, address(sdgnrs)), 0);
         _closeFunded();
-        assertTrue(sdgnrs.redemptionSettlementPending());
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837());
     }
 
 }

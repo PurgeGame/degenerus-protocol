@@ -2,7 +2,7 @@ import hre from "hardhat";
 import { deployFullProtocol } from "./deployFixture.js";
 
 
-// sDGNRS pool index used by transferFromPool to fund test voters.
+// sDGNRS pool index used by transferFromPool_g106128 to fund test voters.
 export const POOL_REWARD = 3;
 
 /**
@@ -37,7 +37,7 @@ export async function stopImpersonating(address) {
  */
 export async function giveSDGNRS(sdgnrs, gameAddress, recipient, amount) {
   const gameSigner = await impersonate(gameAddress);
-  await sdgnrs.connect(gameSigner).transferFromPool(POOL_REWARD, recipient, amount);
+  await sdgnrs.connect(gameSigner).transferFromPool_g106128(POOL_REWARD, recipient, amount);
   await stopImpersonating(gameAddress);
 }
 

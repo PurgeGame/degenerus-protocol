@@ -88,7 +88,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         vm.deal(cranker, 1_000_000 ether);
         vm.deal(address(game), 10_000_000 ether);
 
-        // placeDegeneretteBet requires lootboxRngIndex != 0 and the word at that index == 0.
+        // betDegenerette requires lootboxRngIndex != 0 and the word at that index == 0.
         // Seed index = 1 (word stays 0 until injected post-placement).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         RecyclingState.seedWriteBuffer(address(game), INDEX);
@@ -429,7 +429,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
             _cool();
             vm.recordLogs();
             vm.prank(cranker);
-            game.mineFlip{gas: 10_000_000 - 21_000}(0);
+            game.mineRun{gas: 10_000_000 - 21_000}(0);
             uint256 used = vm.snapshotGasLastCall("correlated-eth-bet-keeper");
             emit log_named_uint("correlated keeper gross call gas", used);
             Vm.Log[] memory rows = vm.getRecordedLogs();
@@ -470,7 +470,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     {
         uint256 totalBet = uint256(AMOUNT_PER_TICKET) * spins;
         vm.prank(better);
-        game.placeDegeneretteBet{value: totalBet}(0, 0, AMOUNT_PER_TICKET, spins, uint8(ticket & 7));
+        game.betDegenerette{value: totalBet}(0, 0, AMOUNT_PER_TICKET, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
@@ -489,20 +489,20 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         uint32 ticket
     ) internal returns (uint64 betId) {
         vm.prank(better);
-        game.placeDegeneretteBet(0, currency, perTicket, spins, uint8(ticket & 7));
+        game.betDegenerette(0, currency, perTicket, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
-    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (keeps supply consistent).
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame_g152734 (keeps supply consistent).
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     /// @dev Place a single 1-spin winning bet (the typical item the marginal calibrates against).
     function _placeOneSpinBet(address better) internal returns (uint64 betId) {
         vm.prank(better);
-        game.placeDegeneretteBet{value: AMOUNT_PER_TICKET}(0, 0, AMOUNT_PER_TICKET, 1, uint8(worstCaseTicket & 7));
+        game.betDegenerette{value: AMOUNT_PER_TICKET}(0, 0, AMOUNT_PER_TICKET, 1, uint8(worstCaseTicket & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
@@ -608,12 +608,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         _cool();
         vm.prank(cranker);
         uint256 g = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 baseline = g - gasleft();
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
             assertTrue(vm.revertToState(emptySnap));
             this.exportNativeFixture(string.concat("degenerette-empty-", vm.toString(baseline)), cranker,
-                address(game), abi.encodeCall(game.mineFlip, (0)));
+                address(game), abi.encodeCall(game.mineRun, (0)));
         }
         vm.revertToStateAndDelete(snap);
         uint256 fullSnap = vm.snapshotState();
@@ -621,15 +621,15 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         vm.recordLogs();
         vm.prank(cranker);
         g = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         gasUsed = g - gasleft();
         stageGas = gasUsed - baseline;
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
             assertTrue(vm.revertToState(fullSnap));
             this.exportNativeFixture(string.concat("degenerette-full-", vm.toString(gasUsed)), cranker,
-                address(game), abi.encodeCall(game.mineFlip, (0)));
+                address(game), abi.encodeCall(game.mineRun, (0)));
             vm.recordLogs();
-            vm.prank(cranker); game.mineFlip(0);
+            vm.prank(cranker); game.mineRun(0);
         }
         emit log_named_uint("cold mineFlip gas", gasUsed);
         emit log_named_uint("Degenerette stage gas (mineFlip minus empty-queue baseline)", stageGas);

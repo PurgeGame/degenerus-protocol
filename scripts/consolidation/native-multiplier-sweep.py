@@ -97,7 +97,7 @@ def main():
     vrf = next(row['to'] for row in rows if row['label'] == 'vrfFulfill')
     fulfilled = {int(row['data'][10:74], 16): row['data'] for row in rows if row['label'] == 'vrfFulfill'}
     selector = lambda signature: n.b.topic(signature)[:10]
-    mine_selector = selector('mineFlip(uint32)')
+    mine_selector = selector('mineRun(uint32)')
     next_selector = selector('nextMinerAction()')
     request_selector = selector('lastRequestId()')
     pending_selector = selector('pendingRequests(uint256)')

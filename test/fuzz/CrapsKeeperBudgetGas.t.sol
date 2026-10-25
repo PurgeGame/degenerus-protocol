@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-// Exercises GameMiner._mineFlip through the public Game.mineFlip entry, including
+// Exercises GameMiner._mineFlip through the public Game.mineRun entry, including
 // the pinned external-worker dispatch and its progress/rollback behavior.
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
@@ -39,7 +39,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
                 if (!done) mockVRF.fulfillRandomWords(request, 0xC01D);
             }
             if (!game.advanceDue() && !game.rngLocked() && game.rngComplete()) break;
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         assertTrue(game.rngComplete());
         OwnerTargetCall.call(address(crapsBattle), abi.encodeCall(crapsBattle.setBattleCreator, (address(this), true)), 0);
@@ -48,17 +48,17 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
         for (uint256 i; i < FIELD; ++i) {
             address player = address(uint160(0xC01000 + i));
-            vm.prank(address(game)); coin.mintForGame(player, 100_000_000 ether);
+            vm.prank(address(game)); coin.mintForGame_g152734(player, 100_000_000 ether);
             vm.prank(player); crapsBattle.enterBattle(slot, board, i == 0 ? 255 : 1);
         }
         vm.warp(vm.getBlockTimestamp() + 60);
         index = JackpotBattle(address(crapsBattle)).closeBattle(slot);
         uint256 prior = mockVRF.lastRequestId();
-        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}(0);
+        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineRun{gas: 15_000_000}(0);
         assertGt(mockVRF.lastRequestId(), prior, "real request seals the custom field");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xBADC0DE);
         // Publish and empty preceding categories, stopping safely before the first whole seat.
-        for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 6; ++i) game.mineFlip{gas: 800_000}(0);
+        for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 6; ++i) game.mineRun{gas: 800_000}(0);
         assertEq(game.rngConsumerStage_g379(), 6);
         assertEq(RecyclingState.readBuffer(address(game)), index);
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
@@ -98,7 +98,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(MINER);
         uint256 before = gasleft();
-        game.mineFlip{gas: 9_500_000}(0);
+        game.mineRun{gas: 9_500_000}(0);
         uint256 used = before - gasleft() + 21_192;
         emit log_named_uint("cold_real_craps_miner_including_intrinsic", used);
         assertLt(used, 9_530_000, "execution fits supplied gas plus intrinsic/frame");
@@ -133,7 +133,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         uint256 lockFactor = game.rngLocked() ? 2 : 1;
         vm.recordLogs();
         vm.prank(MINER);
-        game.mineFlip{gas: 9_500_000}(0);
+        game.mineRun{gas: 9_500_000}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
         for (uint256 i; i < logs.length; ++i) {
@@ -192,14 +192,14 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         _finish(14_000_000, true);
         (uint256 request, uint64 finalSlot) = _requestSingleSeatField();
         mockVRF.fulfillRandomWords(request, 0xC002);
-        for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 6; ++i) game.mineFlip{gas: 800_000}(0);
+        for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 6; ++i) game.mineRun{gas: 800_000}(0);
         assertEq(game.rngConsumerStage_g379(), 6);
         assertEq(crapsBattle.bonusCursorOf(finalSlot), 0);
         assertFalse(game.rngComplete(), "one final seat remains");
         uint256 prior = coinflip.coinflipAmount(MINER);
         vm.recordLogs();
         vm.prank(MINER);
-        game.mineFlip{gas: 15_000_000}(0);
+        game.mineRun{gas: 15_000_000}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
         for (uint256 i; i < logs.length; ++i) {
@@ -223,20 +223,20 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         nextSlot = JackpotBattle(address(crapsBattle)).createBattle(300, 25, 1000, 75,
             uint40(vm.getBlockTimestamp() + 60), true, 255);
         address player = address(0xD00DCAFE);
-        vm.prank(address(game)); coin.mintForGame(player, 100_000_000 ether);
+        vm.prank(address(game)); coin.mintForGame_g152734(player, 100_000_000 ether);
         uint32 board = 1 | uint32(1) << 3 | uint32(1) << 6 | uint32(1) << 9
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
         vm.prank(player); crapsBattle.enterBattle(nextSlot, board, 1);
         vm.warp(vm.getBlockTimestamp() + 60);
         JackpotBattle(address(crapsBattle)).closeBattle(nextSlot);
         uint256 prior = mockVRF.lastRequestId();
-        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}(0);
+        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineRun{gas: 15_000_000}(0);
         request = mockVRF.lastRequestId();
         assertGt(request, prior);
     }
 
     /// @dev Coinflip stakes are whole FLIP: a positive priced reward pays at least 1 FLIP and
-    ///      larger rewards floor to whole FLIP (DegenerusGameMinerModule.mineFlip).
+    ///      larger rewards floor to whole FLIP (DegenerusGameMinerModule.mineRun).
     function _wholeFlip(uint256 priced) private pure returns (uint256) {
         if (priced == 0) return 0;
         return priced < 1 ether ? 1 : priced / 1 ether;
@@ -260,10 +260,10 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Wait));
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip{gas: 15_000_000}(0);
+        game.mineRun{gas: 15_000_000}(0);
         vm.prank(MINER);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip{gas: 15_000_000}(0);
+        game.mineRun{gas: 15_000_000}(0);
         assertEq(mockVRF.lastRequestId(), request, "neither caller can retry through mining");
     }
 
@@ -287,7 +287,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         uint256 lockFactor = game.rngLocked() ? 2 : 1;
         vm.recordLogs();
         vm.prank(MINER);
-        game.mineFlip{gas: 9_500_000}(0);
+        game.mineRun{gas: 9_500_000}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
         for (uint256 i; i < logs.length; ++i) {
@@ -353,7 +353,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     function _underfundedMine() private {
         vm.prank(MINER);
         (bool ok,) = address(game).call{gas: 50_000}(
-            abi.encodeCall(game.mineFlip, (type(uint32).max))
+            abi.encodeCall(game.mineRun, (type(uint32).max))
         );
         assertFalse(ok, "actual underfunding must roll back");
     }
@@ -367,7 +367,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         // The old 800k refusal was estimate-only. The actual first seat fits, even
         // at maximum calibration; its successor waits for the next call.
         vm.prank(MINER);
-        game.mineFlip{gas: 800_000}(type(uint32).max);
+        game.mineRun{gas: 800_000}(type(uint32).max);
         assertEq(crapsBattle.bonusCursorOf(slot), 1);
         assertEq(coinflip.coinflipAmount(MINER), prior, "less than one million gas earns no bounty");
         _finish(14_000_000, true);

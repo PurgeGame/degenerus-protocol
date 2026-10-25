@@ -35,7 +35,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         vm.deal(buyer, 1_000 ether);
         for (uint256 i; i < 8; ++i) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         vm.warp(block.timestamp + 1 days);
@@ -72,7 +72,7 @@ contract RouterWorstCaseGas is DeployProtocol {
     function _realisticCall(address caller, uint256 maxSoFar) internal returns (uint256) {
         vm.prank(caller);
         uint256 gasBefore = gasleft();
-        game.mineFlip{gas: REALISTIC_CALL_GAS}(0);
+        game.mineRun{gas: REALISTIC_CALL_GAS}(0);
         uint256 used = gasBefore - gasleft();
         emit log_named_uint("mintflip_advance_call_gas", used);
         return used > maxSoFar ? used : maxSoFar;

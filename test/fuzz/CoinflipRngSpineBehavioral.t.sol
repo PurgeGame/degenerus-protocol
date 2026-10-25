@@ -180,7 +180,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
         address player = makeAddr("mech03_player");
         vm.deal(player, 100 ether);
         vm.prank(player);
-        game.purchase{value: 10 ether}(
+        game.purchaseOrderFor{value: 10 ether}(
             0,
             400,
             0,

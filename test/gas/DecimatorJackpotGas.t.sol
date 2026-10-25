@@ -145,7 +145,7 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed, GameMiner {
 }
 
 contract DecimatorJackpotNativeViews {
-    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
     function balanceOf(address) external pure returns (uint256) { return 0; }
 }
 

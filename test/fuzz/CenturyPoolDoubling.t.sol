@@ -63,7 +63,7 @@ contract CenturyPoolDoublingTest is DeployProtocol {
 
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     function _harness(uint24 prevLvl, uint256 ratchet)
@@ -138,7 +138,7 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     /// @notice The history starts empty and an empty history imposes no floor: level 100
     ///         runs on the plain ratchet until a century has completed.
     function testEmptyHistoryImposesNoFloor() public {
-        (, uint256 century100, , , , ) = game.growthState(100);
+        (, uint256 century100, , , , ) = game.getGrowth(100);
         assertEq(century100, 0, "history must start empty");
         _setLevel(99); // purchase level 100, no century completed yet
         _setLevelPrizePool(99, 60 ether);

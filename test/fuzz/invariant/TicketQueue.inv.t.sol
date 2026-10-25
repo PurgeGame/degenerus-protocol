@@ -36,14 +36,14 @@ contract TicketQueueInvariant is DeployProtocol {
         vrfHandler.fulfillVrf(uint256(keccak256("ticket-queue-opening")));
         assertGt(ticketHandler.ghost_advances(), 0, "fixture: handler drove the request");
         assertGt(vrfHandler.ghost_vrfFulfillments(), 0, "fixture: handler fulfilled its word");
-        for (uint256 lvl; lvl <= uint256(game.level()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
+        for (uint256 lvl; lvl <= uint256(game.currentLvl()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
     }
 
     /// @notice No consistency violations in ticket tracking
     /// @dev verifyConsistency asserts (and so reverts on a violation) the three cohort queues against the raw
     ///      position records and every actor's address-facing view, at every level up to level + 5.
     function invariant_noConsistencyViolations() public view {
-        for (uint256 lvl; lvl <= uint256(game.level()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
+        for (uint256 lvl; lvl <= uint256(game.currentLvl()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
     }
 
     /// @notice Ticket owed view should return 0 for addresses that never purchased
@@ -52,7 +52,7 @@ contract TicketQueueInvariant is DeployProtocol {
     function invariant_nonParticipantHasNoTickets() public view {
         // Address 0xDEAD was never registered as an actor
         address nonParticipant = address(0xDEAD);
-        uint24 currentLevel = game.level();
+        uint24 currentLevel = game.currentLvl();
 
         // Check current level and next level
         assertEq(

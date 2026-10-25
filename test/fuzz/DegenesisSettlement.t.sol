@@ -130,9 +130,9 @@ contract DegenesisSettlement is DegenesisHarness {
             address caller = makeAddr(string.concat("miner-", vm.toString(i)));
             _fulfillPending(0);
             vm.prank(caller);
-            try game.mineFlip{gas: 2_000_000}(0) {} catch {
+            try game.mineRun{gas: 2_000_000}(0) {} catch {
                 vm.prank(caller);
-                try game.mineFlip(0) {} catch { break; }
+                try game.mineRun(0) {} catch { break; }
             }
         }
         _drive(word);

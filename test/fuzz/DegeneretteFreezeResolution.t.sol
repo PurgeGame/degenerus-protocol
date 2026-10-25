@@ -121,7 +121,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Fund the game contract with ETH to back the pool injections
         vm.deal(address(game), 500 ether);
 
-        // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0.
+        // betDegenerette reverts with E() when lootboxRngIndex == 0.
         // Seed it to 1 so the bet check passes. The word at index 1 starts
         // as 0 (no pending RNG), which is the required state for bet placement.
         // lootboxRngIndex is the low 48 bits of lootboxRngPacked (slot 34).
@@ -160,7 +160,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Place bet (goes to live pools since not frozen)
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
+        game.betDegenerette{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
 
         // Live pools should have increased (unfrozen path uses _setPrizePools)
         uint256 postBetLiveFuture = _readFuturePrizePool();
@@ -779,7 +779,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // post-game-over state for the §1 path without needing to drive the VRF-entropy
         // mineFlip drain that flips the stored flag.
         vm.warp(block.timestamp + 366 days);
-        assertEq(game.level(), 0, "repro precondition: still at level 0 (deploy-idle path)");
+        assertEq(game.currentLvl(), 0, "repro precondition: still at level 0 (deploy-idle path)");
         assertTrue(
             game.livenessTriggered(),
             "game-over liveness must now be triggered (the predicate the guard checks)"
@@ -799,7 +799,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         assertEq(game.rngConsumerStage_g379(), 0, "no read consumer runs once liveness triggers");
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Terminal), "only the terminal path remains");
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG), 0, "the terminal step resolves no pending bet");
         assertEq(claimableBalance(game, player), 0, "the terminal step credits the bettor nothing");
     }
@@ -828,7 +828,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     {
         uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(0, currency, perTicket, spins, uint8(ticket & 7));
+        game.betDegenerette{value: ethValue}(0, currency, perTicket, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), _activeIndex());
     }
 
@@ -1010,10 +1010,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // Token funding helpers (game-gated mints)
     // =========================================================================
 
-    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (keeps supply consistent).
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame_g152734 (keeps supply consistent).
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     // =========================================================================
@@ -1063,7 +1063,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///      mineFlip. One unbounded call runs the cohort's whole consumer chain.
     function _resolveCohort() internal {
         vm.prank(makeAddr("degen_freeze_crank"));
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     /// @dev One mineFlip given the smallest allowance that still resolves a bet: the engine admits a
@@ -1077,7 +1077,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.recordLogs();
             vm.prank(makeAddr("degen_freeze_crank"));
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 n = ok ? _countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG) : 0;
             vm.revertToStateAndDelete(snap);
             if (n != 0) hi = mid;
@@ -1085,7 +1085,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         }
         vm.recordLogs();
         vm.prank(makeAddr("degen_freeze_crank"));
-        game.mineFlip{gas: hi}(0);
+        game.mineRun{gas: hi}(0);
         resolved = _countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG);
     }
 

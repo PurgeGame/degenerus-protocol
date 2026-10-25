@@ -78,7 +78,7 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         for (uint8 i; i < 5; ++i) {
             uint256 amount = sdgnrs.poolBalance(sDGNRS.Pool(i));
             vm.prank(address(game));
-            sdgnrs.transferFromPool(sDGNRS.Pool(i), to, amount);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool(i), to, amount);
         }
     }
 

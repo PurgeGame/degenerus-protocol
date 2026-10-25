@@ -93,9 +93,9 @@ contract AffiliateIdentityTest is DeployProtocol {
         _length(CAP);
         vm.deal(next, 1 ether);
         vm.expectRevert(bytes4(keccak256("E()")));
-        vm.prank(next); game.purchase{value: 0.03 ether}(0, 1200, 0, A, MintPaymentKind.DirectEth, false);
+        vm.prank(next); game.purchaseOrderFor{value: 0.03 ether}(0, 1200, 0, A, MintPaymentKind.DirectEth, false);
         assertEq(_id(next), 0);
-        vm.prank(next); game.purchase{value: 0.04 ether}(0, 1600, 0, A, MintPaymentKind.DirectEth, false);
+        vm.prank(next); game.purchaseOrderFor{value: 0.04 ether}(0, 1600, 0, A, MintPaymentKind.DirectEth, false);
         assertEq(_id(next), CAP + 1);
         assertEq(affiliate.getReferrerId(next), _id(a));
     }
@@ -128,12 +128,12 @@ contract AffiliateIdentityTest is DeployProtocol {
         uint32 original = _id(a);
         assertGt(original, 0, "custom creation did not register owner");
         vm.deal(a, 1 ether);
-        vm.prank(a); game.purchase{value: 0.01 ether}(0, 400, 0, B, MintPaymentKind.DirectEth, false);
+        vm.prank(a); game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, B, MintPaymentKind.DirectEth, false);
         assertEq(_id(a), original);
         address fresh = address(0xD11);
         bytes32 freshCode = bytes32("TICKET_FIRST");
         vm.deal(fresh, 1 ether);
-        vm.prank(fresh); game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        vm.prank(fresh); game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint32 ticketId = _id(fresh);
         vm.prank(fresh); affiliate.createAffiliateCode(freshCode, 7);
         assertEq(_id(fresh), ticketId);

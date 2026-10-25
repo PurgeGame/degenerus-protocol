@@ -118,7 +118,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         if (game.walletIdOf_g3120(player) == 0) {
             (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
             vm.prank(player);
-            game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         uint256 entry = BoxOrderLib.boEntry(game.walletIdOf_g3120(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         RecyclingState.seedWriteBuffer(address(game), index);
@@ -138,7 +138,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     function _triggerSweep(address player, uint48 index) internal {
         _setupLootbox(player, index, 10 ether);
         vm.prank(player);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.boxIndexComplete(index), "the sweep opened the forged entry");
     }
 

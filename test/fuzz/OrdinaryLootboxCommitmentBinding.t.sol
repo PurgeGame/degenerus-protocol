@@ -82,7 +82,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         _finishDaily();
         _settleIdle();
-        assertEq(game.level(), 0, "fixture's live denomination");
+        assertEq(game.currentLvl(), 0, "fixture's live denomination");
         vm.deal(ALICE, 100 ether);
         vm.deal(BOB, 100 ether);
     }
@@ -124,7 +124,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     function _requestDaily() private {
         for (uint256 i; i < 50 && !game.rngLocked(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "real daily request must engage");
         uint256 request = mockVRF.lastRequestId();
@@ -135,7 +135,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     function _finishDaily() private {
         for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertFalse(game.rngLocked(), "bounded daily processing must finish");
     }
@@ -152,7 +152,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             }
             _finishReadConsumers();
             if (!game.advanceDue() && game.rngComplete()) return;
-            if (game.advanceDue()) game.mineFlip(0);
+            if (game.advanceDue()) game.mineRun(0);
         }
         revert("harness: cohorts never settled");
     }
@@ -184,12 +184,12 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}(0);
+        game.mineRun{gas: hi}(0);
     }
 
     /// @dev Drive the delivered cohort (publication, tickets, and on a daily request the whole
@@ -220,7 +220,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             bool opened = ok && _drained(index) >= before + entries;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -231,7 +231,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     function _buy(address owner, uint256 count, uint256 size) private {
         vm.prank(owner);
-        game.purchase{value: 0.01 ether + count * size}(
+        game.purchaseOrderFor{value: 0.01 ether + count * size}(
             0, 400, BoxOrderLib.boCustoms(count, size), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
@@ -273,7 +273,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         _buy(ALICE, 1, 0.25 ether);
         _buy(BOB, 1, 0.25 ether);
         vm.prank(ALICE);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 17);
+        game.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, 17);
         if (game.rngLocked()) vm.expectRevert(bytes4(keccak256("BetLocked()")));
         vm.prank(BOB);
         crapsBattle.setPreferredBoard(0, uint32(1 << 9));
@@ -518,8 +518,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(caller);
         (bool ok, bytes memory ret) = allowance == 0
-            ? address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)))
-            : address(game).call{gas: allowance}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            ? address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)))
+            : address(game).call{gas: allowance}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         if (expectedCount != 0) _assertConsumedUnder(vm.stopAndReturnStateDiff(), lastPosition, committed);
         uint256 reward;
         if (ok) {
@@ -558,7 +558,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             _requestDaily();
         } else {
             // The owners' pending ETH clears the threshold: the engine's mid-day request.
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _assertOrders(index, orders, false);
         assertEq(_word(index), 0);
@@ -568,7 +568,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertFalse(fulfilled);
         vm.prank(KEEPER_ONE);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         _assertOrders(index, orders, false);
         if (perturb) _perturb(index, orders, false);
         mockVRF.fulfillRandomWords(request, word);
@@ -578,7 +578,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         // Publish the delivered word (and on a daily request, finish the day) before opening.
         _advanceToHumanBoxes(index, orders);
         assertFalse(game.rngLocked(), "the day's processing finished before opening");
-        assertEq(game.level(), 0, "opening denomination intentionally held fixed");
+        assertEq(game.currentLvl(), 0, "opening denomination intentionally held fixed");
         assertEq(_word(index), word, "exact delivered word reaches its committed index");
         assertEq(_word((index ^ 1)), 0, "later purchases remain unrevealed");
         _assertOrders(index, orders, false);

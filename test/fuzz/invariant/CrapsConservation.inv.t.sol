@@ -17,7 +17,7 @@ contract InvHarness is CrapsViews {}
 ///         action the campaign asserts the five properties that must hold in EVERY reachable
 ///         state — not on average, not per scenario:
 ///
-///         (1) invariant_crapsNeverMints — the table is burn-only. `mintForGame` recording a
+///         (1) invariant_crapsNeverMints — the table is burn-only. `mintForGame_g152734` recording a
 ///             single wei is a finding, exactly as `CrapsSystemEcon` frames it.
 ///         (2) invariant_progressiveNeverExceedsItsFunding — the pool is release-only against
 ///             the protocol money that ever became spendable: Σ opened-day (main + high)

@@ -249,7 +249,7 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
             vm.deal(address(sdgnrs), 0);
             burned = sdgnrs.totalSupply() / 100;
             vm.prank(address(game));
-            sdgnrs.transferFromPool(sDGNRS.Pool.Reward, BURNER, burned);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, BURNER, burned);
             vm.prank(BURNER); sdgnrs.burn(burned);
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(RequestFlipSeeder).runtimeCode);
@@ -282,7 +282,7 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
             assertEq(foils, _daily() && !paidField ? 1 : 0, "foils remain daily-only");
         }
         if (paidField) assertEq(table.frozenPaidCount(), 4, "paid seats and day tickets frozen");
-        if (_daily() && !_transition()) assertEq(game.level(), 13, "ordinary daily does not transition");
+        if (_daily() && !_transition()) assertEq(game.currentLvl(), 13, "ordinary daily does not transition");
         if (!_daily()) {
             (bool complete, bool writeSlot, uint24 early, uint256 latch) = host.ticketState();
             if (_shape() == 1) { assertFalse(complete); assertTrue(writeSlot); assertEq(latch, 1); }
@@ -290,7 +290,7 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
             if (_shape() == 4) { assertTrue(complete); assertFalse(writeSlot); assertEq(latch, 0); }
         }
         if (_transition()) {
-            assertEq(game.level(), 14, "level transitioned");
+            assertEq(game.currentLvl(), 14, "level transitioned");
             assertEq(gnrus.currentLevel(), 14, "charity resolved");
             assertEq(gnrus.pendingEditSet(), 0, "all charity edits flushed");
             assertGt(gnrus.balanceOf(address(0xC013)), 0, "charity winner paid");
@@ -384,43 +384,43 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
     // Fund the calibrated request plus cold arming/certification, parent tails and forwarding.
     function test_ArmAndRequestFitsCalibratedAllowance() public {
         this.configure(Scenario.Arm);
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(0);
-        emit log_named_uint("cold_arm_and_request", _isolatedExecutionGas(abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
+        game.mineRun{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(0);
+        emit log_named_uint("cold_arm_and_request", _isolatedExecutionGas(abi.encodeWithSignature("mineRun(uint32)", uint32(0))));
         assertEq(table.binding(slot), 1, "armed once");
         _assertRequested();
     }
     function test_ExplicitBaselineAlsoArmsAndRequests() public {
         this.configure(Scenario.Arm);
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(10_000);
+        game.mineRun{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(10_000);
         _assertRequested();
     }
     function test_LowGasKeepsArmWithoutAttemptingRequest() public {
         this.configure(Scenario.Arm);
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
-        game.mineFlip{gas: 500_000}(0);
+        game.mineRun{gas: 500_000}(0);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0);
         assertTrue(game.rngComplete(), "old read remains certified");
     }
     function test_MultiplierDefersOptionalContinuationButFirstRetryUsesAllGas() public {
         this.configure(Scenario.Arm);
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(20_000);
+        game.mineRun{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(20_000);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0, "caller doubled continuation reserve");
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(type(uint32).max);
+        game.mineRun{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(type(uint32).max);
         assertEq(table.binding(slot), 1, "first-unit retry preserves the committed arm");
         _assertRequested();
     }
     function test_ExtremeMultiplierStillArmsFirst() public {
         this.configure(Scenario.Arm);
-        game.mineFlip{gas: 1_000_000}(type(uint32).max);
+        game.mineRun{gas: 1_000_000}(type(uint32).max);
         assertEq(table.binding(slot), 1, "first progress ignores calibration");
         assertEq(coordinator.requests(address(game)), 0);
     }
     function test_HeavyCloseWaitsAfterArmWithoutRequestAttempt() public {
         this.configure(Scenario.ArmRedeem);
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
-        game.mineFlip{gas: 1_000_000}(0);
+        game.mineRun{gas: 1_000_000}(0);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0);
         (uint32 open, uint32 settling,, uint256 escrow) = sdgnrs.redemptionBatchState();
@@ -430,43 +430,43 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
     }
     function test_HeavyCloseFirstRetryUsesAllGasAtMaximumMultiplier() public {
         this.configure(Scenario.ArmRedeem);
-        game.mineFlip{gas: 1_000_000}(0);
+        game.mineRun{gas: 1_000_000}(0);
         (uint32 open, uint32 settling,, uint256 escrow) = sdgnrs.redemptionBatchState();
         assertEq(open, 1); assertEq(settling, 0); assertEq(escrow, burned);
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(type(uint32).max);
+        game.mineRun{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(type(uint32).max);
         _assertRequested();
     }
     function test_FundedHeavyContinuationFits() public {
         this.configure(Scenario.ArmRedeem);
-        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(0);
-        emit log_named_uint("cold_arm_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
+        game.mineRun{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(0);
+        emit log_named_uint("cold_arm_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineRun(uint32)", uint32(0))));
         _assertRequested();
     }
     function test_DailyBudgetPreservesCertificationAtLowGas() public {
         this.configure(Scenario.CertifyDailyRedeem);
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng_g8190(uint24)", DAY), uint64(0));
-        game.mineFlip{gas: 1_000_000}(0);
+        game.mineRun{gas: 1_000_000}(0);
         assertTrue(game.rngComplete());
         assertEq(coordinator.requests(address(game)), 0);
-        assertEq(game.level(), 13, "no partial daily transition");
+        assertEq(game.currentLvl(), 13, "no partial daily transition");
         assertGt(gnrus.pendingEditSet(), 0, "charity edits untouched");
     }
     function test_FundedDailyContinuationFits() public {
         this.configure(Scenario.CertifyDailyRedeem);
         // The engine adds the Degenesis step to the daily request until the seventh cohort closes.
         uint256 degenesis = _degenesisClosed() < 7 ? Bounds.DEGENESIS_REQUEST_GAS : 0;
-        game.mineFlip{gas: Bounds.RNG_DAILY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + degenesis + REQUEST_FRAME_GAS}(0);
-        emit log_named_uint("cold_certify_daily_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
+        game.mineRun{gas: Bounds.RNG_DAILY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + degenesis + REQUEST_FRAME_GAS}(0);
+        emit log_named_uint("cold_certify_daily_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineRun(uint32)", uint32(0))));
         _assertRequested();
     }
 
     function test_DailyWithoutRedemptionAlsoUsesItsOwnBudget() public {
         this.configure(Scenario.CertifyDaily);
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng_g8190(uint24)", DAY), uint64(0));
-        game.mineFlip{gas: 1_000_000}(0);
+        game.mineRun{gas: 1_000_000}(0);
         assertTrue(game.rngComplete());
         assertEq(coordinator.requests(address(game)), 0);
-        assertEq(game.level(), 13);
+        assertEq(game.currentLvl(), 13);
     }
 
     function testFuzz_ConsecutiveLogicalRoundsKeepSdgnrsCurrent(uint8 daysSeed, uint256 word) public {

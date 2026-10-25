@@ -51,7 +51,7 @@ describe("DegenerusGame", function () {
   describe("Initial state", function () {
     it("starts at level 0", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.level()).to.equal(0n);
+      expect(await game.currentLvl()).to.equal(0n);
     });
 
     it("starts in purchase phase (jackpotPhase = false)", async function () {
@@ -87,7 +87,7 @@ describe("DegenerusGame", function () {
       // shows up in priceWei (quoted at the routed level), not in lvl.
       const info = await game.purchaseInfo_g1027();
       expect(info.lvl).to.equal(0n);
-      expect(await game.level()).to.equal(0n);
+      expect(await game.currentLvl()).to.equal(0n);
     });
 
     it("tickets are pre-queued for vault and sdgnrs (levels 1-100)", async function () {
@@ -113,7 +113,7 @@ describe("DegenerusGame", function () {
 
     it("decimator window is closed initially", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      const on = await game.decWindow();
+      const on = await game.decimatorActive();
       expect(on).to.be.false;
     });
   });
@@ -140,7 +140,7 @@ describe("DegenerusGame", function () {
       await game.connect(alice).setOperatorApproval(0, bob.address, false);
       const price = await game.mintPrice();
       await expect(
-        game.connect(bob).purchase(aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: price })
+        game.connect(bob).purchaseOrderFor(aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: price })
       ).to.be.revertedWithCustomError(game, "NotApproved");
     });
 
@@ -161,7 +161,7 @@ describe("DegenerusGame", function () {
       // Bob purchases tickets for Alice (a valid operator action via _resolvePlayer)
       const price = await game.mintPrice();
       await expect(
-        game.connect(bob).purchase(
+        game.connect(bob).purchaseOrderFor(
           aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: price }
         )
@@ -175,7 +175,7 @@ describe("DegenerusGame", function () {
       await giveWalletId(game, bob.address);
       const price = await game.mintPrice();
       await expect(
-        game.connect(bob).purchase(
+        game.connect(bob).purchaseOrderFor(
           aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: price }
         )
@@ -193,7 +193,7 @@ describe("DegenerusGame", function () {
       // 4 scaled units = 1 ticket at 1x price; ticketQuantity is 2-decimal scaled
       // 400 = 4 tickets
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,    // buyer = msg.sender
           400n,            // 4 tickets (scaled by 100)
           0n,              // no lootbox
@@ -207,7 +207,7 @@ describe("DegenerusGame", function () {
     it("reverts when underpaying for DirectEth", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,
           400n,
           0n,
@@ -221,7 +221,7 @@ describe("DegenerusGame", function () {
     it("reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,
           99n, // 0.002475 ETH at 0.01 mintPrice
           0n,
@@ -242,7 +242,7 @@ describe("DegenerusGame", function () {
     it("allows purchasing lootbox with ETH (minimum 0.01 ETH)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,
           0n,
           boCustom(eth("0.01")), // lootbox amount
@@ -261,7 +261,7 @@ describe("DegenerusGame", function () {
       const price = await game.mintPrice();
       // alice buys for bob using alice as buyer
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           bobId,
           400n,
           0n,
@@ -278,7 +278,7 @@ describe("DegenerusGame", function () {
       await giveWalletId(game, alice.address);
       const price = await game.mintPrice();
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           bobId,
           400n,
           0n,
@@ -316,7 +316,7 @@ describe("DegenerusGame", function () {
       expect(beforeCompleted[0]).to.equal(false);
 
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,
           0n,
           boCustom(mintPrice),
@@ -377,7 +377,7 @@ describe("DegenerusGame", function () {
       // Alice has 0 claimable winnings
       expect(await game.claimableWinningsOf(alice.address)).to.equal(0n);
       await expect(
-        game.connect(alice)["claimWinnings(uint32)"](0)
+        game.connect(alice)["claimClaimable(uint32)"](0)
       ).to.be.revertedWithCustomError(errorAbi("NothingToClaim()"), "NothingToClaim");
     });
 
@@ -416,7 +416,7 @@ describe("DegenerusGame", function () {
     it("can be called by anyone", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
-      await expect(game.connect(alice).mineFlip(0, { gasLimit: 16_777_216 })).to.not.be.reverted;
+      await expect(game.connect(alice).mineRun(0, { gasLimit: 16_777_216 })).to.not.be.reverted;
     });
 
     it("mineFlip on a fresh deploy with nothing due reports NoWork", async function () {
@@ -424,7 +424,7 @@ describe("DegenerusGame", function () {
       // Nothing is due on the deploy day, so a caller without a mint gets the clean idle
       // refusal rather than any partial work.
       expect(await game.advanceDue()).to.equal(false);
-      await expect(game.connect(alice).mineFlip(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(
+      await expect(game.connect(alice).mineRun(0, { gasLimit: 16_777_216 })).to.be.revertedWithCustomError(
         errorAbi("NoWork()"),
         "NoWork"
       );

@@ -235,7 +235,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         _latchGameOver();
         uint256 before = _received(alice);
 
-        vm.expectCall(address(game), abi.encodeWithSignature("claimWinnings(uint32)", uint32(0)), 1);
+        vm.expectCall(address(game), abi.encodeWithSignature("claimClaimable(uint32)", uint32(0)), 1);
         vm.prank(operator);
         sdgnrs.claimRedemption(aliceId, open);
         assertGt(_received(alice), before, "A paid from the pulled claimable");
@@ -255,7 +255,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         deal(address(gnrus), address(gnrus), selfBal - amount);
         deal(address(gnrus), holder, amount);
 
-        vm.expectCall(address(game), abi.encodeWithSignature("claimWinnings(uint32)", uint32(0)), 1);
+        vm.expectCall(address(game), abi.encodeWithSignature("claimClaimable(uint32)", uint32(0)), 1);
         vm.prank(holder);
         gnrus.burn(amount);
         assertGt(holder.balance + mockStETH.balanceOf(holder), 0, "the holder was paid from the pull");

@@ -215,7 +215,7 @@ contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
         // rejects a zero-progress call outright (be793ed7c) instead of returning without work.
         vm.prank(MINER);
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        game.mineFlip{gas: 2_000_000}(0);
+        game.mineRun{gas: 2_000_000}(0);
         vm.etch(address(game), type(HumanOrderGasSeed).runtimeCode);
         assertGt(host.entriesLeft(), 0, "gas shortage must preserve the unfinished atomic order");
         vm.etch(address(game), gameCode);
@@ -227,7 +227,7 @@ contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
         vm.recordLogs();
         vm.prank(MINER);
         uint256 start = gasleft();
-        game.mineFlip{gas: 25_000_000}(0);
+        game.mineRun{gas: 25_000_000}(0);
         emit log_named_uint("cold complete mineFlip human gas (no transaction cap)", start - gasleft() + 21_192);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         for (uint256 i; i < entries.length; ++i) {

@@ -1473,7 +1473,7 @@ contract CrapsProgressiveTest is CrapsPins {
     function _seat(address who, uint256 period, uint16 standing) internal returns (uint256) {
         game.setScore(who, standing);
         vm.prank(who);
-        return craps.enterBonusBattle(period, SEVEN, 1);
+        return craps.throwCraps(period, SEVEN, 1);
     }
 
     function _seatHigh(address who, uint256 period, uint16 standing) internal returns (uint256) {
@@ -1482,7 +1482,7 @@ contract CrapsProgressiveTest is CrapsPins {
         // consume the prank below and seat the test contract instead of `who`.
         uint16 mult = uint16(craps.highMultOfSlot(_slotAt(period)));
         vm.prank(who);
-        return craps.enterBonusBattle(period, SEVEN, mult);
+        return craps.throwCraps(period, SEVEN, mult);
     }
 
     /// @dev A seat's real bet id: a window's own seats first, then the day tail behind them.

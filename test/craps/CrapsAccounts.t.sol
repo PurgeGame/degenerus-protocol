@@ -190,8 +190,8 @@ contract CrapsAccountsTest is CrapsPins {
         if (door == SET_BOARD) return abi.encodeCall(CrapsBattleCore.setPreferredBoard, (id, BOARD));
         if (door == AMEND) return abi.encodeCall(CrapsBattleCore.amendSlip, (id, arg, BOARD_B));
         if (door == BATTLE) return abi.encodeCall(CrapsBattleCore.enterBattle, (id, custom, BOARD, 1));
-        if (door == WINDOW) return abi.encodeCall(CrapsBattleCore.enterBonusBattle, (id, 1, BOARD, 1));
-        if (door == DAY) return abi.encodeCall(CrapsBattleCore.enterBonusDay, (id, BOARD, 1));
+        if (door == WINDOW) return abi.encodeCall(CrapsBattleCore.throwCraps, (id, 1, BOARD, 1));
+        if (door == DAY) return abi.encodeCall(CrapsBattleCore.playCraps, (id, BOARD, 1));
         if (door == PASSES) return abi.encodeCall(CrapsBattleCore.applyCrapsPasses, (id, day + 1, 1, false, BOARD));
         if (door == FUTURE) return abi.encodeCall(CrapsBattleCore.buyFutureCrapsDays, (id, day + 1, 1, false, BOARD));
         if (door == UPGRADE) return abi.encodeCall(CrapsBattleCore.upgradeDayWindows, (id, day, UPGRADE_MASK));
@@ -236,11 +236,11 @@ contract CrapsAccountsTest is CrapsPins {
             callerBurned: flip.burned(caller)
         });
         if (_paying(door) && door != UPGRADE) {
-            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, payee, id));
+            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps_g292454.selector, payee, id));
             vm.expectCall(address(quests), abi.encodeWithSelector(MockQuests.recordCrapsAction_g14623.selector, id));
         }
         if (door == UPGRADE) {
-            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoin.selector, payee));
+            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoin_g27673.selector, payee));
         }
         vm.recordLogs();
         (bool ok, bytes memory ret) = _call(door, caller, idArg, arg);
@@ -435,7 +435,7 @@ contract CrapsAccountsTest is CrapsPins {
 
     /// @dev `donate` acts for nobody: it burns the caller's FLIP whoever the caller may act for.
     function test_donateStillBurnsTheCaller() public {
-        vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoin.selector, operator));
+        vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoin_g27673.selector, operator));
         vm.prank(operator);
         uint256 amount = c.donate(false, 1, 1);
         assertGt(amount, 0);
@@ -447,7 +447,7 @@ contract CrapsAccountsTest is CrapsPins {
 
     function test_newcomerRateFollowsTheAccountKey() public {
         vm.prank(wallet);
-        c.enterBonusBattle(0, 1, BOARD, 1);
+        c.throwCraps(0, 1, BOARD, 1);
         uint256 base = flip.burned(wallet);
         assertGt(base, 0, "fixture: an established wallet's price");
 
@@ -455,7 +455,7 @@ contract CrapsAccountsTest is CrapsPins {
         game.setMintHistoryById(smurfId, 0);
         uint256 before = flip.burned(owner);
         vm.prank(owner);
-        c.enterBonusBattle(smurfId, 1, BOARD, 1);
+        c.throwCraps(smurfId, 1, BOARD, 1);
         assertEq(flip.burned(owner) - before, base + base / 20, "newcomer smurf pays the premium");
 
         // An established smurf key with a newcomer owner pays the base price.
@@ -463,13 +463,13 @@ contract CrapsAccountsTest is CrapsPins {
         game.setMintHistory(owner, 0);
         before = flip.burned(owner);
         vm.prank(owner);
-        c.enterBonusBattle(smurfBId, 1, BOARD, 1);
+        c.throwCraps(smurfBId, 1, BOARD, 1);
         assertEq(flip.burned(owner) - before, base, "established smurf pays the base price");
 
         // The owner's own entry still prices on the owner's key.
         before = flip.burned(owner);
         vm.prank(owner);
-        c.enterBonusBattle(0, 1, BOARD, 1);
+        c.throwCraps(0, 1, BOARD, 1);
         assertEq(flip.burned(owner) - before, base + base / 20, "newcomer owner's own entry pays the premium");
 
         // The deity bit on a key with no level history exempts it.
@@ -477,7 +477,7 @@ contract CrapsAccountsTest is CrapsPins {
         game.setMintHistoryById(smurfCId, uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
         before = flip.burned(owner);
         vm.prank(owner);
-        c.enterBonusBattle(smurfCId, 1, BOARD, 1);
+        c.throwCraps(smurfCId, 1, BOARD, 1);
         assertEq(flip.burned(owner) - before, base, "a deity key is exempt");
     }
 
@@ -493,7 +493,7 @@ contract CrapsAccountsTest is CrapsPins {
 
         game.setMintHistoryById(smurfId, 0);
         uint256 before = flip.burned(owner);
-        vm.expectCall(address(flip), abi.encodeCall(MockFlip.burnCoin, (owner, baseDelta + baseDelta / 20)));
+        vm.expectCall(address(flip), abi.encodeCall(MockFlip.burnCoin_g27673, (owner, baseDelta + baseDelta / 20)));
         vm.prank(owner);
         uint256 burned = c.upgradeDayWindows(smurfId, day, UPGRADE_MASK);
         assertEq(burned, baseDelta + baseDelta / 20, "a newcomer smurf's upgrade carries the premium");
@@ -519,7 +519,7 @@ contract CrapsAccountsTest is CrapsPins {
             else code = _comp(5, id, false, day + 1, 1) | (uint256(2) << 208);
 
             uint256 beforeComp = flip.compFor(owner);
-            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, owner, id));
+            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps_g292454.selector, owner, id));
             vm.recordLogs();
             vm.prank(ContractAddresses.VAULT);
             uint256 charged = c.vaultComp(code);
@@ -543,7 +543,7 @@ contract CrapsAccountsTest is CrapsPins {
         vm.startPrank(ContractAddresses.VAULT);
         c.vaultComp(_comp(1, smurfId, false, 0, 0));
         uint256 seated = flip.compFor(owner);
-        vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, owner, smurfId));
+        vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps_g292454.selector, owner, smurfId));
         uint256 charged = c.vaultComp(_comp(3, smurfId, false, day, UPGRADE_MASK));
         vm.stopPrank();
         assertGt(charged, 0);

@@ -81,7 +81,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
         position = host.boxWriteCount();
         (, uint256 cost) = host.decode(boxOrder, host.activeLevel());
         vm.prank(who);
-        host.purchase{value: cost}(0, 0, boxOrder, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchaseOrderFor{value: cost}(0, 0, boxOrder, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(host.boxWriteCount(), position + 1, "one purchase, one entry");
     }
 
@@ -123,7 +123,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
         returns (bytes32 sequence)
     {
         require(msg.sender == address(this), "assertion self-call");
-        uint24 cur = host.level() + 1;
+        uint24 cur = host.currentLvl() + 1;
         uint24[] memory expected = new uint24[](boxes);
         uint256 en;
         for (uint256 i = 1; i <= boxes; ++i) {
@@ -374,7 +374,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
                 abi.decode(logs[i].data, (uint32, uint256, uint24, uint256, uint256));
             if (boonId != id || boxCount != 10) continue;
             assertEq(logs[i].emitter, address(game), "the boon draw uses Game storage");
-            assertEq(lvl, host.level() + 1, "drawn at the open level");
+            assertEq(lvl, host.currentLvl() + 1, "drawn at the open level");
             assertEq(nonceBase, 0, "each order's boxes number from its own start");
             assertLt(calls, 3, "one boon draw per order");
             assertEq(seed, EntropyLib.hash2(14, _root(WORD, b, calls)),
@@ -573,7 +573,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
         uint256 snap = vm.snapshotState();
         uint256 a0 = host.afkingFundingOf(alice);
         vm.prank(alice);
-        host.purchase{value: value}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        host.purchaseOrderFor{value: value}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint256 baseCredit = host.afkingFundingOf(alice) - a0;
         assertTrue(vm.revertToState(snap));
         uint256[4] memory orders =
@@ -582,7 +582,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
             snap = vm.snapshotState();
             (, uint256 boxCost) = host.decode(orders[k], host.activeLevel());
             vm.prank(alice);
-            host.purchase{value: value + boxCost}(0, 400, orders[k], bytes32(0), MintPaymentKind.DirectEth, true);
+            host.purchaseOrderFor{value: value + boxCost}(0, 400, orders[k], bytes32(0), MintPaymentKind.DirectEth, true);
             assertEq(host.afkingFundingOf(alice) - a0, baseCredit, "the box leg charged exactly its quote");
             assertEq(BoxOrderLib.boNominal(_lastEntry()), boxCost, "entry represents the charged box cost");
             assertTrue(vm.revertToState(snap));

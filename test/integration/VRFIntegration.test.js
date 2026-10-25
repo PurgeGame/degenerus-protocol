@@ -66,7 +66,7 @@ describe("VRFIntegration", function () {
   async function drainTickets(game, caller) {
     for (let i = 0; i < 30; i++) {
       if (!await game.rngLocked()) break;
-      await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 });
     }
   }
 
@@ -82,7 +82,7 @@ describe("VRFIntegration", function () {
         return;
       }
       try {
-        await (await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 })).wait();
+        await (await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 })).wait();
       } catch (error) {
         if (await game.rngComplete()) return;
         throw error;
@@ -100,7 +100,7 @@ describe("VRFIntegration", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       expect(await game.rngLocked()).to.equal(true);
       const requestId = await getLastVRFRequestId(mockVRF);
@@ -117,7 +117,7 @@ describe("VRFIntegration", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       expect(await game.isRngFulfilled()).to.equal(false);
     });
@@ -126,14 +126,14 @@ describe("VRFIntegration", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }); // issues VRF request
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 }); // issues VRF request
 
       // Before fulfillment, within 18-hour window, a second call should revert
       // with RngNotReady (from the advance module, propagated through delegatecall).
       // The error is defined in the module, so we check against advanceModule.
       // Alternatively, we just verify it reverts without checking the error name.
       await expect(
-        game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 })
+        game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 })
       ).to.be.revertedWithCustomError(errorAbi("RngNotReady()"), "RngNotReady");
     });
 
@@ -142,7 +142,7 @@ describe("VRFIntegration", function () {
 
       // dailyIdx is initialized to currentDayIndex, so must advance to next day first.
       await advanceToNextDay();
-      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
       expect(await game.rngLocked()).to.equal(true);
@@ -158,7 +158,7 @@ describe("VRFIntegration", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 9876543210n);
@@ -170,7 +170,7 @@ describe("VRFIntegration", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 111n);
@@ -183,7 +183,7 @@ describe("VRFIntegration", function () {
       const { game, deployer, mockVRF, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 111n);
@@ -200,7 +200,7 @@ describe("VRFIntegration", function () {
       // word=1 causes win=true (odd) which triggers bonus payout handling;
       // use word=2 (even, loss) to test a clean path.
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 2n);
       await drainTickets(game, deployer);
@@ -213,7 +213,7 @@ describe("VRFIntegration", function () {
       const MAX_UINT256 = (1n << 256n) - 1n;
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, MAX_UINT256);
       await drainTickets(game, deployer);
@@ -225,7 +225,7 @@ describe("VRFIntegration", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 12345n);
@@ -240,7 +240,7 @@ describe("VRFIntegration", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const gameAddr = await game.getAddress();
       // Use a requestId that doesn't match the pending one.
@@ -261,7 +261,7 @@ describe("VRFIntegration", function () {
       const { game, alice, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       // Direct call from alice should revert — msg.sender != vrfCoordinator.
       await expect(
@@ -273,7 +273,7 @@ describe("VRFIntegration", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       await expect(
         game.connect(deployer).rawFulfillRandomWords(1n, [12345n])
@@ -290,7 +290,7 @@ describe("VRFIntegration", function () {
       const { game, deployer, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }); // VRF now locked
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 }); // VRF now locked
 
       expect(await game.rngLocked()).to.equal(true);
 
@@ -317,7 +317,7 @@ describe("VRFIntegration", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const info = await game.purchaseInfo_g1027();
       expect(info.rngLocked_).to.equal(true);
@@ -331,7 +331,7 @@ describe("VRFIntegration", function () {
   describe("VRF timeout / retry", function () {
     async function requestDaily(game, caller) {
       for (let i = 0; i < 256; i++) {
-        await (await game.connect(caller).mineFlip(0, { gasLimit: 15_000_000 })).wait();
+        await (await game.connect(caller).mineRun(0, { gasLimit: 15_000_000 })).wait();
         expect(await game.gameOver()).to.equal(false);
         if ((await game.rngLocked()) && !(await game.isRngFulfilled())) return;
       }
@@ -348,7 +348,7 @@ describe("VRFIntegration", function () {
           expect(id).to.be.gt(originalId, "the test must fulfill its original request");
           await (await mockVRF.fulfillRandomWords(id, 5n)).wait();
         }
-        await (await game.connect(caller).mineFlip(0, { gasLimit: 15_000_000 })).wait();
+        await (await game.connect(caller).mineRun(0, { gasLimit: 15_000_000 })).wait();
       }
       throw new Error("committed RNG consumers did not complete");
     }
@@ -429,7 +429,7 @@ describe("VRFIntegration", function () {
         await advanceToNextDay();
 
         // Issue VRF request.
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
         expect(await game.rngLocked()).to.equal(
           true,
           `Day ${day}: expected rngLocked after request`
@@ -460,7 +460,7 @@ describe("VRFIntegration", function () {
 
       for (let day = 0; day < 5; day++) {
         await advanceToNextDay();
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
         const requestId = await getLastVRFRequestId(mockVRF);
         await mockVRF.fulfillRandomWords(requestId, BigInt(day + 1) * 99999n);
         await drainTickets(game, deployer);
@@ -478,7 +478,7 @@ describe("VRFIntegration", function () {
 
       for (let day = 0; day < 3; day++) {
         await advanceToNextDay();
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
         const id = await getLastVRFRequestId(mockVRF);
         requestIds.push(id);
 

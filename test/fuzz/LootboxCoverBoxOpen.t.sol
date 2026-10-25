@@ -47,7 +47,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
     function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(caller);
-        game.mineFlip(0);
+        game.mineRun(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -57,12 +57,12 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -81,7 +81,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
         }
         // A fresh request waits for every read consumer of the day's cohort to finish. A shut
         // craps window the day bound to the write buffer rides the next request, which the engine
@@ -96,7 +96,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
             if (!game.advanceDue() && game.rngComplete()) break;
             if (!game.advanceDue()) continue; // a fresh request waits for its word
             vm.prank(actor);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
@@ -135,7 +135,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         uint256 plainPos = RecyclingState.boxCount(address(game), N);
         assertEq(plainPos, whalePos + 1, "the pass purchase is one entry");
         vm.prank(plain);
-        game.purchase{value: 0.24 ether + 1 ether}(0, 400, BoxOrderLib.boOrder(0, 0, 0, 1, 0.24 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 0.24 ether + 1 ether}(0, 400, BoxOrderLib.boOrder(0, 0, 0, 1, 0.24 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 reqId = _mineMiddayRequest(actor);
 
         // A box that draws a spin reports through the spin contracts, so search the word for a
@@ -150,7 +150,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
             // The engine publishes the word and opens the read cohort's entries as read consumers.
             vm.recordLogs();
             vm.prank(actor);
-            game.mineFlip(0);
+            game.mineRun(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             assertGt(_word(N), 0, "the word landed for the entries' buffer");
             assertTrue(game.boxIndexComplete(N), "the walk opened the entries");

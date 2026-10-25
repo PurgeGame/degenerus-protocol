@@ -59,7 +59,7 @@ contract SolvencyActionHandlerDegenesis is DegenesisDeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         mockVRF.fundSubscription(1, 1_000 ether);
-        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineRun(0);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 777);
         _finishReadConsumers(); // Fresh request 2 opens Degenesis cohort 1.
         vm.deal(address(game), 5_000_000 ether);

@@ -139,7 +139,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         s.seedWrappedPending(buyer);
         vm.etch(address(game), realCode);
         _syncCoinflipFixtureDay(uint24(game.currentDayView_g542950()));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(RecyclingState.word(address(game), 1), 2, "wrapped nudge normalized before ticket generation");
         s = _overlay();
         assertEq(s.bucketTotal(203), 100);
@@ -176,11 +176,11 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         vm.etch(address(game), realCode);
         // The already committed old foil cohort drains first, on its own word.
         // Each keeper call completes one bounded step before the ending requests RNG.
-        for (uint256 i; i < 4 && mockVRF.lastRequestId() == 0; ++i) game.mineFlip(0); // decision, loans, foil work, arm and request
+        for (uint256 i; i < 4 && mockVRF.lastRequestId() == 0; ++i) game.mineRun(0); // decision, loans, foil work, arm and request
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0, "ending requests its own entropy after committed foil work");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("terminal recycling word")) | 1);
-        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineRun(0);
         assertTrue(game.gameOver(), "terminal preparation must not stall ending");
         s = _overlay();
         assertEq(s.stamped(6), 6);

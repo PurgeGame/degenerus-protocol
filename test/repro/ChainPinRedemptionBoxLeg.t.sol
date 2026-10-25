@@ -78,7 +78,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
         ids.push(1); // the Vault, a claimant through its allowlisted burn doors
         uint256 share = sdgnrs.totalSupply() * 15 / 1000;
         vm.startPrank(address(game));
-        for (uint256 i; i < N; ++i) sdgnrs.transferFromPool(sDGNRS.Pool.Reward, cast[i], share);
+        for (uint256 i; i < N; ++i) sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, cast[i], share);
         vm.stopPrank();
         _finishSubscriptionWindow();
         for (uint256 i; i < 3; ++i) seats.push(_grantSeat(cast[i]));
@@ -99,7 +99,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
     function test_driverExercisesTheBoxLegNonVacuously() public {
         _run(0xA11CE, 0, 40);
         console.log("maxLevel", maxLevel);
-        console.log("level", game.level(), "steps", nSteps);
+        console.log("level", game.currentLvl(), "steps", nSteps);
         console.log("fails", nFails, "waits", nWaitBreaks);
         console.log("capHits", nCapHits, "lastCapAct", lastCapAct);
         console.log("lastFailAct", lastFailAct);
@@ -139,11 +139,11 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
 
     function _run(uint256 seed, uint256 jumpSel, uint256 days_) internal {
         salt = seed;
-        startLevel = game.level();
+        startLevel = game.currentLvl();
         // Organic play to level 2 (the teleport needs a live level >= 2).
         uint256 d;
-        for (; d < 80 && game.level() < 2 && !game.gameOver() && gasleft() > GAS_FLOOR; ++d) _playDay(_rand(), d);
-        if (jumpSel % 5 != 0 && game.level() >= 2 && !game.gameOver()) {
+        for (; d < 80 && game.currentLvl() < 2 && !game.gameOver() && gasleft() > GAS_FLOOR; ++d) _playDay(_rand(), d);
+        if (jumpSel % 5 != 0 && game.currentLvl() >= 2 && !game.gameOver()) {
             uint24 target = jumpSel % 2 == 0
                 ? uint24(3 + (jumpSel >> 1) % 330)
                 : uint24(100 * (1 + (jumpSel >> 1) % 4) - 1 - (jumpSel >> 4) % 3);
@@ -197,7 +197,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
                 ++nSubscribed;
             } catch {}
         }
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         if (lvl > maxLevel) maxLevel = lvl;
     }
 
@@ -210,7 +210,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
             uint256 pick = (r >> 24) % 5;
             uint256 box = pick == 0 ? 0 : pick == 1 ? 0.05 ether : pick == 2 ? 1 ether : pick == 3 ? 6 ether : 40 ether;
             vm.prank(who);
-            try game.purchase{value: tix * price + box + 1 ether}(
+            try game.purchaseOrderFor{value: tix * price + box + 1 ether}(
                 0, tix * 400, box == 0 ? 0 : BoxOrderLib.boCustomFloor(box), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
         } else if (kind == 4 || kind == 5) {
@@ -241,7 +241,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
     }
 
     function _drive(uint256 r) internal {
-        bool wasSettling = sdgnrs.redemptionSettlementPending();
+        bool wasSettling = sdgnrs.redemptionSettlementPending_g153837();
         for (uint256 j; j < 400; ++j) {
             if (j == 399) {
                 ++nCapHits;
@@ -267,13 +267,13 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
             // A refusal for gas is retried with more; anything else on stage 1 is the brick.
             for (uint256 attempt; attempt < 3; ++attempt) {
                 (ok, data) = address(game).call{gas: attempt == 0 ? gas_ : attempt == 1 ? 16_000_000 : 28_000_000}(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (ok) break;
             }
             if (!ok && act == uint8(DegenerusGameStorage.MinerAction.Redemption)) revert(string.concat("STAGE 1 REVERTED: ", vm.toString(data)));
             _assertFunding();
-            bool settling = sdgnrs.redemptionSettlementPending();
+            bool settling = sdgnrs.redemptionSettlementPending_g153837();
             if (wasSettling && !settling) ++nBatchesSettled;
             wasSettling = settling;
             if (!ok) {
@@ -315,7 +315,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
         uint16 score = uint16((r >> 40) % 65535);
         uint256 word = uint256(keccak256(abi.encode(r, "box")));
         uint32 batch = uint32(r >> 90);
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         // Sizes beyond what an actor buys are probed on a snapshot: their ticket and prize-pool consequences would
         // otherwise swamp the engine that the later steps drive.
         bool isolate = amount > 420 ether;

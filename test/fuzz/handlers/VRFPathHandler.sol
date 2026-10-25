@@ -164,7 +164,7 @@ contract VRFPathHandler is Test {
         if (totalCost == 0 || totalCost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: totalCost}(
+        try game.purchaseOrderFor{value: totalCost}(
             0,
             qty,
             BoxOrderLib.boCustomFloor(lootboxAmt),
@@ -192,7 +192,7 @@ contract VRFPathHandler is Test {
         // terminal flow (gap backfill not owed from then on).
         if (_livenessMirror()) ghost_livenessLatched = true;
 
-        try game.mineFlip(0) {} catch {
+        try game.mineRun(0) {} catch {
             return;
         }
         ghost_advances++;
@@ -263,7 +263,7 @@ contract VRFPathHandler is Test {
         uint256 reqBefore = vrf.lastRequestId();
         bool unansweredBefore = _unansweredRequest();
 
-        try game.mineFlip(0) {} catch {
+        try game.mineRun(0) {} catch {
             return;
         }
 

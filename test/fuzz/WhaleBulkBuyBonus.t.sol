@@ -107,7 +107,7 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
     }
 
     function _buy(address who, uint256 q) private returns (uint24 passLevel) {
-        passLevel = game.level() + 1;
+        passLevel = game.currentLvl() + 1;
         uint256 unit = passLevel <= 4 ? WHALE_EARLY_PRICE : WHALE_STANDARD_PRICE;
         vm.deal(who, unit * q);
         vm.prank(who);

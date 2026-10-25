@@ -112,9 +112,9 @@ contract BigRecordArmingTest is DeployProtocol {
     /// @notice Non-ETH currencies never touch the record.
     function testFlipCurrencyBetNeverArms() public {
         vm.prank(address(game));
-        coin.mintForGame(player, 10_000);
+        coin.mintForGame_g152734(player, 10_000);
         vm.prank(player);
-        game.placeDegeneretteBet(0, CURRENCY_FLIP, 1_000, 1, 3);
+        game.betDegenerette(0, CURRENCY_FLIP, 1_000, 1, 3);
         assertEq(coinflip.biggestSpinEver(), 0, "FLIP bets stay off the record");
     }
 
@@ -123,7 +123,7 @@ contract BigRecordArmingTest is DeployProtocol {
     function testGiftedBetArms() public {
         uint32 playerId = _giveWalletId(player);
         vm.prank(rival);
-        game.placeDegeneretteBet{value: 2 ether}(playerId, CURRENCY_ETH, 2 ether, 1, 3);
+        game.betDegenerette{value: 2 ether}(playerId, CURRENCY_ETH, 2 ether, 1, 3);
         assertEq(coinflip.biggestSpinEver(), 2 ether, "gifted bets arm the record");
     }
 
@@ -428,13 +428,13 @@ contract BigRecordArmingTest is DeployProtocol {
 
     function _placeEth(address who, uint128 perSpin, uint8 spins) internal {
         vm.prank(who);
-        game.placeDegeneretteBet{value: uint256(perSpin) * spins}(0, CURRENCY_ETH, perSpin, spins, 3);
+        game.betDegenerette{value: uint256(perSpin) * spins}(0, CURRENCY_ETH, perSpin, spins, 3);
     }
 
     function _buyBox(address who, uint256 amount) internal {
         if (who.balance < amount) vm.deal(who, amount + 1 ether);
         vm.prank(who);
-        game.purchase{value: amount}(
+        game.purchaseOrderFor{value: amount}(
             0,
             0,
             BoxOrderLib.boCustomFloor(amount),
@@ -449,7 +449,7 @@ contract BigRecordArmingTest is DeployProtocol {
         uint256 qty = tickets * 400;
         uint256 cost = tickets * TICKET_PRICE;
         vm.prank(who);
-        game.purchase{value: cost}(
+        game.purchaseOrderFor{value: cost}(
             0,
             qty,
             0,

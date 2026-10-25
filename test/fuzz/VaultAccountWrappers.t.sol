@@ -108,7 +108,7 @@ contract VaultAccountWrappersTest is SeatFixture {
     function test_forwardGamePurchaseActsAsSelf() public {
         bytes32 code = bytes32("CODE");
         bytes memory data = abi.encodeCall(
-            IDegenerusGame.purchase, (uint32(0), uint256(800), uint256(0.02 ether), code, MintPaymentKind.Combined, false)
+            IDegenerusGame.purchaseOrderFor, (uint32(0), uint256(800), uint256(0.02 ether), code, MintPaymentKind.Combined, false)
         );
         vm.mockCall(address(game), data, "");
         vm.expectCall(address(game), 0.3 ether, data, 1);
@@ -116,7 +116,7 @@ contract VaultAccountWrappersTest is SeatFixture {
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature(
-                "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                "purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)",
                 0, 800, 0.02 ether, code, MintPaymentKind.Combined, false
             ),
             0
@@ -132,13 +132,13 @@ contract VaultAccountWrappersTest is SeatFixture {
     function test_forwardGameDegeneretteBetActsAsSelf() public {
         _expectOnce(
             address(game),
-            abi.encodeCall(IDegenerusGame.placeDegeneretteBet, (uint32(0), uint8(1), uint128(5e18), uint8(3), uint8(7))),
+            abi.encodeCall(IDegenerusGame.betDegenerette, (uint32(0), uint8(1), uint128(5e18), uint8(3), uint8(7))),
             ""
         );
         vm.prank(owner);
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
-            abi.encodeWithSignature("placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)", 0, 1, 5e18, 3, 7),
+            abi.encodeWithSignature("betDegenerette(uint32,uint8,uint128,uint8,uint8)", 0, 1, 5e18, 3, 7),
             0
         )), 0), (bytes));
     }
@@ -225,11 +225,11 @@ contract VaultAccountWrappersTest is SeatFixture {
     // ═══════════════ Coinflip / FLIP / sDGNRS forwarding ═══════════════
 
     function test_forwardCoinDepositCoinflipActsAsSelf() public {
-        _expectOnce(address(coinflip), abi.encodeCall(ICoinflip.depositCoinflip, (uint32(0), uint256(500e18))), "");
+        _expectOnce(address(coinflip), abi.encodeCall(ICoinflip.playCoinflip, (uint32(0), uint256(500e18))), "");
         vm.prank(owner);
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.COINFLIP,
-            abi.encodeWithSignature("depositCoinflip(uint32,uint256)", 0, 500e18),
+            abi.encodeWithSignature("playCoinflip(uint32,uint256)", 0, 500e18),
             0
         )), 0), (bytes));
     }
@@ -341,7 +341,7 @@ contract VaultAccountWrappersTest is SeatFixture {
         uint256 x = shortfall < afking ? shortfall : afking;
         assertGt(x, 0, "fixture: the withdrawal leg runs");
 
-        vm.expectCall(address(game), abi.encodeWithSignature("claimWinnings(uint32)", uint32(0)), 1);
+        vm.expectCall(address(game), abi.encodeWithSignature("claimClaimable(uint32)", uint32(0)), 1);
         vm.expectCall(address(game), abi.encodeCall(IDegenerusGame.withdrawAfkingFunding, (uint32(0), x)), 1);
         vm.recordLogs();
         uint256 ownerBal0 = owner.balance;

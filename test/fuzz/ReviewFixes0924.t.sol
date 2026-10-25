@@ -152,7 +152,7 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
         _syncCoinflipFixtureDay(game.currentDayView_g542950());
         _seedCrapsFixtureCursor(game.currentDayView_g542950());
         uint24 d = game.currentDayView_g542950() + 1;
-        for (uint256 i; i < 800 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 800 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "round requested");
         (uint24 baseline,) = _clock();
         vm.warp(vm.getBlockTimestamp() + 3 days);
@@ -162,19 +162,19 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
         for (uint256 i; i < 500; ++i) {
             (bool complete,,) = game.dailySessionState();
             if (complete) break;
-            game.mineFlip{gas: 16_700_000}(type(uint32).max);
+            game.mineRun{gas: 16_700_000}(type(uint32).max);
         }
         assertGt(game.rngWordForDay(d), 0, "delayed result remains retained");
         assertEq(game.currentDayView_g542950(), d);
         assertFalse(game.livenessTriggered(), "29 completed rounds");
         uint256 prior = mockVRF.lastRequestId();
-        for (uint256 i; i < 800 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip(0);
+        for (uint256 i; i < 800 && mockVRF.lastRequestId() == prior; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), prior);
         _answer();
         for (uint256 i; i < 500; ++i) {
             (bool complete,,) = game.dailySessionState();
             if (complete) break;
-            game.mineFlip{gas: 16_700_000}(type(uint32).max);
+            game.mineRun{gas: 16_700_000}(type(uint32).max);
         }
         (uint24 baselineAfter, uint24 idx) = _clock();
         assertEq(baselineAfter, baseline, "calendar delay never rewrites purchase baseline");
@@ -313,7 +313,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
         address keeper = makeAddr("battle-keeper");
         uint256 before = coinflip.coinflipAmount(keeper);
         vm.recordLogs();
-        vm.prank(keeper); game.mineFlip(0);
+        vm.prank(keeper); game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 used;
         uint256 reward;
@@ -379,7 +379,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
                 warped = true;
                 continue;
             }
-            game.mineFlip(0);
+            game.mineRun(0);
             vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
             swept = ReviewClaimSeeder(payable(address(game))).swept();
             vm.etch(address(game), realCode);
@@ -405,7 +405,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         vm.deal(playerA, 1 ether);
         _giveWalletId(playerA);
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, 1_000_000_000e12);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, playerA, 1_000_000_000e12);
         vm.mockCall(
             address(coinflip),
             abi.encodeWithSelector(IReviewCoinflipMock.getCoinflipDayResult.selector),

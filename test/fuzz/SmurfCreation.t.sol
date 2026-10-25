@@ -95,7 +95,7 @@ contract SmurfCreation is DeployProtocol {
     /// @dev One whole ticket bought by `who` for itself (registers it and resolves its referral).
     function _buyTicket(address who, bytes32 code) private {
         vm.prank(who);
-        game.purchase{value: price}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
     }
 
     /// @dev `code` created by `referrer` (registers the referrer).

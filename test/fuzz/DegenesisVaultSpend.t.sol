@@ -464,7 +464,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
         uint256 credit = _credit(id);
         uint256 price = game.mintPrice();
         vm.prank(who);
-        game.purchase{value: price * 11}(id, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: price * 11}(id, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         assertEq(_credit(id) - credit, price * 11 / 4, "Foil and adapter retain credit");
     }
 

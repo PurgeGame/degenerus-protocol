@@ -53,7 +53,7 @@ contract DegenesisSolvencyInvariant is DegenesisDeployProtocol {
         for (uint256 i; i < handler.actorCount(); ++i) {
             address a = handler.actors(i);
             vm.prank(a);
-            game.purchase{value: 8 ether}(0, 0, BoxOrderLib.boCustom(8 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 8 ether}(0, 0, BoxOrderLib.boCustom(8 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         }
         startingCustody = _custody();
 

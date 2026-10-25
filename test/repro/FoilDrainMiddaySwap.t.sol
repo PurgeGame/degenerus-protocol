@@ -105,7 +105,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         simTime += 1 days + 1;
         vm.warp(simTime);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+            abi.encodeWithSignature("mineRun(uint32)", uint32(0))
         );
         ok; // the first advance of a day may partial-drain; either way we probe the lock
 
@@ -199,7 +199,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -316,7 +316,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint24 lvl = _activeTicketLevelProbe();
         vm.prank(p);
-        game.purchase{value: priceWei * 10}(
+        game.purchaseOrderFor{value: priceWei * 10}(
             0,
             0,
             0,
@@ -352,7 +352,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(ticketBuyer);
-        game.purchase{value: (priceWei * 4000) / 400}(
+        game.purchaseOrderFor{value: (priceWei * 4000) / 400}(
             0,
             4000,
             0,
@@ -365,7 +365,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     function _middayRequest() internal returns (bool swapped) {
         _finishReadConsumers();
         vm.prank(ticketBuyer);
-        game.purchase{value: 2 ether}(
+        game.purchaseOrderFor{value: 2 ether}(
             0,
             0,
             BoxOrderLib.boCustom(2 ether),
@@ -380,7 +380,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         if (game.minerAction() != uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return false;
         vm.prank(crank);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+            abi.encodeWithSignature("mineRun(uint32)", uint32(0))
         );
         if (!ok) return false;
         swapped = _ticketWriteSlot() != before;
@@ -390,7 +390,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         _fulfillPending();
         for (uint256 i = 0; i < 100; i++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -403,7 +403,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }

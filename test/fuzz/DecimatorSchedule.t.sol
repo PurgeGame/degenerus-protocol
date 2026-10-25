@@ -50,7 +50,7 @@ contract DecimatorScheduleTest is Test {
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameDailyModule).runtimeCode);
         vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("poolBalance(uint8)"), abi.encode(uint256(0)));
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("lockJackpotBattle(uint24,uint256,uint24)"), abi.encode(true));
         vm.mockCall(ContractAddresses.QUESTS, abi.encodeWithSignature("rollDailyQuest(uint24,uint256,bool,bool,bool)"), abi.encode(false));
         vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)"), abi.encode(uint256(0)));
@@ -77,7 +77,7 @@ contract DecimatorScheduleTest is Test {
             h.prime(levels[i], false, true);
             // x00's ordinary seal also arms its existing coinflip BAF draw and settles the vault.
             vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("armBafDraw(uint24)"), "");
-            vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("depositCoinflip(uint32,uint256)"), "");
+            vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("playCoinflip(uint32,uint256)"), "");
             MineFlipGas.Result memory result = h.runDailyPhase_g2582(5_000_000);
             assertTrue(result.done);
             assertTrue(h.closed());

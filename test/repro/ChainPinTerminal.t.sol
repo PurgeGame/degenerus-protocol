@@ -515,8 +515,8 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
 
     /// @dev Decision call, then the (empty) loan stage.
     function _toBeforeSwap() private {
-        game.mineFlip(0);
-        game.mineFlip(0);
+        game.mineRun(0);
+        game.mineRun(0);
     }
 
     /// @dev Cohort on the write side; ends right after the one call that swaps, arms and sends.
@@ -525,7 +525,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         uint256 req0 = mockVRF.lastRequestId();
         _toBeforeSwap();
         assertEq(mockVRF.lastRequestId(), req0, "no request before the swap call");
-        game.mineFlip(0);
+        game.mineRun(0);
         req = mockVRF.lastRequestId();
         assertGt(req, req0, "the swap call armed and sent the terminal request");
     }
@@ -564,7 +564,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         for (uint256 i; i < maxCalls; ++i) {
             if (game.gameOver() && _paid() != 0) return;
             _answer(vrf);
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
         }
         fail("ending did not finish");
     }
@@ -601,7 +601,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         vm.recordLogs();
         for (uint256 i; i < 60 && !game.gameOver(); ++i) {
             assertEq(game.nextMinerAction(), ACTION_TERMINAL, "terminal every step");
-            game.mineFlip(0);
+            game.mineRun(0);
             assertEq(mockVRF.lastRequestId(), req, "no further VRF request on the dead path");
         }
         assertTrue(game.gameOver(), "ended");
@@ -638,12 +638,12 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         for (uint256 i; i < gases.length; ++i) {
             assertTrue(vm.revertToState(base));
             uint256 req0 = mockVRF.lastRequestId();
-            (bool ok,) = address(game).call{gas: gases[i]}(abi.encodeCall(game.mineFlip, (uint32(0))));
+            (bool ok,) = address(game).call{gas: gases[i]}(abi.encodeCall(game.mineRun, (uint32(0))));
             if (!ok) continue;
             Id memory r = _id();
             if (r.swap == 0 || r.active) continue;
             vm.warp(block.timestamp + 1 hours);
-            game.mineFlip(0);
+            game.mineRun(0);
             Id memory after_ = _id();
             assertGt(mockVRF.lastRequestId(), req0, "the next call sent the request");
             assertTrue(after_.active && after_.reqDay != 0 && after_.reqTime == block.timestamp, "and armed it afresh");
@@ -658,12 +658,12 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         assertTrue(a.active, "request active");
 
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(_id().active, "a waiting call leaves the request set");
 
         vm.warp(block.timestamp + 2 days);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(_id().active, "a day later");
 
         vm.prank(ContractAddresses.CREATOR);
@@ -682,7 +682,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         fresh.fulfillRandomWords(1, uint256(keccak256("fresh")));
         assertTrue(_id().active, "delivery does not clear the request");
 
-        game.mineFlip(0); // applies the word
+        game.mineRun(0); // applies the word
         Id memory c = _id();
         assertTrue(c.active && c.published && c.swap == 1 && c.reqDay != 0, "word applied, request still set");
         assertTrue(_dayWord(c.reqDay) != 0, "day word recorded");
@@ -692,7 +692,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
 
         for (uint256 i; i < 120; ++i) {
             if (game.gameOver() && _paid() != 0) break;
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
             if (_paid() == 0) {
                 Id memory d = _id();
                 assertTrue(d.active && d.published, "request stays set through the drain");
@@ -722,7 +722,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         uint256 base = vm.snapshotState();
 
         uint256 g0 = gasleft();
-        game.mineFlip{gas: 10_000_000}(0);
+        game.mineRun{gas: 10_000_000}(0);
         uint256 batchGas = g0 - gasleft();
         Id memory ref = _id();
         assertEq(ref.swap, 0, "a batch call leaves the swap window open");
@@ -736,7 +736,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         uint256 step = batchGas / 120 > 2_000 ? batchGas / 120 : 2_000;
         for (uint256 g = 30_000; g <= batchGas + 150_000; g += step) {
             assertTrue(vm.revertToState(base));
-            try game.mineFlip{gas: g}(0) {
+            try game.mineRun{gas: g}(0) {
                 ++oks;
             } catch (bytes memory err) {
                 _assertGasClass(err, "a starved batch raised a foreign error");
@@ -753,7 +753,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
 
         // A starved call first, then full gas: the read side drains, the write cohort swaps in and is drawn.
         assertTrue(vm.revertToState(base));
-        try game.mineFlip{gas: witness}(0) {} catch {}
+        try game.mineRun{gas: witness}(0) {} catch {}
         _finish(mockVRF, 200);
         (uint256 rl, uint256 wl,) = _queues();
         assertEq(rl + wl, 0, "no terminal cohort stranded");
@@ -769,17 +769,17 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
     function test_F2_StarvedPostSwapBatchProgressesOrFailsWithAGasErrorOnly() public {
         _seedCohort(1, 6_000, true);
         _toBeforeSwap();
-        game.mineFlip(0); // swap, arm, send
+        game.mineRun(0); // swap, arm, send
         uint256 req = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(req, uint256(keccak256("chainpin-word")));
-        game.mineFlip(0); // applies the word
+        game.mineRun(0); // applies the word
         assertTrue(_dayWord(_id().reqDay) != 0, "terminal word recorded");
         (uint256 rl,,) = _queues();
         assertGt(rl, 0, "cohort queued behind the word");
         uint256 base = vm.snapshotState();
 
         uint256 g0 = gasleft();
-        game.mineFlip{gas: 10_000_000}(0);
+        game.mineRun{gas: 10_000_000}(0);
         uint256 batchGas = g0 - gasleft();
         assertTrue(vm.revertToState(base));
         bytes32 before_ = _progressDigest();
@@ -789,7 +789,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         uint256 step = batchGas / 12 > 100_000 ? batchGas / 12 : 100_000;
         for (uint256 g = 40_000; g <= batchGas + 300_000; g += step) {
             assertTrue(vm.revertToState(base));
-            try game.mineFlip{gas: g}(0) {
+            try game.mineRun{gas: g}(0) {
                 ++oks;
                 assertTrue(_progressDigest() != before_, "a successful call made progress");
             } catch (bytes memory err) {
@@ -801,7 +801,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
                 assertEq(_paid(), 0, "payout completed ahead of an unpaid cohort");
             }
             // Finish from the starved state: the whole cohort is materialized.
-            for (uint256 i; i < 300 && _paid() == 0; ++i) game.mineFlip{gas: 12_000_000}(0);
+            for (uint256 i; i < 300 && _paid() == 0; ++i) game.mineRun{gas: 12_000_000}(0);
             assertEq(_owedTotal(), 0, "entire cohort materialized");
             (uint256 rl2,,) = _queues();
             assertEq(rl2, 0, "read queue released");
@@ -828,21 +828,21 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
             address(mockVRF), abi.encodeWithSelector(MockVRFCoordinator.requestRandomWords.selector),
             abi.encodeWithSignature("Error(string)", "coordinator refuses request")
         );
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         _chk("armed and refused");
         Id memory a = _id();
         assertTrue(a.reqDay != 0 && !a.active, "armed without a request");
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         _chk("refused again");
         vm.clearMockedCalls();
         uint256 req0 = mockVRF.lastRequestId();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), req0, "the retry sent the request");
         _chk("sent");
         _answer(mockVRF);
         _chk("delivered");
         for (uint256 i; i < 200 && !(game.gameOver() && _paid() != 0); ++i) {
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
             _chk("terminal step");
             _answer(mockVRF);
             _chk("terminal step, answered");
@@ -858,7 +858,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         mockVRF.fulfillRandomWords(req, LATE);
         _chk("late word delivered");
         for (uint256 i; i < 60 && !game.gameOver(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             _chk("dead step");
         }
         assertTrue(game.gameOver(), "ended");
@@ -874,9 +874,9 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
     function _writer(uint256 w, address who, uint256 seat) private {
         vm.startPrank(who);
         if (w == 0) {
-            try game.purchase{value: 1 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: 1 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         } else if (w == 1) {
-            try game.purchase{value: 5 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
+            try game.purchaseOrderFor{value: 5 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
         } else if (w == 2) {
             try game.purchaseWhalePass{value: 10 ether}(0, 1, bytes32(0)) {} catch {}
         } else if (w == 3) {
@@ -884,7 +884,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
         } else if (w == 4) {
             try game.purchaseDeityPass{value: 200 ether}(0, 9, bytes32(0)) {} catch {}
         } else if (w == 5) {
-            try game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 0) {} catch {}
+            try game.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, 0) {} catch {}
         } else if (w == 6) {
             try game.claimWhalePass(0) {} catch {}
         } else if (w == 7) {
@@ -931,7 +931,7 @@ contract ChainPinTerminalFlowTest is DeployProtocol {
                 assertTrue(vm.revertToState(sn));
             }
             assertEq(moved, 0, string.concat("writers that moved the tally inputs (bitmask): ", vm.toString(moved)));
-            try game.mineFlip{gas: i < 6 ? 400_000 : 12_000_000}(0) {} catch {}
+            try game.mineRun{gas: i < 6 ? 400_000 : 12_000_000}(0) {} catch {}
             assertEq(_tallyInputs(), d0, "a tally call moved the tally inputs");
         }
         assertTrue(game.gameOver(), "dead ending completed");
@@ -972,7 +972,7 @@ contract ChainPinRequestKindsTest is DeployProtocol {
         for (uint256 day; day < 6; ++day) {
             vm.warp(block.timestamp + 1 days + 1);
             vm.prank(buyer);
-            try game.purchase{value: 1 ether}(
+            try game.purchaseOrderFor{value: 1 ether}(
                 0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
             for (uint256 j; j < 150; ++j) {
@@ -997,7 +997,7 @@ contract ChainPinRequestKindsTest is DeployProtocol {
                     }
                 }
                 vm.prank(buyer);
-                try game.mineFlip(0) {} catch {}
+                try game.mineRun(0) {} catch {}
                 _chk("after a mineFlip");
             }
         }

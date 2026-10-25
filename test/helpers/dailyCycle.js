@@ -28,7 +28,7 @@ export async function driveDailyCycle(game, signer, mockVRF, advanceModule, word
       await mockVRF.fulfillRandomWords(id, daily ? BigInt(word) : BigInt(word) ^ (0x5eedn + id));
       continue;
     }
-    const tx = await game.connect(signer).mineFlip(0, { gasLimit: 16_777_216 });
+    const tx = await game.connect(signer).mineRun(0, { gasLimit: 16_777_216 });
     const events = await getEvents(tx, advanceModule, "Advance");
     if (events.length > 0) lastStage = events[events.length - 1].args.stage;
   }

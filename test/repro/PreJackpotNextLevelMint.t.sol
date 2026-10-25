@@ -135,7 +135,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         assertFalse(game.rngLocked(), "mid-day request does not take the daily lock");
         assertEq(_boxWord(INDEX), 0, "previous mid-day and daily words cannot resolve this cohort");
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_minted(NEXT, bob), 0, "no next-level traits before the fresh callback");
 
         // Exercise the production queue sink with an award arriving AFTER the snapshot.
@@ -194,7 +194,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         assertEq(_owed(NEXT | FF_BIT, bob), 8, "the transition still has a real frozen cohort to drain");
 
         uint256 reqId = _requestNextDaily();
-        assertEq(game.level(), CURRENT, "last-purchase request promotes the level exactly once");
+        assertEq(game.currentLvl(), CURRENT, "last-purchase request promotes the level exactly once");
         assertTrue(game.rngLocked());
         assertFalse(game.jackpotPhase());
         assertEq(_ceiling(), NEXT);
@@ -213,7 +213,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         uint256 carolBefore;
         for (uint256 i; i < 100 && !entered; ++i) {
             vm.recordLogs();
-            game.mineFlip{gas: 16_777_216}(0);
+            game.mineRun{gas: 16_777_216}(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length && !entered; ++j) {
                 if (logs[j].emitter != address(game)) continue;
@@ -249,7 +249,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         // Finish that real maintenance before buying boxes so it cannot send the
         // intended explicit midday request on our behalf.
         for (uint256 i; i < 256 && crapsBattle.minerMaintenancePending_g11976(); ++i) {
-            game.mineFlip{gas: 16_777_216}(0);
+            game.mineRun{gas: 16_777_216}(0);
         }
         assertFalse(crapsBattle.minerMaintenancePending_g11976(), "fixture scheduled maintenance completed");
         _requestPaidMidday();
@@ -280,7 +280,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         assertEq(_writeKey(CURRENT), oldKey, "current buys remain in their original write queue");
         assertEq(_owed(oldKey, alice), 4);
         assertEq(_owed(oldKey, carol), 4);
-        assertEq(game.level(), CURRENT - 1, "transport retry cannot promote the level");
+        assertEq(game.currentLvl(), CURRENT - 1, "transport retry cannot promote the level");
         assertFalse(game.jackpotPhase(), "midday retry cannot enter a jackpot");
 
         mockVRF.fulfillRandomWords(oldId, 0xBAD);
@@ -289,20 +289,20 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         // The old midday word finishes its frozen FF cohort before a fresh daily request
         // commits the current-level purchases, including those bought during the stall.
         for (uint256 i; i < 100 && mockVRF.lastRequestId() == retryId; ++i) {
-            game.mineFlip{gas: 16_777_216}(0);
+            game.mineRun{gas: 16_777_216}(0);
         }
         uint256 dailyId = mockVRF.lastRequestId();
         assertGt(dailyId, retryId, "daily settlement requires a separate fresh request");
         assertTrue(game.rngLocked(), "the fresh daily request takes the daily lock");
         assertEq(_readKey(CURRENT), oldKey, "fresh daily request commits current-level purchases");
-        assertEq(game.level(), turbo ? CURRENT : CURRENT - 1, "only the fresh request may promote the level");
+        assertEq(game.currentLvl(), turbo ? CURRENT : CURRENT - 1, "only the fresh request may promote the level");
         assertEq(_minted(NEXT, bob), 8, "midday retry resolved only its frozen FF cohort");
         assertEq(_minted(CURRENT, carol), 0, "stall-window current tickets await the daily word");
         mockVRF.fulfillRandomWords(dailyId, 0xDA11);
         for (uint256 i; i < 100; ++i) {
             if (_minted(CURRENT, alice) == 4 && _minted(CURRENT, carol) == 4) break;
             assertFalse(game.jackpotPhase(), "current tickets precede jackpot entry");
-            game.mineFlip{gas: 16_777_216}(0);
+            game.mineRun{gas: 16_777_216}(0);
         }
         assertEq(_minted(CURRENT, alice), 4, "original current tickets materialized before their draw");
         assertEq(_minted(CURRENT, carol), 4, "stall-window tickets joined the same daily cohort");
@@ -327,7 +327,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
 
     function _finishMaintenance() internal {
         for (uint256 i; i < 512 && crapsBattle.minerMaintenancePending_g11976(); ++i) {
-            game.mineFlip{gas: 16_777_216}(0);
+            game.mineRun{gas: 16_777_216}(0);
         }
         assertFalse(crapsBattle.minerMaintenancePending_g11976(), "fixture scheduled maintenance completed");
     }
@@ -361,7 +361,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         // A new day may first retire its own expired Craps maintenance checkpoints.
         for (uint256 i; i < 64 && mockVRF.lastRequestId() == oldId; ++i) {
-            game.mineFlip{gas: 16_777_216}(0);
+            game.mineRun{gas: 16_777_216}(0);
         }
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, oldId, "the new day requests a fresh word");
@@ -380,7 +380,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         for (uint256 i; i < 4000 && (game.rngLocked() || !game.rngComplete() || _dailyWorkPending()); ++i) {
             assertEq(mockVRF.lastRequestId(), requestId, "no request composes into the daily chain");
             for (uint256 r; r < ladder.length; ++r) {
-                try game.mineFlip{gas: ladder[r]}(100_000) {
+                try game.mineRun{gas: ladder[r]}(100_000) {
                     break;
                 } catch (bytes memory err) {
                     assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "only an allowance refusal retries");
@@ -407,12 +407,12 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
     function _buyCurrent(address player) internal {
         (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(player);
-        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _buyBox(uint256 amount) internal {
         vm.prank(alice);
-        game.purchase{value: amount}(
+        game.purchaseOrderFor{value: amount}(
             0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
@@ -428,7 +428,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
     function _mineRequest(address caller) internal returns (uint256 id) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(caller);
-        game.mineFlip(0);
+        game.mineRun(0);
         id = mockVRF.lastRequestId();
         assertGt(id, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -440,7 +440,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         uint256 prior = mockVRF.lastRequestId();
         assertEq(game.nextMinerAction(), 0, "the refused request is not selected (Idle)");
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(mockVRF.lastRequestId(), prior, "a refused request asked for no word");
     }
 
@@ -457,7 +457,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         // freshly queued tickets); that request's own latch is not this cohort's work.
         uint256 startId = mockVRF.lastRequestId();
         for (uint256 i; i < 100 && _midday() != 0 && mockVRF.lastRequestId() == startId; ++i) {
-            game.mineFlip{gas: 16_777_216}(0);
+            game.mineRun{gas: 16_777_216}(0);
         }
         if (mockVRF.lastRequestId() != startId) return; // a new request needs the cohort complete
         assertEq(_midday(), 0, "isolated drain completes in bounded calls");
@@ -612,7 +612,7 @@ contract PreJackpotNextLevelMintDailyTest is PreJackpotNextLevelMintFixture {
         _overlay().setTargetMet(true);
         _restore();
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_ceiling(), CURRENT, "an already requested word cannot open the generation window");
         assertEq(_midday(), 0, "no isolated cohort was bound retroactively");
         mockVRF.fulfillRandomWords(existingId, 0xF12345);
@@ -629,7 +629,7 @@ contract PreJackpotNextLevelMintDailyTest is PreJackpotNextLevelMintFixture {
         vm.roll(100);
         uint256 reqId = _requestNextDaily();
         assertGt(reqId, 0, "daily advance requests its ordinary fresh word");
-        assertEq(game.level(), CURRENT - 1, "the request does not advance the purchase level");
+        assertEq(game.currentLvl(), CURRENT - 1, "the request does not advance the purchase level");
         (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo_g1027();
         assertFalse(jackpot);
         assertFalse(lastPurchase, "the ordinary purchase day is not yet sealed");
@@ -642,7 +642,7 @@ contract PreJackpotNextLevelMintDailyTest is PreJackpotNextLevelMintFixture {
         assertEq(_boxWord(INDEX), 0);
         assertEq(_minted(NEXT, bob), 0, "previous recorded words cannot create the FF cohort");
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
 
         mockVRF.fulfillRandomWords(reqId, 0xDA113);
         _finishOrdinaryPurchaseDaily();
@@ -684,10 +684,10 @@ contract PreJackpotNextLevelMintRetryTest is PreJackpotNextLevelMintFixture {
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xABCD);
         // Publication precedes the bounded ticket worker; with a realistic allowance the same
         // call admits ticket chunks only while their bounds fit, leaving a partial batch.
-        game.mineFlip{gas: 16_777_216}(0);
+        game.mineRun{gas: 16_777_216}(0);
         assertEq(_midday(), 2, "a partial first batch retains its word binding");
         assertFalse(_fullyProcessed(), "partial first batch cannot report completion");
-        game.mineFlip{gas: 16_777_216}(0);
+        game.mineRun{gas: 16_777_216}(0);
         assertEq(_midday(), 2, "a partial batch retains its word binding");
         assertFalse(_fullyProcessed(), "partial FF batch cannot report completion");
         assertGt(_minted(NEXT, bob), 0, "the first batch made progress");
@@ -729,7 +729,7 @@ contract PreJackpotNextLevelMintTerminalTest is PreJackpotNextLevelMintFixture {
                 latched = true;
                 break;
             }
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 reqId = mockVRF.lastRequestId();
             (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
             if (!fulfilled) mockVRF.fulfillRandomWords(reqId, 0xDA112);
@@ -768,7 +768,7 @@ contract PreJackpotNextLevelMintTerminalTest is PreJackpotNextLevelMintFixture {
         assertTrue(game.livenessTriggered(), "fourteen unanswered days enable deterministic exit");
         vm.recordLogs();
         for (uint256 i; i < 30 && !game.gameOver(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.gameOver(), "the isolated snapshot cannot prevent fund release");
         Vm.Log[] memory logs = vm.getRecordedLogs();

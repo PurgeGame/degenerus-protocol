@@ -35,7 +35,7 @@ Use the same canonical encoding as paid entries: three bits per leg, from least 
 
 Encode as `sum(count[i] << (3 * i))`. Each count is 0–3, the total is at most seven, and passLine and dontPass cannot both be named. Bits 30–31 must be zero. The dice scatter the remaining chips to reach ten. Zero means entirely random; unset preferences also read as zero.
 
-Successful calls to `enterBattle`, `enterBonusBattle`, `enterBonusDay`, `buyFutureCrapsDays`, `applyCrapsPasses`, and `amendSlip` remember the supplied board. Explicit entry data always controls that ticket, including zero. Saving the already initialized board causes no preference write, event, or RNG lookup.
+Successful calls to `enterBattle`, `throwCraps`, `playCraps`, `buyFutureCrapsDays`, `applyCrapsPasses`, and `amendSlip` remember the supplied board. Explicit entry data always controls that ticket, including zero. Saving the already initialized board causes no preference write, event, or RNG lookup.
 
 While `Game.rngLocked()` is true, the setter rejects initialization and changes with `BetLocked()`. Automatic saving skips the update while the paid entry or amendment retains its existing rules. This freeze continues after VRF fulfillment until the daily advance fully unlocks. Reads and initialized equal-board calls remain available.
 

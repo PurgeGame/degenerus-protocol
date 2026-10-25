@@ -379,7 +379,7 @@ describe("DegenerusGame simple bingo", function () {
     const poolBalance = await sdgnrs.poolBalance(REWARD_POOL);
     await sdgnrs
       .connect(gameSigner)
-      .transferFromPool(REWARD_POOL, deployer.address, poolBalance);
+      .transferFromPool_g106128(REWARD_POOL, deployer.address, poolBalance);
     await hre.network.provider.send("hardhat_stopImpersonatingAccount", [
       gameAddress,
     ]);

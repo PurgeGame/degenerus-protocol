@@ -57,7 +57,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.recordLogs();
         for (uint256 i; i < 32 && !game.rngLocked(); ++i) {
             vm.prank(keeper);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "the daily request never went out");
         Request[] memory reqs = _decodeRequests(vm.getRecordedLogs());
@@ -70,7 +70,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.recordLogs();
         for (uint256 i; i < maxCalls; ++i) {
             vm.prank(keeper);
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
                 if (sel != NO_WORK && sel != RNG_NOT_READY) {
                     emit log_named_bytes("unexpected mineFlip revert", reason);
@@ -239,7 +239,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         address buyer = makeAddr("boxBuyer");
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         Request[] memory none = _crankUntilRequest(64);
         assertEq(none.length, 0, "an unfunded subscription gets no mid-day request");
@@ -269,7 +269,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         _giveWalletId(voter);
         uint256 stake = sdgnrs.totalSupply() / 50;
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, voter, stake);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, voter, stake);
         _donate(makeAddr("donor"), 50 ether);
         (bool laneExists,) = coordinator.s_provingKeys(KEY_HASH_1000_GWEI);
         assertTrue(laneExists, "the replacement lane is registered");
@@ -368,7 +368,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 32 && !game.rngLocked(); ++i) {
             vm.prank(keeper);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "fixture: daily request pending");
 
@@ -377,7 +377,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 15 days);
         for (uint256 i; i < 400 && !game.gameOver(); ++i) {
             vm.prank(keeper);
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
                 assertTrue(sel == NO_WORK || sel == RNG_NOT_READY, "dead-VRF ending reverted");
                 vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -387,7 +387,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 30 days + 1);
         for (uint256 i; i < 40 && admin.subscriptionId() != 0; ++i) {
             vm.prank(keeper);
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
                 assertTrue(sel == NO_WORK || sel == RNG_NOT_READY, "sweep reverted");
                 break;

@@ -38,13 +38,13 @@ contract WholeTokenBoundaries is DeployProtocol {
             address player = address(uint160(0xFA00 + quantity));
             uint256 charge = (quantity * 250 + 99) / 100;
             vm.prank(address(game));
-            coin.mintForGame(player, charge - 1);
+            coin.mintForGame_g152734(player, charge - 1);
             vm.expectRevert(FLIP.Insufficient.selector);
             vm.prank(player);
             game.redeemFlip(0, quantity);
             assertEq(coin.balanceOf(player), charge - 1, "failed purchase burned funds");
             vm.prank(address(game));
-            coin.mintForGame(player, 1);
+            coin.mintForGame_g152734(player, 1);
             vm.prank(player);
             game.redeemFlip(0, quantity);
             assertEq(coin.balanceOf(player), 0, "purchase did not charge the ceiling");
@@ -63,11 +63,11 @@ contract WholeTokenBoundaries is DeployProtocol {
                 assertEq(packed & 0xff, flags);
             }
             vm.prank(address(game));
-            coin.mintForGame(player, amount);
+            coin.mintForGame_g152734(player, amount);
             uint256 encoded = tags.tag(amount, 0);
             uint32 id = _giveWalletId(player);
             vm.prank(ContractAddresses.CRAPS);
-            coin.burnCoinForCraps(player, id, encoded);
+            coin.burnCoinForCraps_g292454(player, id, encoded);
             assertEq(coin.balanceOf(player), 0, "decoded burn spends the exact principal");
         }
     }
@@ -78,7 +78,7 @@ contract WholeTokenBoundaries is DeployProtocol {
         assertEq(packed & 0xff, 31);
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert(FLIP.InvalidCrapsFlags.selector);
-        coin.burnCoinForCraps(address(this), 0, (1 << 8) | 32);
+        coin.burnCoinForCraps_g292454(address(this), 0, (1 << 8) | 32);
     }
 
     function testFuzz_CrapsTagRoundTrip(uint248 amount, uint8 flags) public view {
@@ -93,12 +93,12 @@ contract WholeTokenBoundaries is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, 25);
         vm.prank(player);
-        wwxrp.enter(0, 25);
+        wwxrp.enterDraw(0, 25);
         // The first burn leaves a nonzero raw score but zero total token supply.
         vm.prank(address(game));
         wwxrp.mintPrize(player, type(uint256).max);
         vm.prank(player);
-        wwxrp.enter(0, type(uint256).max);
+        wwxrp.enterDraw(0, type(uint256).max);
         uint24 day = game.currentDayView_g542950();
         uint8 bucket = wwxrp.bucketOf(day, game.walletIdOf_g3120(player));
         (uint256 raw, uint256 total, uint32 count) = wwxrp.bucketInfo(day, bucket);
@@ -109,7 +109,7 @@ contract WholeTokenBoundaries is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, 25);
         vm.prank(player);
-        wwxrp.enter(0, 25);
+        wwxrp.enterDraw(0, 25);
         (, uint256 endpoint) = wwxrp.entryAt(day, bucket, 2);
         assertEq(endpoint, type(uint96).max, "post-cap interval has zero width");
     }

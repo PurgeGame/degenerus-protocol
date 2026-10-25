@@ -49,16 +49,16 @@ contract LootboxRngLifecycle is DeployProtocol {
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
         _finishReadBoxes();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
-        game.mineFlip(0); // required publication; the callback stores only the final word
+        game.mineRun(0); // required publication; the callback stores only the final word
             _lastFulfilledReqId = reqId;
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadBoxes();
         _finishReadConsumers();
@@ -117,7 +117,7 @@ contract LootboxRngLifecycle is DeployProtocol {
                 mockVRF.fulfillRandomWords(rid, uint256(keccak256(abi.encode("midday", rid))));
                 _lastFulfilledReqId = rid;
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
         fail("mid-day requests did not settle");
@@ -154,7 +154,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Fund the VRF subscription (the mock records the native balance)
         if (!quietCraps) mockVRF.fundSubscription(1, 100e18);
@@ -208,7 +208,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         // numCoins = 400 (minimum for 1 ETH lootbox), total = purchase + lootbox
-        game.purchase{value: lootboxAmount + 0.01 ether}(
+        game.purchaseOrderFor{value: lootboxAmount + 0.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(RecyclingState.boxCount(address(game), index), position + 1, "one appended entry per purchase");
@@ -227,7 +227,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 indexBefore = _readLootboxRngIndex();
 
         // mineFlip triggers daily VRF request -> _finalizeRngRequest(isRetry=false) -> index++
-        game.mineFlip(0);
+        game.mineRun(0);
 
         uint48 indexAfter = _readLootboxRngIndex();
         assertEq(indexAfter, indexBefore ^ 1, "Fresh daily request must toggle the physical tag");
@@ -241,7 +241,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Pending lootbox ETH at the threshold makes the mid-day request the engine's next work.
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
-        game.mineFlip(0);
+        game.mineRun(0);
 
         uint48 indexAfter = _readLootboxRngIndex();
         assertEq(indexAfter, indexBefore ^ 1, "Mid-day request must toggle the physical tag");
@@ -256,7 +256,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Day 2: warp to next day, trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 2 VRF request pending");
 
         // Record index after initial request (already incremented)
@@ -280,7 +280,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Day 2: trigger VRF request
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 2 VRF request pending");
 
         // Record index before swap
@@ -326,17 +326,17 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 indexBefore = _readLootboxRngIndex();
 
         // mineFlip triggers VRF request -> index increments
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Fulfill VRF
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
-        game.mineFlip(0); // required publication; the callback stores only the final word
+        game.mineRun(0); // required publication; the callback stores only the final word
 
         // Complete processing
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
 
         // Word should be stored at indexBefore (the index reserved by this request)
@@ -356,12 +356,12 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // The engine's mid-day request seals the write buffer
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Fulfill mid-day VRF
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
-        game.mineFlip(0); // required publication; the callback stores only the final word
+        game.mineRun(0); // required publication; the callback stores only the final word
 
         // Word stored at indexBefore (the buffer the mid-day request sealed)
         uint256 storedWord = _readLootboxWord(indexBefore);
@@ -380,7 +380,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         // Next day (day 3 absolute): trigger VRF request
         uint256 day3Start = _relTs(3 * 86400);
         vm.warp(day3Start);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
         uint256 reqId = mockVRF.lastRequestId();
 
@@ -390,7 +390,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Fulfill the VRF (word stored in rngWordCurrent, NOT yet in lootboxRngWordByIndex)
         mockVRF.fulfillRandomWords(reqId, vrfWord);
-        game.mineFlip(0); // required publication; the callback stores only the final word
+        game.mineRun(0); // required publication; the callback stores only the final word
         _lastFulfilledReqId = reqId;
 
         // Warp past day boundary to day 4 WITHOUT calling mineFlip
@@ -407,14 +407,14 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // mineFlip on day 4: rngGate sees requestDay < day, redirects stale word
         // to lootbox via _finalizeLootboxRng. The game processes both days inline.
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // Process the stale day until its request is retired (the completing call may issue
         // day 4's request); the stale word is still the published word until then.
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked() || _readVrfRequestId() != reqId) break;
             assertEq(_readLootboxWord(reservedIndex), storedWord, "stale word stays at the reserved index");
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngWordForDay(_relDay(3)) != 0, "Stale word completes its own day");
     }
@@ -427,7 +427,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Next day (day 3 absolute): trigger VRF request
         vm.warp(_relTs(3 * 86400));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
         uint48 reservedIndex = (_readLootboxRngIndex() ^ 1);
 
@@ -468,7 +468,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         // The coordinator answers each request once: a second answer to the consumed request is outside the model.
         assertEq(_readLootboxWord(indexBefore), vrfWord, "the consumed session keeps its word");
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, oldRequest);
         assertEq(_readLootboxWord(indexBefore), 0, "completed normal words leave storage history");
@@ -476,7 +476,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(_readLootboxWord(indexBefore ^ 1), 0, "stale callback cannot fulfill the new request");
         uint256 nextWord = (vrfWord ^ 0xBEEF) | 2;
         mockVRF.fulfillRandomWords(request, nextWord);
-        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineRun(0);
         assertEq(_readLootboxWord(indexBefore ^ 1), nextWord);
     }
 
@@ -488,7 +488,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     function test_zeroGuardRawFulfill() public {
         uint48 buffer = _readLootboxRngIndex();
         uint24 day = game.currentDayView_g542950();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 request = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(request, 0);
         assertEq(_readRngWordCurrent(), 0, "reserved zero remains waiting");
@@ -499,7 +499,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertGt(mockVRF.lastRequestId(), request, "reserved zero requires a fresh retry");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 2);
-        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineRun(0);
         assertEq(_readLootboxWord(buffer), 2, "retry uses the same read buffer");
     }
 
@@ -507,7 +507,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     function test_reservedWordAfterCoordinatorSwapDoesNotRearmRetry() public {
         _completeDay(0xDEAD0001);
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint48 buffer = _readLootboxRngIndex() ^ 1;
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
         mockVRF = newVRF;
@@ -537,7 +537,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         vrf.fulfillRandomWords(request, word);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked() || _readVrfRequestId() != request) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             if (_readVrfRequestId() == request && _readLootboxWord(index) != 0) published = _readLootboxWord(index);
         }
         assertTrue(!game.rngLocked() || _readVrfRequestId() != request, "answered request's day completes");
@@ -548,7 +548,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _setupForMidDayRng();
         uint48 buffer = _readLootboxRngIndex();
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
-        game.mineFlip(0);
+        game.mineRun(0);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0);
         assertEq(_readRngWordCurrent(), 0, "reserved zero remains waiting");
         assertEq(_readLootboxWord(buffer), 0, "midday zero is never published");
@@ -699,7 +699,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 pos = _makePurchase(buyer, 1 ether);
 
         // mineFlip triggers VRF request
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Should be locked after VRF request");
 
         // VRF fulfills
@@ -709,7 +709,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         // Process until unlocked
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertFalse(game.rngLocked(), "Should be unlocked after processing");
 
@@ -740,12 +740,12 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // The engine's mid-day request seals the write buffer
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // VRF fulfills mid-day (writes directly to lootboxRngWordByIndex)
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, 0xCAFE);
-        game.mineFlip(0); // mandatory midday publication
+        game.mineRun(0); // mandatory midday publication
 
         // Verify word stored
         uint256 storedWord = _readLootboxWord(purchaseIndex);
@@ -771,7 +771,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 entry = _entry(purchaseIndex, pos);
 
         // mineFlip triggers VRF request (index increments)
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "Should be locked after VRF request");
 
         // Do NOT fulfill VRF -- word at purchaseIndex is still 0
@@ -780,7 +780,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         // not dropped) for the human-box stage once the word lands.
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(RecyclingState.readBuffer(address(game)), purchaseIndex, "the request sealed the purchase buffer");
         assertEq(RecyclingState.boxCount(address(game), purchaseIndex), pos + 1, "the seal latched the entry");
         assertEq(_entry(purchaseIndex, pos), entry, "the entry is intact");

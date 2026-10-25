@@ -32,7 +32,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol, NativeGasExport {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.deal(address(game), 1_000_000 ether);
         vm.deal(PLAYER, 10_000 ether);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 1_000_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 1_000_000);
         vm.etch(address(game), type(NativeAtomicReadFixture).runtimeCode);
         host = NativeAtomicReadFixture(payable(address(game)));
         host.fundFuture();
@@ -53,7 +53,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol, NativeGasExport {
         uint32 index = uint32(RecyclingState.writeBuffer(address(game)));
         uint256 word = _winningWord(index, minimum, currency == 1);
         vm.prank(PLAYER);
-        game.placeDegeneretteBet{value: currency == 0 ? uint256(stake) * spins : 0}(0, currency, stake, spins, 9);
+        game.betDegenerette{value: currency == 0 ? uint256(stake) * spins : 0}(0, currency, stake, spins, 9);
         host.publishRead();
         host.setCommittedWord(word);
         uint256 packed = host.bet();
@@ -95,7 +95,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol, NativeGasExport {
 
 /// @notice A long real dice run, including its live heap insertion, remains one checkpoint step.
 contract NativeAtomicRedemptionState {
-    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 }
 
 contract NativeAtomicDecimatorTest is NativeGasExport {

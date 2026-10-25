@@ -200,7 +200,7 @@ contract DegenesisPrepareBoundsFuzz is DegenesisGasBase {
         if ((seed >> 64) & 3 == 0) host.hostActive(1 ether, uint24(GameTimeLib.DEGENESIS_START_DAY + closed + 1), 0);
         if ((seed >> 66) & 3 == 0) {
             vm.prank(address(game));
-            sdgnrs.transferFromPool(sDGNRS.Pool.Degenesis, address(0xBEEF), type(uint256).max);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Degenesis, address(0xBEEF), type(uint256).max);
         }
         uint24 day = uint24(GameTimeLib.DEGENESIS_START_DAY + (seed >> 80) % 40);
         Measured memory m = _measure(abi.encodeCall(DegenesisGasHost.hostPrepare, (day)));
@@ -413,11 +413,11 @@ contract DegenesisTerminalSetupEngineGas is DegenesisGasBase {
                 address p = makeAddr(string(abi.encode("terminal-buyer", c, k)));
                 vm.deal(p, 1_000 ether);
                 vm.prank(p);
-                game.purchase{value: 4.08 ether}(0, 0, BoxOrderLib.boCustoms(1, 4.08 ether), bytes32(0),
+                game.purchaseOrderFor{value: 4.08 ether}(0, 0, BoxOrderLib.boCustoms(1, 4.08 ether), bytes32(0),
                     MintPaymentKind.DirectEth, false);
                 uint256 amount = k == 0 ? 0.01 ether : k == 1 ? 0.0101 ether : 1 ether;
                 vm.prank(p);
-                game.buyDegenesisBox{value: amount}(0, amount);
+                game.purchaseDegenesisBox{value: amount}(0, amount);
             }
         }
         vm.warp(block.timestamp + 32 days);
@@ -437,7 +437,7 @@ contract DegenesisTerminalSetupEngineGas is DegenesisGasBase {
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
         vm.prank(miner);
-        (ok,) = address(game).call{gas: 30_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok,) = address(game).call{gas: 30_000_000}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.revertToStateAndDelete(snap);
         // A reverted call has no effect; forge still records the logs it emitted.
@@ -456,11 +456,11 @@ contract DegenesisTerminalSetupEngineGas is DegenesisGasBase {
             }
             (bool splits, bool ok) = _nextCallSplits();
             if (splits) {
-                Measured memory m = _measureCall(address(game), abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), miner);
+                Measured memory m = _measureCall(address(game), abi.encodeWithSignature("mineRun(uint32)", uint32(0)), miner);
                 _log("engine call with terminal setup during the sale (7 unsplit cohorts)", m);
                 vm.recordLogs();
                 vm.prank(miner);
-                game.mineFlip(0);
+                game.mineRun(0);
                 Vm.Log[] memory logs = vm.getRecordedLogs();
                 uint256 n;
                 uint256 released;
@@ -481,7 +481,7 @@ contract DegenesisTerminalSetupEngineGas is DegenesisGasBase {
                 return;
             }
             vm.prank(miner);
-            (bool mined,) = address(game).call{gas: 30_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool mined,) = address(game).call{gas: 30_000_000}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             ok; mined;
         }
         fail("terminal setup never reached");
@@ -509,7 +509,7 @@ contract DegenesisBattleSkipRequestGas is DegenesisGasBase {
         require(game.currentDayView_g542950() == 1, "fixture: bootstrap until accepted request");
         for (uint256 i; i < 50; ++i) {
             if (game.nextMinerAction() == MineFlipAdmission.REQUEST_DAILY) break;
-            game.mineFlip{gas: 3_000_000}(0);
+            game.mineRun{gas: 3_000_000}(0);
         }
         require(game.nextMinerAction() == MineFlipAdmission.REQUEST_DAILY, "fixture: request next");
     }
@@ -519,10 +519,10 @@ contract DegenesisBattleSkipRequestGas is DegenesisGasBase {
     }
 
     function test_SkipPathRequestAndSeal() public {
-        Measured memory m = _measureCall(address(game), abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), miner);
+        Measured memory m = _measureCall(address(game), abi.encodeWithSignature("mineRun(uint32)", uint32(0)), miner);
         _log("Degenesis day-1 request (battle lock skipped)", m);
         vm.prank(miner);
-        game.mineFlip(MineFlipGas.DEFAULT_MULTIPLIER);
+        game.mineRun(MineFlipGas.DEFAULT_MULTIPLIER);
         assertTrue(game.rngLocked(), "the request went out");
         assertFalse(_battlePending(), "no battle pending on a pre-window day");
         uint256 bound = MineFlipAdmission.minGas(MineFlipAdmission.REQUEST_DAILY, true);
@@ -536,7 +536,7 @@ contract DegenesisBattleSkipRequestGas is DegenesisGasBase {
             if (!fulfilled) mockVRF.fulfillRandomWords(req, uint256(keccak256(abi.encode("skip", req))));
             vm.recordLogs();
             vm.prank(miner);
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             Vm.Log[] memory logs = vm.getRecordedLogs();
             // A reverted call has no effect; forge still records the logs it emitted.
             if (!ok) break;
@@ -627,7 +627,7 @@ contract SdgnrsWhaleUnderfundedRevert is DeployProtocol {
         // A cheap first call only pins the preparation day; the whale buy is then the next call's
         // first unit.
         vm.prank(MINER);
-        game.mineFlip{gas: 300_000}(0);
+        game.mineRun{gas: 300_000}(0);
         require(game.nextMinerAction() == MineFlipAdmission.PREPARE_SUBS, "fixture: whale stage next");
         require(uint24(uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR))) >> (17 * 8)) == 0,
             "fixture: whale attempt unspent");
@@ -699,7 +699,7 @@ contract SdgnrsWhaleUnderfundedRevert is DeployProtocol {
             uint256 snap = vm.snapshotState();
             _coolEngine();
             vm.prank(MINER);
-            (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) continue;
             if (keccak256(ret) == keccak256(abi.encodeWithSignature("E()"))) {
@@ -716,7 +716,7 @@ contract SdgnrsWhaleUnderfundedRevert is DeployProtocol {
         assertGt(eAt, 0, "an underfunded whale stage surfaces the out-of-gas as E()");
         _coolEngine();
         vm.prank(MINER);
-        (bool okMin,) = address(game).call{gas: minimum}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool okMin,) = address(game).call{gas: minimum}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         assertTrue(okMin, "the minimum admission progresses");
         assertEq(uint24(uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR))) >> (17 * 8)), 4,
             "the whale attempt ran at the minimum");

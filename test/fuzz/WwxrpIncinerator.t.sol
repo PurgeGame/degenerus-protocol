@@ -108,7 +108,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, amount);
         vm.prank(player);
-        wwxrp.enter(0, amount);
+        wwxrp.enterDraw(0, amount);
     }
 
     /// @dev Mirror of the contract's winner-roll derivation.
@@ -146,7 +146,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         vm.expectEmit(true, true, false, true, address(wwxrp));
         emit IncineratorEntered(100, aliceId, 0, amt, amt, amt);
         vm.prank(alice);
-        wwxrp.enter(0, amt);
+        wwxrp.enterDraw(0, amt);
 
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(100);
         assertEq(total, amt, "whole-token score at 1.0x activity");
@@ -289,7 +289,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         // a cold-forced level leaves the advance state machine without a
         // running day cursor and the drive stalls.
         for (uint256 day = 0; day < 100; day++) {
-            if (game.level() >= 2) break;
+            if (game.currentLvl() >= 2) break;
             _finishReadConsumers();
             simTime += 1 days + 1;
             vm.warp(simTime);
@@ -299,12 +299,12 @@ contract WwxrpIncineratorTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrf(oddWords);
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
         }
-        assertGe(game.level(), 2, "bootstrap reached a live cadence");
+        assertGe(game.currentLvl(), 2, "bootstrap reached a live cadence");
 
         // Charity governance tracks its own sequential level and rejects the
         // forced jump; mock it out for the driven transition.
@@ -316,7 +316,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         _jumpLevel(98);
 
         for (uint256 day = 0; day < 600; day++) {
-            uint24 currentLevel = game.level();
+            uint24 currentLevel = game.currentLvl();
             if (game.gameOver()) break;
             if (currentLevel > 100) break;
 
@@ -343,7 +343,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrf(oddWords);
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
@@ -355,7 +355,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         bool entered = _driveCentury(false);
 
         assertTrue(entered, "level-99 burns were made");
-        assertGt(game.level(), 100, "game advanced past level 100");
+        assertGt(game.currentLvl(), 100, "game advanced past level 100");
 
         // Exactly one IncineratorResolved for bracket 100.
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -405,7 +405,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         bool entered = _driveCentury(true);
 
         assertTrue(entered, "level-99 burns were made");
-        assertGt(game.level(), 100, "game advanced past level 100");
+        assertGt(game.currentLvl(), 100, "game advanced past level 100");
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
@@ -431,9 +431,9 @@ contract WwxrpIncineratorTest is DeployProtocol {
     ///      carries BAF draw weight on an armed day).
     function _selfDeposit(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(0, amount);
+        coinflip.playCoinflip(0, amount);
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
@@ -462,7 +462,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     /// @dev Fulfill any pending VRF request with a parity-forced word: even
@@ -482,7 +482,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         uint256 randomWord;
         for (uint256 k; k < 256; ++k) {
             randomWord = uint256(
-                keccak256(abi.encode("incin_word", block.timestamp, game.level(), reqId, k))
+                keccak256(abi.encode("incin_word", block.timestamp, game.currentLvl(), reqId, k))
             );
             bool fires = (uint256(keccak256(abi.encode(RngTags.BAF_GATE, randomWord))) & 1) == 1;
             bool wins = (randomWord & 1) == 1;

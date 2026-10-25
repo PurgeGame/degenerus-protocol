@@ -54,7 +54,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
         _mintData(1);
         vm.deal(PLAYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 1_000_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 1_000_000);
         _daily(true);
     }
 
@@ -75,7 +75,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
     }
 
     function _open(uint24 round) internal {
-        vm.mockCall(address(game), abi.encodeWithSignature("growthState(uint24)", uint24(0)),
+        vm.mockCall(address(game), abi.encodeWithSignature("getGrowth(uint24)", uint24(0)),
             abi.encode(uint256(0), uint256(0), uint256(0), round, true, uint8(1)));
     }
 
@@ -182,7 +182,7 @@ contract GrowthFoilHotPathGasTest is GrowthFoilFixture {
     }
     function test_Gas_FoilPurchase() public {
         _begin(); vm.prank(PLAYER);
-        game.purchase{value: 0.5 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: 0.5 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         _end("foil_purchase", 0);
     }
 }

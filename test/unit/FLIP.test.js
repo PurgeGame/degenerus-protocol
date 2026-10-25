@@ -166,14 +166,14 @@ describe("FLIP", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // ERC20 — transfer (requires balance, so we need mintForGame first)
+  // ERC20 — transfer (requires balance, so we need mintForGame_g152734 first)
   // ---------------------------------------------------------------------------
 
   describe("transfer()", function () {
     async function mintToAlice(coin, game, alice, amount = flip(1000)) {
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, amount);
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, amount);
       await stopImpersonate(gameAddr);
     }
 
@@ -252,7 +252,7 @@ describe("FLIP", function () {
     async function setup(coin, game, alice, bob) {
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(1000));
       await stopImpersonate(gameAddr);
       await coin.connect(alice).approve(bob.address, flip(500));
     }
@@ -279,7 +279,7 @@ describe("FLIP", function () {
       const { coin, game, alice, bob, carol } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(1000));
       await stopImpersonate(gameAddr);
       await coin.connect(alice).approve(bob.address, hre.ethers.MaxUint256);
 
@@ -295,7 +295,7 @@ describe("FLIP", function () {
       const { coin, game, alice, bob } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(500));
       // No approve() call needed
       await coin
         .connect(gameSigner)
@@ -319,10 +319,10 @@ describe("FLIP", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // mintForGame() — privileged mint
+  // mintForGame_g152734() — privileged mint
   // ---------------------------------------------------------------------------
 
-  describe("mintForGame()", function () {
+  describe("mintForGame_g152734()", function () {
     it("mints FLIP to recipient and emits Transfer from zero address", async function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
@@ -330,7 +330,7 @@ describe("FLIP", function () {
 
       const tx = await coin
         .connect(gameSigner)
-        .mintForGame(alice.address, flip(1000));
+        .mintForGame_g152734(alice.address, flip(1000));
       await expect(tx)
         .to.emit(coin, "Transfer")
         .withArgs(ZERO_ADDRESS, alice.address, flip(1000));
@@ -343,7 +343,7 @@ describe("FLIP", function () {
     it("reverts with OnlyGame when called by non-GAME address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
-        coin.connect(alice).mintForGame(bob.address, flip(100))
+        coin.connect(alice).mintForGame_g152734(bob.address, flip(100))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
@@ -354,7 +354,7 @@ describe("FLIP", function () {
 
       const tx = await coin
         .connect(gameSigner)
-        .mintForGame(alice.address, 0);
+        .mintForGame_g152734(alice.address, 0);
       // No Transfer event
       const receipt = await tx.wait();
       const transferEvents = receipt.logs.filter(
@@ -372,7 +372,7 @@ describe("FLIP", function () {
       const gameSigner = await impersonate(gameAddr);
       const beforeTotal = await coin.totalSupply();
 
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(500));
       await stopImpersonate(gameAddr);
 
       expect(await coin.totalSupply()).to.equal(beforeTotal + flip(500));
@@ -396,7 +396,7 @@ describe("FLIP", function () {
       // Mint first via game
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(5000));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(5000));
       await stopImpersonate(gameAddr);
 
       const coinflipAddr = await coinflip.getAddress();
@@ -409,7 +409,7 @@ describe("FLIP", function () {
       expect(await coin.balanceOf(alice.address)).to.equal(flip(4000));
     });
 
-    // mintForCoinflip removed in Phase 146 (merged into mintForGame, which now accepts COINFLIP + GAME)
+    // mintForCoinflip removed in Phase 146 (merged into mintForGame_g152734, which now accepts COINFLIP + GAME)
   });
 
   // creditCoin() removed from FLIP in Phase 146 ABI cleanup (dead function, zero callers)
@@ -426,7 +426,7 @@ describe("FLIP", function () {
       const allowBefore = await coin.vaultMintAllowance();
       const supplyBefore = await coin.totalSupply();
 
-      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(500));
+      await coin.connect(gameSigner).mintForGame_g152734(await vault.getAddress(), flip(500));
       await stopImpersonate(gameAddr);
 
       expect(await coin.vaultMintAllowance()).to.equal(allowBefore + flip(500));
@@ -438,7 +438,7 @@ describe("FLIP", function () {
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
 
-      const tx = await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(100));
+      const tx = await coin.connect(gameSigner).mintForGame_g152734(await vault.getAddress(), flip(100));
       await expect(tx)
         .to.emit(coin, "VaultEscrowRecorded")
         .withArgs(ZERO_ADDRESS, flip(100));
@@ -463,7 +463,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -483,7 +483,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -500,7 +500,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -543,7 +543,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -564,7 +564,7 @@ describe("FLIP", function () {
     it("reverts with OnlyGame when called by an unauthorized address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
-        coin.connect(alice).burnCoin(bob.address, flip(1))
+        coin.connect(alice).burnCoin_g27673(bob.address, flip(1))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
@@ -572,9 +572,9 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(1000));
 
-      await coin.connect(gameSigner).burnCoin(alice.address, flip(300));
+      await coin.connect(gameSigner).burnCoin_g27673(alice.address, flip(300));
       await stopImpersonate(gameAddr);
 
       expect(await coin.balanceOf(alice.address)).to.equal(flip(700));
@@ -584,13 +584,13 @@ describe("FLIP", function () {
       const { coin, game, affiliate, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(500));
       await stopImpersonate(gameAddr);
 
       const affiliateAddr = await affiliate.getAddress();
       const affiliateSigner = await impersonate(affiliateAddr);
       await expect(
-        coin.connect(affiliateSigner).burnCoin(alice.address, flip(100))
+        coin.connect(affiliateSigner).burnCoin_g27673(alice.address, flip(100))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
       await stopImpersonate(affiliateAddr);
     });
@@ -599,10 +599,10 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(1000));
       const totalBefore = await coin.totalSupply();
 
-      await coin.connect(gameSigner).burnCoin(alice.address, flip(400));
+      await coin.connect(gameSigner).burnCoin_g27673(alice.address, flip(400));
       await stopImpersonate(gameAddr);
 
       expect(await coin.totalSupply()).to.equal(totalBefore - flip(400));
@@ -624,7 +624,7 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(500));
       await stopImpersonate(gameAddr);
 
       const spendable = await coin.balanceOfWithClaimable(alice.address);
@@ -658,9 +658,9 @@ describe("FLIP", function () {
       const vaultSigner = await impersonate(vaultAddr);
 
       // Mint some
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(500));
       // Escrow some (a mint to VAULT lands in its allowance)
-      await coin.connect(gameSigner).mintForGame(vaultAddr, flip(200));
+      await coin.connect(gameSigner).mintForGame_g152734(vaultAddr, flip(200));
       // MintTo some from vault
       await coin.connect(vaultSigner).vaultMintTo(bob.address, flip(100));
 
@@ -683,7 +683,7 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, flip(100));
+      await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(100));
       await stopImpersonate(gameAddr);
 
       await expect(

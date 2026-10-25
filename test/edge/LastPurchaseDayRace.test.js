@@ -18,7 +18,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 // gap-credit and cross-midnight assertions are in BackfillIdempotency.test.js.
 
 async function buyFullTickets(game, buyer, n, totalEth) {
-  return game.connect(buyer).purchase(
+  return game.connect(buyer).purchaseOrderFor(
     0,
     BigInt(n) * 400n,
     0n,
@@ -88,7 +88,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
             }
             const caller = allBuyers[rand() % allBuyers.length];
             try {
-              await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+              await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 });
             } catch (e) {
               const msg = (e && (e.shortMessage || e.message)) || "";
               if (msg.includes("0x11") || msg.toLowerCase().includes("panic")) {
@@ -133,13 +133,13 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       await heavyPurchases(game, buyers);
 
       await advanceToNextDay();
-      await game.connect(alice).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(alice).mineRun(0, { gasLimit: 16_777_216 });
 
       expect(await game.jackpotDuration()).to.equal(
         1n,
         "Normal turbo (tier 2) must still activate when no VRF is in flight"
       );
-      expect(await game.level()).to.equal(
+      expect(await game.currentLvl()).to.equal(
         1n,
         "Turbo must pre-increment level via _finalizeRngRequest"
       );

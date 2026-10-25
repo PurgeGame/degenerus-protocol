@@ -33,7 +33,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         keccak256("DrawEntered(uint24,uint32,uint8,uint32,uint256,uint256,uint256)");
     bytes32 internal constant INCIN_ENTERED =
         keccak256("IncineratorEntered(uint24,uint32,uint32,uint256,uint256,uint256)");
-    bytes4 internal constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
+    bytes4 internal constant GROWTH_STATE = bytes4(keccak256("getGrowth(uint24)"));
 
     uint256 internal constant BURN = 2_000;
     uint256 internal constant STAKE = 1_000;
@@ -95,7 +95,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
 
     function _fundFlip(address p, uint256 amount) internal {
         vm.prank(GAME);
-        coin.mintForGame(p, amount);
+        coin.mintForGame_g152734(p, amount);
     }
 
     function _fundWwxrp(address p, uint256 amount) internal {
@@ -134,14 +134,14 @@ contract ExternalDoorAccountsTest is DeployProtocol {
 
     /// @dev Open the next level's Decimator window today: the window flag and the round's opened day.
     function _openWindow() internal returns (uint24 lvl) {
-        lvl = game.level() + 1;
+        lvl = game.currentLvl() + 1;
         bytes32 flagsSlot = bytes32(GameSlots.DECIMATOR_FLAGS);
         uint256 flags = uint256(vm.load(address(game), flagsSlot));
         vm.store(address(game), flagsSlot, bytes32(flags | (uint256(1) << (GameSlots.DECIMATOR_FLAGS_OFFSET * 8))));
         bytes32 roundSlot = keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS));
         uint256 round = uint256(vm.load(address(game), roundSlot));
         vm.store(address(game), roundSlot, bytes32(round | (uint256(game.currentDayView_g542950()) << OPENED_DAY_SHIFT)));
-        require(game.decWindow(), "fixture: decimator window flag");
+        require(game.decimatorActive(), "fixture: decimator window flag");
     }
 
     /// @dev The wallet's Decimator entry at `lvl`: the entry word's owner ID (bits 0..31).
@@ -282,7 +282,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.deal(owner, price);
         vm.prank(owner);
-        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         _openMarket(1);
         _fundFlip(owner, 10_000);
 
@@ -343,7 +343,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.deal(owner, price);
         vm.prank(owner);
-        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.resolveAccount_g7029.selector), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.marketBetGates, (ownerId, uint24(1))), 1);
         vm.prank(owner);
@@ -370,7 +370,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (smurfId)), 1);
         vm.recordLogs();
         vm.prank(owner);
-        wwxrp.enter(smurfId, 100);
+        wwxrp.enterDraw(smurfId, 100);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(wwxrp.balanceOf(owner), 900, "O's WWXRP burned");
@@ -395,10 +395,10 @@ contract ExternalDoorAccountsTest is DeployProtocol {
     /// @notice At level x99 O's entry for S also enters the century incinerator as S.
     function test_Enter_X99Incinerator_CarriesSmurf() public {
         _fundWwxrp(owner, 1_000);
-        vm.mockCall(address(game), abi.encodeWithSignature("level()"), abi.encode(uint24(199)));
+        vm.mockCall(address(game), abi.encodeWithSignature("currentLvl()"), abi.encode(uint24(199)));
         vm.recordLogs();
         vm.prank(owner);
-        wwxrp.enter(smurfId, 100);
+        wwxrp.enterDraw(smurfId, 100);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint32 e,) = wwxrp.incineratorEntryAt(200, 0);
         assertEq(e, smurfId, "the incinerator entry carries S");
@@ -413,20 +413,20 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         _fundWwxrp(owner, 1_000);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
         vm.prank(stranger);
-        wwxrp.enter(smurfId, 100);
+        wwxrp.enterDraw(smurfId, 100);
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(stranger);
-        wwxrp.enter(uint32(_walletCount()), 100);
+        wwxrp.enterDraw(uint32(_walletCount()), 100);
         assertEq(wwxrp.balanceOf(stranger), 1_000);
 
         vm.prank(operator);
-        wwxrp.enter(smurfId, 100);
+        wwxrp.enterDraw(smurfId, 100);
         assertEq(wwxrp.balanceOf(owner), 900, "P's entry for S burned O's WWXRP");
         assertEq(wwxrp.balanceOf(operator), 0);
 
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.resolveAccount_g7029.selector), 0);
         vm.prank(stranger);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         assertEq(wwxrp.balanceOf(stranger), 900);
         uint32 sid = game.walletIdOf_g3120(stranger);
         assertTrue(sid != 0, "a self entrant registers");

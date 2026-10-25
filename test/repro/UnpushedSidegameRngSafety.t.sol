@@ -60,9 +60,9 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         table.openBonusDay();
 
         vm.prank(address(0xA11CE));
-        table.enterBonusBattle(0, 0, 1);
+        table.throwCraps(0, 0, 1);
         vm.prank(address(0xB0B));
-        table.enterBonusBattle(5, 0, 1);
+        table.throwCraps(5, 0, 1);
 
         vm.warp(dayStart + 1 days);
         // The oldest closed scheduled field joins the next normal word before

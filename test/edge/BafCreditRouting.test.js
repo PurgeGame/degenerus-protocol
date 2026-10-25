@@ -134,7 +134,7 @@ describe("BafCreditRouting", function () {
     ]);
     await hre.ethers.provider.send("hardhat_impersonateAccount", [minterAddr]);
     const minterSigner = await hre.ethers.getSigner(minterAddr);
-    await coin.connect(minterSigner).mintForGame(alice.address, amount);
+    await coin.connect(minterSigner).mintForGame_g152734(alice.address, amount);
     await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
       minterAddr,
     ]);
@@ -165,7 +165,7 @@ describe("BafCreditRouting", function () {
     // coinflipBalance[nextDay][alice] mapping.
     await coinflip
       .connect(alice)
-      .depositCoinflip(0, flip(100));
+      .playCoinflip(0, flip(100));
 
     // Drive day cycle with winning flip word (bit 0 = 1).
     await driveDailyCycleWinningFlip(game, deployer, mockVRF, 0xdeadbeefn);
@@ -212,7 +212,7 @@ describe("BafCreditRouting", function () {
       expect(info.lastPurchaseDay_).to.equal(true);
       expect(info.rngLocked_).to.equal(true);
       expect(info.lvl).to.equal(10n); // purchaseInfo_g1027.lvl now returns the actual game level (not level+1)
-      expect(await game.level()).to.equal(10n);
+      expect(await game.currentLvl()).to.equal(10n);
 
       const balBefore = await coin.balanceOf(alice.address);
       const tx = await coinflip
@@ -246,7 +246,7 @@ describe("BafCreditRouting", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip(0, flip(100))
+          .playCoinflip(0, flip(100))
       ).to.not.be.reverted;
     });
 
@@ -308,7 +308,7 @@ describe("BafCreditRouting", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip(0, flip(100))
+          .playCoinflip(0, flip(100))
       ).to.not.be.reverted;
     });
 

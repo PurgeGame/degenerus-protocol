@@ -94,7 +94,7 @@ contract AnyInputSafety is DeployProtocol {
             _erc20Transfer(dgvf, a, dgvfSupply / 100);
             vm.stopPrank();
             vm.startPrank(address(game));
-            coin.mintForGame(a, 1_000_000);
+            coin.mintForGame_g152734(a, 1_000_000);
             wwxrp.mintPrize(a, 100_000);
             vm.stopPrank();
         }
@@ -113,7 +113,7 @@ contract AnyInputSafety is DeployProtocol {
             }
             vm.stopPrank();
         }
-        // Deity holders (actors 0, 2, 4) so issueDeityBoon / smite / decurse are reachable.
+        // Deity holders (actors 0, 2, 4) so giveBoon / smite / decurse are reachable.
         vm.prank(actors[0]);
         game.purchaseDeityPass{value: 45 ether}(0, 3, bytes32(0));
         vm.prank(actors[2]);
@@ -144,7 +144,7 @@ contract AnyInputSafety is DeployProtocol {
         game.depositAfkingFunding{value: 5 ether}(game.walletIdOf_g3120(BYSTANDER));
         game.purchaseDeityPass{value: 45 ether}(0, 5, bytes32(0)); // overpay lands in its own afking
         (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
-        game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.stopPrank();
         _dgnrsFromVault(BYSTANDER, 1_000_000e12);
         vm.startPrank(ContractAddresses.CREATOR);
@@ -273,7 +273,7 @@ contract AnyInputSafety is DeployProtocol {
             _coolProtocol();
             uint256 g0 = gasleft();
             vm.prank(keeper);
-            (bool ok, bytes memory ret) = address(game).call{gas: CRANK_GAS}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory ret) = address(game).call{gas: CRANK_GAS}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 used = g0 - gasleft();
             if (used > r.maxGas) r.maxGas = used;
             if (ok) continue;
@@ -360,7 +360,7 @@ contract AnyInputSafety is DeployProtocol {
         vm.setEnv(_counterKey("ANY_LEVELS"), vm.toString(vm.envOr(_counterKey("ANY_LEVELS"), uint256(0)) + handler.ghost_levels()));
         vm.setEnv(_counterKey("ANY_GAMEOVER"), vm.toString(vm.envOr(_counterKey("ANY_GAMEOVER"), uint256(0)) + handler.ghost_gameOver()));
         uint256 maxLvl = vm.envOr(_counterKey("ANY_MAXLEVEL"), uint256(0));
-        if (game.level() > maxLvl) vm.setEnv(_counterKey("ANY_MAXLEVEL"), vm.toString(uint256(game.level())));
+        if (game.currentLvl() > maxLvl) vm.setEnv(_counterKey("ANY_MAXLEVEL"), vm.toString(uint256(game.currentLvl())));
         _printReport(runs, n);
         _assertCoverage(runs, n);
     }
@@ -448,7 +448,7 @@ contract AnyInputSafety is DeployProtocol {
         for (uint256 k; k < 4; ++k) {
             _fulfillLast(k);
             vm.prank(address(0x4B33E5));
-            try game.mineFlip(0) { console.log("ok", k); } catch (bytes memory r) { console.logBytes(r); }
+            try game.mineRun(0) { console.log("ok", k); } catch (bytes memory r) { console.logBytes(r); }
         }
     }
 
@@ -456,7 +456,7 @@ contract AnyInputSafety is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 200; ++i) {
             _fulfillLast(salt * 1000 + i);
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 if (bytes4(reason) == NO_WORK) return;
                 if (bytes4(reason) == RNG_NOT_READY && _fulfillLast(salt * 1000 + i + 500)) continue;
                 return;
@@ -623,7 +623,7 @@ contract AnyInputSafety is DeployProtocol {
     /// @notice Minimized campaign regression: a seized root remains valid in its ticket queues.
     function test_queueOracleAcceptsSeizedRoot() public {
         uint32 id = game.walletIdOf_g3120(actors[1]);
-        uint24 due = game.level() + 1;
+        uint24 due = game.currentLvl() + 1;
         handler.gd_borrow(1, 0, 0);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), address(new AnyInputSeizer()).code);

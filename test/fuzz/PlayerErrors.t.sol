@@ -12,7 +12,7 @@ contract PlayerErrorsTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         _giveWalletId(PLAYER);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 100);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 100);
     }
 
     function testTransferShortfallIsNamedAndAtomic() public {
@@ -37,7 +37,7 @@ contract PlayerErrorsTest is DeployProtocol {
         uint256 supply = coin.totalSupply();
         vm.prank(PLAYER);
         vm.expectRevert(FLIP.InsufficientBalance.selector);
-        coinflip.depositCoinflip(0, 1_000);
+        coinflip.playCoinflip(0, 1_000);
         assertEq(coin.balanceOf(PLAYER), 100);
         assertEq(coin.totalSupply(), supply);
     }

@@ -16,7 +16,7 @@ import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DegenesisHarness -- Degenesis-timeline fixture, state readers and a reference model
 /// @notice Deploys on day index 1. Credit is earned through ordinary lootbox purchases, orders go
-///         through game.buyDegenesisBox, and days are driven through mineFlip with mock VRF
+///         through game.purchaseDegenesisBox, and days are driven through mineFlip with mock VRF
 ///         fulfilment. `_refOutcome` re-implements the module's per-order outcome from the spec
 ///         formulas so suites compare the contract's DegenesisOrderResolved fields against it.
 abstract contract DegenesisHarness is DegenesisDeployProtocol {
@@ -106,7 +106,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         uint256 spend = credit * 4;
         if (p.balance < spend) vm.deal(p, spend + 1 ether);
         vm.prank(p);
-        game.purchase{value: spend}(0, 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: spend}(0, 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Write `credit` straight into degenesisCredit[id] (vm.store). Used only where a real
@@ -121,7 +121,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     function _buy(address p, uint256 amount) internal {
         if (p.balance < amount) vm.deal(p, amount + 1 ether);
         vm.prank(p);
-        game.buyDegenesisBox{value: amount}(0, amount);
+        game.purchaseDegenesisBox{value: amount}(0, amount);
     }
 
     // =====================================================================
@@ -133,7 +133,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     function _drive(uint256 vrfWord) internal {
         for (uint256 i; i < 400; ++i) {
             _fulfillPending(vrfWord);
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
                 if (reason.length == 4 && sel == bytes4(keccak256("RngNotReady()"))) {
                     if (_fulfillPending(vrfWord)) continue;
@@ -170,8 +170,8 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
         for (uint256 i; i < 200; ++i) {
             _fulfillPending(0);
             if (game.nextMinerAction() == ACTION_REQUEST_DAILY) return;
-            try game.mineFlip{gas: 3_000_000}(0) {} catch {
-                game.mineFlip(0);
+            try game.mineRun{gas: 3_000_000}(0) {} catch {
+                game.mineRun(0);
             }
         }
         fail("stepToRequest: request never next");
@@ -180,7 +180,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     /// @dev From a day start: step to the request, run it alone, fulfil it with `vrfWord`.
     function _requestOnly(uint256 vrfWord) internal {
         _stepToRequest();
-        game.mineFlip(0);
+        game.mineRun(0);
         _fulfillPending(vrfWord);
     }
 
@@ -190,13 +190,13 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     function _mineStep(uint256 gasBudget) internal returns (bool) {
         _fulfillPending(0);
         for (uint256 k; k < 5; ++k) {
-            try game.mineFlip{gas: gasBudget << k}(0) {
+            try game.mineRun{gas: gasBudget << k}(0) {
                 return true;
             } catch (bytes memory reason) {
                 if (_isIdle(reason)) return false;
             }
         }
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             return true;
         } catch (bytes memory reason) {
             if (_isIdle(reason)) return false;
@@ -377,7 +377,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     }
 
     /// @dev Expected resolution of one order before any pool clamp (an sDGNRS pay above the
-    ///      remaining pool is clamped by transferFromPool; a zero pay turns into WWXRP).
+    ///      remaining pool is clamped by transferFromPool_g106128; a zero pay turns into WWXRP).
     function _refOutcome(
         uint256 word,
         uint256 day,

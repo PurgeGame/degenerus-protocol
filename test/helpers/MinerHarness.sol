@@ -7,5 +7,6 @@ contract MinerHarness is GameMiner {
     function minerAction() external view returns (uint8) { return _minerAction(); }
     function playerActivityScoreCachedById_g975(uint32 id) external returns (uint256) { return _minerActivityById(id); }
     function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id) { return _minerActivity(player); }
-    function mineFlip(uint32 gasMultiplierBps) external { _mineFlip(gasMultiplierBps); }
+    function mineRun(uint32 gasMultiplierBps) external { _mineFlip(gasMultiplierBps); }
+    function currentLvl() external view returns (uint24) { return level; }
 }

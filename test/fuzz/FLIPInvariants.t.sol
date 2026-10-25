@@ -18,7 +18,7 @@ contract FlipCoinInvariantsTest is DeployProtocol {
 
     function _mint(address to, uint256 amount) private {
         vm.prank(address(game));
-        coin.mintForGame(to, amount);
+        coin.mintForGame_g152734(to, amount);
     }
 
     function _fundVault(uint256 amount) private {
@@ -42,7 +42,7 @@ contract FlipCoinInvariantsTest is DeployProtocol {
         uint256 allowanceBefore = coin.vaultMintAllowance();
         _mint(ALICE, amount);
         vm.prank(address(game));
-        coin.burnCoin(ALICE, amount);
+        coin.burnCoin_g27673(ALICE, amount);
         assertEq(coin.totalSupply(), supplyBefore);
         assertEq(coin.vaultMintAllowance(), allowanceBefore);
         assertEq(coin.balanceOf(ALICE), 0);
@@ -95,7 +95,7 @@ contract FlipCoinInvariantsTest is DeployProtocol {
         vm.prank(ALICE);
         coin.transfer(BOB, transferAmount);
         vm.prank(address(game));
-        coin.burnCoin(ALICE, burnAmount);
+        coin.burnCoin_g27673(ALICE, burnAmount);
         assertEq(coin.balanceOf(ALICE), mintAmount - transferAmount - burnAmount);
         assertEq(coin.balanceOf(BOB), transferAmount);
         assertEq(coin.totalSupply(), supplyBefore + mintAmount - burnAmount);

@@ -60,7 +60,7 @@ contract DegenesisFoilMatch is DegenesisFixture {
             if (d == 2) {
                 // A pack bought on Degenesis day 1 (one per cycle) generates during the week.
                 vm.prank(alice);
-                game.purchase{value: 0.1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+                game.purchaseOrderFor{value: 0.1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
             }
             vm.recordLogs();
             _drain();

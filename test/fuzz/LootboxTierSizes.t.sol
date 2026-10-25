@@ -68,7 +68,7 @@ contract LootboxTierSizes is DeployProtocol {
     function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(caller);
-        game.mineFlip(0);
+        game.mineRun(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -78,12 +78,12 @@ contract LootboxTierSizes is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -102,7 +102,7 @@ contract LootboxTierSizes is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
         }
         // A fresh request waits for every read consumer of the day's cohort to finish. A shut
         // craps window the day bound to the write buffer rides the next request, which the engine
@@ -117,7 +117,7 @@ contract LootboxTierSizes is DeployProtocol {
             if (!game.advanceDue() && game.rngComplete()) break;
             if (!game.advanceDue()) continue; // a fresh request waits for its word
             vm.prank(actor);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
@@ -135,7 +135,7 @@ contract LootboxTierSizes is DeployProtocol {
             uint256 pos = RecyclingState.boxCount(address(game), N);
             uint256 balBefore = actor.balance;
             vm.prank(actor);
-            game.purchase{value: 2 * perBox[t]}(0, 0, orders[t], bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 2 * perBox[t]}(0, 0, orders[t], bytes32(0), MintPaymentKind.DirectEth, false);
             assertEq(balBefore - actor.balance, 2 * perBox[t], "charged quantity x per-box value");
             uint256 entry = RecyclingState.boxEntry(address(game), N, pos);
             assertEq(BoxOrderLib.boCount(entry), 2, "quantity stored");
@@ -192,7 +192,7 @@ contract LootboxTierSizes is DeployProtocol {
             vm.deal(who[t], 100 ether);
             pos[t] = RecyclingState.boxCount(address(game), N);
             vm.prank(who[t]);
-            game.purchase{value: 3 * mults[t] * priceWei + 1 ether}(0, 400, orders[t], bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 3 * mults[t] * priceWei + 1 ether}(0, 400, orders[t], bytes32(0), MintPaymentKind.DirectEth, false);
             assertEq(RecyclingState.boxCount(address(game), N), pos[t] + 1, "each purchase appends one entry");
         }
 

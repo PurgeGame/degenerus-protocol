@@ -66,7 +66,7 @@ contract TicketTrackingHandler is Test {
         if (totalCost == 0 || totalCost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: totalCost}(
+        try game.purchaseOrderFor{value: totalCost}(
             0,
             qty,
             BoxOrderLib.boCustomFloor(lootboxAmt),
@@ -86,14 +86,14 @@ contract TicketTrackingHandler is Test {
     /// @notice Interleave queue draining with purchases and the separately targeted VRF handler.
     function advance(uint256 actorSeed) external useActor(actorSeed) {
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ghost_advances++;
         } catch {}
     }
 
     /// @notice Attest all three cohorts and the address-facing view against raw position records.
     function verifyConsistency(uint256 levelSeed) external view {
-        uint24 checkLevel = uint24(bound(levelSeed, 0, uint256(game.level()) + 5));
+        uint24 checkLevel = uint24(bound(levelSeed, 0, uint256(game.currentLvl()) + 5));
         TicketQueueStorage.assertQueue(address(game), checkLevel);
         TicketQueueStorage.assertQueue(address(game), checkLevel | uint24(1 << 23));
         TicketQueueStorage.assertQueue(address(game), checkLevel | uint24(1 << 22));

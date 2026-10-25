@@ -39,7 +39,7 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
             actors.push(a);
             // 40 ETH of boxes: 10 ETH of Degenesis credit each.
             vm.prank(a);
-            game.purchase{value: 40 ether}(0, 0, BoxOrderLib.boCustom(40 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 40 ether}(0, 0, BoxOrderLib.boCustom(40 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         }
         _driveAll();
         vm.warp(_dayStartOf(GameTimeLib.DEGENESIS_START_DAY) + 1 hours);
@@ -48,7 +48,7 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
         for (uint256 i; i < 10; ++i) {
             vm.warp(block.timestamp + 11 minutes);
             vm.prank(actors[i % 5]);
-            game.buyDegenesisBox{value: 0.0137 ether + i * 0.0011 ether}(0, 0.0137 ether + i * 0.0011 ether);
+            game.purchaseDegenesisBox{value: 0.0137 ether + i * 0.0011 ether}(0, 0.0137 ether + i * 0.0011 ether);
         }
 
         handler = new DegenesisRngFreezeHandler(game, mockVRF, coin, crapsBattle, actors);
@@ -72,7 +72,7 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
                 (,, bool done) = mockVRF.pendingRequests(req);
                 if (!done) mockVRF.fulfillRandomWords(req, uint256(keccak256(abi.encode("deg-rng-setup", req))));
             }
-            try game.mineFlip(0) {} catch {
+            try game.mineRun(0) {} catch {
                 req = mockVRF.lastRequestId();
                 (,, bool done) = mockVRF.pendingRequests(req);
                 if (done) return;
@@ -240,7 +240,7 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
         // A long cohort, so it is still settling when its word is recorded.
         for (uint256 i; i < 300; ++i) {
             vm.prank(actors[i % 5]);
-            game.buyDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
+            game.purchaseDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
         }
         handler.nextDay(3600);
         handler.crank(11);

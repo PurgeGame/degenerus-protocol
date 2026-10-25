@@ -93,7 +93,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
         probe.seedFuturePool();
         RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.prank(address(game));
-        coin.mintForGame(player, 1_000_000 ether);
+        coin.mintForGame_g152734(player, 1_000_000 ether);
     }
 
     function _resolve(uint256 amount, uint16 score) private returns (uint256 scaled, uint24 target) {
@@ -205,7 +205,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
 
     function _place(uint8 spins, uint16 score) private {
         vm.prank(player);
-        game.placeDegeneretteBet{value: uint256(spins) * 10 ether}(0, 0, 10 ether, spins, SYMBOL);
+        game.betDegenerette{value: uint256(spins) * 10 ether}(0, 0, 10 ether, spins, SYMBOL);
         uint64 id = DQ.lastBetId(vm, address(game), INDEX);
         probe.seedBetScore(INDEX, id - 1, score);
     }
@@ -224,7 +224,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
     function _sweepAmounts() private returns (uint256[] memory amounts) {
         _land();
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == OPENED) ++count;
@@ -301,7 +301,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
 
     function _gasSweepWithStake(string memory name, uint8 spins, uint16 score, uint256 used, uint128 stake) private {
         vm.prank(player);
-        game.placeDegeneretteBet{value: uint256(spins) * stake}(0, 0, stake, spins, SYMBOL);
+        game.betDegenerette{value: uint256(spins) * stake}(0, 0, stake, spins, SYMBOL);
         probe.seedBetScore(INDEX, 0, score);
         probe.seedAllowance(player, 1, used);
         _land();
@@ -310,7 +310,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
         vm.cool(address(degeneretteModule));
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         emit log_named_uint(name, beforeGas - gasleft());
         assertEq(_resolvedCount(vm.getRecordedLogs()), 1, "the measured call resolved the bet");
     }
@@ -331,7 +331,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
         vm.cool(address(degeneretteModule));
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 used = beforeGas - gasleft();
         assertEq(_resolvedCount(vm.getRecordedLogs()), 11);
         emit log_named_uint("cap_batch_11", used);
@@ -340,7 +340,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
     function testGas_Placement() public {
         vm.prank(player);
         uint256 beforeGas = gasleft();
-        game.placeDegeneretteBet{value: 10 ether}(0, 0, 10 ether, 1, SYMBOL);
+        game.betDegenerette{value: 10 ether}(0, 0, 10 ether, 1, SYMBOL);
         emit log_named_uint("cap_placement", beforeGas - gasleft());
     }
 

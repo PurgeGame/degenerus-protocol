@@ -110,15 +110,15 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         slot = uint64(uint256(day) * 8 + 6);
         for (uint256 i; i < paid; ++i) {
             address player = address(uint160(0x900000 + i));
-            vm.prank(address(game)); coin.mintForGame(player, 100_000 ether);
-            vm.prank(player); crapsBattle.enterBonusBattle(5, 1 | (1 << 9) | (1 << 12), 1);
+            vm.prank(address(game)); coin.mintForGame_g152734(player, 100_000 ether);
+            vm.prank(player); crapsBattle.throwCraps(5, 1 | (1 << 9) | (1 << 12), 1);
         }
         vm.warp(start);
     }
     /// @dev One call at `gas`; every progress marker of the call, in order, and its gas.
     function _step(uint256 gas) private returns (uint8[] memory stages, uint256 gasUsed) {
         vm.recordLogs();
-        game.mineFlip{gas: gas}(0);
+        game.mineRun{gas: gas}(0);
         gasUsed = vm.lastCallGas().gasTotalUsed;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 n;
@@ -353,7 +353,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         _prepare(false,false,false,3,8); _requestAndApply();
         vm.mockCallRevert(ContractAddresses.JACKPOT_BATTLE,
             abi.encodeWithSelector(JackpotBattle.prepareJackpotBattle.selector), hex"deadbeef");
-        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip{gas: DRAW_GAS}(0);
+        vm.expectRevert(bytes4(0xdeadbeef)); game.mineRun{gas: DRAW_GAS}(0);
         assertTrue(game.rngLocked());
         vm.clearMockedCalls(); _drain(false,false);
     }

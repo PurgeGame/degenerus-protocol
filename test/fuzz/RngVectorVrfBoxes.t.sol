@@ -53,7 +53,7 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
     function _dailyRequest(uint24 d) internal returns (uint256 req) {
         _warpTo(d, 1 hours);
         _stepToRequest();
-        game.mineFlip(0);
+        game.mineRun(0);
         req = mockVRF.lastRequestId();
         lastFulfilledReq = req;
         assertTrue(game.rngLocked(), "daily request out");
@@ -64,7 +64,7 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
         _earnCredit(buyer, 1 ether);
         uint256 req0 = mockVRF.lastRequestId();
         for (uint256 i; i < 40 && mockVRF.lastRequestId() == req0; ++i) {
-            try game.mineFlip(0) {} catch { break; }
+            try game.mineRun(0) {} catch { break; }
         }
         req = mockVRF.lastRequestId();
         assertEq(req, req0 + 1, "mid-day request out");
@@ -141,7 +141,7 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
         vm.expectCall(address(mockVRF), _reqData(6), 1);
         vm.expectCall(address(mockVRF), _reqData(4), 0);
         for (uint256 i; i < 60 && mockVRF.lastRequestId() == req0; ++i) {
-            try game.mineFlip(0) {} catch { break; }
+            try game.mineRun(0) {} catch { break; }
         }
         assertEq(mockVRF.lastRequestId(), req0 + 1, "terminal request out");
     }
@@ -180,7 +180,7 @@ contract RngVectorCompactBoxFreeze is DegenesisHarness {
 
     function _boxBuy(address p, uint256 amount) internal {
         vm.prank(p);
-        game.purchase{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _readBuffer() internal view returns (uint48) {
@@ -260,9 +260,9 @@ contract RngVectorCompactBoxFreeze is DegenesisHarness {
         for (uint256 i; i < 600 && _readBuffer() == buf && _readCount() == count && _boxCursor() < count; ++i) {
             if (disturb && i % 3 == 0) _disturb(i + 2);
             vm.prank(makeAddr(string.concat("cb-miner-", vm.toString(i))));
-            try game.mineFlip{gas: 2_500_000}(0) {} catch {
-                try game.mineFlip{gas: 10_000_000}(0) {} catch {
-                    try game.mineFlip(0) {} catch { break; }
+            try game.mineRun{gas: 2_500_000}(0) {} catch {
+                try game.mineRun{gas: 10_000_000}(0) {} catch {
+                    try game.mineRun(0) {} catch { break; }
                 }
             }
         }
@@ -288,13 +288,13 @@ contract RngVectorCompactBoxFreeze is DegenesisHarness {
         uint256 req0 = mockVRF.lastRequestId();
         if (midday) {
             for (uint256 i; i < 40 && mockVRF.lastRequestId() == req0; ++i) {
-                try game.mineFlip(0) {} catch { break; }
+                try game.mineRun(0) {} catch { break; }
             }
             assertFalse(game.rngLocked(), "mid-day window");
         } else {
             _warpTo(3, 1 hours);
             _stepToRequest();
-            game.mineFlip(0);
+            game.mineRun(0);
             assertTrue(game.rngLocked(), "daily window");
             assertEq(_activeDay(), 3, "the daily request also bound cohort 1");
         }
@@ -352,7 +352,7 @@ contract RngVectorCompactBoxFreeze is DegenesisHarness {
         for (uint256 i; i < 3; ++i) _boxBuy(buyers[0], 0.5 ether);
         uint256 req0 = mockVRF.lastRequestId();
         for (uint256 i; i < 40 && mockVRF.lastRequestId() == req0; ++i) {
-            try game.mineFlip(0) {} catch { break; }
+            try game.mineRun(0) {} catch { break; }
         }
         assertEq(mockVRF.lastRequestId(), req0 + 1, "request out");
         vm.recordLogs();

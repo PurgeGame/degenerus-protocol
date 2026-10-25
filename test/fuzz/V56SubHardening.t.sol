@@ -372,7 +372,7 @@ contract V56SubHardening is DeployProtocol {
         assertTrue(game.bountyEligible(miner), "mining has no participant gate");
         vm.recordLogs();
         vm.prank(miner);
-        game.mineFlip(0);
+        game.mineRun(0);
         _assertMinerProgress(miner);
     }
 
@@ -413,12 +413,12 @@ contract V56SubHardening is DeployProtocol {
         // runs each necessary step, without supplying a VRF response.
         for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
             vm.prank(miner);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "fixture: request is waiting for fulfillment");
         vm.prank(miner);
         vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     function testOpenMiningDoesNotBypassSubscriptionCoinRequirement() public {
@@ -436,7 +436,7 @@ contract V56SubHardening is DeployProtocol {
         _warpToDayBoundary(6);
         vm.recordLogs();
         vm.prank(miner);
-        game.mineFlip(0);
+        game.mineRun(0);
         _assertMinerProgress(miner);
     }
 
@@ -445,11 +445,11 @@ contract V56SubHardening is DeployProtocol {
     ///         idle. The vault is owner-gated (onlyVaultOwner) — prank as CREATOR (the DGVE majority
     ///         owner). Mining participation itself has no ownership requirement. Both arms asserted.
     function test_WrappersForwardCallerCalibration() public {
-        bytes memory callData = abi.encodeWithSignature("mineFlip(uint32)", uint32(50_000));
+        bytes memory callData = abi.encodeWithSignature("mineRun(uint32)", uint32(50_000));
         vm.mockCall(address(game), callData, bytes(""));
         vm.expectCall(address(game), callData, 2);
         vm.prank(ContractAddresses.CREATOR);
-        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 50_000), 0)), 0), (bytes));
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("mineRun(uint32)", 50_000), 0)), 0), (bytes));
         sdgnrs.gameAdvance(50_000);
     }
 
@@ -465,7 +465,7 @@ contract V56SubHardening is DeployProtocol {
         _quietCrapsTable();
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 0), 0)), 0), (bytes));
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("mineRun(uint32)", 0), 0)), 0), (bytes));
 
         // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
@@ -474,13 +474,13 @@ contract V56SubHardening is DeployProtocol {
         vm.prank(ContractAddresses.CREATOR);
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
-            abi.encodeWithSignature("mineFlip(uint32)", 50_000),
+            abi.encodeWithSignature("mineRun(uint32)", 50_000),
             0
         )), 0), (bytes));           // MUST NOT revert — routes through mineFlip and does the work
         _assertMinerProgress(address(vault));
     }
 
-    /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance(0) routes through game.mineFlip(0)
+    /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance(0) routes through game.mineRun(0)
     ///         and is PERMISSIONLESS (no owner gate). It performs the crank when work is due and reverts
     ///         NoWork() when idle. These assertions cover routing, without assuming that a small
     ///         call earns compensation.
@@ -570,7 +570,7 @@ contract V56SubHardening is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -581,7 +581,7 @@ contract V56SubHardening is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
         fail("fixture: miner consumers did not settle");

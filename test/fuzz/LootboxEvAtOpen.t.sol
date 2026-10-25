@@ -84,7 +84,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
         vm.setNonce(address(this), 1024);
         vm.etch(address(game), type(EvOpenHost).runtimeCode);
         host = EvOpenHost(payable(address(game)));
-        key = host.level() + 1;
+        key = host.currentLvl() + 1;
         id = host.seed(PLAYER, key, 0);
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 100_000 ether);
@@ -93,7 +93,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
     function _buy(uint256 order) private {
         (, uint256 cost) = host.decode(order, host.activeLevel());
         vm.prank(PLAYER);
-        host.purchase{value: cost}(0, 0, order, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchaseOrderFor{value: cost}(0, 0, order, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _word(uint48 b, uint256 p, bool nested) private view returns (uint256 w) {

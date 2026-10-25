@@ -33,14 +33,14 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
     function test_flip_bet_strayEth_creditsAfking() public {
         uint128 perTicket = 100;
         vm.prank(address(game));
-        coin.mintForGame(player, perTicket);
+        coin.mintForGame_g152734(player, perTicket);
 
         uint256 afkingBefore = game.afkingFundingOf(player);
         uint256 poolBefore = game.claimablePoolView();
         uint256 stray = 5 ether;
 
         vm.prank(player);
-        game.placeDegeneretteBet{value: stray}(0, CURRENCY_FLIP, perTicket, 1, uint8(TICKET & 7));
+        game.betDegenerette{value: stray}(0, CURRENCY_FLIP, perTicket, 1, uint8(TICKET & 7));
 
         assertEq(game.afkingFundingOf(player), afkingBefore + stray, "stray ETH not credited to afking");
         assertEq(
@@ -60,7 +60,7 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
         uint256 gameBefore = address(game).balance;
         vm.expectRevert(bytes4(keccak256("UnsupportedCurrency()")));
         vm.prank(player);
-        game.placeDegeneretteBet{value: 3 ether}(0, CURRENCY_WWXRP, 1 ether, 1, uint8(TICKET & 7));
+        game.betDegenerette{value: 3 ether}(0, CURRENCY_WWXRP, 1 ether, 1, uint8(TICKET & 7));
         assertEq(player.balance, ethBefore, "rejected bet retained the payment");
         assertEq(address(game).balance, gameBefore, "rejected bet funded the game");
         assertEq(wwxrp.balanceOf(player), 1 ether, "rejected bet burned WWXRP");
@@ -71,13 +71,13 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
     function test_flip_bet_noEth_afkingUnchanged() public {
         uint128 perTicket = 100;
         vm.prank(address(game));
-        coin.mintForGame(player, perTicket);
+        coin.mintForGame_g152734(player, perTicket);
 
         uint256 afkingBefore = game.afkingFundingOf(player);
         uint256 poolBefore = game.claimablePoolView();
 
         vm.prank(player);
-        game.placeDegeneretteBet(0, CURRENCY_FLIP, perTicket, 1, uint8(TICKET & 7));
+        game.betDegenerette(0, CURRENCY_FLIP, perTicket, 1, uint8(TICKET & 7));
 
         assertEq(game.afkingFundingOf(player), afkingBefore, "no-ETH token bet must not touch afking");
         assertEq(game.claimablePoolView(), poolBefore, "no-ETH token bet must not touch claimablePool");

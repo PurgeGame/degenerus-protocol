@@ -69,7 +69,7 @@ contract GameHandler is Test {
         if (totalCost == 0 || totalCost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: totalCost}(
+        try game.purchaseOrderFor{value: totalCost}(
             0,
             qty,
             BoxOrderLib.boCustomFloor(lootboxAmt),
@@ -90,9 +90,9 @@ contract GameHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ghost_successfulAdvances++;
-            uint256 currentLevel = game.level();
+            uint256 currentLevel = game.currentLvl();
             if (currentLevel > ghost_maxLevelReached) {
                 ghost_maxLevelReached = currentLevel;
             }
@@ -107,7 +107,7 @@ contract GameHandler is Test {
         uint256 balBefore = currentActor.balance;
 
         vm.prank(currentActor);
-        try game.claimWinnings(0) {
+        try game.claimClaimable(0) {
             uint256 balAfter = currentActor.balance;
             if (balAfter > balBefore) {
                 ghost_totalClaimed += balAfter - balBefore;

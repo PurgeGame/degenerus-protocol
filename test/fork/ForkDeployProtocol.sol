@@ -347,7 +347,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         for (uint256 i; i < maxCalls; ++i) {
             bool answered = _fulfillPending(uint256(keccak256(abi.encode("fork-word", cranks, i))) | 2);
             vm.prank(keeper);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ++cranks;
             } catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
@@ -366,12 +366,12 @@ abstract contract ForkDeployProtocol is DeployProtocol {
 
     /// @dev Real play: a funded driver buys tickets plus a lootbox each day.
     function _playUntilLevel(address driver, uint24 target, uint256 maxDays, uint256 box) internal {
-        for (uint256 day; day < maxDays && game.level() < target && !game.gameOver(); ++day) {
+        for (uint256 day; day < maxDays && game.currentLvl() < target && !game.gameOver(); ++day) {
             vm.warp(vm.getBlockTimestamp() + 1 days + 1);
             (,,, bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked) {
                 vm.prank(driver);
-                try game.purchase{value: priceWei * 10 + box}(
+                try game.purchaseOrderFor{value: priceWei * 10 + box}(
                     0, 4000, BoxOrderLib.boCustomFloor(box), bytes32(0), MintPaymentKind.DirectEth, false
                 ) {} catch {}
             }

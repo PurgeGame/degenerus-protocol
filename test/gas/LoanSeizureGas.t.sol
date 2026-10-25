@@ -104,7 +104,7 @@ abstract contract LoanSeizureGasBase is DeployProtocol, NativeGasExport {
         }
         if (holdsSdgnrs) {
             vm.prank(address(game));
-            sdgnrs.transferFromPool(sDGNRS.Pool.Reward, borrower, 1e15);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, borrower, 1e15);
         }
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         vm.prank(borrower);
@@ -196,7 +196,7 @@ abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
         vm.warp(block.timestamp + 31 days);
         _etch(); SeizureGasSeeder(address(game)).completedDeadline(); _unetch();
         assertTrue(game.livenessTriggered(), "thirty completed rounds with VRF alive");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_loanStep(), 1, "the decision owes settlement");
     }
 
@@ -208,12 +208,12 @@ abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
     function _measureTerminal(string memory label) internal returns (uint256 used) {
         uint256 snapshot = vm.snapshotState();
         uint256 before = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         used = before - gasleft();
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
             assertTrue(vm.revertToState(snapshot));
-            this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(game.mineFlip, (0)));
-            game.mineFlip(0);
+            this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(game.mineRun, (0)));
+            game.mineRun(0);
         }
         emit log_named_uint(label, used);
         assertEq(_loanStep(), 0, "one call finishes the book");
@@ -270,7 +270,7 @@ contract LoanEntryGas is LoanSeizureGasBase {
         uint256 owed = lens.loanOf(address(game), id).owed;
         vm.deal(other, owed);
         vm.prank(other);
-        game.repay{value: owed}(id);
+        game.clearDebtNow{value: owed}(id);
         emit log_named_uint("repay_gas", vm.lastCallGas().gasTotalUsed);
     }
 }

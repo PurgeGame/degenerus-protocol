@@ -161,7 +161,7 @@ export function rollHeroSymbolRef({ day, entropy, dailyHeroWagers, excludeIdx = 
 ///         four packed BigInts mirroring the `dailyHeroWagers[day]` storage
 ///         layout (contracts/storage/DegenerusGameStorage.sol L1470-L1475). Each
 ///         per-symbol amount is capped at `0xFFFFFFFF` (uint32 max) to mirror
-///         the `placeDegeneretteBet` saturation at
+///         the `betDegenerette` saturation at
 ///         contracts/modules/DegenerusGameDegeneretteModule.sol L495.
 ///
 /// @param rawAmounts number[32] — flat amounts indexed by `(q << 3) | s`.

@@ -668,12 +668,12 @@ contract CrapsPassesTest is CrapsPins {
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusDay(_seven(), 1);
+        craps.playCraps(_seven(), 1);
 
         // And a single window of that day is barred too — the seat is a claim on all seven.
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusBattle(1, _seven(), 1);
+        craps.throwCraps(1, _seven(), 1);
     }
 
     /// @dev MISSING PERIOD ZERO COSTS THE HOLDER NOTHING. There is no redemption window to be

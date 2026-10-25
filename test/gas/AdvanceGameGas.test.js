@@ -114,7 +114,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   async function buyFullTickets(game, buyer, n, totalEth) {
     return game
       .connect(buyer)
-      .purchase(
+      .purchaseOrderFor(
         0,
         BigInt(n) * 400n,
         0n,
@@ -133,7 +133,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (await game.gameOver()) return;
       const before = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       } catch {
         return;
       }
@@ -344,7 +344,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
       console.log(`      Advance stages observed: ${[...seen].sort((a, b) => a - b).join(", ")}`);
       expect(entered, "the purchase->jackpot transition (STAGE_ENTERED_JACKPOT) must execute").to.not.equal(null);
-      expect(await game.level(), "the transition advanced the level").to.be.gte(1n);
+      expect(await game.currentLvl(), "the transition advanced the level").to.be.gte(1n);
       recordGas("Enter Jackpot Phase chunk (stage=7)", entered.receipt);
       // The same turbo day carries the rest of the jackpot phase, each stage walked as its
       // own <=10M chunk above: daily ETH (10), coin+tickets (8), phase end (9), transition (3).
@@ -459,7 +459,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       for (const buyer of others.slice(10, 160)) {
         await game.connect(buyer).purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       }
-      const lvl0 = await game.level();
+      const lvl0 = await game.currentLvl();
       const preLens = [];
       for (let l = lvl0 + 1n; l <= lvl0 + 3n; l++) preLens.push(`L${l}=${await ffQueueLength(game, l)}`);
       console.log(`      far-future queues before the drain: ${preLens.join(" ")}`);
@@ -474,7 +474,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
             await mockVRF.fulfillRandomWords(await getLastVRFRequestId(mockVRF), BigInt(day * 1000 + i + 42));
             continue;
           }
-          const lvl = await game.level();
+          const lvl = await game.currentLvl();
           const ffLevels = [];
           for (let l = lvl + 1n; l <= lvl + 2n; l++) if ((await ffQueueLength(game, l)) !== 0n) ffLevels.push(l);
           if (action !== MINER_TICKETS || ffLevels.length === 0) {
@@ -554,7 +554,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         try {
           await game
             .connect(buyer)
-            .purchase(
+            .purchaseOrderFor(
               0,
               400n,         // 1 full ticket = qty 400; cost = (price * 400) / 400 = price = 0.01 ETH
               0n,
@@ -618,7 +618,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       await advanceToNextDay();
 
       // mineFlip() triggers the VRF request (stage=1, rngLockedFlag=true)
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const requestId = await getLastVRFRequestId(mockVRF);
 
       // Fulfill: this is rawFulfillRandomWords() — capture the full receipt.
@@ -640,7 +640,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // mid-day threshold for mineFlip to select the request without donor credit.
       await game
         .connect(alice)
-        .purchase(0, 0n, boSmalls(100), ZERO_BYTES32, MintPaymentKind.DirectEth, false,
+        .purchaseOrderFor(0, 0n, boSmalls(100), ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: eth(1) });
 
       const lbRequestId = await requestMiddayRng(game, deployer, mockVRF);
@@ -690,7 +690,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
     async function buyOneTicket(game, buyer) {
       return game
         .connect(buyer)
-        .purchase(
+        .purchaseOrderFor(
           0,
           400n,
           0n,

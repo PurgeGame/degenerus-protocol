@@ -286,7 +286,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     function _logicalResumeStep() private returns (uint256 used) {
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: EIP7825_TX_GAS_CAP}(type(uint32).max);
+        game.mineRun{gas: EIP7825_TX_GAS_CAP}(type(uint32).max);
         used = beforeGas - gasleft();
         assertLe(used, GAS_TARGET, "each indivisible resume checkpoint fits the existing 10M target");
     }
@@ -500,7 +500,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address human = makeAddr("v_human");
         vm.deal(human, 5 ether);
         vm.prank(human);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         _stampNewDay(0xA0F1);
         address[] memory subject = new address[](1);
@@ -514,7 +514,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Afking), "LIVE-01(a): the AFKing stage is the engine's next work");
         vm.recordLogs();
         vm.prank(makeAddr("v_opener"));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_minerFirstAction(vm.getRecordedLogs()), uint8(DegenerusGameStorage.MinerAction.Afking), "LIVE-01(a): afking-first -- the call opened with the AFKing stage");
 
         // Afking-first: the afking box opened (no longer pending).
@@ -553,7 +553,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 before = _openedCount(subs);
             vm.prank(makeAddr(string(abi.encodePacked("vd_op_", _u(c)))));
             uint256 gb = gasleft();
-            (bool ok,) = address(game).call{gas: 1_500_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: 1_500_000}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 g = gb - gasleft();
             // LIVE-01(c): each bounded engine chunk stays under the EIP per-tx ceiling.
             assertLt(g, EIP7825_TX_GAS_CAP, "LIVE-01(c): each bounded mineFlip chunk stays < 16,777,216");
@@ -583,7 +583,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
         // LIVE-01(d): a further engine call opens nothing on the drained backlog — no double-open.
         vm.prank(makeAddr("vd_reopen"));
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         for (uint256 i; i < n; ++i) {
             assertFalse(_isPending(subs[i]), "LIVE-01(d): re-running the engine on an already-drained backlog opens nothing (no double-open)");
         }
@@ -623,7 +623,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
         // And the canonical path (the engine) DOES open it — the non-vacuity control.
         vm.prank(makeAddr("vsel_op"));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertFalse(_isPending(afk), "LIVE-01(e) control: the engine's AFKing stage DOES open the afking box");
     }
 
@@ -707,7 +707,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _warpToBoundary(false);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         advGas = gasBefore - gasleft();
 
         require(_subscriberCount() < preCount, "evict non-vacuity: the stage funding-killed subs");
@@ -737,7 +737,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _warpToBoundary(landOnSettleDay);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         advGas = gasBefore - gasleft();
 
         // Non-vacuity: the pass completed and every measured lootbox sub bought its box.
@@ -847,7 +847,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _finishIndexedReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineRun(0);
         require(mockVRF.lastRequestId() > before, "fixture: the new day's request is in flight");
     }
 
@@ -860,7 +860,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // the closing call; it only waits for its word (no work), and is not part of this session.
         for (uint256 i; i < 200 && game.advanceDue(); ++i) {
             uint256 g0 = gasleft();
-            game.mineFlip(0);
+            game.mineRun(0);
             total += g0 - gasleft();
         }
         require(!game.advanceDue() && !game.rngLocked(), "fixture: the session completed");
@@ -882,7 +882,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 snap = vm.snapshotState();
             bool stepped;
             for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
-                try game.mineFlip{gas: g}(0) {
+                try game.mineRun{gas: g}(0) {
                     if (_allPending(subjects)) stepped = true;
                     else require(vm.revertToState(snap), "snapshot");
                 } catch {
@@ -913,7 +913,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             // reports no advance work, so it is answered before the idle check.
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
     }
 
@@ -923,7 +923,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 d; d < 240; d++) {
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
     }
 
@@ -1150,7 +1150,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         vm.cool(address(game)); // re-cold all game storage -> each Sub slot is a cold first-touch in the STAGE
         uint256 gasBefore = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         advGas = gasBefore - gasleft();
 
         require(_endpoint() > endpointBefore, "cold marginal non-vacuity: the pass completed");
@@ -1185,7 +1185,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         vm.cool(address(game)); // re-cold all game storage -> the finalize cross-contract read is a cold touch
         uint256 gasBefore = gasleft();
-        game.mineFlip(0);
+        game.mineRun(0);
         advGas = gasBefore - gasleft();
 
         require(_subscriberCount() < preCount, "cold evict non-vacuity: the stage funding-killed subs");
@@ -1214,7 +1214,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             + MineFlipGas.CHECK_RESERVE - 1;
         vm.recordLogs();
         vm.cool(address(game));
-        game.mineFlip{gas: insufficient}(0);
+        game.mineRun{gas: insufficient}(0);
         assertEq(_recordNativeEvictions(vm.getRecordedLogs()), 0, "LIVE: no eviction before complete-item admission");
         assertEq(_subscriberCount(), count + protocolMembers);
         _assertNativeEvictionCheckpoint(players, originalSubs);
@@ -1236,7 +1236,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             vm.recordLogs();
             vm.cool(address(game));
             uint256 gasBefore = gasleft();
-            game.mineFlip{gas: NATIVE_EVICTION_CALL_GAS}(0);
+            game.mineRun{gas: NATIVE_EVICTION_CALL_GAS}(0);
             uint256 callGas = gasBefore - gasleft();
             uint256 evicted = _recordNativeEvictions(vm.getRecordedLogs());
             uint256 remaining = count - totalEvicted;
@@ -1324,7 +1324,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertGt(game.currentWallDayView(), initialWall + 1, "several resets elapsed");
         assertEq(_dailyIdx(), initialDay, "elapsed resets create no logical rounds");
         assertTrue(game.advanceDue(), "a fresh daily commitment is due");
-        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "bounded preparation reaches the daily request");
         assertEq(_dailyIdx(), initialDay + 1, "one accepted request advances once");
 
@@ -1345,7 +1345,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         while (game.rngLocked() && consumeCalls < DRAIN_MAX_ITERATIONS) {
             vm.recordLogs();
             // One mandatory unit isolates each still-locked step from later unlocked work.
-            game.mineFlip{gas: 16_777_216}(type(uint32).max);
+            game.mineRun{gas: 16_777_216}(type(uint32).max);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length; ++i) {
                 assertTrue(logs[i].topics.length == 0 || logs[i].topics[0] != deliveredSig,

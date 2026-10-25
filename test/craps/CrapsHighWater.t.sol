@@ -658,7 +658,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
 
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(alice);
-        craps.enterBonusBattle(PER, _chips(), 1);
+        craps.throwCraps(PER, _chips(), 1);
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 5 hours);
@@ -733,11 +733,11 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         craps.openBonusDay();
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(alice);
-        craps.enterBonusBattle(PER, _chips(), 1);
+        craps.throwCraps(PER, _chips(), 1);
         vm.prank(bob);
-        craps.enterBonusBattle(PER, _chips(), 1);
+        craps.throwCraps(PER, _chips(), 1);
         vm.prank(carol);
-        craps.enterBonusBattle(PER, _chips(), 1);
+        craps.throwCraps(PER, _chips(), 1);
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 5 hours);

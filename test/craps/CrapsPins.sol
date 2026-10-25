@@ -182,13 +182,13 @@ contract MockFlip {
         burnRefused[target] = refused;
     }
 
-    function burnCoin(address target, uint256 amount) external {
+    function burnCoin_g27673(address target, uint256 amount) external {
         if (burnRefused[target]) revert MockBurnRefused();
         burned[target] += amount;
         totalBurned += amount;
     }
 
-    function mintForGame(address to, uint256 amount) external {
+    function mintForGame_g152734(address to, uint256 amount) external {
         minted[to] += amount;
         totalMinted += amount;
     }
@@ -216,7 +216,7 @@ contract MockFlip {
 
     error MockCompLaneShort();
 
-    function creditCrapsComps(uint256 amount) external {
+    function creditCrapsComps_g37225(uint256 amount) external {
         compLane += uint128(amount);
         ++compAccruals;
     }
@@ -228,7 +228,7 @@ contract MockFlip {
     /// @dev The wallet ID the table passed with the last paid burn.
     uint32 public lastCrapsId;
 
-    function burnCoinForCraps(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 mask) {
+    function burnCoinForCraps_g292454(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 mask) {
         if (burnRefused[target]) revert MockBurnRefused();
         uint256 gross = grossAndFlags >> 8;
         lastCrapsFlags = uint8(grossAndFlags);

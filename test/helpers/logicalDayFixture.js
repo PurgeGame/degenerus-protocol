@@ -55,7 +55,7 @@ export async function requestLogicalDay(game, signer, vrf, word) {
   for (let i = 0; i < 300 && (await game.currentDayView_g542950()) === previous; ++i) {
     const pending = await vrf.lastRequestId();
     if (pending && !(await vrf.pendingRequests(pending))[2]) await vrf.fulfillRandomWords(pending, 777n);
-    await game.connect(signer).mineFlip(0xffffffff, { gasLimit: 16_777_216 });
+    await game.connect(signer).mineRun(0xffffffff, { gasLimit: 16_777_216 });
   }
   if ((await game.currentDayView_g542950()) !== previous + 1n || !(await game.rngLocked()))
     throw new Error("next logical request did not commit");
@@ -67,6 +67,6 @@ export async function requestLogicalDay(game, signer, vrf, word) {
 export async function completeLogicalDay(game, signer, vrf, word) {
   await requestLogicalDay(game, signer, vrf, word);
   for (let i = 0; i < 300 && !(await game.dailySessionState())[0]; ++i)
-    await game.connect(signer).mineFlip(0xffffffff, { gasLimit: 16_777_216 });
+    await game.connect(signer).mineRun(0xffffffff, { gasLimit: 16_777_216 });
   if (!(await game.dailySessionState())[0]) throw new Error("daily read certificate did not complete");
 }

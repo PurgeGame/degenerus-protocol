@@ -76,7 +76,7 @@ contract AccountRuleGame is DeployProtocol {
 
     function _buyTicket(address who) private {
         vm.prank(who);
-        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _createSmurf() private returns (uint32 id, uint32 key) {
@@ -120,7 +120,7 @@ contract AccountRuleGame is DeployProtocol {
 
     function _flip(address who, uint256 amount) private {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     /// @dev Open the FLIP redemption window: the next pool clears the level-1 target.
@@ -281,7 +281,7 @@ contract AccountRuleGame is DeployProtocol {
         vm.expectEmit(true, false, false, false, address(game));
         emit LootBoxBuy(_fixtureId(smurfId), 0, 0, 0);
         vm.prank(owner);
-        game.purchase{value: price + box + extra}(
+        game.purchaseOrderFor{value: price + box + extra}(
             smurfId, 400, BoxOrderLib.boCustom(box), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
@@ -297,7 +297,7 @@ contract AccountRuleGame is DeployProtocol {
         _seedClaimable(smurfId, 1 ether);
         _seedClaimable(ownerId, 1 ether);
         vm.prank(owner);
-        game.purchase(smurfId, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor(smurfId, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(_fixtureClaimable(smurfId), 1 ether - price, "the smurf's claimable spent");
         assertEq(_fixtureClaimable(owner), 1 ether, "the owner's untouched");
     }
@@ -305,15 +305,15 @@ contract AccountRuleGame is DeployProtocol {
     function test_StrangerPurchaseForSmurf_NotApproved() public {
         vm.prank(stranger);
         vm.expectRevert(NotApproved.selector);
-        game.purchase{value: price}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.prank(stranger);
         vm.expectRevert(NotApproved.selector);
-        game.purchase{value: price}(ownerId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(ownerId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         // An operator of the owner's ID is a stranger to the smurf.
         _approve(owner, 0, operator);
         vm.prank(operator);
         vm.expectRevert(NotApproved.selector);
-        game.purchase{value: price}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @notice An operator approved on the smurf buys for it with its own ETH. Overpay credits the
@@ -323,18 +323,18 @@ contract AccountRuleGame is DeployProtocol {
         uint32 smurfOwed = _fixtureEntries(1, smurfId);
         uint256 opEth = operator.balance;
         vm.prank(operator);
-        game.purchase{value: price}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(operator.balance, opEth - price, "the operator's ETH paid");
         assertGt(_fixtureEntries(1, smurfId), smurfOwed, "tickets to the smurf");
 
         vm.prank(operator);
         vm.expectRevert(E.selector);
-        game.purchase{value: price + 1 ether}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price + 1 ether}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         uint32 opId = _giveWalletId(operator);
         uint256 ownerAfk = _fixtureAfking(owner);
         vm.prank(operator);
-        game.purchase{value: price + 1 ether}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price + 1 ether}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(_fixtureAfking(operator), 1 ether, "overpay to the paying operator's ID");
         assertEq(_fixtureAfking(owner), ownerAfk, "not the owner's");
         assertEq(_fixtureAfking(smurfId), 0, "not the smurf's");
@@ -388,7 +388,7 @@ contract AccountRuleGame is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit WinningsClaimed(_fixtureId(smurfId), 1 ether - 1, 1);
         vm.prank(owner);
-        game.claimWinnings(smurfId);
+        game.claimClaimable(smurfId);
         assertEq(owner.balance, ownerEth + 1 ether - 1, "paid to the owner");
         assertEq(_fixtureClaimable(smurfId), 1, "the smurf's ledger debited to the sentinel");
 
@@ -439,14 +439,14 @@ contract AccountRuleGame is DeployProtocol {
         _fundAfking(smurfId, 1 ether);
         vm.prank(stranger);
         vm.expectRevert(NotApproved.selector);
-        game.claimWinnings(smurfId);
+        game.claimClaimable(smurfId);
         vm.prank(stranger);
         vm.expectRevert(NotApproved.selector);
         game.withdrawAfkingFunding(smurfId, 1);
         _approve(owner, 0, operator); // the owner's-ID operator is a stranger to the smurf
         vm.prank(operator);
         vm.expectRevert(NotApproved.selector);
-        game.claimWinnings(smurfId);
+        game.claimClaimable(smurfId);
         vm.prank(operator);
         vm.expectRevert(NotApproved.selector);
         game.withdrawAfkingFunding(smurfId, 1);
@@ -581,7 +581,7 @@ contract AccountRuleGame is DeployProtocol {
         uint256 slot0 = uint256(vm.load(address(game), levelSlot));
         uint256 levelMask = uint256(0xFFFFFF) << (GameSlots.LEVEL_OFFSET * 8);
         vm.store(address(game), levelSlot, bytes32((slot0 & ~levelMask) | (uint256(1) << (GameSlots.LEVEL_OFFSET * 8))));
-        assertEq(game.level(), 1, "fixture: level 1");
+        assertEq(game.currentLvl(), 1, "fixture: level 1");
         assertEq(game.walletIdOf_g3120(stranger), 0, "fixture: the caller holds no ID");
         vm.prank(stranger);
         vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));

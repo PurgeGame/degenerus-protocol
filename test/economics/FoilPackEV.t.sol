@@ -29,7 +29,7 @@ contract FoilPackEV is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _advance() internal {
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {
@@ -70,7 +70,7 @@ contract FoilPackEV is DeployProtocol {
     }
 
     function _runScenario(uint256 nPurchaseDays) internal returns (Result memory r) {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 priceWei = PriceLookupLib.priceForLevel(lvl + 1);
         uint256 foilCost = 10 * priceWei; // FOIL_PACK_TICKETS = 10
         uint256 ticketQty = (foilCost * 4 * 100) / priceWei; // one whole ticket = 4*TICKET_SCALE units
@@ -83,7 +83,7 @@ contract FoilPackEV is DeployProtocol {
             fb[i] = makeAddr(string(abi.encodePacked("foil", vm.toString(i))));
             vm.deal(fb[i], 1_000 ether);
             vm.prank(fb[i]);
-            try game.purchase{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
+            try game.purchaseOrderFor{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
                 r.foilSpend += foilCost;
             } catch {}
             fid[i] = game.walletIdOf_g3120(fb[i]);
@@ -92,7 +92,7 @@ contract FoilPackEV is DeployProtocol {
             tb[i] = makeAddr(string(abi.encodePacked("tkt", vm.toString(i))));
             vm.deal(tb[i], 1_000 ether);
             vm.prank(tb[i]);
-            try game.purchase{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchaseOrderFor{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
                 r.ticketSpend += foilCost;
             } catch {}
         }
@@ -107,9 +107,9 @@ contract FoilPackEV is DeployProtocol {
 
         for (uint256 d = 0; d < nPurchaseDays + 50; d++) {
             if (!game.jackpotPhase()) {
-                uint256 pw = PriceLookupLib.priceForLevel(game.level() + 1);
+                uint256 pw = PriceLookupLib.priceForLevel(game.currentLvl() + 1);
                 vm.prank(whale);
-                try game.purchase{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+                try game.purchaseOrderFor{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             } else {
                 r.jackpotReached = true;
             }
@@ -129,7 +129,7 @@ contract FoilPackEV is DeployProtocol {
         }
 
         uint24 endDay = game.currentDayView_g542950();
-        r.endLevel = game.level();
+        r.endLevel = game.currentLvl();
 
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
             r.foilValue += _realizedValue(fb[i]);

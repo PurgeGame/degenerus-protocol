@@ -43,7 +43,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
     function _settleClaimAt(uint256 budget) internal {
         uint256 before = _cursor();
         _work(budget);
-        assertTrue(_cursor() == before + 1 || !sdgnrs.redemptionSettlementPending());
+        assertTrue(_cursor() == before + 1 || !sdgnrs.redemptionSettlementPending_g153837());
     }
     function _settleOneClaim() internal { _settleClaimAt(_oneClaimAllowance()); }
     /// @dev Close and resolve using an actual batch word whose roll matches the fixture.
@@ -74,7 +74,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         assertEq(a, 0);
         assertEq(b, 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertFalse(game.rngLocked());
     }
 
@@ -105,7 +105,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
     }
 
     function _assertCohortPaid(uint32 day) internal {
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(_claimTokens(alice, day), 0);
         assertEq(_claimTokens(bob, day), 0);
@@ -315,7 +315,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         uint256 second = _oneClaimAllowance();
         vm.getRecordedLogs(); // Drop the probes' events.
         _settleClaimAt(second);
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         digest = _logDigest(digest, vm.getRecordedLogs());
         assertEq(_transcriptOf(digest), automatic, "per-claim calls use the frozen cohort word");
         assertTrue(vm.revertToState(snapshot));
@@ -328,10 +328,10 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         // A burner holds a wallet ID: the receiver gets one with a one-ticket purchase.
         vm.deal(address(receiver), 1 ether);
         vm.prank(address(receiver));
-        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 amount = sdgnrs.totalSupply() / 1000;
         vm.prank(address(game));
-        assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(receiver), amount), amount);
+        assertEq(sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Whale, address(receiver), amount), amount);
         uint32 day = _openBatchId();
         _burn(address(receiver), sdgnrs.balanceOf(address(receiver)));
         _resolve(day, 100, 99);

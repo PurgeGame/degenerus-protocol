@@ -18,7 +18,7 @@ import {
  *
  * checkAndClearExpiredBoon (see test/fuzz/WhaleBoonExpiry.t.sol) sweeps a lapsed
  * lootbox-rolled or stale deity-stamped whale lane, but that sweep only runs on the
- * lootbox-open path (_boxBoonContext). The deity gift path -- issueDeityBoon ->
+ * lootbox-open path (_boxBoonContext). The deity gift path -- giveBoon ->
  * _applyBoon -- never calls the sweep, so before this fix a dead lane's stale
  * `existingTier` silently blocked a fresh (even lower-tier) deity gift forever:
  * `newTier > existingTier` compared the incoming tier against a tier that was never
@@ -119,7 +119,7 @@ describe("WhaleBoonDeityLapse", function () {
         await settleRngDay(game, deployer, mockVRF, BigInt(seedBase + dayOffset));
       } catch (error) {
         const state = { offset: dayOffset, logical: String(await game.currentDayView_g542950()),
-          wall: String(await game.currentWallDayView()), level: String(await game.level()),
+          wall: String(await game.currentWallDayView()), level: String(await game.currentLvl()),
           action: String(await game.nextMinerAction()), complete: (await game.dailySessionState())[0],
           locked: await game.rngLocked(), over: await game.gameOver() };
         console.log("Whale menu driver state:", JSON.stringify(state));
@@ -160,7 +160,7 @@ describe("WhaleBoonDeityLapse", function () {
     expect(before.deityWhaleDay).to.equal(0n, "seeded lane must be lootbox-rolled (deityWhaleDay 0)");
 
     // Before the fix this would be a silent no-op: newTier(1) <= existingTier(3).
-    await game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
+    await game.connect(alice).giveBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
 
     const after_ = await readWhaleLane(game, bob.address);
     expect(after_.tier).to.equal(1n, "dead lane must accept the fresh (lower) deity gift, tier 1");
@@ -185,7 +185,7 @@ describe("WhaleBoonDeityLapse", function () {
     const before = await readWhaleLane(game, bob.address);
     expect(before.tier).to.equal(3n, "seeded tier must start at 3");
 
-    await game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
+    await game.connect(alice).giveBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
 
     const after_ = await readWhaleLane(game, bob.address);
     expect(after_.tier).to.equal(3n, "live tier-3 lane must reject the lower (tier 1) gift");

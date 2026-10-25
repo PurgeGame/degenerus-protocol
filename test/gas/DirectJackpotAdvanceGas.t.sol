@@ -74,7 +74,7 @@ contract DirectJackpotAdvanceGasTest is DeployProtocol {
             vm.cool(ContractAddresses.GAME_TICKET_MODULE);
             vm.recordLogs();
             uint256 before = gasleft();
-            game.mineFlip{gas: supplied}(0);
+            game.mineRun{gas: supplied}(0);
             uint256 used = before - gasleft() + 21_192;
             if (used > maxGas) maxGas = used;
             assertLt(used, 10_000_000);

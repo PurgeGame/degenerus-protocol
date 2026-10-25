@@ -93,7 +93,7 @@ contract VaultSweepTest is DeployProtocol {
         uint256 allowanceBefore = coin.vaultMintAllowance();
 
         vm.prank(address(game));
-        coin.mintForGame(address(vault), 1_000 ether);
+        coin.mintForGame_g152734(address(vault), 1_000 ether);
 
         assertEq(coin.balanceOf(address(vault)), 0, "FLIP landed as a vault balance");
         assertEq(

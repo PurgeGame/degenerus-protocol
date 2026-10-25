@@ -235,7 +235,7 @@ contract AdvanceLivenessHandler is Test {
         if (next != uint8(DegenerusGameStorage.MinerAction.Afking)
             && next != uint8(DegenerusGameStorage.MinerAction.HumanBoxes)) return;
         vm.prank(a);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         ok;
     }
 
@@ -269,9 +269,9 @@ contract AdvanceLivenessHandler is Test {
             bool ok;
             if ((bits >> (32 + (i % 32))) & 1 != 0) {
                 vm.prank(_actor(bits >> 64));
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             }
             if (!ok && (bits >> 100) & 1 == 0) break;
         }
@@ -381,7 +381,7 @@ contract AdvanceLivenessHandler is Test {
         uint256 n = bound(seed >> 48, 1, 30);
         for (uint256 i = 0; i < n; i++) {
             vm.prank(a);
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
         lvl;
@@ -435,7 +435,7 @@ contract AdvanceLivenessHandler is Test {
             address probe = address(uint160(0xC4A95));
             vm.deal(probe, 1 ether);
             vm.prank(probe);
-            try game.purchase{value: 0.01 ether}(
+            try game.purchaseOrderFor{value: 0.01 ether}(
                 0, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
             vm.prank(ContractAddresses.ADMIN);
@@ -445,7 +445,7 @@ contract AdvanceLivenessHandler is Test {
             if (game.minerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) {
                 uint256 prior = vrf.lastRequestId();
                 vm.prank(probe);
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 ok = ok && vrf.lastRequestId() > prior;
             }
             if (ok) {
@@ -479,7 +479,7 @@ contract AdvanceLivenessHandler is Test {
         for (cranks = 0; cranks < MAX_CRANKS; cranks++) {
             if (game.gameOver()) return (true, bytes4(0), cranks);
             _fulfillPending();
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) {
                 // One engine selects every action (60d31f775): its idle stop is NoWork().
                 return (true, _sel(ret), cranks);
@@ -581,7 +581,7 @@ contract AdvanceLivenessHandler is Test {
         if (game.minerAction() != uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return;
         uint256 prior = vrf.lastRequestId();
         vm.prank(who);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         if (!ok || vrf.lastRequestId() == prior) return;
         ghost_middayRequests++;
         if (who == address(uint160(0xD0D0D0))) ghost_middayAsCraps++;
@@ -601,12 +601,12 @@ contract AdvanceLivenessHandler is Test {
             bool ok;
             if (useMineFlip) {
                 vm.prank(actors[0]);
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (ok && !game.advanceDue()) {
-                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                    (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 }
             } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             }
             if (!ok) return;
         }
@@ -616,7 +616,7 @@ contract AdvanceLivenessHandler is Test {
         if (game.gameOver()) return;
         (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(a);
-        try game.purchase{value: priceWei * tickets}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: priceWei * tickets}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_ticketBuys++;
         } catch {}
     }
@@ -624,7 +624,7 @@ contract AdvanceLivenessHandler is Test {
     function _buyLootbox(address a, uint256 amount) internal {
         if (game.gameOver()) return;
         vm.prank(a);
-        try game.purchase{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_lootboxBuys++;
         } catch {}
     }
@@ -634,7 +634,7 @@ contract AdvanceLivenessHandler is Test {
         (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(a);
         // overpay is credited to the payer's afking balance, never reverts
-        try game.purchase{value: priceWei * 80}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
+        try game.purchaseOrderFor{value: priceWei * 80}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
             ghost_foilBuys++;
         } catch {}
     }

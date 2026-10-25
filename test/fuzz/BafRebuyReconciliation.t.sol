@@ -103,7 +103,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         uint256 simTime = block.timestamp; // starts at 86400 (deploy time)
 
         for (uint256 day = 0; day < 600; day++) {
-            uint24 currentLevel = game.level();
+            uint24 currentLevel = game.currentLvl();
             if (game.gameOver()) break;
             // Stop once level > 10 (the level-10 jackpot phase has ended).
             if (currentLevel > 10) break;
@@ -120,17 +120,17 @@ contract BafRebuyReconciliationTest is DeployProtocol {
             for (uint256 j = 0; j < 50; j++) {
                 _fulfillVrfIfPending();
                 // The last-purchase request pre-increments the level: the consolidation is next.
-                if (!stageChecked && game.level() == 10 && !game.jackpotPhase()) {
+                if (!stageChecked && game.currentLvl() == 10 && !game.jackpotPhase()) {
                     _checkLevelTenBaf();
                     stageChecked = true;
                     continue;
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }
 
-        uint24 finalLevel = game.level();
+        uint24 finalLevel = game.currentLvl();
         emit log_named_uint("Final level reached", finalLevel);
         assertTrue(stageChecked, "the level-10 BAF consolidation and award stage were observed");
         assertGt(finalLevel, 10, "Game advanced past level 10 (BAF trigger level)");
@@ -150,7 +150,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         for (uint256 i; i < 256; ++i) {
             _fulfillVrfIfPending();
             uint256 snap = vm.snapshotState();
-            (bool ok, ) = address(game).call{gas: 6_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call{gas: 6_000_000}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (game.jackpotPhase()) {
                 vm.revertToState(snap);
                 break;
@@ -158,7 +158,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
             vm.deleteStateSnapshot(snap);
             if (!ok) break;
         }
-        assertTrue(game.rngLocked() && !game.jackpotPhase() && game.level() == 10, "parked before consolidation");
+        assertTrue(game.rngLocked() && !game.jackpotPhase() && game.currentLvl() == 10, "parked before consolidation");
         vm.etch(address(game), type(BafRebuyHost).runtimeCode);
         BafRebuyHost host = BafRebuyHost(payable(address(game)));
         // The engine step that enters the jackpot phase can also carry the daily legs before
@@ -320,7 +320,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         }
 
         vm.prank(who);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0,
             qty,
             0,
@@ -339,11 +339,11 @@ contract BafRebuyReconciliationTest is DeployProtocol {
 
         uint256 randomWord = uint256(keccak256(abi.encode(
             block.timestamp,
-            game.level(),
+            game.currentLvl(),
             reqId
         )));
         // The level-10 transition word decides the BAF flip: force the winning branch.
-        if (game.level() == 10 && !game.jackpotPhase()) {
+        if (game.currentLvl() == 10 && !game.jackpotPhase()) {
             while (uint256(keccak256(abi.encode(uint256(61), randomWord))) & 1 == 0) ++randomWord;
         }
 

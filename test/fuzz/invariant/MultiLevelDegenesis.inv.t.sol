@@ -23,16 +23,16 @@ contract MultiLevelDegenesisTurbo is MultiLevelInvariant, DegenesisWeekOpening {
     function setUp() public override {
         _deployProtocol();
         _degenesisWeek(_turbo());
-        levelAtHandoff = game.level();
+        levelAtHandoff = game.currentLvl();
         mlHandler = new MultiLevelHandler(game, mockVRF, 15);
         mlHandler.scriptedOpening();
-        assertGe(game.level(), mlHandler.OPENING_LEVEL(), "MultiLevel: the scripted opening must reach its level");
+        assertGe(game.currentLvl(), mlHandler.OPENING_LEVEL(), "MultiLevel: the scripted opening must reach its level");
         targetContract(address(mlHandler));
     }
 
     /// @notice The opening counts only the levels it raised: from the level the Degenesis week left.
     function test_openingReachesLevelTen() public view override {
-        assertGe(uint256(game.level()), mlHandler.OPENING_LEVEL(), "opening level");
+        assertGe(uint256(game.currentLvl()), mlHandler.OPENING_LEVEL(), "opening level");
         assertGe(mlHandler.ghost_levelTransitions(), mlHandler.OPENING_LEVEL() - levelAtHandoff, "each level was a recorded transition");
         assertLe(mlHandler.openingDays(), mlHandler.OPENING_MAX_DAYS(), "opening bound");
     }

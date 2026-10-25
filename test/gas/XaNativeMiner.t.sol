@@ -73,9 +73,9 @@ contract XaNativeMinerTest is DeployProtocol, NativeGasExport {
         vm.txGasPrice(1 gwei);
         uint256 snapshot = vm.snapshotState();
         vm.prank(MINER);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertGt(coinflip.coinflipAmount(MINER), 0, "fixture must earn a positive miner stake");
         assertTrue(vm.revertToState(snapshot));
-        _nativeFixture("human_miner_reward_300", MINER, address(game), abi.encodeCall(game.mineFlip, (0)));
+        _nativeFixture("human_miner_reward_300", MINER, address(game), abi.encodeCall(game.mineRun, (0)));
     }
 }

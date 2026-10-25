@@ -56,7 +56,7 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
             _erc20Transfer(dgvf, a, dgvfSupply / 100);
             vm.stopPrank();
             vm.startPrank(address(game));
-            coin.mintForGame(a, 1_000_000);
+            coin.mintForGame_g152734(a, 1_000_000);
             wwxrp.mintPrize(a, 100_000);
             vm.stopPrank();
         }
@@ -75,7 +75,7 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
             }
             vm.stopPrank();
         }
-        // Deity holders (actors 0, 2, 4) so issueDeityBoon / smite / decurse are reachable.
+        // Deity holders (actors 0, 2, 4) so giveBoon / smite / decurse are reachable.
         vm.prank(actors[0]);
         game.purchaseDeityPass{value: 45 ether}(0, 3, bytes32(0));
         vm.prank(actors[2]);
@@ -106,7 +106,7 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
         game.depositAfkingFunding{value: 5 ether}(game.walletIdOf_g3120(BYSTANDER));
         game.purchaseDeityPass{value: 45 ether}(0, 5, bytes32(0)); // overpay lands in its own afking
         (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
-        game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.stopPrank();
         _dgnrsFromVault(BYSTANDER, 1_000_000e12);
         vm.startPrank(ContractAddresses.CREATOR);

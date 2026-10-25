@@ -332,7 +332,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             address who = address(uint160(uint256(keccak256(abi.encode("seat", i)))));
             game.setScore(who, craps.SYBIL_SCORE_FLOOR());
             vm.prank(who);
-            craps.enterBonusBattle(PER, SEVEN, 1);
+            craps.throwCraps(PER, SEVEN, 1);
         }
         slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(block.timestamp + 5 hours);

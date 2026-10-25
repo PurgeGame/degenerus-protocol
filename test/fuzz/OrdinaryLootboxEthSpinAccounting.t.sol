@@ -74,16 +74,16 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         mockVRF.fundSubscription(1, 100e18);
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 50 && !game.rngLocked(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngLocked(), "bootstrap reached a real daily request");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertFalse(game.rngLocked(), "bootstrap daily processing finished");
         _settleIdle();
-        assertEq(game.level(), 0);
+        assertEq(game.currentLvl(), 0);
         vm.deal(PLAYER, 100 ether);
     }
 
@@ -99,7 +99,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
             }
             _finishReadConsumers();
             if (!game.advanceDue() && game.rngComplete()) return;
-            if (game.advanceDue()) game.mineFlip(0);
+            if (game.advanceDue()) game.mineRun(0);
         }
         revert("harness: cohorts never settled");
     }
@@ -113,12 +113,12 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}(0);
+        game.mineRun{gas: hi}(0);
     }
 
     function _index() private view returns (uint48) {
@@ -148,7 +148,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
 
     function _buy(uint256 size) private {
         vm.prank(PLAYER);
-        game.purchase{value: 0.01 ether + size}(
+        game.purchaseOrderFor{value: 0.01 ether + size}(
             0, 400, BoxOrderLib.boCustoms(1, size), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
@@ -363,7 +363,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         uint256 committed = uint256(id) | (uint256(1000) << 32) | (uint256(1) << 53) | (uint256(1) << 77);
         assertEq(_entry(index, position), committed, "real purchase committed score one, one unboosted 1 ETH box");
         // The purchase's pending ETH clears the threshold: the engine's mid-day request.
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0);
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
@@ -385,7 +385,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
             assertEq(BoxOrderLib.boId(_entry(index ^ 1, nextPos)), id, "second purchase remains an unrevealed entry");
         }
         assertEq(_entry(index, position), committed);
-        assertEq(game.level(), 0, "fixed live denomination");
+        assertEq(game.currentLvl(), 0, "fixed live denomination");
         bytes32 nextEntries = _entries(index ^ 1);
         Balances memory beforeState = _balances();
         (Expected memory e, bool carrier) = _reference(word, index, position, id, beforeState.future, beforeState.pools[2]);
@@ -396,7 +396,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         uint256 keeperFlip = coinflip.coinflipAmount(KEEPER);
         vm.recordLogs();
         vm.prank(KEEPER);
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // One parent spin and its one recirculated child: exactly one committed ordinary box consumed.
         _assertEvents(logs, e);
@@ -438,14 +438,14 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         // Replay probe: whatever the engine does next (or NoWork / a pending word), it opens nothing.
         vm.recordLogs();
         vm.prank(KEEPER);
-        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         replayed;
         assertEq(_boxResults(vm.getRecordedLogs()), 0, "spent parent and child cannot replay");
         assertEq(keccak256(abi.encode(_balances())), keccak256(abi.encode(afterState)), "replay has no balance effects");
 
         uint256 withdrawable = afterState.claimable - 1;
         vm.prank(PLAYER);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         assertEq(PLAYER.balance, afterState.playerEth + withdrawable, "cash credit is actually withdrawable");
         assertEq(address(game).balance + withdrawable, afterState.eth, "cash withdrawal backing debit");
         assertEq(game.claimablePoolView() + withdrawable, afterState.liability);

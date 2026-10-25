@@ -219,7 +219,7 @@ contract DegenesisDailyEngine is DegenesisFixture {
 
         _warpDay(GameTimeLib.MAIN_LAUNCH_DAY + 1, 1 hours);
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "the request went out on wall day 10");
         assertEq(_dailyIdx(), 9, "requested logical day is 9 before its result");
         assertTrue(_lastPurchaseDay(), "lastPurchaseDay latched");

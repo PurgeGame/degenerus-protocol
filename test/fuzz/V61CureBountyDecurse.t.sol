@@ -41,7 +41,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///   staleness basis maybeCurse uses is _currentMintDay() == dailyIdx (the monotonic advance counter, == 1 at
 ///   fresh deploy), so dailyIdx is seeded to 100 in setUp (field-isolated slot-0 RMW) — irrelevant to the CURE
 ///   itself (the curse is seeded directly) but kept consistent with the curse-SET harness. FLIP is minted
-///   via the GAME-gated coin.mintForGame; balances read via coin.balanceOf. Seeded-fuzz deterministic.
+///   via the GAME-gated coin.mintForGame_g152734; balances read via coin.balanceOf. Seeded-fuzz deterministic.
 ///   Test-only: ZERO contracts/*.sol mutation.
 contract V61CureBountyDecurse is DeployProtocol {
 
@@ -99,7 +99,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 cost = _oneTicketCost();
         vm.deal(p, cost);
         vm.prank(p);
-        game.purchase{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(p), 0, "direct ticket (fresh ETH) cures the curse");
     }
 
@@ -110,7 +110,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(p, 4);
         _seedClaimable(p, 100 ether); // funds the buy from claimable
         vm.prank(p);
-        game.purchase{value: 0}(0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor{value: 0}(0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(p), 0, "direct ticket (claimable) cures the curse (funding-agnostic)");
     }
 
@@ -122,7 +122,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 batchCost = _ticketCost(4000); // 10 tickets worth
         vm.deal(pe, batchCost);
         vm.prank(pe);
-        game.purchase{value: batchCost}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: batchCost}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "batched buy (fresh ETH) cures");
 
         // Claimable
@@ -130,7 +130,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(pc, 6);
         _seedClaimable(pc, 1000 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(0, 4000, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor{value: 0}(0, 4000, 0, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "batched buy (claimable) cures");
     }
 
@@ -144,14 +144,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 cost = _oneTicketCost();
         vm.deal(pe, cost);
         vm.prank(pe);
-        game.purchase{value: cost}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "affiliate-coded buy (fresh ETH) cures");
 
         address pc = makeAddr("cure_aff_claim");
         _seedCurse(pc, 8);
         _seedClaimable(pc, 100 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(0, 400, 0, code, MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor{value: 0}(0, 400, 0, code, MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "affiliate-coded buy (claimable) cures");
     }
 
@@ -164,14 +164,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(pe, 10);
         vm.deal(pe, boxAmount);
         vm.prank(pe);
-        game.purchase{value: boxAmount}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: boxAmount}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "lootbox>=ticket (fresh ETH) cures");
 
         address pc = makeAddr("cure_lb_claim");
         _seedCurse(pc, 10);
         _seedClaimable(pc, 100 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor{value: 0}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "lootbox>=ticket (claimable) cures");
     }
 
@@ -188,14 +188,14 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 total = ticketCost + boxAmount;
         vm.deal(pe, total);
         vm.prank(pe);
-        game.purchase{value: total}(0, 400, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: total}(0, 400, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(pe), 0, "ticket+lootbox bundle (fresh ETH) cures");
 
         address pc = makeAddr("cure_bundle_claim");
         _seedCurse(pc, 12);
         _seedClaimable(pc, 1000 ether);
         vm.prank(pc);
-        game.purchase{value: 0}(0, 400, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor{value: 0}(0, 400, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(game.curseCountOf(pc), 0, "ticket+lootbox bundle (claimable) cures");
     }
 
@@ -213,7 +213,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 fullCost = _oneTicketCost();
         vm.deal(cured, fullCost);
         vm.prank(cured);
-        game.purchase{value: fullCost}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: fullCost}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(cured), 0, "curing buy cleared the curse");
         uint256 curedScore = activityScoreOf(address(game), cured);
 
@@ -227,7 +227,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 subCost = _ticketCost(subUnits);
         vm.deal(notCured, subCost);
         vm.prank(notCured);
-        game.purchase{value: subCost}(0, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: subCost}(0, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(notCured), curse, "sub-ticket buy did NOT cure (still cursed)");
         uint256 notCuredScore = activityScoreOf(address(game), notCured);
 
@@ -277,7 +277,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 subCost = _ticketCost(subUnits);
         vm.deal(p, subCost);
         vm.prank(p);
-        game.purchase{value: subCost}(0, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: subCost}(0, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(_lastEthDayOf(p), 0, "sub-ticket buy below the minted floor does NOT stamp DAY_SHIFT");
         assertEq(game.curseCountOf(p), 2, "sub-ticket buy does NOT cure (totalCost < priceWei)");
@@ -286,7 +286,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         // DAY_SHIFT stamps; the sub-priceWei buy still cannot cure.
         vm.deal(p, subCost);
         vm.prank(p);
-        game.purchase{value: subCost}(0, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: subCost}(0, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(_lastEthDayOf(p), expectedMintDay, "crossing the whole-ticket floor stamps the saved mint day");
         assertEq(game.curseCountOf(p), 2, "crossing buy still does NOT cure (totalCost < priceWei)");
@@ -307,7 +307,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 boxAmount = _oneTicketCost();
         vm.deal(p, boxAmount);
         vm.prank(p);
-        game.purchase{value: boxAmount}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: boxAmount}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(_lastEthDayOf(p), 100, "whole-ticket-value box stamps the saved daily index");
         assertEq(game.curseCountOf(p), 0, "one-ticket-value plain lootbox cures the curse");
@@ -387,7 +387,7 @@ contract V61CureBountyDecurse is DeployProtocol {
 
     /// @dev Cost of `units` ticket-units at the active purchase level (4*TICKET_SCALE=100 units == 1 ticket).
     function _ticketCost(uint256 units) internal view returns (uint256) {
-        uint24 targetLevel = game.jackpotPhase() ? game.level() : game.level() + 1;
+        uint24 targetLevel = game.jackpotPhase() ? game.currentLvl() : game.currentLvl() + 1;
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         // ticketCost = priceWei * units / (4 * TICKET_SCALE); 4*TICKET_SCALE == 400 ⇒ 400 units == 1 ticket.
         return (priceWei * units) / 400;
@@ -469,10 +469,10 @@ contract V61CureBountyDecurse is DeployProtocol {
     // FLIP + affiliate helpers
     // =========================================================================
 
-    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (the established test pattern).
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame_g152734 (the established test pattern).
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     /// @dev Set the current HAS_DEITY_PASS bit — the activity-score deity bonus (80 points),

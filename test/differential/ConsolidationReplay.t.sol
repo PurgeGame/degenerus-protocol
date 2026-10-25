@@ -232,7 +232,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     {
         vm.pauseGasMetering();
         ++censusSeq;
-        if (to == address(game) && data.length >= 4 && bytes4(data) == game.mineFlip.selector) {
+        if (to == address(game) && data.length >= 4 && bytes4(data) == game.mineRun.selector) {
             vm.prank(from, from);
             label = string.concat(label, ":", vm.toString(game.nextMinerAction()));
         }
@@ -356,7 +356,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 if (ok && data.length == 32) console.log(string.concat("DIFFTOKEN|", _name(tokens[j]), "|", _name(a), "|", vm.toString(abi.decode(data, (uint256)))));
             }
         }
-        console.log(string.concat("DIFFCHECK|", vm.toString(++checkpoint), "|", vm.toString(uint256(game.nextMinerAction())), "|", vm.toString(uint256(game.level()))));
+        console.log(string.concat("DIFFCHECK|", vm.toString(++checkpoint), "|", vm.toString(uint256(game.nextMinerAction())), "|", vm.toString(uint256(game.currentLvl()))));
     }
 
     function _censusEnd() internal override {
@@ -399,7 +399,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         for (uint24 day = GameTimeLib.MAIN_LAUNCH_DAY; day < end; ++day) {
             _warpDay(day, 7200);
             _crank(1000 + day);
-            if (game.level() < 2 && !game.jackpotPhase()) {
+            if (game.currentLvl() < 2 && !game.jackpotPhase()) {
                 uint256 target = game.prizePoolTargetView() + 1;
                 uint256 nextPool = game.nextPrizePoolView();
                 if (nextPool < target) {
@@ -414,7 +414,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 MintPaymentKind.DirectEth, game.mintPrice() * 100);
             _crank(2000 + day);
         }
-        assertGt(game.level(), 1, "daily scenario crosses purchase and jackpot phases");
+        assertGt(game.currentLvl(), 1, "daily scenario crosses purchase and jackpot phases");
         for (uint24 day = end; day < end + 60 && !game.gameOver(); ++day) {
             _warpDay(day, 7200);
             _crank(9000 + day);
@@ -487,7 +487,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         _buy("ordinary-vault-ticket", address(vault), 400, 0, MintPaymentKind.Claimable, 0);
         _success("ordinary-vault-whale", address(vault), address(game), 0,
             abi.encodeCall(game.purchaseWhalePass, (uint32(0), uint256(1), bytes32(0))));
-        _ctx("purchase-revert", false, cast[2], address(game), 0, abi.encodeCall(game.purchase, (uint32(0), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
+        _ctx("purchase-revert", false, cast[2], address(game), 0, abi.encodeCall(game.purchaseOrderFor, (uint32(0), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
         // Affiliate is the actual caller of both registration hooks. The address-derived
         // referrer code allocates cast[4]'s permanent identity while cast[3] registers itself.
         _success("affiliate-registration-hooks", cast[3], address(affiliate), 0,
@@ -497,7 +497,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         // FoilPack -> Mint.purchaseWith buys the ticket leg; Quests -> Game raises the
         // subscriber's floor. Both execute through their production callers.
         _success("foil-ticket-and-floor-hook", cast[0], address(game), game.mintPrice() * 11,
-            abi.encodeCall(game.purchase, (id, uint256(400), uint256(0), bytes32(0), MintPaymentKind.DirectEth, true)));
+            abi.encodeCall(game.purchaseOrderFor, (id, uint256(400), uint256(0), bytes32(0), MintPaymentKind.DirectEth, true)));
         _success("raise-smurf-base", ContractAddresses.OWNER_GOVERNANCE, address(game), 0,
             abi.encodeCall(game.raiseSmurfBaseAllowance, (id, uint16(2))));
         (bool created, bytes memory smurfResult) = _ctx("create-smurf", false, cast[0], address(game), game.mintPrice(),
@@ -517,14 +517,14 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         ConsolidationSeed(address(game)).collateral(id);
         ConsolidationSeed(address(game)).redemptionWindow();
         vm.etch(address(game), runtime);
-        vm.prank(address(game)); coin.mintForGame(cast[0], 100_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(cast[0], 100_000);
         _success("redeem-flip", cast[0], address(game), 0,
             abi.encodeCall(game.redeemFlip, (id, uint256(400))));
         GameFunding.credit(2, 100 ether);
         _success("borrow", cast[0], address(game), 0, abi.encodeCall(game.borrow, (id, uint24(2), type(uint256).max, uint256(0))));
         uint256 owed = lens.loanOf(address(game), id).owed;
         assertGt(owed, 0);
-        _success("repay", cast[0], address(game), owed, abi.encodeCall(game.repay, (id)));
+        _success("repay", cast[0], address(game), owed, abi.encodeCall(game.clearDebtNow, (id)));
         // Restricted Vault budget is backed by the same Game pool and ETH.
         vm.store(address(game), bytes32(GameSlots.DEGENESIS_VAULT_BUDGET), bytes32(uint256(1 ether)));
         GameFunding.addPool(1 ether);
@@ -535,7 +535,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         assertEq(uint128(uint256(vm.load(address(game), bytes32(GameSlots.DEGENESIS_VAULT_BUDGET)))), 1 ether - game.mintPrice());
         _warpDay(2, 5 minutes);
         _crank(101);
-        _success("degenesis-buy", cast[1], address(game), 0.01 ether, abi.encodeCall(game.buyDegenesisBox, (uint32(0), uint256(0.01 ether))));
+        _success("degenesis-buy", cast[1], address(game), 0.01 ether, abi.encodeCall(game.purchaseDegenesisBox, (uint32(0), uint256(0.01 ether))));
         _checkpoint();
     }
 
@@ -577,15 +577,15 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         (bool denied,) = _ctx("hot-unauthorized-boon", false, cast[1], address(game), 0,
             abi.encodeCall(game.consumeCoinflipBoon_g2902, (id)));
         assertFalse(denied);
-        vm.prank(address(game)); coin.mintForGame(cast[0], 1000);
+        vm.prank(address(game)); coin.mintForGame_g152734(cast[0], 1000);
         _success("hot-eth-bet", cast[0], address(game), 0.01 ether,
-            abi.encodeCall(game.placeDegeneretteBet, (id, uint8(0), uint128(0.01 ether), uint8(1), uint8(1))));
+            abi.encodeCall(game.betDegenerette, (id, uint8(0), uint128(0.01 ether), uint8(1), uint8(1))));
         _success("hot-flip-bet", cast[0], address(game), 0,
-            abi.encodeCall(game.placeDegeneretteBet, (id, uint8(1), uint128(100), uint8(1), uint8(2))));
+            abi.encodeCall(game.betDegenerette, (id, uint8(1), uint128(100), uint8(1), uint8(2))));
         _success("hot-gift-bet", cast[1], address(game), 0.01 ether,
-            abi.encodeCall(game.placeDegeneretteBet, (id, uint8(0), uint128(0.01 ether), uint8(1), uint8(3))));
+            abi.encodeCall(game.betDegenerette, (id, uint8(0), uint128(0.01 ether), uint8(1), uint8(3))));
         for (uint8 slot; slot < 2; ++slot) _success("hot-deity-gift", cast[2], address(game), 0,
-            abi.encodeCall(game.issueDeityBoon, (issuer, id, slot)));
+            abi.encodeCall(game.giveBoon, (issuer, id, slot)));
         _success("hot-activity-cache", cast[1], address(game), 0,
             abi.encodeCall(game.playerActivityScoreCachedById_g975, (id)));
         uint32[8] memory slots;
@@ -609,7 +609,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
 
     uint256 private constant PURCHASE_TIER_SHIFT = 160;
     function _buy(string memory label, address buyer, uint256 quantity, uint256 box, MintPaymentKind kind, uint256 value) private {
-        (bool ok,) = _ctx(label, false, buyer, address(game), value, abi.encodeCall(game.purchase, (uint32(0), quantity, box, bytes32(0), kind, false)));
+        (bool ok,) = _ctx(label, false, buyer, address(game), value, abi.encodeCall(game.purchaseOrderFor, (uint32(0), quantity, box, bytes32(0), kind, false)));
         require(ok, label);
     }
 }

@@ -46,7 +46,7 @@ contract BoonStaticDiscard is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -54,7 +54,7 @@ contract BoonStaticDiscard is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
     }
@@ -112,7 +112,7 @@ contract BoonStaticDiscard is DeployProtocol {
 
             vm.recordLogs();
             vm.prank(player);
-            try game.mineFlip(0) {} catch { continue; }
+            try game.mineRun(0) {} catch { continue; }
 
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j = 0; j < logs.length; j++) {
@@ -144,7 +144,7 @@ contract BoonStaticDiscard is DeployProtocol {
         keccak256("DeityBoonIssued(uint32,uint32,uint24,uint8,uint8)");
 
     /// @notice Module-side twin of the viewer test: issue ALL THREE slots through the real
-    ///         issueDeityBoon path and read the emitted boonType. No slot may revert (the
+    ///         giveBoon path and read the emitted boonType. No slot may revert (the
     ///         always-issuable property) and no issued type may come from the excluded
     ///         families. This catches a band-arithmetic slip shared with the viewer mirror,
     ///         which the viewer-only test cannot.
@@ -168,7 +168,7 @@ contract BoonStaticDiscard is DeployProtocol {
             uint32 recipientId = game.walletIdOf_g3120(recipient);
             vm.recordLogs();
             vm.prank(deity);
-            game.issueDeityBoon(deityId, recipientId, s2);
+            game.giveBoon(deityId, recipientId, s2);
 
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool found;

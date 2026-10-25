@@ -46,7 +46,7 @@ describe("JackpotAffiliateBonus", function () {
   }
 
   async function buyFullTickets(game, buyer, n, totalEth, affiliateCode) {
-    return game.connect(buyer).purchase(
+    return game.connect(buyer).purchaseOrderFor(
       0,
       BigInt(n) * 400n,
       0n,

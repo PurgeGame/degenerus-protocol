@@ -24,7 +24,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///         balance is created ONLY through a real paired contract entrypoint:
 ///           depositAfkingFunding pairs `claimablePool += value` (the afking high half);
 ///           subscribe pulls approved stETH backed by the actor's own submitted ETH, then pays the daily buy;
-///           buyDegenesisBox holds the whole amount in `claimablePool` with no per-wallet owner until its
+///           purchaseDegenesisBox holds the whole amount in `claimablePool` with no per-wallet owner until its
 ///           cohort splits; the split (at a daily request) moves half to the prize pool and a quarter each to
 ///           the Vault's Degenesis budget (inside claimablePool, outside every claimable half) and sDGNRS afking;
 ///           spendDegenesis moves budget into a Vault purchase, pairing `claimablePool -=` the cost;
@@ -94,7 +94,7 @@ contract SolvencyActionHandler is Test {
     modifier useActor(uint256 seed) {
         currentActor = actors[bound(seed, 0, actors.length - 1)];
         _;
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         if (!SolvencyObligations.ticketViewMatches(game, lvl, currentActor)
             || !SolvencyObligations.ticketViewMatches(game, lvl + 1, currentActor)
             || !SolvencyObligations.ticketViewMatches(game, lvl + 100, currentActor)) {
@@ -248,7 +248,7 @@ contract SolvencyActionHandler is Test {
         }
         if (value > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.buyDegenesisBox{value: value}(0, amount) {
+        try game.purchaseDegenesisBox{value: value}(0, amount) {
             ghost_degenesisBuys++;
             ghost_degenesisVolume += amount;
             if (value < amount) ghost_degenesisClaimableFunded++;
@@ -263,7 +263,7 @@ contract SolvencyActionHandler is Test {
         uint256 ethSent = priceWei + lootBoxAmount;
         if (ethSent > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: ethSent}(0, 400, BoxOrderLib.boCustomFloor(lootBoxAmount), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: ethSent}(0, 400, BoxOrderLib.boCustomFloor(lootBoxAmount), bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_boxBuys++;
         } catch {}
     }
@@ -361,7 +361,7 @@ contract SolvencyActionHandler is Test {
         uint256 fresh = bound(freshSeed, 0, cost);
         if (fresh > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: fresh}(0, 0, 0, bytes32(0), MintPaymentKind.Combined, true) {
+        try game.purchaseOrderFor{value: fresh}(0, 0, 0, bytes32(0), MintPaymentKind.Combined, true) {
             ghost_foilBuys++;
         } catch {}
     }
@@ -376,7 +376,7 @@ contract SolvencyActionHandler is Test {
     function claim(uint256 actorSeed) external useActor(actorSeed) {
         calls_claim++;
         vm.prank(currentActor);
-        try game.claimWinnings(0) {
+        try game.claimClaimable(0) {
             ghost_claims++;
         } catch {}
     }
@@ -396,14 +396,14 @@ contract SolvencyActionHandler is Test {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         uint256 stethBefore = IStETH(ContractAddresses.STETH_TOKEN).balanceOf(address(game));
         uint256 rounds = dayWarpsEnabled ? 8 : 3;
         for (uint256 i; i < rounds; i++) {
             vm.prank(currentActor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);

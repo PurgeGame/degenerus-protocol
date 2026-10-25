@@ -57,7 +57,7 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
     function _request() internal returns (uint256) {
         for (uint256 i; i < 100; ++i) {
             if (game.rngLocked()) return mockVRF.lastRequestId();
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("daily request did not commit");
     }
@@ -66,7 +66,7 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
         for (uint256 i; i < 500; ++i) {
             (bool complete,,) = game.dailySessionState();
             if (complete) return;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("daily consumers did not complete");
     }
@@ -78,7 +78,7 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
             for (uint256 call; call < 200; ++call) {
                 (bool complete,,) = game.dailySessionState();
                 if (complete) break;
-                game.mineFlip{gas: 16_700_000}(type(uint32).max);
+                game.mineRun{gas: 16_700_000}(type(uint32).max);
             }
             (bool complete,,) = game.dailySessionState();
             assertTrue(complete, "mandatory phase includes its complete sealing tail");
@@ -178,11 +178,11 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
         _syncCoinflipFixtureDay(game.currentDayView_g542950());
         address late = address(0x1A7E);
         uint32 lateId = _giveWalletId(late);
-        vm.prank(address(game)); coin.mintForGame(late, 200_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(late, 200_000);
         uint256 rewardPool = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         uint256 shareSupply = sdgnrs.totalSupply();
         assertTrue(game.livenessTriggered());
-        vm.prank(late); coinflip.depositCoinflip(lateId, 200_000);
+        vm.prank(late); coinflip.playCoinflip(lateId, 200_000);
         assertEq(coin.balanceOf(late), 0);
         assertGe(coinflip.coinflipAmountById(lateId), 200_000);
         uint256 lateShares = sdgnrs.balanceOf(late);
@@ -198,7 +198,7 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
             vm.expectCall(address(mockVRF), requestSelector);
             for (uint256 i; i < 5; ++i) {
                 // Refused coordinator calls may report waiting or roll back the attempt.
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 ok;
             }
             assertEq(mockVRF.lastRequestId(), 0, "the coordinator never accepted the terminal request");
@@ -222,21 +222,21 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
                     if (!fulfilled) mockVRF.fulfillRandomWords(request, 777);
                 }
             }
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.gameOver());
         assertGt(game.gameOverTimestamp(), 0);
         assertEq(address(game).balance + mockStETH.balanceOf(address(game)), initial,
             "terminal accounting preserves every funded wei before pull claims/sweep");
         uint256 paidBefore = claimant.balance + mockStETH.balanceOf(claimant);
-        vm.prank(claimant); game.claimWinnings(claimantId);
+        vm.prank(claimant); game.claimClaimable(claimantId);
         uint256 paid = claimant.balance + mockStETH.balanceOf(claimant) - paidBefore;
         assertEq(paid, 12 ether, "prior awards and prepaid subscriptions remain withdrawable");
         address[3] memory sinks = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
         uint256 beforeFunds;
         for (uint256 i; i < 3; ++i) beforeFunds += sinks[i].balance + mockStETH.balanceOf(sinks[i]);
         vm.warp(uint256(game.gameOverTimestamp()) + 30 days);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 afterFunds;
         for (uint256 i; i < 3; ++i) afterFunds += sinks[i].balance + mockStETH.balanceOf(sinks[i]);
         assertEq(address(game).balance + mockStETH.balanceOf(address(game)), 0);

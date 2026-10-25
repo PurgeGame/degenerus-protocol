@@ -76,7 +76,7 @@ contract AfkingCompactTest is DeployProtocol {
     }
 
     function _price() private view returns (uint256) {
-        return PriceLookupLib.priceForLevel(game.level() + 1);
+        return PriceLookupLib.priceForLevel(game.currentLvl() + 1);
     }
 
     function _setBalances(uint32 id, uint256 prepaid, uint256 claimable) private {

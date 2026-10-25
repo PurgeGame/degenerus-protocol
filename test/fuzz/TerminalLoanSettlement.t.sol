@@ -128,7 +128,7 @@ abstract contract TerminalLoanBase is DeployProtocol {
     ///      settlement charges exactly this; at the due level it is the full term.
     function _owedNow(uint32 id) internal view returns (uint256) {
         DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), id);
-        uint256 lvl = game.level();
+        uint256 lvl = game.currentLvl();
         uint256 used = lvl > info.startLevel ? lvl - info.startLevel : 1;
         return info.principal * (10_000 + used * 500 + (uint256(info.dueLevel) - info.startLevel - used) * 100)
             / 10_000;
@@ -168,7 +168,7 @@ abstract contract TerminalLoanBase is DeployProtocol {
     /// @dev One engine call at `gasCap`. Waiting on a word is not a failure; anything else is.
     function _mine(uint256 gasCap) internal returns (bool ran) {
         (bool ok, bytes memory reason) =
-            address(game).call{gas: gasCap}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            address(game).call{gas: gasCap}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         if (ok) return true;
         if (reason.length == 4 && (bytes4(reason) == bytes4(keccak256("RngNotReady()"))
             || bytes4(reason) == bytes4(keccak256("NoWork()")))) return false;
@@ -293,7 +293,7 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         // bob: one wei short of the current price at due 3 (holding sDGNRS); defaults intact.
         uint32 b = _account(bob);
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, bob, 1e15);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, bob, 1e15);
         _borrow(bob, b, 3);
         uint256 owedB = _owedNow(b);
         _setBalances(b, owedB, 0);
@@ -423,13 +423,13 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         assertEq(early, _owedNow(mid), "manual repayment costs what settlement would charge");
         vm.deal(owners[index + 1], early);
         vm.prank(owners[index + 1]);
-        game.repay{value: early}(mid);
+        game.clearDebtNow{value: early}(mid);
         // And the last entry of level 7 repays too.
         uint32 last = ids[n - 1];
         uint256 lastOwed = lens.loanOf(address(game), last).owed;
         vm.deal(owners[n - 1], lastOwed);
         vm.prank(owners[n - 1]);
-        game.repay{value: lastOwed}(last);
+        game.clearDebtNow{value: lastOwed}(last);
 
         for (uint256 calls; calls < 100 && _anyOpen(); ++calls) {
             _mine(800_000);
@@ -625,7 +625,7 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;
         vm.prank(buyer);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     /// @dev Drive the real engine until the request that enters `target` has run; the word stays out.
@@ -651,11 +651,11 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
             _seedNextPrizePool(500 ether);
             _buyTickets(4000);
             for (uint256 j; j < 80; ++j) {
-                if (game.level() >= target) return day;
+                if (game.currentLvl() >= target) return day;
                 _fulfillLatest();
-                if (game.level() >= target) return day;
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-                if (game.level() >= target) return day;
+                if (game.currentLvl() >= target) return day;
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+                if (game.currentLvl() >= target) return day;
                 if (!ok) break;
             }
         }
@@ -678,7 +678,7 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
         uint256 requestedAt = vm.getBlockTimestamp();
         _fulfillLatest(); // the transition's word lands: VRF is alive
         vm.recordLogs();
-        game.mineFlip{gas: 800_000}(0); // the ordinary stage settles part of level 1's batch
+        game.mineRun{gas: 800_000}(0); // the ordinary stage settles part of level 1's batch
         uint256 cursorAfterOrdinary = uint32(uint256(vm.load(address(game), bytes32(uint256(GameSlots.LOAN_SEIZE_CURSOR))))
             >> (GameSlots.LOAN_SEIZE_CURSOR_OFFSET * 8));
         assertGt(cursorAfterOrdinary, 0, "part of the batch settled");

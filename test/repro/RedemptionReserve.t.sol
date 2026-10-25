@@ -107,7 +107,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         ordinary = game.claimableWinningsOf(address(sdgnrs));
         DegenerusGameLens lens = new DegenerusGameLens();
         uint32 borrower = game.walletIdOf_g3120(bob);
-        uint24 due = game.level() + 1;
+        uint24 due = game.currentLvl() + 1;
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), borrower, due, ordinary - 1 ether);
         assertTrue(q.eligible, "borrow actually eligible");
         assertEq(q.principal, ordinary - 1 ether, "collateral drains ordinary funds down to lender floor");
@@ -145,7 +145,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         vm.deal(address(game), 0);
         _closeFundedReserve();
         assertGt(game.redemptionReserve(), 0, "a close keeps the whole reserve in the Game");
-        assertTrue(sdgnrs.redemptionSettlementPending());
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837());
         (uint256 preview,) = sdgnrs.previewBurnValue(sdgnrs.totalSupply());
         assertEq(preview, 100 ether - sdgnrs.pendingRedemptionEthValue(), "preview counts the reserve exactly once");
     }

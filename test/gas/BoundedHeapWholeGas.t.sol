@@ -10,7 +10,7 @@ contract BoundedHeapWholeGasTest is Test {
     DecimatorBattleHarness private host;
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         host = new DecimatorBattleHarness();
         vm.etch(ContractAddresses.CRAPS_ENGINE, vm.getDeployedCode("CrapsEngine.sol:CrapsEngine"));
     }

@@ -125,7 +125,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
         for (uint256 d; d < 240 && !game.gameOver(); d++) {
             uint256 word = uint256(keccak256(abi.encode("go", d))) | 1;
             if (game.advanceDue() || game.rngLocked()) {
-                try game.mineFlip(0) {} catch {}
+                try game.mineRun(0) {} catch {}
             }
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -171,7 +171,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
         dgnrs.unwrapTo(address(0xBEEF), 7_000e12);
 
         // Level 4 vests 50B + 4 x 5B = 70B, so 20B is claimable past the 50B released at deploy.
-        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("level()"), abi.encode(uint24(4)));
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("currentLvl()"), abi.encode(uint24(4)));
         uint256 before = dgnrs.balanceOf(owner);
         vm.prank(poker);
         dgnrs.claimVested();

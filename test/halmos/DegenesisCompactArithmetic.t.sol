@@ -65,7 +65,7 @@ contract ScoreCodeHarness is DegenerusGameBoxModule {
 ///           monotonicity, error).
 ///         Mirrors (the code is inline in a function body, so no harness can reach it; these prove
 ///         the arithmetic as written in the module, not the bytecode):
-///         - the Degenesis order lane and day header written inline in `buyDegenesisBox`.
+///         - the Degenesis order lane and day header written inline in `purchaseDegenesisBox`.
 ///         Not proved (each attempt timed out at the 120 s assertion budget on 256-bit multiply or
 ///         divide, so none is kept here): the Degenesis FLIP scale, schedule and volume factor
 ///         (private `_degenesisOutcome`, mirror only), the 0.0001-ETH grid, the quarter split, the
@@ -219,7 +219,7 @@ contract DegenesisCompactArithmeticTest is Test {
     }
 
     // =====================================================================
-    // Degenesis order lane and day header (mirror of buyDegenesisBox)
+    // Degenesis order lane and day header (mirror of purchaseDegenesisBox)
     // =====================================================================
 
     uint256 internal constant DEG_AMOUNT_MASK = (uint256(1) << 38) - 1;

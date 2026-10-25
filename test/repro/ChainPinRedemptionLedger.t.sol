@@ -153,7 +153,7 @@ contract ChainPinConsumerStage is DeployProtocol {
         vm.etch(address(game), type(ChainPinStageHarness).runtimeCode);
         ChainPinStageHarness(payable(address(game))).seed(s);
         vm.etch(address(game), original);
-        vm.mockCall(address(sdgnrs), abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(pending));
+        vm.mockCall(address(sdgnrs), abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(pending));
         uint8 action = game.nextMinerAction();
         uint8 stage = game.rngConsumerStage_g379();
         // Redemption = 7 ... CertifyRead = 13: the consumer branch maps stage n to action n + 6.
@@ -252,11 +252,11 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
         // Wide holder shares: alice takes three pools (63% of supply), so a burn can exceed 57% of the holder base
         // (where the 175% maximum payout is capped by free backing).
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Affiliate, alice, sdgnrs.poolBalance(sDGNRS.Pool.Affiliate));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Lootbox, alice, sdgnrs.poolBalance(sDGNRS.Pool.Lootbox));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Whale, alice, sdgnrs.poolBalance(sDGNRS.Pool.Whale));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, dave, sdgnrs.poolBalance(sDGNRS.Pool.Reward) / 2);
-        sdgnrs.transferFromPool(sDGNRS.Pool.Degenesis, erin, sdgnrs.poolBalance(sDGNRS.Pool.Degenesis) / 3);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Affiliate, alice, sdgnrs.poolBalance(sDGNRS.Pool.Affiliate));
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Lootbox, alice, sdgnrs.poolBalance(sDGNRS.Pool.Lootbox));
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Whale, alice, sdgnrs.poolBalance(sDGNRS.Pool.Whale));
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, dave, sdgnrs.poolBalance(sDGNRS.Pool.Reward) / 2);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Degenesis, erin, sdgnrs.poolBalance(sDGNRS.Pool.Degenesis) / 3);
         vm.stopPrank();
     }
 
@@ -300,7 +300,7 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
         uint256 claimable = game.claimableWinningsOf(address(sdgnrs)) + game.redemptionReserve();
         uint256 snap = vm.snapshotState();
         vm.prank(address(game));
-        pull = sdgnrs.closeRedemptionBatch(claimable);
+        pull = sdgnrs.closeRedemptionBatch_g165517(claimable);
         if (claimable == 0) assertEq(pull, 0, "F9: pull from an empty claimable");
         else assertLt(pull, claimable, "F9: pull must stay at or below claimable - 1");
         assertTrue(vm.revertToState(snap));
@@ -395,7 +395,7 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
             // Custody ETH is irrelevant to live settlement; sometimes present, sometimes not.
             vm.deal(address(sdgnrs), _r(s, 3) % 3 == 0 ? _r(s, 4) % 50 ether : 0);
             if (_burnRound(s) == 0) continue;
-            if (!sdgnrs.redemptionSettlementPending()) {
+            if (!sdgnrs.redemptionSettlementPending_g153837()) {
                 uint32 id = _openBatchId();
                 _closeAssertingPull();
                 _assertLedger(id);
@@ -475,18 +475,18 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
                     try sdgnrs.burn(amount) {} catch {}
                 }
             } else if (op == 2) {
-                if (!sdgnrs.redemptionSettlementPending() && _escrow() != 0) {
+                if (!sdgnrs.redemptionSettlementPending_g153837() && _escrow() != 0) {
                     _closeProduction();
                     settlementWord = _wordForRoll(uint16(21 + (r >> 8) % 155));
                     _mockSettlingStage();
-                    for (uint256 k; k < 40 && sdgnrs.redemptionSettlementPending(); ++k) _work(9_000_000);
+                    for (uint256 k; k < 40 && sdgnrs.redemptionSettlementPending_g153837(); ++k) _work(9_000_000);
                     vm.clearMockedCalls();
                 }
             } else if (op == 3) {
                 uint256 avail = sdgnrs.poolBalance(sDGNRS.Pool(uint8((r >> 8) % 4)));
                 if (avail != 0) {
                     vm.prank(address(game));
-                    sdgnrs.transferFromPool(sDGNRS.Pool(uint8((r >> 8) % 4)), address(sdgnrs), (r >> 16) % avail + 1);
+                    sdgnrs.transferFromPool_g106128(sDGNRS.Pool(uint8((r >> 8) % 4)), address(sdgnrs), (r >> 16) % avail + 1);
                 }
             } else if (op == 4) {
                 vm.prank(address(game));
@@ -520,7 +520,7 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
     function test_refillThenBurnsThenNextRecycle() public {
         _fundOrdinary(10_000 ether);
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), sdgnrs.poolBalance(sDGNRS.Pool.Whale) / 2);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Whale, address(sdgnrs), sdgnrs.poolBalance(sDGNRS.Pool.Whale) / 2);
         sdgnrs.recycleCentury(100, 53);
         vm.stopPrank();
         assertEq(sdgnrs.centurySupplyCheckpoint(), _holderBase());
@@ -529,7 +529,7 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
         sdgnrs.burn(bal / 3);
         vm.startPrank(address(game));
         sdgnrs.burnForLiquidation(bob);
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, address(sdgnrs), 1e12);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, address(sdgnrs), 1e12);
         vm.stopPrank();
         assertLe(_holderBase(), sdgnrs.centurySupplyCheckpoint());
         vm.prank(address(game));

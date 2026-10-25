@@ -281,9 +281,9 @@ contract CrapsHighRollerTest is CrapsPins {
         game.setScore(alice, 5);
         game.setScore(bob, 5);
         vm.prank(alice);
-        craps.enterBonusBattle(1, _boardA(), 10);
+        craps.throwCraps(1, _boardA(), 10);
         vm.prank(bob);
-        craps.enterBonusBattle(1, _boardA(), 10);
+        craps.throwCraps(1, _boardA(), 10);
 
         vm.warp(vm.getBlockTimestamp() + 7 hours);
         uint48 index = craps.armWindow(slot);
@@ -611,7 +611,7 @@ contract CrapsHighRollerTest is CrapsPins {
         Craps.Bets memory blank;
         uint256 before = flip.burned(alice);
         vm.prank(alice);
-        uint256 placed = craps.enterBonusDay(blank, 10);
+        uint256 placed = craps.playCraps(blank, 10);
         assertEq(placed, periods, "the ticket did not take the whole day");
         assertEq(flip.burned(alice) - before, plain * 10, "a high day ticket did not pay the multiple on the day");
 

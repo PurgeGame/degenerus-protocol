@@ -232,7 +232,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             uint256 snap = vm.snapshotState();
             host.seedRng(kind == 1, true);
             _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
-            game.mineFlip{gas: 16_000_000}(0);
+            game.mineRun{gas: 16_000_000}(0);
             (uint24 day,, bool active) = host.requestIdentity();
             if (mode == 4) assertTrue(active);
             else { assertFalse(active); assertEq(day, 0); assertTrue(game.rngComplete()); }
@@ -250,7 +250,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             for (uint256 supplied = 150_000; supplied <= 1_500_000; supplied += 5_000) {
                 uint256 snap = vm.snapshotState();
                 host.seedRng(kind == 1, false);
-                (bool ok, bytes memory err) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (uint32(0))));
+                (bool ok, bytes memory err) = address(game).call{gas: supplied}(abi.encodeCall(game.mineRun, (uint32(0))));
                 (, , bool active) = host.requestIdentity();
                 if (ok) {
                     assertTrue(active, "a successful first unit is a sent request");
@@ -273,7 +273,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         for (uint256 kind; kind < 2; ++kind) {
             uint256 snap = vm.snapshotState();
             host.seedRng(kind == 1, false);
-            game.mineFlip{gas: 3_000_000}(type(uint32).max);
+            game.mineRun{gas: 3_000_000}(type(uint32).max);
             (, , bool active) = host.requestIdentity();
             assertTrue(active, "the request is sent");
             assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
@@ -283,14 +283,14 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function test_UnderfundedFirstTerminalRequestRevertsAfterRefusal() public {
         host.seedTerminal(false);
         _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, 1);
-        game.mineFlip{gas: 10_000_000}(0);
+        game.mineRun{gas: 10_000_000}(0);
         (uint24 day, uint48 origin, bool active) = host.requestIdentity();
         assertGt(day, 0);
         assertFalse(active);
         uint256 refused;
         for (uint256 supplied = 150_000; supplied <= 1_500_000; supplied += 25_000) {
             uint256 snap = vm.snapshotState();
-            (bool ok, bytes memory err) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (uint32(0))));
+            (bool ok, bytes memory err) = address(game).call{gas: supplied}(abi.encodeCall(game.mineRun, (uint32(0))));
             if (!ok) {
                 assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "a short terminal retry is refused for gas");
                 ++refused;
@@ -301,7 +301,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
         }
         assertGt(refused, 0);
-        (bool funded,) = address(game).call{gas: 3_000_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
+        (bool funded,) = address(game).call{gas: 3_000_000}(abi.encodeCall(game.mineRun, (uint32(0))));
         assertTrue(funded, "an adequately funded retry against a refusing coordinator succeeds");
     }
 
@@ -318,12 +318,12 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                 host.seedRng(kind == 1, false);
                 if (mode == 0) vm.etch(address(mockVRF), "");
                 else _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
-                (bool ok,) = address(game).call{gas: 3_000_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
+                (bool ok,) = address(game).call{gas: 3_000_000}(abi.encodeCall(game.mineRun, (uint32(0))));
                 assertTrue(ok, "a refusing coordinator never reverts a funded first unit");
                 (, , bool active) = host.requestIdentity();
                 assertFalse(active);
                 vm.etch(address(mockVRF), vrfImplementation.code);
-                game.mineFlip{gas: 3_000_000}(0);
+                game.mineRun{gas: 3_000_000}(0);
                 (, , active) = host.requestIdentity();
                 assertTrue(active, "the next funded call sends the request");
                 assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
@@ -334,7 +334,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function test_ExpensiveCoordinatorRequestSucceedsBeyondFormerCap() public {
         host.seedRng(true, true);
         _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, 8);
-        game.mineFlip{gas: 16_000_000}(0);
+        game.mineRun{gas: 16_000_000}(0);
         (uint24 day,, bool active) = host.requestIdentity();
         assertGt(day, 0); assertTrue(active);
     }
@@ -351,7 +351,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             host.seedRng(false, true);
             _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, mode);
             vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector));
-            game.mineFlip{gas: 16_000_000}(0);
+            game.mineRun{gas: 16_000_000}(0);
             if (mode != 4) { assertTrue(game.rngComplete()); (, , bool active) = host.requestIdentity(); assertFalse(active); }
             vm.revertToState(snap);
         }
@@ -380,15 +380,15 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             uint256 snap = vm.snapshotState();
             host.seedTerminal(false);
             _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
-            game.mineFlip{gas: 10_000_000}(0);
+            game.mineRun{gas: 10_000_000}(0);
             (uint24 day, uint48 origin, bool active) = host.requestIdentity();
             assertGt(day, 0); assertGt(origin, 0); assertFalse(active);
             vm.warp(block.timestamp + 1 days);
-            game.mineFlip{gas: 10_000_000}(0);
+            game.mineRun{gas: 10_000_000}(0);
             (uint24 retryDay, uint48 retryOrigin, bool retryActive) = host.requestIdentity();
             assertEq(retryDay, day); assertEq(retryOrigin, origin); assertFalse(retryActive);
             vm.warp(uint256(origin) + 14 days + 1);
-            for (uint256 i; i < 10 && !game.gameOver(); ++i) game.mineFlip{gas: 12_000_000}(0);
+            for (uint256 i; i < 10 && !game.gameOver(); ++i) game.mineRun{gas: 12_000_000}(0);
             assertTrue(game.gameOver(), "the dead ending remains reachable");
             vm.revertToState(snap);
         }
@@ -427,7 +427,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         uint256 firstSuccess;
         for (uint256 supplied = 50_000; supplied <= 2_800_000; supplied += 5_000) {
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (uint32(0))));
+            (bool ok,) = address(game).call{gas: supplied}(abi.encodeCall(game.mineRun, (uint32(0))));
             if (ok) {
                 assertTrue(host.swept()); assertEq(admin.subscriptionId(), 0);
                 if (firstSuccess == 0) firstSuccess = supplied;
@@ -449,12 +449,12 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                 uint256 snap = vm.snapshotState();
                 host.seedRng(kind == 0, true);
                 uint32 multiplier = calibration == 0 ? 10_000 : 2_500;
-                (bool ok,) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (multiplier)));
+                (bool ok,) = address(game).call{gas: supplied}(abi.encodeCall(game.mineRun, (multiplier)));
                 assertTrue(ok, "certification prefix must survive a declined request or re-selection");
                 (,, bool active) = host.requestIdentity();
                 if (!active) {
                     assertTrue(game.rngComplete(), "refusal cannot lose the certified read");
-                    game.mineFlip{gas: 6_000_000}(multiplier);
+                    game.mineRun{gas: 6_000_000}(multiplier);
                     (,, active) = host.requestIdentity();
                 }
                 assertTrue(active, "a refused request succeeds on a funded retry");
@@ -483,7 +483,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function test_UnderfundedFinalShutdownRollsBackSweptMarkerAndTransfers() public {
         host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
         uint256 beforeSD = ContractAddresses.SDGNRS.balance;
-        (bool ok,) = address(game).call{gas: 50_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
+        (bool ok,) = address(game).call{gas: 50_000}(abi.encodeCall(game.mineRun, (uint32(0))));
         assertFalse(ok, "underfunded first unit must roll back");
         assertFalse(host.swept());
         assertEq(game.redemptionReserve(), 9 ether);
@@ -516,7 +516,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                 _seedCrapsFixtureCursor(game.currentDayView_g542950());
                 vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector));
                 _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
-                input = abi.encodeCall(game.mineFlip, (uint32(0)));
+                input = abi.encodeCall(game.mineRun, (uint32(0)));
             } else if (site == 1) {
                 _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, mode);
                 input = abi.encodeCall(host.nativeBalance, ());
@@ -570,7 +570,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             host.seedRng(kind == 1, true);
             _seedCrapsFixtureCursor(game.currentDayView_g542950());
         }
-        bytes memory input = abi.encodeCall(game.mineFlip, (uint32(10_000)));
+        bytes memory input = abi.encodeCall(game.mineRun, (uint32(10_000)));
         string memory label = kind == 0 ? "optfix-sweep" : kind == 1 ? "optfix-daily" : "optfix-midday";
         _nativeCheckedFixture(label, address(this), address(probe),
             abi.encodeCall(probe.invoke, (address(game), input, 6_000_000)));

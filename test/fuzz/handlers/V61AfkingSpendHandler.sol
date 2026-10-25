@@ -172,7 +172,7 @@ contract V61AfkingSpendHandler is Test {
 
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchase{value: ethSent}(0, qty, 0, bytes32(0), kind, false) {
+        try game.purchaseOrderFor{value: ethSent}(0, qty, 0, bytes32(0), kind, false) {
             success_afkingBuy++;
             ghost_afkingDrawn += _afkingSpentAmount(currentActor);
         } catch {}
@@ -189,7 +189,7 @@ contract V61AfkingSpendHandler is Test {
         calls_staleCashout++;
         uint256 balBefore = currentActor.balance;
         vm.prank(currentActor);
-        try game.claimWinnings(0) {
+        try game.claimClaimable(0) {
             success_staleCashout++;
             if (currentActor.balance > balBefore) ghost_cashedOut += currentActor.balance - balBefore;
         } catch {}
@@ -206,7 +206,7 @@ contract V61AfkingSpendHandler is Test {
         calls_smite++;
         address smitee = actors[bound(targetSeed, 0, actors.length - 1)];
         vm.prank(address(game));
-        try coin.mintForGame(deity, SMITE_BURN) {} catch {}
+        try coin.mintForGame_g152734(deity, SMITE_BURN) {} catch {}
         uint256 flipBefore = coin.balanceOf(deity);
         uint32 smiteeId = game.walletIdOf_g3120(smitee);
         if (smiteeId == 0) return;
@@ -227,7 +227,7 @@ contract V61AfkingSpendHandler is Test {
         calls_decurse++;
         address target = actors[bound(targetSeed, 0, actors.length - 1)];
         vm.prank(address(game));
-        try coin.mintForGame(currentActor, DECURSE_BURN) {} catch {}
+        try coin.mintForGame_g152734(currentActor, DECURSE_BURN) {} catch {}
         uint32 targetId = game.walletIdOf_g3120(target);
         if (targetId == 0) return;
         vm.prank(currentActor);
@@ -250,12 +250,12 @@ contract V61AfkingSpendHandler is Test {
         uint256 small = (priceWei * 400) / 400; // one whole ticket to satisfy the daily gate
         if (small != 0 && small <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: small}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: small}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);

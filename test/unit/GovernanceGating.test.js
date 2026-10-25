@@ -108,7 +108,7 @@ async function advanceGameOneDay(game, caller, mockVRF) {
         await fulfillVRF(mockVRF, reqId, BigInt(hre.ethers.keccak256(hre.ethers.toBeHex(reqId, 32))));
       }
     }
-    await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+    await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 });
   }
   throw new Error("miner chain did not seal the target day and finish its read consumers");
 }
@@ -199,7 +199,7 @@ describe("Governance & Gating (Phase 43)", function () {
   describe("ADMIN-02: Vault onlyVaultOwner requires >50.1% DGVE", function () {
     it("deployer (100% DGVE) passes onlyVaultOwner", async function () {
       const { vault, deployer, game } = await loadFixture(deployFullProtocol);
-      const tx = ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0]);
+      const tx = ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("mineRun", [0]), 0]);
       await expect(tx).to.not.be.revertedWithCustomError(
         vault,
         "NotVaultOwner"
@@ -209,7 +209,7 @@ describe("Governance & Gating (Phase 43)", function () {
     it("alice (0% DGVE) fails onlyVaultOwner with NotVaultOwner", async function () {
       const { vault, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineRun", [0]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -239,7 +239,7 @@ describe("Governance & Gating (Phase 43)", function () {
       await dgve.connect(deployer).transfer(alice.address, amount);
 
       await expect(
-        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
+        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineRun", [0]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -389,7 +389,7 @@ describe("Governance & Gating (Phase 43)", function () {
       await advanceGameOneDay(game, deployer, mockVRF);
       await jumpToNextGameDayBoundary(5);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
-      await expect(game.connect(alice).mineFlip(0, { gasLimit: 16_777_216 })).to.not.be.reverted;
+      await expect(game.connect(alice).mineRun(0, { gasLimit: 16_777_216 })).to.not.be.reverted;
       expect(await game.rngLocked()).to.equal(true);
     });
 
@@ -397,7 +397,7 @@ describe("Governance & Gating (Phase 43)", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
       const { priceWei } = await game.purchaseInfo_g1027();
-      await game.connect(alice).purchase(
+      await game.connect(alice).purchaseOrderFor(
         0, 400, 0, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: priceWei }
       );
       expect(await game.bountyEligible(alice.address)).to.equal(true);

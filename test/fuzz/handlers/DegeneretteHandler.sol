@@ -9,7 +9,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title DegeneretteHandler -- Handler for Degenerette slot machine betting in invariant tests
-/// @notice Wraps placeDegeneretteBet and resolveBets with bounded inputs, multi-actor support,
+/// @notice Wraps betDegenerette and resolveBets with bounded inputs, multi-actor support,
 ///         and ghost variable tracking for ETH accounting invariants.
 /// @dev Targets the NEVER-FUZZED Degenerette bet accounting: wager in = payout + burn.
 ///      Tracks ETH flows to verify no ETH is created or destroyed during bet lifecycle.
@@ -19,7 +19,7 @@ contract DegeneretteHandler is Test {
 
     /// @dev Re-attested via game-layout-POST.txt (forge inspect DegenerusGame storageLayout):
     ///      `lootboxRngPacked` slot 34 (LR_INDEX lives in its low 48 bits) and
-    ///      `lootboxRngWordByIndex` slot 35 (mapping(uint48 => uint256)). placeDegeneretteBet
+    ///      `lootboxRngWordByIndex` slot 35 (mapping(uint48 => uint256)). betDegenerette
     ///      gates on (LR_INDEX != 0) AND (_lootboxWord(LR_INDEX) == 0); resolution
     ///      gates on _lootboxWord(betIndex) != 0. The handler seeds both so the fuzzer
     ///      reaches a non-vacuous place->resolve sequence regardless of call ordering.
@@ -94,11 +94,11 @@ contract DegeneretteHandler is Test {
         uint256 totalBet = uint256(amountPerSpin) * uint256(ticketCount);
         if (totalBet > currentActor.balance) return;
 
-        // Open the lootbox RNG window so placeDegeneretteBet's index-gate is satisfiable.
+        // Open the lootbox RNG window so betDegenerette's index-gate is satisfiable.
         uint48 index = _ensureLootboxIndexOpen();
 
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: totalBet}(0, 0, amountPerSpin, ticketCount, symbol) {
+        try game.betDegenerette{value: totalBet}(0, 0, amountPerSpin, ticketCount, symbol) {
             ghost_totalEthWagered += totalBet;
             ghost_betsPlaced++;
             uint64 len = knownQueueLen[index];
@@ -139,7 +139,7 @@ contract DegeneretteHandler is Test {
         // Bets resolve only as the engine's Degenerette read consumer of the published word
         // (mineFlip).
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
                 ghost_totalEthPayout += (claimableAfter - claimableBefore);
@@ -179,7 +179,7 @@ contract DegeneretteHandler is Test {
         if (cost == 0 || cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0,
             400, // 1 full ticket
             0,
@@ -202,17 +202,17 @@ contract DegeneretteHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
     }
 
     // --- Internal helpers ---
 
-    /// @dev Make a Degenerette bet placeable: placeDegeneretteBet reverts unless the lootbox
+    /// @dev Make a Degenerette bet placeable: betDegenerette reverts unless the lootbox
     ///      RNG index is non-zero AND _lootboxWord(index) is still zero (the open,
     ///      not-yet-rolled window). The unguided fuzzer drives the game to game-over long before
     ///      a real purchase opens that window, so without this seed every placeEthBet early-returns
     ///      and the solvency invariant passes vacuously (betsPlaced stays 0). We force LR_INDEX to a
-    ///      fixed open index (word still zero) so the live placeDegeneretteBet path actually executes
+    ///      fixed open index (word still zero) so the live betDegenerette path actually executes
     ///      against real ETH. This is the same mechanism the DegeneretteHeroScore unit harness uses.
     function _ensureLootboxIndexOpen() private view returns (uint48 index) {
         // Placement always joins the write buffer; its previous session is never rewritten.

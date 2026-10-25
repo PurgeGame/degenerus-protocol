@@ -67,7 +67,7 @@ contract BoundedQueueGasTest is BoundedDeployProtocol, BoundedGasProbe {
         uint256 price = PriceLookupLib.priceForLevel(25);
         for (uint256 i; i < 3; ++i) {
             vm.prank(PLAYER);
-            game.purchase{value: price * 10}(0, 0, BoxOrderLib.boSmalls(10), 0, MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: price * 10}(0, 0, BoxOrderLib.boSmalls(10), 0, MintPaymentKind.DirectEth, false);
         }
         host.seal(false);
     }
@@ -85,7 +85,7 @@ contract BoundedQueueGasTest is BoundedDeployProtocol, BoundedGasProbe {
     }
     function test_G10_BetWholeDrain() public {
         for (uint256 i; i < 3; ++i) {
-            vm.prank(PLAYER); game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
+            vm.prank(PLAYER); game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         }
         host.seal(true);
         _measure("G10_bet_drain3", true);

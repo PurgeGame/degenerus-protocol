@@ -20,7 +20,7 @@ contract ResolutionCleanupGasTest is DeployProtocol {
         for (uint256 i; i < 3; ++i) {
             address player = address(uint160(0xCA1101 + i));
             vm.prank(address(coin)); game.registerWallet_g9539(player, true);
-            vm.prank(address(game)); coin.mintForGame(player, 100_000_000);
+            vm.prank(address(game)); coin.mintForGame_g152734(player, 100_000_000);
         }
     }
 
@@ -53,7 +53,7 @@ contract ResolutionCleanupGasTest is DeployProtocol {
         uint256 resolveGas;
         // The miner preserves one-field finalization per transaction.
         for (uint256 i; i < 5; ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             resolveGas += vm.lastCallGas().gasTotalUsed;
         }
         assertTrue(game.rngComplete(), "five fields must drain in five transactions");

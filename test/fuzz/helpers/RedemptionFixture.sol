@@ -49,9 +49,9 @@ abstract contract RedemptionFixture is DeployProtocol {
         _giveWalletId(bob);
         _giveWalletId(carol);
         vm.startPrank(address(game));
-        assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Reward, alice, share), share);
-        assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Reward, bob, share), share);
-        assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Reward, carol, share), share);
+        assertEq(sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, alice, share), share);
+        assertEq(sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, bob, share), share);
+        assertEq(sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, carol, share), share);
         vm.stopPrank();
     }
 
@@ -72,7 +72,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     function _complete(uint256 word) internal {
         for (uint256 i; i < 500; ++i) {
             if (!game.advanceDue() && !game.rngLocked() && game.rngComplete()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(word);
         }
         revert("fixture did not finish");
@@ -85,7 +85,7 @@ abstract contract RedemptionFixture is DeployProtocol {
             uint8 action = game.nextMinerAction();
             if (action == 0) return false; // Idle
             require(action != 2, "harness: an unanswered request is waiting"); // Wait
-            game.mineFlip(0);
+            game.mineRun(0);
             if (mockVRF.lastRequestId() != before) return true;
         }
         revert("harness: engine did not settle");
@@ -96,7 +96,7 @@ abstract contract RedemptionFixture is DeployProtocol {
         address buyer = makeAddr("boxBuyer");
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(
+        game.purchaseOrderFor{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertTrue(_runUntilNewRequestOrIdle(), "mid-day request sent");
@@ -108,7 +108,7 @@ abstract contract RedemptionFixture is DeployProtocol {
         for (uint256 i; i < 200; ++i) {
             _fulfillPending(word);
             if (game.gameOver()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("harness: the ending did not reach game over");
     }
@@ -252,7 +252,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     ///      holder's claim entry, Game credit, flip stake and balance.
     function _redemptionDigest(uint32 id) internal returns (bytes32 digest) {
         (uint32 open, uint32 settling, uint32 cursor, uint256 escrowed) = sdgnrs.redemptionBatchState();
-        digest = keccak256(abi.encode(open, settling, cursor, escrowed, sdgnrs.redemptionSettlementPending(),
+        digest = keccak256(abi.encode(open, settling, cursor, escrowed, sdgnrs.redemptionSettlementPending_g153837(),
             sdgnrs.pendingRedemptionEthValue(), game.redemptionReserve(), address(sdgnrs).balance,
             game.claimableWinningsOf(address(sdgnrs))));
         (uint256 tokens, uint256 ethBase, uint256 flipEscrow, uint16 roll, uint16 flipReward) = _batch(id);
@@ -285,7 +285,7 @@ abstract contract RedemptionFixture is DeployProtocol {
         for (budget = CLAIM_SEARCH_START_GAS; budget <= CLAIM_SEARCH_LIMIT_GAS; budget += CLAIM_SEARCH_STEP_GAS) {
             uint256 snap = vm.snapshotState();
             _work(budget);
-            bool moved = _cursor() != cursor || !sdgnrs.redemptionSettlementPending();
+            bool moved = _cursor() != cursor || !sdgnrs.redemptionSettlementPending_g153837();
             assertTrue(vm.revertToState(snap));
             if (moved) return budget;
         }

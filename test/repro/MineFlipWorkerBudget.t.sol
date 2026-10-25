@@ -73,14 +73,14 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
     }
     function _queueWideBox() private {
         vm.prank(BUYER);
-        game.purchase{value: 1 ether}(0, 0, BoxOrderLib.boCustoms(100, 0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1 ether}(0, 0, BoxOrderLib.boCustoms(100, 0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         host.publishRead();
         assertEq(BoxOrderLib.boCount(host.order()), 100);
         assertEq(BoxOrderLib.boId(host.order()), game.walletIdOf_g3120(BUYER));
     }
     function test_PublicRouterAttemptsWideBoxAtMaximumCalibration() public {
         _queueWideBox();
-        game.mineFlip{gas: ROUTER_CALL_GAS}(type(uint32).max);
+        game.mineRun{gas: ROUTER_CALL_GAS}(type(uint32).max);
         assertEq(host.order(), 0);
         assertEq(host.cursor(), 1);
     }
@@ -88,19 +88,19 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         _queueWideBox();
         uint256 beforeOrder = host.order();
         vm.expectRevert(MineFlipGas.InvalidGasMultiplier.selector);
-        game.mineFlip(EXPECTED_MIN_MULTIPLIER - 1);
+        game.mineRun(EXPECTED_MIN_MULTIPLIER - 1);
         assertEq(host.order(), beforeOrder);
     }
     function test_ZeroAndExplicitBaselineProduceSameBoxOutcome() public {
         _queueWideBox();
         uint256 snap = vm.snapshotState();
-        game.mineFlip{gas: ROUTER_CALL_GAS}(0);
+        game.mineRun{gas: ROUTER_CALL_GAS}(0);
         uint256 expected = game.claimableWinningsOf(BUYER);
         uint256 cursor = host.cursor();
         uint32[4] memory factors = [EXPECTED_MIN_MULTIPLIER, EXPECTED_BASE_MULTIPLIER / 2, EXPECTED_BASE_MULTIPLIER - 1, EXPECTED_BASE_MULTIPLIER];
         for (uint256 i; i < factors.length; ++i) {
             assertTrue(vm.revertToState(snap));
-            game.mineFlip{gas: ROUTER_CALL_GAS}(factors[i]);
+            game.mineRun{gas: ROUTER_CALL_GAS}(factors[i]);
             assertEq(game.claimableWinningsOf(BUYER), expected);
             assertEq(host.cursor(), cursor);
         }
@@ -123,7 +123,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         uint256 beforeOrder = host.order();
         for (uint8 stage; stage <= 2; ++stage) {
             host.priorWork(stage);
-            vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(stage == 1));
+            vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(stage == 1));
             MineFlipGas.Result memory result = host.workHuman(9_000_000);
             assertFalse(result.progressed);
             assertEq(host.order(), beforeOrder);
@@ -132,7 +132,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
     }
     function test_ExtremeCalibrationAttemptsOneWholeBet() public {
         vm.prank(BUYER);
-        game.placeDegeneretteBet{value: 0.125 ether}(0, 0, uint128(0.005 ether), 25, 9);
+        game.betDegenerette{value: 0.125 ether}(0, 0, uint128(0.005 ether), 25, 9);
         host.publishRead();
         MineFlipGas.Result memory result = host.workBet{gas: 10_000_000}(
             MineFlipGas.budget(9_000_000, type(uint32).max, true));
@@ -141,7 +141,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
     }
     function test_BetReservesWholeSlipBeforeMutation() public {
         vm.prank(BUYER);
-        game.placeDegeneretteBet{value: 0.125 ether}(0, 0, uint128(0.005 ether), 25, 9);
+        game.betDegenerette{value: 0.125 ether}(0, 0, uint128(0.005 ether), 25, 9);
         host.publishRead();
         uint256 beforeBet = host.bet();
         MineFlipGas.Result memory result = host.workBet(500_000);
@@ -222,7 +222,7 @@ contract MineFlipDecimatorBudgetTest is Test {
     uint256 private constant SENTINEL = 1;
     function setUp() public {
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 8) * 1 days + 82_621);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         host = new BudgetDecimatorFixture();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(BudgetBoundedEngine).runtimeCode);
         host.open(LVL);
@@ -289,7 +289,7 @@ contract MineFlipDecimatorBudgetTest is Test {
         bytes memory beforeRound = abi.encode(host.roundOf(LVL));
         for (uint8 stage; stage < 4; ++stage) {
             host.priorWork(stage);
-            vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(stage == 1));
+            vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(stage == 1));
             MineFlipGas.Result memory result = host.runDecimatorWork(9_000_000);
             assertFalse(result.progressed);
             assertEq(abi.encode(host.roundOf(LVL)), beforeRound);

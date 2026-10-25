@@ -18,7 +18,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      every day RESOLVED (no cheap unresolved skip), every day carrying a stored stake (so
 ///      every tagged page is read), all wins but one (the win branch runs the take-profit
 ///      division and the BAF credit accumulation), and a single loss on the last day so the
-///      end-of-walk WWXRP loss prize fires beside recordBafFlip and mintForGame. Take-profit 1
+///      end-of-walk WWXRP loss prize fires beside recordBafFlip and mintForGame_g152734. Take-profit 1
 ///      divides each whole-FLIP payout evenly, so the rolling carry stays 0. The window's first
 ///      day sits in lane 31 of its result word and lane 6 of its stake word, so the walk crosses
 ///      the most words a window can: 4 result words and 14 stake words.

@@ -60,7 +60,7 @@ describe("CharityGameHooks", function () {
     const valuePerBuy = eth("8");  // 7.5 ETH cost + margin (DirectEth allows overpay)
     const buyerCount = Math.min(signers.length, 10);
     for (let i = 0; i < buyerCount; i++) {
-      await game.connect(signers[i]).purchase(
+      await game.connect(signers[i]).purchaseOrderFor(
         0,
         ticketQty,
         0n,
@@ -79,7 +79,7 @@ describe("CharityGameHooks", function () {
    *   3. mineFlip repeatedly until RNG unlocked
    */
   async function driveVRFCycle(game, deployer, mockVRF) {
-    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+    await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
@@ -89,7 +89,7 @@ describe("CharityGameHooks", function () {
     // so the first advance cycle needs many batch-processing calls.
     for (let i = 0; i < 200; i++) {
       if (!(await game.rngLocked())) break;
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
     }
   }
 
@@ -101,14 +101,14 @@ describe("CharityGameHooks", function () {
    */
   async function driveVRFCycleCapturing(game, deployer, mockVRF) {
     const txs = [];
-    txs.push(await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }));
+    txs.push(await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 }));
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
     }
     for (let i = 0; i < 200; i++) {
       if (!(await game.rngLocked())) break;
-      txs.push(await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }));
+      txs.push(await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 }));
     }
     return txs;
   }
@@ -128,7 +128,7 @@ describe("CharityGameHooks", function () {
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       } catch {
         /* may revert mid-sequence; keep driving */
       }
@@ -169,7 +169,7 @@ describe("CharityGameHooks", function () {
       await driveVRFCycle(game, deployer, mockVRF);
 
       // Verify: game level incremented
-      const gameLevel = await game.level();
+      const gameLevel = await game.currentLvl();
       expect(gameLevel).to.be.gte(1, "Game level should have incremented past 0");
 
       // Verify: charity pickCharity was called (currentLevel advanced)
@@ -193,7 +193,7 @@ describe("CharityGameHooks", function () {
       // Day 2: Level transition day -- capture LevelSkipped event.
       // No setCharity() calls before transition -> currentActiveBitmap == 0 -> skip-path A.
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
 
@@ -201,7 +201,7 @@ describe("CharityGameHooks", function () {
       let levelSkippedFound = false;
       for (let i = 0; i < 200; i++) {
         if (!(await game.rngLocked())) break;
-        const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
         const events = await getEvents(tx, charity, "LevelSkipped");
         if (events.length > 0) {
           expect(events[0].args.level).to.equal(0);
@@ -242,7 +242,7 @@ describe("CharityGameHooks", function () {
         "0x56BC75E2D63100000", // 100 ETH
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddress);
-      await sdgnrs.connect(gameSigner).transferFromPool(
+      await sdgnrs.connect(gameSigner).transferFromPool_g106128(
         POOL_REWARD,
         alice.address,
         hre.ethers.parseUnits("100", 12)
@@ -251,7 +251,7 @@ describe("CharityGameHooks", function () {
         method: "hardhat_stopImpersonatingAccount",
         params: [gameAddress],
       });
-      await charity.connect(alice).vote(slot);
+      await charity.connect(alice).castBallot(slot);
 
       // DRIVE: REAL game flow -> DegenerusGameAdvanceModule:1634 -> charityResolve.pickCharity(0).
       // Tight deterministic driver mirrors the existing `charity.currentLevel increments from 0 to 1`
@@ -405,7 +405,7 @@ describe("CharityGameHooks", function () {
         const reqBefore = await getLastVRFRequestId(mockVRF);
         let tx = null;
         try {
-          tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+          tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
         } catch {
           /* may revert mid-sequence */
         }

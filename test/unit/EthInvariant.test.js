@@ -67,7 +67,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     // Purchase 1 full ticket (qty=400 = 1 ticket at mintPrice=0.01 ETH)
     // Cost: (priceWei * ticketQuantity) / 400 = 0.01 ETH * 400 / 400 = 0.01 ETH
     const priceWei = await game.mintPrice(); // 0.01 ETH
-    await game.connect(alice).purchase(
+    await game.connect(alice).purchaseOrderFor(
       0, // buyer = msg.sender
       400n,         // 4 scaled tickets = 1 full ticket
       0n,           // no lootbox
@@ -87,7 +87,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
 
     // Advance to next day and call mineFlip — this issues a VRF request
     await advanceToNextDay();
-    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+    await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
     await assertSolvencyInvariant(game, mockStETH);
   });
@@ -102,7 +102,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
 
     // Advance and trigger VRF
     await advanceToNextDay();
-    await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+    await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
@@ -111,7 +111,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       // Process the fulfilled word (may take multiple mineFlip calls)
       for (let i = 0; i < 15; i++) {
         if (!(await game.rngLocked())) break;
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       }
     }
 
@@ -127,7 +127,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
 
     // Purchase tickets first to ensure some ETH is in the pools
     const priceWei = await game.mintPrice();
-    await game.connect(alice).purchase(
+    await game.connect(alice).purchaseOrderFor(
       0,
       400n,
       0n,
@@ -140,7 +140,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     const aliceClaimable = await game.claimableWinningsOf(alice.address);
     if (aliceClaimable > 1n) {
       // Alice has winnings — claim them
-      await game.connect(alice)["claimWinnings(uint32)"](0);
+      await game.connect(alice)["claimClaimable(uint32)"](0);
     }
 
     // The solvency invariant holds after claimWinnings.
@@ -160,7 +160,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
 
     // Purchase to put ETH into the game contract
     const priceWei = await game.mintPrice();
-    await game.connect(alice).purchase(
+    await game.connect(alice).purchaseOrderFor(
       0,
       400n,
       0n,
@@ -192,7 +192,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
 
     // Purchase some tickets first to fund the pools
     const priceWei = await game.mintPrice();
-    await game.connect(alice).purchase(
+    await game.connect(alice).purchaseOrderFor(
       0,
       400n,
       0n,
@@ -210,7 +210,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       } catch {
         /* may revert mid-sequence; keep driving */
       }

@@ -34,7 +34,7 @@ contract BoundedSupplementGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(game), original);
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 1000 ether);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 10_000_000);
         uint24 day = game.currentDayView_g542950();
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
@@ -67,7 +67,7 @@ contract BoundedSupplementGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(crapsBattle), original);
     }
     function _field(uint256 period) private returns (uint64 slot) {
-        vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, period, BOARD, 1);
+        vm.prank(PLAYER); crapsBattle.throwCraps(0, period, BOARD, 1);
         slot = uint64(uint256(game.currentDayView_g542950()) * 8 + period + 1);
         bytes memory original = address(crapsBattle).code;
         vm.etch(address(crapsBattle), type(BoundedRngQueueSeeder).runtimeCode);

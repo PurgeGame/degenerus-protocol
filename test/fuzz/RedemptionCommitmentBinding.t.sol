@@ -44,7 +44,7 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
         for (uint256 i; i < 200; ++i) {
             (, settling,,) = sdgnrs.redemptionBatchState();
             if (settling != id) break;
-            game.mineFlip{gas: allowance}(0);
+            game.mineRun{gas: allowance}(0);
         }
         (, settling,,) = sdgnrs.redemptionBatchState();
         assertTrue(settling != id, "the committed batch finished");
@@ -65,7 +65,7 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
         for (uint256 i; i < 50; ++i) {
             uint8 next = game.nextMinerAction();
             if (next == 0 || next == 2) break; // idle, or waiting on the request just issued
-            game.mineFlip{gas: allowance}(0);
+            game.mineRun{gas: allowance}(0);
         }
         for (uint256 i; i < OWNERS; ++i) assertEq(_claimTokens(_owner(i), id), 0);
         return _awardDigest(vm.getRecordedLogs(), id);

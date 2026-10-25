@@ -33,7 +33,7 @@ contract TerminalSinkFixture {
     function burnAtGameOver() external { ++burns; }
     function tombstoneAtGameOver() external { ++burns; }
     function balanceOf(address) external pure returns (uint256) { return 0; }
-    function closeRedemptionBatch(uint256) external pure returns (uint256) { return 0; }
+    function closeRedemptionBatch_g165517(uint256) external pure returns (uint256) { return 0; }
     function resolveTerminalRedemptions() external pure {}
 }
 
@@ -78,7 +78,7 @@ contract TerminalRngCheckpointsTest is Test {
         vrf = new TerminalCoordinatorFixture();
         priorDay = h.seed(address(vrf));
         vm.etch(ContractAddresses.COINFLIP, type(TerminalCoinflipFixture).runtimeCode);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("closeRedemptionBatch(uint256)"), abi.encode(uint256(0)));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("closeRedemptionBatch_g165517(uint256)"), abi.encode(uint256(0)));
     }
 
     /// @dev One terminal call at level 10 on `day`, `callGas` as its gas and allowance.

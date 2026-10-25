@@ -71,7 +71,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
 
         // Fund the player with sDGNRS via the Reward pool (game is the authorized caller).
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, player, PLAYER_FUNDING);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, player, PLAYER_FUNDING);
         vm.stopPrank();
 
         // Mock ONLY the coinflip surface (FLIP settle leg + backing preview). The lootbox
@@ -133,7 +133,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
     function _settleCohort() internal {
         vm.prank(address(game));
         assertTrue(sdgnrs.runRedemptionWork(batchWord, 9_000_000).done, "fixture: keeper drained the cohort");
-        assertFalse(sdgnrs.redemptionSettlementPending(), "fixture: cohort cleared");
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837(), "fixture: cohort cleared");
     }
 
     /// @dev Give `who` live boon state: an unexpired coinflip boon (slot0). The claim-time

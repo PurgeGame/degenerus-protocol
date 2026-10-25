@@ -31,7 +31,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         vm.deal(player, 100 ether);
         vm.deal(address(game), 1_000 ether);
 
-        // placeDegeneretteBet reverts while lootboxRngIndex == 0. Production crosses
+        // betDegenerette reverts while lootboxRngIndex == 0. Production crosses
         // that at the deploy day's first advance request; mirror the post-crank state
         // (shape shared with BigRecordArming).
         uint256 lrPacked = uint256(
@@ -68,7 +68,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         // (the standing daily design) — so clear MINT_ETH with a ticket buy first.
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(player);
-        game.purchase{value: priceWei * 4}(
+        game.purchaseOrderFor{value: priceWei * 4}(
             0,
             1600,
             0,
@@ -85,7 +85,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         // Daily DEGENERETTE_ETH target = min(mintPrice * 2, 0.5 ether); one 0.5 ETH
         // spin clears it at any price.
         vm.prank(player);
-        game.placeDegeneretteBet{value: 0.5 ether}(0, CURRENCY_ETH, 0.5 ether, 1, 3);
+        game.betDegenerette{value: 0.5 ether}(0, CURRENCY_ETH, 0.5 ether, 1, 3);
         (, bool slot1) = quests.questCompletionToday(game.walletIdOf_g3120(player));
         assertTrue(
             slot1,

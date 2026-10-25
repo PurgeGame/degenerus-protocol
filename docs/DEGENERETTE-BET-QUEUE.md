@@ -47,7 +47,7 @@ these compact offsets for the fresh deployment.
 
 ## Placement rules
 
-`placeDegeneretteBet(player, currency, amountPerSpin, spinCount, symbol)` only
+`betDegenerette(player, currency, amountPerSpin, spinCount, symbol)` only
 accepts ETH (0) and FLIP (1); `spinCount` is capped per currency (ETH 25, FLIP
 15). `amountPerSpin` must be a whole multiple of the currency's stake unit —
 1 gwei for ETH, 1 whole FLIP for FLIP — and at least the currency's minimum bet

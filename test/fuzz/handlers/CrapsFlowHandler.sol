@@ -245,7 +245,7 @@ contract CrapsFlowHandler {
             mult = uint16(h);
         }
         vm.prank(who);
-        try craps.enterBonusBattle(p, _board(boardSeed), mult) returns (uint256 betId) {
+        try craps.throwCraps(p, _board(boardSeed), mult) returns (uint256 betId) {
             ghost_betIds.push(betId);
             _trackSlot(uint64(betId >> 64));
             ++ghost_entries;
@@ -268,7 +268,7 @@ contract CrapsFlowHandler {
             mult = uint16(h);
         }
         vm.prank(who);
-        try craps.enterBonusDay(_board(boardSeed), mult) returns (uint256) {
+        try craps.playCraps(_board(boardSeed), mult) returns (uint256) {
             ++ghost_entries;
             ++ghost_dayTickets;
             if (high) ++ghost_highSeats;

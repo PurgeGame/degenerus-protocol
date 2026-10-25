@@ -194,7 +194,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         for (uint256 i; i < n; ++i) {
             players[i] = address(uint160(0xC01000 + i));
             vm.prank(address(game));
-            assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, players[i], amount), amount);
+            assertEq(sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Whale, players[i], amount), amount);
             _burn(players[i], amount);
         }
     }
@@ -209,7 +209,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
     function _coldRouterGasWith(uint256 allowance) private returns (uint256 used) {
         _coolSettlementState();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: allowance}(0);
+        game.mineRun{gas: allowance}(0);
         used = beforeGas - gasleft() + 21_000;
     }
 
@@ -221,9 +221,9 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(7_000_000));
         (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[2]), day);
         assertGt(base, 0, "next beneficiary remains whole");
-        assertTrue(sdgnrs.redemptionSettlementPending());
+        assertTrue(sdgnrs.redemptionSettlementPending_g153837());
         emit log_named_uint("cold_maximum_continuation_router_gas", _coldRouterGas());
-        if (sdgnrs.redemptionSettlementPending()) _coldRouterGas();
+        if (sdgnrs.redemptionSettlementPending_g153837()) _coldRouterGas();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
@@ -233,7 +233,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         _resolve(day, 175, 99);
         emit log_named_uint("cold_45_dust_router_gas", _coldRouterGas());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
     }
 
     function test_ColdTwentyBoxBeneficiaryMiddleOfMixedBatch() public {
@@ -242,19 +242,19 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         address[] memory players = _queueBurners(3, minimum);
         uint256 topup = (sdgnrs.totalSupply() + _escrow()) * 16 / 1000 - minimum;
         vm.prank(address(game));
-        assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, players[1], topup), topup);
+        assertEq(sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Whale, players[1], topup), topup);
         _burn(players[1], topup);
         _resolve(day, 175, 99);
         assertEq(_claimBase(players[1], day), 160 ether);
         emit log_named_uint("cold_mixed_batch_maximum_middle_gas", _coldRouterGas());
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
     /// @dev The fixture records the cohort size; the public cursor measures progress.
     ///      No dependency on the alternating player lists' physical storage slots.
     function _left() private view returns (uint256) {
-        return sdgnrs.redemptionSettlementPending() ? cohortSize - _redemptionCursor() : 0;
+        return sdgnrs.redemptionSettlementPending_g153837() ? cohortSize - _redemptionCursor() : 0;
     }
 
     /// @dev Settle the cohort through Redemption-stage steps until exactly one beneficiary is left:
@@ -266,7 +266,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
             uint256 snap = vm.snapshotState();
             vm.prank(address(game));
             _process(allowance);
-            if (sdgnrs.redemptionSettlementPending() && _left() >= 1 && _left() < before) continue;
+            if (sdgnrs.redemptionSettlementPending_g153837() && _left() >= 1 && _left() < before) continue;
             assertTrue(vm.revertToState(snap));
             if (allowance > 1_000_000) allowance /= 2;
             else _settleOneClaim();
@@ -284,7 +284,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         _resolve(day, 100, 99);
         _drainToLastClaim();
         uint256 shortFinish = _coldRouterGas();
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertTrue(vm.revertToState(snap));
 
         _queueBurners(2000, _minimumLiveBurn());
@@ -295,7 +295,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         emit log_named_uint("cold_2000_claim_cohort_finish_router_gas", used);
         assertLe(used, 500_000, "the finishing call stays small");
         assertLe(used, shortFinish + 5_000, "cleanup must not rescan already-consumed beneficiaries");
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 

@@ -38,10 +38,10 @@ contract OptNativePairsTest is StorageCensusLongRunTest {
     {
         if (bytes(directory).length != 0) {
             string memory category = label;
-            if (to == address(game) && data.length >= 4 && bytes4(data) == game.mineFlip.selector) {
+            if (to == address(game) && data.length >= 4 && bytes4(data) == game.mineRun.selector) {
                 vm.prank(from, from);
                 category = string.concat(label, ":", vm.toString(game.nextMinerAction()));
-                uint24 lvl = game.level();
+                uint24 lvl = game.currentLvl();
                 if (lvl == 0 && block.timestamp >= GameTimeLib.DEGENESIS_END_TS) category = string.concat(category, ":level-one");
                 if (lvl >= 10 && lvl % 10 == 0) category = string.concat(category, ":baf");
             }

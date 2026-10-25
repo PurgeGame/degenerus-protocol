@@ -16,7 +16,7 @@ contract SdgnrsPendingReuseGasTest is RedemptionFixture {
             assertEq(_claimTokens(alice,id) + _claimTokens(bob,id), 0);
             assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
             assertEq(_openBatchId(), id + 1);
-            assertFalse(sdgnrs.redemptionSettlementPending());
+            assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         }
     }
 

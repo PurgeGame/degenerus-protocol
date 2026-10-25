@@ -201,7 +201,7 @@ contract FlipTombstone is DeployProtocol {
         // existing allowance to a plausible high value.
         uint256 escrow = 1_000_000_000_000; // whole FLIP
         vm.prank(GAME);
-        coin.mintForGame(VAULT, escrow);
+        coin.mintForGame_g152734(VAULT, escrow);
 
         uint256 existing = coin.vaultMintAllowance();
         assertEq(existing, SEED_VAULT_ALLOWANCE + escrow, "escrow applied");
@@ -224,7 +224,7 @@ contract FlipTombstone is DeployProtocol {
         uint256 target = U128_MAX - TOMBSTONE_AMOUNT;
         uint256 escrow = target - SEED_VAULT_ALLOWANCE;
         vm.prank(GAME);
-        coin.mintForGame(VAULT, escrow);
+        coin.mintForGame_g152734(VAULT, escrow);
 
         assertEq(coin.vaultMintAllowance(), target, "existing pushed to U128_MAX - 1e18");
 
@@ -244,7 +244,7 @@ contract FlipTombstone is DeployProtocol {
         uint256 target = U128_MAX - TOMBSTONE_AMOUNT + 1;
         uint256 escrow = target - SEED_VAULT_ALLOWANCE;
         vm.prank(GAME);
-        coin.mintForGame(VAULT, escrow);
+        coin.mintForGame_g152734(VAULT, escrow);
 
         assertEq(coin.vaultMintAllowance(), target, "existing pushed 1 past the exact-fit bound");
 

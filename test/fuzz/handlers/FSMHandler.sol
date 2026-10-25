@@ -89,17 +89,17 @@ contract FSMHandler is Test {
     ///         above level 0 and a later gameOver latches at a non-zero level.
     function scriptedOpening(uint24 target) external {
         vm.deal(driver, 1_000_000 ether);
-        for (uint256 d; d < 3 * DRIVE_MAX_DAYS && game.level() < target && !game.gameOver(); ++d) _driveDay(d);
-        openingLevel = game.level();
+        for (uint256 d; d < 3 * DRIVE_MAX_DAYS && game.currentLvl() < target && !game.gameOver(); ++d) _driveDay(d);
+        openingLevel = game.currentLvl();
         ghost_maxLevel = openingLevel;
         ghost_lastVrfSeen = game.lastVrfProcessed();
     }
 
     /// @notice Fuzz action: play real-money game days (bounded) until the level rises once.
     function driveLevelUp(uint256 seed) external {
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
         bool gameOverBefore = game.gameOver();
-        for (uint256 d; d < DRIVE_MAX_DAYS && game.level() == levelBefore && !game.gameOver(); ++d) {
+        for (uint256 d; d < DRIVE_MAX_DAYS && game.currentLvl() == levelBefore && !game.gameOver(); ++d) {
             _driveDay(seed + d);
         }
         _postAction(levelBefore, gameOverBefore);
@@ -112,7 +112,7 @@ contract FSMHandler is Test {
         (, , , bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
         if (!locked && !game.gameOver()) {
             vm.prank(driver);
-            try game.purchase{value: priceWei * 10 + DRIVE_BOX}(
+            try game.purchaseOrderFor{value: priceWei * 10 + DRIVE_BOX}(
                 0, 4000, BoxOrderLib.boCustomFloor(DRIVE_BOX), bytes32(0), MintPaymentKind.DirectEth, false
             ) {
                 ghost_purchases++;
@@ -129,7 +129,7 @@ contract FSMHandler is Test {
                 }
             }
             vm.prank(driver);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ghost_advances++;
             } catch {
                 break;
@@ -145,7 +145,7 @@ contract FSMHandler is Test {
     ) external useActor(actorSeed) {
         calls_purchase++;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
         bool gameOverBefore = game.gameOver();
 
         // Purchases are inert after gameOver; skip the buy but still record FSM state so the
@@ -160,7 +160,7 @@ contract FSMHandler is Test {
 
             if (totalCost != 0 && totalCost <= currentActor.balance) {
                 vm.prank(currentActor);
-                try game.purchase{value: totalCost}(
+                try game.purchaseOrderFor{value: totalCost}(
                     0,
                     qty,
                     BoxOrderLib.boCustomFloor(lootboxAmt),
@@ -181,11 +181,11 @@ contract FSMHandler is Test {
     function mineFlip(uint256 actorSeed) external useActor(actorSeed) {
         calls_advanceGame++;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
         bool gameOverBefore = game.gameOver();
 
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ghost_advances++;
         } catch {}
 
@@ -196,7 +196,7 @@ contract FSMHandler is Test {
     function fulfillVrf(uint256 randomWord) external {
         calls_fulfillVrf++;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
         bool gameOverBefore = game.gameOver();
 
         uint256 reqId = vrf.lastRequestId();
@@ -232,7 +232,7 @@ contract FSMHandler is Test {
     function recoverAndDrain(uint256 word) external {
         calls_recover++;
 
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
         bool gameOverBefore = game.gameOver();
 
         address cranker = actors[0];
@@ -255,7 +255,7 @@ contract FSMHandler is Test {
             if (!game.advanceDue() && !game.rngLocked()) break;
 
             vm.prank(cranker);
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ghost_advances++;
             } catch {
                 break;
@@ -267,7 +267,7 @@ contract FSMHandler is Test {
 
     /// @notice Warp past the VRF retry timeout (18 hours + 1 second)
     function warpPastVrfTimeout() external {
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
         bool gameOverBefore = game.gameOver();
         vm.warp(block.timestamp + 18 hours + 1);
         _postAction(levelBefore, gameOverBefore);
@@ -275,7 +275,7 @@ contract FSMHandler is Test {
 
     /// @notice Warp time by bounded delta
     function warpTime(uint256 delta) external {
-        uint256 levelBefore = game.level();
+        uint256 levelBefore = game.currentLvl();
         bool gameOverBefore = game.gameOver();
         delta = bound(delta, 1 minutes, 30 days);
         vm.warp(block.timestamp + delta);
@@ -284,7 +284,7 @@ contract FSMHandler is Test {
 
     /// @dev Update FSM ghost state after an operation.
     function _postAction(uint256 levelBefore, bool gameOverBefore) private {
-        uint256 levelAfter = game.level();
+        uint256 levelAfter = game.currentLvl();
         bool gameOverAfter = game.gameOver();
 
         // Level monotonicity violations.

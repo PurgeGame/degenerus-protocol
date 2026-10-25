@@ -34,7 +34,7 @@ contract RngNudge is DeployProtocol {
             assertGt(cost, 0, "positive whole-token price");
 
             bytes memory burnCall = abi.encodeCall(
-                IDegenerusCoin.burnCoin,
+                IDegenerusCoin.burnCoin_g27673,
                 (alice, cost)
             );
             vm.mockCall(ContractAddresses.COIN, burnCall, bytes(""));
@@ -53,7 +53,7 @@ contract RngNudge is DeployProtocol {
 
         vm.mockCall(
             ContractAddresses.COIN,
-            abi.encodeCall(IDegenerusCoin.burnCoin, (bob, staleCost)),
+            abi.encodeCall(IDegenerusCoin.burnCoin_g27673, (bob, staleCost)),
             bytes("")
         );
         vm.prank(bob);
@@ -65,7 +65,7 @@ contract RngNudge is DeployProtocol {
 
         vm.mockCallRevert(
             ContractAddresses.COIN,
-            abi.encodeCall(IDegenerusCoin.burnCoin, (alice, staleCost)),
+            abi.encodeCall(IDegenerusCoin.burnCoin_g27673, (alice, staleCost)),
             abi.encodeWithSignature("UnexpectedBurn()")
         );
         vm.expectRevert(GameFacade.NudgeCostChanged.selector);

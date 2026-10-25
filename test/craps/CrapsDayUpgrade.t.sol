@@ -115,7 +115,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
     function _buyNormalDay(address who) internal {
         Craps.Bets memory blank;
         vm.prank(who);
-        craps.enterBonusDay(blank, 1);
+        craps.playCraps(blank, 1);
     }
 
     function _slotAt(uint24 day, uint256 period) internal view returns (uint64) {
@@ -361,7 +361,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint24 day = _openDay(10);
         Craps.Bets memory blank;
         vm.prank(alice);
-        craps.enterBonusDay(blank, 10);
+        craps.playCraps(blank, 10);
 
         assertEq(craps.daySeatHighMaskOf(day, alice), 0x3F, "a whole-day high is missing period flags");
         for (uint256 p = 0; p < 6; ++p) {
@@ -419,7 +419,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         vm.warp(dayStart);
         Craps.Bets memory blank;
         vm.prank(alice);
-        craps.enterBonusDay(blank, 10);
+        craps.playCraps(blank, 10);
         vm.warp(dayStart + 7 hours);
         _armAndSettle(day, 1, word);
 
@@ -507,7 +507,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         craps.upgradeDayWindows(0, day, uint8(1 << 1));
         Craps.Bets memory blank;
         vm.prank(dave);
-        craps.enterBonusBattle(1, blank, 10);
+        craps.throwCraps(1, blank, 10);
 
         vm.warp(vm.getBlockTimestamp() + 7 hours);
         Vm.Log[] memory logs = _armAndSettle(day, 1, uint256(keccak256("contest")));

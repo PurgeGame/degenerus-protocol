@@ -44,7 +44,7 @@ contract LootboxOpenGoldens is DeployProtocol {
     function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(caller);
-        game.mineFlip(0);
+        game.mineRun(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -54,12 +54,12 @@ contract LootboxOpenGoldens is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -78,7 +78,7 @@ contract LootboxOpenGoldens is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
         }
         // A fresh request waits for every read consumer of the day's cohort to finish. A shut
         // craps window the day bound to the write buffer rides the next request, which the engine
@@ -93,7 +93,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             if (!game.advanceDue() && game.rngComplete()) break;
             if (!game.advanceDue()) continue; // a fresh request waits for its word
             vm.prank(actor);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
@@ -104,7 +104,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), vrfWord);
         vm.recordLogs();
         vm.prank(actor);
-        game.mineFlip(0);
+        game.mineRun(0);
         logs = vm.getRecordedLogs();
     }
 
@@ -126,14 +126,14 @@ contract LootboxOpenGoldens is DeployProtocol {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
-        assertEq(game.level(), 0, "golden fixture level");
+        assertEq(game.currentLvl(), 0, "golden fixture level");
         assertEq(priceWei, 0.01 ether, "golden fixture price");
         gi = _idx();
         assertEq(RecyclingState.boxCount(address(game), gi), 0, "golden fixture: empty buffer");
         whale = makeAddr("goldenBuyer");
         vm.deal(whale, 20 ether);
         vm.prank(whale);
-        game.purchase{value: 12 * 0.15 ether + priceWei + 1 ether}(0, 400, BoxOrderLib.boCustoms(12, 0.15 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 12 * 0.15 ether + priceWei + 1 ether}(0, 400, BoxOrderLib.boCustoms(12, 0.15 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(RecyclingState.boxCount(address(game), gi), 1, "golden fixture: one entry");
         assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), gi, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
         assertEq(BoxOrderLib.boScore(RecyclingState.boxEntry(address(game), gi, 0)), 1, "golden fixture: whale's frozen score");

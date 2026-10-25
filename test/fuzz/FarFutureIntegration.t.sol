@@ -72,7 +72,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
     /// @notice Main integration test: drive game through multiple levels, verify zero FF stranding
     function testMultiLevelAdvancementWithFFTickets() public {
         // --- Phase 1: Verify initial state ---
-        assertEq(game.level(), 0, "Initial level should be 0");
+        assertEq(game.currentLvl(), 0, "Initial level should be 0");
 
         // Verify constructor pre-queued FF entries at levels 6, 7, 8.
         // ticketQueue[_ticketQueueStorageKey(key)] is an address[] of unique buyers. The constructor queues tickets
@@ -109,7 +109,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         // level 6's own latch, which has necessarily already fired once level reaches 7;
         // target level 9 for a full level of margin over that.
         for (uint256 day = 0; day < 500; day++) {
-            if (game.level() >= 9) break;
+            if (game.currentLvl() >= 9) break;
             if (game.gameOver()) break;
 
             // Advance to next day
@@ -131,7 +131,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) break; // NotTimeYet = done for this day
             }
@@ -142,7 +142,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         // level at a time, strictly before L's own L->L+1 transition (see the loop comment
         // above); reaching level 7 already implies levels 6's and 5's own latches (draining
         // pools 8 and 7) have fired, and the loop runs to level 9 for margin.
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         emit log_named_uint("Final level reached", finalLevel);
         assertGe(finalLevel, 7, "Game should advance past level 6, whose latch drains the level-8 FF pool");
 
@@ -198,7 +198,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         }
 
         vm.prank(who);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0,
             qty,
             0,
@@ -218,7 +218,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         // Use deterministic random word derived from current state
         uint256 randomWord = uint256(keccak256(abi.encode(
             block.timestamp,
-            game.level(),
+            game.currentLvl(),
             reqId
         )));
 

@@ -82,7 +82,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
 
     function _mint(address who, uint256 amount) internal {
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     function _call(Vm.AccountAccess[] memory a, address target, bytes4 sel) internal pure returns (uint256 at, bytes memory args) {
@@ -121,8 +121,8 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         assertLt(reg, burn, "registration precedes the burn");
 
         (uint256 regCall,) = _call(acc, address(game), bytes4(keccak256("registerWallet_g9539(address,bool)")));
-        (uint256 burnCall, bytes memory burnArgs) = _call(acc, address(coin), bytes4(keccak256("burnCoinForCraps(address,uint32,uint256)")));
-        assertLt(regCall, burnCall, "registerWallet is called before burnCoinForCraps");
+        (uint256 burnCall, bytes memory burnArgs) = _call(acc, address(coin), bytes4(keccak256("burnCoinForCraps_g292454(address,uint32,uint256)")));
+        assertLt(regCall, burnCall, "registerWallet is called before burnCoinForCraps_g292454");
         (address burner, uint32 burnId,) = abi.decode(burnArgs, (address, uint32, uint256));
         assertEq(burner, who, "FLIP burns from the address");
         assertEq(burnId, id, "FLIP receives the wallet ID");
@@ -253,13 +253,13 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         slot = JackpotBattle(address(crapsBattle)).createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
         vm.prank(ContractAddresses.CRAPS);
-        coin.creditCrapsComps(1e12);
+        coin.creditCrapsComps_g37225(1e12);
     }
 
     function _who(string memory label) internal returns (address who) {
         who = makeAddr(label);
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, 1_000_000);
+        coin.mintForGame_g152734(who, 1_000_000);
     }
 
     function _gas(string memory label) internal {

@@ -73,14 +73,14 @@ contract WwxrpClaimableTest is DeployProtocol {
         _credit(aliceId, 50);
         vm.prank(ContractAddresses.VAULT); OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (alice, 30)), 0);
         uint256 supply = wwxrp.totalSupply();
-        vm.prank(alice); wwxrp.enter(0, 25);
+        vm.prank(alice); wwxrp.enterDraw(0, 25);
         assertEq(wwxrp.claimable(aliceId), 25);
         assertEq(wwxrp.balanceOf(alice), 30);
         assertEq(wwxrp.totalSupply(), supply);
         vm.expectRevert(WWXRP.InsufficientBalance.selector);
-        vm.prank(alice); wwxrp.enter(0, 56);
+        vm.prank(alice); wwxrp.enterDraw(0, 56);
         assertEq(wwxrp.claimable(aliceId), 25, "failed draw restores claimable");
-        vm.prank(alice); wwxrp.enter(0, 40);
+        vm.prank(alice); wwxrp.enterDraw(0, 40);
         assertEq(wwxrp.claimable(aliceId), 0);
         assertEq(wwxrp.balanceOf(alice), 15);
         assertEq(wwxrp.totalSupply(), supply - 15);

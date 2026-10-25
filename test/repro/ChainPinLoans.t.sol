@@ -102,7 +102,7 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
         _setUpBase();
         seeder = address(new ChainPinLoanSeeder());
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, borrower, 1e15);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, borrower, 1e15);
         _sub(root);
         for (uint256 i; i < 5; ++i) {
             uint256 price = game.mintPrice();
@@ -129,8 +129,8 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
     function _seizeLive(uint24 due) private {
         _enterDue(due);
         assertEq(game.nextMinerAction(), ACTION_SEIZE_LOANS, "the seizure stage is next");
-        game.mineFlip(0);
-        for (uint256 i; i < 5 && game.nextMinerAction() == ACTION_SEIZE_LOANS; ++i) game.mineFlip(0);
+        game.mineRun(0);
+        for (uint256 i; i < 5 && game.nextMinerAction() == ACTION_SEIZE_LOANS; ++i) game.mineRun(0);
         assertTrue(game.nextMinerAction() != ACTION_SEIZE_LOANS, "the seizure stage completed");
     }
 
@@ -235,9 +235,9 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
         _pin().completedDeadline();
         _unetch();
         assertTrue(game.livenessTriggered(), "completed purchase deadline");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_loanStep(), 1, "the decision owes settlement");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(_loanStep(), 0, "one call finishes the book");
 
         assertFalse(_open(kids[0]), "smurf loan closed");
@@ -248,7 +248,7 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
         assertEq(_payeeOf(edge), address(sdgnrs));
 
         // The ending moves on: the next call sends the terminal request or waits for it.
-        (bool ok, bytes memory reason) = address(game).call(abi.encodeCall(game.mineFlip, (uint32(0))));
+        (bool ok, bytes memory reason) = address(game).call(abi.encodeCall(game.mineRun, (uint32(0))));
         if (!ok) {
             assertTrue(reason.length == 4 && (bytes4(reason) == bytes4(keccak256("RngNotReady()"))
                 || bytes4(reason) == bytes4(keccak256("NoWork()"))), "the call after the loan stage failed");

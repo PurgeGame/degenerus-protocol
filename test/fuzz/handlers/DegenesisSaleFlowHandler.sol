@@ -121,7 +121,7 @@ contract DegenesisSaleFlowHandler is Test {
             uint256 spend = ((amount - credit) * 4 + 0.001 ether - 1) / 0.001 ether * 0.001 ether;
             if (spend < 0.01 ether) spend = 0.01 ether;
             vm.prank(p);
-            try game.purchase{value: spend}(0, 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchaseOrderFor{value: spend}(0, 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false) {
                 ++ghost_ordinary;
             } catch {
                 _dropLogs();
@@ -130,7 +130,7 @@ contract DegenesisSaleFlowHandler is Test {
         bool live = !game.gameOver() && !game.livenessTriggered();
         _observe();
         vm.prank(p);
-        try game.buyDegenesisBox{value: amount}(0, amount) {
+        try game.purchaseDegenesisBox{value: amount}(0, amount) {
             ++ghost_buys;
             if (!saleDay || !live || malformed) ++bad_buyAccepted;
         } catch {
@@ -150,7 +150,7 @@ contract DegenesisSaleFlowHandler is Test {
         if (tickets == 0 && box == 0) tickets = 1;
         _observe();
         vm.prank(p);
-        try game.purchase{value: tickets * price + box}(
+        try game.purchaseOrderFor{value: tickets * price + box}(
             0, tickets * 400, box == 0 ? 0 : BoxOrderLib.boCustom(box), bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             ++ghost_ordinary;
@@ -169,7 +169,7 @@ contract DegenesisSaleFlowHandler is Test {
         uint256 tickets = bound(ethSeed, 5 ether, 30 ether) / price;
         _observe();
         vm.prank(p);
-        try game.purchase{value: tickets * price}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: tickets * price}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             nextFilled += tickets * price;
             ++ghost_ordinary;
         } catch {
@@ -183,7 +183,7 @@ contract DegenesisSaleFlowHandler is Test {
         uint256 g = bound(gasSeed, 250_000, 10_000_000);
         _observe();
         vm.prank(actors[actorSeed % actors.length]);
-        (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         if (ok) ++ghost_mines;
         else _dropLogs();
         _observe();
@@ -212,7 +212,7 @@ contract DegenesisSaleFlowHandler is Test {
                 continue;
             }
             _observe();
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) {
                 _dropLogs();
                 break;

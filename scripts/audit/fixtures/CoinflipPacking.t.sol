@@ -10,7 +10,7 @@ import {ContractAddresses} from "../contracts/ContractAddresses.sol";
 
 contract PackingDependencies {
     function burnForCoinflip(address, uint256) external {}
-    function mintForGame(address, uint256) external {}
+    function mintForGame_g152734(address, uint256) external {}
     function mintPrize(address, uint256) external {}
     function recordBafFlip(address, uint24, uint256) external {}
     function getLastBafResolvedDay() external pure returns (uint24) { return 0; }
@@ -114,7 +114,7 @@ contract CoinflipPackingBench is Test {
             _warp(today);
             cf.setLatest(today);
             vm.prank(p);
-            cf.depositCoinflip(address(0), 1000 ether);
+            cf.playCoinflip(address(0), 1000 ether);
             _gas(string.concat("daily_", vm.toString(i)));
             assertEq(cf.coinflipAmount(p), 1007 ether + 0.5 ether);
         }

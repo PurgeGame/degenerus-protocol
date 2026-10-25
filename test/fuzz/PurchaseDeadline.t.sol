@@ -73,7 +73,7 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
     }
 
     function _advanceWithVrf() private {
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 id = mockVRF.lastRequestId();
         if (id != 0) {
             (, , bool fulfilled) = mockVRF.pendingRequests(id);
@@ -85,7 +85,7 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
         _seed(30);
         uint256 nextBefore = game.nextPrizePoolView();
         vm.prank(BUYER);
-        game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.nextPrizePoolView() - nextBefore, 2 ether, "distress routes entire purchase to next");
 
         // Finish the funded level beyond its purchase deadline, across all three jackpot days.
@@ -95,7 +95,7 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
         // the engine has nothing left to do (not merely until a call leaves the lock clear).
         for (uint256 day; day < 6; ++day) {
             for (uint256 step; step < 1000; ++step) {
-                if (game.level() == 2 && !game.jackpotPhase() && !game.rngLocked()) return;
+                if (game.currentLvl() == 2 && !game.jackpotPhase() && !game.rngLocked()) return;
                 if (!game.rngLocked() && !game.advanceDue()) break;
                 _advanceWithVrf();
             }
@@ -111,7 +111,7 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
         assertTrue(game.livenessTriggered());
         vm.prank(BUYER);
         vm.expectRevert(bytes4(keccak256("E()")));
-        game.purchase{value: 1 ether}(0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1 ether}(0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         for (uint256 i; i < 30 && !game.gameOver(); ++i) _advanceWithVrf();
         assertTrue(game.gameOver(), "unfunded level ends after the 30-day deadline");
     }

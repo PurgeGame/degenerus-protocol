@@ -74,7 +74,7 @@ contract AfkingPendingMembershipTest is Test {
         vm.etch(ContractAddresses.GAME, address(h).code);
         vm.copyStorage(address(h), ContractAddresses.GAME);
         h = AfkingMembershipHarness(ContractAddresses.GAME);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         vm.mockCall(ContractAddresses.QUESTS, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.AFFILIATE, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.WWXRP, bytes(""), bytes(""));

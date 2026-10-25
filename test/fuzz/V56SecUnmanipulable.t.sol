@@ -134,7 +134,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         _deliverDay(_singleton(p), 0xDECA02);
         _t += 1 days;
         vm.warp(_t);
-        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked());
         DegenerusGameLens.SubFull memory before = _owed(p);
         _t += 3 days;
@@ -489,7 +489,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         _subscribeLootbox(p, 1);
         _t += 1 days;
         vm.warp(_t);
-        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked());
         uint32 id = game.walletIdOf_g3120(p);
         assertTrue(GameSlotKeys.afkingBoxPending(address(game), id), "the day's box is paid and pending");
@@ -566,7 +566,7 @@ contract V56SecUnmanipulable is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -577,7 +577,7 @@ contract V56SecUnmanipulable is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

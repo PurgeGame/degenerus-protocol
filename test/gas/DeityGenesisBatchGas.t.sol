@@ -26,7 +26,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol(false);
-        assertEq(game.level(), 0, "fixture: genesis level anchors GENESIS_MINT_CEILING");
+        assertEq(game.currentLvl(), 0, "fixture: genesis level anchors GENESIS_MINT_CEILING");
     }
 
     function testColdBatchFitsTransactionCapAndWritesEachQueueWordOnce() public {

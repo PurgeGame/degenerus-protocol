@@ -33,7 +33,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.deal(buyer, 0.01 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: 0.01 ether}(
+        game.purchaseOrderFor{value: 0.01 ether}(
             0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint256 qty, uint256 weiIn, bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
@@ -49,7 +49,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.deal(buyer, 0.05 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: 0.05 ether}(
+        game.purchaseOrderFor{value: 0.05 ether}(
             0, 0, BoxOrderLib.boCustomFloor(0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (, , bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
@@ -86,7 +86,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.deal(buyer, 1 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: 1 ether}(
+        game.purchaseOrderFor{value: 1 ether}(
             0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();

@@ -84,7 +84,7 @@ contract DegenesisAccounting is DegenesisFixture {
         Books memory a = _books();
         uint256 claimable = _claimableOf(aliceId);
         vm.prank(alice);
-        game.buyDegenesisBox(0, 1 ether);
+        game.purchaseDegenesisBox(0, 1 ether);
         Books memory b = _books();
         assertEq(claimable - _claimableOf(aliceId), 1 ether, "claimable debited");
         assertEq(b.claimablePool, a.claimablePool, "a reservation changes category only");
@@ -100,7 +100,7 @@ contract DegenesisAccounting is DegenesisFixture {
         game.depositAfkingFunding{value: 3 ether}(aliceId);
         Books memory a = _books();
         vm.prank(alice);
-        game.buyDegenesisBox(0, 2 ether);
+        game.purchaseDegenesisBox(0, 2 ether);
         Books memory b = _books();
         assertEq(_afkingOf(aliceId), 1 ether, "prepaid debited");
         assertEq(b.claimablePool, a.claimablePool, "claimablePool unchanged");
@@ -118,7 +118,7 @@ contract DegenesisAccounting is DegenesisFixture {
         Books memory a = _books();
         vm.deal(alice, 0.2 ether);
         vm.prank(alice);
-        game.buyDegenesisBox{value: 0.2 ether}(0, 1 ether);
+        game.purchaseDegenesisBox{value: 0.2 ether}(0, 1 ether);
         Books memory b = _books();
         assertEq(_claimableOf(aliceId), 1, "claimable to its sentinel");
         assertEq(_afkingOf(aliceId), 0.5 ether, "prepaid covers the rest");
@@ -134,7 +134,7 @@ contract DegenesisAccounting is DegenesisFixture {
         uint256 afk = _afkingOf(aliceId);
         vm.deal(alice, 1 ether);
         vm.prank(alice);
-        game.buyDegenesisBox{value: 1 ether}(0, 0.25 ether);
+        game.purchaseDegenesisBox{value: 1 ether}(0, 0.25 ether);
         Books memory b = _books();
         assertEq(_afkingOf(aliceId) - afk, 0.75 ether, "overpay to the payer's AFKing");
         assertEq(b.claimablePool, a.claimablePool + 1 ether, "amount plus overpay held");
@@ -150,7 +150,7 @@ contract DegenesisAccounting is DegenesisFixture {
         game.setOperatorApproval(0, op, true);
         uint256 credit = game.degenesisCreditOf(alice);
         vm.prank(op);
-        game.buyDegenesisBox{value: 1 ether}(aliceId, 0.4 ether);
+        game.purchaseDegenesisBox{value: 1 ether}(aliceId, 0.4 ether);
         assertEq(_afkingOf(opId), 0.6 ether, "overpay to the operator");
         assertEq(_afkingOf(aliceId), 0, "nothing to the buyer");
         assertEq(game.degenesisCreditOf(alice), credit - 0.4 ether, "the buyer's credit consumed");
@@ -183,7 +183,7 @@ contract DegenesisAccounting is DegenesisFixture {
         Books memory a = _books();
         assertFalse(_frozen(), "fixture: the request splits before it freezes");
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (bool found, uint8 day, uint256 volume) = _splitIn(logs);
         (uint256 fromYield, uint256 fromSdgnrs) = _vrfFundedIn(logs);
@@ -235,7 +235,7 @@ contract DegenesisAccounting is DegenesisFixture {
         _seedClaimable(aliceId, 1 ether);
         _buyDegenesis(alice, 0.0101 ether);
         vm.prank(alice);
-        game.buyDegenesisBox(0, 0.0257 ether);
+        game.purchaseDegenesisBox(0, 0.0257 ether);
         _buyDegenesis(alice, 0.3333 ether);
         uint256 v = 0.0101 ether + 0.0257 ether + 0.3333 ether;
         assertEq(_cohortVolume(1), v, "fixture: cohort 1 volume");
@@ -311,9 +311,9 @@ contract DegenesisAccounting is DegenesisFixture {
         game.depositAfkingFunding{value: 1 ether}(aliceId);
         // Separate purchases exhaust claimable before drawing prepaid principal.
         vm.prank(alice);
-        game.buyDegenesisBox(0, 1 ether);
+        game.purchaseDegenesisBox(0, 1 ether);
         vm.prank(alice);
-        game.buyDegenesisBox(0, 0.0101 ether);
+        game.purchaseDegenesisBox(0, 0.0101 ether);
         _buyDegenesis(alice, 0.0123 ether);
         uint256 volume = 1.0224 ether;
         _warpDay(3, 1 hours);

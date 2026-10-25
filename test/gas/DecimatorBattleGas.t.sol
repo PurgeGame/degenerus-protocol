@@ -13,7 +13,7 @@ contract DecimatorBattleGasTest is Test {
 
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         h = new DecimatorBattleHarness();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
     }

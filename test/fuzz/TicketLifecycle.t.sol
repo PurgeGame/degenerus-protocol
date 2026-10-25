@@ -186,7 +186,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // before the game reaches that level.
         _driveToLevel(5);
         _flushAdvance();
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, 4, "Game must reach at least level 4");
 
         // FF queues for levels 2-4 should be drained (their generation windows opened
@@ -223,7 +223,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _flushAdvance();
         for (uint160 i; i < 19; ++i) assertEq(_ticketsOwed(key, address(0xDA00 + i)), 0);
         (, bool inJackpot,,, ) = game.purchaseInfo_g1027();
-        uint24 target = inJackpot ? game.level() : game.level() + 1;
+        uint24 target = inJackpot ? game.currentLvl() : game.currentLvl() + 1;
         uint24 nextKey = _writeKeyForLevel(target);
         for (uint160 i; i < 19; ++i) {
             address player = address(0xDA00 + i);
@@ -233,7 +233,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     function testPurchasePhaseTicketsProcessed() public {
-        assertEq(game.level(), 0, "Should start at level 0");
+        assertEq(game.currentLvl(), 0, "Should start at level 0");
 
         // Verify we are in purchase phase (not jackpot)
         (, bool inJackpot, , ,) = game.purchaseInfo_g1027();
@@ -248,7 +248,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Drive through one full level transition
         _driveToLevel(2);
-        assertGe(game.level(), 1, "Game must reach at least level 1");
+        assertGe(game.currentLvl(), 1, "Game must reach at least level 1");
 
         // After level transition, write slot swaps and tickets from level 1 should be processed
         // The read-side queue for level 1 should be empty
@@ -269,7 +269,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // _driveToLevel buys tickets every day, so queues are naturally populated.
         _driveToLevel(6);
         _flushAdvance();
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, 4, "Game must reach at least level 4");
 
         // Verify all read queues for early levels have at most 2 constructor-seeded entries.
@@ -304,7 +304,7 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @notice At level 0, verify level 5 goes to write key and level 6 goes to FF key.
     ///         This tests the unified boundary (> level + 5).
     function testBoundaryRoutingAtDeployment() public {
-        assertEq(game.level(), 0, "Should be level 0");
+        assertEq(game.currentLvl(), 0, "Should be level 0");
 
         // Constructor pre-queued at levels 1-100. At level 0 the mint ceiling is
         // level+1 = 1:
@@ -340,7 +340,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // last-purchase-day latch is open), so by the time the game reaches level 3
         // the pools for levels 2 and 3 must already be minted and drained.
         _driveToLevel(4);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 3, "Must reach level 3");
 
         assertEq(_ffQueueLength(2), 0, "FF at 2 should drain once the mint ceiling passes it");
@@ -360,7 +360,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         which always routes to FF key (99 > 5). Verify they exist after transition.
     function testVaultPerpetualTicketsRouteToFF() public {
         _driveToLevel(2);
-        assertGe(game.level(), 1, "Must reach level 1");
+        assertGe(game.currentLvl(), 1, "Must reach level 1");
 
         // After level 0->1 transition: purchaseLevel=1, targetLevel=1+99=100
         // 100 > 1+5 = true -> FF key
@@ -414,7 +414,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // and jackpot phases with all ticket processing windows completed.
         _driveToLevel(5);
         _flushAdvance();
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 4, "Must complete at least 4 full level cycles");
 
         // Check levels 1-3 (well below current level).
@@ -501,7 +501,7 @@ contract TicketLifecycleTest is DeployProtocol {
         //   level 6 FF: drained by transition at level 1
         //   level 7 FF: drained by transition at level 2
         //   level 8+ FF: should still be 2 (untouched by _prepareFutureTickets)
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         // Check FF levels that are beyond the transition drain range
         for (uint24 lvl = uint24(reached) + 6; lvl <= 10; lvl++) {
             assertEq(
@@ -520,7 +520,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         state machine correctly processes tickets at every phase.
     function testFiveLevelIntegration() public {
         _driveToLevel(6);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 5, "Must reach at least level 5");
 
         // Verify all processed levels have queues with at most the constructor-seeded
@@ -564,7 +564,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testJackpotPhaseTicketsRouteToCurrentLevel() public {
         // Drive to level 1 first to get past initial state
         _driveToLevel(2);
-        uint256 startLevel = game.level();
+        uint256 startLevel = game.currentLvl();
         assertGe(startLevel, 1, "Must reach at least level 1");
 
         // Now drive the game forward day by day until we enter jackpot phase
@@ -583,7 +583,7 @@ contract TicketLifecycleTest is DeployProtocol {
             (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo_g1027();
             if (inJackpot && !rngLocked_) {
                 foundJackpot = true;
-                jackpotLevel = game.level();
+                jackpotLevel = game.currentLvl();
 
                 // Snapshot queue lengths BEFORE purchase for both current and next level.
                 // Check all 4 possible keys (plain and SLOT_BIT for both levels).
@@ -612,7 +612,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
@@ -636,7 +636,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testLastDayTicketsRouteToNextLevel() public {
         // Drive to level 2 to establish game state
         _driveToLevel(3);
-        uint256 currentLevel = game.level();
+        uint256 currentLevel = game.currentLvl();
         assertGe(currentLevel, 2, "Must reach at least level 2");
 
         // Warp forward to a new day so purchases are allowed
@@ -689,7 +689,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 cost = (priceWei * qty) / 400;
         vm.deal(buyer3, cost + 50 ether);
         vm.prank(buyer3);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             // Purchase succeeded -- verify routing via entriesOwedPacked
@@ -731,9 +731,9 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      consumer. The fixture therefore seals the genesis day, buys into the write buffer and
     ///      lands the chosen word through the real mid-day request instead of poking storage.
     function testLootboxNearRollTicketsProcessed() public {
-        assertEq(game.level(), 0, "Should start at level 0");
+        assertEq(game.currentLvl(), 0, "Should start at level 0");
         _settleToday();
-        assertEq(game.level(), 0, "the genesis daily cycle leaves the game at level 0");
+        assertEq(game.currentLvl(), 0, "the genesis daily cycle leaves the game at level 0");
 
         // Use buyer3 exclusively for lootbox (buyer1/buyer2 are used by _driveToLevel).
         // One buyer at one physical buffer merges every buy into one packed order (the custom
@@ -752,7 +752,7 @@ contract TicketLifecycleTest is DeployProtocol {
         for (uint24 lvl = 1; lvl <= 5; lvl++) {
             writeKeysBefore[lvl] = _queueLength(_writeKeyForLevel(lvl));
         }
-        uint24 openLevel = uint24(game.level()) + 1; // a box's base level: the live mint level
+        uint24 openLevel = uint24(game.currentLvl()) + 1; // a box's base level: the live mint level
 
         // Land the word and open all eight boxes (mid-day: buyer3's 8 ETH clears the threshold).
         _openWithMiddayWord(buyer3, _nearRollWord(buffer, buyer3));
@@ -790,7 +790,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive through level transitions to process all near-future tickets.
         _driveToLevel(6);
         _flushAdvance();
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 5, "Must reach at least level 5");
 
         // After processing: verify that buyer3's lootbox-sourced ticketsOwed at near-future
@@ -838,9 +838,9 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      mid-day request (stored verbatim) and the engine opens the sealed cohort as a read
     ///      consumer, replacing the old advance-cycle-then-poke-the-word fixture.
     function testLootboxFarRollTicketsRouteToFF() public {
-        assertEq(game.level(), 0, "Should start at level 0");
+        assertEq(game.currentLvl(), 0, "Should start at level 0");
         _settleToday();
-        assertEq(game.level(), 0, "the genesis daily cycle leaves the game at level 0");
+        assertEq(game.currentLvl(), 0, "the genesis daily cycle leaves the game at level 0");
 
         // Snapshot FF queue lengths before lootbox opens across a wide range.
         // Constructor places 2 entries at each FF level 2-100. We check levels 6-55
@@ -892,7 +892,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive game forward enough to drain FF queues in the lootbox target range.
         _driveToLevel(8);
         _flushAdvance();
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 6, "Must reach at least level 6");
 
         // Verify FF queues within the drained range are empty. The mint ceiling never
@@ -915,7 +915,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         - After level transitions, FF queues in the drain range are empty
     /// @dev SRC-06: Whale pass queues tickets at purchaseLevel through purchaseLevel+99
     function testWhalePassTicketsAcrossLevels() public {
-        assertEq(game.level(), 0, "Should start at level 0");
+        assertEq(game.currentLvl(), 0, "Should start at level 0");
 
         // Record queue state before whale purchase for levels we'll check
         uint256 writeKey1Before = _queueLength(_writeKeyForLevel(1));
@@ -961,7 +961,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive through level transitions to process near-future and drain FF
         _driveToLevel(6);
         _flushAdvance();
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 5, "Must reach at least level 5");
 
         // FF queues drained once their generation window opens: the mint ceiling
@@ -1010,7 +1010,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Materialize level 1, then check the chunk's quadrant spread while level 1 still owns
         // its parity trait buffer.
         _driveToLevel(1);
-        assertGe(game.level(), 1, "must reach level 1");
+        assertGe(game.currentLvl(), 1, "must reach level 1");
         assertEq(_ticketsOwed(1, claimant) + _ticketsOwed(1 | TICKET_SLOT_BIT, claimant), 0,
             "level-1 claim fully drained");
         assertEq(_traitBufferLevel(1), 1, "level 1 still owns its parity trait buffer");
@@ -1065,7 +1065,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Materialize level 1 across multiple aligned chunks, then read the spread while
         // level 1 still owns its parity trait buffer.
         _driveToLevel(1);
-        assertGe(game.level(), 1, "must reach level 1");
+        assertGe(game.currentLvl(), 1, "must reach level 1");
         assertEq(_ticketsOwed(1, claimant) + _ticketsOwed(1 | TICKET_SLOT_BIT, claimant), 0,
             "level-1 claim fully drained");
         assertEq(_traitBufferLevel(1), 1, "level 1 still owns its parity trait buffer");
@@ -1117,7 +1117,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testBoundaryRoutingAtNonZeroLevel() public {
         // Drive to level 4 so the game is at level 3+
         _driveToLevel(4);
-        uint256 L = game.level();
+        uint256 L = game.currentLvl();
         assertGe(L, 3, "Game must reach at least level 3");
 
         // Snapshot FF queue lengths at L+1 (always within the mint window: the ceiling
@@ -1160,7 +1160,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive to level 2 to get past initial state
         _driveToLevel(2);
         _flushAdvance();
-        uint256 L = game.level();
+        uint256 L = game.currentLvl();
         assertGe(L, 1, "Must reach at least level 1");
 
         // At steady state (no last-purchase-day latch open) the mint ceiling is L+1,
@@ -1186,14 +1186,14 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 50; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
         }
 
         // Verify we are still at the same level (no transition occurred)
-        assertEq(game.level(), L,
+        assertEq(game.currentLvl(), L,
             "Game should still be at level L after low-pool daily cycles");
 
         // EDGE-03 core assertion: FF queue at L+2 is UNCHANGED while the pool stays
@@ -1210,7 +1210,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _seedNextPrizePool(49.9 ether);
         _driveToLevel(L + 2);
         _flushAdvance();
-        assertGt(game.level(), L, "Game must advance past level L");
+        assertGt(game.currentLvl(), L, "Game must advance past level L");
 
         // After the latch + sweep: FF at L+2 should be drained.
         assertEq(_ffQueueLength(uint24(ffTarget)), 0,
@@ -1231,7 +1231,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testJackpotPhaseTicketsProcessedFromReadSlot() public {
         // Drive to level 2 to get past initial state
         _driveToLevel(2);
-        uint256 startLevel = game.level();
+        uint256 startLevel = game.currentLvl();
         assertGe(startLevel, 1, "Must reach at least level 1");
 
         // Drive day by day until entering jackpot phase
@@ -1250,7 +1250,7 @@ contract TicketLifecycleTest is DeployProtocol {
             (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo_g1027();
             if (inJackpot && !rngLocked_) {
                 foundJackpot = true;
-                jackpotLevel = game.level();
+                jackpotLevel = game.currentLvl();
 
                 // Buy tickets with buyer3 during jackpot phase -> routes to level J
                 _buyTickets(buyer3, 4000);
@@ -1269,7 +1269,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
@@ -1282,7 +1282,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // batches, so multiple mineFlip calls may be needed across multiple days.
         _driveToLevel(jackpotLevel + 3);
         _flushAdvance();
-        assertGt(game.level(), jackpotLevel, "Must advance past jackpot level");
+        assertGt(game.currentLvl(), jackpotLevel, "Must advance past jackpot level");
 
         // EDGE-04: ticket processing only runs at the current level, so
         // jackpot-phase entries at old level J persist in the double-buffer after
@@ -1321,7 +1321,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive to level 6 to complete several level transitions
         _driveToLevel(6);
         _flushAdvance();
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 5, "Must complete at least 5 level transitions");
 
         // ZSA-01 autoBuy: both key spaces should have at most 2 constructor-seeded entries.
@@ -1403,7 +1403,7 @@ contract TicketLifecycleTest is DeployProtocol {
         }
 
         _flushAdvance();
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 4, "Must complete at least 4 level transitions");
         assertGt(totalLanded, 0, "ZSA-03: the lootbox source was exercised");
 
@@ -1440,7 +1440,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testRngLockedBlocksFFPurchase() public {
         // Drive to level 2 so purchaseLevel > 0 and game state is established
         _driveToLevel(3);
-        uint256 L = game.level();
+        uint256 L = game.currentLvl();
         assertGe(L, 2, "Must reach at least level 2");
 
         // Set rngLockedFlag=true via vm.store on slot 0, bit 152
@@ -1463,7 +1463,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(buyer3);
         // Near-future purchase should not revert
-        game.purchase{value: cost}(
+        game.purchaseOrderFor{value: cost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
@@ -1498,7 +1498,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      sealing the genesis day so the cohort is openable; an unlocked control proves the
     ///      zero below is the gate, not an empty cohort.
     function testRngLockedBlocksFFLootbox() public {
-        assertEq(game.level(), 0, "Should start at level 0");
+        assertEq(game.currentLvl(), 0, "Should start at level 0");
         _settleToday();
 
         // Purchase several lootboxes with buyer3 (before locking)
@@ -1560,7 +1560,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testWriteSlotIsolationDuringRngLocked() public {
         // Drive to level 2 so game state is established
         _driveToLevel(3);
-        uint256 L = game.level();
+        uint256 L = game.currentLvl();
         assertGe(L, 2, "Must reach at least level 2");
 
         // Set rngLockedFlag=true
@@ -1606,7 +1606,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.deal(buyer3, cost + 50 ether);
 
         vm.prank(buyer3);
-        game.purchase{value: cost}(
+        game.purchaseOrderFor{value: cost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
@@ -1641,7 +1641,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testWriteSlotIsolationAcrossBufferStates() public {
         // === Round 1: Verify at level 2 ===
         _driveToLevel(3);
-        uint256 L1 = game.level();
+        uint256 L1 = game.currentLvl();
         assertGe(L1, 2, "Must reach at least level 2");
         // Ticket purchases target the game's purchase level: level + 1 in the purchase phase, the
         // promoted level itself once the jackpot phase has opened.
@@ -1663,7 +1663,7 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256 cost = (priceWei * 400) / 400;
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
-            game.purchase{value: cost}(
+            game.purchaseOrderFor{value: cost}(
                 0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
             );
         }
@@ -1679,7 +1679,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // === Round 2: Drive to level 4+ (writeSlot toggles with transitions) ===
         _driveToLevel(5);
-        uint256 L2 = game.level();
+        uint256 L2 = game.currentLvl();
         assertGe(L2, 4, "Must reach at least level 4");
         // The writeSlot should have toggled (or been toggled multiple times).
         // Regardless of the current value, the isolation must hold.
@@ -1702,7 +1702,7 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256 cost = (priceWei * 400) / 400;
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
-            game.purchase{value: cost}(
+            game.purchaseOrderFor{value: cost}(
                 0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
             );
         }
@@ -1738,7 +1738,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mineFlip to complete daily cycle
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1750,7 +1750,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Try to trigger lootbox RNG — this may or may not succeed depending on
         // threshold, but we can check the swap didn't happen if write queue is empty
-        uint24 wk = _writeKeyForLevel(game.level() + 1);
+        uint24 wk = _writeKeyForLevel(game.currentLvl() + 1);
         uint256 writeQueueLen = _queueLength(wk);
 
         // If write queue is empty, no swap should happen even if lootbox RNG fires
@@ -1763,7 +1763,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -1774,7 +1774,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testMidDayTicketsNotStranded() public {
         // Drive to level 1 to get past bootstrap
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         // Now buy tickets + lootbox on the same day to trigger mid-day path
@@ -1792,7 +1792,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mineFlip through daily + potentially mid-day cycle
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1802,7 +1802,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Drive through more days to ensure everything processes
         _driveToLevel(reached + 3);
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, reached + 2, "Must advance at least 2 more levels");
 
         // Assert zero stranding for all processed levels
@@ -1814,7 +1814,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testMidDayFFWritesNotBlocked() public {
         // Drive to level 1
         _driveToLevel(2);
-        assertGe(game.level(), 1, "Must reach level 1");
+        assertGe(game.currentLvl(), 1, "Must reach level 1");
 
         // Advance to next day and complete daily processing
         uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
@@ -1824,13 +1824,13 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
         // Now we're in mid-day territory. rngLockedFlag should be false.
         // Snapshot FF queues at far-future levels
-        uint24 lvl = uint24(game.level());
+        uint24 lvl = uint24(game.currentLvl());
         uint24 ffTarget = lvl + 7; // definitely far future (> lvl + 5)
         uint256 ffBefore = _ffQueueLength(ffTarget);
 
@@ -1853,7 +1853,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function testMidDaySwapTicketsNotDoubleCounted() public {
         // Drive to level 1
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: buy tickets, complete daily processing
@@ -1866,7 +1866,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Complete daily cycle (swap happens, tickets process)
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1880,13 +1880,13 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mid-day mineFlip
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
         // Day N+1 through N+3: drive through more levels
         _driveToLevel(reached + 4);
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, reached + 3, "Must advance 3 more levels");
 
         // The critical assertion: zero stranding proves no double-counting.
@@ -1904,7 +1904,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         NEW write slot and not interfere with the swapped read-slot processing.
     function testMidDayBurstAfterRngRequest() public {
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: complete daily cycle
@@ -1915,7 +1915,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1939,13 +1939,13 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mid-day mineFlip to process anything pending
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
         // Drive through several more levels
         _driveToLevel(reached + 4);
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, reached + 3, "Must advance 3+ levels after burst");
 
         // Zero stranding: all burst tickets must be eventually processed
@@ -1957,7 +1957,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         handles large queues without stranding.
     function testMidDayHeavyTicketVolume() public {
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: complete daily cycle
@@ -1968,7 +1968,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1987,13 +1987,13 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mid-day processing — may take multiple calls due to large queue
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
         // Continue to next days and advance levels
         _driveToLevel(reached + 4);
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, reached + 3, "Must advance 3+ levels after heavy volume");
 
         _assertZeroStranding(1, uint24(finalLevel));
@@ -2004,7 +2004,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         the existing read-slot processing should continue via daily path.
     function testMidDaySwapSkipped_ReadNotDrained() public {
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: buy a lot to create a large read queue that takes multiple batches
@@ -2016,7 +2016,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Run ONE mineFlip call — this swaps and starts processing but may not finish
         _fulfillVrfIfPending();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         // Don't drain fully — the read slot should still have entries
 
         // Record write slot
@@ -2037,13 +2037,13 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive everything to completion via daily path
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok2) break;
         }
 
         // Next day + more levels
         _driveToLevel(reached + 3);
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, reached + 2, "Must advance 2+ levels");
 
         // Zero stranding: all tickets from all scenarios processed
@@ -2055,7 +2055,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         between multiple swap decisions.
     function testMidDayMultipleCyclesSameDay() public {
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
@@ -2066,7 +2066,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 4000);
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -2076,7 +2076,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2088,7 +2088,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2099,14 +2099,14 @@ contract TicketLifecycleTest is DeployProtocol {
         _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
 
         // Advance through levels to drain everything
         _driveToLevel(reached + 4);
-        uint256 finalLevel = game.level();
+        uint256 finalLevel = game.currentLvl();
         assertGe(finalLevel, reached + 3, "Must advance 3+ levels after multiple mid-day cycles");
 
         _assertZeroStranding(1, uint24(finalLevel));
@@ -2118,7 +2118,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         processes tickets (STAGE_TICKETS_WORKING) instead of requesting RNG.
     function testDailyRngBlockedByReadQueue() public {
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         // Next day: buy large batch to create substantial read queue
@@ -2136,7 +2136,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Read rngLockedFlag before mineFlip (slot 0, offset 19 = bit 152)
         // The daily drain gate (AM:204-219) should process tickets and return
         // before ever reaching rngGate.
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         assertTrue(ok, "mineFlip should succeed (STAGE_TICKETS_WORKING)");
 
         // Check that read queue still has entries (not fully drained in one call)
@@ -2149,13 +2149,13 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive all remaining processing calls
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok2) break;
         }
 
         // Now advance further and verify zero stranding
         _driveToLevel(reached + 3);
-        _assertZeroStranding(1, uint24(game.level()));
+        _assertZeroStranding(1, uint24(game.currentLvl()));
     }
 
     /// @notice A mid-day lootbox demand raised while the read queue is not fully drained
@@ -2164,7 +2164,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         cohort completes; the daily path continues draining either way, with zero stranding.
     function testMidDayRngFiresWithReadQueuePending() public {
         _driveToLevel(2);
-        uint256 reached = game.level();
+        uint256 reached = game.currentLvl();
         assertGe(reached, 1, "Must reach level 1");
 
         // Next day: buy large batch to create a read queue that takes multiple batches
@@ -2177,7 +2177,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Run mineFlip a few times — enough to swap but NOT fully drain
         for (uint256 i = 0; i < 5; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -2192,19 +2192,19 @@ contract TicketLifecycleTest is DeployProtocol {
         // stage order and reaches the mid-day request only if the cohort completes. It may also
         // find nothing to do (threshold, LINK, timing); that is acceptable. The swap decision
         // is tested in testMidDaySwapSkipped_ReadNotDrained.
-        (bool midOk, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool midOk, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         midOk;
 
         // Regardless of mid-day outcome, continue daily processing
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
 
         // Advance levels and verify zero stranding
         _driveToLevel(reached + 3);
-        _assertZeroStranding(1, uint24(game.level()));
+        _assertZeroStranding(1, uint24(game.currentLvl()));
     }
 
     // ==================== Internal Helpers ====================
@@ -2252,7 +2252,7 @@ contract TicketLifecycleTest is DeployProtocol {
         for (uint256 j = 0; j < 80; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -2284,7 +2284,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (who.balance < totalCost) vm.deal(who, totalCost + 50 ether);
 
         vm.prank(who);
-        try game.purchase{value: totalCost}(
+        try game.purchaseOrderFor{value: totalCost}(
             0, ticketQty, BoxOrderLib.boCustomFloor(lootboxEthAmount), bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {
             return 0;
@@ -2325,7 +2325,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 400);
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -2387,7 +2387,7 @@ contract TicketLifecycleTest is DeployProtocol {
             _fulfillVrfIfPending();
             if (!game.rngLocked() && game.rngComplete()
                 && game.rngWordForDay(game.currentDayView_g542950()) != 0) return;
-            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) {
                 bytes4 sel = bytes4(err);
                 assertTrue(
@@ -2409,12 +2409,12 @@ contract TicketLifecycleTest is DeployProtocol {
         mockVRF.fundSubscription(subId, 100e18); // the mid-day path keeps a LINK floor
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(requester);
-        game.mineFlip(0); // the mid-day request: mineFlip is its only door
+        game.mineRun(0); // the mid-day request: mineFlip is its only door
         uint256 reqId = mockVRF.lastRequestId();
         assertGt(reqId, priorReq, "harness: mineFlip issued the mid-day request");
         mockVRF.fulfillRandomWords(reqId, word);
         for (uint256 i = 0; i < 50 && !game.rngComplete(); i++) {
-            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) {
                 assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "harness: mid-day consumers stalled");
                 _fulfillVrfIfPending();
@@ -2427,7 +2427,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      action for a creditless caller; otherwise nothing (the request would be refused).
     function _tryMiddayRequest() internal returns (bool requested) {
         if (game.nextMinerAction() != 17) return false;
-        game.mineFlip(0);
+        game.mineRun(0);
         return true;
     }
 
@@ -2486,7 +2486,7 @@ contract TicketLifecycleTest is DeployProtocol {
     function _buyWhalePass(address who, uint256 quantity) internal {
         if (game.gameOver()) return;
         // Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+
-        uint256 lvl = game.level();
+        uint256 lvl = game.currentLvl();
         uint256 unitPrice = (lvl + 1) <= 4 ? 2.4 ether : 4 ether;
         uint256 cost = unitPrice * quantity;
         if (who.balance < cost) vm.deal(who, cost + 50 ether);
@@ -2584,7 +2584,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 50 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
     }
@@ -2598,7 +2598,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (fulfilled) return;
 
         uint256 randomWord = uint256(keccak256(abi.encode(
-            block.timestamp, game.level(), reqId, blockhash(block.number - 1)
+            block.timestamp, game.currentLvl(), reqId, blockhash(block.number - 1)
         )));
 
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
@@ -2618,13 +2618,13 @@ contract TicketLifecycleTest is DeployProtocol {
         for (uint256 w = 0; w < 30; w++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
 
         for (uint256 day = 0; day < 500; day++) {
-            if (game.level() >= targetLevel) break;
+            if (game.currentLvl() >= targetLevel) break;
             if (game.gameOver()) break;
 
             simTime += 1 days + 1;
@@ -2643,14 +2643,14 @@ contract TicketLifecycleTest is DeployProtocol {
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                    abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                 );
                 if (!ok) {
                     // Fulfill VRF one more time in case the failed call generated a request
                     _fulfillVrfIfPending();
                     // Retry once — the fulfillment may have unblocked progress
                     (ok, ) = address(game).call(
-                        abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                        abi.encodeWithSignature("mineRun(uint32)", uint32(0))
                     );
                     if (!ok) break;
                 }

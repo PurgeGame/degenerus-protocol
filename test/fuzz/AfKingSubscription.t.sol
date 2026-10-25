@@ -129,7 +129,7 @@ contract AfKingSubscription is DeployProtocol {
         }
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 credits = _countCreditFlipTo(keeper);
         uint256 reward;
         uint256 works;
@@ -203,7 +203,7 @@ contract AfKingSubscription is DeployProtocol {
     ///      during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until
@@ -211,7 +211,7 @@ contract AfKingSubscription is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -223,9 +223,9 @@ contract AfKingSubscription is DeployProtocol {
         }
     }
 
-    /// @dev Current game level (game.level() auto-getter for the `uint24 public level` storage var).
+    /// @dev Current game level (game.currentLvl() auto-getter for the `uint24 public level` storage var).
     function _currentLevel() internal view returns (uint24) {
-        return game.level();
+        return game.currentLvl();
     }
 
     /// @dev Subscribe `who` in LOOTBOX mode (so the box STAGE materializes a stamp), dailyQuantity q.

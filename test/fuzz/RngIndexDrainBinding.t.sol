@@ -62,7 +62,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         uint256 ticketCost = (priceWei * qty) / 400;
         uint256 total = ticketCost + lootboxWei;
         vm.prank(buyer);
-        game.purchase{value: total}(
+        game.purchaseOrderFor{value: total}(
             0,
             qty,
             BoxOrderLib.boCustomFloor(lootboxWei),
@@ -79,7 +79,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     {
         _finishReadBoxes();
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -87,7 +87,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         logs = vm.getRecordedLogs();
     }
@@ -108,7 +108,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
                 mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("binding-midday", id))));
                 lastFulfilledReqId = id;
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
         fail("harness: mid-day work did not settle");
@@ -121,7 +121,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         uint256[3] memory allowances = [uint256(2_000_000), 4_500_000, 9_000_000];
         for (uint256 k; k < 3; ++k) {
             vm.recordLogs();
-            try game.mineFlip{gas: allowances[k]}(0) {
+            try game.mineRun{gas: allowances[k]}(0) {
                 return vm.getRecordedLogs();
             } catch (bytes memory err) {
                 vm.getRecordedLogs();
@@ -140,7 +140,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
             logs = _mineBounded();
         } else {
             vm.recordLogs();
-            game.mineFlip(0);
+            game.mineRun(0);
             logs = vm.getRecordedLogs();
         }
         // Two physical buffers (6d0e64b09): the committed word is the read buffer's (write ^ 1).
@@ -230,7 +230,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         //    word at index N (= the new LR_INDEX - 1). The word is NOT yet delivered. mineFlip
         //    is the only door to the request; with the read cohort finished it is the next action.
         uint256 priorReq = mockVRF.lastRequestId();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), priorReq, "mineFlip issued the mid-day request");
         uint48 idxLive = _lrIndex();
         // Two physical buffers (6d0e64b09): the request seals N and the write side flips to N ^ 1.
@@ -249,7 +249,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyerB);
-        game.purchase{value: ticketCost + 1 ether}(
+        game.purchaseOrderFor{value: ticketCost + 1 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_boxIdAt0(idxLive), game.walletIdOf_g3120(buyerB), "box B not keyed at the LIVE post-request index");
@@ -266,7 +266,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         // by the word requested before it was bought. The same call may drain the cohort and
         // seal box B's buffer for a further request, so the publications are read from events.
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 landedN;
         uint256 landedLive;

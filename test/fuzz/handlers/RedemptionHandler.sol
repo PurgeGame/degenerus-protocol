@@ -51,7 +51,7 @@ contract RedemptionHandler is Test {
             // At 10,000 ETH backing, this supports real burns above the 0.01 ETH
             // admission floor. The old 1e18 allocation left bounded seeds at or
             // below admission instead of giving the campaign a useful range.
-            uint256 funded = s.transferFromPool(sDGNRS.Pool.Reward, actor, 1_000 ether);
+            uint256 funded = s.transferFromPool_g106128(sDGNRS.Pool.Reward, actor, 1_000 ether);
             assertEq(funded, 1_000 ether, "handler actors receive usable redemption balances");
         }
     }
@@ -131,7 +131,7 @@ contract RedemptionHandler is Test {
             vm.prank(actor);
             try sdgnrs.claimRedemption(0, id) {} catch {}
         } else {
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
         }
         _recordClaims(vm.getRecordedLogs());
         // Canonical events from a second claim are a double payment, even for a dust claim.
@@ -167,7 +167,7 @@ contract RedemptionHandler is Test {
     }
     function _crank() private {
         vm.recordLogs();
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         _recordClaims(vm.getRecordedLogs());
     }
     function _recordClaims(Vm.Log[] memory logs) private {

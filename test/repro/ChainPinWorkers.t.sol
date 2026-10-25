@@ -84,7 +84,7 @@ contract ChainPinWorkers is DeployProtocol {
             uint8 a = game.nextMinerAction();
             if (a == 2) break;
             require(a != 0, "no daily request was reached");
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         require(game.nextMinerAction() == 2, "request not outstanding");
         uint256 requested = vm.snapshotState();
@@ -146,7 +146,7 @@ contract ChainPinWorkers is DeployProtocol {
             vm.deal(p, 100_000 ether);
             _giveWalletId(p);
             vm.prank(address(game));
-            coin.mintForGame(p, 500_000);
+            coin.mintForGame_g152734(p, 500_000);
         }
         uint256 placed;
         for (uint256 i; i < 24; ++i) {
@@ -155,12 +155,12 @@ contract ChainPinWorkers is DeployProtocol {
             uint8 spins = uint8(3 + (i % 8));
             vm.prank(p);
             if (i % 3 == 2) {
-                try game.placeDegeneretteBet(0, 1, uint128(200 + 200 * (i % 4)), uint8(3 + i % 5), symbol) {
+                try game.betDegenerette(0, 1, uint128(200 + 200 * (i % 4)), uint8(3 + i % 5), symbol) {
                     ++placed;
                 } catch {}
             } else {
                 uint128 stake = uint128(0.01 ether * (1 + i % 5));
-                try game.placeDegeneretteBet{value: uint256(stake) * spins}(0, 0, stake, spins, symbol) {
+                try game.betDegenerette{value: uint256(stake) * spins}(0, 0, stake, spins, symbol) {
                     ++placed;
                 } catch {}
             }
@@ -202,12 +202,12 @@ contract ChainPinWorkers is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}(0);
+        game.mineRun{gas: hi}(0);
     }
 
     function _paidSomething() private view returns (bool) {
@@ -229,7 +229,7 @@ contract ChainPinWorkers is DeployProtocol {
             uint256 g = gas;
             while (true) {
                 vm.prank(miner);
-                (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (ok) break;
                 require(escalate && g < FULL, "stage call failed");
                 g = g * 5 / 4;
@@ -240,7 +240,7 @@ contract ChainPinWorkers is DeployProtocol {
             uint8 a = game.nextMinerAction();
             if (a == 0 || a == 2) break;
             vm.prank(miner);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         _collect(acc, out);
@@ -418,7 +418,7 @@ contract ChainPinWorkers is DeployProtocol {
                 mockVRF.fulfillRandomWords(req, uint256(keccak256("pin-sdgnrs-word")));
                 continue;
             }
-            game.mineFlip(0);
+            game.mineRun(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
                 if (logs[j].emitter != address(game) || logs[j].topics[0] != LOOT_BOX_BUY) continue;

@@ -282,7 +282,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         game.withdrawAfkingFunding(0, funded);
         if (claimableBalance(game, player) != 0) { // the 1-wei sentinel alone is not claimable
             vm.prank(player);
-            game.claimWinnings(0);
+            game.claimClaimable(0);
         }
         uint256 w = uint256(keccak256(abi.encode("skip", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
@@ -302,7 +302,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             if (_daySealed()) break;
             _fulfillPending(vrfWord);
             if (_daySealed()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -312,7 +312,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             if (_daySealed()) return;
             _fulfillPending(vrfWord);
             if (_daySealed()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

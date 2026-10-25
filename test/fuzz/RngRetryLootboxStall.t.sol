@@ -66,13 +66,13 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         // --- Inject a stalled mid-day lootbox VRF request ---
         // 1) create lootbox pending (>= 1 ETH threshold) via a real purchase.
         vm.prank(attacker);
-        game.purchase{value: 3 ether}(0, 0, BoxOrderLib.boCustomFloor(3 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 3 ether}(0, 0, BoxOrderLib.boCustomFloor(3 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // 2) fire the mid-day lootbox RNG request through mineFlip, its only door (leaves
         //    rngLockedFlag = false).
         uint256 priorReqId = mockVRF.lastRequestId();
         vm.prank(attacker);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 lootboxReqId = mockVRF.lastRequestId();
         assertGt(lootboxReqId, priorReqId, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "the request is a mid-day one");
@@ -110,10 +110,10 @@ contract RngRetryLootboxStallTest is DeployProtocol {
             require(!game.gameOver(), "gameOver before reaching last-purchase-day");
 
             (, , bool lpd, bool rngL, ) = game.purchaseInfo_g1027();
-            if (game.level() >= 1 && lpd && !rngL) {
+            if (game.currentLvl() >= 1 && lpd && !rngL) {
                 _settleMidday();
                 (, , lpd, rngL, ) = game.purchaseInfo_g1027();
-                if (lpd && !rngL) return game.level();
+                if (lpd && !rngL) return game.currentLvl();
             }
 
             simTime += 1 days + 1;
@@ -124,14 +124,14 @@ contract RngRetryLootboxStallTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (, , bool lpd2, bool rngL2, ) = game.purchaseInfo_g1027();
-                if (game.level() >= 1 && lpd2 && !rngL2) {
+                if (game.currentLvl() >= 1 && lpd2 && !rngL2) {
                     // Settle the engine's own mid-day work (closed Craps windows) so the window
                     // is idle, as an unlocked last purchase day was before the engine refactor.
                     _settleMidday();
                     (, , lpd2, rngL2, ) = game.purchaseInfo_g1027();
-                    if (lpd2 && !rngL2) return game.level();
+                    if (lpd2 && !rngL2) return game.currentLvl();
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }
@@ -148,7 +148,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
             OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
             assertGt(mockVRF.lastRequestId(), skipReqId, "Admin replaced the withheld midday request");
             assertFalse(game.rngLocked(), "transport retry preserves midday mode before fresh daily work");
-            assertEq(game.level(), L0, "retry alone does not promote the level");
+            assertEq(game.currentLvl(), L0, "retry alone does not promote the level");
         }
 
         for (uint256 j = 0; j < 200; j++) {
@@ -156,21 +156,21 @@ contract RngRetryLootboxStallTest is DeployProtocol {
             if (rid != 0 && rid != skipReqId) {
                 (, , bool fl) = mockVRF.pendingRequests(rid);
                 if (!fl) {
-                    uint256 w = uint256(keccak256(abi.encode(block.timestamp, game.level(), rid)));
+                    uint256 w = uint256(keccak256(abi.encode(block.timestamp, game.currentLvl(), rid)));
                     try mockVRF.fulfillRandomWords(rid, w) {} catch {}
                 }
             }
 
-            if (game.level() != L0) return game.level();
+            if (game.currentLvl() != L0) return game.currentLvl();
 
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) {
                 // Need a fresh wall-clock day (e.g. NotTimeYet / death-clock pacing).
                 simTime += 1 days + 1;
                 vm.warp(simTime);
             }
         }
-        return game.level();
+        return game.currentLvl();
     }
 
     /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
@@ -188,7 +188,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
                 if (done) return;
                 _fulfillVrfIfPending();
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
         revert("harness: mid-day work did not settle");
@@ -201,7 +201,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending() internal {
@@ -209,7 +209,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         if (reqId == 0) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
-        uint256 randomWord = uint256(keccak256(abi.encode(block.timestamp, game.level(), reqId)));
+        uint256 randomWord = uint256(keccak256(abi.encode(block.timestamp, game.currentLvl(), reqId)));
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 

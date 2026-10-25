@@ -34,7 +34,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
 
         _t += 1 days;
         vm.warp(_t);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint24 R = game.currentDayView_g542950();
         uint256 reqR = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "R requested on its own day");
@@ -54,7 +54,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
 
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
         _lastFulfilledReqId = fresh;
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngWordForDay(W) != 0, "W's word recorded by the fulfil crank");
         assertEq(_dailyIdx(), W, "publication preserves the requested day");
         assertTrue(game.rngLocked(), "W's jackpot still owed under the lock");
@@ -78,7 +78,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         assertEq(game.rngWordForDay(W + 1), 0, "W+1 unrequested before its own day");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.rngLocked(), "W+1 requested on its own day");
     }
 
@@ -100,11 +100,11 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     function _buy(address buyer) private {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 50 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: 50 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 
     function _assertQueuedForFreshRng(address buyer, uint24) private view {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         DegenerusGameLens.FoilRecordEntry memory f = lens.foilRecordOf(address(game), lvl, buyer);
         if (!f.present) f = lens.foilRecordOf(address(game), lvl + 1, buyer);
         assertTrue(f.present, "foil record written");
@@ -127,7 +127,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
             _fulfillPending(vrfWord);
             if (!game.rngLocked()) _finishReadConsumers();
             if (_settled()) return;
-            if (game.advanceDue()) game.mineFlip(0);
+            if (game.advanceDue()) game.mineRun(0);
         }
         revert("harness: day never settled");
     }
@@ -147,7 +147,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     /// @dev Crank until the engine issues a request after `previous`; returns its id.
     function _crankUntilFreshRequest(uint256 previous) internal returns (uint256 id) {
         for (uint256 i; i < 64; ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             id = mockVRF.lastRequestId();
             if (id != previous) return id;
         }
@@ -168,7 +168,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     function _advanceUntilUnlocked() internal {
         for (uint256 i; i < 64; i++) {
             if (!game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("harness: lock never released");
     }

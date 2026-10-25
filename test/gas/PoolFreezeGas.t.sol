@@ -87,7 +87,7 @@ contract PoolFreezeGas is DeployProtocol {
     }
 
     function _advance() internal {
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {
@@ -118,7 +118,7 @@ contract PoolFreezeGas is DeployProtocol {
 
     /// @dev The FoilClaimBatch scenario: real packs, a live board planted on each pack's last line.
     function _runScenario() internal {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 priceWei = PriceLookupLib.priceForLevel(lvl + 1);
         uint256 foilCost = 10 * priceWei;
         uint256 ticketQty = (foilCost * 4 * 100) / priceWei;
@@ -126,22 +126,22 @@ contract PoolFreezeGas is DeployProtocol {
             _fb[i] = makeAddr(string(abi.encodePacked("foil", vm.toString(i))));
             vm.deal(_fb[i], 1_000 ether);
             vm.prank(_fb[i]);
-            try game.purchase{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
+            try game.purchaseOrderFor{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
             _fid[i] = game.walletIdOf_g3120(_fb[i]);
         }
         _ticketBuyer = makeAddr("tkt0");
         vm.deal(_ticketBuyer, 1_000 ether);
         vm.prank(_ticketBuyer);
-        game.purchase{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         _buyDay = game.currentDayView_g542950();
 
         address whale = makeAddr("whale");
         vm.deal(whale, 1_000_000 ether);
         for (uint256 d = 0; d < 80; d++) {
             if (!game.jackpotPhase()) {
-                uint256 pw = PriceLookupLib.priceForLevel(game.level() + 1);
+                uint256 pw = PriceLookupLib.priceForLevel(game.currentLvl() + 1);
                 vm.prank(whale);
-                try game.purchase{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+                try game.purchaseOrderFor{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             }
             _completeDay(_seed(30, d));
             _endDay = game.currentDayView_g542950();
@@ -289,7 +289,7 @@ contract PoolFreezeGas is DeployProtocol {
             address bettor = makeAddr(string(abi.encodePacked("bettor", vm.toString(k))));
             vm.deal(bettor, 10 ether);
             vm.prank(bettor);
-            game.placeDegeneretteBet{value: 0.05 ether}(0, 0, 0.01 ether, 5, uint8(k));
+            game.betDegenerette{value: 0.05 ether}(0, 0, 0.01 ether, 5, uint8(k));
         }
 
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -298,10 +298,10 @@ contract PoolFreezeGas is DeployProtocol {
         emit log_named_uint("poolfreeze_daily_request", this.probe(target, data, sender, 0));
         assertTrue(game.rngLocked(), "request locked the day");
 
-        uint256 price = PriceLookupLib.priceForLevel(game.level() + 1);
+        uint256 price = PriceLookupLib.priceForLevel(game.currentLvl() + 1);
         vm.deal(_ticketBuyer, 10 ether);
         emit log_named_uint("poolfreeze_first_frozen_purchase", this.probe(address(game),
-            abi.encodeCall(game.purchase, (0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)), _ticketBuyer, price));
+            abi.encodeCall(game.purchaseOrderFor, (0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)), _ticketBuyer, price));
         emit log_named_uint("poolfreeze_pending_raw_hi", uint256(vm.load(address(game),
             bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED))) >> 255);
 

@@ -96,7 +96,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
         vm.prank(who);
         try
-            game.purchase{value: cost}(
+            game.purchaseOrderFor{value: cost}(
                 0,
                 qty,
                 0,
@@ -117,7 +117,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
                 abi.encode(
                     "quest_gate_word",
                     vm.getBlockTimestamp(),
-                    game.level(),
+                    game.currentLvl(),
                     reqId
                 )
             )
@@ -131,7 +131,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         simTime += 1 days + 1;
         vm.warp(simTime);
 
-        uint24 lvlNow = game.level();
+        uint24 lvlNow = game.currentLvl();
         if (lvlNow != trackLevel || game.jackpotPhase()) {
             trackLevel = lvlNow;
             purchaseDaysAtLevel = 0;
@@ -149,7 +149,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         for (uint256 j = 0; j < 80; j++) {
             _fulfillVrf();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -159,7 +159,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
 
     function _sample() private {
         QuestInfo[2] memory active = quests.getActiveQuests();
-        bool windowOpen = game.decWindow();
+        bool windowOpen = game.decimatorActive();
         bool inJackpot = game.jackpotPhase();
         // The opening-day bit is slot 0 byte 18 bit 1 -- raised by the request that
         // arms a burn window, cleared by the next day's fresh request, so it
@@ -212,10 +212,10 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
     function testFoilDailyQuestActuallyRolls() public {
         for (uint256 d = 0; d < 200; d++) {
             if (game.gameOver()) break;
-            if (game.level() > 5) break;
+            if (game.currentLvl() > 5) break;
             _runDayAndSample();
         }
-        assertGt(game.level(), 3, "drive crossed several level transitions");
+        assertGt(game.currentLvl(), 3, "drive crossed several level transitions");
 
         assertTrue(
             sawFoilDaily,
@@ -230,7 +230,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         assertGe(foilDays, 2, "FOIL forced on more than one level");
         assertLe(
             foilDays,
-            game.level() + 1,
+            game.currentLvl() + 1,
             "FOIL forced at most once per level crossed"
         );
 
@@ -256,9 +256,9 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         bool everOpen;
         for (uint256 d = 0; d < 200; d++) {
             if (game.gameOver()) break;
-            if (game.level() > 5) break;
+            if (game.currentLvl() > 5) break;
             _runDayAndSample();
-            if (game.decWindow()) everOpen = true;
+            if (game.decimatorActive()) everOpen = true;
         }
         assertTrue(everOpen, "drive opened a decimator burn window");
 

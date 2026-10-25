@@ -15,7 +15,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 
 /// @title VaultBafSettleGas — cold cost of the vault settlement the x0 seal runs.
 ///
-/// @notice The seal settles the vault through `depositCoinflip(1, 0)`: one claim walk over
+/// @notice The seal settles the vault through `playCoinflip(1, 0)`: one claim walk over
 ///         the days since its last settlement, at most COIN_CLAIM_DAYS (90), always through the
 ///         latest resolved day. Its gas is the BAF_VAULT_SETTLE reserve that every seal-capable
 ///         purchase leg keeps in its tail on an x0 purchase day.
@@ -111,7 +111,7 @@ abstract contract VaultSettleCallGas is DeployProtocol, NativeGasExport {
     function test_SettleCallCold() public {
         uint256 snapshot = vm.snapshotState();
         vm.prank(address(game));
-        coinflip.depositCoinflip(1, 0);
+        coinflip.playCoinflip(1, 0);
         uint256 used = vm.lastCallGas().gasTotalUsed;
         emit log_named_uint("vault_settle_call_days", _gap());
         emit log_named_uint("vault_settle_call_gas", used);
@@ -123,8 +123,8 @@ abstract contract VaultSettleCallGas is DeployProtocol, NativeGasExport {
             string memory label = string.concat("vault-window-", vm.toString(_gap()), "-", vm.toString(_rebuy()));
             vm.serializeUint(label, "fixedCalleeBudget", GasBounds.BAF_VAULT_SETTLE);
             vm.serializeBool(label, "enforceBudget", true);
-            this.exportNativeFixture(label, address(game), address(coinflip), abi.encodeCall(coinflip.depositCoinflip, (uint32(1), uint256(0))));
-            vm.prank(address(game)); coinflip.depositCoinflip(1, 0);
+            this.exportNativeFixture(label, address(game), address(coinflip), abi.encodeCall(coinflip.playCoinflip, (uint32(1), uint256(0))));
+            vm.prank(address(game)); coinflip.playCoinflip(1, 0);
         }
         vm.deleteStateSnapshot(snapshot);
     }
@@ -135,12 +135,12 @@ abstract contract VaultSettleCallGas is DeployProtocol, NativeGasExport {
         // supplies the accesses (recording does not keep the call's own cold state).
         uint256 snap = vm.snapshotState();
         vm.prank(address(game));
-        coinflip.depositCoinflip(1, 0);
+        coinflip.playCoinflip(1, 0);
         uint256 used = vm.lastCallGas().gasTotalUsed;
         vm.revertToState(snap);
         vm.startStateDiffRecording();
         vm.prank(address(game));
-        coinflip.depositCoinflip(1, 0);
+        coinflip.playCoinflip(1, 0);
         VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used, acc, address(coinflip));
         emit log_named_uint("vault_settle_call_days", _gap());
@@ -209,7 +209,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
         if (_slow()) {
             _runFullDay();
             vm.prank(POKER);
-            coinflip.depositCoinflip(1, 0);
+            coinflip.playCoinflip(1, 0);
         }
         if (_rebuy()) {
             vm.prank(VAULT);
@@ -225,7 +225,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
         for (uint256 pokes; !_slow() && _presettle() && _lastClaim(VAULT) + 1 < latchDay; ++pokes) {
             require(pokes < 4, "harness: the control never settled");
             vm.prank(POKER);
-            coinflip.depositCoinflip(1, 0);
+            coinflip.playCoinflip(1, 0);
         }
         // The latch day up to its request, then the native daily cycle.
         simTime += 1 days + 1;
@@ -233,7 +233,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
         uint256 before = mockVRF.lastRequestId();
         for (uint256 calls; mockVRF.lastRequestId() == before; ++calls) {
             require(calls < 64, "harness: the latch-day request stalled");
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
         }
         _fulfillPending();
         vm.etch(address(game), type(VaultSettleHost).runtimeCode);
@@ -259,7 +259,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
             vm.etch(address(coinflip), original);
             if (_presettle()) {
                 vm.prank(POKER);
-                coinflip.depositCoinflip(1, 0);
+                coinflip.playCoinflip(1, 0);
             }
         }
         emit log_named_uint("vault_days_unsettled", latchDay - _lastClaim(VAULT));

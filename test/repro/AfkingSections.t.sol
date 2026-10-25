@@ -67,7 +67,7 @@ contract AfkingSectionsTest is Test {
         vm.mockCall(ContractAddresses.QUESTS, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.AFFILIATE, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.WWXRP, bytes(""), bytes(""));
-        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending_g153837()"), abi.encode(false));
         vm.mockCall(ContractAddresses.GAME_LOOTBOX_MODULE, bytes(""), bytes(""));
     }
 

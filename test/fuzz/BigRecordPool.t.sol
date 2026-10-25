@@ -298,9 +298,9 @@ contract BigRecordPoolTest is DegenesisDeployProtocol {
     /// @notice An operator-routed (indirect) deposit never arms the record.
     function testIndirectDepositNeverArms() public {
         vm.prank(GAME);
-        coin.mintForGame(player, FLIP_MIN);
+        coin.mintForGame_g152734(player, FLIP_MIN);
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, FLIP_MIN);
+        coinflip.playCoinflip(playerId, FLIP_MIN);
         assertEq(coinflip.biggestFlipEver(), 0, "indirect deposits stay off the record");
     }
 
@@ -356,7 +356,7 @@ contract BigRecordPoolTest is DegenesisDeployProtocol {
 
     /// @notice The leg pays the accrued share at 1/500 scale of the live reward pool
     ///         (zero on an empty pool), and never reverts the claim. Its sDGNRS `poolBalance`
-    ///         read and `transferFromPool` payout are reached bare from the keeper's craps leg
+    ///         read and `transferFromPool_g106128` payout are reached bare from the keeper's craps leg
     ///         (mineFlip's Craps stages → armDiceRunRecord → payRecordSdgnrs), so this is their pin.
     function testPayRecordSdgnrsPaysScaledShare() public {
         uint256 rewardPool = IsDGNRS(ContractAddresses.SDGNRS).poolBalance(
@@ -414,8 +414,8 @@ contract BigRecordPoolTest is DegenesisDeployProtocol {
     /// @dev Mint wallet FLIP and self-deposit it (direct — arms the flip record).
     function _selfDeposit(address who, uint256 amount) internal {
         vm.prank(GAME);
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(0, amount);
+        coinflip.playCoinflip(0, amount);
     }
 }

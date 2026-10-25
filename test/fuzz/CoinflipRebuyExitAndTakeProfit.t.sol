@@ -91,13 +91,13 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     function _enterRebuyWithStake(uint256 takeProfit) internal returns (uint256 stake) {
         stake = 100_000;
         vm.prank(GAME);
-        coin.mintForGame(player, stake);
+        coin.mintForGame_g152734(player, stake);
         vm.prank(player);
         game.setOperatorApproval(0, operator, true);
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(0, true, takeProfit);
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, stake);
+        coinflip.playCoinflip(playerId, stake);
     }
 
     function _payoutOf(uint256 stake, uint24 epoch) internal view returns (uint256) {
@@ -545,7 +545,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
     function test_DepositAlwaysTargetsDayAfterLastResolved() public {
         vm.prank(GAME);
-        coin.mintForGame(player, 1_000_000);
+        coin.mintForGame_g152734(player, 1_000_000);
 
         for (uint24 d = 3; d <= 8; d++) {
             _resolveDay(d, d % 2 == 1);
@@ -553,7 +553,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
             // Wall clock is at day d and day d is now resolved. A fresh deposit must
             // land strictly after it.
             vm.prank(player);
-            coinflip.depositCoinflip(0, 100);
+            coinflip.playCoinflip(0, 100);
 
             // coinflipAmount reads the stake at _targetFlipDay() == wallDay + 1.
             assertGt(

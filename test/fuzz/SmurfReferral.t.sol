@@ -88,7 +88,7 @@ contract SmurfReferralTest is DeployProtocol {
         uint256 p = _price();
         vm.deal(buyer, buyer.balance + p);
         vm.prank(buyer);
-        game.purchase{value: p}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: p}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
     }
 
     function _createSmurf(address o, bytes32 code) internal returns (uint32 id, uint32 key, Vm.Log[] memory logs) {
@@ -319,7 +319,7 @@ contract SmurfReferralTest is DeployProtocol {
         vm.deal(owner, owner.balance + p);
         vm.recordLogs();
         vm.prank(owner);
-        game.purchase{value: p}(sId, 400, 0, CODE_OTHER, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: p}(sId, 400, 0, CODE_OTHER, MintPaymentKind.DirectEth, false);
         assertFalse(_refEvent(vm.getRecordedLogs(), s).found, "no referral write for the smurf");
         assertEq(_refWord(s), word, "a purchase with another code keeps the copied referrer");
         assertEq(affiliate.getReferrerIdById(_fixtureId(s)), game.walletIdOf_g3120(owner));
@@ -449,7 +449,7 @@ contract SmurfReferralTest is DeployProtocol {
         address who = address(uint160(0xA11C5000 + _buyerNonce++));
         vm.deal(who, 5 ether);
         vm.prank(who);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Drive the real game to level 1 and read the transition's top-affiliate award.
@@ -458,7 +458,7 @@ contract SmurfReferralTest is DeployProtocol {
         vm.deal(address(game), 100_000 ether);
         vm.recordLogs();
         uint256 simTime = block.timestamp;
-        for (uint256 d; d < 500 && game.level() < 1; ++d) {
+        for (uint256 d; d < 500 && game.currentLvl() < 1; ++d) {
             simTime += 1 days + 1;
             vm.warp(simTime);
             uint256 packed = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT)));
@@ -468,9 +468,9 @@ contract SmurfReferralTest is DeployProtocol {
             (,,, bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked && !game.gameOver()) {
                 vm.prank(driveBuyer);
-                try game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+                try game.purchaseOrderFor{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             }
-            for (uint256 j; j < 80 && game.level() < 1; ++j) {
+            for (uint256 j; j < 80 && game.currentLvl() < 1; ++j) {
                 uint256 reqId = mockVRF.lastRequestId();
                 if (reqId != 0) {
                     (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -478,11 +478,11 @@ contract SmurfReferralTest is DeployProtocol {
                         try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp, reqId)))) {} catch {}
                     }
                 }
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }
-        assertEq(game.level(), 1, "reached level 1");
+        assertEq(game.currentLvl(), 1, "reached level 1");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 3) continue;
@@ -547,7 +547,7 @@ contract SmurfReferralTest is DeployProtocol {
         vm.deal(owner, owner.balance + 2 * p);
         vm.startStateDiffRecording();
         vm.prank(owner);
-        game.purchase{value: p}(sId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: p}(sId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (bool found, uint32 buyerId,, uint32 winner, uint256 credit) = _pairCall(acc);
         assertTrue(found);
@@ -559,7 +559,7 @@ contract SmurfReferralTest is DeployProtocol {
         // The owner's own purchase on the same roll class pays the leg to nobody.
         vm.startStateDiffRecording();
         vm.prank(owner);
-        game.purchase{value: p}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: p}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         acc = vm.stopAndReturnStateDiff();
         uint256 ownerCredit;
         (found,,, winner, credit) = _pairCall(acc);

@@ -137,7 +137,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         uint24 initial = game.currentDayView_g542950();
         _award(player, 10, initial);
         vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked());
         uint24 requested = game.currentDayView_g542950();
         assertEq(requested, initial + 1);
@@ -145,7 +145,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         vm.warp(block.timestamp + 8 days);
         assertEq(game.currentDayView_g542950(), requested);
         mockVRF.fulfillRandomWords(request, 0xBACC_F111);
-        for (uint256 i; i < 100 && _activeQuestDay() != requested; ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && _activeQuestDay() != requested; ++i) game.mineRun(0);
         assertEq(_activeQuestDay(), requested);
         (,,uint32 streak,bool completed) = _completePrimary(player);
         assertTrue(completed); assertEq(streak, 11);
@@ -231,7 +231,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         uint24 today = uint24(game.currentDayView_g542950()) + 1;
         for (uint256 i; i < 200 && _endpoint() != today; ++i) {
             _fulfillLatest(uint256(keccak256(abi.encode("drive", i))) | 1);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertEq(_endpoint(), today, "subscriber pass completed the current day");
     }
@@ -240,7 +240,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         for (uint256 i; i < 120; ++i) {
             _fulfillLatest(word);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillLatest(word);
         }
         revert("fixture failed to settle current game day");

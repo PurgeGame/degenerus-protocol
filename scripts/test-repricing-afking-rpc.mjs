@@ -147,7 +147,7 @@ for (const name of (process.env.AFKING_RPC_FULL_CYCLE ? ["full-cycle"] : ["buy",
         applyDiff(state, callback);
       }
       const tx = { from: caller, to: game, gas: quantity(gasLimit), gasPrice: "0x0",
-        data: abi.encodeFunctionData("mineFlip", [factor]) };
+        data: abi.encodeFunctionData("mineRun", [factor]) };
       try {
         await rpc("eth_call", [tx, "latest", state, block]);
         const trace = await rpc("debug_traceCall", [tx, "latest", { tracer: "callTracer",
@@ -196,7 +196,7 @@ for (const name of (process.env.AFKING_RPC_FULL_CYCLE ? ["full-cycle"] : ["buy",
       const state = structuredClone(initial);
       state[game].state[word(BigInt(rng.slot))] = word(candidate);
       const tx = { from: caller, to: game, gas: quantity(gasLimit), gasPrice: "0x0",
-        data: abi.encodeFunctionData("mineFlip", [4_294_967_295]) };
+        data: abi.encodeFunctionData("mineRun", [4_294_967_295]) };
       const trace = await rpc("debug_traceCall", [tx, "latest", { tracer: "callTracer",
         tracerConfig: { withLog: true }, stateOverrides: state, blockOverrides: block }]);
       if (trace.error) throw new Error(`Maximum box roll ${desired}: ${trace.error}`);
@@ -222,7 +222,7 @@ for (const name of (process.env.AFKING_RPC_FULL_CYCLE ? ["full-cycle"] : ["buy",
   }
   // Deliberately starve the complete public first-operation path. The transaction must revert.
   const starved = { from: caller, to: game, gas: quantity(50_000), gasPrice: "0x0",
-    data: abi.encodeFunctionData("mineFlip", [4_294_967_295]) };
+    data: abi.encodeFunctionData("mineRun", [4_294_967_295]) };
   const failed = await rpc("debug_traceCall", [starved, "latest", { tracer: "callTracer",
     stateOverrides: initial, blockOverrides: block }]);
   if (!failed.error) throw new Error("Underfunded first operation unexpectedly succeeded");

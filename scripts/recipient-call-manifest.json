@@ -371,7 +371,7 @@
     "path": "contracts/DGNRS.sol",
     "scope": "DGNRS.claimVested",
     "kind": "external",
-    "expression": "game.level()",
+    "expression": "game.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -819,7 +819,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate._claimRun",
     "kind": "external",
-    "expression": "afkingDrain.level()",
+    "expression": "afkingDrain.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2243,7 +2243,7 @@
     "path": "contracts/DegenerusParimutuel.sol",
     "scope": "DegenerusParimutuel.marketStateById",
     "kind": "external",
-    "expression": "game.growthState(0)",
+    "expression": "game.getGrowth(0)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2251,7 +2251,7 @@
     "path": "contracts/DegenerusParimutuel.sol",
     "scope": "DegenerusParimutuel.placeBet",
     "kind": "external",
-    "expression": "coin.burnCoin(payee, STAKE)",
+    "expression": "coin.burnCoin_g27673(payee, STAKE)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2259,7 +2259,7 @@
     "path": "contracts/DegenerusParimutuel.sol",
     "scope": "DegenerusParimutuel.placeBet",
     "kind": "external",
-    "expression": "game.growthState(0)",
+    "expression": "game.getGrowth(0)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2323,7 +2323,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._canRollDecimatorQuest",
     "kind": "external",
-    "expression": "game_.decWindow()",
+    "expression": "game_.decimatorActive()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2331,7 +2331,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._canRollDecimatorQuest",
     "kind": "external",
-    "expression": "game_.level()",
+    "expression": "game_.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2419,7 +2419,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._handleLevelQuestProgress",
     "kind": "external",
-    "expression": "questGame.level()",
+    "expression": "questGame.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2651,7 +2651,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.getPlayerLevelQuestView",
     "kind": "external",
-    "expression": "questGame.level()",
+    "expression": "questGame.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2883,7 +2883,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.rollLevelQuest",
     "kind": "external",
-    "expression": "questGame.level()",
+    "expression": "questGame.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3107,7 +3107,7 @@
     "path": "contracts/DegenerusVault.sol",
     "scope": "DegenerusVault.burnEth",
     "kind": "external",
-    "expression": "gamePlayer.claimWinnings(0)",
+    "expression": "gamePlayer.claimClaimable(0)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3609,7 +3609,7 @@
   },
   {
     "path": "contracts/FLIP.sol",
-    "scope": "FLIP.burnCoin",
+    "scope": "FLIP.burnCoin_g27673",
     "kind": "recipient-helper",
     "expression": "_consumeCoinflipShortfall(target, amount)",
     "count": 1,
@@ -3617,7 +3617,7 @@
   },
   {
     "path": "contracts/FLIP.sol",
-    "scope": "FLIP.burnCoinForCraps",
+    "scope": "FLIP.burnCoinForCraps_g292454",
     "kind": "external",
     "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
     "count": 1,
@@ -3625,7 +3625,7 @@
   },
   {
     "path": "contracts/FLIP.sol",
-    "scope": "FLIP.burnCoinForCraps",
+    "scope": "FLIP.burnCoinForCraps_g292454",
     "kind": "external",
     "expression": "questModule.recordCrapsAction_g14623(id, flags)",
     "count": 1,
@@ -3633,7 +3633,7 @@
   },
   {
     "path": "contracts/FLIP.sol",
-    "scope": "FLIP.burnCoinForCraps",
+    "scope": "FLIP.burnCoinForCraps_g292454",
     "kind": "recipient-helper",
     "expression": "_consumeCoinflipShortfall(player, gross)",
     "count": 1,
@@ -3651,7 +3651,7 @@
     "path": "contracts/FLIP.sol",
     "scope": "FLIP.decimatorBurn",
     "kind": "external",
-    "expression": "degenerusGame.decWindow()",
+    "expression": "degenerusGame.decimatorActive()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3659,7 +3659,7 @@
     "path": "contracts/FLIP.sol",
     "scope": "FLIP.decimatorBurn",
     "kind": "external",
-    "expression": "degenerusGame.level()",
+    "expression": "degenerusGame.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3689,7 +3689,7 @@
   },
   {
     "path": "contracts/FLIP.sol",
-    "scope": "FLIP.mintForGame",
+    "scope": "FLIP.mintForGame_g152734",
     "kind": "recipient-helper",
     "expression": "_mint(to, amount)",
     "count": 1,
@@ -3715,7 +3715,7 @@
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS._redeemTo",
     "kind": "external",
-    "expression": "game.claimWinnings(0)",
+    "expression": "game.claimClaimable(0)",
     "count": 1,
     "review": "OFF_CHAIN: holder-initiated charity redemption."
   },
@@ -3833,7 +3833,7 @@
   },
   {
     "path": "contracts/GNRUS.sol",
-    "scope": "GNRUS.vote",
+    "scope": "GNRUS.castBallot",
     "kind": "external",
     "expression": "IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(voter)",
     "count": 1,
@@ -3841,7 +3841,7 @@
   },
   {
     "path": "contracts/GNRUS.sol",
-    "scope": "GNRUS.vote",
+    "scope": "GNRUS.castBallot",
     "kind": "external",
     "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter)",
     "count": 1,
@@ -3849,7 +3849,7 @@
   },
   {
     "path": "contracts/GNRUS.sol",
-    "scope": "GNRUS.vote",
+    "scope": "GNRUS.castBallot",
     "kind": "external",
     "expression": "sdgnrs.balanceOf(voter)",
     "count": 1,
@@ -3931,7 +3931,7 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._bookFees",
     "kind": "external",
-    "expression": "IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps(earned)",
+    "expression": "IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps_g37225(earned)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3955,7 +3955,7 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._creditComps",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).creditCrapsComps(amount)",
+    "expression": "IFlipCoin(ContractAddresses.COIN).creditCrapsComps_g37225(amount)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -4227,7 +4227,7 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin(msg.sender, amount)",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(msg.sender, amount)",
     "count": 1,
     "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
   },
@@ -4235,7 +4235,7 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoinForCraps( ContractAddresses.VAULT, _VAULT_ID, (amount << 8) | _CRAPS_FLAG_COMP )",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoinForCraps_g292454( ContractAddresses.VAULT, _VAULT_ID, (amount << 8) | _CRAPS_FLAG_COMP )",
     "count": 1,
     "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
   },
@@ -4593,7 +4593,7 @@
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "external",
     "expression": "game.consumeCoinflipBoon_g2902(id)",
     "count": 1,
@@ -4601,7 +4601,7 @@
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "external",
     "expression": "game.extsload_g2807007(bytes32(0))",
     "count": 1,
@@ -4609,15 +4609,15 @@
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "external",
-    "expression": "game.level()",
+    "expression": "game.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "external",
     "expression": "game.playerActivityScoreCachedById_g975(id)",
     "count": 1,
@@ -4625,7 +4625,7 @@
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "external",
     "expression": "game.registerWallet_g9539(msg.sender, true)",
     "count": 1,
@@ -4633,7 +4633,7 @@
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "external",
     "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
@@ -4641,7 +4641,7 @@
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "external",
     "expression": "game.walletIdOf_g3120(msg.sender)",
     "count": 1,
@@ -4649,7 +4649,7 @@
   },
   {
     "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enter",
+    "scope": "WWXRP.enterDraw",
     "kind": "recipient-helper",
     "expression": "_holdsWwxrpBoon(id)",
     "count": 1,
@@ -4931,7 +4931,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._claimAcquiredCoinflips",
     "kind": "external",
-    "expression": "flip.mintForGame(buyer == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS, claimed)",
+    "expression": "flip.mintForGame_g152734(buyer == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS, claimed)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -4947,7 +4947,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._claimCoinflipsAmount",
     "kind": "external",
-    "expression": "flip.mintForGame(payee, toClaim)",
+    "expression": "flip.mintForGame_g152734(payee, toClaim)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5083,7 +5083,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._setCoinflipAutoRebuy",
     "kind": "external",
-    "expression": "flip.mintForGame(payee, mintable)",
+    "expression": "flip.mintForGame_g152734(payee, mintable)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5107,7 +5107,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._setCoinflipAutoRebuyTakeProfit",
     "kind": "external",
-    "expression": "flip.mintForGame(payee, mintable)",
+    "expression": "flip.mintForGame_g152734(payee, mintable)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5195,7 +5195,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.claimCoinflipCarry",
     "kind": "external",
-    "expression": "flip.mintForGame(payee, claimed)",
+    "expression": "flip.mintForGame_g152734(payee, claimed)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5321,7 +5321,7 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.depositCoinflip",
+    "scope": "CoinflipCore.playCoinflip",
     "kind": "recipient-helper",
     "expression": "_depositCoinflip(key, payee, id, amount, !authorized)",
     "count": 1,
@@ -5329,7 +5329,7 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.depositCoinflip",
+    "scope": "CoinflipCore.playCoinflip",
     "kind": "recipient-helper",
     "expression": "_resolve(id)",
     "count": 1,
@@ -5443,7 +5443,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._burnCoin",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin(from, amount)",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(from, amount)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -5451,7 +5451,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._burnForCraps",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoinForCraps( address(uint160(account)), uint32(account >> _ACCOUNT_ID_SHIFT), grossAndFlags )",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoinForCraps_g292454( address(uint160(account)), uint32(account >> _ACCOUNT_ID_SHIFT), grossAndFlags )",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -5603,7 +5603,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._newcomer",
     "kind": "external",
-    "expression": "IGameCraps(_GAME).level()",
+    "expression": "IGameCraps(_GAME).currentLvl()",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -5779,7 +5779,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._seatBody",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin(address(uint160(account)), cost)",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(address(uint160(account)), cost)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -6049,7 +6049,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBonusBattle",
+    "scope": "CrapsBattleCore.throwCraps",
     "kind": "recipient-helper",
     "expression": "_enterWindow(w, chips, multiple, account, 0)",
     "count": 1,
@@ -6057,7 +6057,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBonusBattle",
+    "scope": "CrapsBattleCore.throwCraps",
     "kind": "recipient-helper",
     "expression": "_joinableWindow(period)",
     "count": 1,
@@ -6065,7 +6065,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBonusBattle",
+    "scope": "CrapsBattleCore.throwCraps",
     "kind": "recipient-helper",
     "expression": "_paidDoor(id)",
     "count": 1,
@@ -6073,7 +6073,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBonusBattle",
+    "scope": "CrapsBattleCore.throwCraps",
     "kind": "recipient-helper",
     "expression": "_rememberBoard(word, chips)",
     "count": 1,
@@ -6081,7 +6081,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBonusDay",
+    "scope": "CrapsBattleCore.playCraps",
     "kind": "recipient-helper",
     "expression": "_enterToday(chips, multiple, account, 0)",
     "count": 1,
@@ -6089,7 +6089,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBonusDay",
+    "scope": "CrapsBattleCore.playCraps",
     "kind": "recipient-helper",
     "expression": "_paidDoor(id)",
     "count": 1,
@@ -6097,7 +6097,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBonusDay",
+    "scope": "CrapsBattleCore.playCraps",
     "kind": "recipient-helper",
     "expression": "_rememberBoard(word, chips)",
     "count": 1,
@@ -6595,7 +6595,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._rewardTopAffiliate",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate, top, dgnrsReward)",
+    "expression": "dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Affiliate, top, dgnrsReward)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -6667,7 +6667,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._settleVaultFlips",
     "kind": "external",
-    "expression": "coinflip.depositCoinflip(VAULT_WALLET_ID, 0)",
+    "expression": "coinflip.playCoinflip(VAULT_WALLET_ID, 0)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -7163,7 +7163,7 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._awardDegeneretteDgnrs",
     "kind": "external",
-    "expression": "sdgnrs.transferFromPool( IsDGNRS.Pool.Reward, _resolvePayee(acc), reward )",
+    "expression": "sdgnrs.transferFromPool_g106128( IsDGNRS.Pool.Reward, _resolvePayee(acc), reward )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -7171,7 +7171,7 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._flushOwner",
     "kind": "external",
-    "expression": "coin.mintForGame(_resolvePayee(acc), acc.flipMint)",
+    "expression": "coin.mintForGame_g152734(_resolvePayee(acc), acc.flipMint)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -7299,7 +7299,7 @@
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule._closeDegenesisCohort",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Degenesis, ContractAddresses.SDGNRS, type(uint256).max)",
+    "expression": "dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Degenesis, ContractAddresses.SDGNRS, type(uint256).max)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -7331,7 +7331,7 @@
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule._resolveDegenesisOrder",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Degenesis, _payee(_walletElement(o.id)), o.dgnrs)",
+    "expression": "dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Degenesis, _payee(_walletElement(o.id)), o.dgnrs)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8299,7 +8299,7 @@
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule._creditDgnrsReward",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Lootbox, _boxPayee(acc), amount)",
+    "expression": "dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Lootbox, _boxPayee(acc), amount)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8787,7 +8787,7 @@
     "path": "contracts/modules/DegenerusGameRngUtils.sol",
     "scope": "DegenerusGameRngUtils._closeRedemptionBatch",
     "kind": "external",
-    "expression": "IsDGNRS(ContractAddresses.SDGNRS).closeRedemptionBatch(claimable)",
+    "expression": "IsDGNRS(ContractAddresses.SDGNRS).closeRedemptionBatch_g165517(claimable)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8939,7 +8939,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule._rewardDeityPassDgnrs",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool( IsDGNRS.Pool.Affiliate, _payee(_walletElement(affiliateId)), affiliateShare )",
+    "expression": "dgnrs.transferFromPool_g106128( IsDGNRS.Pool.Affiliate, _payee(_walletElement(affiliateId)), affiliateShare )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8947,7 +8947,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule._rewardDeityPassDgnrs",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool( IsDGNRS.Pool.Affiliate, _payee(_walletElement(upline1Id)), uplineShare )",
+    "expression": "dgnrs.transferFromPool_g106128( IsDGNRS.Pool.Affiliate, _payee(_walletElement(upline1Id)), uplineShare )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8955,7 +8955,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule._rewardDeityPassDgnrs",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool( IsDGNRS.Pool.Affiliate, _payee(_walletElement(upline2Id)), upline2Share )",
+    "expression": "dgnrs.transferFromPool_g106128( IsDGNRS.Pool.Affiliate, _payee(_walletElement(upline2Id)), upline2Share )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8963,7 +8963,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule._rewardDeityPassDgnrs",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool( IsDGNRS.Pool.Whale, _payee(_walletElement(buyer)), totalReward )",
+    "expression": "dgnrs.transferFromPool_g106128( IsDGNRS.Pool.Whale, _payee(_walletElement(buyer)), totalReward )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -8979,7 +8979,7 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule._rewardWhalePassDgnrs",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Whale, _payee(_walletElement(buyer)), reward)",
+    "expression": "dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Whale, _payee(_walletElement(buyer)), reward)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -9121,7 +9121,7 @@
   },
   {
     "path": "contracts/modules/GameActionEntries.sol",
-    "scope": "GameActionEntries.claimWinnings(uint32:default)",
+    "scope": "GameActionEntries.claimClaimable",
     "kind": "recipient-helper",
     "expression": "_actionClaimWinnings(id)",
     "count": 1,
@@ -9129,7 +9129,7 @@
   },
   {
     "path": "contracts/modules/GameActionEntries.sol",
-    "scope": "GameActionEntries.claimWinnings(uint32:default,uint256:default)",
+    "scope": "GameActionEntries.claimWinnings",
     "kind": "recipient-helper",
     "expression": "_actionClaimWinnings(id, amount)",
     "count": 1,
@@ -9387,7 +9387,7 @@
     "path": "contracts/modules/GameActions.sol",
     "scope": "GameActions._actionPayRecordSdgnrs",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Reward, payee, payout)",
+    "expression": "dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Reward, payee, payout)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated custody/administration body: same CEI ordering, account/payee resolution, vault authorization and bounded ETH/stETH fallback; hook forwarding preserves the original msg.sender and msg.value."
   },
@@ -9395,7 +9395,7 @@
     "path": "contracts/modules/GameActions.sol",
     "scope": "GameActions._actionReverseFlip",
     "kind": "external",
-    "expression": "coin.burnCoin(msg.sender, cost)",
+    "expression": "coin.burnCoin_g27673(msg.sender, cost)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated custody/administration body: same CEI ordering, account/payee resolution, vault authorization and bounded ETH/stETH fallback; hook forwarding preserves the original msg.sender and msg.value."
   },
@@ -9667,7 +9667,7 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.decurse",
     "kind": "external",
-    "expression": "coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 10)",
+    "expression": "coin.burnCoin_g27673(msg.sender, PRICE_COIN_UNIT / 10)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -9763,7 +9763,7 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.smite",
     "kind": "external",
-    "expression": "coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 5)",
+    "expression": "coin.burnCoin_g27673(msg.sender, PRICE_COIN_UNIT / 5)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -9817,7 +9817,7 @@
   },
   {
     "path": "contracts/modules/GameBetEntries.sol",
-    "scope": "GameBetEntries.placeDegeneretteBet",
+    "scope": "GameBetEntries.betDegenerette",
     "kind": "recipient-helper",
     "expression": "_placeBet(id, currency, amountPerSpin, spinCount, symbol)",
     "count": 1,
@@ -9843,7 +9843,7 @@
     "path": "contracts/modules/GameBingo.sol",
     "scope": "GameBingo._claimAffiliateDgnrs",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool( IsDGNRS.Pool.Affiliate, payee, reward )",
+    "expression": "dgnrs.transferFromPool_g106128( IsDGNRS.Pool.Affiliate, payee, reward )",
     "count": 1,
     "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
   },
@@ -9867,7 +9867,7 @@
     "path": "contracts/modules/GameBingo.sol",
     "scope": "GameBingo._claimBingo",
     "kind": "external",
-    "expression": "dgnrs.transferFromPool( IsDGNRS.Pool.Reward, payee, (poolBal * BINGO_DGNRS_BPS) / 10_000 )",
+    "expression": "dgnrs.transferFromPool_g106128( IsDGNRS.Pool.Reward, payee, (poolBal * BINGO_DGNRS_BPS) / 10_000 )",
     "count": 1,
     "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
   },
@@ -9921,7 +9921,7 @@
   },
   {
     "path": "contracts/modules/GameBoonActionsEntries.sol",
-    "scope": "GameBoonActionsEntries.issueDeityBoon",
+    "scope": "GameBoonActionsEntries.giveBoon",
     "kind": "recipient-helper",
     "expression": "_issueDeityBoon(deityId, recipientId, slot)",
     "count": 1,
@@ -10099,7 +10099,7 @@
     "path": "contracts/modules/GameDegeneretteBet.sol",
     "scope": "GameDegeneretteBet._collectBetFunds",
     "kind": "external",
-    "expression": "coin.burnCoin(burnFrom, totalBet)",
+    "expression": "coin.burnCoin_g27673(burnFrom, totalBet)",
     "count": 1,
     "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
   },
@@ -10219,7 +10219,7 @@
     "path": "contracts/modules/GameEntryInternals.sol",
     "scope": "GameEntryInternals._gameIssueDeityBoon",
     "kind": "recipient-helper",
-    "expression": "_componentDelegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSelector(IGameBoonActionsModule.issueDeityBoon.selector, deityId, recipientId, slot))",
+    "expression": "_componentDelegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSelector(IGameBoonActionsModule.giveBoon.selector, deityId, recipientId, slot))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Default entry hook uses its named ContractAddresses component pin and interface selector. Exact result decoding and revert bubbling follow the shared delegate helper; the profile override removes only the call boundary."
   },
@@ -10227,7 +10227,7 @@
     "path": "contracts/modules/GameEntryInternals.sol",
     "scope": "GameEntryInternals._gameMineFlip",
     "kind": "recipient-helper",
-    "expression": "_componentDelegate(ContractAddresses.GAME_MINER_MODULE, abi.encodeWithSelector(IGameMinerModule.mineFlip.selector, gasMultiplierBps))",
+    "expression": "_componentDelegate(ContractAddresses.GAME_MINER_MODULE, abi.encodeWithSelector(IGameMinerModule.mineRun.selector, gasMultiplierBps))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Default entry hook uses its named ContractAddresses component pin and interface selector. Exact result decoding and revert bubbling follow the shared delegate helper; the profile override removes only the call boundary."
   },
@@ -10243,7 +10243,7 @@
     "path": "contracts/modules/GameEntryInternals.sol",
     "scope": "GameEntryInternals._gamePlaceBet",
     "kind": "recipient-helper",
-    "expression": "_componentDelegate(ContractAddresses.GAME_DEGENERETTE_MODULE, abi.encodeWithSelector(IGameBetModule.placeDegeneretteBet.selector, id, currency, amountPerSpin, spinCount, symbol))",
+    "expression": "_componentDelegate(ContractAddresses.GAME_DEGENERETTE_MODULE, abi.encodeWithSelector(IGameBetModule.betDegenerette.selector, id, currency, amountPerSpin, spinCount, symbol))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Default entry hook uses its named ContractAddresses component pin and interface selector. Exact result decoding and revert bubbling follow the shared delegate helper; the profile override removes only the call boundary."
   },
@@ -10275,7 +10275,7 @@
     "path": "contracts/modules/GameEntryInternals.sol",
     "scope": "GameEntryInternals._gameRepay",
     "kind": "recipient-helper",
-    "expression": "_componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.repay.selector, id))",
+    "expression": "_componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.clearDebtNow.selector, id))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Default entry hook uses its named ContractAddresses component pin and interface selector. Exact result decoding and revert bubbling follow the shared delegate helper; the profile override removes only the call boundary."
   },
@@ -10353,7 +10353,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.buyDegenesisBox",
+    "scope": "GameFacade.purchaseDegenesisBox",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.buyDegenesisBox_g1442.selector, id, amount) )",
     "count": 1,
@@ -10441,7 +10441,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.claimWinnings(uint32:default)",
+    "scope": "GameFacade.claimClaimable",
     "kind": "recipient-helper",
     "expression": "_gameClaimWinnings(id)",
     "count": 1,
@@ -10449,7 +10449,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.claimWinnings(uint32:default,uint256:default)",
+    "scope": "GameFacade.claimWinnings",
     "kind": "recipient-helper",
     "expression": "_gameClaimWinnings(id, amount)",
     "count": 1,
@@ -10561,7 +10561,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.issueDeityBoon",
+    "scope": "GameFacade.giveBoon",
     "kind": "recipient-helper",
     "expression": "_gameIssueDeityBoon(deityId, recipientId, slot)",
     "count": 1,
@@ -10569,7 +10569,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.mineFlip",
+    "scope": "GameFacade.mineRun",
     "kind": "recipient-helper",
     "expression": "_gameMineFlip(gasMultiplierBps)",
     "count": 1,
@@ -10601,7 +10601,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.placeDegeneretteBet",
+    "scope": "GameFacade.betDegenerette",
     "kind": "recipient-helper",
     "expression": "_gamePlaceBet(id, currency, amountPerSpin, spinCount, symbol)",
     "count": 1,
@@ -10665,7 +10665,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.purchase",
+    "scope": "GameFacade.purchaseOrderFor",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses .GAME_FOILPACK_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameFoilPackModule.purchaseWithFoil.selector, id, entryQuantityScaled, boxOrder, affiliateCode, payKind ) )",
     "count": 1,
@@ -10673,7 +10673,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.purchase",
+    "scope": "GameFacade.purchaseOrderFor",
     "kind": "recipient-helper",
     "expression": "_gamePurchase( id, entryQuantityScaled, boxOrder, affiliateCode, payKind )",
     "count": 1,
@@ -10753,7 +10753,7 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.repay",
+    "scope": "GameFacade.clearDebtNow",
     "kind": "recipient-helper",
     "expression": "_gameRepay(id)",
     "count": 1,
@@ -11001,7 +11001,7 @@
   },
   {
     "path": "contracts/modules/GameMinerEntries.sol",
-    "scope": "GameMinerEntries.mineFlip",
+    "scope": "GameMinerEntries.mineRun",
     "kind": "recipient-helper",
     "expression": "_mineFlip(gasMultiplierBps)",
     "count": 1,
@@ -11051,7 +11051,7 @@
     "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._coinReceive",
     "kind": "external",
-    "expression": "coin.burnCoin(payer, amount)",
+    "expression": "coin.burnCoin_g27673(payer, amount)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -11867,7 +11867,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._payGameOverValue",
     "kind": "external",
-    "expression": "game.claimWinnings(0)",
+    "expression": "game.claimClaimable(0)",
     "count": 1,
     "review": "OFF_CHAIN: holder-initiated game-over burn."
   },
@@ -12073,7 +12073,7 @@
   },
   {
     "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS.closeRedemptionBatch",
+    "scope": "sDGNRS.closeRedemptionBatch_g165517",
     "kind": "external",
     "expression": "coinflip.redeemableFlipBacking()",
     "count": 1,
@@ -12081,7 +12081,7 @@
   },
   {
     "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS.closeRedemptionBatch",
+    "scope": "sDGNRS.closeRedemptionBatch_g165517",
     "kind": "external",
     "expression": "coinflip.withdrawRedeemedFlip(flipEscrow)",
     "count": 1,
@@ -12131,7 +12131,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS.gameAdvance",
     "kind": "external",
-    "expression": "game.mineFlip(gasMultiplierBps)",
+    "expression": "game.mineRun(gasMultiplierBps)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -12355,7 +12355,7 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._rngConsumerStage",
     "kind": "external",
-    "expression": "IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()",
+    "expression": "IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending_g153837()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -12363,7 +12363,7 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._rngConsumersComplete",
     "kind": "external",
-    "expression": "IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()",
+    "expression": "IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending_g153837()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },

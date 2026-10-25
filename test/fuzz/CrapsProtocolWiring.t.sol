@@ -72,24 +72,24 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     ///      standing authority with no call site to bound it.
     function test_flipOpensTheBurnSinkToCrapsAndNotTheMint() public {
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(PLAYER, 1000);
+        coin.mintForGame_g152734(PLAYER, 1000);
 
         vm.prank(ContractAddresses.CRAPS);
-        coin.burnCoin(PLAYER, 400);
+        coin.burnCoin_g27673(PLAYER, 400);
         assertEq(coin.balanceOf(PLAYER), 600, "craps could not burn a stake");
 
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert(bytes4(keccak256("OnlyGame()")));
-        coin.mintForGame(PLAYER, 1);
+        coin.mintForGame_g152734(PLAYER, 1);
 
         // Negative controls: the gates admit the table, not the world.
         vm.prank(STRANGER);
         vm.expectRevert(bytes4(keccak256("OnlyGame()")));
-        coin.mintForGame(PLAYER, 1);
+        coin.mintForGame_g152734(PLAYER, 1);
 
         vm.prank(STRANGER);
         vm.expectRevert(bytes4(keccak256("OnlyGame()")));
-        coin.burnCoin(PLAYER, 1);
+        coin.burnCoin_g27673(PLAYER, 1);
     }
 
     /// @dev Both payout lanes, with a stranger refused at each.
@@ -138,7 +138,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint128 bankroll = 6000;
 
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(PLAYER, uint256(bankroll) * 105 / 100);
+        coin.mintForGame_g152734(PLAYER, uint256(bankroll) * 105 / 100);
 
         // A zero-bounty custom slot exercises run settlement without adding a battle claim to
         // this wiring proof. Governance is the deployed Vault's owner executor.
@@ -174,14 +174,14 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // consumers (tickets, boxes, bets, Decimator) have finished: the read-cohort gate
         // (6d0e64b09). Small engine calls run those stages and stop before the first whole seat,
         // leaving the field to the read stage itself.
-        for (uint256 i; i < 32 && game.rngConsumerStage_g379() != 6; ++i) game.mineFlip{gas: 800_000}(0);
+        for (uint256 i; i < 32 && game.rngConsumerStage_g379() != 6; ++i) game.mineRun{gas: 800_000}(0);
         assertEq(game.rngConsumerStage_g379(), 6, "the cohort reached its Craps read stage");
         assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field is still unsettled for the read stage");
 
         // Any caller's mineFlip runs the read stage; the money goes to the slip's owner.
         uint256 stakeBefore = coinflip.coinflipAmount(PLAYER);
         vm.prank(STRANGER);
-        game.mineFlip(0);
+        game.mineRun(0);
 
         // The win ships as next-day coinflip stake, not liquid FLIP: `creditFlip_g317` against the
         // REAL Coinflip is the payout lane now, so the balance must stay at zero and the stake
@@ -202,7 +202,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         uint32 board = uint32(3 | (3 << 12) | (1 << 15));
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(address(vault), 630);
+        coin.mintForGame_g152734(address(vault), 630);
         vm.prank(ContractAddresses.CREATOR);
         uint256 betId = abi.decode(abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.CRAPS,
@@ -306,21 +306,21 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // A real seat in the window, so the field the walk settles is not empty.
         (uint128 bankroll,,,,,) = crapsBattle.bonusTermsFor(today, 1);
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(PLAYER, uint256(bankroll) * 4);
+        coin.mintForGame_g152734(PLAYER, uint256(bankroll) * 4);
         Craps.Bets memory board;
         board.passLine = 3;
         board.place8 = 3;
         board.place9 = 1;
         vm.prank(PLAYER);
-        crapsBattle.enterBonusBattle(1, board, 1);
+        crapsBattle.throwCraps(1, board, 1);
         // More seats, so the walk measures past the miner's unpaid first MIN_REWARDED_GAS and the
         // measured-gas bounty (72fc06f6c) is observable rather than zero.
         for (uint256 i; i < WALK_FIELD; ++i) {
             address who = address(uint160(uint256(keccak256(abi.encode("walkfield", i)))));
             vm.prank(ContractAddresses.GAME);
-            coin.mintForGame(who, uint256(bankroll) * 4);
+            coin.mintForGame_g152734(who, uint256(bankroll) * 4);
             vm.prank(who);
-            crapsBattle.enterBonusBattle(1, board, 1);
+            crapsBattle.throwCraps(1, board, 1);
         }
 
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
@@ -373,7 +373,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
         vm.prank(KEEPER);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     /// @dev Daily preparation may commit a closed table to the upcoming word. Its frozen field
@@ -388,11 +388,11 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         (uint128 bankroll,,,,,) = crapsBattle.bonusTermsFor(today, 1);
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(PLAYER, uint256(bankroll) * 4);
+        coin.mintForGame_g152734(PLAYER, uint256(bankroll) * 4);
         Craps.Bets memory board;
         board.passLine = 3;
         vm.prank(PLAYER);
-        crapsBattle.enterBonusBattle(1, board, 1);
+        crapsBattle.throwCraps(1, board, 1);
 
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
         // A reset closes admission but leaves the existing table committed to its logical day.
@@ -402,14 +402,14 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertTrue(game.advanceDue(), "the fixture owes no advance, so nothing is being preempted");
         vm.prank(PLAYER);
         vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()")));
-        crapsBattle.enterBonusBattle(1, board, 1);
+        crapsBattle.throwCraps(1, board, 1);
 
         // Preparation must make real progress, including arming the old table, before the
         // next daily request. No table result can be applied using its already-known terms word.
         uint256 requestBefore = mockVRF.lastRequestId();
         for (uint256 i; i < 200 && mockVRF.lastRequestId() == requestBefore; ++i) {
             vm.prank(KEEPER);
-            game.mineFlip{gas: 16_777_216}(type(uint32).max);
+            game.mineRun{gas: 16_777_216}(type(uint32).max);
             assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field cannot settle before the new word");
         }
         assertGt(mockVRF.lastRequestId(), requestBefore, "bounded preparation reaches the daily request");
@@ -441,9 +441,9 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         for (uint256 i = 0; i < seated; ++i) {
             address who = address(uint160(uint256(keccak256(abi.encode("bigfield", i)))));
             vm.prank(ContractAddresses.GAME);
-            coin.mintForGame(who, uint256(bankroll) * 4);
+            coin.mintForGame_g152734(who, uint256(bankroll) * 4);
             vm.prank(who);
-            crapsBattle.enterBonusBattle(1, board, 1);
+            crapsBattle.throwCraps(1, board, 1);
         }
 
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
@@ -454,7 +454,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         uint256 g = gasleft();
         vm.prank(KEEPER);
-        game.mineFlip{gas: REALISTIC_CALL_GAS}(0); // the walk, at a realistic allowance
+        game.mineRun{gas: REALISTIC_CALL_GAS}(0); // the walk, at a realistic allowance
         uint256 used = g - gasleft();
         uint64 walked = crapsBattle.bonusCursorOf(slot);
 
@@ -471,7 +471,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         // And the rest follows on later cranks rather than being stranded.
         vm.prank(KEEPER);
-        game.mineFlip{gas: REALISTIC_CALL_GAS}(0);
+        game.mineRun{gas: REALISTIC_CALL_GAS}(0);
         assertGt(crapsBattle.bonusCursorOf(slot), walked, "the tail of the field was stranded");
     }
 
@@ -538,7 +538,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint256 before = coinflip.coinflipAmount(KEEPER);
         vm.prank(KEEPER);
         vm.expectRevert(GameMiner.NoWork.selector);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(coinflip.coinflipAmount(KEEPER), before, "an idle table still paid the crank");
     }
 
@@ -612,7 +612,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
                 _landTableWordW(pending - 1, uint256(keccak256(abi.encode("cursor-feed", at))));
             }
             vm.prank(KEEPER);
-            game.mineFlip(0);
+            game.mineRun(0);
             ++cranks;
             index = crapsBattle.slotIndexOf(slot);
         }

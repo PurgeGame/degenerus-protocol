@@ -14,7 +14,7 @@ contract PlayerErrorGasTest is DeployProtocol, NativeGasExport {
         _giveWalletId(PLAYER);
         _giveWalletId(RECIPIENT);
         vm.prank(address(game));
-        coin.mintForGame(PLAYER, 1_000_000);
+        coin.mintForGame_g152734(PLAYER, 1_000_000);
         vm.deal(PLAYER, 100 ether);
     }
 
@@ -23,7 +23,7 @@ contract PlayerErrorGasTest is DeployProtocol, NativeGasExport {
     }
 
     function testNativeTransferExisting() public {
-        vm.prank(address(game)); coin.mintForGame(RECIPIENT, 100);
+        vm.prank(address(game)); coin.mintForGame_g152734(RECIPIENT, 100);
         this.exportNativeFixture("flip-transfer-existing", PLAYER, address(coin), abi.encodeCall(coin.transfer, (RECIPIENT, 1_000)));
     }
 
@@ -33,11 +33,11 @@ contract PlayerErrorGasTest is DeployProtocol, NativeGasExport {
     }
 
     function testNativeDepositFresh() public {
-        this.exportNativeFixture("depositCoinflip-fresh", PLAYER, address(coinflip), abi.encodeCall(coinflip.depositCoinflip, (0, 1_000)));
+        this.exportNativeFixture("playCoinflip-fresh", PLAYER, address(coinflip), abi.encodeCall(coinflip.playCoinflip, (0, 1_000)));
     }
 
     function testNativeDepositExisting() public {
-        vm.prank(PLAYER); coinflip.depositCoinflip(0, 1_000);
-        this.exportNativeFixture("depositCoinflip-existing", PLAYER, address(coinflip), abi.encodeCall(coinflip.depositCoinflip, (0, 1_000)));
+        vm.prank(PLAYER); coinflip.playCoinflip(0, 1_000);
+        this.exportNativeFixture("playCoinflip-existing", PLAYER, address(coinflip), abi.encodeCall(coinflip.playCoinflip, (0, 1_000)));
     }
 }

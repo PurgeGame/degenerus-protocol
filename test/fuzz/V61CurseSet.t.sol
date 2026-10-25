@@ -97,7 +97,7 @@ contract V61CurseSet is DeployProtocol {
         assertEq(game.curseCountOf(p), 0, "pre: no curse");
 
         vm.prank(p);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
 
         assertEq(game.curseCountOf(p), 2, "stale cashout SET: curse += 2");
     }
@@ -113,7 +113,7 @@ contract V61CurseSet is DeployProtocol {
         for (uint256 i; i < 3; i++) {
             _seedClaimable(infra[i], 10 ether);
             vm.prank(infra[i]);
-            game.claimWinnings(0);
+            game.claimClaimable(0);
             assertEq(game.curseCountOf(infra[i]), 0, "infra exempt: curse stays 0");
         }
         // Contrast: an ordinary stale claimant in the same conditions IS cursed.
@@ -126,7 +126,7 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(fresh, 10 ether);
         _seedLastEthDay(fresh, _currentDay()); // claimed/minted "today" ⇒ lastEthDay + 5 > currentDay ⇒ exempt
         vm.prank(fresh);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         assertEq(game.curseCountOf(fresh), 0, "non-stale exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("stale_contrast")), 2, "contrast: stale claimant cursed +2");
@@ -138,7 +138,7 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(deity, 10 ether);
         _grantDeityPass(deity);
         vm.prank(deity);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         assertEq(game.curseCountOf(deity), 0, "deity-pass exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("deity_contrast")), 2, "contrast: pass-less stale claimant cursed +2");
@@ -151,7 +151,7 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(whale, 10 ether);
         _grantWhalePass(whale, 1); // passType 1 (10-level), frozenUntilLevel high
         vm.prank(whale);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         assertEq(game.curseCountOf(whale), 0, "whale-pass exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("whale_contrast")), 2, "contrast: pass-less stale claimant cursed +2");
@@ -169,7 +169,7 @@ contract V61CurseSet is DeployProtocol {
         assertTrue(_dailyQtyOf(afk) != 0, "setup: active afker (dailyQuantity != 0)");
 
         vm.prank(afk);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         assertEq(game.curseCountOf(afk), 0, "active-afker exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("afker_contrast")), 2, "contrast: non-subscribed stale claimant cursed +2");
@@ -189,7 +189,7 @@ contract V61CurseSet is DeployProtocol {
         // Post-gameOver the claim pays out (claimable + afking merge) but maybeCurse bails on the gameOver
         // guard — curseCountOf stays 0.
         vm.prank(p);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         assertEq(game.curseCountOf(p), 0, "gameOver exempt: curse stays 0");
     }
 
@@ -277,7 +277,7 @@ contract V61CurseSet is DeployProtocol {
             vm.warp(_t);
             _topUpClaimable(p, 5 ether);
             vm.prank(p);
-            game.claimWinnings(0);
+            game.claimClaimable(0);
 
             uint256 expected = (2 * (i + 1)) > CURSE_COUNT_CAP ? CURSE_COUNT_CAP : 2 * (i + 1);
             assertEq(game.curseCountOf(p), expected, "stacking: curseCountOf == min(2N, cap)");
@@ -298,13 +298,13 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(p, 10 ether);
 
         vm.prank(p);
-        game.claimWinnings(0); // first claim: drains to the sentinel, sets curse to 2
+        game.claimClaimable(0); // first claim: drains to the sentinel, sets curse to 2
         assertEq(game.curseCountOf(p), 2, "first claim cursed +2");
 
         // Second claim same day: claimable is at the 1-wei sentinel ⇒ nothing to claim ⇒ revert.
         vm.prank(p);
         vm.expectRevert(bytes4(keccak256("NothingToClaim()")));
-        game.claimWinnings(0);
+        game.claimClaimable(0);
 
         assertEq(game.curseCountOf(p), 2, "no in-day stacking: curse unchanged after the reverted second claim");
     }
@@ -317,7 +317,7 @@ contract V61CurseSet is DeployProtocol {
     function _cashoutCurseOf(address p) internal returns (uint8) {
         _seedClaimable(p, 10 ether);
         vm.prank(p);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         return game.curseCountOf(p);
     }
 
@@ -383,7 +383,7 @@ contract V61CurseSet is DeployProtocol {
     ///      so the cache is considered current by _playerActivityScore.
     function _seedAffiliateBase(address who, uint256 points) internal {
         _seedField(who, AFFILIATE_BONUS_POINTS_SHIFT, 0x3F, points); // 6-bit field
-        _seedField(who, AFFILIATE_BONUS_LEVEL_SHIFT, 0xFFFFFF, game.level()); // cache "current"
+        _seedField(who, AFFILIATE_BONUS_LEVEL_SHIFT, 0xFFFFFF, game.currentLvl()); // cache "current"
     }
 
     function _grantDeityPass(address who) internal {
@@ -392,7 +392,7 @@ contract V61CurseSet is DeployProtocol {
 
     /// @dev Grant a whale/lazy pass: passType (1 or 3) + frozenUntilLevel high enough to cover the level.
     function _grantWhalePass(address who, uint256 passType) internal {
-        _seedField(who, FROZEN_UNTIL_LEVEL_SHIFT, 0xFFFFFF, uint256(game.level()) + 100);
+        _seedField(who, FROZEN_UNTIL_LEVEL_SHIFT, 0xFFFFFF, uint256(game.currentLvl()) + 100);
         _seedField(who, WHALE_PASS_TYPE_SHIFT, 0x3, passType);
     }
 
@@ -451,7 +451,7 @@ contract V61CurseSet is DeployProtocol {
         for (uint256 d; d < 240 && !game.gameOver(); d++) {
             _fulfillPending(uint256(keccak256(abi.encode("go", d))) | 1);
             if (game.advanceDue() || game.rngLocked()) {
-                try game.mineFlip(0) {} catch {}
+                try game.mineRun(0) {} catch {}
             }
             _fulfillPending(uint256(keccak256(abi.encode("go2", d))) | 1);
             if (!game.advanceDue() && !game.rngLocked() && !game.gameOver()) {
@@ -490,7 +490,7 @@ contract V61CurseSet is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -501,7 +501,7 @@ contract V61CurseSet is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }

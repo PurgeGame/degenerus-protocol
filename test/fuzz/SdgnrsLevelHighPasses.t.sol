@@ -152,10 +152,10 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
             _buyTickets(buyer1, 400);
             for (uint256 j = 0; j < 40; ++j) {
                 _fulfillVrfIfPending();
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) {
                     _fulfillVrfIfPending();
-                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                    (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                     if (!ok) break;
                 }
             }
@@ -178,7 +178,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost) vm.deal(who, cost + 50 ether);
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending() internal {
@@ -187,7 +187,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
         uint256 randomWord =
-            uint256(keccak256(abi.encode(block.timestamp, game.level(), reqId, blockhash(block.number - 1))));
+            uint256(keccak256(abi.encode(block.timestamp, game.currentLvl(), reqId, blockhash(block.number - 1))));
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 
@@ -195,11 +195,11 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         uint256 simTime = block.timestamp;
         for (uint256 w = 0; w < 30; w++) {
             _fulfillVrfIfPending();
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
         for (uint256 day = 0; day < 500; day++) {
-            if (game.level() >= targetLevel || game.gameOver()) break;
+            if (game.currentLvl() >= targetLevel || game.gameOver()) break;
             simTime += 1 days + 1;
             vm.warp(simTime);
             _seedNextPrizePool(500 ether);
@@ -207,10 +207,10 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
             _buyTickets(buyer2, 2000);
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) {
                     _fulfillVrfIfPending();
-                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                    (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                     if (!ok) break;
                 }
             }

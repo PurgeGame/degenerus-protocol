@@ -90,7 +90,7 @@ contract CompositionDegenesisBacklog is CompositionInvariant, DegenesisWeekOpeni
         for (uint256 i; i < 400 && !game.gameOver(); ++i) {
             _dgwFulfil();
             assertTrue(game.nextMinerAction() != DGW_ACTION_SETTLE, "settlement offered during the ending");
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.gameOver(), "game over");
         _dgwScan();
@@ -103,7 +103,7 @@ contract CompositionDegenesisBacklog is CompositionInvariant, DegenesisWeekOpeni
             uint8 a = game.nextMinerAction();
             assertTrue(a != DGW_ACTION_SETTLE, "settlement offered after game over");
             if (a == DGW_ACTION_IDLE) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertEq(game.nextMinerAction(), DGW_ACTION_IDLE, "the ending finished");
         assertGe(address(game).balance + mockStETH.balanceOf(address(game)), game.claimablePoolView(), "solvent after the sweep");

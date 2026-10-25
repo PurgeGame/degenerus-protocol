@@ -10,7 +10,7 @@ interface IGameBoonView {
     function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16);
 }
 
-/// @title WwxrpBoonLaneSkip -- WWXRP.enter reads the Game's WWXRP boon lane before consuming
+/// @title WwxrpBoonLaneSkip -- WWXRP.enterDraw reads the Game's WWXRP boon lane before consuming
 /// @notice enter() dispatches the Game's consumeCoinflipBoon_g2902 only when the player's WWXRP lane
 ///         (Game slot 46 mapping, second word, bits 232..255) has a nonzero tier. These tests pin
 ///         that slot against the Game's own getter and prove the skipped dispatch is a no-op.
@@ -75,7 +75,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit BoonConsumed(aliceId, 7, 1200);
         vm.prank(alice);
-        wwxrp.enter(0, 25);
+        wwxrp.enterDraw(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
         assertEq(s1, others | (1 << 24), "WWXRP lane not cleared or another lane touched");
     }
@@ -88,7 +88,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         _write(aliceId, 0, _lane(2, false, d - 10) << WWXRP_LANE_SHIFT);
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), 1);
         vm.prank(alice);
-        wwxrp.enter(0, 25);
+        wwxrp.enterDraw(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
         assertEq(s1, 1 << 24, "expired WWXRP lane not cleared");
     }
@@ -101,7 +101,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit BoonConsumed(aliceId, 7, 1200);
         vm.prank(alice);
-        wwxrp.enter(0, 25);
+        wwxrp.enterDraw(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
         assertEq(s1, 1 << 24, "same-day deity lane not spent");
 
@@ -110,7 +110,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), 1);
         vm.recordLogs();
         vm.prank(alice);
-        wwxrp.enter(0, 25);
+        wwxrp.enterDraw(0, 25);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != BOON_CONSUMED_SIG, "stale deity lane paid");
@@ -152,7 +152,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         );
         vm.recordLogs();
         vm.prank(alice);
-        wwxrp.enter(0, amount);
+        wwxrp.enterDraw(0, amount);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         if (!nonzeroTier) {
             (uint256 g0, uint256 g1) = IGameBoonView(address(game)).boonPacked(aliceId);

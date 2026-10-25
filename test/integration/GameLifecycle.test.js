@@ -78,7 +78,7 @@ describe("GameLifecycle", function () {
     quantity = 100,
     value = eth("0.01")
   ) {
-    return game.connect(player).purchase(
+    return game.connect(player).purchaseOrderFor(
       0,  // buyer
       quantity,        // ticketQuantity (100 = 1 full ticket at TICKET_SCALE)
       0,               // lootBoxAmount (0 = skip)
@@ -107,7 +107,7 @@ describe("GameLifecycle", function () {
         await mockVRF.fulfillRandomWords(await getLastVRFRequestId(mockVRF), 987654321n);
         continue;
       }
-      await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 });
     }
     expect(await game.rngLocked()).to.equal(
       true,
@@ -123,7 +123,7 @@ describe("GameLifecycle", function () {
     for (let i = 0; i < 30; i++) {
       const locked = await game.rngLocked();
       if (!locked) break;
-      const tx = await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+      const tx = await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 });
       const events = await getAdvanceEvents(tx, advanceModule);
       if (events.length > 0) lastAdvanceEvent = events[0];
     }
@@ -162,7 +162,7 @@ describe("GameLifecycle", function () {
 
       // Sending 0 ETH with 0 ticket quantity should revert (nothing to do).
       await expect(
-        game.connect(alice).purchase(
+        game.connect(alice).purchaseOrderFor(
           0,
           0,         // no tickets
           0,         // no lootbox
@@ -177,7 +177,7 @@ describe("GameLifecycle", function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
       // Send a quarter ticket (0.0025 ETH) + a 0.01 ETH lootbox inside 0.02 ETH total.
-      const tx = await game.connect(alice).purchase(
+      const tx = await game.connect(alice).purchaseOrderFor(
         0,
         100,
         boCustom(eth("0.01")), // lootBoxAmount
@@ -218,7 +218,7 @@ describe("GameLifecycle", function () {
       // dailyIdx is initialized to currentDayIndex in the constructor, so
       // mineFlip reverts with NotTimeYet on deploy day. Advance to next day first.
       await advanceToNextDay();
-      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -230,7 +230,7 @@ describe("GameLifecycle", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       expect(await game.rngLocked()).to.equal(true);
       const lastId = await getLastVRFRequestId(mockVRF);
@@ -241,7 +241,7 @@ describe("GameLifecycle", function () {
       const { game, deployer, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       const events = await getAdvanceEvents(tx, advanceModule);
 
       expect(events.length).to.be.gt(0);
@@ -259,7 +259,7 @@ describe("GameLifecycle", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       expect(await game.rngLocked()).to.equal(true);
       expect(await game.isRngFulfilled()).to.equal(false);
@@ -276,7 +276,7 @@ describe("GameLifecycle", function () {
       const { game, deployer, mockVRF, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
@@ -285,7 +285,7 @@ describe("GameLifecycle", function () {
       let unlocked = false;
       for (let i = 0; i < 30; i++) {
         if (!await game.rngLocked()) { unlocked = true; break; }
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       }
 
       expect(unlocked).to.equal(true);
@@ -297,7 +297,7 @@ describe("GameLifecycle", function () {
       const { game, deployer, mockVRF, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 777n);
@@ -305,7 +305,7 @@ describe("GameLifecycle", function () {
       let finalStage = null;
       for (let i = 0; i < 30; i++) {
         if (!await game.rngLocked()) break;
-        const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
         const events = await getAdvanceEvents(tx, advanceModule);
         // One crank can apply the word and run the daily phase; the last stage is the one that unlocks.
         if (events.length > 0) finalStage = Number(events[events.length - 1].args.stage);
@@ -349,7 +349,7 @@ describe("GameLifecycle", function () {
       await advanceToNextDay();
       await driveFullVRFCycle(game, mockVRF, advanceModule, deployer);
 
-      expect(await game.level()).to.equal(0);
+      expect(await game.currentLvl()).to.equal(0);
     });
 
     it("three consecutive daily cycles all complete without revert", async function () {
@@ -421,7 +421,7 @@ describe("GameLifecycle", function () {
       await game.connect(alice).setOperatorApproval(0, bob.address, true);
 
       // Bob purchases on behalf of alice.
-      const tx = await game.connect(bob).purchase(
+      const tx = await game.connect(bob).purchaseOrderFor(
         aliceId,
         100,
         0,
@@ -453,7 +453,7 @@ describe("GameLifecycle", function () {
       await game.connect(alice).setOperatorApproval(0, bob.address, false);
 
       await expect(
-        game.connect(bob).purchase(aliceId, 100, 0, ZERO_BYTES32, 0, false, { value: eth("0.01") })
+        game.connect(bob).purchaseOrderFor(aliceId, 100, 0, ZERO_BYTES32, 0, false, { value: eth("0.01") })
       ).to.be.revertedWithCustomError(game, "NotApproved");
     });
 
@@ -464,7 +464,7 @@ describe("GameLifecycle", function () {
       const aliceId = await giveWalletId(game, alice.address);
       await giveWalletId(game, bob.address);
       await expect(
-        game.connect(bob).purchase(
+        game.connect(bob).purchaseOrderFor(
           aliceId,
           100,
           0,
@@ -503,7 +503,7 @@ describe("GameLifecycle", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
 
       const info = await game.purchaseInfo_g1027();
       expect(info.rngLocked_).to.equal(true);
@@ -545,21 +545,21 @@ describe("GameLifecycle", function () {
       ]);
       await hre.ethers.provider.send("hardhat_impersonateAccount", [minterAddr]);
       const minterSigner = await hre.ethers.getSigner(minterAddr);
-      await coin.connect(minterSigner).mintForGame(alice.address, flip(1000));
+      await coin.connect(minterSigner).mintForGame_g152734(alice.address, flip(1000));
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
         minterAddr,
       ]);
 
       // Trigger RNG lock (level 0, purchaseLevel = 1 → 1 % 10 != 0)
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       expect(await game.rngLocked()).to.equal(true);
 
       // Coinflip deposits flow during RNG locks (no deposit-level lock exists).
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip(0, flip(100))
+          .playCoinflip(0, flip(100))
       ).to.not.be.reverted;
     });
   });
@@ -576,14 +576,14 @@ describe("GameLifecycle", function () {
 
       // Drive a full VRF cycle and collect all advance stages emitted
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 }); // RNG request → stage 1
+      await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 }); // RNG request → stage 1
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
 
       const allStages = [];
       for (let i = 0; i < 30; i++) {
         if (!(await game.rngLocked())) break;
-        const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        const tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
         const events = await getAdvanceEvents(tx, advanceModule);
         for (const e of events) allStages.push(Number(e.args.stage));
       }

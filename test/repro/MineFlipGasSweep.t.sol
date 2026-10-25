@@ -100,7 +100,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
         if (_slow()) {
             _runFullDay();
             vm.prank(POKER);
-            coinflip.depositCoinflip(1, 0);
+            coinflip.playCoinflip(1, 0);
             vm.prank(VAULT);
             coinflip.setCoinflipAutoRebuy(0, true, 7 ether);
         }
@@ -112,7 +112,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
         uint256 before = mockVRF.lastRequestId();
         for (uint256 calls; mockVRF.lastRequestId() == before; ++calls) {
             require(calls < 64, "harness: the latch-day request stalled");
-            game.mineFlip{gas: 12_000_000}(0);
+            game.mineRun{gas: 12_000_000}(0);
         }
         _fulfillPending();
         vm.etch(address(game), type(SweepHost).runtimeCode);
@@ -169,7 +169,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
 
     function _mineAt(uint256 g) internal returns (bool ok, bytes memory err) {
         _coolAll();
-        (ok, err) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok, err) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
     }
 
     /// @dev From DailyPhase, advance with the smallest successful calls to the earliest state

@@ -21,7 +21,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
     uint256 private constant LARGE_WORKER_ALLOWANCE = 16_000_000;
     uint256 private constant MINER_CALL_GAS = 9_000_000;
 
-    bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
+    bytes4 private constant GROWTH_STATE = bytes4(keccak256("getGrowth(uint24)"));
     bytes4 private constant MARKET_GATES = bytes4(keccak256("marketBetGates(uint32,uint24)"));
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
     uint256 private constant STAKE = 1_000;
@@ -61,7 +61,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
     function _bet(address who, uint32 id, bool over) private {
         vm.mockCall(address(quests), abi.encodeWithSelector(MARKET_GATES, id), abi.encode(true, false, id));
         vm.prank(address(game));
-        coin.mintForGame(who, STAKE);
+        coin.mintForGame_g152734(who, STAKE);
         vm.prank(who);
         parimutuel.placeBet(0, over);
     }
@@ -203,7 +203,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
                 if (!fulfilled) try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(reqId)))) {} catch {}
             }
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -239,7 +239,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
         vm.recordLogs();
         vm.prank(keeper);
         uint256 g0 = gasleft();
-        game.mineFlip{gas: MINER_CALL_GAS}(0);
+        game.mineRun{gas: MINER_CALL_GAS}(0);
         uint256 total = g0 - gasleft();
         uint256 executionGas = _executionGas(vm.getRecordedLogs());
         console.log("mineFlip GrowthSettle stage, 100 fresh cold winners, MinerWork.executionGas:", executionGas);

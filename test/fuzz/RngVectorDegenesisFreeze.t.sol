@@ -52,7 +52,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
     /// @dev Step to the day's request and make it, leaving it unanswered. Returns the request id.
     function _requestUnanswered() internal returns (uint256 req) {
         _stepToRequest();
-        game.mineFlip(0);
+        game.mineRun(0);
         req = mockVRF.lastRequestId();
         lastFulfilledReq = req;
         (,, bool done) = mockVRF.pendingRequests(req);
@@ -158,13 +158,13 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         vm.prank(main);
         uint32 smurf = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
         vm.prank(main);
-        game.purchase{value: 4 ether}(smurf, 0, BoxOrderLib.boCustom(4 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 4 ether}(smurf, 0, BoxOrderLib.boCustom(4 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         // A seat for the AFKing subscribe inside the window.
         uint256 seat = _grantSeat(buyers[1]);
 
         _placeOrdersOn(2, 45, 6 minutes);
         vm.prank(main);
-        game.buyDegenesisBox{value: 0.05 ether}(smurf, 0.05 ether);
+        game.purchaseDegenesisBox{value: 0.05 ether}(smurf, 0.05 ether);
         uint256 n1 = _count(1);
         uint256 q = _refQ(1, _degPool());
 
@@ -192,9 +192,9 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
             if (i % 3 == 0) _earnCredit(buyers[(i + 2) % 5], 0.05 ether);
         }
         vm.prank(main);
-        game.purchase{value: 1 ether}(smurf, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1 ether}(smurf, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         vm.prank(main);
-        game.buyDegenesisBox{value: 0.03 ether}(smurf, 0.03 ether);
+        game.purchaseDegenesisBox{value: 0.03 ether}(smurf, 0.03 ether);
         // Subscribing is refused while the daily window is open.
         vm.prank(buyers[1]);
         vm.expectRevert(ERR_RNG_LOCKED);
@@ -205,7 +205,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         game.reverseFlip(nudgeCost);
         for (uint256 i; i < 3; ++i) {
             vm.prank(makeAddr(string.concat("rv-miner-", vm.toString(i))));
-            try game.mineFlip{gas: 3_000_000}(0) {} catch {}
+            try game.mineRun{gas: 3_000_000}(0) {} catch {}
         }
         Vm.Log[] memory windowLogs = vm.getRecordedLogs();
         assertEq(_buyDays(windowLogs), 1 << 2, "every window order joined cohort 2");
@@ -219,7 +219,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
             if (i % 2 == 0) _buy(buyers[i % 5], 0.0111 ether);
             if (i % 5 == 1) _earnCredit(buyers[(i + 1) % 5], 0.02 ether);
             vm.prank(makeAddr(string.concat("rv-settler-", vm.toString(i))));
-            try game.mineFlip{gas: 2_000_000}(0) {} catch {
+            try game.mineRun{gas: 2_000_000}(0) {} catch {
                 if (!_mineStep(5_000_000)) break;
             }
         }
@@ -290,7 +290,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         bytes32 digest7 = _frozenDigest(7);
         vm.prank(buyers[0]);
         vm.expectRevert();
-        game.buyDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
+        game.purchaseDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
         _earnCredit(buyers[1], 0.05 ether); // ordinary activity inside the window
         assertEq(_frozenDigest(7), digest7, "cohort 7's inputs unchanged");
         uint256 w9 = uint256(keccak256("rv-day9"));
@@ -414,18 +414,18 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         _requestOnly(w3);
         _driveToSettle();
         assertEq(_word(), w3, "copy written at recording");
-        game.mineFlip(0);
+        game.mineRun(0);
         assertLt(_activeCursor(), n, "backlog after one chunk");
 
         _warpTo(6, 1 hours);
         _stepToRequest();
-        game.mineFlip(0);
+        game.mineRun(0);
         _fulfillPending(0);
         _driveToSettle();
         assertEq(game.currentDayView_g542950(), 4, "calendar delay admitted only one logical round");
         _warpTo(7, 1 hours);
         _stepToRequest();
-        game.mineFlip(0);
+        game.mineRun(0);
         _fulfillPending(0);
         _driveToSettle();
         uint256 tags = uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS)));
@@ -459,7 +459,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
             assertEq(before_, 0, "no pricing ahead of the request call");
             uint256 req0 = mockVRF.lastRequestId();
             vm.recordLogs();
-            game.mineFlip(0);
+            game.mineRun(0);
             (uint256 cohorts, uint24 bound) = _pricedIn(vm.getRecordedLogs());
             assertEq(mockVRF.lastRequestId(), req0 + 1, "the call sent the request");
             assertEq(_rngRequestDay(), d, "request day");
@@ -494,7 +494,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         uint256 req0 = mockVRF.lastRequestId();
         vm.recordLogs();
         for (uint256 i; i < 40 && mockVRF.lastRequestId() == req0; ++i) {
-            try game.mineFlip(0) {} catch { break; }
+            try game.mineRun(0) {} catch { break; }
         }
         assertEq(mockVRF.lastRequestId(), req0 + 1, "mid-day request sent");
         assertFalse(game.rngLocked(), "a mid-day request holds no daily lock");

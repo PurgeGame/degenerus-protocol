@@ -97,7 +97,7 @@ contract DegenesisLanes is DegenesisHarness {
         uint256 count = _count(1);
         vm.prank(p);
         vm.expectRevert();
-        game.buyDegenesisBox{value: amount}(0, amount);
+        game.purchaseDegenesisBox{value: amount}(0, amount);
         assertEq(game.degenesisCreditOf(p), credit, "credit untouched on revert");
         assertEq(_count(1), count, "no order on revert");
     }

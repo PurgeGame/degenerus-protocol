@@ -26,11 +26,11 @@ contract SysHarness is CrapsViews {
 ///
 /// @dev Three quantities, kept apart because they are not the same money:
 ///
-///        burned     `IFlipCoin.burnCoin` — liquid FLIP destroyed at the door, at once.
+///        burned     `IFlipCoin.burnCoin_g27673` — liquid FLIP destroyed at the door, at once.
 ///        credited   `ICoinflipStake.creditFlip_g317` — a coinflip STAKE, not a mint. It becomes
 ///                   liquid FLIP only if its holder later cashes out of that game, and the
 ///                   coinflip carries its own edge on the way.
-///        minted     `IFlipCoin.mintForGame` — liquid FLIP created. Craps is burn-only, so any
+///        minted     `IFlipCoin.mintForGame_g152734` — liquid FLIP created. Craps is burn-only, so any
 ///                   nonzero figure here is a finding, not a measurement.
 ///
 ///      "Net burn" below is `burned - credited`: the conservative reading, which treats every
@@ -221,7 +221,7 @@ contract CrapsSystemEconTest is CrapsPins {
             for (uint256 i = 0; i < ps.length; ++i) {
                 uint16 mult = i < f.highSeats ? uint16(hm) : 1;
                 vm.prank(ps[i]);
-                craps.enterBonusDay(board, mult);
+                craps.playCraps(board, mult);
             }
 
             for (uint256 p = 0; p < PERIODS; ++p) {

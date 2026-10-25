@@ -125,7 +125,7 @@ contract NativeEnsRegistrar {
     ['ticket-and-foil',0n,true,price * 11n],
   ]) {
     stage = `purchase:${label}`;
-    const sample = await (await contracts.GAME.purchase(0,400,box,'0x'+'00'.repeat(32),0,foil,{value,gasLimit:transactionGas})).wait();
+    const sample = await (await contracts.GAME.purchaseOrderFor(0,400,box,'0x'+'00'.repeat(32),0,foil,{value,gasLimit:transactionGas})).wait();
     purchases.push({label,receipt:await provider.send('eth_getTransactionReceipt',[sample.hash])});
     fs.writeFileSync(path.join(directory,'purchase-receipts.json'),JSON.stringify(purchases,null,2));
     console.log(`${label}: gasUsed=${sample.gasUsed}`);

@@ -313,7 +313,7 @@ contract V61SolvencyAfpay is DeployProtocol {
 
         vm.deal(p, ethSent);
         vm.prank(p);
-        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(afkingBefore - game.afkingFundingOf(p), expAfkingDrawn, "afking drawn == the shortfall");
         assertEq(poolBefore - game.claimablePoolView(), expAfkingDrawn, "claimablePool dropped by exactly the afking drawn (paired debit)");
@@ -345,7 +345,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 ethSent = cost / 5;
         vm.deal(p, ethSent);
         vm.prank(p);
-        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchaseOrderFor{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         _assertIdentityHolds(_singleton3(p));
         assertEq(game.claimableWinningsOf(p), 1, "debit: claimable sentinel untouched (afking covered the shortfall)");
@@ -372,7 +372,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 poolBefore = game.claimablePoolView();
         uint256 balBefore = p.balance;
         vm.prank(p);
-        game.claimWinnings(0); // the real stale-cashout claim path (debit pairs claimablePool -=)
+        game.claimClaimable(0); // the real stale-cashout claim path (debit pairs claimablePool -=)
 
         // claimWinnings drains claimable to the 1-wei sentinel; the payout is claimable - 1.
         assertEq(p.balance - balBefore, claimable - 1, "stale cashout paid out claimable to the sentinel");
@@ -527,7 +527,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     }
 
     function _oneTicketCost() internal view returns (uint256) {
-        uint24 targetLevel = game.jackpotPhase() ? game.level() : game.level() + 1;
+        uint24 targetLevel = game.jackpotPhase() ? game.currentLvl() : game.currentLvl() + 1;
         return PriceLookupLib.priceForLevel(targetLevel);
     }
 
@@ -573,7 +573,7 @@ contract V61SolvencyAfpay is DeployProtocol {
 
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 }
 

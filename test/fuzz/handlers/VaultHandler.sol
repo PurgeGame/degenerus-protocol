@@ -127,7 +127,7 @@ contract VaultHandler is Test {
         if (cost == 0 || cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: cost}(
+        try game.purchaseOrderFor{value: cost}(
             0,
             qty,
             0,
@@ -145,7 +145,7 @@ contract VaultHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
     }
 
     /// @notice Fulfill VRF

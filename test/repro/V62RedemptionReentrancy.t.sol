@@ -85,7 +85,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
 
         // Fund the attacker contract with sDGNRS via the Reward pool (game is the authorized caller).
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, address(attacker), ATTACKER_FUNDING);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, address(attacker), ATTACKER_FUNDING);
         vm.stopPrank();
 
         // Mock the coinflip surface so the submit FLIP leg is a no-op, keeping the focus on the

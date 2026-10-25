@@ -13,13 +13,13 @@ async function request(game, vrf) {
   for (let i = 0; i < 200 && !(await game.rngLocked()); ++i) {
     const id = await vrf.lastRequestId();
     if (id && !(await vrf.pendingRequests(id))[2]) await vrf.fulfillRandomWords(id, 777n);
-    await game.mineFlip(ONE_UNIT, { gasLimit: 16_777_216 });
+    await game.mineRun(ONE_UNIT, { gasLimit: 16_777_216 });
   }
   expect(await game.rngLocked()).to.equal(true);
   return vrf.lastRequestId();
 }
 async function finish(game) {
-  for (let i = 0; i < 200 && !(await game.dailySessionState())[0]; ++i) await game.mineFlip(ONE_UNIT, { gasLimit: 16_777_216 });
+  for (let i = 0; i < 200 && !(await game.dailySessionState())[0]; ++i) await game.mineRun(ONE_UNIT, { gasLimit: 16_777_216 });
   expect((await game.dailySessionState())[0]).to.equal(true);
 }
 
@@ -30,7 +30,7 @@ describe("Delayed logical rounds never backfill calendar gaps", function () {
     it(`settles each committed cohort once across resets (${paidNudge ? "paid nudge" : "no nudge"})`, async function () {
       const { game, mockVRF, coinflip, coin, alice } = await loadFixture(deployFullProtocol);
       const [start, initial] = await clocks(game);
-      await game.connect(alice).purchase(0, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) });
+      await game.connect(alice).purchaseOrderFor(0, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) });
       await advanceToNextDay();
       expect(await game.currentDayView_g542950()).to.equal(initial);
       const id = await request(game, mockVRF);
@@ -71,7 +71,7 @@ describe("Delayed logical rounds never backfill calendar gaps", function () {
       for (let i = 0; i < 20 && (await game.nextMinerAction()) !== 0n; ++i) {
         const pending = await mockVRF.lastRequestId();
         if (pending && !(await mockVRF.pendingRequests(pending))[2]) await mockVRF.fulfillRandomWords(pending, 999n);
-        await game.mineFlip(ONE_UNIT, { gasLimit: 16_777_216 });
+        await game.mineRun(ONE_UNIT, { gasLimit: 16_777_216 });
       }
       expect(await game.currentDayView_g542950()).to.equal(day + 1n);
       expect(await game.gameOver()).to.equal(false);

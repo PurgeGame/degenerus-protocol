@@ -81,7 +81,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         // a historical intermediate unlock that the serialized engine can cross atomically.
         vm.recordLogs();
         for (uint256 i; i < 128 && mockVRF.lastRequestId() == reqR; ++i) {
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         Vm.Log[] memory recoveryLogs = vm.getRecordedLogs();
         _assertNoGapLogs(recoveryLogs, R, W);
@@ -107,7 +107,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         // the logical word or permitting a subscription change while W remains locked.
         vm.recordLogs();
         for (uint256 i; i < 64 && game.rngWordForDay(W) == 0; ++i) {
-            game.mineFlip{gas: 5_000_000}(0);
+            game.mineRun{gas: 5_000_000}(0);
         }
         assertTrue(game.rngLocked(), "W remains locked before its daily battle finishes");
         assertEq(game.rngWordForDay(R), WORD_LATE, "previous logical result remains available");
@@ -194,7 +194,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         for (uint256 d; d < 240; d++) {
             _fulfillPending(vrfWord);
             if (game.rngComplete() && !game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         revert("harness: current cohort never completed");
     }
@@ -202,7 +202,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     function _requestDaily() internal {
         for (uint256 i; i < 128; ++i) {
             if (game.rngLocked()) return;
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         revert("harness: daily request never committed");
     }
@@ -249,7 +249,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     function _advanceUntilUnlocked() internal {
         for (uint256 i; i < 64; i++) {
             if (!game.rngLocked()) return;
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         revert("harness: lock never released");
     }

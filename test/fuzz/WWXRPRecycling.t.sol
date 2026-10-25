@@ -85,7 +85,7 @@ contract WWXRPRecyclingTest is Test {
     function _enter(address player, uint256 amount) private {
         _mint(player, amount);
         vm.prank(player);
-        token.enter(0, amount);
+        token.enterDraw(0, amount);
     }
 
     function _hash(uint256 domain, uint256 word) private pure returns (uint256) {
@@ -257,7 +257,7 @@ contract WWXRPRecyclingTest is Test {
         _mint(next, 25);
         vm.expectRevert(WWXRP.ScoreOverflow.selector);
         vm.prank(next);
-        token.enter(0, 25);
+        token.enterDraw(0, 25);
         assertEq(token.balanceOf(next), 25, "overflow must not burn");
     }
 

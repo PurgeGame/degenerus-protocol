@@ -75,11 +75,11 @@ contract RngVectorTurboClose is DegenesisFixture {
         _buyTickets(bob, 300);
         _buyTickets(alice, 200);
         vm.prank(bob);
-        game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         vm.deal(alice, alice.balance + 1 ether);
         vm.prank(alice);
         vm.expectRevert();
-        game.buyDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
+        game.purchaseDegenesisBox{value: 0.01 ether}(0, 0.01 ether);
         vm.recordLogs();
         _drain();
         bytes32[] memory mixed = _jackpotEvents(vm.getRecordedLogs());

@@ -53,7 +53,7 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
         else {
             (, uint256 cost) = host.decode(order, host.activeLevel());
             vm.prank(player);
-            host.purchase{value: cost}(0, 0, order, bytes32(0), MintPaymentKind.DirectEth, false);
+            host.purchaseOrderFor{value: cost}(0, 0, order, bytes32(0), MintPaymentKind.DirectEth, false);
         }
     }
 

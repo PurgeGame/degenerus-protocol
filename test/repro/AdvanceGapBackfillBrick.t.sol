@@ -13,7 +13,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
     }
 
     function _request() private returns (uint256) {
-        for (uint256 i; i < 200 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 200 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked());
         return mockVRF.lastRequestId();
     }
@@ -22,7 +22,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         address buyer = makeAddr("buyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 0.05 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 0.05 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint24 baseline = uint24(uint256(vm.load(address(game), bytes32(0))));
         vm.warp(block.timestamp + 1 days);
         uint256 request = _request();
@@ -33,7 +33,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         mockVRF.fulfillRandomWords(request, 0xCAFEBABE);
         for (uint256 i; i < 500; ++i) {
             if (mockVRF.lastRequestId() != request) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertEq(uint24(uint256(vm.load(address(game), bytes32(0)))), baseline,
             "no purchase-clock compensation or underflow");

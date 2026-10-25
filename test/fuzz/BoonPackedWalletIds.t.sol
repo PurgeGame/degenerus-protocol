@@ -159,12 +159,12 @@ contract BoonPackedWalletIds is DeployProtocol {
     }
 
     function _price() private view returns (uint256) {
-        return PriceLookupLib.priceForLevel(game.level() + 1);
+        return PriceLookupLib.priceForLevel(game.currentLvl() + 1);
     }
 
     function _placeBet(address who, uint8 currency, uint128 perSpin, uint8 spins, uint8 symbol) private {
         vm.prank(who);
-        game.placeDegeneretteBet{value: currency == 0 ? uint256(perSpin) * spins : 0}(
+        game.betDegenerette{value: currency == 0 ? uint256(perSpin) * spins : 0}(
             0, currency, perSpin, spins, symbol
         );
     }
@@ -180,7 +180,7 @@ contract BoonPackedWalletIds is DeployProtocol {
             for (uint256 k; k < 128 && !awarded; ++k) {
                 ext.x_delegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeCall(
                     DegenerusGameBoonModule.rollBoxBoons,
-                    (id, 100 ether, 4, 1 ether, game.level() + 1,
+                    (id, 100 ether, 4, 1 ether, game.currentLvl() + 1,
                         uint256(keccak256(abi.encode("retained", cycle, k))), 0)
                 ));
                 (, uint256 s1) = _boon(id);
@@ -201,7 +201,7 @@ contract BoonPackedWalletIds is DeployProtocol {
 
     function test_BoxRollSingleTierWritesById() public {
         (address player, uint32 id) = _wallet("roll_single");
-        uint24 lvl = game.level() + 1;
+        uint24 lvl = game.currentLvl() + 1;
         bool wrote;
         for (uint256 k; k < 64 && !wrote; ++k) {
             uint256 snap = vm.snapshotState();
@@ -243,7 +243,7 @@ contract BoonPackedWalletIds is DeployProtocol {
             uint24 day = uint24(_today());
             RecyclingState.seedDailyWord(address(game), day - 1, uint256(keccak256(abi.encode(i))));
             vm.prank(last);
-            game.issueDeityBoon(lastId, rid, 0);
+            game.giveBoon(lastId, rid, 0);
             vm.warp(block.timestamp + 1 days);
         _seedLogicalFixtureDay(game.currentDayView_g542950() + 1);
         }
@@ -251,9 +251,9 @@ contract BoonPackedWalletIds is DeployProtocol {
         RecyclingState.seedDailyWord(address(game), today - 1, 123);
         vm.prank(last);
         vm.expectRevert(GameBoonActions.RecipientBoonCapReached.selector);
-        game.issueDeityBoon(lastId, rid, 0);
+        game.giveBoon(lastId, rid, 0);
         vm.prank(first);
-        game.issueDeityBoon(firstId, rid, 0);
+        game.giveBoon(firstId, rid, 0);
         uint256 counts = uint256(vm.load(address(game), keccak256(abi.encode(rid, GameSlots.DEITY_RECIPIENT_BOON_COUNT))));
         assertEq(counts, (uint256(10) << 124) | (uint256(1) << 8), "cap does not carry into another ordinal");
         assertEq(uint256(vm.load(address(game), firstMeta)) >> 32, 2, "daily metadata preserves first ordinal");
@@ -271,7 +271,7 @@ contract BoonPackedWalletIds is DeployProtocol {
             uint32 deityId = game.walletIdOf_g3120(deity);
             vm.recordLogs();
             vm.prank(deity);
-            game.issueDeityBoon(deityId, rid, slot);
+            game.giveBoon(deityId, rid, slot);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             (uint256 s0, uint256 s1) = _boon(rid);
             (uint256 n, uint32 topicId,,) = _consumed(logs);
@@ -331,11 +331,11 @@ contract BoonPackedWalletIds is DeployProtocol {
         (address player, uint32 id) = _wallet("cf_boon");
         ext.x_setBoon(id, (uint256(1) << COINFLIP_TIER) | _today(), 0);
         vm.prank(address(game));
-        coin.mintForGame(player, 10_000);
+        coin.mintForGame_g152734(player, 10_000);
 
         vm.recordLogs();
         vm.prank(player);
-        coinflip.depositCoinflip(0, 1_000);
+        coinflip.playCoinflip(0, 1_000);
 
         _assertConsumedBy(vm.getRecordedLogs(), id, 1);
         (uint256 s0,) = _boon(id);
@@ -347,11 +347,11 @@ contract BoonPackedWalletIds is DeployProtocol {
         (address player, uint32 id) = _wallet("craps_boon");
         ext.x_setBoon(id, 0, _lane(1));
         vm.prank(address(game));
-        coin.mintForGame(player, 10_000);
+        coin.mintForGame_g152734(player, 10_000);
 
         vm.recordLogs();
         vm.prank(ContractAddresses.CRAPS);
-        uint8 mask = coin.burnCoinForCraps(player, id, uint256(1_000) << 8);
+        uint8 mask = coin.burnCoinForCraps_g292454(player, id, uint256(1_000) << 8);
 
         assertEq(mask, 1, "tier-1 craps boon mask");
         _assertConsumedBy(vm.getRecordedLogs(), id, 6);
@@ -373,7 +373,7 @@ contract BoonPackedWalletIds is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
 
         _assertConsumedBy(vm.getRecordedLogs(), id, 7);
         (, s1) = _boon(id);
@@ -410,7 +410,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         uint256 value = 4 * _price();
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         _assertConsumedBy(vm.getRecordedLogs(), id, 2);
         (uint256 s0,) = _boon(id);
@@ -423,7 +423,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         ext.x_setBoon(id, uint256(1) << DECIMATOR_TIER, 0);
         ext.x_openDecWindow();
         vm.prank(address(game));
-        coin.mintForGame(player, 10_000);
+        coin.mintForGame_g152734(player, 10_000);
 
         vm.recordLogs();
         vm.prank(player);
@@ -453,7 +453,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         (address player, uint32 id) = _wallet("degen_flip_boon");
         ext.x_setBoon(id, 0, (_lane(1) << DEGEN_FLIP_LANE) | (_lane(1) << DEGEN_ETH_LANE));
         vm.prank(address(game));
-        coin.mintForGame(player, 100_000);
+        coin.mintForGame_g152734(player, 100_000);
 
         vm.recordLogs();
         _placeBet(player, 1, 1_000, 1, 9);
@@ -473,7 +473,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         uint256 value = _price();
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(0, 0, 1, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, 0, 1, bytes32(0), MintPaymentKind.DirectEth, false);
 
         _assertBoostUsed(vm.getRecordedLogs(), buyer);
         (uint256 s0,) = _boon(id);

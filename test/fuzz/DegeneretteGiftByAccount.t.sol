@@ -7,7 +7,7 @@ import {IDegenerusQuests} from "../../contracts/interfaces/IDegenerusQuests.sol"
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteGiftByAccount -- the Degenerette door's gift and acting-for-an-account split
-/// @notice `placeDegeneretteBet(id, ...)` resolves account `id` against the caller (F-game spec item
+/// @notice `betDegenerette(id, ...)` resolves account `id` against the caller (F-game spec item
 ///         6). A caller not authorized for the account makes a gift: the caller's fresh ETH,
 ///         claimable and FLIP fund it, the caller earns the quest, the bet belongs to `id`, and the
 ///         recipient's stake boon is never read. A gift to an unallocated ID reverts `E`. A caller
@@ -70,7 +70,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
 
     function _fundFlip(address who, uint256 amount) private {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     function _expectQuest(uint32 earner, uint32 notEarner) private {
@@ -85,7 +85,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     {
         vm.recordLogs();
         vm.prank(caller);
-        game.placeDegeneretteBet{value: value}(id, currency, perSpin, spins, HERO);
+        game.betDegenerette{value: value}(id, currency, perSpin, spins, HERO);
         uint64 betId;
         (betId, betOwner) = _placedBetId(vm.getRecordedLogs());
         bet = game.degeneretteBetInfo(BET_INDEX, betId);
@@ -158,7 +158,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
         uint32 unallocated = 1_000_000;
         vm.prank(giver);
         vm.expectRevert(abi.encodeWithSignature("E()"));
-        game.placeDegeneretteBet{value: 0.01 ether}(unallocated, CURRENCY_ETH, 0.01 ether, 1, HERO);
+        game.betDegenerette{value: 0.01 ether}(unallocated, CURRENCY_ETH, 0.01 ether, 1, HERO);
     }
 
     // ---------------------------------------------------------------------

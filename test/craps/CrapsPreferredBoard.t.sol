@@ -253,7 +253,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
 
     function test_PaidWindowAndCustomSaveExplicitBoard() public {
         _openToday();
-        vm.prank(alice); c.enterBonusBattle(5, BOARD, 1);
+        vm.prank(alice); c.throwCraps(5, BOARD, 1);
         assertEq(c.preferredBoardOf(game.walletIdOf_g3120(alice)), BOARD);
         uint64 slot = _openFar(c, 300, 5, 1);
         vm.prank(alice); uint256 bet = c.enterBattle(slot, uint32(0), 1);
@@ -274,7 +274,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         c.vaultComp(uint256(aliceId) | (uint256(3) << 160) | (uint256(day) << 176) | (uint256(1) << 200));
         assertEq(_dayChips(day, alice), BOARD, "upgrade moved board");
         assertEq(_word(alice), INIT);
-        vm.prank(bob); c.enterBonusDay(BOARD, 1);
+        vm.prank(bob); c.playCraps(BOARD, 1);
         assertEq(_dayChips(day, bob), BOARD);
         assertEq(c.preferredBoardOf(game.walletIdOf_g3120(bob)), BOARD);
         vm.prank(ContractAddresses.VAULT);
@@ -393,7 +393,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         game.setScore(erin, c.SYBIL_SCORE_FLOOR());
         _openToday();
         assertEq(game.walletIdOf_g3120(erin), 0);
-        vm.prank(erin); c.enterBonusBattle(5, BOARD, 1);
+        vm.prank(erin); c.throwCraps(5, BOARD, 1);
         uint32 id = game.walletIdOf_g3120(erin);
         assertGt(id, 0, "paid door allocates");
 

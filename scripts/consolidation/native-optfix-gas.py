@@ -77,7 +77,7 @@ for kind in ['sweep', 'daily', 'midday']:
     def run(supplied, multiplier, limit):
         data = bytearray(raw)
         data[68:100] = supplied.to_bytes(32, 'big')
-        # invoke(address,bytes,uint256), bytes payload = mineFlip(uint32).
+        # invoke(address,bytes,uint256), bytes payload = mineRun(uint32).
         assert int.from_bytes(data[36:68], 'big') == 96
         assert int.from_bytes(data[100:132], 'big') == 36
         data[136:168] = multiplier.to_bytes(32, 'big')

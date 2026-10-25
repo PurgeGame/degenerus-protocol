@@ -52,9 +52,9 @@ contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
         if (!vm.envOr("DAYSEFF_TRACE", false)) return;
         address player = address(0xEFFE);
         uint32 id = _giveWalletId(player);
-        vm.prank(address(game)); coin.mintForGame(player, 10_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(player, 10_000);
         vm.startStateDiffRecording();
-        vm.prank(player); coinflip.depositCoinflip(id, 1_000);
+        vm.prank(player); coinflip.playCoinflip(id, 1_000);
         Vm.AccountAccess[] memory calls = vm.stopAndReturnStateDiff();
         uint256 reads;
         for (uint256 i; i < calls.length; ++i) {
@@ -104,7 +104,7 @@ contract DaysEfficiencyCrapsGasTest is CrapsScheduledCursorTest {
 
     function test_DaysEffScheduledEntry() public {
         _openDay();
-        this.probe(alice, abi.encodeWithSignature("enterBonusBattle(uint32,uint256,uint32,uint16)", 0, PER, SEVEN, 1), "dayseff_scheduled_entry");
+        this.probe(alice, abi.encodeWithSignature("throwCraps(uint32,uint256,uint32,uint16)", 0, PER, SEVEN, 1), "dayseff_scheduled_entry");
     }
 
     function test_DaysEffMaintenance() public {
@@ -139,7 +139,7 @@ contract DaysEfficiencyCrapsGasTest is CrapsScheduledCursorTest {
         vm.warp(_dayStart() + 1);
         _openDay();
         vm.prank(alice);
-        craps.enterBonusDay(0, SEVEN, 1);
+        craps.playCraps(0, SEVEN, 1);
         uint24 day = craps.currentDayIndex();
         this.probe(alice, abi.encodeWithSignature("upgradeDayWindows(uint32,uint24,uint8)", 0, day, uint8(31)), "dayseff_upgrade");
     }

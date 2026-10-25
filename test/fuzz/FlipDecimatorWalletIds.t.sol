@@ -36,7 +36,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
     function _fundFlip(address p, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(p, amount);
+        coin.mintForGame_g152734(p, amount);
     }
 
     function _gameId(address p) internal view returns (uint32) {
@@ -49,14 +49,14 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
     /// @dev Open the next level's Decimator window today: the window flag and the round's opened day.
     function _openWindow() internal returns (uint24 lvl) {
-        lvl = game.level() + 1;
+        lvl = game.currentLvl() + 1;
         bytes32 flagsSlot = bytes32(GameSlots.DECIMATOR_FLAGS);
         uint256 flags = uint256(vm.load(address(game), flagsSlot));
         vm.store(address(game), flagsSlot, bytes32(flags | (uint256(1) << (GameSlots.DECIMATOR_FLAGS_OFFSET * 8))));
         bytes32 roundSlot = keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS));
         uint256 round = uint256(vm.load(address(game), roundSlot));
         vm.store(address(game), roundSlot, bytes32(round | (uint256(game.currentDayView_g542950()) << OPENED_DAY_SHIFT)));
-        require(game.decWindow(), "harness: decimator window flag");
+        require(game.decimatorActive(), "harness: decimator window flag");
     }
 
     function _registrations(Vm.Log[] memory logs) internal view returns (uint256 n, uint32 lastId, address lastOwner) {
@@ -147,7 +147,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -382,14 +382,14 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (qid)), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.recordCrapsAction_g14623, (pid, uint8(1))), 2);
         vm.prank(CRAPS);
-        uint8 mask = coin.burnCoinForCraps(p, pid, grossAndFlags);
+        uint8 mask = coin.burnCoinForCraps_g292454(p, pid, grossAndFlags);
         assertEq(mask, 1, "tier-1 craps boon -> one-hot mask 1");
         assertEq(coin.balanceOf(p), 9_500, "the full gross burns");
         assertEq(_crapsTier(pid), 0, "the passed ID's lane is spent");
         assertEq(_crapsTier(qid), 2, "another ID's lane is untouched");
 
         vm.prank(CRAPS);
-        assertEq(coin.burnCoinForCraps(p, pid, grossAndFlags), 0, "a spent lane pays nothing");
+        assertEq(coin.burnCoinForCraps_g292454(p, pid, grossAndFlags), 0, "a spent lane pays nothing");
         assertEq(coin.balanceOf(p), 9_000);
     }
 
@@ -400,13 +400,13 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         _fundFlip(p, 10_000);
         _seedCrapsLane(pid, 1);
         vm.prank(CRAPS);
-        coin.creditCrapsComps(1_000);
+        coin.creditCrapsComps_g37225(1_000);
         uint256 lane = coin.crapsCompAllowance();
 
         vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.consumeCoinflipBoon_g2902.selector), 0);
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.recordCrapsAction_g14623.selector), 0);
         vm.prank(CRAPS);
-        uint8 mask = coin.burnCoinForCraps(p, pid, (uint256(500) << 8) | 0x10 | 0x1);
+        uint8 mask = coin.burnCoinForCraps_g292454(p, pid, (uint256(500) << 8) | 0x10 | 0x1);
         assertEq(mask, 0);
         assertEq(coin.crapsCompAllowance(), lane - 500, "the comp lane pays");
         assertEq(coin.balanceOf(p), 10_000, "no wallet FLIP burned");

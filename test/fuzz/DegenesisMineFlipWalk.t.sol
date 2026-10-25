@@ -187,7 +187,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
             for (uint256 k; k < perDay; ++k) _orderAtBound(buyers[(c * perDay + k) % buyers.length], c * 11 + k);
             (,,,, uint256 price) = game.purchaseInfo_g1027();
             vm.prank(buyers[c % buyers.length]);
-            game.purchase{value: price * 40}(0, 40 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: price * 40}(0, 40 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
             _walkToIdle(gasSeed == 0);
         }
         if (busySeed) _seedNextPool(80 ether);
@@ -213,16 +213,16 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
         spend += (0.001 ether - spend % 0.001 ether) % 0.001 ether;
         if (p.balance < spend) vm.deal(p, spend + 1 ether);
         vm.prank(p);
-        game.purchase{value: spend}(0, 0, BoxOrderLib.boCustoms(1, spend), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: spend}(0, 0, BoxOrderLib.boCustoms(1, spend), bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Day by day from `fromDay`, VRF answering, until the sale is settled at level 1.
     function _walkDays(uint24 fromDay, uint24 maxDays, bool minimum) internal {
         for (uint24 d = fromDay; d < fromDay + maxDays; ++d) {
             _warpTo(d, 1 hours);
-            if (game.level() == 0 && d >= seedFrom) _seedNextPool(80 ether);
+            if (game.currentLvl() == 0 && d >= seedFrom) _seedNextPool(80 ether);
             _walkToIdle(minimum);
-            if (_closed() == 7 && game.level() >= 1 && !_jackpotPhase()) return;
+            if (_closed() == 7 && game.currentLvl() >= 1 && !_jackpotPhase()) return;
         }
     }
 
@@ -261,7 +261,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
             vm.recordLogs();
             vm.prank(miner);
             (bool ok, bytes memory ret) =
-                address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) { _scan(vm.getRecordedLogs()); return true; }
             bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
             if (sel == E_NO_WORK || sel == E_RNG_NOT_READY) return false;
@@ -306,7 +306,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
         vm.recordLogs();
         uint256 before = gasleft();
         vm.prank(miner);
-        (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         uint256 used = before - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // A reverted call has no effect; forge still records the logs it emitted.
@@ -331,7 +331,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
         console2.log("gas given", g);
         console2.log("minimum", floor_);
         console2.log("day", uint256(game.currentDayView_g542950()));
-        console2.log("level", uint256(game.level()));
+        console2.log("level", uint256(game.currentLvl()));
         console2.log("degenesisClosed", uint256(_closed()));
         fail(why);
     }
@@ -355,7 +355,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
         _report();
         assertEq(_closed(), 7, "all seven cohorts closed");
         assertEq(burns, 1, "leftover inventory burned once");
-        assertGe(uint256(game.level()), 1, "level 1 reached");
+        assertGe(uint256(game.currentLvl()), 1, "level 1 reached");
         assertGt(settleCalls, 0, "settlement ran as a first action at its minimum");
         assertGt(resolved, 0, "orders resolved");
         assertGt(minCalls, 0, "calls at the minimum");

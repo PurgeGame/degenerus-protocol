@@ -109,7 +109,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
             uint256 cost = game.mintPrice() * 6700;
             vm.deal(whale, cost);
             vm.prank(whale);
-            game.purchase{value: cost}(0, 6700 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: cost}(0, 6700 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         _dgwDrive();
 
@@ -124,10 +124,10 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
         _dgwDrive();
         require(!game.jackpotPhase(), "DegenesisWeekOpening: a jackpot phase outlived the launch day");
         if (turbo) {
-            require(game.level() == 1, "DegenesisWeekOpening: index-9 request did not reach level 1");
+            require(game.currentLvl() == 1, "DegenesisWeekOpening: index-9 request did not reach level 1");
             require(_dgwKeepLogs() || (dgw.l1JackpotEntered == 1 && dgw.l1JackpotEnded == 1), "DegenesisWeekOpening: level-1 jackpot not one day");
         } else {
-            require(game.level() == 0, "DegenesisWeekOpening: level moved without the target");
+            require(game.currentLvl() == 0, "DegenesisWeekOpening: level moved without the target");
             require(dgw.l1JackpotEntered == 0, "DegenesisWeekOpening: jackpot phase without the target");
         }
 
@@ -169,7 +169,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
             _dgwWarp(d, driveAt[drives++]);
             _dgwDrive();
         }
-        require(game.level() == 0, "DegenesisWeekOpening: level moved during the sale");
+        require(game.currentLvl() == 0, "DegenesisWeekOpening: level moved during the sale");
         require(!game.jackpotPhase(), "DegenesisWeekOpening: jackpot phase during the sale");
         require(!_dgwLastPurchaseDay(), "DegenesisWeekOpening: last-purchase latch during the sale");
     }
@@ -194,12 +194,12 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
             uint256 spend = ((total - credit) * 4 + 0.001 ether - 1) / 0.001 ether * 0.001 ether;
             if (spend < 0.01 ether) spend = 0.01 ether;
             vm.prank(p);
-            game.purchase{value: spend}(0, 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: spend}(0, 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false);
             dgw.lootboxEth += spend;
         }
         for (uint256 j; j < n; ++j) {
             vm.prank(p);
-            game.buyDegenesisBox{value: amounts[j]}(0, amounts[j]);
+            game.purchaseDegenesisBox{value: amounts[j]}(0, amounts[j]);
             ++dgwOrders[c];
             dgwVolume[c] += amounts[j];
             ++dgw.orders;
@@ -221,7 +221,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
                 continue;
             }
             if (lag) _dgwMineSmall();
-            else game.mineFlip(0);
+            else game.mineRun(0);
             if (i == 1999) revert("DegenesisWeekOpening: engine never idle");
         }
         _dgwScan();
@@ -233,11 +233,11 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
     function _dgwMineSmall() internal {
         for (uint256 g = 800_000; g <= 12_800_000; g *= 2) {
             _dgwScan();
-            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) return;
             if (!_dgwKeepLogs()) vm.getRecordedLogs();
         }
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     function _dgwFulfil() internal returns (bool) {
@@ -320,7 +320,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
             assertTrue((header >> 80) & 1 == 1, "NON-VACUITY: cohort split");
         }
         if (dgw.turbo) {
-            assertGe(game.level(), 1, "NON-VACUITY: level 1 reached");
+            assertGe(game.currentLvl(), 1, "NON-VACUITY: level 1 reached");
             assertGt(dgw.nextAtLaunch, DGW_TARGET_L1, "NON-VACUITY: next pool above 50 ETH at the launch");
         } else {
             assertLe(dgw.nextAtLaunch, DGW_TARGET_L1, "NON-VACUITY: next pool at or below 50 ETH at the launch");

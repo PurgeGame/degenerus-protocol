@@ -53,11 +53,11 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture, NativeGasExport
         vm.startPrank(address(game));
         if (empty) {
             for (uint8 i; i < 4; ++i) {
-                expectedBurns += sdgnrs.transferFromPool(sDGNRS.Pool(i), address(sdgnrs), type(uint256).max);
+                expectedBurns += sdgnrs.transferFromPool_g106128(sDGNRS.Pool(i), address(sdgnrs), type(uint256).max);
             }
-            sdgnrs.transferFromPool(sDGNRS.Pool.Degenesis, address(0xA11CE), type(uint256).max);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Degenesis, address(0xA11CE), type(uint256).max);
         } else {
-            expectedBurns = sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 7_000e12 + 1);
+            expectedBurns = sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Whale, address(sdgnrs), 7_000e12 + 1);
         }
         vm.stopPrank();
         expectedSupply = sdgnrs.totalSupply() + expectedBurns * REFILL_PERCENT / 100;
@@ -161,7 +161,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture, NativeGasExport
         // bounded (the per-chunk bound is _checkColdCloseChunk).
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 10_000_000}(0);
+        game.mineRun{gas: 10_000_000}(0);
         uint256 used = beforeGas - gasleft() + 21_192;
         emit log_named_uint("century refill + 32 deity grants, cold gas including intrinsic", used);
         bool recycled;

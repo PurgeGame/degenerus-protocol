@@ -66,7 +66,7 @@ abstract contract CensusBoundaryBase is StorageCensus {
 
     function _buy(uint256 i, uint256 tickets, uint256 box) internal {
         uint256 price = game.mintPrice();
-        _act("purchase", i, address(game), tickets * price + box, abi.encodeCall(game.purchase,
+        _act("purchase", i, address(game), tickets * price + box, abi.encodeCall(game.purchaseOrderFor,
             (uint32(0), tickets * 400, box == 0 ? 0 : BoxOrderLib.boCustomFloor(box), bytes32(0), MintPaymentKind.DirectEth, false)));
     }
 
@@ -95,7 +95,7 @@ abstract contract CensusBoundaryBase is StorageCensus {
     }
 
     function _playToLevel(uint24 lvl, uint256 maxDays, uint256 divisor) internal {
-        for (uint256 k; k < maxDays && game.level() < lvl && !game.gameOver(); ++k) _day(divisor);
+        for (uint256 k; k < maxDays && game.currentLvl() < lvl && !game.gameOver(); ++k) _day(divisor);
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
@@ -125,7 +125,7 @@ abstract contract CensusBoundaryBase is StorageCensus {
 
     function _flipFloat(uint256 i, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(cast[i], amount);
+        coin.mintForGame_g152734(cast[i], amount);
     }
 
     function _fundLender() internal {
@@ -162,7 +162,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
     function testCenturyRollover() public {
         vm.pauseGasMetering();
         _playToLevel(2, 60, 1);
-        assertGe(game.level(), 2, "bootstrap");
+        assertGe(game.currentLvl(), 2, "bootstrap");
         vm.mockCall(ContractAddresses.GNRUS, abi.encodeWithSignature("pickCharity(uint24)"), abi.encode());
         _jumpLevel(97);
         vm.deal(address(game), address(game).balance + 5_000 ether);
@@ -172,8 +172,8 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
             wwxrp.mintPrize(cast[i], 5_000);
         }
         _on("century");
-        for (uint256 day; day < 80 && game.level() <= 101 && !game.gameOver(); ++day) {
-            uint24 lvl = game.level();
+        for (uint256 day; day < 80 && game.currentLvl() <= 101 && !game.gameOver(); ++day) {
+            uint24 lvl = game.currentLvl();
             _seedNextPrizePool(49.9 ether + day * 10 ether);
             _seedFuturePrizePool(200 ether);
             uint24 d = _today() + 1;
@@ -182,9 +182,9 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
             for (uint256 j; j < 6; ++j) {
                 uint256 i = (uint256(d) * 5 + j * 3) % N;
                 _buy(i, 4 + j, j % 2 == 0 ? 0.2 ether : 0);
-                _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.depositCoinflip, (uint32(0), uint256(1_000))));
-                _act("wwxrpEnter", i, address(wwxrp), 0, abi.encodeCall(wwxrp.enter, (uint32(0), uint256(50 + j * 25))));
-                if (game.decWindow()) {
+                _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.playCoinflip, (uint32(0), uint256(1_000))));
+                _act("wwxrpEnter", i, address(wwxrp), 0, abi.encodeCall(wwxrp.enterDraw, (uint32(0), uint256(50 + j * 25))));
+                if (game.decimatorActive()) {
                     _act("decimatorBurn", i, address(coin), 0, abi.encodeCall(coin.decimatorBurn, (uint32(0), uint256(2_000), uint32(0))));
                 }
             }
@@ -198,7 +198,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
             _cMineAll(3000, d + 2_000);
         }
         _off();
-        assertGt(game.level(), 100, "crossed the century");
+        assertGt(game.currentLvl(), 100, "crossed the century");
     }
 
     // ------------------------------------------------------------------ loan horizon
@@ -216,21 +216,21 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         _fundLender();
         _day(2);
         _on("loanHorizon");
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint24 cl = lvl + 1; // outside the jackpot phase the active ticket level is level + 1
         for (uint256 i; i < 4; ++i) _borrow(i, cl + 98 - uint24(i)); // the horizon edge
         for (uint256 i = 4; i < 8; ++i) _borrow(i, lvl + 2 + uint24(i - 4)); // due within a few levels
         _playToLevel(lvl + 7, 60, 2);
         // Second generation: the short borrowers borrow again (their loan words were cleared).
         _fundLender();
-        for (uint256 i = 4; i < 8; ++i) _borrow(i, game.level() + 2 + uint24(i - 4));
-        _playToLevel(game.level() + 6, 60, 2);
+        for (uint256 i = 4; i < 8; ++i) _borrow(i, game.currentLvl() + 2 + uint24(i - 4));
+        _playToLevel(game.currentLvl() + 6, 60, 2);
         // Repay what is still open.
         for (uint256 i; i < 8; ++i) {
             uint32 id = game.walletIdOf_g3120(cast[i]);
             DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), id);
-            if (info.principal != 0 && info.dueLevel > game.level()) {
-                _act("repay", i, address(game), info.owed + 0.01 ether, abi.encodeCall(game.repay, (id)));
+            if (info.principal != 0 && info.dueLevel > game.currentLvl()) {
+                _act("repay", i, address(game), info.owed + 0.01 ether, abi.encodeCall(game.clearDebtNow, (id)));
             }
         }
         _off();
@@ -253,7 +253,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
             if (pl == 9 && lastDay) break;
             // Coinflip activity before the bracket builds BAF scores (claims record them).
             uint256 i = k % N;
-            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.depositCoinflip, (uint32(0), uint256(5_000))));
+            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.playCoinflip, (uint32(0), uint256(5_000))));
             _act("claimCoinflips", (k + 7) % N, address(coinflip), 0,
                 abi.encodeCall(coinflip.claimCoinflips, (uint32(0), type(uint256).max)));
             _day(1);
@@ -269,12 +269,12 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         _on(scenario);
         // Direct deposits after the latch enter the weighted BAF draw.
         for (uint256 i; i < N; ++i) {
-            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.depositCoinflip, (uint32(0), uint256(1_000 + i * 100))));
+            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.playCoinflip, (uint32(0), uint256(1_000 + i * 100))));
         }
         uint256 guard;
-        while (game.level() < 12 && guard++ < 40 && !game.gameOver()) {
+        while (game.currentLvl() < 12 && guard++ < 40 && !game.gameOver()) {
             _day(2);
-            uint24 lvl = game.level();
+            uint24 lvl = game.currentLvl();
             for (uint256 j; j < 6; ++j) {
                 uint256 i = (guard * 5 + j) % N;
                 _act("claimCoinflips", i, address(coinflip), 0,
@@ -300,7 +300,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         for (uint256 k; k < 106; ++k) {
             if (k < 5 || k >= 100) {
                 for (uint256 i; i < N; ++i) {
-                    _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.depositCoinflip, (uint32(0), uint256(1_000 + k))));
+                    _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.playCoinflip, (uint32(0), uint256(1_000 + k))));
                 }
             }
             if (k == 45 || k >= 100) {
@@ -332,10 +332,10 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
                 if (crapsBattle.daySeatNumberOf(d, cast[i]) != 0) continue;
                 if (j < 2) {
                     _act("crapsEnterBonusDay", i, address(crapsBattle), 0,
-                        abi.encodeWithSignature("enterBonusDay(uint32,uint32,uint16)", uint32(0), board, uint16(1)));
+                        abi.encodeWithSignature("playCraps(uint32,uint32,uint16)", uint32(0), board, uint16(1)));
                 } else {
                     _act("crapsEnterWindow", i, address(crapsBattle), 0, abi.encodeWithSignature(
-                        "enterBonusBattle(uint32,uint256,uint32,uint16)", uint32(0), uint256(j), board, uint16(1)));
+                        "throwCraps(uint32,uint256,uint32,uint16)", uint32(0), uint256(j), board, uint16(1)));
                 }
             }
             uint256 b = (k * 7 + 1) % N;
@@ -362,14 +362,14 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         }
         _fundLender();
         _day(3);
-        for (uint256 i; i < 4; ++i) _borrow(i, game.level() + 3 + uint24(i));
+        for (uint256 i; i < 4; ++i) _borrow(i, game.currentLvl() + 3 + uint24(i));
         for (uint256 i; i < N; ++i) {
             _flipFloat(i, 100_000);
-            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.depositCoinflip, (uint32(0), uint256(2_000))));
+            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.playCoinflip, (uint32(0), uint256(2_000))));
         }
         for (uint256 i = 8; i < 12; ++i) {
             vm.prank(address(game));
-            sdgnrs.transferFromPool(sDGNRS.Pool.Reward, cast[i], 20_000 * 1e12);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, cast[i], 20_000 * 1e12);
             _act("sdgnrsBurn", i, address(sdgnrs), 0, abi.encodeCall(sdgnrs.burn, (uint256(5_000 * 1e12))));
         }
     }
@@ -383,7 +383,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         _cMineAll(3000, d + 1);
         for (uint256 i; i < N; ++i) {
             if (game.claimableWinningsOf(cast[i]) > 1) {
-                _act("claimWinnings", i, address(game), 0, abi.encodeWithSignature("claimWinnings(uint32)", uint32(0)));
+                _act("claimWinnings", i, address(game), 0, abi.encodeWithSignature("claimClaimable(uint32)", uint32(0)));
             }
             if (sdgnrs.balanceOf(cast[i]) > 1e12) {
                 _act("sdgnrsBurnDeterministic", i, address(sdgnrs), 0, abi.encodeCall(sdgnrs.burn, (sdgnrs.balanceOf(cast[i]) / 2)));
@@ -420,7 +420,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
             if (!game.gameOver()) vm.warp(vm.getBlockTimestamp() + 2 hours);
         }
         console.log(string.concat("CENSUSNOTE|gameOver|crankRoundsToGameOver|", vm.toString(rounds),
-            "|level|", vm.toString(uint256(game.level())), "|gameOver|", game.gameOver() ? "1" : "0"));
+            "|level|", vm.toString(uint256(game.currentLvl())), "|gameOver|", game.gameOver() ? "1" : "0"));
         assertEq((_lootboxRngWord() >> 232) & 0xFF, 1, "a hard stall latched the deterministic ending");
         _sweepAndClaim();
     }
@@ -457,7 +457,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
             if (!game.gameOver()) vm.warp(vm.getBlockTimestamp() + 2 hours);
         }
         console.log(string.concat("CENSUSNOTE|gameOverPurchaseTimeout|idleDays|", vm.toString(idleDays),
-            "|crankRoundsToGameOver|", vm.toString(rounds), "|level|", vm.toString(uint256(game.level()))));
+            "|crankRoundsToGameOver|", vm.toString(rounds), "|level|", vm.toString(uint256(game.currentLvl()))));
         require(game.gameOver(), "game over latched");
         // The terminal request: sent after the deadline froze purchases, answered, and the
         // terminal jackpot paid from its word; the deterministic ending never latched.
@@ -524,10 +524,10 @@ contract StorageCensusDegenesisBoundaryTest is CensusBoundaryBase {
             if (credit < amount) {
                 uint256 spend = ((amount - credit) * 4 + 0.001 ether - 1) / 0.001 ether * 0.001 ether;
                 if (spend < 0.01 ether) spend = 0.01 ether;
-                _act("purchase", i, address(game), spend, abi.encodeCall(game.purchase,
+                _act("purchase", i, address(game), spend, abi.encodeCall(game.purchaseOrderFor,
                     (uint32(0), 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false)));
             }
-            _act("buyDegenesisBox", i, address(game), amount, abi.encodeCall(game.buyDegenesisBox, (uint32(0), amount)));
+            _act("buyDegenesisBox", i, address(game), amount, abi.encodeCall(game.purchaseDegenesisBox, (uint32(0), amount)));
         }
         _warpDay(d, 13 hours);
         _cMineAll(3000, 300 + c);

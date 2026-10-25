@@ -32,7 +32,7 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
             }
             if (!game.advanceDue()) return;
             vm.prank(KEEPER);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("fixture did not settle");
     }
@@ -44,13 +44,13 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
     function _seat(address player, uint256 period) internal {
         (uint128 bankroll,,,,,) = crapsBattle.bonusTermsFor(today, period);
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(player, uint256(bankroll) * 4);
+        coin.mintForGame_g152734(player, uint256(bankroll) * 4);
         Craps.Bets memory board;
         board.passLine = 3;
         board.place8 = 3;
         board.place9 = 1;
         vm.prank(player);
-        crapsBattle.enterBonusBattle(period, board, 1);
+        crapsBattle.throwCraps(period, board, 1);
     }
 
     function _armedIn(Vm.Log[] memory logs, uint64 slot) internal view returns (bool) {
@@ -71,7 +71,7 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(KEEPER);
         uint256 start = gasleft();
-        game.mineFlip{gas: gasLimit}(calibration);
+        game.mineRun{gas: gasLimit}(calibration);
         used = start - gasleft();
         armed = _armedIn(vm.getRecordedLogs(), slot);
         requested = mockVRF.lastRequestId() != before;

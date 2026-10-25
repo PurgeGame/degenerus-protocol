@@ -60,7 +60,7 @@ library SolvencyObligations {
     /// @return The sum of all ETH obligations the contract is liable to pay out.
     function obligations(DegenerusGame game) internal view returns (uint256) {
         // Queue records share the registry slot; attest their boundaries while checking pool solvency.
-        uint24 active = game.level();
+        uint24 active = game.currentLvl();
         for (uint24 lvl = active; lvl <= active + 5; ++lvl) {
             TicketQueueStorage.assertQueue(address(game), lvl);
             TicketQueueStorage.assertQueue(address(game), lvl | uint24(1 << 23));

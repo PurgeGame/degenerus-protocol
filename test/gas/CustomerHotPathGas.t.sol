@@ -77,7 +77,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(PLAYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(PLAYER, 10_000_000);
         uint24 day = uint24(game.currentDayView_g542950());
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
@@ -170,7 +170,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         return false;
     }
 
-    function _deposit(uint256 amount) private { vm.prank(PLAYER); coinflip.depositCoinflip(0, amount); }
+    function _deposit(uint256 amount) private { vm.prank(PLAYER); coinflip.playCoinflip(0, amount); }
     function _boon(bool craps, bool expired) private {
         uint32 id = game.walletIdOf_g3120(PLAYER);
         bytes memory code = address(game).code;
@@ -222,7 +222,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
 
     function _degen(uint8 currency, uint8 symbol, uint256 fresh) private {
         vm.prank(PLAYER);
-        game.placeDegeneretteBet{value:fresh}(0, currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
+        game.betDegenerette{value:fresh}(0, currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
     }
     function test_Gas_DegeneretteEthFirst() public { _begin(); _degen(0, 3, 0.01 ether); _end("degen_eth_first"); }
     function test_Gas_DegeneretteEthRepeat() public {
@@ -248,7 +248,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
     function test_Gas_DegeneretteFlip() public { _begin(); _degen(1, 3, 0); _end("degen_flip"); }
     function test_Gas_DegeneretteBankedFlip() public {
         uint256 balance = coin.balanceOf(PLAYER);
-        vm.prank(address(game)); coin.burnCoin(PLAYER, balance);
+        vm.prank(address(game)); coin.burnCoin_g27673(PLAYER, balance);
         _bank(1_000_000); _begin(); _degen(1, 3, 0); _end("degen_banked_flip");
     }
     function test_Gas_DegeneretteClaimableEth() public { _begin(); _degen(0, 3, 0); _end("degen_claimable_eth"); }
@@ -259,15 +259,15 @@ contract CustomerHotPathGasTest is DeployProtocol {
         vm.prank(address(game)); crapsBattle.openBonusDay();
     }
     function test_Gas_CrapsWindowFirst() public {
-        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, 1, BOARD, 1); _end("craps_window_first");
+        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.throwCraps(0, 1, BOARD, 1); _end("craps_window_first");
     }
     function test_Gas_CrapsWindowRepeat() public {
-        _openDay(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
-        _begin(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, 2, BOARD, 1); _end("craps_window_repeat");
+        _openDay(); vm.prank(PLAYER); crapsBattle.throwCraps(0, 1, BOARD, 1);
+        _begin(); vm.prank(PLAYER); crapsBattle.throwCraps(0, 2, BOARD, 1); _end("craps_window_repeat");
     }
     function test_Gas_CrapsDay() public {
         vm.warp(block.timestamp - ((block.timestamp - 82_620) % 1 days) + 1);
-        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.enterBonusDay(0, BOARD, 1); _end("craps_day");
+        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.playCraps(0, BOARD, 1); _end("craps_day");
     }
     function _future(string memory label, uint8 days_) private {
         uint24 day = uint24(game.currentDayView_g542950()) + 1;
@@ -280,7 +280,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
     function test_Gas_CrapsExpiredBoon() public { _boon(true, true); _future("craps_expired_boon", 1); }
     function test_Gas_CrapsBankedFlip() public {
         uint256 balance = coin.balanceOf(PLAYER);
-        vm.prank(address(game)); coin.burnCoin(PLAYER, balance);
+        vm.prank(address(game)); coin.burnCoin_g27673(PLAYER, balance);
         _bank(1_000_000); _future("craps_banked_flip", 1);
     }
     function test_Gas_CrapsPass() public {
@@ -331,7 +331,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
 
     function test_ZeroBurnKeepsEventsAndRejectsZeroAddressWithoutStorageWrites() public {
         vm.recordLogs(); vm.record();
-        vm.prank(address(game)); coin.burnCoin(PLAYER, 0);
+        vm.prank(address(game)); coin.burnCoin_g27673(PLAYER, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(coin));
         assertEq(reads.length, 0); assertEq(writes.length, 0);
@@ -339,13 +339,13 @@ contract CustomerHotPathGasTest is DeployProtocol {
         assertEq(logs[0].topics[0], keccak256("Transfer(address,address,uint256)"));
         assertEq(abi.decode(logs[0].data, (uint256)), 0);
         vm.recordLogs(); vm.record();
-        vm.prank(address(game)); coin.burnCoin(ContractAddresses.VAULT, 0);
+        vm.prank(address(game)); coin.burnCoin_g27673(ContractAddresses.VAULT, 0);
         logs = vm.getRecordedLogs();
         (reads, writes) = vm.accesses(address(coin));
         assertEq(reads.length, 0); assertEq(writes.length, 0);
         assertEq(logs.length, 1);
         assertEq(logs[0].topics[0], keccak256("VaultAllowanceSpent(address,uint256)"));
         vm.expectRevert(FLIP.ZeroAddress.selector);
-        vm.prank(address(game)); coin.burnCoin(address(0), 0);
+        vm.prank(address(game)); coin.burnCoin_g27673(address(0), 0);
     }
 }

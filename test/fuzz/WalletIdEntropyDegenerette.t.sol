@@ -59,10 +59,10 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
 
     function _place() private returns (uint64 betId, uint16 activity) {
         vm.prank(address(game));
-        coin.mintForGame(player, uint256(FLIP_PER_SPIN) * SPINS + 1);
+        coin.mintForGame_g152734(player, uint256(FLIP_PER_SPIN) * SPINS + 1);
         vm.recordLogs();
         vm.prank(player);
-        game.placeDegeneretteBet(0, CURRENCY_FLIP, FLIP_PER_SPIN, SPINS, HERO);
+        game.betDegenerette(0, CURRENCY_FLIP, FLIP_PER_SPIN, SPINS, HERO);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)")) {
@@ -83,7 +83,7 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
         RecyclingState.seedWriteBuffer(address(game), INDEX ^ 1);
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;
         for (uint256 i; i < logs.length; ++i) {

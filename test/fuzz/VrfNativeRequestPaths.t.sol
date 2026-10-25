@@ -14,7 +14,7 @@ contract VrfNativeRequestPathsTest is DeployProtocol {
 
     function _daily() private returns (uint256 requestId) {
         for (uint256 i; i < 30 && mockVRF.lastRequestId() == 0; ++i) {
-            game.mineFlip{gas: 15_000_000}(0);
+            game.mineRun{gas: 15_000_000}(0);
         }
         requestId = mockVRF.lastRequestId();
         assertGt(requestId, 0, "daily request issued");

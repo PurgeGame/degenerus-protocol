@@ -245,7 +245,7 @@ contract GameWalletIdViews is DeployProtocol {
 
     function testFuzz_SampleTraitEntriesReturnsLaneIds(uint256 entropy, uint8 n) public {
         uint256 count = bound(n, 1, 21);
-        uint24 lvl = game.level() + 1;
+        uint24 lvl = game.currentLvl() + 1;
         uint8 trait = uint8(entropy >> 24);
         for (uint256 i; i < count; ++i) {
             (, uint32 id) = _wallet(string(abi.encodePacked("trait_entry_", vm.toString(i))));
@@ -269,7 +269,7 @@ contract GameWalletIdViews is DeployProtocol {
 
     function test_SampleTraitEntriesEmptyAndRetired() public {
         uint256 entropy = uint256(keccak256("sampler_empty"));
-        uint24 lvl = game.level() + 1;
+        uint24 lvl = game.currentLvl() + 1;
         uint8 trait = uint8(entropy >> 24);
         uint32[] memory entries = game.sampleTraitEntries(true, trait, entropy);
         assertEq(entries.length, 0, "empty bucket returns no entries");
@@ -353,7 +353,7 @@ contract GameWalletIdViews is DeployProtocol {
         JackpotBattleStub stub = JackpotBattleStub(ContractAddresses.CRAPS);
         vm.etch(ContractAddresses.CRAPS, type(JackpotBattleStub).runtimeCode);
         stub.setRemaining(12);
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         // Seed one far-future level with distinct entrants; give some a saved board.
         uint24 target = lvl + 40;
         uint32[] memory ids = new uint32[](16);
@@ -442,7 +442,7 @@ contract GameWalletIdViews is DeployProtocol {
             abi.encodeWithSelector(IsDGNRS.poolBalance.selector, IsDGNRS.Pool.Reward),
             abi.encode(uint256(4_999))
         );
-        vm.expectCall(address(sdgnrs), abi.encodeWithSelector(IsDGNRS.transferFromPool.selector), 0);
+        vm.expectCall(address(sdgnrs), abi.encodeWithSelector(IsDGNRS.transferFromPool_g106128.selector), 0);
         vm.prank(ContractAddresses.COINFLIP);
         (uint256 paid, address payee) = game.payRecordSdgnrs(id, 1);
         assertEq(paid, 0, "zero payout pays nothing");
@@ -456,7 +456,7 @@ contract GameWalletIdViews is DeployProtocol {
             abi.encodeWithSelector(IsDGNRS.poolBalance.selector, IsDGNRS.Pool.Reward),
             abi.encode(uint256(0))
         );
-        vm.expectCall(address(sdgnrs), abi.encodeWithSelector(IsDGNRS.transferFromPool.selector), 0);
+        vm.expectCall(address(sdgnrs), abi.encodeWithSelector(IsDGNRS.transferFromPool_g106128.selector), 0);
         vm.prank(ContractAddresses.COINFLIP);
         (uint256 paid, address payee) = game.payRecordSdgnrs(id, 10_000);
         assertEq(paid, 0, "empty pool pays nothing");
@@ -531,9 +531,9 @@ contract GameWalletIdViews is DeployProtocol {
         // Cold path: a buyer whose affiliate cache is for another level.
         address buyer = makeAddr("score_buyer");
         vm.deal(buyer, 10 ether);
-        uint256 value = 4 * PriceLookupLib.priceForLevel(game.level() + 1);
+        uint256 value = 4 * PriceLookupLib.priceForLevel(game.currentLvl() + 1);
         vm.prank(buyer);
-        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint32 buyerId = game.walletIdOf_g3120(buyer);
         bytes32 mintSlot = GameSlotKeys.mintPacked(buyer);
         uint256 word = uint256(vm.load(address(game), mintSlot));
@@ -608,7 +608,7 @@ contract GameWalletIdViews is DeployProtocol {
     function _place(address caller, address player, uint8 currency, uint128 perSpin, uint8 spins, uint256 value) private {
         uint32 id = (player == address(0) || player == caller) ? 0 : game.walletIdOf_g3120(player);
         vm.prank(caller);
-        game.placeDegeneretteBet{value: value}(id, currency, perSpin, spins, SYMBOL);
+        game.betDegenerette{value: value}(id, currency, perSpin, spins, SYMBOL);
     }
 
     /// @dev Deliver `word` for the cohort at IDX (as DegeneretteSweep does) and resolve it.
@@ -622,7 +622,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.store(address(game), bytes32(0), bytes32(slot0));
         vm.recordLogs();
         vm.prank(makeAddr("degen_crank"));
-        game.mineFlip(0);
+        game.mineRun(0);
         logs = vm.getRecordedLogs();
     }
 
@@ -693,7 +693,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint256 totalBet = 0.02 ether;
         vm.expectCall(
             address(quests),
-            abi.encodeCall(IDegenerusQuests.handleDegenerette_g3, (expectedFunderId, totalBet, true, PriceLookupLib.priceForLevel(game.level() + 1), _fixtureGameDay()))
+            abi.encodeCall(IDegenerusQuests.handleDegenerette_g3, (expectedFunderId, totalBet, true, PriceLookupLib.priceForLevel(game.currentLvl() + 1), _fixtureGameDay()))
         );
         vm.recordLogs();
         _place(funder, player, ETH, 0.01 ether, 2, totalBet);
@@ -712,7 +712,7 @@ contract GameWalletIdViews is DeployProtocol {
         address funder = makeAddr("gift_flip_funder");
         vm.deal(funder, 1 ether);
         vm.prank(address(game));
-        coin.mintForGame(funder, 100_000);
+        coin.mintForGame_g152734(funder, 100_000);
         vm.recordLogs();
         _place(funder, player, FLIP, 1_000, 1, 0.003 ether);
         (uint256 n, uint32 fid) = _registrations(vm.getRecordedLogs(), funder);
@@ -739,7 +739,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint32 playerId = game.walletIdOf_g3120(player);
         vm.prank(small);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.placeDegeneretteBet{value: 0.01 ether}(playerId, ETH, 0.01 ether, 1, SYMBOL);
+        game.betDegenerette{value: 0.01 ether}(playerId, ETH, 0.01 ether, 1, SYMBOL);
 
         address large = makeAddr("gift3_large_funder");
         vm.deal(large, 10 ether);
@@ -753,7 +753,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint32 expectedId = uint32(_walletsLength());
         vm.expectCall(
             address(quests),
-            abi.encodeCall(IDegenerusQuests.handleDegenerette_g3, (expectedId, 0.01 ether, true, PriceLookupLib.priceForLevel(game.level() + 1), _fixtureGameDay()))
+            abi.encodeCall(IDegenerusQuests.handleDegenerette_g3, (expectedId, 0.01 ether, true, PriceLookupLib.priceForLevel(game.currentLvl() + 1), _fixtureGameDay()))
         );
         vm.recordLogs();
         _place(player, address(0), ETH, 0.01 ether, 1, 0.01 ether);
@@ -807,7 +807,7 @@ contract GameWalletIdViews is DeployProtocol {
                 && uint32(uint256(logs[i].topics[1])) == aId) ++affiliateRanges;
         }
         assertGt(affiliateRanges, 0, "conferred pass queued on the affiliate's ID");
-        assertGt(game.entriesOwedView(game.level() + 1, a), 0, "affiliate owes entries at the pass level");
+        assertGt(game.entriesOwedView(game.currentLvl() + 1, a), 0, "affiliate owes entries at the pass level");
         assertGt(
             game.mintPackedFor(a) >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT & BitPackingLib.MASK_24,
             0,
@@ -858,13 +858,13 @@ contract GameWalletIdViews is DeployProtocol {
         address owner = makeAddr(string(abi.encodePacked("h6_owner_", vm.toString(kind))));
         bytes32 code = bytes32(uint256(uint160(owner)));
         vm.deal(buyer, 200 ether);
-        uint256 price = PriceLookupLib.priceForLevel(game.level() + 1);
+        uint256 price = PriceLookupLib.priceForLevel(game.currentLvl() + 1);
         vm.recordLogs();
         vm.startPrank(buyer);
-        if (kind == 0) game.purchase{value: 4 * price}(0, 1_600, 0, code, MintPaymentKind.DirectEth, false);
+        if (kind == 0) game.purchaseOrderFor{value: 4 * price}(0, 1_600, 0, code, MintPaymentKind.DirectEth, false);
         else if (kind == 1) game.purchaseWhalePass{value: 4 ether}(0, 1, code);
         else if (kind == 2) game.purchaseLazyPass{value: 1 ether}(0, code);
-        else if (kind == 3) game.purchase{value: 10 * price}(0, 0, 0, code, MintPaymentKind.DirectEth, true);
+        else if (kind == 3) game.purchaseOrderFor{value: 10 * price}(0, 0, 0, code, MintPaymentKind.DirectEth, true);
         else game.purchaseDeityPass{value: 100 ether}(0, 7, code);
         vm.stopPrank();
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -909,11 +909,11 @@ contract GameWalletIdViews is DeployProtocol {
             abi.encode(winnerId, uint256(500), uint256(300))
         );
         // The call carries the buyer ID first and the returned winner ID with its credit.
-        uint256 value = 4 * PriceLookupLib.priceForLevel(game.level() + 1);
+        uint256 value = 4 * PriceLookupLib.priceForLevel(game.currentLvl() + 1);
         vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlipPair_g578.selector, buyerId));
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         (uint256 winnerCredit,) = _credited(vm.getRecordedLogs(), winnerId);
         assertEq(winnerCredit, 500, "winner leg by its ID");
     }
@@ -921,7 +921,7 @@ contract GameWalletIdViews is DeployProtocol {
     function test_RedeemFlipQuestAndQueueByNewId() public {
         address buyer = makeAddr("redeem_new_id");
         vm.prank(address(game));
-        coin.mintForGame(buyer, 1_000_000 ether);
+        coin.mintForGame_g152734(buyer, 1_000_000 ether);
         uint256 pools = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
         vm.store(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED), bytes32((pools & ~uint256(type(uint128).max)) | 60 ether));
         uint32 expectedId = uint32(_walletsLength());
@@ -937,7 +937,7 @@ contract GameWalletIdViews is DeployProtocol {
         assertEq(id, expectedId, "new ID");
         _assertIdTruth(buyer, id);
         uint32 owed;
-        for (uint24 l = game.level(); l <= game.level() + 2; ++l) owed += game.entriesOwedView(l, buyer);
+        for (uint24 l = game.currentLvl(); l <= game.currentLvl() + 2; ++l) owed += game.entriesOwedView(l, buyer);
         assertGt(owed, 0, "entries queued by the new ID");
     }
 
@@ -984,7 +984,7 @@ contract GameWalletIdViews is DeployProtocol {
         );
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest_g3878.selector, game.level(), id),
+            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest_g3878.selector, game.currentLvl(), id),
             abi.encode(uint256(6))
         );
 

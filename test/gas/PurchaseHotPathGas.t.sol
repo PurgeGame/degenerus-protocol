@@ -116,7 +116,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         returns (uint256 used)
     {
         vm.prank(BUYER);
-        game.purchase{value: fresh}(0, quantity, boxes, referral, kind, false);
+        game.purchaseOrderFor{value: fresh}(0, quantity, boxes, referral, kind, false);
         used = vm.snapshotGasLastCall("purchase-hot-path");
     }
 
@@ -136,7 +136,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         emit log_named_uint(scenario, used);
         emit log_named_bytes32(string.concat(scenario, " events"), digest);
         digest = keccak256(abi.encode(
-            game.mintPackedFor(BUYER), game.entriesOwedView(game.level() + 1, BUYER),
+            game.mintPackedFor(BUYER), game.entriesOwedView(game.currentLvl() + 1, BUYER),
             coinflip.coinflipAmount(BUYER), coinflip.coinflipAmount(REFERRER),
             coinflip.coinflipAmount(address(vault)), coinflip.coinflipAmount(address(sdgnrs)),
             vm.load(address(game), bytes32(uint256(2))), vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)),
@@ -152,7 +152,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)) >> 2, GameSlots.SUB_META))),
             vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
             _newestBoxEntry(),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), bytes32(GameSlots.FOIL_RECORD + uint256((game.level() + 1) & 3)))))
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), bytes32(GameSlots.FOIL_RECORD + uint256((game.currentLvl() + 1) & 3)))))
         ));
         emit log_named_bytes32(string.concat(scenario, " state"), digest);
     }
@@ -164,7 +164,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         return count == 0 ? 0 : RecyclingState.boxEntry(address(game), write, count - 1);
     }
 
-    function _price() internal view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
+    function _price() internal view returns (uint256) { return PriceLookupLib.priceForLevel(game.currentLvl() + 1); }
     function _prime(bytes32 referral) internal { _buy(400, 0, referral, MintPaymentKind.DirectEth, _price()); }
 
     function test_Gas_FirstTicket() public {
@@ -236,7 +236,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         uint256 cost = _price() * 11;
         vm.recordLogs();
         vm.prank(BUYER);
-        game.purchase{value: cost}(0, 400, 0, 0, MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 400, 0, 0, MintPaymentKind.DirectEth, true);
         uint256 used = vm.snapshotGasLastCall("purchase-foil");
         _report(afking ? "afking_foil" : "foil_ticket", used, vm.getRecordedLogs());
     }
@@ -302,7 +302,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         if (afkingUsed > afking) {
             vm.expectRevert(DegenerusGameStorage.Insolvent.selector);
             vm.prank(BUYER);
-            game.purchase{value: fresh}(0, quantity, box ? 1 : 0, 0, payment, false);
+            game.purchaseOrderFor{value: fresh}(0, quantity, box ? 1 : 0, 0, payment, false);
             assertEq(vm.load(address(game), balanceSlot), beforeBalance, "failed buy preserves balances");
             assertEq(game.claimablePoolView(), pool, "failed buy preserves liabilities");
         } else {

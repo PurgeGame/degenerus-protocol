@@ -43,7 +43,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         vm.deal(address(game), 500 ether);
         playerId = _giveWalletId(player);
 
-        // placeDegeneretteBet reverts E() when lootboxRngIndex == 0; seed it to 1.
+        // betDegenerette reverts E() when lootboxRngIndex == 0; seed it to 1.
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
@@ -64,12 +64,12 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     /// @dev claimBingo needs a registered player; a minimum ETH bet registers one.
     function _register(address who) internal {
         vm.prank(who);
-        game.placeDegeneretteBet{value: BET_ETH}(0, CURRENCY_ETH, BET_ETH, 1, 0);
+        game.betDegenerette{value: BET_ETH}(0, CURRENCY_ETH, BET_ETH, 1, 0);
     }
 
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     // ----- Degenerette gift placement -----
@@ -83,7 +83,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint64 idBefore = _lastBetId();
 
         vm.prank(gifter); // gifter is NOT the player and NOT approved
-        game.placeDegeneretteBet(playerId, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
+        game.betDegenerette(playerId, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
 
         assertEq(coin.balanceOf(player), playerBefore, "no drain: player FLIP untouched");
         assertLt(coin.balanceOf(gifter), gifterBefore, "funder paid the bet");
@@ -99,7 +99,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint64 idBefore = _lastBetId();
 
         vm.prank(gifter);
-        game.placeDegeneretteBet{value: BET_ETH}(playerId, CURRENCY_ETH, BET_ETH, 1, 0);
+        game.betDegenerette{value: BET_ETH}(playerId, CURRENCY_ETH, BET_ETH, 1, 0);
 
         assertEq(gifter.balance, gifterEthBefore - BET_ETH, "funder's ETH funded the bet");
         assertEq(player.balance, playerEthBefore, "no drain: player ETH untouched");
@@ -111,7 +111,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     function testWwxrpGiftReverts() public {
         vm.prank(gifter);
         vm.expectRevert(UnsupportedCurrency.selector);
-        game.placeDegeneretteBet(playerId, CURRENCY_WWXRP, 1 ether, 1, 0);
+        game.betDegenerette(playerId, CURRENCY_WWXRP, 1 ether, 1, 0);
     }
 
     /// @notice An approved operator spends the PLAYER's funds (the old funded-self path), not a gift.
@@ -124,7 +124,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint256 gifterBefore = coin.balanceOf(gifter); // 0
 
         vm.prank(gifter);
-        game.placeDegeneretteBet(playerId, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
+        game.betDegenerette(playerId, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
 
         assertEq(coin.balanceOf(player), playerBefore - MIN_BET_FLIP, "approved op spends player's FLIP");
         assertEq(coin.balanceOf(gifter), gifterBefore, "approved operator is not charged");
@@ -145,7 +145,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         emit CoinflipDeposit(_fixtureId(player), 0); // assert topic1 (player) only; amount not checked
 
         vm.prank(gifter);
-        coinflip.depositCoinflip(playerId, amt);
+        coinflip.playCoinflip(playerId, amt);
 
         assertEq(coin.balanceOf(player), playerBefore, "no drain: player FLIP untouched");
         assertEq(coin.balanceOf(gifter), gifterBefore - amt, "funder's FLIP funded the stake");
@@ -205,7 +205,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint256 slot0 = uint256(vm.load(address(game), levelSlot));
         uint256 levelMask = uint256(0xFFFFFF) << (GameSlots.LEVEL_OFFSET * 8);
         vm.store(address(game), levelSlot, bytes32((slot0 & ~levelMask) | (uint256(1) << (GameSlots.LEVEL_OFFSET * 8))));
-        assertEq(game.level(), 1, "fixture: level 1");
+        assertEq(game.currentLvl(), 1, "fixture: level 1");
         vm.prank(player);
         vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));
         game.claimAffiliateDgnrs(empty);

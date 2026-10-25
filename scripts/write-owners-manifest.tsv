@@ -82,9 +82,9 @@ OWNER	balancesPacked	modules/DegenerusGameDegenesisModule.sol	topUpSdgnrsAfking 
 OWNER	balancesPacked	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain one-shot Degenesis release clears the sDGNRS AFKing half (leaving its claimable half) in tandem with the claimablePool debit; the gameOver latch makes it once
 OWNER	balancesPacked	modules/GamePurchase.sol	_processMintPayment debits claimable and afking from one packed snapshot; preserves the low-half sentinel and checks high-half sufficiency; _purchaseForWithCached applies the matching combined claimablePool debit
 OWNER	boonPacked	modules/GameFacade.sol	NOT A STORAGE WRITE: deityBoonData declares a local uint32 boonPacked = deityBoonPacked[deity] in a view; label collision with the storage identifier
-OWNER	boonPacked	modules/DegenerusGameBoonModule.sol	NOT A STORAGE WRITE: issueDeityBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
+OWNER	boonPacked	modules/DegenerusGameBoonModule.sol	NOT A STORAGE WRITE: giveBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
 OWNER	boonPacked	modules/DegenerusGameWhaleModule.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
-OWNER	boonPacked	modules/GameBoonActions.sol	Internalized component retains the reviewed writer role: NOT A STORAGE WRITE: issueDeityBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
+OWNER	boonPacked	modules/GameBoonActions.sol	Internalized component retains the reviewed writer role: NOT A STORAGE WRITE: giveBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
 OWNER	boonPacked	modules/GamePurchaseBoon.sol	Purchase boost consumes the same packed tier/day fields in Game storage; no other fields or call authority change.
 OWNER	boonPacked	modules/GamePurchaseBox.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
 OWNER	boxCursor	modules/GameAfkingModule.sol	Human FIFO worker stores the advanced cursor before each entry settles; the seal resets it.
@@ -92,7 +92,7 @@ OWNER	claimablePool	modules/GameActions.sol	claimWinnings/withdrawAfkingFunding 
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
 OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_releaseToFuture moves an zero-quota round, or the pass money fixed at ranking, from the reservation to the (frozen-aware) future pool
 OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth pairs pool += with _creditClaimable for Degenerette ETH wins; same identity as every other crediting site
-OWNER	claimablePool	modules/DegenerusGameDegenesisModule.sol	buyDegenesisBox holds the whole Degenesis amount as a reserved obligation (pool += amount after the buyer draw); _splitDegenesisCohorts releases equal future-prize and insurance quarters at the cohort split
+OWNER	claimablePool	modules/DegenerusGameDegenesisModule.sol	purchaseDegenesisBox holds the whole Degenesis amount as a reserved obligation (pool += amount after the buyer draw); _splitDegenesisCohorts releases equal future-prize and insurance quarters at the cohort split
 OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain adds deity refunds; _handleFinalSweep zeroes it after debiting VAULT/SDGNRS/GNRUS (terminal, GO_SWEPT latch guards later withdraws)
 OWNER	claimablePool	modules/DegenerusGameJackpotDrawModule.sol	BAF stage completion releases the reserved ETH term of awards no candidate took (jackpotWork.paid residue) back to the future pool
 OWNER	claimablePool	modules/DegenerusGameJackpotModule.sol	jackpot payouts (_processDailyEth liabilityDelta, golden ticket, yield surplus) add liability in tandem with _creditClaimable
@@ -134,9 +134,9 @@ OWNER	degeneretteRecordBounty	modules/GameDegeneretteBet.sol	Internalized compon
 OWNER	degenesisActive	modules/DegenerusGameDegenesisModule.sol	prepareDegenesis stamps the next cohort (budget and day) at the word-free request boundary; runDegenesisWork persists the order cursor; _closeDegenesisCohort clears it
 OWNER	degenesisActive	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain clears the active cohort at the terminal latch (unresolved orders are forfeited with the burned inventory)
 OWNER	degenesisClosed	modules/DegenerusGameDegenesisModule.sol	_closeDegenesisCohort advances the closed-cohort count once per settled cohort; sole writer
-OWNER	degenesisCredit	modules/DegenerusGameDegenesisModule.sol	buyDegenesisBox consumes credit 1:1 against the amount (checked before the guarded -=); one of the two writers, the accrual helper adds
-OWNER	degenesisDays	modules/DegenerusGameDegenesisModule.sol	buyDegenesisBox appends an order to the day header (volume and count); _splitDegenesisCohorts latches the split flag; the cohort is sealed before it splits
-OWNER	degenesisOrders	modules/DegenerusGameDegenesisModule.sol	buyDegenesisBox packs each order into its lane at the append position; sole writer, immutable once the day seals
+OWNER	degenesisCredit	modules/DegenerusGameDegenesisModule.sol	purchaseDegenesisBox consumes credit 1:1 against the amount (checked before the guarded -=); one of the two writers, the accrual helper adds
+OWNER	degenesisDays	modules/DegenerusGameDegenesisModule.sol	purchaseDegenesisBox appends an order to the day header (volume and count); _splitDegenesisCohorts latches the split flag; the cohort is sealed before it splits
+OWNER	degenesisOrders	modules/DegenerusGameDegenesisModule.sol	purchaseDegenesisBox packs each order into its lane at the append position; sole writer, immutable once the day seals
 OWNER	degenesisVaultBudget	modules/DegenerusGameDegenesisModule.sol	_splitDegenesisCohorts adds the Vault quarter at each cohort split; spendDegenesis debits the exact purchase cost (checked)
 OWNER	degenesisVaultBudget	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain zeroes the budget in the one-shot Degenesis release, paired with the claimablePool debit
 OWNER	degenesisWord	modules/DegenerusGameDegenesisModule.sol	_closeDegenesisCohort clears the bound word when the cohort closes

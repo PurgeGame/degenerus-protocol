@@ -27,7 +27,7 @@ contract StakedStonkRedemptionTest is RedemptionFixture {
     }
     function test_OnlyGameClosesAndResolves() public {
         vm.expectRevert(sDGNRS.Unauthorized.selector);
-        sdgnrs.closeRedemptionBatch(0);
+        sdgnrs.closeRedemptionBatch_g165517(0);
         vm.expectRevert(sDGNRS.Unauthorized.selector);
         sdgnrs.resolveTerminalRedemptions();
         vm.expectRevert(sDGNRS.Unauthorized.selector);

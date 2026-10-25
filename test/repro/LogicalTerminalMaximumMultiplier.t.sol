@@ -7,7 +7,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 /// reaches normal terminal settlement at maximum calibration within one transaction's cap.
 contract LogicalTerminalMaximumMultiplierTest is DeployProtocol {
     function _mine() private {
-        game.mineFlip{gas: 16_777_216}(type(uint32).max);
+        game.mineRun{gas: 16_777_216}(type(uint32).max);
     }
 
     function _answer(uint256 word) private {

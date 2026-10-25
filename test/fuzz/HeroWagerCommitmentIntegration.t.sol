@@ -13,7 +13,7 @@ contract HeroWagerCommitmentIntegrationTest is RedemptionFixture {
     function _bet(uint8 symbol, uint128 amount) private {
         vm.deal(alice, 100 ether);
         vm.prank(alice);
-        game.placeDegeneretteBet{value: amount}(0, 0, amount, 1, symbol);
+        game.betDegenerette{value: amount}(0, 0, amount, 1, symbol);
     }
     function _metadata() private view returns (uint256) {
         return uint256(game.extsload_g2807007(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & HERO_MASK;

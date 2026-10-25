@@ -30,7 +30,7 @@ import {
  *   - Consume functions are access-restricted (COIN/COINFLIP/self-call only).
  *
  * We verify boon coexistence via:
- *   1. Successful issueDeityBoon calls (no revert) + DeityBoonIssued events
+ *   1. Successful giveBoon calls (no revert) + DeityBoonIssued events
  *   2. Multiple deity boons issued across consecutive days prove _applyBoon
  *      writes each category's bit fields independently
  *   3. Lootbox resolution with an existing deity boon proves the exclusivity
@@ -110,7 +110,7 @@ describe("Multi-category boon coexistence", function () {
         await giveWalletId(game, recipient.address);
         const tx = await game
           .connect(deity)
-          .issueDeityBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
+          .giveBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
         // DeityBoonIssued is emitted by the Game itself (GameBoonActions)
         const events = await getEvents(tx, game, "DeityBoonIssued");
         expect(events.length).to.equal(1);
@@ -286,7 +286,7 @@ describe("Multi-category boon coexistence", function () {
         await giveWalletId(game, bob.address);
         await game
           .connect(alice)
-          .issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
+          .giveBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
         deityBoonType = Number(slots[slot]);
         break;
       }
@@ -346,7 +346,7 @@ describe("Multi-category boon coexistence", function () {
           await giveWalletId(game, bob.address);
           const tx = await game
             .connect(alice)
-            .issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
+            .giveBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
           const events = await getEvents(tx, game, "DeityBoonIssued");
           if (events.length > 0) {
             const emittedType = Number(events[0].args.boonType);

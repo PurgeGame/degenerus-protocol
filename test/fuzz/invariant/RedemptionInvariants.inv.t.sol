@@ -152,7 +152,7 @@ contract RedemptionInvariants is DeployProtocol {
 
     /// @notice STRICT equality direction: pre-yearSweep, backing tracks wrapper supply EXACTLY —
     ///         `sDGNRS.balanceOf(DGNRS) == DGNRS.totalSupply()`.
-    /// @dev The proof's `==` needs ¬P1 (game never transferFromPool→wrapper) ∧ ¬P2 (no unwrap
+    /// @dev The proof's `==` needs ¬P1 (game never transferFromPool_g106128→wrapper) ∧ ¬P2 (no unwrap
     ///      recipient == wrapper); this campaign's handlers satisfy both by construction (actors
     ///      are the only recipients), so any drift the fuzzer finds is a REAL paired-decrement
     ///      break, not benign over-backing. This is the non-vacuous equality coverage the
@@ -213,12 +213,12 @@ contract RedemptionInvariants is DeployProtocol {
 
     /// @notice The five reward-pool sub-ledgers sum to exactly the sDGNRS contract's own
     ///         token balance: `Σ poolBalances == balanceOf(sDGNRS)`.
-    /// @dev Every pool debit pairs a contract-balance debit (`transferFromPool` decrements both
+    /// @dev Every pool debit pairs a contract-balance debit (`transferFromPool_g106128` decrements both
     ///      poolBalances[idx] and balanceOf[address(this)] by the same amount; `burnAtGameOver`
     ///      zeroes both). A mutation
     ///      that desyncs the pool ledger from the held balance (the sDGNRS:566/567 survivor cluster
     ///      in mutation/FINDINGS-v75.md) breaks this equality. Non-vacuous: the redemption handler
-    ///      funds actors via `transferFromPool(Pool.Reward, ...)`, exercising the paired debit.
+    ///      funds actors via `transferFromPool_g106128(Pool.Reward, ...)`, exercising the paired debit.
     function invariant_poolBalanceConservation() public view {
         uint256 pools = sdgnrs.poolBalance(sDGNRS.Pool.Whale)
             + sdgnrs.poolBalance(sDGNRS.Pool.Affiliate)

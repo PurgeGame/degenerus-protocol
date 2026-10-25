@@ -13,7 +13,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 interface IDegeneretteCallbackGame {
     function degeneretteBetInfo(uint48 index, uint64 betId) external view returns (uint256);
     function boxIndexComplete(uint48 index) external view returns (bool);
-    function mineFlip(uint32 gasMultiplierBps) external;
+    function mineRun(uint32 gasMultiplierBps) external;
 }
 
 /// @dev Adversarial replacement for the trusted mint sink, installed only after placement.
@@ -27,12 +27,12 @@ contract DegeneretteCallbackMint {
 
     constructor(address target) { game = IDegeneretteCallbackGame(target); }
     function setFail(bool fail) external { failMint = fail; }
-    function mintForGame(address, uint256) external {
+    function mintForGame_g152734(address, uint256) external {
         require(!failMint, "mint failed");
         ++calls;
         exposedLiveBet = game.degeneretteBetInfo(1, 1) != 0;
         exposedComplete = game.boxIndexComplete(1);
-        if (calls == 1) (reentrySucceeded,) = address(game).call(abi.encodeCall(game.mineFlip, (uint32(0))));
+        if (calls == 1) (reentrySucceeded,) = address(game).call(abi.encodeCall(game.mineRun, (uint32(0))));
     }
 }
 
@@ -49,10 +49,10 @@ contract DegeneretteCallbackMint {
 ///         4. FROZEN POOL: the sweep holds the queue while the prize pool is frozen.
 ///         5. KEEPER: a plain mineFlip() resolves the queue and pays the box-open bounty.
 ///
-///         Callees the sweep reaches, driven here: IDegenerusCoin.mintForGame (the owner FLIP
+///         Callees the sweep reaches, driven here: IDegenerusCoin.mintForGame_g152734 (the owner FLIP
 ///         flush), ICoinflip.creditFlip_g317 + IDegenerusAffiliate.getReferrerId (the affiliate leg of
-///         a high-match ETH spin) and IsDGNRS.poolBalance / IsDGNRS.transferFromPool (the S>=7
-///         award). The record-bounty chain's IDegenerusCoin.mintForGame is driven by
+///         a high-match ETH spin) and IsDGNRS.poolBalance / IsDGNRS.transferFromPool_g106128 (the S>=7
+///         award). The record-bounty chain's IDegenerusCoin.mintForGame_g152734 is driven by
 ///         BigRecordArming.
 contract DegeneretteSweep is DeployProtocol {
     uint256 private constant LR_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
@@ -87,8 +87,8 @@ contract DegeneretteSweep is DeployProtocol {
         _setActiveIndex(IDX);
         _setFuturePool(1_000_000 ether);
         vm.startPrank(address(game));
-        coin.mintForGame(alice, 1_000_000);
-        coin.mintForGame(bob, 1_000_000);
+        coin.mintForGame_g152734(alice, 1_000_000);
+        coin.mintForGame_g152734(bob, 1_000_000);
         vm.stopPrank();
     }
 
@@ -117,7 +117,7 @@ contract DegeneretteSweep is DeployProtocol {
     ///      mineFlip. One unbounded call runs the cohort's whole consumer chain.
     function _resolveCohort() private {
         vm.prank(makeAddr("sweepCrank"));
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     /// @dev Resolved bets in a recorded log window.
@@ -135,7 +135,7 @@ contract DegeneretteSweep is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.recordLogs();
             vm.prank(makeAddr("sweepCrank"));
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 n = ok ? _countResolved(vm.getRecordedLogs()) : 0;
             vm.revertToStateAndDelete(snap);
             if (n != 0) hi = mid;
@@ -148,7 +148,7 @@ contract DegeneretteSweep is DeployProtocol {
     function _crankWith(uint256 supplied) private returns (uint256 resolved) {
         vm.recordLogs();
         vm.prank(makeAddr("sweepCrank"));
-        game.mineFlip{gas: supplied}(0);
+        game.mineRun{gas: supplied}(0);
         resolved = _countResolved(vm.getRecordedLogs());
     }
 
@@ -160,7 +160,7 @@ contract DegeneretteSweep is DeployProtocol {
 
     function _place(address who, uint8 currency, uint128 perSpin, uint8 spins) private {
         vm.prank(who);
-        game.placeDegeneretteBet{value: currency == ETH ? uint256(perSpin) * spins : 0}(
+        game.betDegenerette{value: currency == ETH ? uint256(perSpin) * spins : 0}(
             0, currency, perSpin, spins, SYMBOL
         );
     }
@@ -271,7 +271,7 @@ contract DegeneretteSweep is DeployProtocol {
     function testPlacementRejectsPartialUnits() public {
         vm.prank(alice);
         vm.expectRevert(bytes4(keccak256("InvalidBet()")));
-        game.placeDegeneretteBet{value: 0.01 ether + 1}(0, ETH, 0.01 ether + 1, 1, SYMBOL);
+        game.betDegenerette{value: 0.01 ether + 1}(0, ETH, 0.01 ether + 1, 1, SYMBOL);
 
         _place(alice, FLIP, 101, 1); // any whole FLIP is fine
         assertEq((game.degeneretteBetInfo(IDX, 1) >> 60) & type(uint64).max, 101, "whole FLIP accepted");
@@ -377,7 +377,7 @@ contract DegeneretteSweep is DeployProtocol {
     function testSweepHoldsQueueWhilePoolFrozen() public {
         _placeMixedQueue();
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < 64 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
+        for (uint256 i; i < 64 && mockVRF.lastRequestId() == before; ++i) game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(reqId != before, "the daily request went out");
         assertTrue(_poolFrozen(), "the daily request froze the pool");
@@ -387,7 +387,7 @@ contract DegeneretteSweep is DeployProtocol {
         // Frozen and waiting on the word: the consumer stage is closed and the queue holds.
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Wait), "waiting on the word");
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertTrue(game.degeneretteBetInfo(IDX, 1) != 0, "bet still queued");
         assertFalse(game.boxIndexComplete(IDX), "frontier holds at the queue");
 
@@ -406,7 +406,7 @@ contract DegeneretteSweep is DeployProtocol {
                 );
             }
             vm.prank(makeAddr("sweepCrank"));
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertGt(frozenSteps, 0, "fixture: the delivered day cranked while still frozen");
@@ -454,7 +454,7 @@ contract DegeneretteSweep is DeployProtocol {
         vm.expectCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.poolBalance.selector));
         vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.creditFlip_g317.selector));
         _resolveCohort();
-        assertGt(sdgnrs.balanceOf(alice), dgnrsBefore, "S>=7 transferFromPool paid sDGNRS");
+        assertGt(sdgnrs.balanceOf(alice), dgnrsBefore, "S>=7 transferFromPool_g106128 paid sDGNRS");
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved by the sweep");
     }
 
@@ -465,7 +465,7 @@ contract DegeneretteSweep is DeployProtocol {
         _resolveCohort();
         // The survival flip may zero the payout; either way the queue drains once.
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved");
-        assertGe(coin.balanceOf(bob), before, "mintForGame never debits");
+        assertGe(coin.balanceOf(bob), before, "mintForGame_g152734 never debits");
     }
 
     /// @dev 30+ minutes into the sealed day, with the delivered cohort's read consumers as the only
@@ -510,7 +510,7 @@ contract DegeneretteSweep is DeployProtocol {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     /// @notice A plain mineFlip resolves the whole queue. Pay is priced on measured gas, and the
@@ -589,7 +589,7 @@ contract DegeneretteSweep is DeployProtocol {
         uint256 first = game.degeneretteBetInfo(IDX, 1);
         sink.setFail(true);
         vm.expectRevert(bytes("mint failed"));
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(game.degeneretteBetInfo(IDX, 1), first, "failed payout consumed a bet");
         assertFalse(game.boxIndexComplete(IDX));
         sink.setFail(false);

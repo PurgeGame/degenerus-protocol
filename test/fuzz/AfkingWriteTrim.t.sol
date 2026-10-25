@@ -95,7 +95,7 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
 
     /// @dev Borrow against `id` and default at the next level.
     function _sale(uint32 id) private {
-        uint24 due = game.level() + 1;
+        uint24 due = game.currentLvl() + 1;
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due, type(uint256).max);
         assertTrue(q.eligible, "borrow eligible");
         vm.prank(seller);
@@ -226,7 +226,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
             require(++calls < 200, "harness: open walk never finished");
             uint256 gasCap = _singleUnitGas();
             vm.recordLogs();
-            game.mineFlip{gas: gasCap}(type(uint32).max);
+            game.mineRun{gas: gasCap}(type(uint32).max);
             _tallySettlements(vm.getRecordedLogs());
         }
         assertGt(calls, 1, "open walk split across calls");
@@ -355,7 +355,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
     function _singleUnitGas() private pure returns (uint256) { return 30_000_000; }
 
     function _stepMinimal() private {
-        game.mineFlip{gas: _singleUnitGas()}(type(uint32).max);
+        game.mineRun{gas: _singleUnitGas()}(type(uint32).max);
     }
 
     function _fulfill(uint256 vrfWord) private {

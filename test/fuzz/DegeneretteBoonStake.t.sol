@@ -124,7 +124,7 @@ contract DegeneretteBoonStake is DeployProtocol {
 
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     /// @dev Place a bet and return the per-spin stake the module actually PACKED (the payout
@@ -139,7 +139,7 @@ contract DegeneretteBoonStake is DeployProtocol {
             : 0;
         vm.recordLogs();
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(0, currency, perSpin, spins, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
+        game.betDegenerette{value: ethValue}(0, currency, perSpin, spins, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
         return _lastPackedStake(perSpin);
     }
 
@@ -154,7 +154,7 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint32 forId = game.walletIdOf_g3120(forPlayer);
         vm.recordLogs();
         vm.prank(caller);
-        game.placeDegeneretteBet{value: perSpin}(forId, CURRENCY_ETH, perSpin, 1, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
+        game.betDegenerette{value: perSpin}(forId, CURRENCY_ETH, perSpin, 1, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
         return _lastPackedStake(perSpin);
     }
 

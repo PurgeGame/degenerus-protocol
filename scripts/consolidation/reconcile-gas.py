@@ -18,7 +18,7 @@ a = p.parse_args()
 raw = a.traffic.read_bytes()
 data = json.loads(raw)
 fits = json.loads(a.calibration.read_text())['fits']
-functions = {'purchase', 'borrow', 'repay', 'createSmurf', 'raiseSmurfBaseAllowance',
+functions = {'purchase', 'borrow', 'clearDebtNow', 'createSmurf', 'raiseSmurfBaseAllowance',
              'sweepAccounts', 'redeemFlip', 'withdrawAfkingFunding'}
 hooks = {'registerWallet', 'registerWalletIdentity', 'recordAfkingSecondary', 'floorAfkingStreakBase'}
 

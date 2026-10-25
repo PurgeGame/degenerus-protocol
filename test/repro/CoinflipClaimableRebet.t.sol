@@ -85,10 +85,10 @@ contract CoinflipClaimableRebet is DeployProtocol {
     ///      unclaimed winnings — the position the rebet path exists to serve.
     function _bankAWin(uint256 amount) internal returns (uint256 payout) {
         vm.prank(GAME);
-        coin.mintForGame(player, amount);
+        coin.mintForGame_g152734(player, amount);
         // Operator-routed: indirect, so it arms neither the bounty nor the biggest-flip record.
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, amount);
+        coinflip.playCoinflip(playerId, amount);
         assertEq(coin.balanceOf(player), 0, "fixture: deposit burned the whole wallet balance");
         assertEq(coinflip.biggestFlipEver(), 0, "fixture: indirect deposit set no record");
 
@@ -113,7 +113,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
 
         // The whole deposit is funded from the bank — the player holds no FLIP at all.
         vm.prank(player);
-        coinflip.depositCoinflip(0, payout);
+        coinflip.playCoinflip(0, payout);
 
         uint256 recordClaim = poolBefore - coinflip.recordPool();
         assertGt(recordClaim, 0, "fixture: the deposit bootstrapped the flip record");
@@ -135,7 +135,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertLt(draw, payout, "fixture: draw only part of the bank");
 
         vm.prank(player);
-        coinflip.depositCoinflip(0, draw);
+        coinflip.playCoinflip(0, draw);
 
         assertEq(
             coinflip.previewClaimCoinflips(player),
@@ -153,7 +153,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 payout = _bankAWin(10_000);
 
         vm.prank(player);
-        coinflip.depositCoinflip(0, payout);
+        coinflip.playCoinflip(0, payout);
 
         assertEq(
             coinflip.coinflipAmount(player),
@@ -172,8 +172,8 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertEq(half * 2, payout, "fixture: payout splits evenly");
 
         vm.startPrank(player);
-        coinflip.depositCoinflip(0, half);
-        coinflip.depositCoinflip(0, payout - half);
+        coinflip.playCoinflip(0, half);
+        coinflip.playCoinflip(0, payout - half);
         vm.stopPrank();
 
         assertEq(coinflip.previewClaimCoinflips(player), 0, "both halves drew the bank");
@@ -196,10 +196,10 @@ contract CoinflipClaimableRebet is DeployProtocol {
     function test_WalletFundedDepositWithNoBankPaysNoBonus() public {
         uint256 amount = 100_000;
         vm.prank(GAME);
-        coin.mintForGame(player, amount);
+        coin.mintForGame_g152734(player, amount);
 
         vm.prank(player);
-        coinflip.depositCoinflip(0, amount);
+        coinflip.playCoinflip(0, amount);
 
         assertEq(coin.balanceOf(player), 0, "wallet funded the whole stake");
         assertEq(
@@ -217,11 +217,11 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 amount = payout + topUp;
 
         vm.prank(GAME);
-        coin.mintForGame(player, topUp);
+        coin.mintForGame_g152734(player, topUp);
         uint256 supplyBefore = coin.totalSupply();
 
         vm.prank(player);
-        coinflip.depositCoinflip(0, amount);
+        coinflip.playCoinflip(0, amount);
 
         assertEq(coin.balanceOf(player), 0, "the wallet leg burned exactly the shortfall");
         assertEq(
@@ -244,11 +244,11 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 gift = 5_000;
 
         vm.prank(GAME);
-        coin.mintForGame(gifter, gift);
+        coin.mintForGame_g152734(gifter, gift);
 
         // gifter is NOT the player and NOT an approved operator.
         vm.prank(gifter);
-        coinflip.depositCoinflip(playerId, gift);
+        coinflip.playCoinflip(playerId, gift);
 
         assertEq(coin.balanceOf(gifter), 0, "the gifter's own FLIP funded the stake");
         assertEq(
@@ -267,7 +267,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 payout = _bankAWin(100_000);
 
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, payout);
+        coinflip.playCoinflip(playerId, payout);
 
         assertEq(coinflip.previewClaimCoinflips(player), 0, "operator approval reaches the bank");
         assertEq(
@@ -287,11 +287,11 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 takeProfit = 100_000;
 
         vm.prank(GAME);
-        coin.mintForGame(player, stake);
+        coin.mintForGame_g152734(player, stake);
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(0, true, takeProfit);
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, stake);
+        coinflip.playCoinflip(playerId, stake);
 
         _resolveDay(3, true);
         (uint16 r, ) = coinflip.getCoinflipDayResult(3);
@@ -302,7 +302,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
 
         // Settle-only probe: banks the take-profit chunk and rolls the remainder as carry.
         vm.prank(player);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         assertEq(coinflip.previewClaimCoinflips(player), reserved, "take-profit banked");
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry, expectedCarry, "remainder rolled into the carry");
@@ -310,7 +310,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 draw = 50_000;
 
         vm.prank(player);
-        coinflip.depositCoinflip(0, draw);
+        coinflip.playCoinflip(0, draw);
 
         assertEq(
             coinflip.previewClaimCoinflips(player),
@@ -341,15 +341,15 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 takeProfit = 100_000;
 
         vm.prank(GAME);
-        coin.mintForGame(player, stake);
+        coin.mintForGame_g152734(player, stake);
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(0, true, takeProfit);
         vm.prank(operator);
-        coinflip.depositCoinflip(playerId, stake);
+        coinflip.playCoinflip(playerId, stake);
 
         _resolveDay(3, true);
         vm.prank(player);
-        coinflip.depositCoinflip(0, 0); // settle: banks take-profit, rolls the carry
+        coinflip.playCoinflip(0, 0); // settle: banks take-profit, rolls the carry
         uint256 bankBefore = coinflip.previewClaimCoinflips(player);
         (, , uint256 carryBefore, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertGt(bankBefore, 0, "fixture: a take-profit bank exists");
@@ -368,7 +368,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         // The deposit is still open, and it can only push MORE onto tomorrow's flip.
         uint256 draw = 50_000;
         vm.prank(player);
-        coinflip.depositCoinflip(0, draw);
+        coinflip.playCoinflip(0, draw);
 
         assertEq(
             coinflip.previewClaimCoinflips(player),
@@ -396,7 +396,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 supplyBefore = coin.totalSupply();
 
         vm.prank(player);
-        coinflip.depositCoinflip(0, payout);
+        coinflip.playCoinflip(0, payout);
 
         assertEq(
             coin.totalSupply(),
@@ -413,7 +413,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertGt(payout, 200_000, "fixture: the payout must clear the floor");
 
         vm.prank(player);
-        coinflip.depositCoinflip(0, payout);
+        coinflip.playCoinflip(0, payout);
 
         assertEq(
             coinflip.biggestFlipEver(),

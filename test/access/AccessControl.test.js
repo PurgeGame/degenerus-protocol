@@ -45,11 +45,11 @@ describe("AccessControl", function () {
 
     // rollDailyQuest removed from FLIP — moved to DegenerusQuests (v13.0)
 
-    it("mintForGame: reverts when called by alice (OnlyGame)", async function () {
+    it("mintForGame_g152734: reverts when called by alice (OnlyGame)", async function () {
       const { coin, alice, bob } = await loadFixture(deployFullProtocol);
 
       await expect(
-        coin.connect(alice).mintForGame(bob.address, eth("1000"))
+        coin.connect(alice).mintForGame_g152734(bob.address, eth("1000"))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
@@ -57,7 +57,7 @@ describe("AccessControl", function () {
       const { coin, alice, bob } = await loadFixture(deployFullProtocol);
 
       await expect(
-        coin.connect(alice).burnCoin(bob.address, eth("100"))
+        coin.connect(alice).burnCoin_g27673(bob.address, eth("100"))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
   });
@@ -159,12 +159,12 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
-    it("transferFromPool: reverts when called by alice (onlyGame → Unauthorized)", async function () {
+    it("transferFromPool_g106128: reverts when called by alice (onlyGame → Unauthorized)", async function () {
       const { sdgnrs, alice, bob } = await loadFixture(deployFullProtocol);
 
       // Pool enum: 0 = first pool (e.g. AFFILIATE)
       await expect(
-        sdgnrs.connect(alice).transferFromPool(0, bob.address, eth("1"))
+        sdgnrs.connect(alice).transferFromPool_g106128(0, bob.address, eth("1"))
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
@@ -416,7 +416,7 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
-    // coin.mintForCoinflip removed from FLIP in Phase 146 (merged into mintForGame)
+    // coin.mintForCoinflip removed from FLIP in Phase 146 (merged into mintForGame_g152734)
 
     it("coin.vaultMintTo reverts when called by alice (onlyVault → OnlyVault)", async function () {
       const { coin, alice } = await loadFixture(deployFullProtocol);

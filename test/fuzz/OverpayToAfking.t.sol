@@ -37,7 +37,7 @@ contract OverpayToAfking is DeployProtocol {
         vm.deal(buyer, cost + over);
 
         vm.prank(buyer);
-        game.purchase{value: cost + over}(
+        game.purchaseOrderFor{value: cost + over}(
             0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
@@ -57,7 +57,7 @@ contract OverpayToAfking is DeployProtocol {
 
         uint256 stray = 0.03 ether;
         vm.prank(buyer);
-        game.purchase{value: stray}(
+        game.purchaseOrderFor{value: stray}(
             0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false
         );
 
@@ -189,11 +189,11 @@ contract OverpayToAfkingDegenesis is DegenesisFixture {
         vm.deal(buyer, mintCost + boxAmount + over);
 
         vm.prank(buyer);
-        game.purchase{value: mintCost}(0, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: mintCost}(0, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.degenesisCreditOf(buyer), mintCost / 4, "the buy earned a quarter as credit");
 
         vm.prank(buyer);
-        game.buyDegenesisBox{value: boxAmount + over}(0, boxAmount);
+        game.purchaseDegenesisBox{value: boxAmount + over}(0, boxAmount);
 
         assertEq(game.afkingFundingOf(buyer), over, "Degenesis overpay -> afking");
         assertEq(game.degenesisCreditOf(buyer), mintCost / 4 - boxAmount, "the box consumed its amount in credit");

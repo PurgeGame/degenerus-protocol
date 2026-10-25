@@ -29,7 +29,7 @@ contract BattlePaidMinerProbe {
     {
         VM.fee(1 gwei);
         VM.prank(miner);
-        (ok, reason) = game.call{gas: supplied}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (ok, reason) = game.call{gas: supplied}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         used = VM.lastCallGas();
     }
 }
@@ -336,14 +336,14 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         _cool();
         vm.prank(MINER);
         (bool ok,) = address(game).call{gas: 100_000}(
-            abi.encodeCall(game.mineFlip, (type(uint32).max)));
+            abi.encodeCall(game.mineRun, (type(uint32).max)));
         assertFalse(ok, "an unfunded construction must roll back");
         (round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawnCount, 0);
 
         _cool();
         vm.prank(MINER);
-        game.mineFlip{gas: GasBounds.JACKPOT_BATTLE_DRAW}(type(uint32).max);
+        game.mineRun{gas: GasBounds.JACKPOT_BATTLE_DRAW}(type(uint32).max);
         (round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertGt(round.drawWord, 0, "funded first chunk initialized the draw");
         assertEq(round.drawnCount, 50, "one canonical award group despite extreme estimates");

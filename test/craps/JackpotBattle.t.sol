@@ -158,10 +158,10 @@ contract JackpotBattleTest is CrapsPins {
         game.setScore(player, 100);
         vm.prank(player);
         if (wholeDay) {
-            table.enterBonusDay(0, 1);
+            table.playCraps(0, 1);
             return (uint256(day) * 8 << 64) | table.daySeatNumberOf(day, player);
         }
-        return table.enterBonusBattle(5, 0, 1);
+        return table.throwCraps(5, 0, 1);
     }
     function _lock(uint256 added) internal {
         vm.warp(dayStart + 1 days);
@@ -299,7 +299,7 @@ contract JackpotBattleTest is CrapsPins {
     function test_NewHighDrawAgreesWithJackpotPaidUnits() public {
         _highDay(true);
         vm.prank(alice);
-        table.enterBonusBattle(5, 0, 100);
+        table.throwCraps(5, 0, 100);
         assertEq(flip.burned(alice), 800_000);
         _lock(150_000);
         assertEq(_round().paidUnits, 100);
@@ -463,7 +463,7 @@ contract JackpotBattleTest is CrapsPins {
         assertGt(staked, 0);
         assertLe(staked, uint256(r.paidUnits) * 4_000, "more than the fees' bankroll half");
         assertEq(table.dayStaked(day) - before, staked);
-        assertEq(flip.compLane() - lane, staked / 50, "creditCrapsComps paid other than the fee share");
+        assertEq(flip.compLane() - lane, staked / 50, "creditCrapsComps_g37225 paid other than the fee share");
         _finish();
         assertEq(table.dayStaked(day) - before, staked, "settlement booked the jackpot again");
         assertEq(flip.compLane() - lane, staked / 50, "finalization comped the jackpot again");
@@ -535,7 +535,7 @@ contract JackpotBattleTest is CrapsPins {
     function test_LockPreventsEntryUpgradeAmendmentAndPreferenceChange() public {
         uint256 id = _enter(alice, false); _enter(bob, true);
         _lock(200_000);
-        vm.prank(address(0x123)); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.enterBonusBattle(5, 0, 1);
+        vm.prank(address(0x123)); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.throwCraps(5, 0, 1);
         vm.prank(alice); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.amendSlip(id, 1);
         vm.prank(bob); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.upgradeDayWindows(0, day, 0x20);
         _start(831, 1, alice); _finish();
@@ -577,7 +577,7 @@ contract JackpotBattleTest is CrapsPins {
     }
     function test_HighCopiesAndRepeatedAwardsCountAsUnits() public {
         uint16 h = uint16(table.highMultOfWord(123456));
-        vm.prank(alice); table.enterBonusBattle(5, 0, h);
+        vm.prank(alice); table.throwCraps(5, 0, h);
         _lock(500_000);
         uint256[] memory f = new uint256[](3);
         for (uint256 i; i < f.length; ++i) f[i] = uint160(bob) | (uint256(1) << JackpotBattleFieldLib.UNITS_SHIFT);
@@ -654,7 +654,7 @@ contract JackpotBattleTest is CrapsPins {
     function _enterHigh(address player, uint16 multiple) private {
         game.setScore(player, 100);
         vm.prank(player);
-        table.enterBonusBattle(5, 0, multiple);
+        table.throwCraps(5, 0, multiple);
     }
 
     function _wordForMultiplier(uint256 bps) private pure returns (uint256 word) {
@@ -831,7 +831,7 @@ contract JackpotBattleTest is CrapsPins {
 
     function test_HighDayTicketUsesTheSameFeeOnlyAllocation() public {
         uint16 h = _highDay(true);
-        vm.prank(alice); table.enterBonusDay(0, h);
+        vm.prank(alice); table.playCraps(0, h);
         _lock(150_000); _start(_wordForMultiplier(5000), 15, address(0x1000));
         assertEq(_round().paidUnits, 100);
         assertEq(table.jackpotTerms(slot).highExtra, 198_000);

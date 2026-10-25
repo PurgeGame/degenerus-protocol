@@ -25,8 +25,8 @@ interface ICensusShare {
 ///         MAX_PLAY_DAYS after launch. Feature calls that revert are logged (CENSUSTX ...|reverted)
 ///         and counted, never fatal: the census measures what the protocol does, not the script.
 /// @dev Seeded setup that is NOT part of the census (direct calls outside `_ctx`): player ETH,
-///      a FLIP float for the cast (coin.mintForGame as the Game), a small sDGNRS float for
-///      burners/voters (sDGNRS.transferFromPool as the Game), DGVE shares from the creator, two
+///      a FLIP float for the cast (coin.mintForGame_g152734 as the Game), a small sDGNRS float for
+///      burners/voters (sDGNRS.transferFromPool_g106128 as the Game), DGVE shares from the creator, two
 ///      GNRUS charity slots, VRF subscription LINK and the loan lender's backing.
 contract StorageCensusLongRunTest is StorageCensus {
     uint256 internal constant PLAYERS = 30;
@@ -68,7 +68,7 @@ contract StorageCensusLongRunTest is StorageCensus {
         for (uint256 c = 1; c <= 7; ++c) _degenesisDay(c);
         _seedFloats();
         uint24 launch = GameTimeLib.MAIN_LAUNCH_DAY;
-        for (uint24 d = launch; d < launch + MAX_PLAY_DAYS && game.level() < TARGET_LEVEL && !game.gameOver(); ++d) {
+        for (uint24 d = launch; d < launch + MAX_PLAY_DAYS && game.currentLvl() < TARGET_LEVEL && !game.gameOver(); ++d) {
             _playDay(d);
         }
         _censusEnd();
@@ -104,7 +104,7 @@ contract StorageCensusLongRunTest is StorageCensus {
             uint256 box = 0.2 ether + (_rand(i, 1) % 20) * 0.05 ether;
             uint256 price = game.mintPrice();
             uint256 tickets = 2 + _rand(i, 2) % 6;
-            _act("purchase", i, address(game), tickets * price + box, abi.encodeCall(game.purchase,
+            _act("purchase", i, address(game), tickets * price + box, abi.encodeCall(game.purchaseOrderFor,
                 (uint32(0), tickets * 400, BoxOrderLib.boCustomFloor(box), i < 3 ? bytes32(0) : _code(i % 3),
                  MintPaymentKind.DirectEth, false)));
         }
@@ -128,10 +128,10 @@ contract StorageCensusLongRunTest is StorageCensus {
             if (credit < amount) {
                 uint256 spend = ((amount - credit) * 4 + 0.001 ether - 1) / 0.001 ether * 0.001 ether;
                 if (spend < 0.01 ether) spend = 0.01 ether;
-                _act("purchase", i, address(game), spend, abi.encodeCall(game.purchase,
+                _act("purchase", i, address(game), spend, abi.encodeCall(game.purchaseOrderFor,
                     (uint32(0), 0, BoxOrderLib.boCustom(spend), bytes32(0), MintPaymentKind.DirectEth, false)));
             }
-            _act("buyDegenesisBox", i, address(game), amount, abi.encodeCall(game.buyDegenesisBox, (uint32(0), amount)));
+            _act("buyDegenesisBox", i, address(game), amount, abi.encodeCall(game.purchaseDegenesisBox, (uint32(0), amount)));
             if (k == 3) {
                 _warpDay(d, 7 hours);
                 _crank(200 + c);
@@ -146,10 +146,10 @@ contract StorageCensusLongRunTest is StorageCensus {
         ICensusShare dgve = ICensusShare(vault.dgve());
         for (uint256 i; i < PLAYERS; ++i) {
             vm.prank(address(game));
-            coin.mintForGame(cast[i], 200_000);
+            coin.mintForGame_g152734(cast[i], 200_000);
             if (i % 3 == 0) {
                 vm.prank(address(game));
-                sdgnrs.transferFromPool(sDGNRS.Pool.Reward, cast[i], 50_000 * 1e12);
+                sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, cast[i], 50_000 * 1e12);
             }
             if (i % 5 == 0) dgve.transfer(cast[i], 1e9 * 1e18 / 1000);
             vm.prank(address(game));
@@ -194,7 +194,7 @@ contract StorageCensusLongRunTest is StorageCensus {
             uint256 i = (uint256(d) * 7 + j * 3) % PLAYERS;
             uint256 tickets = j < 6 ? perBuyer : 1 + _rand(d, j) % 3;
             uint256 box = j % 3 == 0 ? 0.1 ether + (_rand(d, j + 50) % 10) * 0.1 ether : 0;
-            _act("purchase", i, address(game), tickets * price + box, abi.encodeCall(game.purchase,
+            _act("purchase", i, address(game), tickets * price + box, abi.encodeCall(game.purchaseOrderFor,
                 (uint32(0), tickets * 400, box == 0 ? 0 : BoxOrderLib.boCustomFloor(box), bytes32(0),
                  MintPaymentKind.DirectEth, false)));
         }
@@ -202,7 +202,7 @@ contract StorageCensusLongRunTest is StorageCensus {
         for (uint256 j; j < 2; ++j) {
             uint256 i = (uint256(d) * 11 + j * 13) % PLAYERS;
             if (game.claimableWinningsOf(cast[i]) > price * 2) {
-                _act("purchaseClaimable", i, address(game), 0, abi.encodeCall(game.purchase,
+                _act("purchaseClaimable", i, address(game), 0, abi.encodeCall(game.purchaseOrderFor,
                     (uint32(0), 400, 0, bytes32(0), MintPaymentKind.Claimable, false)));
             }
         }
@@ -213,7 +213,7 @@ contract StorageCensusLongRunTest is StorageCensus {
         for (uint256 j; j < 6; ++j) {
             uint256 i = (uint256(d) * 5 + j * 4) % PLAYERS;
             uint256 amount = 100 + _rand(d, 300 + j) % 5_000;
-            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.depositCoinflip, (uint32(0), amount)));
+            _act("depositCoinflip", i, address(coinflip), 0, abi.encodeCall(coinflip.playCoinflip, (uint32(0), amount)));
         }
         if (d % 3 == 0) {
             for (uint256 j; j < 5; ++j) {
@@ -230,7 +230,7 @@ contract StorageCensusLongRunTest is StorageCensus {
         // WWXRP: draw entries from claimable/wallet, then claim yesterday's winner if any.
         for (uint256 j; j < 3; ++j) {
             uint256 i = (uint256(d) * 3 + j * 10) % PLAYERS;
-            _act("wwxrpEnter", i, address(wwxrp), 0, abi.encodeCall(wwxrp.enter, (uint32(0), uint256(25))));
+            _act("wwxrpEnter", i, address(wwxrp), 0, abi.encodeCall(wwxrp.enterDraw, (uint32(0), uint256(25))));
         }
         (bool found, uint32 idx,) = _findWinner(d - 1);
         if (found) _act("wwxrpClaim", d % PLAYERS, address(wwxrp), 0, abi.encodeCall(wwxrp.claim, (d - 1, idx)));
@@ -239,7 +239,7 @@ contract StorageCensusLongRunTest is StorageCensus {
             _act("wwxrpWithdraw", i, address(wwxrp), 0, abi.encodeCall(wwxrp.withdraw, (uint32(0), uint256(0))));
         }
         // BAF consolation after a skipped bracket.
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         if (lvl >= 10 && lvl % 10 == 0 && d % 2 == 0) {
             for (uint256 j; j < 3; ++j) {
                 _act("claimBafConsolation", (uint256(d) + j * 9) % PLAYERS, address(jackpots), 0,
@@ -260,20 +260,20 @@ contract StorageCensusLongRunTest is StorageCensus {
             uint256 i = (uint256(d) * 13 + j * 7) % PLAYERS;
             uint8 symbol = uint8(_rand(d, 400 + j) % 24);
             _act("degeneretteEth", i, address(game), 0.02 ether,
-                abi.encodeCall(game.placeDegeneretteBet, (uint32(0), uint8(0), uint128(0.01 ether), uint8(2), symbol)));
+                abi.encodeCall(game.betDegenerette, (uint32(0), uint8(0), uint128(0.01 ether), uint8(2), symbol)));
         }
         for (uint256 j; j < 2; ++j) {
             uint256 i = (uint256(d) * 17 + j * 5) % PLAYERS;
             _act("degeneretteFlip", i, address(game), 0,
-                abi.encodeCall(game.placeDegeneretteBet, (uint32(0), uint8(1), uint128(200), uint8(3), uint8(_rand(d, 450 + j) % 24))));
+                abi.encodeCall(game.betDegenerette, (uint32(0), uint8(1), uint128(200), uint8(3), uint8(_rand(d, 450 + j) % 24))));
         }
-        if (game.decWindow()) {
+        if (game.decimatorActive()) {
             for (uint256 j; j < 5; ++j) {
                 uint256 i = (uint256(d) * 3 + j * 6) % PLAYERS;
                 _act("decimatorBurn", i, address(coin), 0, abi.encodeCall(coin.decimatorBurn, (uint32(0), uint256(2000), uint32(0))));
             }
         }
-        if (game.jackpotPhase() && game.level() != 0) {
+        if (game.jackpotPhase() && game.currentLvl() != 0) {
             for (uint256 j; j < 4; ++j) {
                 uint256 i = (uint256(d) * 19 + j * 7) % PLAYERS;
                 _act("parimutuelBet", i, address(parimutuel), 0, abi.encodeCall(parimutuel.placeBet, (uint32(0), j % 2 == 0)));
@@ -283,7 +283,7 @@ contract StorageCensusLongRunTest is StorageCensus {
 
     /// @dev Whale / lazy / deity passes, deity boons, affiliate DGNRS claims, loans.
     function _passesAndBoons(uint24 d) internal {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         if (d % 6 == 0) {
             uint256 i = (uint256(d) / 6) % PLAYERS;
             _act("purchaseWhalePass", i, address(game), 5 ether,
@@ -307,7 +307,7 @@ contract StorageCensusLongRunTest is StorageCensus {
                 uint32 recipient = game.walletIdOf_g3120(cast[(uint256(d) * 3 + slot * 7) % (PLAYERS - 1)]);
                 if (recipient == 0) continue;
                 _act("issueDeityBoon", deityHolder - 1, address(game), 0,
-                    abi.encodeCall(game.issueDeityBoon, (deityId, recipient, slot)));
+                    abi.encodeCall(game.giveBoon, (deityId, recipient, slot)));
             }
         }
         if (d % 5 == 0 && lvl > 0) {
@@ -327,7 +327,7 @@ contract StorageCensusLongRunTest is StorageCensus {
             DegenerusGameLens.LoanInfo memory info = _loanOf(id);
             if (info.principal != 0) {
                 if (_rand(d, 600 + j) % 3 != 0 && info.dueLevel > lvl) {
-                    _act("repay", i, address(game), info.owed + 0.01 ether, abi.encodeCall(game.repay, (id)));
+                    _act("repay", i, address(game), info.owed + 0.01 ether, abi.encodeCall(game.clearDebtNow, (id)));
                 }
                 continue;
             }
@@ -349,7 +349,7 @@ contract StorageCensusLongRunTest is StorageCensus {
 
     /// @dev sDGNRS burns, GNRUS votes, Vault share burns, OwnerGovernance positions, winnings claims.
     function _tokenActions(uint24 d) internal {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         if (d % 5 == 1) {
             for (uint256 j; j < 3; ++j) {
                 uint256 i = ((uint256(d) / 5 + j) * 3) % PLAYERS;
@@ -363,9 +363,9 @@ contract StorageCensusLongRunTest is StorageCensus {
             if (votedAt[i][lvl] || sdgnrs.balanceOf(cast[i]) < 1e12) continue;
             votedAt[i][lvl] = true;
             uint8 slot = uint8(3 + (i + lvl) % 2);
-            (bool ok,) = _act("gnrusVote", i, address(gnrus), 0, abi.encodeCall(gnrus.vote, (slot)));
+            (bool ok,) = _act("gnrusVote", i, address(gnrus), 0, abi.encodeCall(gnrus.castBallot, (slot)));
             // Last level's winner is not votable this level: vote the other charity instead.
-            if (!ok) _act("gnrusVote", i, address(gnrus), 0, abi.encodeCall(gnrus.vote, (uint8(7 - slot))));
+            if (!ok) _act("gnrusVote", i, address(gnrus), 0, abi.encodeCall(gnrus.castBallot, (uint8(7 - slot))));
         }
         ICensusShare dgve = ICensusShare(vault.dgve());
         if (d % 7 == 2) {
@@ -399,7 +399,7 @@ contract StorageCensusLongRunTest is StorageCensus {
             for (uint256 j; j < 4; ++j) {
                 uint256 i = (uint256(d) + j * 7) % PLAYERS;
                 if (game.claimableWinningsOf(cast[i]) > 0.01 ether) {
-                    _act("claimWinnings", i, address(game), 0, abi.encodeWithSignature("claimWinnings(uint32)", uint32(0)));
+                    _act("claimWinnings", i, address(game), 0, abi.encodeWithSignature("claimClaimable(uint32)", uint32(0)));
                 }
             }
         }
@@ -411,7 +411,7 @@ contract StorageCensusLongRunTest is StorageCensus {
         for (uint256 j; j < 3; ++j) {
             uint256 i = (uint256(d) * 23 + j * 9) % PLAYERS;
             uint256 box = 0.4 ether;
-            _act("purchase", i, address(game), price + box, abi.encodeCall(game.purchase,
+            _act("purchase", i, address(game), price + box, abi.encodeCall(game.purchaseOrderFor,
                 (uint32(0), uint256(400), BoxOrderLib.boCustomFloor(box), bytes32(0), MintPaymentKind.DirectEth, false)));
         }
     }
@@ -431,13 +431,13 @@ contract StorageCensusLongRunTest is StorageCensus {
             if (crapsBattle.daySeatNumberOf(today, cast[i]) != 0) continue;
             if (j < 3) {
                 _act("crapsEnterBonusDay", i, address(crapsBattle), 0,
-                    abi.encodeWithSignature("enterBonusDay(uint32,uint32,uint16)", uint32(0), BOARD, uint16(1)));
+                    abi.encodeWithSignature("playCraps(uint32,uint32,uint16)", uint32(0), BOARD, uint16(1)));
             } else if (j < 6) {
                 _act("crapsEnterWindow", i, address(crapsBattle), 0, abi.encodeWithSignature(
-                    "enterBonusBattle(uint32,uint256,uint32,uint16)", uint32(0), uint256(1 + j % 3), BOARD, uint16(1)));
+                    "throwCraps(uint32,uint256,uint32,uint16)", uint32(0), uint256(1 + j % 3), BOARD, uint16(1)));
             } else if (!game.rngLocked()) {
                 _act("crapsEnterJackpot", i, address(crapsBattle), 0, abi.encodeWithSignature(
-                    "enterBonusBattle(uint32,uint256,uint32,uint16)", uint32(0), uint256(5), BOARD, uint16(1)));
+                    "throwCraps(uint32,uint256,uint32,uint16)", uint32(0), uint256(5), BOARD, uint16(1)));
             }
         }
         if (d % 2 == 0) {
@@ -487,7 +487,7 @@ contract StorageCensusLongRunTest is StorageCensus {
     function _topUpFlip(uint256 i) internal {
         if (coin.balanceOf(cast[i]) >= 600_000) return;
         vm.prank(address(game));
-        coin.mintForGame(cast[i], 2_000_000);
+        coin.mintForGame_g152734(cast[i], 2_000_000);
     }
 
     // ------------------------------------------------------------------------------- AFKing

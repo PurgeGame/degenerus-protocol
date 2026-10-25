@@ -7,7 +7,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 interface IGameSnapshot {
-    function level() external view returns (uint24);
+    function currentLvl() external view returns (uint24);
 
     function jackpotPhase() external view returns (bool);
 
@@ -43,7 +43,7 @@ contract CoinflipBonusRecorder {
             // bits 32-39: compression tier at settlement
             // bit 40: jackpotPhase at settlement
             uint256 stamped = (uint256(bonus) + 1) |
-                (uint256(g.level()) << 8) |
+                (uint256(g.currentLvl()) << 8) |
                 (((uint256(g.extsload_g2807007(bytes32(0))) >> 184) & 3) << 32) |
                 (g.jackpotPhase() ? (uint256(1) << 40) : 0);
             bytes32 slot = keccak256(abi.encode("cf.bonus.recorder", epoch));
@@ -184,7 +184,7 @@ contract CoinflipBonusDayTest is DeployProtocol {
 
         vm.prank(who);
         try
-            game.purchase{value: cost}(
+            game.purchaseOrderFor{value: cost}(
                 0,
                 qty,
                 0,
@@ -210,7 +210,7 @@ contract CoinflipBonusDayTest is DeployProtocol {
                 abi.encode(
                     "bonus_day_word",
                     vm.getBlockTimestamp(),
-                    game.level(),
+                    game.currentLvl(),
                     reqId
                 )
             )
@@ -233,7 +233,7 @@ contract CoinflipBonusDayTest is DeployProtocol {
         simTime += 1 days + 1;
         vm.warp(simTime);
 
-        uint24 lvlNow = game.level();
+        uint24 lvlNow = game.currentLvl();
         if (lvlNow != trackLevel || game.jackpotPhase()) {
             trackLevel = lvlNow;
             purchaseDaysAtLevel = 0;
@@ -255,7 +255,7 @@ contract CoinflipBonusDayTest is DeployProtocol {
         for (uint256 j = 0; j < 80; j++) {
             _fulfillVrf();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -357,10 +357,10 @@ contract CoinflipBonusDayTest is DeployProtocol {
     function testBonusSecondJackpotDayThroughLevelTen() public {
         for (uint256 day = 0; day < 600; day++) {
             if (game.gameOver()) break;
-            if (game.level() > 11) break;
+            if (game.currentLvl() > 11) break;
             _runDay(0);
         }
-        assertGt(game.level(), 10, "drive reached past level 10");
+        assertGt(game.currentLvl(), 10, "drive reached past level 10");
 
         (uint256 bonusEpochs, bool sawSix) = _auditAllEpochs();
         // Levels 1..(current level) each entered a jackpot phase except the
@@ -402,10 +402,10 @@ contract CoinflipBonusDayTest is DeployProtocol {
         bool seededTurbo;
         for (uint256 day = 0; day < 250; day++) {
             if (game.gameOver()) break;
-            if (game.level() > 5) break;
+            if (game.currentLvl() > 5) break;
 
             uint256 seed = 0;
-            if (game.level() == 3 && !game.jackpotPhase() && !seededTurbo) {
+            if (game.currentLvl() == 3 && !game.jackpotPhase() && !seededTurbo) {
                 // Cohort 4's purchase phase just opened: overshoot the target
                 // on day <= 1 so the turbo latch arms.
                 seed = game.prizePoolTargetView() + 10 ether;
@@ -414,7 +414,7 @@ contract CoinflipBonusDayTest is DeployProtocol {
             _runDay(seed);
         }
         assertTrue(seededTurbo, "turbo seed applied");
-        assertGt(game.level(), 4, "drive passed the turbo level");
+        assertGt(game.currentLvl(), 4, "drive passed the turbo level");
 
         // Cohort 4 collapsed: no settled epoch inside a level-4 jackpot phase.
         assertEq(_inPhaseEpochCount(4), 0, "turbo level has no jackpot days");
@@ -462,14 +462,14 @@ contract CoinflipBonusDayTest is DeployProtocol {
     function testBackToBackTurboPaysBonusPerCollapse() public {
         for (uint256 day = 0; day < 250; day++) {
             if (game.gameOver()) break;
-            if (game.level() > 6) break;
+            if (game.currentLvl() > 6) break;
 
             // Cohorts 4 and 5 both turbo; cohort 6 runs normally.
-            uint24 lvl = game.level();
+            uint24 lvl = game.currentLvl();
             bool turboWindow = (lvl == 3 || lvl == 4) && !game.jackpotPhase();
             _runDay(turboWindow ? game.prizePoolTargetView() + 10 ether : 0);
         }
-        assertGt(game.level(), 5, "drive passed both turbo levels");
+        assertGt(game.currentLvl(), 5, "drive passed both turbo levels");
 
         assertEq(_inPhaseEpochCount(4), 0, "cohort 4 collapsed");
         assertEq(_inPhaseEpochCount(5), 0, "cohort 5 collapsed");

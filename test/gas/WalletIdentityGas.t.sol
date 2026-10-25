@@ -79,7 +79,7 @@ contract WalletIdentityGasTest is DeployProtocol {
         // CODE_OWNER registers through its default code with no purchase history of its own.
         uint256 price = _price();
         vm.prank(REFERRER);
-        game.purchase{value: price}(0, 400, 0, bytes32(uint256(uint160(CODE_OWNER))),
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(uint256(uint160(CODE_OWNER))),
             MintPaymentKind.DirectEth, false);
         vm.prank(REG);
         game.setOperatorApproval(0, OPERATOR, true);
@@ -95,12 +95,12 @@ contract WalletIdentityGasTest is DeployProtocol {
 
     function _restoreGame() private { vm.etch(address(game), gameCode); _syncCoinflipFixtureDay(game.currentDayView_g542950()); }
 
-    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
+    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.currentLvl() + 1); }
 
     function _ticket(address caller, address buyer, uint256 quantity, uint256 value) private {
         uint32 id = caller == buyer ? 0 : game.walletIdOf_g3120(buyer);
         vm.prank(caller);
-        game.purchase{value: value}(id, quantity, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: value}(id, quantity, 0, 0, MintPaymentKind.DirectEth, false);
     }
 
     function _report(string memory scenario) private {
@@ -128,16 +128,16 @@ contract WalletIdentityGasTest is DeployProtocol {
     function test_Gas_BoxFirstNewWallet() public {
         uint256 price = _price();
         vm.prank(FRESH);
-        game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
         _report("box_first_new_wallet");
     }
 
     function test_Gas_BoxRepeat() public {
         uint256 price = _price();
         vm.prank(REG);
-        game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
         vm.prank(REG);
-        game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
         _report("box_repeat");
     }
 
@@ -161,13 +161,13 @@ contract WalletIdentityGasTest is DeployProtocol {
 
     function test_Gas_DegeneretteEthNewWallet() public {
         vm.prank(FRESH);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
+        game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         _report("degenerette_eth_new_wallet");
     }
 
     function test_Gas_DegeneretteEthRegistered() public {
         vm.prank(REG);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
+        game.betDegenerette{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         _report("degenerette_eth_registered");
     }
 
@@ -198,7 +198,7 @@ contract WalletIdentityGasTest is DeployProtocol {
         _seeder().seedBalances(REG, 1 ether, 0);
         _restoreGame();
         vm.prank(REG);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         _report("claim_winnings");
     }
 

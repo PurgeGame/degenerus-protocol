@@ -27,7 +27,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
         for (uint256 i; i < 3; ++i) {
             address player = address(uint160(A) + uint160(i));
             vm.prank(address(coin)); game.registerWallet_g9539(player, true);
-            vm.prank(address(game)); coin.mintForGame(player, 100_000_000);
+            vm.prank(address(game)); coin.mintForGame_g152734(player, 100_000_000);
         }
     }
 
@@ -46,7 +46,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
         RecyclingState.seedWriteBuffer(address(game), 1);
         for (uint256 i; i < n; ++i) {
             vm.record(); vm.prank(A);
-            game.placeDegeneretteBet(0, 1, 100, 1, 9);
+            game.betDegenerette(0, 1, 100, 1, 9);
             total += _sample(string.concat(prefix, "-place-", vm.toString(i + 1)), address(game));
         }
         RecyclingState.seedWord(address(game), 1, bytes32(WORD));
@@ -54,7 +54,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
         uint256 state = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(state | (uint256(1) << 192)));
         vm.record();
-        game.mineFlip(0);
+        game.mineRun(0);
         total += _sample(string.concat(prefix, "-resolve"), address(game));
         assertTrue(game.boxIndexComplete(1));
         emit log_named_uint(string.concat(prefix, "-lifecycle"), total);
@@ -71,7 +71,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
     }
 
     function test_DecimatorBurnsAndTopup() public {
-        uint24 lvl = game.level() + 1;
+        uint24 lvl = game.currentLvl() + 1;
         bytes32 flags = bytes32(GameSlots.DECIMATOR_FLAGS);
         vm.store(address(game), flags, bytes32(uint256(vm.load(address(game), flags))
             | (uint256(1) << (GameSlots.DECIMATOR_FLAGS_OFFSET * 8))));

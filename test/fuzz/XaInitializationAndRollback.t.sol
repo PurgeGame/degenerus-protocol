@@ -9,7 +9,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {QaTrace} from "../helpers/QaTrace.sol";
 
 contract XaReentrantGift {
-    function deposit(uint32 id) external { Coinflip(ContractAddresses.COINFLIP).depositCoinflip(id,1000); }
+    function deposit(uint32 id) external { Coinflip(ContractAddresses.COINFLIP).playCoinflip(id,1000); }
 }
 
 contract XaCallbackSnapshot {
@@ -73,7 +73,7 @@ contract XaInitializationAndRollbackTest is DeployProtocol {
     }
     function _ready() private returns (uint32 id,bytes32 stateSlot) {
         vm.prank(address(coinflip));id=game.registerWallet_g9539(PLAYER,true);
-        vm.prank(address(game));coin.mintForGame(PLAYER,10000);
+        vm.prank(address(game));coin.mintForGame_g152734(PLAYER,10000);
         uint256 day=GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
         vm.store(address(quests),bytes32(QaTrace.QUESTS),bytes32((day|(1<<24))|((day|(2<<24))<<64)));
         stateSlot=keccak256(abi.encode(uint256(id),QaTrace.QUESTS+1));
@@ -82,29 +82,29 @@ contract XaInitializationAndRollbackTest is DeployProtocol {
     function test_RewardCallbackFailureRollsBackFundingQuestAndStakeThenRetriesOnce() public {
         (uint32 id,bytes32 slot)=_ready();bytes32 before_=vm.load(address(quests),slot);
         vm.mockCallRevert(address(game),abi.encodeWithSignature("consumeCoinflipBoon_g2902(uint32)",id),hex"deadbeef");
-        vm.expectRevert(bytes4(0xdeadbeef));vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
+        vm.expectRevert(bytes4(0xdeadbeef));vm.prank(PLAYER);coinflip.playCoinflip(0,2000);
         assertEq(coin.balanceOf(PLAYER),10000);assertEq(vm.load(address(quests),slot),before_);
         assertEq(coinflip.coinflipAmountById(id),0);
-        vm.clearMockedCalls();vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
+        vm.clearMockedCalls();vm.prank(PLAYER);coinflip.playCoinflip(0,2000);
         assertEq(coin.balanceOf(PLAYER),8000);assertEq(coinflip.coinflipAmountById(id),2100);
-        vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
+        vm.prank(PLAYER);coinflip.playCoinflip(0,2000);
         assertEq(coin.balanceOf(PLAYER),6000);assertEq(coinflip.coinflipAmountById(id),4100);
     }
     function test_FormerCallbackBoundarySeesFundingAndCompletedQuestBeforeStake() public {
         (uint32 id,)=_ready();bytes memory code=address(game).code;address saved=address(0xDA7A);
         vm.etch(saved,code);XaCallbackSnapshot probe=new XaCallbackSnapshot(saved,PLAYER,id,address(0));
         vm.etch(address(game),address(probe).code);
-        vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
+        vm.prank(PLAYER);coinflip.playCoinflip(0,2000);
         vm.etch(address(game),code);
         assertEq(coinflip.coinflipAmountById(id),2100);
     }
     function test_ReentrantGiftUsesGiversFundsAndCannotRepeatCompletedQuest() public {
         (uint32 id,)=_ready();XaReentrantGift gift=new XaReentrantGift();
-        vm.prank(address(game));coin.mintForGame(address(gift),1000);
+        vm.prank(address(game));coin.mintForGame_g152734(address(gift),1000);
         bytes memory code=address(game).code;address saved=address(0xDA7A);vm.etch(saved,code);
         XaCallbackSnapshot probe=new XaCallbackSnapshot(saved,PLAYER,id,address(gift));
         vm.etch(address(game),address(probe).code);
-        vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
+        vm.prank(PLAYER);coinflip.playCoinflip(0,2000);
         vm.etch(address(game),code);
         assertEq(coin.balanceOf(PLAYER),8000);assertEq(coin.balanceOf(address(gift)),0);
         assertEq(coinflip.coinflipAmountById(id),3100,"one 100 FLIP quest reward across both deposits");

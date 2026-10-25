@@ -62,7 +62,7 @@ contract FoilSnapPayout is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _advance() internal {
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {
@@ -106,7 +106,7 @@ contract FoilSnapPayout is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _buyAndDrive() internal {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 priceWei = PriceLookupLib.priceForLevel(lvl + 1);
         uint256 foilCost = 10 * priceWei; // FOIL_PACK_TICKETS = 10
         uint256 ticketQty = (foilCost * 4 * 100) / priceWei;
@@ -116,7 +116,7 @@ contract FoilSnapPayout is DeployProtocol {
             _fb[i] = makeAddr(string(abi.encodePacked("foil", vm.toString(i))));
             vm.deal(_fb[i], 1_000 ether);
             vm.prank(_fb[i]);
-            try game.purchase{value: foilCost}(
+            try game.purchaseOrderFor{value: foilCost}(
                 0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true
             ) {
                 bought++;
@@ -130,7 +130,7 @@ contract FoilSnapPayout is DeployProtocol {
             address t = makeAddr(string(abi.encodePacked("tkt", vm.toString(i))));
             vm.deal(t, 1_000 ether);
             vm.prank(t);
-            try game.purchase{value: foilCost}(
+            try game.purchaseOrderFor{value: foilCost}(
                 0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
         }
@@ -146,9 +146,9 @@ contract FoilSnapPayout is DeployProtocol {
         // claimable matches. The cheatcode read is a staticcall and is never folded.
         for (uint256 d = 0; d < RUN_DAYS; d++) {
             if (!game.jackpotPhase()) {
-                uint256 pw = PriceLookupLib.priceForLevel(game.level() + 1);
+                uint256 pw = PriceLookupLib.priceForLevel(game.currentLvl() + 1);
                 vm.prank(whale);
-                try game.purchase{value: 50 * pw}(
+                try game.purchaseOrderFor{value: 50 * pw}(
                     0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
                 ) {} catch {}
             }
@@ -170,7 +170,7 @@ contract FoilSnapPayout is DeployProtocol {
         emit log_named_uint("buyDay", _buyDay);
         emit log_named_uint("endDay", _endDay);
         emit log_named_uint("days with a sealed word in window", worded);
-        emit log_named_uint("end level", game.level());
+        emit log_named_uint("end level", game.currentLvl());
     }
 
     /// @dev The property compares payout state, so give it a guaranteed matching line
@@ -275,7 +275,7 @@ contract FoilSnapPayout is DeployProtocol {
     ///      proven through production code rather than by re-reading storage. At shift 1 a
     ///      pack costs 2x, so the unshifted price must no longer cover a DirectEth buy.
     function test_snapShiftDoublesFoilPrice() public {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 baseCost = 10 * PriceLookupLib.priceForLevel(lvl + 1);
 
         _forceSnapShift(1);
@@ -287,11 +287,11 @@ contract FoilSnapPayout is DeployProtocol {
         // tier, and this fresh actor has no prepaid afking for the waterfall's last tier to
         // draw. Selector-pinned so an unrelated revert cannot make this pass by accident.
         vm.expectRevert(bytes4(keccak256("Insolvent()")));
-        game.purchase{value: baseCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: baseCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
 
         address b = makeAddr("fsnapPriceB");
         vm.deal(b, 1_000 ether);
         vm.prank(b);
-        game.purchase{value: 2 * baseCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: 2 * baseCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 }

@@ -333,7 +333,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
         Craps.Bets memory blank;
         flip.setNextBoonMask(uint8(mask));
         vm.prank(alice);
-        craps.enterBonusDay(blank, 1);
+        craps.playCraps(blank, 1);
 
         uint256 seat = craps.daySeatNumberOf(day, alice);
         betId = ((uint256(day) * craps.BONUS_SLOTS_PER_DAY()) << 64) | seat;

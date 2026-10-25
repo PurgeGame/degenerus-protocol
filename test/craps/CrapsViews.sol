@@ -148,15 +148,15 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
         return enterBattle(0, slot, _pack(chips), multiple);
     }
 
-    function enterBonusBattle(uint256 period, Craps.Bets calldata chips, uint16 multiple)
+    function throwCraps(uint256 period, Craps.Bets calldata chips, uint16 multiple)
         external
         returns (uint256)
     {
-        return enterBonusBattle(0, period, _pack(chips), multiple);
+        return throwCraps(0, period, _pack(chips), multiple);
     }
 
-    function enterBonusDay(Craps.Bets calldata chips, uint16 multiple) external returns (uint256) {
-        return enterBonusDay(0, _pack(chips), multiple);
+    function playCraps(Craps.Bets calldata chips, uint16 multiple) external returns (uint256) {
+        return playCraps(0, _pack(chips), multiple);
     }
 
     function amendSlip(uint256 betId, Craps.Bets calldata chips) external {
@@ -169,12 +169,12 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
         return enterBattle(0, slot, chips, multiple);
     }
 
-    function enterBonusBattle(uint256 period, uint32 chips, uint16 multiple) external returns (uint256) {
-        return enterBonusBattle(0, period, chips, multiple);
+    function throwCraps(uint256 period, uint32 chips, uint16 multiple) external returns (uint256) {
+        return throwCraps(0, period, chips, multiple);
     }
 
-    function enterBonusDay(uint32 chips, uint16 multiple) external returns (uint256) {
-        return enterBonusDay(0, chips, multiple);
+    function playCraps(uint32 chips, uint16 multiple) external returns (uint256) {
+        return playCraps(0, chips, multiple);
     }
 
     function amendSlip(uint256 betId, uint32 chips) external {

@@ -140,7 +140,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function _autoBurn() private returns (uint256) {
-        uint24 resolutionLevel = game.level() + 1;
+        uint24 resolutionLevel = game.currentLvl() + 1;
         vm.prank(address(game));
         return coin.autoDecimatorBurn(resolutionLevel, CAP);
     }
@@ -175,7 +175,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         uint32 playerId = _giveWalletId(player);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500), playerId));
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCachedById_g975.selector, playerId), abi.encode(uint256(500)));
-        vm.prank(address(game)); coin.mintForGame(player, 4_000_000);
+        vm.prank(address(game)); coin.mintForGame_g152734(player, 4_000_000);
         vm.recordLogs();
         vm.prank(player); coin.decimatorBurn(0, 2_000_000, 0);
         (uint256 firstBase, uint256 firstCredit) = _recorded(vm.getRecordedLogs());
@@ -267,8 +267,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // (see runTicketWork_g1150's far-future continuation block). That first call resolves
         // the pool and returns early (STAGE_TICKETS_WORKING); the second call finds the gate
         // clear and reaches rngGate, where the opening-day decimator burn fires.
-        game.mineFlip(0);
-        game.mineFlip(0);
+        game.mineRun(0);
+        game.mineRun(0);
         (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(spent, CAP);
         assertEq(count, 1);
@@ -287,8 +287,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // and genesis queued VAULT+SDGNRS perpetual entries into level 100's far-future pool at
         // deploy. The first mineFlip() call mints that pool inside the daily drain gate and
         // returns early; the second reaches rngGate and the opening-day decimator entry.
-        game.mineFlip(0);
-        game.mineFlip(0);
+        game.mineRun(0);
+        game.mineRun(0);
         (uint256 weight,) = harness.entry(100);
         assertGt(weight, 0);
         (uint256 previousWeight,) = harness.entry(99);
@@ -306,13 +306,13 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // The real daily request is the keeper engine's RequestDaily action (the advance module
         // only applies a delivered word); the word is then published and applied by the engine.
         uint256 requestBefore = mockVRF.lastRequestId();
-        for (uint256 i; i < 20 && mockVRF.lastRequestId() == requestBefore; ++i) game.mineFlip(0);
+        for (uint256 i; i < 20 && mockVRF.lastRequestId() == requestBefore; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), requestBefore, "real daily request");
         assertTrue(game.rngLocked());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 3);
-        for (uint256 i; i < 20 && game.rngWordForDay(23) == 0; ++i) game.mineFlip(0);
+        for (uint256 i; i < 20 && game.rngWordForDay(23) == 0; ++i) game.mineRun(0);
         assertGt(game.rngWordForDay(23), 0, "day 23 word applied");
-        assertTrue(game.decWindow());
+        assertTrue(game.decimatorActive());
         assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
         (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
@@ -438,7 +438,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(22, 4, 3, true);
         harness.applyOpeningWord(22);
         vm.prank(address(game));
-        coin.mintForGame(player, 8000);
+        coin.mintForGame_g152734(player, 8000);
         vm.startPrank(player);
         vm.expectRevert(FLIP.AmountLTMin.selector);
         coin.decimatorBurn(0, 1999, 0);

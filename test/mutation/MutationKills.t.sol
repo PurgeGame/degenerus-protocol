@@ -94,7 +94,7 @@ contract MutationKills is DeployProtocol {
 
         // Fund a burner with sDGNRS from the Reward pool (game is the onlyGame caller).
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, burner, ACTOR_FUNDING);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, burner, ACTOR_FUNDING);
     }
 
     /// @dev Force game.gameOver() == true via mockCall so burn() takes the deterministic leg.
@@ -210,11 +210,11 @@ contract MutationKills is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    //                  sDGNRS — transferFromPool
+    //                  sDGNRS — transferFromPool_g106128
     // ---------------------------------------------------------------------
 
     /// @notice KILLS sDGNRS.sol:549/553/555/558/559/567/569/570 [RR] — the regular
-    ///         (to != this) transferFromPool leg: pool debit, contract-balance debit, recipient
+    ///         (to != this) transferFromPool_g106128 leg: pool debit, contract-balance debit, recipient
     ///         credit, return value. setUp already exercises this (it funds the burner), but no
     ///         assertion pinned the post-conditions; this test pins them.
     function test_kills_StakedStonk_transferFromPool_creditsRecipient() public {
@@ -226,7 +226,7 @@ contract MutationKills is DeployProtocol {
         require(poolBefore >= req, "fixture: reward pool too small");
 
         vm.prank(address(game));
-        uint256 transferred = sdgnrs.transferFromPool(sDGNRS.Pool.Reward, sink, req);
+        uint256 transferred = sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, sink, req);
 
         assertEq(transferred, req, "return value wrong (return-mutant)");
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Reward), poolBefore - req, "pool not debited");
@@ -234,7 +234,7 @@ contract MutationKills is DeployProtocol {
         assertEq(sdgnrs.balanceOf(address(sdgnrs)), contractBefore - req, "contract balance not debited");
     }
 
-    /// @notice KILLS sDGNRS.sol:563/564 [RR] — the SELF-WIN branch of transferFromPool
+    /// @notice KILLS sDGNRS.sol:563/564 [RR] — the SELF-WIN branch of transferFromPool_g106128
     ///         (to == address(this)): burns instead of a no-op transfer, decrementing supply and
     ///         emitting Transfer to address(0). The oracle never drives the self-win branch.
     /// @dev Branch-proof: target to == address(this) and assert supply DROPPED (the burn happened),
@@ -247,7 +247,7 @@ contract MutationKills is DeployProtocol {
         require(poolBefore >= req, "fixture: reward pool too small");
 
         vm.prank(address(game));
-        uint256 transferred = sdgnrs.transferFromPool(sDGNRS.Pool.Reward, address(sdgnrs), req);
+        uint256 transferred = sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, address(sdgnrs), req);
 
         assertEq(transferred, req, "self-win return value wrong");
         // Self-win burns: supply drops by req; contract balance net unchanged (debit then burn).
@@ -268,7 +268,7 @@ contract MutationKills is DeployProtocol {
         // Fund the DGNRS wrapper address with sDGNRS so wrapperTransferTo has balance to move.
         uint256 seed = 12_000e12;
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, ContractAddresses.DGNRS, seed);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, ContractAddresses.DGNRS, seed);
 
         address recipient = makeAddr("wrapperRecipient");
         uint256 wrapperBefore = sdgnrs.balanceOf(ContractAddresses.DGNRS);

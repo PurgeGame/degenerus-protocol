@@ -41,7 +41,7 @@ async function triggerGameOver(game, caller, mockVRF) {
   for (let i = 0; i < 12; i++) {
     const reqBefore = await getLastVRFRequestId(mockVRF);
     try {
-      await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 });
+      await game.connect(caller).mineRun(0, { gasLimit: 16_777_216 });
     } catch {
       /* may revert mid-sequence; keep driving */
     }
@@ -86,7 +86,7 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [gameAddr] });
   await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
   const gameSigner = await hre.ethers.getSigner(gameAddr);
-  await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
+  await sdgnrs.connect(gameSigner).transferFromPool_g106128(Pool.Reward, recipient, amount);
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
   // Admit a gambling burn using the authenticated current-day parity word.
   await seedDailyWord(game, await game.currentDayView_g542950(), BigInt("0x" + "de".repeat(32)));

@@ -48,7 +48,7 @@ contract FlipRedeemWindowTest is DeployProtocol {
 
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 
     function _windowOpen() internal view returns (bool) {

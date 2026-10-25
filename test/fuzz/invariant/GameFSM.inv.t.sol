@@ -26,7 +26,7 @@ contract GameFSMInvariant is DeployProtocol {
 
         fsmHandler = new FSMHandler(game, mockVRF, 10);
         fsmHandler.scriptedOpening(OPENING_LEVEL);
-        assertGe(game.level(), OPENING_LEVEL, "GameFSM: the scripted opening must reach its level");
+        assertGe(game.currentLvl(), OPENING_LEVEL, "GameFSM: the scripted opening must reach its level");
         openingPurchases = fsmHandler.ghost_purchases();
         openingAdvances = fsmHandler.ghost_advances();
         openingVrf = fsmHandler.ghost_vrfFulfillments();

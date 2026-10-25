@@ -33,7 +33,7 @@ contract LoanSeeder is DegenerusGameStorage {
         _setPendingPools(0.5 ether, 0.25 ether);
     }
     function awardSdgnrs(uint32 id, uint256 amount) external {
-        dgnrs.transferFromPool(IsDGNRS.Pool.Reward, _payee(_walletElement(id)), amount);
+        dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Reward, _payee(_walletElement(id)), amount);
     }
     function seedLevel(uint32 id, uint24 level_, uint32 entries) external { _queueEntries(id, level_, entries, false); }
 
@@ -148,7 +148,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function _nextDue() private view returns (uint24) {
-        return game.level() + 1;
+        return game.currentLvl() + 1;
     }
 
     /// @dev Borrow the full quote for `id` due at `due`; returns the principal.
@@ -184,7 +184,7 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function _giveSdgnrs(address player, uint256 amount) private {
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, player, amount);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, player, amount);
     }
 
     function _endGame() private {
@@ -294,7 +294,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(info.owed, amount * 105 / 100, "interest accrues on the amount taken");
 
         vm.deal(seller, info.owed);
-        vm.prank(seller); game.repay{value: info.owed}(root);
+        vm.prank(seller); game.clearDebtNow{value: info.owed}(root);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore - amount + info.owed);
         assertEq(lens.loanOf(address(game), root).principal, 0);
     }
@@ -547,7 +547,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 principal = _borrow(root, 1);
         assertGt(principal, 0);
         uint256 owed = lens.loanOf(address(game), root).owed;
-        vm.prank(seller); game.repay{value: owed}(root);
+        vm.prank(seller); game.clearDebtNow{value: owed}(root);
         assertEq(lens.loanOf(address(game), root).principal, 0);
     }
 
@@ -589,7 +589,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()")));
         game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
         uint256 owed = lens.loanOf(address(game), root).owed;
-        vm.prank(seller); game.repay{value: owed}(root);
+        vm.prank(seller); game.clearDebtNow{value: owed}(root);
         _child();
     }
 
@@ -624,7 +624,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _setLevel(19);
         uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
         uint256 poolBefore = _pool();
-        vm.prank(seller); game.repay{value: p * 196 / 100}(root);
+        vm.prank(seller); game.clearDebtNow{value: p * 196 / 100}(root);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore + p * 196 / 100);
         assertEq(_pool(), poolBefore + p * 196 / 100);
         assertEq(lens.loanOf(address(game), root).principal, 0);
@@ -639,11 +639,11 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 p = _borrow(root, 4);
         uint256 owed = lens.loanOf(address(game), root).owed;
         _seed(root, 0, uint128(owed), 0);
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.repay(root);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.clearDebtNow(root);
         _seed(root, 0, uint128(owed + 1), 0);
         uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
         uint256 poolBefore = _pool();
-        vm.prank(seller); game.repay(root);
+        vm.prank(seller); game.clearDebtNow(root);
         assertEq(uint128(uint256(vm.load(address(game), keccak256(abi.encode(root, GameSlots.BALANCES_PACKED))))), 1);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore + owed);
         assertEq(_pool(), poolBefore, "internal move");
@@ -655,14 +655,14 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 owed = lens.loanOf(address(game), root).owed;
         _seed(root, 0, uint128(owed / 2 + 1), 0);
         uint256 poolBefore = _pool();
-        vm.prank(seller); game.repay{value: owed - owed / 2}(root);
+        vm.prank(seller); game.clearDebtNow{value: owed - owed / 2}(root);
         assertEq(_pool(), poolBefore + (owed - owed / 2));
 
         _borrow(root, 4);
         owed = lens.loanOf(address(game), root).owed;
         uint256 afkBefore = uint256(vm.load(address(game), keccak256(abi.encode(root, GameSlots.BALANCES_PACKED)))) >> 128;
         poolBefore = _pool();
-        vm.prank(seller); game.repay{value: owed + 3 ether}(root);
+        vm.prank(seller); game.clearDebtNow{value: owed + 3 ether}(root);
         uint256 afkAfter = uint256(vm.load(address(game), keccak256(abi.encode(root, GameSlots.BALANCES_PACKED)))) >> 128;
         assertEq(afkAfter, afkBefore + 3 ether, "excess goes to the account's AFKing balance");
         assertEq(_pool(), poolBefore + owed + 3 ether);
@@ -672,20 +672,20 @@ contract AccountLoansTest is RedemptionCloseTools {
         _borrow(root, 2);
         _etch(); LoanSeeder(address(game)).lock(true); _unetch();
         uint256 owed = lens.loanOf(address(game), root).owed;
-        vm.prank(seller); game.repay{value: owed}(root);
+        vm.prank(seller); game.clearDebtNow{value: owed}(root);
 
         _etch(); LoanSeeder(address(game)).lock(false); _unetch();
         _borrow(root, 2);
         _setLevel(2);
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.repay{value: 10 ether}(root);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.clearDebtNow{value: 10 ether}(root);
     }
 
     function test_OnlyOwnerRepays() public {
         _borrow(root, 2);
         address stranger = makeAddr("repay-stranger");
         vm.deal(stranger, 10 ether);
-        vm.prank(stranger); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.repay{value: 1 ether}(root);
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.repay{value: 1 ether}(root + 9);
+        vm.prank(stranger); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.clearDebtNow{value: 1 ether}(root);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.clearDebtNow{value: 1 ether}(root + 9);
     }
 
     /// @dev A loan still open once the game is over was left by a VRF-dead ending (a VRF-alive
@@ -694,7 +694,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     function test_GameOverClosesRepaymentOfALoanTheEndingLeftOpen() public {
         uint256 p = _borrow(root, 3);
         _endGame();
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.repay{value: 10 ether}(root);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.clearDebtNow{value: 10 ether}(root);
         assertEq(_payee(root), seller);
         assertEq(game.walletIdOf_g3120(seller), root);
         assertGt(p, 0);
@@ -717,7 +717,7 @@ contract AccountLoansTest is RedemptionCloseTools {
             uint24 due = uint24(2 + (seed >> 8) % 3);
             if (open[k]) {
                 uint256 owed = lens.loanOf(address(game), ids[k]).owed;
-                vm.prank(owners[k]); game.repay{value: owed}(ids[k]);
+                vm.prank(owners[k]); game.clearDebtNow{value: owed}(ids[k]);
                 open[k] = false;
             } else {
                 uint256 principal = lens.previewBorrow(address(game), ids[k], due, type(uint256).max).principal;
@@ -1100,7 +1100,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _seize(1);
         assertEq(_payee(child), address(vault), "the family moved with the main");
         vm.deal(address(vault), 10 ether);
-        vm.prank(seller); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.repay{value: 5 ether}(child);
+        vm.prank(seller); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.clearDebtNow{value: 5 ether}(child);
         _seize(2);
         assertEq(_payee(child), address(sdgnrs), "explicit seizure overrides the inherited owner");
         assertEq(game.acquiredBuyer(child), 2);
@@ -1124,8 +1124,8 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_NewAccountDoesNotResetVotesOrDefaultReferralOwnership() public {
         vm.store(address(gnrus), bytes32(uint256(7)), bytes32(uint256(uint160(address(0xBEEF)))));
-        vm.prank(address(game)); sdgnrs.transferFromPool(sDGNRS.Pool.Reward, seller, 1e12);
-        vm.prank(seller); gnrus.vote(3);
+        vm.prank(address(game)); sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, seller, 1e12);
+        vm.prank(seller); gnrus.castBallot(3);
         uint24 lvl = gnrus.currentLevel();
         _default(root);
         uint32 replacement = _giveWalletId(seller);
@@ -1141,7 +1141,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint24 due = _nextDue();
         _borrow(root, due);
         uint256 owed = lens.loanOf(address(game), root).owed;
-        vm.prank(seller); game.repay{value: owed}(root);
+        vm.prank(seller); game.clearDebtNow{value: owed}(root);
         _seize(due);
         assertEq(_payee(root), seller);
         assertEq(game.walletIdOf_g3120(seller), root);

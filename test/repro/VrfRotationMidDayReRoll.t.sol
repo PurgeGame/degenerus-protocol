@@ -51,7 +51,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
                 mockVRF.fulfillRandomWords(reqId, vrfWord);
                 _lastFulfilledReqId = reqId;
             }
-            try game.mineFlip(0) {} catch (bytes memory reason) {
+            try game.mineRun(0) {} catch (bytes memory reason) {
                 if (reason.length >= 4 && bytes4(reason) == bytes4(keccak256("NoWork()"))) {
                     assertFalse(game.rngLocked(), "daily work drained");
                     assertTrue(game.rngComplete(), "read consumers drained");
@@ -66,7 +66,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
     /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
     function _mineMiddayRequest() internal {
         uint256 prior = mockVRF.lastRequestId();
-        game.mineFlip(0);
+        game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
     }
@@ -81,7 +81,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         mockVRF.fundSubscription(1, 100e18);
     }
 

@@ -203,7 +203,7 @@ abstract contract FreshWordLeg is AdvanceStageStream {
         uint8 st = 255;
         for (uint256 calls; calls < 1000 && mockVRF.lastRequestId() == before; ++calls) {
             vm.recordLogs();
-            game.mineFlip{gas: 16_700_000}(0);
+            game.mineRun{gas: 16_700_000}(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) (st,) = abi.decode(logs[i].data, (uint8, uint24));
@@ -247,7 +247,7 @@ abstract contract FreshWordLeg is AdvanceStageStream {
     ///      (intrinsic included) and its logs.
     function _advanceTx(bool) internal returns (uint8 stage, uint256 used, Vm.Log[] memory logs) {
         vm.recordLogs();
-        game.mineFlip{gas: 10_000_000}(0);
+        game.mineRun{gas: 10_000_000}(0);
         // With isolation, Foundry includes calldata intrinsic in the top-level CALL cost.
         used = vm.lastCallGas().gasTotalUsed;
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_192;

@@ -37,7 +37,7 @@ contract VrfCallbackGasTest is DeployProtocol {
     function _mineRequest() private returns (uint256 id, uint256 used) {
         uint256 prior = mockVRF.lastRequestId();
         for (uint256 i; i < 200; ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             used = vm.snapshotGasLastCall("vrf-mine");
             id = mockVRF.lastRequestId();
             if (id != prior) return (id, used);
@@ -64,7 +64,7 @@ contract VrfCallbackGasTest is DeployProtocol {
                 uint256 id = mockVRF.lastRequestId();
                 mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("settle", id))));
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
     }
@@ -87,7 +87,7 @@ contract VrfCallbackGasTest is DeployProtocol {
         address buyer = makeAddr("vrfGasBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 used;
         (id, used) = _mineRequest();
         assertFalse(game.rngLocked(), "mid-day request");
@@ -158,7 +158,7 @@ contract VrfCallbackGasTest is DeployProtocol {
         bytes32 legacy = keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)");
         for (uint256 i; i < 200 && game.rngLocked(); ++i) {
             vm.recordLogs();
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 used = vm.snapshotGasLastCall("vrf-apply");
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
@@ -178,7 +178,7 @@ contract VrfCallbackGasTest is DeployProtocol {
         bytes32 applied = keccak256("LootboxRngApplied(uint48,uint256,uint256)");
         for (uint256 i; i < 50; ++i) {
             vm.recordLogs();
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 used = vm.snapshotGasLastCall("vrf-publish");
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
@@ -196,7 +196,7 @@ contract VrfCallbackGasTest is DeployProtocol {
         uint256 id = _dailyRequest(0);
         mockVRF.fulfillRandomWords(id, 1_000_000);
         for (uint256 i; i < 200 && game.rngLocked(); ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             uint256 used = vm.snapshotGasLastCall("vrf-unlock");
             if (!game.rngLocked()) {
                 emit log_named_uint("daily unlock tx gas", used);

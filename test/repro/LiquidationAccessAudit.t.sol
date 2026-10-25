@@ -106,7 +106,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
     }
 
     function _default(uint32 id) private {
-        uint24 due = game.level() + 1;
+        uint24 due = game.currentLvl() + 1;
         vm.prank(borrower);
         game.borrow(id, due, type(uint256).max, 0);
         host.seizeAt(due);
@@ -183,7 +183,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
                 assertFalse(authorized);
                 vm.startPrank(callers[j]);
                 vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
-                game.claimWinnings(ids[i]);
+                game.claimClaimable(ids[i]);
                 vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
                 game.withdrawAfkingFunding(ids[i], 1);
                 vm.expectRevert(bytes4(keccak256("NotApproved()")));

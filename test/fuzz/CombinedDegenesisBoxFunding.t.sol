@@ -17,12 +17,12 @@ contract CombinedDegenesisBoxFunding is DegenesisDeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineRun(0);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 777);
         for (uint256 i; i < 100; ++i) {
             (bool done,,) = game.dailySessionState();
             if (done) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertEq(game.currentDayView_g542950(), 2, "first Degenesis sale cohort");
     }
@@ -51,13 +51,13 @@ contract CombinedDegenesisBoxFunding is DegenesisDeployProtocol {
         vm.deal(buyer, mintCost + boxAmount);
 
         vm.prank(buyer);
-        game.purchase{value: mintCost}(0, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: mintCost}(0, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.degenesisCreditOf(buyer), 0.06 ether, "the ticket earned a quarter as credit");
 
         uint256 poolBefore = game.claimablePoolView();
         vm.recordLogs();
         vm.prank(buyer);
-        game.buyDegenesisBox{value: boxAmount}(0, boxAmount);
+        game.purchaseDegenesisBox{value: boxAmount}(0, boxAmount);
 
         (uint8 day, uint32 index, uint256 amount) = _buyEvent(vm.getRecordedLogs(), buyer);
         assertEq(day, 1, "the first sale day's cohort");
@@ -75,13 +75,13 @@ contract CombinedDegenesisBoxFunding is DegenesisDeployProtocol {
         address buyer = makeAddr("repeatBuyer");
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        game.purchase{value: 0.48 ether}(0, 19_200, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 0.48 ether}(0, 19_200, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.degenesisCreditOf(buyer), 0.12 ether, "the purchase funds two box attempts");
 
         for (uint32 n; n < 2; ++n) {
             vm.recordLogs();
             vm.prank(buyer);
-            game.buyDegenesisBox{value: 0.05 ether}(0, 0.05 ether);
+            game.purchaseDegenesisBox{value: 0.05 ether}(0, 0.05 ether);
             (, uint32 index, uint256 amount) = _buyEvent(vm.getRecordedLogs(), buyer);
             assertEq(index, n, "each purchase is the next order");
             assertEq(amount, 0.05 ether);
@@ -96,7 +96,7 @@ contract CombinedDegenesisBoxFunding is DegenesisDeployProtocol {
         uint256 header = _header(1);
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("E()")));
-        game.buyDegenesisBox{value: 0.05 ether}(0, 0.05 ether);
+        game.purchaseDegenesisBox{value: 0.05 ether}(0, 0.05 ether);
         assertEq(game.degenesisCreditOf(buyer), 0.02 ether, "the failed buy rolls back the credit debit");
         assertEq(_header(1), header, "the failed buy appends nothing");
         assertEq(game.claimablePoolView(), poolBefore, "the failed buy holds nothing");

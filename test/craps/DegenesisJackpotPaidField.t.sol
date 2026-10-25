@@ -55,9 +55,9 @@ contract DegenesisJackpotPaidField is CrapsPins {
     ///      next day's request, the draw prepared and appended, then the daily worker to completion.
     function _playPaidField() internal returns (CrapsBattleStorage.JackpotRound memory r, uint256 remaining) {
         vm.prank(alice);
-        table.enterBonusBattle(5, 0, 1);
+        table.throwCraps(5, 0, 1);
         vm.prank(bob);
-        table.enterBonusDay(0, 1);
+        table.playCraps(0, 1);
 
         vm.warp(dayStart + 1 days);
         game.setRngLocked(true);

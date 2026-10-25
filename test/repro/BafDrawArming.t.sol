@@ -67,7 +67,7 @@ contract BafDrawArming is DeployProtocol {
 
         // A minimum-size deposit inside the sealed last-purchase window enters.
         vm.prank(minnow);
-        coinflip.depositCoinflip(0, 100);
+        coinflip.playCoinflip(0, 100);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 1, "the sealed-window deposit entered the draw");
@@ -135,7 +135,7 @@ contract BafDrawArming is DeployProtocol {
 
     function _tryCoinflipDeposit() internal {
         vm.prank(buyer);
-        try coinflip.depositCoinflip(0, 500) {} catch {}
+        try coinflip.playCoinflip(0, 500) {} catch {}
     }
 
     /// @dev One driver step. The engine composes every admitted checkpoint into a call and the
@@ -147,7 +147,7 @@ contract BafDrawArming is DeployProtocol {
         if (game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return false;
         uint256[6] memory ladder = [uint256(1_500_000), 2_500_000, 3_500_000, 5_000_000, 9_000_000, 16_777_216];
         for (uint256 r; r < ladder.length; ++r) {
-            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) return true;
             if (bytes4(err) != MineFlipGas.InsufficientExecutionGas.selector) return false;
         }
@@ -171,7 +171,7 @@ contract BafDrawArming is DeployProtocol {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
-        game.purchase{value: (priceWei * 4000) / 400}(
+        game.purchaseOrderFor{value: (priceWei * 4000) / 400}(
             0,
             4000,
             0,

@@ -36,7 +36,7 @@ contract StallDaysNeverHappened is LogicalDaysFixture {
         vm.warp(uint256(completed) + 14 days);
         mockVRF.fulfillRandomWords(id, 777);
         assertTrue(game.livenessTriggered());
-        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineRun(0);
         assertTrue(game.gameOver());
         assertEq(game.currentDayView_g542950(), 2);
         assertEq(game.rngWordForDay(2), 0, "expired normal result is never applied");

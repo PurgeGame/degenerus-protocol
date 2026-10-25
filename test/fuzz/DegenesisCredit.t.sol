@@ -62,7 +62,7 @@ contract DegenesisCredit is DegenesisFixture {
         uint256 cost = 10 * game.mintPrice() + 0.05 ether;
         vm.deal(alice, cost);
         vm.prank(alice);
-        game.purchase{value: cost}(0, 4000, BoxOrderLib.boCustom(0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, 4000, BoxOrderLib.boCustom(0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(alice.balance, 0, "fixture: exact fresh payment");
         assertEq(_credit(alice), cost / 4, "credit = cost / 4");
     }
@@ -73,7 +73,7 @@ contract DegenesisCredit is DegenesisFixture {
         uint256 cost = 20 * game.mintPrice();
         uint256 before = _claimableOf(_idOf(alice));
         vm.prank(alice);
-        game.purchase(0, 8000, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchaseOrderFor(0, 8000, 0, bytes32(0), MintPaymentKind.Claimable, false);
         assertEq(before - _claimableOf(_idOf(alice)), cost, "fixture: claimable paid");
         assertEq(_credit(alice), cost / 4, "claimable spend earns credit");
     }
@@ -87,7 +87,7 @@ contract DegenesisCredit is DegenesisFixture {
         assertEq(_credit(alice), 0, "a deposit is not a purchase");
         uint256 cost = 10 * game.mintPrice();
         vm.prank(alice);
-        game.purchase(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(1 ether - _afkingOf(_idOf(alice)), cost, "fixture: prepaid paid");
         assertEq(_credit(alice), cost / 4, "prepaid spend earns credit");
     }
@@ -102,7 +102,7 @@ contract DegenesisCredit is DegenesisFixture {
         uint256 cost = 10 * game.mintPrice(); // 0.1 ETH: 0.02 fresh + 0.03 claimable + 0.05 prepaid
         vm.deal(alice, 0.02 ether);
         vm.prank(alice);
-        game.purchase{value: 0.02 ether}(0, 4000, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchaseOrderFor{value: 0.02 ether}(0, 4000, 0, bytes32(0), MintPaymentKind.Combined, false);
         assertEq(_afkingOf(id), 0, "fixture: prepaid leg used");
         assertEq(_claimableOf(id), 1, "fixture: claimable leg used to its sentinel");
         assertEq(_credit(alice), cost / 4, "every leg earns");
@@ -114,14 +114,14 @@ contract DegenesisCredit is DegenesisFixture {
     function test_FlipPaidTickets_EarnNone_OnlyEthPartEarns() public {
         _setNextPool(60 ether);
         vm.prank(address(game));
-        coin.mintForGame(alice, 10_000_000 ether);
+        coin.mintForGame_g152734(alice, 10_000_000 ether);
         vm.prank(alice);
         game.redeemFlip(0, 4000);
         assertEq(_credit(alice), 0, "FLIP-paid tickets earn no credit");
         uint256 cost = 4 * game.mintPrice();
         vm.deal(alice, cost);
         vm.prank(alice);
-        game.purchase{value: cost}(0, 1600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: cost}(0, 1600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(_credit(alice), cost / 4, "only the ETH part earns");
     }
 
@@ -172,7 +172,7 @@ contract DegenesisCredit is DegenesisFixture {
         uint32 id = _idOf(alice);
         vm.deal(alice, 1 ether);
         vm.prank(alice);
-        game.purchase{value: 1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: 1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint256 charged = _charged(id, 1 ether, 0);
         assertGt(charged, 0, "fixture: foil pack charged");
         assertEq(_credit(alice), charged / 4, "foil pack: credit on its cost");
@@ -182,7 +182,7 @@ contract DegenesisCredit is DegenesisFixture {
         uint32 id = _idOf(alice);
         vm.deal(alice, 2 ether);
         vm.prank(alice);
-        game.purchase{value: 2 ether}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: 2 ether}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint256 charged = _charged(id, 2 ether, 0);
         assertApproxEqAbs(_credit(alice), charged / 4, 1, "tickets + foil: credit on the whole charge");
     }
@@ -214,7 +214,7 @@ contract DegenesisCredit is DegenesisFixture {
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature(
-                "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                "purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)",
                 0, 8000, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ),
             0
@@ -265,7 +265,7 @@ contract DegenesisCredit is DegenesisFixture {
         vm.deal(alice, 1 ether);
         vm.prank(alice);
         vm.expectRevert();
-        game.buyDegenesisBox{value: 1 ether}(0, credit - 0.2 ether + UNIT);
+        game.purchaseDegenesisBox{value: 1 ether}(0, credit - 0.2 ether + UNIT);
     }
 
     /// @notice The Vault cannot buy a Degenesis box directly, even holding credit (written into
@@ -276,7 +276,7 @@ contract DegenesisCredit is DegenesisFixture {
         vm.deal(ContractAddresses.VAULT, 1 ether);
         vm.prank(ContractAddresses.VAULT);
         vm.expectRevert();
-        game.buyDegenesisBox{value: 0.1 ether}(0, 0.1 ether);
+        game.purchaseDegenesisBox{value: 0.1 ether}(0, 0.1 ether);
     }
 
     /// @notice An operator approved for wallet 1 cannot buy for the Vault, while the same kind of
@@ -293,7 +293,7 @@ contract DegenesisCredit is DegenesisFixture {
         )), 0), (bytes));
         vm.prank(op);
         vm.expectRevert();
-        game.buyDegenesisBox{value: 0.1 ether}(VAULT_ID, 0.1 ether);
+        game.purchaseDegenesisBox{value: 0.1 ether}(VAULT_ID, 0.1 ether);
 
         // Positive control: an operator for a player buys within the player's credit.
         _earnCredit(alice, 0.1 ether);
@@ -301,7 +301,7 @@ contract DegenesisCredit is DegenesisFixture {
         game.setOperatorApproval(0, op, true);
         uint32 aliceId = _idOf(alice);
         vm.prank(op);
-        game.buyDegenesisBox{value: 0.1 ether}(aliceId, 0.1 ether);
+        game.purchaseDegenesisBox{value: 0.1 ether}(aliceId, 0.1 ether);
         assertEq(_cohortCount(1), 1, "the player's order joined cohort 1");
     }
 
@@ -316,7 +316,7 @@ contract DegenesisCredit is DegenesisFixture {
         uint32 affId = _idOf(AFF_OWNER);
         uint256 scoreBefore = affiliate.affiliateScore(1, affId);
         vm.prank(REFERRED);
-        game.purchase{value: 4 ether}(0, 400 * 400, 0, AFF_CODE, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 4 ether}(0, 400 * 400, 0, AFF_CODE, MintPaymentKind.DirectEth, false);
         assertGt(affiliate.affiliateScore(1, affId), scoreBefore, "control: a ticket buy pays the affiliate");
 
         uint256 score = affiliate.affiliateScore(1, affId);
@@ -327,7 +327,7 @@ contract DegenesisCredit is DegenesisFixture {
         uint256 affStake = coinflip.coinflipAmount(AFF_OWNER);
 
         vm.prank(REFERRED);
-        game.buyDegenesisBox{value: 0.5 ether}(0, 0.5 ether);
+        game.purchaseDegenesisBox{value: 0.5 ether}(0, 0.5 ether);
         assertEq(_cohortCount(1), 1, "fixture: the order landed");
 
         assertEq(affiliate.affiliateScore(1, affId), score, "no affiliate score");

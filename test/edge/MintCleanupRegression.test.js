@@ -111,7 +111,7 @@ async function parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary) {
 }
 
 async function buyTickets(game, buyer, ticketCount, ethValue) {
-  return game.connect(buyer).purchase(
+  return game.connect(buyer).purchaseOrderFor(
     0,
     BigInt(ticketCount) * 400n,
     0n,
@@ -176,7 +176,7 @@ async function pinDailyEntropy(game, deployer, mockVRF, word) {
   const previous = await getLastVRFRequestId(mockVRF);
   let request = previous;
   for (let i = 0; i < 100 && request === previous; ++i) {
-    await game.connect(deployer).mineFlip(0, { gasLimit: 12_000_000 });
+    await game.connect(deployer).mineRun(0, { gasLimit: 12_000_000 });
     request = await getLastVRFRequestId(mockVRF);
   }
   expect(request).not.to.equal(previous);
@@ -197,7 +197,7 @@ async function drainViaAdvanceGame(game, caller, storage, deployDayBoundary, max
       expect(await game.rngLocked(), "drain stopped with the daily lock still held").to.equal(false);
       break;
     }
-    const receipt = await (await game.connect(caller).mineFlip(0, { gasLimit: 12_000_000 })).wait();
+    const receipt = await (await game.connect(caller).mineRun(0, { gasLimit: 12_000_000 })).wait();
     const newEvents = await parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary);
     events.push(...newEvents);
     for (const log of receipt.logs) reveals.push(...seatedTicketReveals(log));

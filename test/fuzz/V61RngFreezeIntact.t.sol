@@ -321,7 +321,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         vm.deal(buyer, ethSent);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchaseOrderFor{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         o.claimableDelta = claimableBefore - game.claimableWinningsOf(buyer);
         o.afkingDelta = afkingBefore - game.afkingFundingOf(buyer);
@@ -346,7 +346,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     ) internal returns (uint8 curse, uint256 score) {
         _perturbBlock(blockBump, warpBump, prevrandao, coinbaseName);
         vm.prank(p);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         curse = game.curseCountOf(p);
         score = activityScoreOf(address(game), p);
     }
@@ -422,7 +422,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     function _oneTicketCost() internal view returns (uint256) {
-        uint24 targetLevel = game.jackpotPhase() ? game.level() : game.level() + 1;
+        uint24 targetLevel = game.jackpotPhase() ? game.currentLvl() : game.currentLvl() + 1;
         return PriceLookupLib.priceForLevel(targetLevel);
     }
 
@@ -519,7 +519,7 @@ contract V61RngFreezeIntact is DeployProtocol {
 
     function _seedAffiliateBase(address who, uint256 points) internal {
         _seedField(who, AFFILIATE_BONUS_POINTS_SHIFT, 0x3F, points);
-        _seedField(who, AFFILIATE_BONUS_LEVEL_SHIFT, 0xFFFFFF, game.level());
+        _seedField(who, AFFILIATE_BONUS_LEVEL_SHIFT, 0xFFFFFF, game.currentLvl());
     }
 
     function _seedDailyIdx(uint256 day) internal {
@@ -546,6 +546,6 @@ contract V61RngFreezeIntact is DeployProtocol {
 
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 }

@@ -160,7 +160,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
 
     // ---- F10 (sDGNRS side) ----
 
-    /// @dev `transferFromPool` returns exactly what it took out of the pool and out of the contract balance.
+    /// @dev `transferFromPool_g106128` returns exactly what it took out of the pool and out of the contract balance.
     /// forge-config: default.fuzz.runs = 64
     function testFuzz_F10_transferFromPoolReturnsTheExactDecrement(uint8 poolSeed, uint256 keep, uint256 ask) public {
         sDGNRS.Pool pool = sDGNRS.Pool(bound(poolSeed, 0, 4));
@@ -168,7 +168,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
         keep = bound(keep, 0, cur);
         if (cur != keep) {
             vm.prank(address(game));
-            sdgnrs.transferFromPool(pool, address(0xdead), cur - keep);
+            sdgnrs.transferFromPool_g106128(pool, address(0xdead), cur - keep);
         }
         assertEq(sdgnrs.poolBalance(pool), keep);
         ask = bound(ask, 0, 2 * keep + 10);
@@ -177,7 +177,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
         uint256 selfBefore = sdgnrs.balanceOf(address(sdgnrs));
         uint256 toBefore = sdgnrs.balanceOf(to);
         vm.prank(address(game));
-        uint256 got = sdgnrs.transferFromPool(pool, to, ask);
+        uint256 got = sdgnrs.transferFromPool_g106128(pool, to, ask);
         assertEq(got, ask < poolBefore ? ask : poolBefore, "returns the clamped amount");
         assertEq(poolBefore - sdgnrs.poolBalance(pool), got, "F10: the pool fell by the returned amount");
         assertEq(selfBefore - sdgnrs.balanceOf(address(sdgnrs)), got, "and so did the contract balance");

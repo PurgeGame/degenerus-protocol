@@ -357,7 +357,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
     function exportBattleNativeFixture() external {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
-        _nativeFixture("battle_first_checkpoint", MINER, address(game), abi.encodeCall(game.mineFlip, (0)));
+        _nativeFixture("battle_first_checkpoint", MINER, address(game), abi.encodeCall(game.mineRun, (0)));
     }
 
     function test_MaxProductionMinerPassBranches() public {

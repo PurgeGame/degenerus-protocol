@@ -30,7 +30,7 @@ contract CrapsCompDonationTest is DeployProtocol {
         slot = JackpotBattle(address(crapsBattle)).createBattle(300, 4, 5, 2, uint40(block.timestamp + 1 hours), false, 0);
         index = slot - crapsBattle.CUSTOM_SLOT_BASE();
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(player, 2_000);
+        coin.mintForGame_g152734(player, 2_000);
         vm.prank(player);
         uint256 betId = crapsBattle.enterBattle(slot, uint32(0), 1);
         key = crapsBattle.battleKeyOf(betId);

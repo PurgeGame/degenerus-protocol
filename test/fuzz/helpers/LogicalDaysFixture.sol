@@ -17,7 +17,7 @@ abstract contract LogicalDaysFixture is DegenesisDeployProtocol {
                 (,,bool delivered) = mockVRF.pendingRequests(pending);
                 if (!delivered) mockVRF.fulfillRandomWords(pending, 777);
             }
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("daily request did not commit");
     }
@@ -26,7 +26,7 @@ abstract contract LogicalDaysFixture is DegenesisDeployProtocol {
         for (uint256 i; i < 500; ++i) {
             (bool complete,,) = game.dailySessionState();
             if (complete || game.currentDayView_g542950() > requested) return;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("daily certificate not reached");
     }
@@ -36,7 +36,7 @@ abstract contract LogicalDaysFixture is DegenesisDeployProtocol {
         _finishLogical();
     }
     function _nextRequestAfter(uint256 oldId) internal {
-        for (uint256 i; i < 500 && mockVRF.lastRequestId() == oldId; ++i) game.mineFlip(0);
+        for (uint256 i; i < 500 && mockVRF.lastRequestId() == oldId; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), oldId);
     }
     function _rotateLogical() internal returns (MockVRFCoordinator vrf) {

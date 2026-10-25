@@ -59,7 +59,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     function _enter(address p, uint256 amount) internal {
         _fund(p, amount);
         vm.prank(p);
-        wwxrp.enter(0, amount);
+        wwxrp.enterDraw(0, amount);
     }
 
     function _gameId(address p) internal view returns (uint32) {
@@ -142,7 +142,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
         vm.recordLogs();
         vm.prank(p);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 n, uint32 rid, address owner) = _registrations(logs);
@@ -173,7 +173,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertTrue(seen);
 
         vm.prank(p);
-        wwxrp.enter(expectedId, 100);
+        wwxrp.enterDraw(expectedId, 100);
         (eid,) = wwxrp.entryAt(day, bucket, 1);
         assertEq(eid, expectedId, "same bucket, same ID; no second registration");
     }
@@ -200,11 +200,11 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(uint256(3_000_000_001)));
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(n);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         assertEq(wwxrp.balanceOf(n), 1_000);
         uint24 day = _today();
         vm.prank(e);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         (uint32 got,) = wwxrp.entryAt(day, wwxrp.bucketOf(day, eid), 0);
         assertEq(got, eid);
     }
@@ -235,9 +235,9 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         _fund(p, 1_000);
         _fund(q, 1_000);
         vm.prank(p);
-        wwxrp.enter(pid, 1_000);
+        wwxrp.enterDraw(pid, 1_000);
         vm.prank(q);
-        wwxrp.enter(qid, 1_000);
+        wwxrp.enterDraw(qid, 1_000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(_effectiveOf(logs, p), (1_000 * wwxrp.drawMultBps(pScore) * 10_400) / 1e8, "tier-1 boost (+4%)");
@@ -322,7 +322,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     /// @notice An x99 burn writes ONE incinerator slot `cum | id << 192` (the next slot untouched);
     ///         resolve returns the reference winner's ID and credits it.
     function test_Incinerator_OneSlotEntry_ResolveReturnsAndCreditsId() public {
-        vm.mockCall(address(game), abi.encodeWithSignature("level()"), abi.encode(uint24(199)));
+        vm.mockCall(address(game), abi.encodeWithSignature("currentLvl()"), abi.encode(uint24(199)));
         address p1 = makeAddr("incin_1");
         address p2 = makeAddr("incin_2");
         _fund(p1, 1_000);
@@ -330,7 +330,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
 
         vm.record();
         vm.prank(p1);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         (, bytes32[] memory writes) = vm.accesses(address(wwxrp));
         bytes32 s0 = _incinSlot(200, 0);
         uint256 hits;
@@ -340,7 +340,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         }
         assertEq(hits, 1, "one struct store");
         vm.prank(p2);
-        wwxrp.enter(0, 300);
+        wwxrp.enterDraw(0, 300);
         uint32 id1 = _gameId(p1);
         uint32 id2 = _gameId(p2);
 

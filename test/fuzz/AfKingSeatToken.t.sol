@@ -31,7 +31,7 @@ contract AfKingSeatToken is SeatFixture {
         uint256 beforeRequest = mockVRF.lastRequestId();
         // Subscription preparation and maintenance can consume an earlier
         // call. Stop only when the engine has actually issued the request.
-        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "engine should open a VRF request");
         assertGt(mockVRF.lastRequestId(), beforeRequest, "fresh request opened");
     }
@@ -196,7 +196,7 @@ contract AfKingSeatToken is SeatFixture {
         vm.deal(owner, 10 ether);
         // The owner registers through a plain ticket purchase (no pass, no seat).
         vm.prank(owner);
-        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(afkingSubToken.balanceOf(owner), 0);
         _grantSmurfBase(owner, 1);
         uint32 smurfId = _createSmurf(owner);

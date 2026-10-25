@@ -383,7 +383,7 @@ contract CrapsRngSealHandler is Test {
         }
         vm.recordLogs();
         if (asActor) vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < n; i++) {
             uint64 slot = armedSlots[i];
@@ -482,7 +482,7 @@ contract CrapsRngSealHandler is Test {
     ///      progress, so the engine stops at the next checkpoint it cannot admit.
     function _minimalEngineStep() internal returns (bool ok) {
         for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
-            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) return true;
         }
     }
@@ -594,7 +594,7 @@ contract CrapsRngSealHandler is Test {
         uint256 flipA = coin.balanceOf(a);
         uint256 flipB = coin.balanceOf(b);
         vm.prank(a);
-        try craps.enterBonusBattle(pa, _board(boardSeed), 1) returns (uint256 betId) {
+        try craps.throwCraps(pa, _board(boardSeed), 1) returns (uint256 betId) {
             _trackBet(betId);
             ghost_entries++;
         } catch {
@@ -602,7 +602,7 @@ contract CrapsRngSealHandler is Test {
         }
         ghost_flipBurnedIn += flipA - coin.balanceOf(a);
         vm.prank(b);
-        try craps.enterBonusBattle(pb, _board(boardSeed + 1), 1) returns (uint256 betId) {
+        try craps.throwCraps(pb, _board(boardSeed + 1), 1) returns (uint256 betId) {
             _trackBet(betId);
             ghost_entries++;
         } catch {
@@ -651,7 +651,7 @@ contract CrapsRngSealHandler is Test {
         uint256 flip0 = coin.balanceOf(currentActor);
         (bool open, bool midDay, bytes32 h0) = _before();
         vm.prank(currentActor);
-        try craps.enterBonusBattle(p, _board(boardSeed), mult) returns (uint256 betId) {
+        try craps.throwCraps(p, _board(boardSeed), mult) returns (uint256 betId) {
             _trackBet(betId);
             ghost_entries++;
         } catch {}
@@ -676,7 +676,7 @@ contract CrapsRngSealHandler is Test {
         uint256 flip0 = coin.balanceOf(currentActor);
         (bool open, bool midDay, bytes32 h0) = _before();
         vm.prank(currentActor);
-        try craps.enterBonusDay(_board(boardSeed), mult) returns (uint256) {
+        try craps.playCraps(_board(boardSeed), mult) returns (uint256) {
             ghost_entries++;
             ghost_dayTickets++;
         } catch {}
@@ -1318,14 +1318,14 @@ contract CrapsRngSealHandler is Test {
     function _fund(address who) internal {
         if (coin.balanceOf(who) >= FLIP_FLOOR) return;
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, FLIP_TOP_UP);
+        coin.mintForGame_g152734(who, FLIP_TOP_UP);
     }
 
     function _buyTicket() internal {
         (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei == 0 || priceWei > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {}
+        try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {}
             catch {}
     }
 

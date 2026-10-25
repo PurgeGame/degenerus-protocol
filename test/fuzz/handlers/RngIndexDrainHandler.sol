@@ -72,7 +72,7 @@ abstract contract RngIndexDrainOracle is Test {
     }
 
     function _snapshotDrain(DegenerusGame subject) internal view returns (DrainSnapshot memory snap) {
-        uint24 lvl = subject.level();
+        uint24 lvl = subject.currentLvl();
         snap.firstLevel = lvl == 0 ? 0 : lvl - 1;
         snap.index = _lrIndexOf(subject);
         snap.round = _roundOf(subject);
@@ -232,7 +232,7 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = priceWei * qty / 400;
         vm.prank(actor);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function advance() external {
@@ -248,7 +248,7 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         bool ok;
         for (uint256 k; k < 3 && !ok; ++k) {
             vm.recordLogs();
-            try game.mineFlip{gas: allowances[k]}(k == 0 ? type(uint32).max : 0) {
+            try game.mineRun{gas: allowances[k]}(k == 0 ? type(uint32).max : 0) {
                 ok = true;
             } catch (bytes memory err) {
                 // Reverted logs are not committed state and must not be scored.

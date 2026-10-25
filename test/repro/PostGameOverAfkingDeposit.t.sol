@@ -27,7 +27,7 @@ contract PostGameOverAfkingDeposit is DeployProtocol {
         vm.warp(block.timestamp + 370 days);
         for (uint256 i; i < 40 && !game.gameOver(); i++) {
             vm.prank(keeper);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
                 (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -44,7 +44,7 @@ contract PostGameOverAfkingDeposit is DeployProtocol {
         _driveToGameOver();
         vm.warp(block.timestamp + 30 days + 1);
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
         require(game.isFinalSwept(), "fixture: final sweep did not run");
     }
 

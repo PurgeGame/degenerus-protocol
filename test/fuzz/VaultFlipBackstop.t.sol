@@ -97,7 +97,7 @@ contract VaultFlipBackstopTest is DeployProtocol {
             assertEq(coin.vaultMintAllowance(), allowanceBefore, "zero deposit banks without minting");
             // A later direct settle cannot duplicate the bank, or alter the Game stamp.
             vm.prank(ContractAddresses.GAME);
-            coinflip.depositCoinflip(1, 0);
+            coinflip.playCoinflip(1, 0);
             (uint128 afterBank,) = _position();
             assertEq(afterBank, bank);
             assertEq(host.stamp(), DAY);
@@ -120,7 +120,7 @@ contract VaultFlipBackstopTest is DeployProtocol {
     function test_externalSettleLeavesOwnStampAndDueCheckpointIsSafeRedundancy() public {
         _seed(76, DAY - 76, 0);
         vm.prank(ContractAddresses.VAULT);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         (uint128 bank,) = _position();
         assertEq(bank, 76 * 12_500, "44 + 31 + 1 recovery backlog retained");
         assertEq(host.stamp(), DAY - 76);

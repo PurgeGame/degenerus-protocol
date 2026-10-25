@@ -65,7 +65,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
     function testColdAdvanceAwardsSixAtMaximumSearchDepthAndResumes() public {
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 10_000_000}(0);
+        game.mineRun{gas: 10_000_000}(0);
         uint256 used = beforeGas - gasleft() + 21_192;
         emit log_named_uint("cold RNG settlement plus six automatic boons including intrinsic", used);
         // This call must make progress with the supplied allowance and commit all six awards.
@@ -82,7 +82,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 7);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.recordLogs();
-        game.mineFlip(0);
+        game.mineRun(0);
         logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != keccak256("ProtocolBoonDrawAwarded(uint32,uint32,uint24,uint8,uint32,uint8)"), "resume re-awarded a slot");
@@ -119,7 +119,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
 
     function testInsufficientGasCannotDiscardOrSealAwards() public {
         uint24 day = game.currentDayView_g542950();
-        (bool ok,) = address(game).call{gas: 100_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
+        (bool ok,) = address(game).call{gas: 100_000}(abi.encodeCall(game.mineRun, (uint32(0))));
         // A low-gas call may return without progress or fail naturally; neither may
         // consume the day word or drop any owed boon.
         ok;
@@ -127,7 +127,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
         assertEq(game.rngWordForDay(day), 0, "failed advance cannot record the word");
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 0);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 0);
-        game.mineFlip(0);
+        game.mineRun(0);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 7);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 7);
     }

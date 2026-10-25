@@ -63,7 +63,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         assertTrue(found, "bob settled");
         (, ethBase,,,) = _batch(id);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "a settled batch releases its whole reserve");
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
     }
 
     function test_BurnersInOneBatchGetOneClosePriceRegardlessOfOrder() public {
@@ -189,7 +189,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
             (, settling) = _state();
             if (settling != first + 1) break;
             require(game.nextMinerAction() != 2, "harness: only the mid-day word is answered");
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         (, settling) = _state();
         assertTrue(settling != first + 1, "bob's batch settled on the mid-day session");
@@ -229,7 +229,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         uint256 sdgnrsBalance = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs));
         vm.recordLogs();
         vm.prank(address(game));
-        uint256 pull = sdgnrs.closeRedemptionBatch(gameClaimable);
+        uint256 pull = sdgnrs.closeRedemptionBatch_g165517(gameClaimable);
         assertEq(_sdgnrsTransfers(vm.getRecordedLogs()), 0, "the close emits no Transfer");
 
         (uint32 open,) = _state();
@@ -376,7 +376,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
 
         vm.warp(vm.getBlockTimestamp() + 14 days);
         assertTrue(game.livenessTriggered(), "unanswered for the dead window");
-        for (uint256 i; i < 200 && !game.gameOver(); ++i) game.mineFlip(0);
+        for (uint256 i; i < 200 && !game.gameOver(); ++i) game.mineRun(0);
         assertTrue(game.gameOver(), "deterministic ending reached game over");
 
         (, uint256 ethBase,, uint16 roll, uint16 flip) = _batch(first);

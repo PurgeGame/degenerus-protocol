@@ -130,7 +130,7 @@ abstract contract VaultBafRig is DeployProtocol {
         if (game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return false;
         uint256[6] memory ladder = [uint256(1_500_000), 2_500_000, 3_500_000, 5_000_000, 9_000_000, 16_777_216];
         for (uint256 r; r < ladder.length; ++r) {
-            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (ok) return true;
             if (bytes4(err) != MineFlipGas.InsufficientExecutionGas.selector) return false;
         }
@@ -157,7 +157,7 @@ abstract contract VaultBafRig is DeployProtocol {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
-        game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
@@ -291,7 +291,7 @@ abstract contract VaultBafRig is DeployProtocol {
 ///
 /// @notice The x0 last-purchase seal arms tomorrow's BAF draw after today's coinflip result
 ///         is applied, and in the same step settles the vault's resolved flips through the
-///         existing `depositCoinflip(1, 0)` entry. Drives the real advance path (the
+///         existing `playCoinflip(1, 0)` entry. Drives the real advance path (the
 ///         turbo-chained rig of BafDrawArming) and pins:
 ///         - Reference equality: a player holding the vault's exact position who claims at
 ///           the last moment that still scores the bracket (the close of the day before the
@@ -429,7 +429,7 @@ contract VaultBafSettlement is VaultBafRig {
         // Settle everything before the latch day, so the latch day's stake is the vault's only
         // unsettled flip; then stake it.
         vm.prank(POKER);
-        coinflip.depositCoinflip(1, 0);
+        coinflip.playCoinflip(1, 0);
         _stageDay();
         uint256 stake = _stake(VAULT, latchDay);
         assertGt(stake, 0, "harness: the vault stakes the latch day");

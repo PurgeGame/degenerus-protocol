@@ -221,17 +221,17 @@ contract BafWeightedDrawTest is DeployProtocol {
 
         // Permissionless gift: bob funds a stake credited to alice.
         vm.prank(GAME);
-        coin.mintForGame(bob, 1_000);
+        coin.mintForGame_g152734(bob, 1_000);
         vm.prank(bob);
-        coinflip.depositCoinflip(aliceId, 1_000);
+        coinflip.playCoinflip(aliceId, 1_000);
 
         // Approved-operator deposit: operator spends alice's FLIP for her stake.
         vm.prank(alice);
         game.setOperatorApproval(0, operator, true);
         vm.prank(GAME);
-        coin.mintForGame(alice, 1_000);
+        coin.mintForGame_g152734(alice, 1_000);
         vm.prank(operator);
-        coinflip.depositCoinflip(aliceId, 1_000);
+        coinflip.playCoinflip(aliceId, 1_000);
 
         // Protocol flip credit (quest-reward shape).
         vm.prank(ContractAddresses.QUESTS);
@@ -282,7 +282,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         // Day-3 deposits stake day 4: arm day 4 and rebet out of the winnings.
         _arm(4);
         vm.prank(alice);
-        coinflip.depositCoinflip(0, 500);
+        coinflip.playCoinflip(0, 500);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 1, "the rebet enters once");
@@ -411,9 +411,9 @@ contract BafWeightedDrawTest is DeployProtocol {
     /// @dev Mint wallet FLIP and self-deposit it (direct — carries draw weight).
     function _selfDeposit(address who, uint256 amount) internal {
         vm.prank(GAME);
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(0, amount);
+        coinflip.playCoinflip(0, amount);
     }
 
     /// @dev Scan words until the draw's domain hash lands exactly on `target`.

@@ -274,7 +274,7 @@ contract LoanAccountingHandler is Test {
 
     function _seed(uint256 a, uint256 b) internal {
         uint256 idx = a % accts.length;
-        uint256 lo = uint256(game.level()) + 3;
+        uint256 lo = uint256(game.currentLvl()) + 3;
         if (lo > MAX_LEVEL) return;
         uint24 lvl = uint24(lo + (b >> 8) % (MAX_LEVEL - lo + 1));
         _seedAt(idx, lvl, uint32(1 + b % 600));
@@ -312,7 +312,7 @@ contract LoanAccountingHandler is Test {
 
     function _borrow(uint256 a, uint256 b, bool plan) internal {
         BorrowCtx memory c;
-        c.lvl = game.level();
+        c.lvl = game.currentLvl();
         c.cl = jackpotPhase ? c.lvl : uint256(c.lvl) + 1;
         uint256 maxDue = c.cl + 98 < MAX_LEVEL - 2 ? c.cl + 98 : MAX_LEVEL - 2;
         if (uint256(c.lvl) + 1 > maxDue) return;
@@ -407,7 +407,7 @@ contract LoanAccountingHandler is Test {
         if (idx == type(uint256).max) return;
         Loan memory l = loans[idx];
         uint32 id = accts[idx].id;
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 c = lvl > l.start ? lvl - l.start : 1;
         uint256 owed = l.principal * (100 + (l.due - l.start) + 4 * c) / 100;
         // Winnings the account may spend on the repayment.
@@ -423,7 +423,7 @@ contract LoanAccountingHandler is Test {
         uint256 lenderFunds = _funds(l.lender);
         vm.deal(payer, payer.balance + value);
         vm.prank(payer);
-        try game.repay{value: value}(id) {
+        try game.clearDebtNow{value: value}(id) {
             if (!ok) {
                 _flag(1, "repay succeeded where the spec rejects it");
                 return;
@@ -499,7 +499,7 @@ contract LoanAccountingHandler is Test {
     }
 
     function _advance(uint256 a, uint256 b, bool plan) internal {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint24 minDue = type(uint24).max;
         for (uint256 i; i < accts.length; ++i) {
             if (loans[i].open && loans[i].due < minDue) minDue = loans[i].due;
@@ -583,7 +583,7 @@ contract LoanAccountingHandler is Test {
         if ((b >> 8) & 1 == 1 && game.nextMinerAction() == ACTION_SEIZE_LOANS) {
             uint256 gasCap = 600_000 + (b >> 16) % 2_400_000;
             for (uint256 i; i < 64 && _pending(); ++i) {
-                try game.mineFlip{gas: gasCap}(0) {} catch { break; }
+                try game.mineRun{gas: gasCap}(0) {} catch { break; }
                 ++ghost_chunkedSettles;
             }
         }
@@ -722,7 +722,7 @@ contract LoanAccountingHandler is Test {
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         game.raiseSmurfBaseAllowance(id, 8);
         vm.prank(address(game));
-        sdgnrsToken.transferFromPool(sDGNRS.Pool.Reward, who, 1e12);
+        sdgnrsToken.transferFromPool_g106128(sDGNRS.Pool.Reward, who, 1e12);
         accts.push(Acct(id, uint8(actor), false, uint16(accts.length), 0, 0));
         idxOf[id] = accts.length;
         liveMain[actor] = accts.length;
@@ -827,7 +827,7 @@ contract LoanAccountingHandler is Test {
 
     /// @dev Invariant 5: owners, open loans and due lists match the model.
     function checkOwnership() external view {
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 open;
         for (uint256 i; i < accts.length; ++i) {
             uint32 id = accts[i].id;

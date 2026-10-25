@@ -33,7 +33,7 @@ contract LootboxBoostBlendPin is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -41,7 +41,7 @@ contract LootboxBoostBlendPin is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
     }
@@ -62,7 +62,7 @@ contract LootboxBoostBlendPin is DeployProtocol {
     function _buyBoxes(uint48 idx, uint256 n, uint256 amount) internal returns (uint256 position) {
         position = RecyclingState.boxCount(address(game), idx);
         vm.prank(player);
-        game.purchase{value: n * amount + 1 ether}(
+        game.purchaseOrderFor{value: n * amount + 1 ether}(
             0, 400, BoxOrderLib.boCustoms(n, amount), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(RecyclingState.boxCount(address(game), idx), position + 1, "one entry per purchase");

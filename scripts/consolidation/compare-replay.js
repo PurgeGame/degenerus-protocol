@@ -182,7 +182,7 @@ for (const mutation of ['slot', 'payout', 'event', 'revert']) {
 }
 const forbidden = [
   ['mod:Mint', 'purchase(uint32,uint256,uint256,bytes32,uint8)'],
-  ['mod:Mint', 'borrow(uint32,uint24,uint256,uint256)'], ['mod:Mint', 'repay(uint32)'],
+  ['mod:Mint', 'borrow(uint32,uint24,uint256,uint256)'], ['mod:Mint', 'clearDebtNow(uint32)'],
   ['mod:Mint', 'createSmurf(bytes32,uint8)'], ['mod:Mint', 'raiseSmurfBaseAllowance(uint32,uint16)'],
   ['mod:Mint', 'sweepAccounts(uint32[])'], ['mod:Mint', 'redeemFlip(uint32,uint256)'],
   ['mod:Mint', 'withdrawAfkingFunding(uint32,uint256)'],
@@ -281,8 +281,8 @@ if (mode === '--p6' || mode === '--integrated') {
 const gameEdges = [];
 if (phase === 'P3' || mode === '--integrated') {
   for (const signature of [
-    'mineFlip(uint32)', 'minerAction()', 'playerActivityScoreCachedById(uint32)',
-    'placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)', 'issueDeityBoon(uint32,uint32,uint8)',
+    'mineRun(uint32)', 'minerAction()', 'playerActivityScoreCachedById(uint32)',
+    'betDegenerette(uint32,uint8,uint128,uint8,uint8)', 'giveBoon(uint32,uint32,uint8)',
     'consumeCoinflipBoon(uint32)', 'consumeDecimatorBoost(uint32)',
     'claimBingo(uint32,uint24,uint8,uint32[8])', 'claimAffiliateDgnrs(uint32)',
     'maybeCurse(uint32)', 'drainAffiliateBases(uint256,uint256)',

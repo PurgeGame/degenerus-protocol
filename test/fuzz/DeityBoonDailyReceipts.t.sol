@@ -50,7 +50,7 @@ contract DeityBoonDailyReceiptsTest is DeployProtocol {
 
     function _give(address owner, uint32 deity, uint32 to, uint8 slot) private {
         vm.prank(owner);
-        game.issueDeityBoon(deity, to, slot);
+        game.giveBoon(deity, to, slot);
     }
 
     function test_SixSameDayGiftsFromTwoDeities() public {

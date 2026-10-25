@@ -213,7 +213,7 @@ contract DegenesisSolvencyHandler is Test {
         uint256 qty = ticketSeed % 3 == 0 ? 0 : bound(ticketSeed, 400, 400 * 600);
         uint256 value = box + priceWei * qty / 400;
         vm.prank(a);
-        try game.purchase{value: value}(0, qty, BoxOrderLib.boCustom(box), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: value}(0, qty, BoxOrderLib.boCustom(box), bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_deposited += value;
             ++ghost_creditBuys;
         } catch {}
@@ -257,7 +257,7 @@ contract DegenesisSolvencyHandler is Test {
         uint256 poolBefore = game.claimablePoolView();
         int256 surplusBefore = surplus();
         vm.prank(a);
-        try game.buyDegenesisBox{value: value}(0, amount) {
+        try game.purchaseDegenesisBox{value: value}(0, amount) {
             if (surplus() != surplusBefore) _flag("a Degenesis buy moved backing minus obligations");
             if (c < 1 || c > 7) {
                 _flag("a Degenesis buy landed outside the sale days");
@@ -293,13 +293,13 @@ contract DegenesisSolvencyHandler is Test {
             uint256 qty = 25 ether / priceWei * 400;
             uint256 value = priceWei * qty / 400;
             vm.prank(a);
-            try game.purchase{value: value}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchaseOrderFor{value: value}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
                 ghost_deposited += value;
             } catch {}
         }
         uint256 qtyFlip = bound(qtySeed, 400, 4000);
         vm.prank(address(game));
-        coin.mintForGame(a, 10_000_000 ether);
+        coin.mintForGame_g152734(a, 10_000_000 ether);
         uint256 credit = game.degenesisCreditOf(a);
         uint256 balBefore = address(game).balance;
         vm.prank(a);
@@ -327,7 +327,7 @@ contract DegenesisSolvencyHandler is Test {
         uint256 eth = a.balance;
         uint256 steth = st.balanceOf(a);
         vm.prank(a);
-        try game.claimWinnings(0) {
+        try game.claimClaimable(0) {
             ++ghost_claims;
             ghost_claimed += (a.balance - eth) + (st.balanceOf(a) - steth);
         } catch {}
@@ -437,7 +437,7 @@ contract DegenesisSolvencyHandler is Test {
         int256 surplusBefore = surplus();
         uint256 requestedBefore = dayIndex();
         vm.recordLogs();
-        try game.mineFlip{gas: g}(0) {
+        try game.mineRun{gas: g}(0) {
             ran = true;
             ++ghost_mines;
         } catch {}

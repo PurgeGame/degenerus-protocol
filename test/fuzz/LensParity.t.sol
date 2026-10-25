@@ -493,7 +493,7 @@ contract LensSettlementParity is DeployProtocol {
         // A scheduled Craps window can leave a mid-day request open; mining waits for its word.
         OpenVrfRequest.answer(mockVRF, vrfWord);
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
+        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -501,7 +501,7 @@ contract LensSettlementParity is DeployProtocol {
         }
         for (uint256 i; i < 50; ++i) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
     }

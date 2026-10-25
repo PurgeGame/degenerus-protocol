@@ -39,7 +39,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     }
 
     function _autoBurn() private returns (uint256 amount) {
-        uint24 lvl = game.level() + 1;
+        uint24 lvl = game.currentLvl() + 1;
         vm.prank(address(game));
         amount = coin.autoDecimatorBurn(lvl, 8000);
     }

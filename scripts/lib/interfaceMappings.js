@@ -16,8 +16,6 @@ const targets = {
   "contracts/interfaces/IsDGNRS.sol:IsDGNRS": "SDGNRS",
   "contracts/interfaces/IVaultCoin.sol:IVaultCoin": "COIN",
   "contracts/interfaces/IOwnerActions.sol:IOwnerVault": "VAULT",
-  "contracts/interfaces/IVaultPlayerActions.sol:IVaultWinnings": "GAME",
-  "contracts/interfaces/IVaultPlayerActions.sol:IVaultPartialWinnings": "GAME",
   "contracts/interfaces/IVaultPlayerActions.sol:IVaultAffiliateClaim": "GAME",
   "contracts/interfaces/IVaultPlayerActions.sol:IVaultBatchAffiliateClaim": "GAME",
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameAdvanceModule": "GAME_ADVANCE_MODULE",

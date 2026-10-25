@@ -217,7 +217,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
   describe("Anti-grind: the caller-composed aggregate is NEVER rounded (§4)", function () {
     it("[04a] `sweepDegeneretteBets` flushes through the shared `_flushOwner`, which mints `acc.flipMint` raw — no collapse at the flush", function () {
       // Bets resolve ONLY through the permissionless in-order sweep `sweepDegeneretteBets`
-      // (reached via `game.mineFlip`'s Degenerette stage), which loops queued bets
+      // (reached via `game.mineRun`'s Degenerette stage), which loops queued bets
       // into a shared ResolveAcc and delegates the per-owner payout to `_flushOwner` (called
       // once per owner-run and once at the end of the call). The entry-point body itself
       // does not inline the mint — pin it to the shared flush instead, which it routes through.
@@ -229,7 +229,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
       const body = bodyOf(DEGENERETTE, "function _flushOwner(");
       expect(
-        /if\s*\(\s*acc\.flipMint\s*!=\s*0\s*\)\s*\{?\s*coin\.mintForGame\(\s*_resolvePayee\(\s*acc\s*\)\s*,\s*acc\.flipMint\s*\)\s*;/.test(
+        /if\s*\(\s*acc\.flipMint\s*!=\s*0\s*\)\s*\{?\s*coin\.mintForGame_g152734\(\s*_resolvePayee\(\s*acc\s*\)\s*,\s*acc\.flipMint\s*\)\s*;/.test(
           body
         ),
         "the flush must mint the bare accumulator to the accumulated owner"

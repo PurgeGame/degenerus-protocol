@@ -91,7 +91,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
             uint256 nativeSnapshot = vm.snapshotState();
             vm.recordLogs();
             uint256 before = gasleft();
-            game.mineFlip{gas: 11_500_000 - 21_192}(0);
+            game.mineRun{gas: 11_500_000 - 21_192}(0);
             uint256 used = before - gasleft() + 21_192;
             Vm.Log[] memory logs = vm.getRecordedLogs();
             _exportTerminal(nativeSnapshot, string.concat("payout-", vm.toString(calls)));
@@ -128,8 +128,8 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) return;
         assertTrue(vm.revertToState(snapshot));
         string memory label = string.concat("terminal-", vm.toString(_extraWallWindows()), "-", _fresh() ? "fresh-" : "recorded-", stage);
-        this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
-        game.mineFlip{gas: 11_500_000 - 21_192}(0);
+        this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(game.mineRun, (uint32(0))));
+        game.mineRun{gas: 11_500_000 - 21_192}(0);
     }
 
     function _terminalPaid() private view returns (bool) {
@@ -154,11 +154,11 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
     ///      answers it with the word the winning buckets were seeded for.
     function _requestTerminalWord() private {
         uint256 before = mockVRF.lastRequestId();
-        game.mineFlip(0); // decision
-        game.mineFlip(0); // the (empty) loan book
+        game.mineRun(0); // decision
+        game.mineRun(0); // the (empty) loan book
         assertEq(mockVRF.lastRequestId(), before, "no request before the loan book is settled");
         uint256 requestSnapshot = vm.snapshotState();
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, before, "the ending sends its own terminal request");
         assertFalse(game.gameOver(), "the payout waits for the terminal word");
@@ -167,7 +167,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
             uint256 post = vm.snapshotState();
             assertTrue(vm.revertToState(requestSnapshot));
             this.exportNativeFixture(string.concat("terminal-request-", vm.toString(_extraWallWindows()), _fresh() ? "-fresh" : "-recorded"),
-                address(this), address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
+                address(this), address(game), abi.encodeCall(game.mineRun, (uint32(0))));
             assertTrue(vm.revertToState(post));
             vm.deleteStateSnapshot(post);
         }
@@ -185,7 +185,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
         uint256 nativeSnapshot = vm.snapshotState();
         vm.recordLogs();
         uint256 before = gasleft();
-        game.mineFlip{gas: 11_500_000 - 21_192}(0);
+        game.mineRun{gas: 11_500_000 - 21_192}(0);
         uint256 used = before - gasleft() + 21_192;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         if (_fresh()) _exportTerminal(nativeSnapshot, "apply");

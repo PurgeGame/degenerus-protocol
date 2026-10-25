@@ -152,7 +152,7 @@ describe("Paper Parity (Phase 46)", function () {
       const futureBefore = await game.futurePrizePoolView();
       await game
         .connect(alice)
-        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
+        .purchaseOrderFor(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
 
       // Verify pools received funds (90/10 split)
       const nextAfter = await game.nextPrizePoolView();
@@ -171,7 +171,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
+        .purchaseOrderFor(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
     });
 
     it("10 full tickets (qty=4000) costs 10 * priceWei", async function () {
@@ -185,7 +185,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
+        .purchaseOrderFor(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
     });
   });
 
@@ -202,7 +202,7 @@ describe("Paper Parity (Phase 46)", function () {
       const costWei = priceWei;
       await game
         .connect(alice)
-        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: costWei });
+        .purchaseOrderFor(0, qty, 0, ZeroHash, 0,false,  { value: costWei });
 
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =
@@ -231,7 +231,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchase(0, 0, boCustom(lootboxAmount), ZeroHash, 0,false,  {
+        .purchaseOrderFor(0, 0, boCustom(lootboxAmount), ZeroHash, 0,false,  {
           value: lootboxAmount,
         });
 

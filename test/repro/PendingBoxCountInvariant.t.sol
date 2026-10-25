@@ -151,7 +151,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             bool opened = ok && _pendingBoxCount() < before;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -196,7 +196,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         bool afking = game.rngConsumerStage_g379() == 2;
         if (afking) vm.recordLogs();
         if (caller != address(this)) vm.prank(caller);
-        game.mineFlip{gas: gasCap}(multiplier);
+        game.mineRun{gas: gasCap}(multiplier);
         if (!afking) return;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint32[] memory seen = new uint32[](logs.length);

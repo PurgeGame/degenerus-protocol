@@ -73,7 +73,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         vm.expectRevert(RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
-        game.mineFlip(0); // apply the word: the requested day is resolved, the lock still held
+        game.mineRun(0); // apply the word: the requested day is resolved, the lock still held
         // Nothing unresolved remains, so the armed positions are free even under the lock.
         vm.prank(armed);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
@@ -98,7 +98,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         for (uint256 d; d < 240; d++) {
             _fulfillPending(vrfWord);
             if (_daySealed()) return;
-            if (game.advanceDue()) game.mineFlip(0);
+            if (game.advanceDue()) game.mineRun(0);
         }
         revert("harness: day never settled");
     }
@@ -133,7 +133,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
     function _requestFreshDaily() internal returns (uint256 id) {
         uint256 previous = mockVRF.lastRequestId();
         for (uint256 i; i < 80; ++i) {
-            game.mineFlip(0);
+            game.mineRun(0);
             id = mockVRF.lastRequestId();
             if (id != previous) {
                 assertTrue(game.rngLocked(), "the new daily request holds the lock");
@@ -146,7 +146,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
     function _advanceUntilUnlocked() internal {
         for (uint256 i; i < 64; i++) {
             if (!game.rngLocked()) return;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         revert("harness: lock never released");
     }

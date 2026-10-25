@@ -122,7 +122,7 @@ contract CrapsCompBudgetTest is CrapsPins {
 
     function _seat(address who, uint256 period, uint16 mult) internal returns (uint256 betId) {
         vm.prank(who);
-        betId = craps.enterBonusBattle(period, _blank(), mult);
+        betId = craps.throwCraps(period, _blank(), mult);
     }
 
     function _code(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal returns (uint256) {
@@ -250,7 +250,7 @@ contract CrapsCompBudgetTest is CrapsPins {
     function test_aDayTicketCountsInEveryWindowItSitsIn() public {
         uint24 day = _openDay(10);
         vm.prank(alice);
-        craps.enterBonusDay(_blank(), 1);
+        craps.playCraps(_blank(), 1);
         _seat(bob, 1, 1);
         (uint256 bank,,) = craps.windowOf(_slotAt(day, 1));
         uint256 before = flip.compLane();
@@ -262,7 +262,7 @@ contract CrapsCompBudgetTest is CrapsPins {
     function test_anUpgradedDayWindowEarnsAsAHighSeatThereOnly() public {
         uint24 day = _openDay(10);
         vm.prank(alice);
-        craps.enterBonusDay(_blank(), 1);
+        craps.playCraps(_blank(), 1);
         vm.prank(alice);
         craps.upgradeDayWindows(0, day, 1 << 1);
         _seat(bob, 1, 1);
@@ -545,7 +545,7 @@ contract CrapsCompBudgetTest is CrapsPins {
     function test_aCompedDayIsThePaidDay() public {
         uint24 day = _openDay(10);
         vm.prank(bob);
-        craps.enterBonusDay(_blank(), 1);
+        craps.playCraps(_blank(), 1);
         uint256 paid = flip.burned(bob);
         uint256 charged = _comp(KIND_DAY, dave, false, 0, 0);
         assertEq(charged, paid, "the comped day was priced other than the paid one");
@@ -577,7 +577,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         uint24 day = _openDay(10);
         _comp(KIND_DAY, dave, false, 0, 0);
         vm.prank(bob);
-        craps.enterBonusDay(_blank(), 1);
+        craps.playCraps(_blank(), 1);
         vm.prank(bob);
         uint256 paid = craps.upgradeDayWindows(0, day, (1 << 2) | (1 << 5));
         uint256 laneBefore = flip.compFor(dave);
@@ -680,11 +680,11 @@ contract CrapsCompBudgetTest is CrapsPins {
         // The reserved holders may not take a second seat there, but may sit elsewhere.
         vm.prank(dave);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusBattle(1, _blank(), 1);
+        craps.throwCraps(1, _blank(), 1);
         _seat(dave, 3, 1);
         vm.prank(dave);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-        craps.enterBonusDay(_blank(), 1);
+        craps.playCraps(_blank(), 1);
         vm.prank(dave);
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
         craps.upgradeDayWindows(0, day, 1 << 1);

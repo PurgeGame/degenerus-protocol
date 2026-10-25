@@ -250,7 +250,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         uint256 p = _price();
         vm.deal(buyer, buyer.balance + p);
         vm.prank(buyer);
-        game.purchase{value: p}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: p}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
         id = _id(buyer);
     }
 
@@ -1342,7 +1342,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _assertCredit(c[0], _id(a), 1050);
         _assertCredit(c[1], _id(u1), 280);
         _assertCredit(c[2], _id(u2), 70);
-        assertEq(affiliate.affiliateScore(game.level() + 1, _id(a)), 1400, "leaderboard by ID");
+        assertEq(affiliate.affiliateScore(game.currentLvl() + 1, _id(a)), 1400, "leaderboard by ID");
     }
 
     function test_ClaimMutualReferralSkipsTheSubUpline() public {
@@ -1672,7 +1672,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         address actor = actors[r % actors.length];
         uint256 op = (r >> 8) % 6;
         bytes32 code = pool[(r >> 16) % n];
-        uint24 lvl = game.level() + 1; // Mixed real purchases/AFKing claims share the Game's level.
+        uint24 lvl = game.currentLvl() + 1; // Mixed real purchases/AFKing claims share the Game's level.
         uint256 amount = 1000 + ((r >> 40) % 100_000);
         if (op == 0) {
             vm.prank(actor);
@@ -1704,7 +1704,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     // =====================================================================
 
     function _deityRecipients(Vm.AccountAccess[] memory acc) internal view returns (address[] memory out) {
-        bytes[] memory t = _calls(acc, address(game), address(sdgnrs), sdgnrs.transferFromPool.selector);
+        bytes[] memory t = _calls(acc, address(game), address(sdgnrs), sdgnrs.transferFromPool_g106128.selector);
         uint256 n;
         for (uint256 i; i < t.length; ++i) {
             (IsDGNRS.Pool pool,,) = abi.decode(t[i], (IsDGNRS.Pool, address, uint256));
@@ -1808,12 +1808,12 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
     function _resolve(address player) private returns (uint32 id, uint256 amount, Vm.Log[] memory logs) {
         vm.deal(player, 1 ether);
         vm.prank(player);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, SYMBOL);
+        game.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, SYMBOL);
         _landWord(_wordScoring(7));
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(makeAddr("degCrank"));
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         logs = vm.getRecordedLogs();
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved");

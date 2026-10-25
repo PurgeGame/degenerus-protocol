@@ -74,7 +74,7 @@ contract SeatTenureDraw is DeployProtocol {
         // The day's request follows the day's preparation and Craps maintenance checkpoints
         // (each a separate keeper step), so crank until the real daily request is issued.
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
+        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), before, "harness: daily request issued");
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -83,7 +83,7 @@ contract SeatTenureDraw is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         _finishReadConsumers();
     }

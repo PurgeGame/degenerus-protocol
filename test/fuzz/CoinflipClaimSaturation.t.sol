@@ -94,7 +94,7 @@ contract CoinflipClaimSaturation is DeployProtocol {
         _setStored(MAX - 5);
         _creditAndWin();
         vm.prank(player);
-        coinflip.depositCoinflip(0, 0);
+        coinflip.playCoinflip(0, 0);
         assertEq(_stored(), MAX, "deposit settle: bank saturates");
     }
 

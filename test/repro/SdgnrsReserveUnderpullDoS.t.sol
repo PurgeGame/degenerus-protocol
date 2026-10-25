@@ -46,8 +46,8 @@ contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
         _setGameClaimablePool(uint128(1000 ether));
 
         vm.startPrank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerX, FUND);
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerY, FUND);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, playerX, FUND);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, playerY, FUND);
         vm.stopPrank();
 
         // FLIP legs no-op → escrow slice is 0, claim-time FLIP leg skipped; focus stays on ETH/stETH.

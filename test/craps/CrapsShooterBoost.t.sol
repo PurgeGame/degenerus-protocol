@@ -468,7 +468,7 @@ contract CrapsShooterBoostTest is CrapsPins {
             players[placed] = player;
             game.setScore(player, craps.SYBIL_SCORE_FLOOR());
             vm.prank(player);
-            ids[placed] = craps.enterBonusBattle(PER, _placed(placed), 1);
+            ids[placed] = craps.throwCraps(PER, _placed(placed), 1);
         }
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
@@ -649,7 +649,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         assertGt(hm, 1, "the fixture's day drew no high lane");
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(alice);
-        craps.enterBonusBattle(PER, _sevenChips(), uint16(hm));
+        craps.throwCraps(PER, _sevenChips(), uint16(hm));
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
@@ -831,7 +831,7 @@ contract CrapsShooterBoostTest is CrapsPins {
             players[i] = player;
             game.setScore(player, craps.SYBIL_SCORE_FLOOR());
             vm.prank(player);
-            ids[i] = craps.enterBonusBattle(PER, _placed(i % 8), 1);
+            ids[i] = craps.throwCraps(PER, _placed(i % 8), 1);
         }
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
@@ -876,7 +876,7 @@ contract CrapsShooterBoostTest is CrapsPins {
             address player = address(uint160(100 + i));
             game.setScore(player, craps.SYBIL_SCORE_FLOOR());
             vm.prank(player);
-            ids[i] = craps.enterBonusBattle(PER, _placed(i * 3), 1);
+            ids[i] = craps.throwCraps(PER, _placed(i * 3), 1);
         }
         uint64 slot = uint64(uint256(day) * 8 + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
@@ -1031,10 +1031,10 @@ contract CrapsShooterBoostTest is CrapsPins {
 
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(alice);
-        craps.enterBonusBattle(PER, _sevenChips(), 1);
+        craps.throwCraps(PER, _sevenChips(), 1);
         Craps.Bets memory blank;
         vm.prank(bob);
-        craps.enterBonusBattle(PER, blank, 1);
+        craps.throwCraps(PER, blank, 1);
 
         slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);

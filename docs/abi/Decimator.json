@@ -78,7 +78,7 @@
     "DegenerusGame": [
       {
         "type": "function",
-        "name": "decWindow",
+        "name": "decimatorActive",
         "inputs": [],
         "outputs": [
           {

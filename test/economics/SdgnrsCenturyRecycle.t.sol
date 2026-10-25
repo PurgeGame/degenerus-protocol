@@ -65,7 +65,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
 
     function _award(sDGNRS.Pool pool, address recipient, uint256 amount) private returns (uint256) {
         vm.prank(address(game));
-        return sdgnrs.transferFromPool(pool, recipient, amount);
+        return sdgnrs.transferFromPool_g106128(pool, recipient, amount);
     }
 
     /// @dev One Redemption-stage step as mineFlip dispatches it (the live worker, called as the
@@ -78,14 +78,14 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
             vm.prank(address(game));
             sdgnrs.runRedemptionWork(batchWord, g);
             bool moved = _cursor() != cursor
-                || !sdgnrs.redemptionSettlementPending();
+                || !sdgnrs.redemptionSettlementPending_g153837();
             assertTrue(vm.revertToState(snap));
             if (moved) {
                 vm.prank(address(game));
                 sdgnrs.runRedemptionWork(batchWord, g);
                 assertTrue(
                     _cursor() == cursor + 1
-                        || !sdgnrs.redemptionSettlementPending(),
+                        || !sdgnrs.redemptionSettlementPending_g153837(),
                     "harness: the step consumed exactly the FIFO head"
                 );
                 return;
@@ -362,7 +362,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         assertEq(sdgnrs.pendingRedemptionEthValue(), reserve - alicePayout);
         _settleOneClaim();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertEq(sdgnrs.totalSupply(), supply);
         _assertRefill(300, 0);
     }
@@ -386,7 +386,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         vm.warp(block.timestamp + 400 days);
         for (uint256 i; i < 240 && !game.gameOver(); ++i) {
             if (game.advanceDue() || game.rngLocked()) {
-                try game.mineFlip(0) {} catch {}
+                try game.mineRun(0) {} catch {}
             }
             uint256 req = mockVRF.lastRequestId();
             if (req != 0) {

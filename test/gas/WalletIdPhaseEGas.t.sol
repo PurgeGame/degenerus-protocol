@@ -96,12 +96,12 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _restoreGame();
     }
 
-    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
+    function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.currentLvl() + 1); }
 
     function _ticket(address buyer, bytes32 code) private {
         uint256 price = _price();
         vm.prank(buyer);
-        game.purchase{value: price}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
     }
 
     function _default(address owner) private pure returns (bytes32) { return bytes32(uint256(uint160(owner))); }
@@ -181,29 +181,29 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
 
     function _flip(address player) private {
         vm.prank(address(game));
-        coin.mintForGame(player, 1_000_000);
+        coin.mintForGame_g152734(player, 1_000_000);
     }
 
     function test_Gas_CoinflipDepositNewWallet() public {
         _flip(FRESH);
         vm.prank(FRESH);
-        coinflip.depositCoinflip(0, 1000);
+        coinflip.playCoinflip(0, 1000);
         _report("coinflip_deposit_new_wallet");
     }
 
     function test_Gas_CoinflipDepositRegisteredUncached() public {
         _flip(REG);
         vm.prank(REG);
-        coinflip.depositCoinflip(0, 1000);
+        coinflip.playCoinflip(0, 1000);
         _report("coinflip_deposit_registered_uncached");
     }
 
     function test_Gas_CoinflipDepositRepeat() public {
         _flip(REG);
         vm.prank(REG);
-        coinflip.depositCoinflip(0, 1000);
+        coinflip.playCoinflip(0, 1000);
         vm.prank(REG);
-        coinflip.depositCoinflip(0, 1000);
+        coinflip.playCoinflip(0, 1000);
         _report("coinflip_deposit_repeat");
     }
 
@@ -283,7 +283,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(FRESH);
         vm.prank(FRESH);
-        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
+        crapsBattle.throwCraps(0, 1, BOARD, 1);
         _report("craps_window_first_new_wallet");
     }
 
@@ -291,7 +291,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(REG);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
+        crapsBattle.throwCraps(0, 1, BOARD, 1);
         _report("craps_window_first_registered");
     }
 
@@ -299,9 +299,9 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(REG);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
+        crapsBattle.throwCraps(0, 1, BOARD, 1);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(0, 2, BOARD, 1);
+        crapsBattle.throwCraps(0, 2, BOARD, 1);
         _report("craps_window_unchanged_board");
     }
 
@@ -309,9 +309,9 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(REG);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
+        crapsBattle.throwCraps(0, 1, BOARD, 1);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(0, 2, BOARD2, 1);
+        crapsBattle.throwCraps(0, 2, BOARD2, 1);
         _report("craps_window_changed_board");
     }
 
@@ -344,7 +344,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function _open(uint24 round) private {
-        vm.mockCall(address(game), abi.encodeWithSignature("growthState(uint24)", uint24(0)),
+        vm.mockCall(address(game), abi.encodeWithSignature("getGrowth(uint24)", uint24(0)),
             abi.encode(uint256(0), uint256(0), uint256(0), round, true, uint8(1)));
     }
 
@@ -405,16 +405,16 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     function test_Gas_WwxrpDailyFirstNewWallet() public {
         _wwxrp(FRESH);
         vm.prank(FRESH);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         _report("wwxrp_daily_first_new_wallet");
     }
 
     function test_Gas_WwxrpDailyRepeat() public {
         _wwxrp(REG);
         vm.prank(REG);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         vm.prank(REG);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         _report("wwxrp_daily_repeat");
     }
 
@@ -428,7 +428,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _level99();
         _wwxrp(REG);
         vm.prank(REG);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         _report("wwxrp_incinerator_first");
     }
 
@@ -436,9 +436,9 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _level99();
         _wwxrp(REG);
         vm.prank(REG);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         vm.prank(REG);
-        wwxrp.enter(0, 100);
+        wwxrp.enterDraw(0, 100);
         _report("wwxrp_incinerator_repeat");
     }
 }

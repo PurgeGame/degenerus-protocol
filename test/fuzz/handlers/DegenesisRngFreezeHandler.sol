@@ -222,7 +222,7 @@ contract DegenesisRngFreezeHandler is Test {
         vm.recordLogs();
         vm.prank(a);
         bool ok;
-        try game.buyDegenesisBox{value: amount}(0, amount) {
+        try game.purchaseDegenesisBox{value: amount}(0, amount) {
             ok = true;
             ++ghost_buys;
             if (open) ++ghost_buysWhileRequestOpen;
@@ -240,7 +240,7 @@ contract DegenesisRngFreezeHandler is Test {
         vm.recordLogs();
         vm.prank(a);
         bool ok;
-        try game.purchase{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchaseOrderFor{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
             ok = true;
             ++ghost_boxBuys;
             if (open) ++ghost_boxBuysWhileRequestOpen;
@@ -260,19 +260,19 @@ contract DegenesisRngFreezeHandler is Test {
         ++ghost_crapsAttempts;
         if (coin.balanceOf(a) < FLIP_TOP_UP / 2) {
             vm.prank(ContractAddresses.GAME);
-            coin.mintForGame(a, FLIP_TOP_UP);
+            coin.mintForGame_g152734(a, FLIP_TOP_UP);
         }
         (, uint256 period,) = craps.currentBonusSlot();
         vm.recordLogs();
         vm.prank(a);
         bool ok;
         if (period == 0) {
-            try craps.enterBonusDay(_board(boardSeed), 1) returns (uint256) {
+            try craps.playCraps(_board(boardSeed), 1) returns (uint256) {
                 ok = true;
                 ++ghost_crapsEntries;
             } catch {}
         } else {
-            try craps.enterBonusBattle(period, _board(boardSeed), 1) returns (uint256) {
+            try craps.throwCraps(period, _board(boardSeed), 1) returns (uint256) {
                 ok = true;
                 ++ghost_crapsEntries;
             } catch {}
@@ -288,7 +288,7 @@ contract DegenesisRngFreezeHandler is Test {
         if (cost == 0) return;
         if (coin.balanceOf(a) < cost) {
             vm.prank(ContractAddresses.GAME);
-            coin.mintForGame(a, cost + FLIP_TOP_UP);
+            coin.mintForGame_g152734(a, cost + FLIP_TOP_UP);
         }
         ++ghost_nudgeAttemptsInDailyWindow;
         vm.recordLogs();
@@ -311,11 +311,11 @@ contract DegenesisRngFreezeHandler is Test {
         vm.prank(caller);
         bool ok;
         if (g == 0) {
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ok = true;
             } catch {}
         } else {
-            try game.mineFlip{gas: g}(0) {
+            try game.mineRun{gas: g}(0) {
                 ok = true;
             } catch {}
         }
@@ -334,7 +334,7 @@ contract DegenesisRngFreezeHandler is Test {
             uint256 req0 = vrf.lastRequestId();
             vm.recordLogs();
             bool ok;
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ok = true;
             } catch {}
             _afterAction(_logsOf(ok), req0);
@@ -410,7 +410,7 @@ contract DegenesisRngFreezeHandler is Test {
             uint256 req0 = vrf.lastRequestId();
             vm.recordLogs();
             bool ok;
-            try game.mineFlip(0) {
+            try game.mineRun(0) {
                 ok = true;
             } catch {}
             _afterAction(_logsOf(ok), req0);

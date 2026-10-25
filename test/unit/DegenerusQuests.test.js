@@ -1041,7 +1041,7 @@ describe("DegenerusQuests", function () {
     async function makeLevelQuestEligible(hreEthers, game, player) {
       const layout = await compiledStorageLayout();
       const mintRoot = BigInt(layout.storage.find((entry) => entry.label === "mintPacked_").slot);
-      const lvl = await game.level();
+      const lvl = await game.currentLvl();
       const packed =
         (5n << 48n) | ((BigInt(lvl) + 1n) << 96n) | ((BigInt(lvl) + 1n) << 148n) | (400n << 208n);
       const slot = hreEthers.keccak256(

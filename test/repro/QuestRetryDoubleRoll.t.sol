@@ -70,7 +70,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
     function test_generationWindowWrittenAtRequestAndNeverRetry() public {
         _driveToLastPurchaseDay();
-        uint24 oldLevel = game.level();
+        uint24 oldLevel = game.currentLvl();
         // _driveToLastPurchaseDay only returns once lastPurchaseDay is latched (and the
         // daily lock is not yet held), i.e. AFTER _sealPurchaseDay (or the same-day turbo
         // latch) has already fired for the active purchase level (oldLevel + 1). That seal
@@ -85,8 +85,8 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         vm.roll(block.number + 100);
         vm.warp(block.timestamp + 1 days + 1);
         vm.recordLogs();
-        game.mineFlip(0);
-        assertEq(game.level(), oldLevel + 1, "fresh request advances the level");
+        game.mineRun(0);
+        assertEq(game.currentLvl(), oldLevel + 1, "fresh request advances the level");
         assertTrue(game.rngLocked(), "request returns with word still pending");
         // The level-promoting RNG request (_finalizeRngRequest) no longer writes this
         // mapping at all — the window was opened earlier, at the seal. The stamp recorded
@@ -101,7 +101,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         vm.roll(block.number + 17);
         vm.warp(block.timestamp + 21 hours);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
-        assertEq(game.level(), oldLevel + 1, "retry did not advance level");
+        assertEq(game.currentLvl(), oldLevel + 1, "retry did not advance level");
         assertEq(_generationStart(target), sealBlock, "retry preserves the sealed bound (never re-stamps)");
         assertEq(_generationStart(1), bootstrapStart, "old levels retain their bounds");
         assertEq(_generationStart(target + 1), 0, "future window remains unopened");
@@ -160,10 +160,10 @@ contract QuestRetryDoubleRoll is DeployProtocol {
             require(!game.gameOver(), "gameOver before reaching last-purchase-day");
 
             (, , bool lpd, bool rngL, ) = game.purchaseInfo_g1027();
-            if (game.level() >= 1 && lpd && !rngL) {
+            if (game.currentLvl() >= 1 && lpd && !rngL) {
                 _settleMidday();
                 (, , lpd, rngL, ) = game.purchaseInfo_g1027();
-                if (lpd && !rngL) return game.level();
+                if (lpd && !rngL) return game.currentLvl();
             }
 
             simTime += 1 days + 1;
@@ -174,14 +174,14 @@ contract QuestRetryDoubleRoll is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (, , bool lpd2, bool rngL2, ) = game.purchaseInfo_g1027();
-                if (game.level() >= 1 && lpd2 && !rngL2) {
+                if (game.currentLvl() >= 1 && lpd2 && !rngL2) {
                     // Settle the engine's own mid-day work (closed Craps windows) so the window
                     // is idle, as an unlocked last purchase day was before the engine refactor.
                     _settleMidday();
                     (, , lpd2, rngL2, ) = game.purchaseInfo_g1027();
-                    if (lpd2 && !rngL2) return game.level();
+                    if (lpd2 && !rngL2) return game.currentLvl();
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }
@@ -205,7 +205,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
             for (uint256 j = 0; j < 30; j++) {
                 QuestInfo[2] memory pre = quests.getActiveQuests();
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
                 if (!ok) break;
 
                 QuestInfo[2] memory post = quests.getActiveQuests();
@@ -244,7 +244,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
                 if (done) return;
                 _fulfillVrfIfPending();
             } else {
-                game.mineFlip(0);
+                game.mineRun(0);
             }
         }
         revert("harness: mid-day work did not settle");
@@ -257,7 +257,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchaseOrderFor{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending() internal {
@@ -265,7 +265,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         if (reqId == 0) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
-        uint256 randomWord = uint256(keccak256(abi.encode(block.timestamp, game.level(), reqId)));
+        uint256 randomWord = uint256(keccak256(abi.encode(block.timestamp, game.currentLvl(), reqId)));
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 

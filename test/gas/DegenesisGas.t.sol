@@ -458,7 +458,7 @@ abstract contract DegenesisSettleGas is DegenesisGasBase {
         host.hostWord(WORD);
         if (_kind() == Kind.DgnrsEmpty) {
             vm.prank(address(game));
-            sdgnrs.transferFromPool(sDGNRS.Pool.Degenesis, address(0xBEEF), type(uint256).max);
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Degenesis, address(0xBEEF), type(uint256).max);
             require(sdgnrs.poolBalance(sDGNRS.Pool.Degenesis) == 0, "fixture: drained");
         }
         for (uint256 i = _cursor(); i < n; ++i) {
@@ -882,7 +882,7 @@ contract DegenesisDayCloseGas is DegenesisGasBase {
             require(action != 0, "fixture: idle before the daily phase");
             // The external VRF request retains its forwarding minimum. Other
             // actions use extreme calibration to stop after mandatory progress.
-            game.mineFlip{gas: 16_000_000}(action == uint8(DegenerusGameStorage.MinerAction.RequestDaily) ? 10_000 : type(uint32).max);
+            game.mineRun{gas: 16_000_000}(action == uint8(DegenerusGameStorage.MinerAction.RequestDaily) ? 10_000 : type(uint32).max);
         }
         require(game.nextMinerAction() == ACTION_DAILY_PHASE, "fixture: daily phase");
         _etchHost();

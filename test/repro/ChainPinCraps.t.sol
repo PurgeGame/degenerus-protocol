@@ -316,7 +316,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
                 address who = (r >> 8) % 2 == 0 ? alice : bob;
                 game.setScore(who, floorScore);
                 vm.prank(who);
-                try craps.enterBonusBattle((r >> 16) % 6, SEVEN, 1) {} catch {}
+                try craps.throwCraps((r >> 16) % 6, SEVEN, 1) {} catch {}
             } else if (op == 5) {
                 uint48 b = craps.currentIndex();
                 if (!craps.rngCohortComplete(b) && craps.rngCohortComplete(b ^ 1)) _setWord(b, (r >> 8) | 2);
@@ -371,7 +371,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
             try craps.setPreferredBoard(0, chips) {} catch {}
         } else if (d == 1) {
             vm.prank(alice);
-            try craps.enterBonusBattle(1, chips, 1) {} catch {}
+            try craps.throwCraps(1, chips, 1) {} catch {}
         } else if (d == 2) {
             uint64 slot = craps.createBattle(300, 2, 5, 0, uint40(vm.getBlockTimestamp() + 1 hours), true, 0);
             vm.prank(alice);
@@ -489,7 +489,7 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
         address who = address(uint160(uint256(keccak256(abi.encode("pin-bettor", a % 4)))));
         vm.deal(who, 10 ether);
         vm.prank(who);
-        try game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, uint8(a % 24)) {} catch {}
+        try game.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, uint8(a % 24)) {} catch {}
     }
 
     function _box(uint256 a) internal {
@@ -497,7 +497,7 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
         uint256 amt = 0.01 ether + (a % 5) * 0.01 ether;
         vm.deal(who, 10 ether);
         vm.prank(who);
-        try game.purchase{value: amt + 1 ether}(
+        try game.purchaseOrderFor{value: amt + 1 ether}(
             0, 400, BoxOrderLib.boCustomFloor(amt), bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
     }
@@ -527,7 +527,7 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
             _box(a);
         } else if (op == 10) {
             vm.prank(address(uint160(a)));
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
         } else {
             vm.warp(vm.getBlockTimestamp() + a % 6 hours);
         }
@@ -578,7 +578,7 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
         handler.fulfil(11);
         _couplings();
         for (uint256 i; i < 96 && !crapsBattle.rngCohortComplete(i0); ++i) {
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             _couplings();
         }
         assertTrue(crapsBattle.rngCohortComplete(i0), "fixture: the FIFO never drained");
@@ -677,7 +677,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + gap * 1 days);
         assertEq(crapsBattle.currentDayIndex(), beforeDay, "calendar gap creates no table days");
         assertEq(crapsBattle.minerSlot(), beforeCursor, "calendar gap creates no cursor debt");
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertTrue(game.nextMinerAction() != 1, "gap is inside the completion deadline");
         for (uint256 i; i < 300; ++i) {
             _fulfilPending();
@@ -685,7 +685,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
                 (bool complete,,) = game.dailySessionState();
                 if (complete && !crapsBattle.minerMaintenancePending_g11976()) return;
             }
-            game.mineFlip{gas: 16_700_000}(0);
+            game.mineRun{gas: 16_700_000}(0);
             assertLe(game.currentDayView_g542950(), beforeDay + 1, "one round per actual reset");
         }
         fail("one delayed round did not complete");
@@ -700,7 +700,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         bool pending = crapsBattle.minerMaintenancePending_g11976();
         uint24 today = crapsBattle.currentDayIndex();
         if (uint256(crapsBattle.minerSlot()) / 8 + 30 < today) assertTrue(pending, "an expired cursor is owed maintenance");
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
         assertLe(uint256(game.nextMinerAction()), 20);
         assertLe(uint256(game.minerAction()), 21);
     }

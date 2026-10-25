@@ -211,7 +211,7 @@ contract BoxCreationHandler is Test {
         Pre memory pre = _pre();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchase{value: value}(0, 400, BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), kind, false) {
+        try game.purchaseOrderFor{value: value}(0, 400, BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), kind, false) {
             boxesCreated_mintLootbox++;
             _checkAppend(pre, Expect({custom: 1, sizeWei: size, maxAmount: size}));
         } catch {
@@ -304,7 +304,7 @@ contract BoxCreationHandler is Test {
             uint48 wb = RecyclingState.writeBuffer(address(game));
             uint256 count = RecyclingState.boxCount(address(game), wb);
             vm.prank(currentActor);
-            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
                 if (RecyclingState.writeBuffer(address(game)) != wb || RecyclingState.boxCount(address(game), wb) != count) {
                     _appendViolation("a ticket-only purchase appended a box entry");
                 }
@@ -337,7 +337,7 @@ contract BoxCreationHandler is Test {
         ReadState memory pre = readState();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.mineFlip(0) {
+        try game.mineRun(0) {
             ok = true;
         } catch {}
         Vm.Log[] memory logs = vm.getRecordedLogs();

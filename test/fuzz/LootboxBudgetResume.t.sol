@@ -53,12 +53,12 @@ contract LootboxBudgetResume is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -77,7 +77,7 @@ contract LootboxBudgetResume is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
         }
         // A fresh request waits for every read consumer of the day's cohort to finish. A shut
         // craps window the day bound to the write buffer rides the next request, which the engine
@@ -92,7 +92,7 @@ contract LootboxBudgetResume is DeployProtocol {
             if (!game.advanceDue() && game.rngComplete()) break;
             if (!game.advanceDue()) continue; // a fresh request waits for its word
             vm.prank(actor);
-            game.mineFlip(0);
+            game.mineRun(0);
         }
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
@@ -117,7 +117,7 @@ contract LootboxBudgetResume is DeployProtocol {
             address who = makeAddr(string.concat(label, vm.toString(k)));
             vm.deal(who, 10 ether);
             vm.prank(who);
-            game.purchase{value: 2 * priceWei + 1 ether}(0, 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 2 * priceWei + 1 ether}(0, 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
             assertEq(RecyclingState.boxCount(address(game), N), k + 1, "fixture: one entry per purchase");
             entries[k] = RecyclingState.boxEntry(address(game), N, k);
             assertEq(BoxOrderLib.boId(entries[k]), game.walletIdOf_g3120(who), "fixture: the entry holds the buyer's ID");
@@ -139,7 +139,7 @@ contract LootboxBudgetResume is DeployProtocol {
         assertEq(_cursor(), 5, "completion waits until all entries settled");
         vm.recordLogs();
         vm.prank(actor);
-        game.mineFlip{gas: budget}(0);
+        game.mineRun{gas: budget}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics.length != 0) {
@@ -159,7 +159,7 @@ contract LootboxBudgetResume is DeployProtocol {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
             vm.prank(actor);
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             bool opened = ok && _cursor() >= before + entries;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -184,7 +184,7 @@ contract LootboxBudgetResume is DeployProtocol {
         uint256 budget = _minimalOpenAllowance(1);
         emit log_named_uint("one-entry mineFlip allowance", budget);
         vm.prank(actor);
-        game.mineFlip{gas: budget}(0);
+        game.mineRun{gas: budget}(0);
         assertEq(_cursor(), 1, "one entry settled, four still owed");
         assertFalse(_readComplete(), "no early completion while entries remain");
         assertTrue(game.boxesPending(), "the walk still reports the index pending");
@@ -196,7 +196,7 @@ contract LootboxBudgetResume is DeployProtocol {
         while (_cursor() < 5 && calls < 12) {
             budget = _minimalOpenAllowance(1);
             vm.prank(actor);
-            game.mineFlip{gas: budget}(0);
+            game.mineRun{gas: budget}(0);
             calls++;
             assertEq(_cursor(), calls, "each call settles exactly the next entry; none is replayed");
             if (calls < 5) assertFalse(_readComplete(), "no completion while entries remain");
@@ -231,7 +231,7 @@ contract LootboxBudgetResume is DeployProtocol {
             uint256 budget = before + 1 < 5 ? one + (_minimalOpenAllowance(2) - one) / 2 : one + 30_000;
             lastBudget = budget;
             vm.prank(actor);
-            game.mineFlip{gas: budget}(0);
+            game.mineRun{gas: budget}(0);
             assertEq(_cursor() - before, 1, "one entry per call: the second never fits the budget");
             calls++;
             if (calls < 5) assertFalse(_readComplete(), "no completion while entries remain");
@@ -261,7 +261,7 @@ contract LootboxBudgetResume is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(actor);
-        game.mineFlip(0);
+        game.mineRun(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length != 0) {

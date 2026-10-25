@@ -98,7 +98,7 @@ contract DegenesisCraps is DegenesisCrapsChecks, DegenesisFixture {
         address p = makeAddr("future-buyer");
         uint32 id = _giveWalletId(p);
         vm.prank(address(game));
-        coin.mintForGame(p, 1_000_000 ether);
+        coin.mintForGame_g152734(p, 1_000_000 ether);
         uint256 balance = coin.balanceOf(p);
         vm.startPrank(p);
         vm.expectRevert(DAY_NOT_RESERVABLE);

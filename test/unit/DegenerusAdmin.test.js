@@ -23,12 +23,12 @@ async function grantSdgnrs(sdgnrs, game, recipient, amount) {
   await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
   const gameSigner = await hre.ethers.getSigner(gameAddr);
   try {
-    await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
+    await sdgnrs.connect(gameSigner).transferFromPool_g106128(Pool.Reward, recipient, amount);
   } catch {
     try {
-      await sdgnrs.connect(gameSigner).transferFromPool(Pool.Whale, recipient, amount);
+      await sdgnrs.connect(gameSigner).transferFromPool_g106128(Pool.Whale, recipient, amount);
     } catch {
-      await sdgnrs.connect(gameSigner).transferFromPool(Pool.Lootbox, recipient, amount);
+      await sdgnrs.connect(gameSigner).transferFromPool_g106128(Pool.Lootbox, recipient, amount);
     }
   }
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });

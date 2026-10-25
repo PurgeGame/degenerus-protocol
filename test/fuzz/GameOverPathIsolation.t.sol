@@ -80,7 +80,7 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
     {
         vm.recordLogs();
         for (uint256 i = 0; i < 30; i++) {
-            try game.mineFlip(0) {} catch {
+            try game.mineRun(0) {} catch {
                 // Revert is acceptable while waiting on VRF.
             }
             Vm.Log[] memory iterLogs = vm.getRecordedLogs();
@@ -112,7 +112,7 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyer);
-        game.purchase{value: ticketCost}(
+        game.purchaseOrderFor{value: ticketCost}(
             0,
             400,
             0,

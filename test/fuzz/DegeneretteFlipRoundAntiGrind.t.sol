@@ -86,7 +86,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
 
         vm.deal(address(game), 500 ether);
 
-        // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0; seed it to 1.
+        // betDegenerette reverts with E() when lootboxRngIndex == 0; seed it to 1.
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
@@ -206,8 +206,8 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         uint256 before = coin.balanceOf(player);
         uint256 allowance = budget == type(uint256).max ? 0 : _minimalAllowance();
         vm.prank(keeper);
-        if (allowance == 0) game.mineFlip(0);
-        else game.mineFlip{gas: allowance}(0);
+        if (allowance == 0) game.mineRun(0);
+        else game.mineRun{gas: allowance}(0);
         minted = coin.balanceOf(player) - before;
     }
 
@@ -222,7 +222,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.recordLogs();
             vm.prank(keeper);
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             bool resolved;
             if (ok) {
                 Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -244,7 +244,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     ) internal returns (uint64 betId) {
         vm.recordLogs();
         vm.prank(player);
-        game.placeDegeneretteBet(0, currency, perTicket, spins, uint8(ticket & 7));
+        game.betDegenerette(0, currency, perTicket, spins, uint8(ticket & 7));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)")) {
@@ -302,9 +302,9 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         );
     }
 
-    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (keeps supply consistent).
+    /// @dev Mint FLIP to `who` via the GAME-gated mintForGame_g152734 (keeps supply consistent).
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
-        coin.mintForGame(who, amount);
+        coin.mintForGame_g152734(who, amount);
     }
 }

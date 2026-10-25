@@ -156,7 +156,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         Vm.Log[] memory logs;
         for (uint256 r; r < ladder.length; ++r) {
             vm.recordLogs();
-            try game.mineFlip{gas: ladder[r]}(0) {
+            try game.mineRun{gas: ladder[r]}(0) {
                 logs = vm.getRecordedLogs();
                 break;
             } catch (bytes memory err) {
@@ -204,8 +204,8 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         vm.startPrank(ATTACKER);
         // These both SUCCEED: a late purchase adds a write-cohort owner and a late
         // ETH wager adds a rival hero to today's ledger. Neither can enter this draw.
-        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 15);
+        game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, 15);
         vm.expectRevert(RNG_LOCKED);
         game.claimWhalePass(0);
         vm.expectRevert(RNG_LOCKED);

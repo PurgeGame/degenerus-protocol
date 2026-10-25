@@ -167,7 +167,7 @@ contract ChainPinTicketDrain is ChainPinBase {
         vm.resumeGasMetering();
         for (uint256 d; d < 12; ++d) {
             if (!game.jackpotPhase()) {
-                _seedNextPrizePool(_levelPrizePool(game.level()) + 25 ether);
+                _seedNextPrizePool(_levelPrizePool(game.currentLvl()) + 25 ether);
                 _buyTickets();
             }
             simTime += 1 days + 1;

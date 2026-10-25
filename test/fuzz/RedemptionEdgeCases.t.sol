@@ -39,9 +39,9 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         GameFunding.setClaimable(2, 1 ether + 1);
         uint256 supply = sdgnrs.totalSupply();
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Affiliate, alice, supply * 3 / 10);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Affiliate, alice, supply * 3 / 10);
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Lootbox, alice, supply / 5);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Lootbox, alice, supply / 5);
         _burn(alice, supply / 2);
         uint256 extra = _minimumLiveBurn();
         _burn(bob, extra);
@@ -85,7 +85,7 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         uint32 id = _resolveLive(21);
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, id), 0);
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertFalse(sdgnrs.redemptionSettlementPending_g153837());
     }
     function test_DustLootboxReturnsToBacking() public {
         uint256 n = sdgnrs.totalSupply() / 1_000_000;

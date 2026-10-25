@@ -209,7 +209,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
       expect(root, "current RNG buffer storage root").to.not.be.undefined;
       const flags = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), root.slot)) >> (BigInt(root.offset) * 8n);
       const index = (flags >> 12n) & 1n;
-      await game.connect(alice).purchase(0, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
+      await game.connect(alice).purchaseOrderFor(0, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
       // 1 ETH of pending box value meets the mid-day threshold: an ordinary mineFlip requests.
       const request = await requestMiddayRng(game, deployer, mockVRF);
       const aliceId = await game.walletIdOf_g3120(alice.address);
@@ -221,7 +221,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
         const snapshot = await hre.ethers.provider.send("evm_snapshot", []);
         await mockVRF.fulfillRandomWords(request, word);
         // Publication is a keeper step; the callback only stores the final word.
-        await game.connect(deployer).mineFlip(0, { gasLimit: 1_000_000 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 1_000_000 });
         expect(await game.rngConsumerStage_g379(), "publication checkpoint leaves human boxes ready").to.equal(3n);
         const receipts = await mineAll(game, deployer);
         const ticketAward = receipts.flatMap((receipt) => receipt.logs).some((log) => {
@@ -233,7 +233,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
         await hre.ethers.provider.send("evm_revert", [snapshot]);
         if (ticketAward) {
           await mockVRF.fulfillRandomWords(request, word);
-          await game.connect(deployer).mineFlip(0, { gasLimit: 1_000_000 });
+          await game.connect(deployer).mineRun(0, { gasLimit: 1_000_000 });
           expect(await game.rngConsumerStage_g379(), "selected trial remains unopened").to.equal(3n);
           return index;
         }
@@ -279,7 +279,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
-      const currentLevel = BigInt(await game.level()) + 1n;
+      const currentLevel = BigInt(await game.currentLvl()) + 1n;
 
       // Before any ticket activity, the shared slot is empty: rem == 0 AND
       // owed == 0. This also pins the slot-derivation math against a known
@@ -312,7 +312,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
 
       // Snapshot the shared slot BEFORE the open across the plausible target
       // levels (the lootbox roll picks a target level >= currentLevel).
-      const baseLevel = BigInt(await game.level()) + 1n;
+      const baseLevel = BigInt(await game.currentLvl()) + 1n;
       const levelsToWatch = [];
       for (let l = baseLevel; l <= baseLevel + 55n; l++) {
         levelsToWatch.push(l);
@@ -371,7 +371,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
       // Fresh fixture: alice has 0 owed-entries everywhere (proven by [CROSS-01a]).
       // Pin before == 0 across the plausible target-level band so the post-open owed
       // at whichever level the roll lands on IS the full delta.
-      const baseLevel = BigInt(await game.level()) + 1n;
+      const baseLevel = BigInt(await game.currentLvl()) + 1n;
       for (let l = baseLevel; l <= baseLevel + 55n; l++) {
         const before = await resolveLiveTicketsOwed(game, gameAddress, l, alice);
         expect(

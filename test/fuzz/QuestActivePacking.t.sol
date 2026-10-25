@@ -13,8 +13,8 @@ contract QuestActivePackingTest is Test {
 
     function setUp() public {
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("currentDayView_g542950()"), abi.encode(uint24(1)));
-        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("level()"), abi.encode(uint24(24)));
-        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("decWindow()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("currentLvl()"), abi.encode(uint24(24)));
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("decimatorActive()"), abi.encode(false));
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("mintPrice()"), abi.encode(uint256(0.04 ether)));
         DegenerusQuests implementation = new DegenerusQuests();
         quests = DegenerusQuests(ContractAddresses.QUESTS);

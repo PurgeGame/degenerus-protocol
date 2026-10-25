@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
 contract BoundedHeapRedemptionState {
-    function redemptionSettlementPending() external pure returns (bool) { return false; }
+    function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 }
 
 contract BoundedHeapSeeder is DecimatorBattleHarness {

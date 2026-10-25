@@ -30,7 +30,7 @@ def main():
         actual = json.loads(call["expectedLogs"])[-1]
         if actual == expected[0]:
             continue
-        # These five reviewed cases call Game.mineFlip through NativeFailureProbe.
+        # These five reviewed cases call Game.mineRun through NativeFailureProbe.
         assert name in {"game-0-1.call", "game-0-2.call", "game-0-5.call", "game-0-9.call", "game-0-10.call"}, name
         assert call["input"].startswith("0x9e976db1"), "NativeFailureProbe.invoke(address,bytes,uint256)"
         emitter = "0x" + call["input"][34:74]

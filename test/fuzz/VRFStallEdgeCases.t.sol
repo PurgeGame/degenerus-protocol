@@ -58,14 +58,14 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
         // Preparation is independently checkpointed. Force a refusal only after it is complete.
         vm.mockCallRevert(address(mockVRF), abi.encodeWithSelector(mockVRF.requestRandomWords.selector), abi.encodeWithSignature("Refused()"));
         for (uint256 i; i < 20 && game.nextMinerAction() != uint8(DegenerusGameStorage.MinerAction.RequestDaily); ++i) {
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) break;
         }
         uint24 beforeDay = game.currentDayView_g542950();
         (bool complete,uint24 sent,uint48 completed) = game.dailySessionState();
         bytes32 mirror = vm.load(address(coinflip), bytes32(uint256(4)));
         bytes32 commitment = vm.load(address(game), bytes32(0));
-        (bool accepted,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool accepted,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         assertTrue(accepted, "coordinator refusal is a non-reverting uncharged no-op");
         assertEq(game.currentDayView_g542950(), beforeDay);
         assertEq(vm.load(address(coinflip), bytes32(uint256(4))), mirror);
@@ -80,11 +80,11 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
     function test_KnownWordCannotRepriceCarryAndNewDepositTargetsFollowingRound() public {
         address player = address(0xA11CE);
         uint32 id = _giveWalletId(player);
-        vm.prank(ContractAddresses.GAME); coin.mintForGame(player, 100_000);
-        vm.prank(player); coinflip.depositCoinflip(id, 1_000);
+        vm.prank(ContractAddresses.GAME); coin.mintForGame_g152734(player, 100_000);
+        vm.prank(player); coinflip.playCoinflip(id, 1_000);
         uint256 request = _requestAtNextReset();
         mockVRF.fulfillRandomWords(request, 777);
-        vm.prank(player); coinflip.depositCoinflip(id, 2_000);
+        vm.prank(player); coinflip.playCoinflip(id, 2_000);
         assertEq(coinflip.requestedDailyIdx(), 2);
         _finishLogical();
         (uint16 reward,) = coinflip.getCoinflipDayResult(3);
@@ -100,16 +100,16 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
                 (,,bool delivered) = mockVRF.pendingRequests(pending);
                 if (!delivered) mockVRF.fulfillRandomWords(pending, 777);
             }
-            game.mineFlip(type(uint32).max);
+            game.mineRun(type(uint32).max);
         }
         (,,uint48 completed) = game.dailySessionState();
         uint24 day = game.currentDayView_g542950();
         address buyer = address(0xB0B);
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 old = mockVRF.lastRequestId();
-        for (uint256 i; i < 100 && mockVRF.lastRequestId() == old; ++i) game.mineFlip(0);
+        for (uint256 i; i < 100 && mockVRF.lastRequestId() == old; ++i) game.mineRun(0);
         assertGt(mockVRF.lastRequestId(), old);
         assertFalse(game.rngLocked());
         assertEq(game.currentDayView_g542950(), day);
@@ -124,7 +124,7 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
         count = uint8(bound(count, 1, 3));
         address buyer = address(0xB0B);
         _giveWalletId(buyer);
-        vm.prank(ContractAddresses.GAME); coin.mintForGame(buyer, 100_000_000);
+        vm.prank(ContractAddresses.GAME); coin.mintForGame_g152734(buyer, 100_000_000);
         for (uint256 i; i < count; ++i) {
             (,uint256 cost) = game.rngNudgeQuote();
             vm.prank(buyer); game.reverseFlip(cost);

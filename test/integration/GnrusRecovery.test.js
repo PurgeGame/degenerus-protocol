@@ -57,7 +57,7 @@ describe("GnrusRecovery", function () {
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       } catch {
         /* multi-tx drain may revert mid-sequence; keep driving */
       }
@@ -83,7 +83,7 @@ describe("GnrusRecovery", function () {
       if ((await gnrus.sweptAt()) !== 0n) return;
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+        await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
       } catch {}
       const reqAfter = await getLastVRFRequestId(mockVRF);
       if (reqAfter > reqBefore) {
@@ -112,7 +112,7 @@ describe("GnrusRecovery", function () {
     const slot = 5; // non-locked (>= LOCKED_SLOTS)
     await ownerAction(gnrus.connect(deployer), "setCharity", [slot, holder.address]);
     await giveSDGNRS(sdgnrs, gameAddress, voter.address, hre.ethers.parseUnits("100", 12));
-    await gnrus.connect(voter).vote(slot);
+    await gnrus.connect(voter).castBallot(slot);
     await runLevelTransitionViaGame(gnrus, gameAddress, 0); // pickCharity(0) via game impersonation
     return gnrus.balanceOf(holder.address);
   }

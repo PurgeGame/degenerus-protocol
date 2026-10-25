@@ -66,9 +66,9 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         symbol %= 24;
         uint128 perTicket = 100;
         vm.prank(address(game));
-        coin.mintForGame(player, uint256(perTicket) + 1);
+        coin.mintForGame_g152734(player, uint256(perTicket) + 1);
         vm.prank(player);
-        game.placeDegeneretteBet(0, CURRENCY_FLIP, perTicket, 1, symbol);
+        game.betDegenerette(0, CURRENCY_FLIP, perTicket, 1, symbol);
         uint64 betId = DQ.lastBetId(vm, address(game), 1);
         uint256 bet = game.degeneretteBetInfo(1, betId);
         uint256 roiBps = _roiBps(DQ.activity(bet));
@@ -76,7 +76,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         // Bets resolve only as the engine's Degenerette read consumer (mineFlip).
         vm.recordLogs();
         vm.prank(player);
-        game.mineFlip(0);
+        game.mineRun(0);
         (uint8 score, uint8 wilds) = _firstSpin();
         assertLe(wilds, 4, "at most four house wilds");
         uint256 payout = math.payout(score, wilds, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));

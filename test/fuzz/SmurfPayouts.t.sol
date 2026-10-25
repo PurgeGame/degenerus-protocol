@@ -76,7 +76,7 @@ contract SmurfPayoutsTest is SmurfFixture {
         uint256 before = owner.balance;
 
         vm.prank(owner);
-        game.claimWinnings(smurfId);
+        game.claimClaimable(smurfId);
 
         assertEq(owner.balance - before, raw - 1, "the owner received the smurf's winnings");
         assertEq(_fixtureClaimable(smurfId), 1, "the smurf's ledger was debited to the sentinel");
@@ -95,7 +95,7 @@ contract SmurfPayoutsTest is SmurfFixture {
 
         uint256 rest = _fixtureClaimable(smurfId) - 1;
         vm.prank(operator);
-        game.claimWinnings(smurfId);
+        game.claimClaimable(smurfId);
         assertEq(owner.balance - before, 0.4 ether + rest, "the full claim paid the owner");
         assertEq(operator.balance, 0, "the operator receives nothing");
     }
@@ -113,7 +113,7 @@ contract SmurfPayoutsTest is SmurfFixture {
         assertEq(operator.balance, 0, "the operator receives nothing");
 
         vm.prank(plain);
-        game.claimWinnings(0);
+        game.claimClaimable(0);
         assertEq(plain.balance - before, raw - 1, "the self claim pays the wallet");
     }
 
@@ -240,7 +240,7 @@ contract SmurfPayoutsTest is SmurfFixture {
     /// @dev Seed a ready score-4 pack for `id` and a draw whose currency roll lands in the WWXRP
     ///      band (c >= 80); a stranger claims; the spin's WWXRP mints to `payee`.
     function _foilWwxrp(uint32 id, uint32 key, address payee) private {
-        uint24 L = game.level() + 1;
+        uint24 L = game.currentLvl() + 1;
         uint24 day = game.currentDayView_g542950();
         uint32 sel;
         uint32 win;
@@ -345,7 +345,7 @@ contract SmurfPayoutsTest is SmurfFixture {
     /// @dev Resolve one box of `kind` for account `id` (key `key`) on the k-th seeded word.
     function _openBox(Box kind, uint32 id, uint32 key, uint256 k) private {
         uint256 word = uint256(keccak256(abi.encode("smurf_box", uint8(kind), k)));
-        uint24 cur = game.level() + 1;
+        uint24 cur = game.currentLvl() + 1;
         address lootbox = ContractAddresses.GAME_LOOTBOX_MODULE;
         if (kind == Box.Human) {
             // Twenty custom boxes of 0.5 ETH.
@@ -488,7 +488,7 @@ contract SmurfPayoutsTest is SmurfFixture {
         uint8 spins = 25;
         vm.recordLogs();
         vm.prank(caller);
-        game.placeDegeneretteBet{value: uint256(perSpin) * spins}(accountId, 0, perSpin, spins, HERO);
+        game.betDegenerette{value: uint256(perSpin) * spins}(accountId, 0, perSpin, spins, HERO);
         (uint64 betId, uint32 betOwner) = _placedBetId(vm.getRecordedLogs());
         assertEq(betOwner, _fixtureId(key), "the bet belongs to the account");
 
@@ -538,7 +538,7 @@ contract SmurfPayoutsTest is SmurfFixture {
         uint256 s0 = sdgnrs.balanceOf(payee);
         vm.recordLogs();
         vm.prank(caller);
-        game.placeDegeneretteBet{value: 1 ether}(accountId, 0, 0.04 ether, 25, HERO);
+        game.betDegenerette{value: 1 ether}(accountId, 0, 0.04 ether, 25, HERO);
         Vm.Log[] memory placed = vm.getRecordedLogs();
         (uint64 betId, uint32 betOwner) = _placedBetId(placed);
         assertEq(betOwner, _fixtureId(key), "the bet belongs to the account");

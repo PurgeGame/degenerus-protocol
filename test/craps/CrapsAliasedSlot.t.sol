@@ -62,7 +62,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
     function _seat(address who, uint256 period) internal returns (uint256) {
         game.setScore(who, craps.SYBIL_SCORE_FLOOR());
         vm.prank(who);
-        return craps.enterBonusBattle(period, _seven(), 1);
+        return craps.throwCraps(period, _seven(), 1);
     }
 
     function _idAt(uint64 slot, uint64 n) internal view returns (uint256) {

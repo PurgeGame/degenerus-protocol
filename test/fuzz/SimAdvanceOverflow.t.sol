@@ -29,9 +29,9 @@ contract SimAdvanceOverflow is DeployProtocol {
             address buyer = address(uint160(0x1000 + i));
             vm.deal(buyer, 10 ether);
             vm.prank(buyer);
-            game.purchase{value: 1 ether}(0, 400, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchaseOrderFor{value: 1 ether}(0, 400, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         }
         vm.warp(block.timestamp + 1 days + 1861);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 }

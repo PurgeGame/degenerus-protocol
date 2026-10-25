@@ -172,7 +172,7 @@ function customTicketWithSymbol(quadrant, symbol) {
 // `(quadrant, symbol)` slot. Defaults to MIN_BET_ETH per spin, 1 spin total.
 async function placeEthBet(game, signer, quadrant, symbol) {
   const customTicket = customTicketWithSymbol(quadrant, symbol);
-  return game.connect(signer).placeDegeneretteBet(0, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
+  return game.connect(signer).betDegenerette(0, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
 }
 
 // Phase 282 / 291 pattern: drive mineFlip() to issue a VRF request,
@@ -579,7 +579,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
           // The real daily request freezes the accumulated pool before its VRF result.
           await advanceToNextDay();
-          for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0, { gasLimit: 16_777_216 });
+          for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineRun(0, { gasLimit: 16_777_216 });
           expect(await game.rngLocked(), "daily request seals the hero pool").to.equal(true);
           const requestedDayAfter = Number(await game.currentDayView_g542950());
           expect(
@@ -822,7 +822,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // _emitDailyWinningTraits. 200 tickets is sufficient per the
             // debug trace; matches the Phase 282 / 291 fixture-volume
             // baseline scaled down for gas-measurement determinism.
-            await game.connect(alice).purchase(
+            await game.connect(alice).purchaseOrderFor(
               0,
               200n,
               0n,
@@ -848,7 +848,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             for (let iter = 0; iter < MAX_DRAIN_ITERS; ++iter) {
               let tx;
               try {
-                tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+                tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
               } catch {
                 // Drain ended (NotTimeYet, etc.).
                 break;
@@ -1028,7 +1028,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
             // Purchase enough tickets to drive the drain chain into
             // _emitDailyWinningTraits.
-            await game.connect(alice).purchase(
+            await game.connect(alice).purchaseOrderFor(
               0,
               200n,
               0n,
@@ -1054,7 +1054,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             for (let iter = 0; iter < MAX_DRAIN_ITERS; ++iter) {
               let tx;
               try {
-                tx = await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
+                tx = await game.connect(deployer).mineRun(0, { gasLimit: 16_777_216 });
               } catch {
                 break;
               }

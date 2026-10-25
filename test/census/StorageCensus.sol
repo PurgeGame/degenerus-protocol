@@ -135,7 +135,7 @@ abstract contract StorageCensus is DeployProtocol {
     }
 
     function _censusLevel() internal view returns (uint24 l) {
-        try game.level() returns (uint24 v) { l = v; } catch {}
+        try game.currentLvl() returns (uint24 v) { l = v; } catch {}
     }
 
     // ---------------------------------------------------------------------------------------
@@ -405,7 +405,7 @@ abstract contract StorageCensus is DeployProtocol {
     /// @dev One mineFlip crank. Returns 0 on success, 1 on NoWork, 2 on RngNotReady, 3 on any other revert.
     function _cMine() internal returns (uint8) {
         (bool ok, bytes memory ret) = _ctx("mineFlip", true, CENSUS_KEEPER, address(game), 0,
-            abi.encodeCall(game.mineFlip, (uint32(0))));
+            abi.encodeCall(game.mineRun, (uint32(0))));
         if (ok) return 0;
         if (ret.length == 4 && bytes4(ret) == SEL_NO_WORK) return 1;
         if (ret.length == 4 && bytes4(ret) == SEL_RNG_NOT_READY) return 2;

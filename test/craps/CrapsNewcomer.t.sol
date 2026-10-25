@@ -71,7 +71,7 @@ contract CrapsNewcomerTest is CrapsPins {
     }
 
     function test_levelIsNotReadForEstablishedDeityOrUnmintedAccounts() public {
-        vm.mockCallRevert(ContractAddresses.GAME, abi.encodeWithSignature("level()"), "unnecessary level read");
+        vm.mockCallRevert(ContractAddresses.GAME, abi.encodeWithSignature("currentLvl()"), "unnecessary level read");
         game.setMintHistory(player, uint256(3) << 24);
         assertEq(table.entryPrice(player, 25_000), 25_000);
         game.setMintHistory(player, uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);

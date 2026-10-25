@@ -96,7 +96,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         position = host.boxWriteCount();
         uint256 cost = _cost(boxOrder);
         vm.prank(who);
-        host.purchase{value: cost}(0, 0, boxOrder, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchaseOrderFor{value: cost}(0, 0, boxOrder, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(host.boxWriteCount(), position + 1, "one purchase, one entry");
     }
 
@@ -155,7 +155,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     }
 
     function _assertSeeded(Vm.Log[] memory logs, uint48 tag, uint256 rootWord, uint32 id, uint256 boxes) internal {
-        (uint24[] memory expected, uint256 en) = _expectedTargets(rootWord, id, boxes, host.level() + 1);
+        (uint24[] memory expected, uint256 en) = _expectedTargets(rootWord, id, boxes, host.currentLvl() + 1);
         (uint24[] memory seen, uint256 sn) = _openedTargets(logs, tag);
         assertGt(en, 0, "fixture rolls at least one non-spin box");
         assertEq(sn, en, "LootBoxOpened count matches the predicted non-spin boxes");
@@ -269,7 +269,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 pendingBefore = host.pendingMilliEth();
         vm.prank(alice);
         vm.expectRevert(bytes4(keccak256("E()")));
-        host.purchase{value: 2_000.001 ether}(0, 0, over, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchaseOrderFor{value: 2_000.001 ether}(0, 0, over, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(alice.balance, balanceBefore, "payment rolled back");
         assertEq(host.boxWriteCount(), countBefore, "nothing appended");
         assertEq(host.pendingMilliEth(), pendingBefore, "no pending ETH");
@@ -401,7 +401,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     function test_Modifiers_SharedEvAllowanceAcrossEntries() public {
         _buy(alice, BoxOrderLib.boSmalls(1)); // registers alice
         uint32 id = _id(alice);
-        uint24 key = host.level() + 1;
+        uint24 key = host.currentLvl() + 1;
         assertEq(host.evUsed(id, key), 0, "purchase does not draw");
         uint48 b = host.writeBuffer();
         uint256 p = host.boxWriteCount();
@@ -552,7 +552,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     function test_Seeds_SingleBoxResolverDomains() public {
         _buy(alice, BoxOrderLib.boSmalls(1));
         uint32 id = _id(alice);
-        uint24 cur = host.level() + 1;
+        uint24 cur = host.currentLvl() + 1;
 
         // Direct: find a word whose box is not a spin, then check its target level.
         uint256 w = _nonSpinWord(id, cur, 0);
@@ -688,9 +688,9 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         _buy(bob, BoxOrderLib.boSmalls(1));
         uint48 w = host.writeBuffer();
         vm.prank(alice);
-        host.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 1);
+        host.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, 1);
         vm.prank(bob);
-        host.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 2);
+        host.betDegenerette{value: 0.01 ether}(0, 0, 0.01 ether, 1, 2);
         assertEq(host.boxWriteCount(), 2);
         assertEq(host.betWriteCount(), 2);
         assertTrue(host.degeneretteBetInfo(w, 2) != 0);
@@ -715,7 +715,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 before = (slot >> (GameSlotsFoil.WRITE_OFFSET * 8)) & type(uint32).max;
         (,,,, uint256 priceWei) = host.purchaseInfo_g1027();
         vm.prank(alice);
-        host.purchase{value: priceWei * 20}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        host.purchaseOrderFor{value: priceWei * 20}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         slot = uint256(vm.load(address(game), bytes32(GameSlotsFoil.SLOT)));
         assertEq((slot >> (GameSlotsFoil.WRITE_OFFSET * 8)) & type(uint32).max, before + 1);
     }

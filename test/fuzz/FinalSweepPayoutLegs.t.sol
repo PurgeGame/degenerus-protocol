@@ -29,7 +29,7 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
         vm.warp(block.timestamp + 370 days);
         for (uint256 i; i < 40 && !game.gameOver(); i++) {
             vm.prank(keeper);
-            try game.mineFlip(0) {} catch {}
+            try game.mineRun(0) {} catch {}
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
                 (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -46,7 +46,7 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
     function _sweep() internal {
         vm.warp(block.timestamp + 30 days + 1);
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
     }
 
     function _sweepNative(string memory label) internal {
@@ -57,10 +57,10 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
         vm.warp(block.timestamp + 30 days + 1);
         uint256 snapshot = vm.snapshotState();
         vm.prank(keeper);
-        game.mineFlip(0);
+        game.mineRun(0);
         uint256 post = vm.snapshotState();
         assertTrue(vm.revertToState(snapshot));
-        this.exportNativeFixture(label, keeper, address(game), abi.encodeCall(game.mineFlip, (uint32(0))));
+        this.exportNativeFixture(label, keeper, address(game), abi.encodeCall(game.mineRun, (uint32(0))));
         assertTrue(vm.revertToState(post));
         vm.deleteStateSnapshot(snapshot);
         vm.deleteStateSnapshot(post);
@@ -224,7 +224,7 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
         vm.clearMockedCalls();
         bytes32 settled = keccak256(abi.encode(_ledger()));
         vm.prank(keeper);
-        try game.mineFlip(type(uint32).max) {} catch {}
+        try game.mineRun(type(uint32).max) {} catch {}
         assertEq(keccak256(abi.encode(_ledger())), settled, "a later crank moved swept funds");
         assertEq(address(game).balance, 0);
         assertEq(admin.subscriptionId(), 0);

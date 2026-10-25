@@ -91,7 +91,7 @@ contract FoilClaimBatch is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _advance() internal {
-        try game.mineFlip(0) {} catch {}
+        try game.mineRun(0) {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {
@@ -120,7 +120,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///      The cohort tests separately verify generated-line/bucket conservation.
     function _runScenario() internal {
         uint256 nPurchaseDays = 30;
-        uint24 lvl = game.level();
+        uint24 lvl = game.currentLvl();
         uint256 priceWei = PriceLookupLib.priceForLevel(lvl + 1);
         uint256 foilCost = 10 * priceWei; // FOIL_PACK_TICKETS = 10
         uint256 ticketQty = (foilCost * 4 * 100) / priceWei; // one whole ticket = 4*TICKET_SCALE units
@@ -129,14 +129,14 @@ contract FoilClaimBatch is DeployProtocol {
             _fb[i] = makeAddr(string(abi.encodePacked("foil", vm.toString(i))));
             vm.deal(_fb[i], 1_000 ether);
             vm.prank(_fb[i]);
-            try game.purchase{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
+            try game.purchaseOrderFor{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
             _fid[i] = game.walletIdOf_g3120(_fb[i]);
         }
         for (uint256 i = 0; i < TICKET_BUYERS; i++) {
             address tb = makeAddr(string(abi.encodePacked("tkt", vm.toString(i))));
             vm.deal(tb, 1_000 ether);
             vm.prank(tb);
-            try game.purchase{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchaseOrderFor{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             if (i == 0) _packlessId = game.walletIdOf_g3120(tb);
         }
 
@@ -146,9 +146,9 @@ contract FoilClaimBatch is DeployProtocol {
         vm.deal(whale, 1_000_000 ether);
         for (uint256 d = 0; d < nPurchaseDays + 50; d++) {
             if (!game.jackpotPhase()) {
-                uint256 pw = PriceLookupLib.priceForLevel(game.level() + 1);
+                uint256 pw = PriceLookupLib.priceForLevel(game.currentLvl() + 1);
                 vm.prank(whale);
-                try game.purchase{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+                try game.purchaseOrderFor{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             }
             _completeDay(_seed(nPurchaseDays, d));
             _endDay = game.currentDayView_g542950();
@@ -391,9 +391,9 @@ contract FoilClaimBatch is DeployProtocol {
 
         address buyer = makeAddr("freeze-window-buyer");
         vm.deal(buyer, 10 ether);
-        uint256 price = PriceLookupLib.priceForLevel(game.level() + 1);
+        uint256 price = PriceLookupLib.priceForLevel(game.currentLvl() + 1);
         vm.prank(buyer);
-        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         pendingRaw = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
         assertEq(pendingRaw >> 255, 1, "the credit keeps the sentinel");
@@ -496,9 +496,9 @@ contract FoilClaimBatch is DeployProtocol {
     function _buyFoilPackNow(address p) internal returns (uint24 lvl, uint24 resolveDay, uint16 multBps) {
         vm.deal(p, 1_000 ether);
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
-        lvl = game.jackpotPhase() ? game.level() : game.level() + 1;
+        lvl = game.jackpotPhase() ? game.currentLvl() : game.currentLvl() + 1;
         vm.prank(p);
-        game.purchase{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint32 playerId = game.walletIdOf_g3120(p);
         bytes32 inner = bytes32(FOIL_RECORD_SLOT + uint256(lvl & 3));
         uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(playerId, inner))));
@@ -544,7 +544,7 @@ contract FoilClaimBatch is DeployProtocol {
     function _tick() internal {
         _fulfillPendingVrf();
         uint256 requestBefore = mockVRF.lastRequestId();
-        (bool ok, ) = address(game).call{gas: 12_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        (bool ok, ) = address(game).call{gas: 12_000_000}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         // A refused optional midday request may now return a successful no-op.
         // Move to the next daily boundary instead of replaying that same refusal.
         bool waitingForDaily = mockVRF.lastRequestId() == requestBefore
@@ -930,7 +930,7 @@ contract FoilClaimBatch is DeployProtocol {
             uint256 beforeGameBalance = address(game).balance;
             vm.expectRevert(bytes4(keccak256("FoilRecordBusy()")));
             vm.prank(_fb[0]);
-            game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+            game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
             assertEq(_fb[0].balance, beforeBalance, "rejected buy keeps buyer funds");
             assertEq(address(game).balance, beforeGameBalance, "rejected buy keeps game funds");
             assertEq(uint256(vm.load(address(game), slot)), oldRecord, "live pack metadata and all lines survive");
@@ -938,7 +938,7 @@ contract FoilClaimBatch is DeployProtocol {
         }
 
         vm.prank(_fb[0]);
-        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint256 replacement = uint256(vm.load(address(game), slot));
         assertEq(uint24(replacement >> 208), nextLevel, "same physical slot carries new exact level");
         assertEq(uint128(replacement >> 56), 0, "old four lines cleared");
@@ -951,7 +951,7 @@ contract FoilClaimBatch is DeployProtocol {
         assertTrue(lens.foilRecordOf(address(game), nextLevel, _fb[0]).present, "new logical record remains");
         vm.expectRevert(bytes4(keccak256("FoilAlreadyBought()")));
         vm.prank(_fb[0]);
-        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 
     function test_reuse_realPurchaseCannotReplaceUndrainedPack() public {
@@ -970,7 +970,7 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 cost = 10 * PriceLookupLib.priceForLevel(nextLevel);
         vm.expectRevert(bytes4(keccak256("FoilRecordBusy()")));
         vm.prank(_fb[0]);
-        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchaseOrderFor{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         assertEq(_fb[0].balance, beforeBalance);
         assertEq(address(game).balance, beforeGameBalance);
         assertEq(uint256(vm.load(address(game), slot)), pending, "paid undrained pack survives");
