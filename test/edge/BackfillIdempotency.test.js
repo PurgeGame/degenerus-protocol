@@ -62,7 +62,9 @@ describe("Delayed logical rounds never backfill calendar gaps", function () {
       expect(await game.currentDayView_g542950()).to.equal(day + 1n);
       await mockVRF.fulfillRandomWords(next, 0xbadc0fffn);
       await finish(game);
-      expect(await game.rngWordForDay(day + 1n)).to.equal(0xbadc0fffn + (paidNudge ? 1n : 0n));
+      // The recorded word stays raw; the nudge reverses only the coinflip (odd raw word wins).
+      expect(await game.rngWordForDay(day + 1n)).to.equal(0xbadc0fffn);
+      expect((await coinflip.getCoinflipDayResult(day + 1n))[1]).to.equal(!paidNudge);
       expect(Array.from(await coinflip.getCoinflipDayResult(day))).to.deep.equal(settled);
       expect(await clocks(game)).to.deep.equal([start, day + 1n]);
       // The actual send window permits only one fresh daily request.

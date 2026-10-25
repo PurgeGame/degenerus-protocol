@@ -820,8 +820,8 @@ describe("VRF Governance", function () {
 
       // Cast approve vote -- deployer has enough weight to exceed threshold
       const tx = await admin.connect(deployer).vote(1, true);
-      // vrfCoordinator shares Game storage slot 22 with vrfCallbackGasLimit (bits 160..191).
-      const vrfWord = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), 22));
+      // vrfCoordinator shares Game storage slot 21 with vrfCallbackGasLimit (bits 160..191).
+      const vrfWord = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), 21));
       expect((vrfWord >> 160n) & 0xffffffffn).to.equal(450000n, "Game stores the voted callback gas limit");
 
       // Verify proposal state transitions to Executed (enum value 1)
