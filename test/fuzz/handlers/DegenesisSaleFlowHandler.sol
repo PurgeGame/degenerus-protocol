@@ -259,6 +259,7 @@ contract DegenesisSaleFlowHandler is Test {
             Vm.Log memory l = logs[i];
             if (l.emitter != address(game) || l.topics.length == 0) continue;
             bytes32 t = l.topics[0];
+            if (!_committed(t, l)) continue;
             if (t == SIG_RESOLVED) {
                 (uint8 day, uint32 index) = abi.decode(l.data, (uint8, uint32));
                 uint256 key = (uint256(day) << 32) | index;
@@ -293,6 +294,29 @@ contract DegenesisSaleFlowHandler is Test {
                 ++ghost_burns;
             }
         }
+    }
+
+    /// @dev Forge keeps the logs of a call frame the Game later rolled back. The miner catches a refused
+    ///      worker (the daily request refuses when the coordinator call cannot be made, after its Degenesis
+    ///      split and pricing already emitted) and carries on, so a recorded log is real only if the state
+    ///      it announces is visible now. Game over forfeits the active cohort, so after it every log is taken
+    ///      as recorded.
+    function _committed(bytes32 t, Vm.Log memory l) internal view returns (bool) {
+        if (game.gameOver()) return true;
+        uint256 closedNow = uint8(uint256(vm.load(address(game), bytes32(uint256(0)))) >> (GameSlots.DEGENESIS_CLOSED_OFFSET * 8));
+        uint256 active = uint256(vm.load(address(game), bytes32(GameSlots.DEGENESIS_ACTIVE)));
+        if (t == SIG_SPLIT) return (_header(uint256(l.topics[1])) >> 80) & 1 == 1;
+        if (t == SIG_PRICED) {
+            uint256 c = uint256(l.topics[1]);
+            return closedNow >= c || (active != 0 && closedNow + 1 == c);
+        }
+        if (t == SIG_CLOSED) return closedNow >= uint256(l.topics[1]);
+        if (t == SIG_BURNED) return closedNow == 7;
+        if (t == SIG_RESOLVED) {
+            (uint8 day, uint32 index) = abi.decode(l.data, (uint8, uint32));
+            return closedNow >= day || (active != 0 && closedNow + 1 == day && uint32(active >> 184) > index);
+        }
+        return true;
     }
 
     function _checkState() internal {
