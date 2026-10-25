@@ -92,6 +92,14 @@ contract LootboxRngLifecycle is DeployProtocol {
         _lastFulfilledReqId = 0;
     }
 
+    /// @dev Craps windows request mid-day words at any native balance. Hold every mid-day
+    ///      request back with the basefee ceiling (Craps refuses above 4x it), so only daily
+    ///      requests move the buffer, as the unfunded subscription did before native billing.
+    function _holdMiddayRequests() internal {
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (1)), 0);
+        vm.fee(5 gwei);
+    }
+
     /// @dev Answer and publish every mid-day request the miner issues for closed Craps windows
     ///      until it has no work left today. Publishing one window's word can arm the next closed
     ///      window and request its word in the same call, so this loops to quiescence.
@@ -117,14 +125,15 @@ contract LootboxRngLifecycle is DeployProtocol {
     }
 
     /// @dev Setup for mid-day lootbox RNG: complete a day, make a purchase on the
-    ///      new day to create pending lootbox ETH, fund VRF subscription with LINK.
+    ///      new day to create pending lootbox ETH, fund the VRF subscription natively.
     function _setupForMidDayRng() internal returns (uint256 ts) {
         return _setupForMidDayRng(false);
     }
 
-    /// @param quietCraps Fund LINK before the purchase and settle the mid-day requests for
-    ///        closed Craps windows, so the lootbox request under test is the only mid-day
-    ///        work and its publication arms no further window.
+    /// @param quietCraps Fund the subscription before the purchase, so the lootbox request
+    ///        under test is the only mid-day work and its publication arms no further window.
+    ///        Mid-day requests for closed Craps windows are settled either way: they no longer
+    ///        wait for a funded subscription.
     function _setupForMidDayRng(bool quietCraps) internal returns (uint256 ts) {
         // Complete day 1
         _completeDay(0xDEAD0001);
@@ -137,10 +146,10 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         _finishReadBoxes();
 
-        if (quietCraps) {
-            mockVRF.fundSubscription(1, 100e18);
-            _settleMiddayRequests();
-        }
+        // Craps windows request at any native balance; answer them so the lootbox request
+        // under test is the next mid-day work.
+        if (quietCraps) mockVRF.fundSubscription(1, 100e18);
+        _settleMiddayRequests();
 
         // Purchase with lootbox amount to create pending ETH
         address buyer = makeAddr("lootboxBuyer");
@@ -148,7 +157,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
-        // Fund VRF subscription with LINK
+        // Fund the VRF subscription (the mock records the native balance)
         if (!quietCraps) mockVRF.fundSubscription(1, 100e18);
 
         ts = block.timestamp;
@@ -289,6 +298,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     /// @notice Over N days (2-10), lootboxRngIndex increments exactly N times.
     function test_indexSequentialAcrossMultipleDays(uint8 numDays) public {
         numDays = uint8(bound(numDays, 2, 10));
+        _holdMiddayRequests();
 
         uint48 indexBefore = _readLootboxRngIndex();
 
@@ -452,6 +462,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     /// @notice Duplicate/stale callbacks cannot replace a fulfilled or newly reserved word.
     function test_wordWriteIdempotent(uint256 vrfWord) public {
         vm.assume(vrfWord > 1);
+        _holdMiddayRequests();
         uint48 indexBefore = _readLootboxRngIndex();
         _completeDay(vrfWord);
         uint256 oldRequest = mockVRF.lastRequestId();
@@ -780,6 +791,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     /// @notice Multiple indices: purchases at different indices each use their respective VRF word.
     function test_fullLifecycleMultipleIndices() public {
         address buyer = makeAddr("multiBuyer");
+        _holdMiddayRequests();
 
         // First index: purchase at index N on day 2 (setUp already warped to day 2)
         uint48 indexN = _readLootboxRngIndex();

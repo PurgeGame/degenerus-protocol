@@ -70,6 +70,27 @@ describe("VRFIntegration", function () {
     }
   }
 
+  // Craps windows request mid-day words at any native subscription balance, so the call that
+  // unlocks a day can issue a scheduled request. Answer and publish those before the next day.
+  async function settleMidday(game, caller, mockVRF) {
+    for (let i = 0; i < 64; i++) {
+      if (await game.rngLocked()) return;
+      const id = await getLastVRFRequestId(mockVRF);
+      if (id > 0n && !(await mockVRF.pendingRequests(id)).fulfilled) {
+        await (await mockVRF.fulfillRandomWords(id, 5n)).wait();
+      } else if (await game.rngComplete()) {
+        return;
+      }
+      try {
+        await (await game.connect(caller).mineFlip(0, { gasLimit: 16_777_216 })).wait();
+      } catch (error) {
+        if (await game.rngComplete()) return;
+        throw error;
+      }
+    }
+    throw new Error("scheduled mid-day requests did not settle");
+  }
+
   // ---------------------------------------------------------------------------
   // VRF request lifecycle
   // ---------------------------------------------------------------------------
@@ -422,6 +443,7 @@ describe("VRFIntegration", function () {
 
         // Process.
         await drainTickets(game, deployer);
+        await settleMidday(game, deployer, mockVRF);
         expect(await game.rngLocked()).to.equal(
           false,
           `Day ${day}: expected rngLocked cleared after process`
@@ -442,6 +464,7 @@ describe("VRFIntegration", function () {
         const requestId = await getLastVRFRequestId(mockVRF);
         await mockVRF.fulfillRandomWords(requestId, BigInt(day + 1) * 99999n);
         await drainTickets(game, deployer);
+        await settleMidday(game, deployer, mockVRF);
       }
 
       expect(await game.gameOver()).to.equal(false);
@@ -461,6 +484,7 @@ describe("VRFIntegration", function () {
 
         await mockVRF.fulfillRandomWords(id, BigInt(day + 1) * 42n);
         await drainTickets(game, deployer);
+        await settleMidday(game, deployer, mockVRF);
       }
 
       // All request IDs should be strictly increasing.

@@ -18,6 +18,8 @@ import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 ///         any other confirmation count fails the count-zero expectation.
 contract RngVectorVrfConfirmations is DegenesisHarness {
     bytes4 internal constant REQ_SEL = bytes4(keccak256("requestRandomWords((bytes32,uint256,uint16,uint32,uint32,bytes))"));
+    // VRFV2PlusClient.ExtraArgsV1({nativePayment: true}).
+    bytes internal constant NATIVE = hex"92fd13380000000000000000000000000000000000000000000000000000000000000001";
 
     address internal buyer;
 
@@ -42,7 +44,7 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
                 requestConfirmations: confirmations,
                 callbackGasLimit: callbackGas,
                 numWords: 1,
-                extraArgs: ""
+                extraArgs: NATIVE
             })
         );
     }
@@ -101,10 +103,10 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
         uint256 sub = next.createSubscription();
         bytes32 key = keccak256("rotated-key");
         bytes memory six = abi.encodeWithSelector(
-            REQ_SEL, VRFRandomWordsRequest(key, sub, 6, 300_000, 1, "")
+            REQ_SEL, VRFRandomWordsRequest(key, sub, 6, 300_000, 1, NATIVE)
         );
         bytes memory four = abi.encodeWithSelector(
-            REQ_SEL, VRFRandomWordsRequest(key, sub, 4, 300_000, 1, "")
+            REQ_SEL, VRFRandomWordsRequest(key, sub, 4, 300_000, 1, NATIVE)
         );
         vm.expectCall(address(next), six, 1);
         vm.expectCall(address(next), four, 0);
@@ -120,8 +122,8 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
         MockVRFCoordinator next = new MockVRFCoordinator();
         uint256 sub = next.createSubscription();
         bytes32 key = keccak256("rotated-key-midday");
-        vm.expectCall(address(next), abi.encodeWithSelector(REQ_SEL, VRFRandomWordsRequest(key, sub, 4, 300_000, 1, "")), 1);
-        vm.expectCall(address(next), abi.encodeWithSelector(REQ_SEL, VRFRandomWordsRequest(key, sub, 6, 300_000, 1, "")), 0);
+        vm.expectCall(address(next), abi.encodeWithSelector(REQ_SEL, VRFRandomWordsRequest(key, sub, 4, 300_000, 1, NATIVE)), 1);
+        vm.expectCall(address(next), abi.encodeWithSelector(REQ_SEL, VRFRandomWordsRequest(key, sub, 6, 300_000, 1, NATIVE)), 0);
         vm.prank(ContractAddresses.ADMIN);
         game.updateVrfCoordinatorAndSub(address(next), sub, key, 300_000);
         assertEq(next.lastRequestId(), 1, "re-issued on the new coordinator");

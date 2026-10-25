@@ -26,7 +26,7 @@ contract CompletionCheckingCoordinator {
     DegenerusGame private immutable game;
     constructor(DegenerusGame game_) { game = game_; }
     function getSubscription(uint256) external pure returns (uint96, uint96, uint64, address, address[] memory) {
-        return (1000 ether, 0, 0, address(0), new address[](0));
+        return (0, 1000 ether, 0, address(0), new address[](0)); // native balance word
     }
     function requestRandomWords(VRFRandomWordsRequest calldata) external returns (uint256) {
         require(!game.rngComplete(), "completion remained true during request");

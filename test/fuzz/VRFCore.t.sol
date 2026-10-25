@@ -101,6 +101,14 @@ contract VRFCore is DeployProtocol {
         _lastFulfilledReqId = 0;
     }
 
+    /// @dev Craps windows request mid-day words at any native balance. Hold every mid-day
+    ///      request back with the basefee ceiling (Craps refuses above 4x it), so only daily
+    ///      requests move the buffer, as the unfunded subscription did before native billing.
+    function _holdMiddayRequests() internal {
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (1)), 0);
+        vm.fee(5 gwei);
+    }
+
     /// @dev Answer and publish every mid-day request the miner issues for closed Craps windows
     ///      until it has no work left today. Publishing one window's word can arm the next closed
     ///      window and request its word in the same call, so this loops to quiescence.
@@ -135,15 +143,16 @@ contract VRFCore is DeployProtocol {
     }
 
     /// @dev Setup for mid-day lootbox RNG: complete a day, make a purchase on the
-    ///      new day to create pending lootbox ETH, fund VRF subscription with LINK.
+    ///      new day to create pending lootbox ETH, fund the VRF subscription natively.
     ///      Returns the current timestamp for boundary checks.
     function _setupForMidDayRng() internal returns (uint256 ts) {
         return _setupForMidDayRng(false);
     }
 
-    /// @param quietCraps Fund LINK before the purchase and settle the mid-day requests for
-    ///        closed Craps windows, so the lootbox request under test is the only mid-day
-    ///        work and its publication arms no further window.
+    /// @param quietCraps Fund the subscription before the purchase, so the lootbox request
+    ///        under test is the only mid-day work and its publication arms no further window.
+    ///        Mid-day requests for closed Craps windows are settled either way: they no longer
+    ///        wait for a funded subscription.
     function _setupForMidDayRng(bool quietCraps) internal returns (uint256 ts) {
         // Complete day 1
         _completeDay(0xDEAD0001);
@@ -154,10 +163,10 @@ contract VRFCore is DeployProtocol {
         // Complete day 2 so _recordedDailyWord(day2) != 0
         _completeDay(0xDEAD0002);
 
-        if (quietCraps) {
-            mockVRF.fundSubscription(1, 100e18);
-            _settleMiddayRequests();
-        }
+        // Craps windows request at any native balance; answer them so the lootbox request
+        // under test is the next mid-day work.
+        if (quietCraps) mockVRF.fundSubscription(1, 100e18);
+        _settleMiddayRequests();
 
         // Purchase with lootbox amount to create pending ETH
         address buyer = makeAddr("lootboxBuyer");
@@ -165,7 +174,7 @@ contract VRFCore is DeployProtocol {
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
-        // Fund VRF subscription with LINK
+        // Fund the VRF subscription (the mock records the native balance)
         // Admin created subscription 1 during deploy; fund it
         if (!quietCraps) mockVRF.fundSubscription(1, 100e18);
 
@@ -425,6 +434,7 @@ contract VRFCore is DeployProtocol {
     ///         lootboxRngIndex must remain unchanged between first request and post-retry.
     function test_retryDetection_fuzz(uint256 word1, uint256 word2) public {
         vm.assume(word1 > 1);
+        _holdMiddayRequests();
 
         // Day 1: complete normally
         _completeDay(word1);
@@ -618,6 +628,10 @@ contract VRFCore is DeployProtocol {
         // The exact start of the final minute is blocked: the request is never selected, so a
         // mineFlip with nothing else to do finds no work and requests nothing.
         vm.warp(nextDayBoundary - 1 minutes);
+        // Craps windows that closed since setup leave table maintenance, which is not a request.
+        for (uint256 i; i < 16 && game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.Maintenance); ++i) {
+            game.mineFlip(0);
+        }
         uint256 priorReq = mockVRF.lastRequestId();
         assertEq(game.nextMinerAction(), 0, "the final minute selects no mid-day request");
         vm.expectRevert(bytes4(keccak256("NoWork()")));
@@ -838,6 +852,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Fuzz: timeout retry never double-increments lootboxRngIndex.
     function test_timeoutRetry_lootboxIndexPreserved_fuzz(uint256 word) public {
         vm.assume(word > 1);
+        _holdMiddayRequests();
 
         // Day 1: complete normally
         _completeDay(0xFEED0001);

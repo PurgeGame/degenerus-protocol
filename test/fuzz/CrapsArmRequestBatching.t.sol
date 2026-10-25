@@ -109,7 +109,8 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 5 hours + 10 minutes);
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (5)), 0);
-        vm.fee(6 gwei);
+        // Craps requests answer to four times the ceiling.
+        vm.fee(21 gwei);
         (bool armed, bool requested,) = _mine(16_000_000);
         assertTrue(armed, "a refused optional request does not undo the arm");
         assertFalse(requested);

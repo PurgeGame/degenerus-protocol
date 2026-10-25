@@ -41,19 +41,26 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
 
     }
 
+    /// @dev Drain every request created while completing the day (as VrfRotationOrphanIndex):
+    ///      Craps requests at any native balance, so mining past the daily unlock can issue a
+    ///      scheduled mid-day word, which is answered before mining again.
     function _completeDay(uint256 vrfWord) internal {
-        _finishReadConsumers();
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip(0);
-        assertTrue(game.rngLocked(), "daily request starts after prior consumers finish");
-        uint256 reqId = mockVRF.lastRequestId();
-        if (reqId != _lastFulfilledReqId && reqId > 0) {
-            mockVRF.fulfillRandomWords(reqId, vrfWord);
-            _lastFulfilledReqId = reqId;
+        for (uint256 i; i < 200; ++i) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                mockVRF.fulfillRandomWords(reqId, vrfWord);
+                _lastFulfilledReqId = reqId;
+            }
+            try game.mineFlip(0) {} catch (bytes memory reason) {
+                if (reason.length >= 4 && bytes4(reason) == bytes4(keccak256("NoWork()"))) {
+                    assertFalse(game.rngLocked(), "daily work drained");
+                    assertTrue(game.rngComplete(), "read consumers drained");
+                    return;
+                }
+                assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+            }
         }
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip(0);
-        }
+        fail("fixture did not finish daily and scheduled requests");
     }
 
     /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.

@@ -175,10 +175,10 @@ contract MinerNoProgressTest is Test {
         assertEq(game.minerAction(), uint8(action), "fixture action");
     }
 
-    function _fundCoordinator(uint96 link) private {
+    function _fundCoordinator(uint96 nativeBalance) private {
         game.wireCoordinator();
         vm.mockCall(ContractAddresses.VRF_COORDINATOR, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
-            abi.encode(link, uint96(0), uint64(0), address(0), new address[](0)));
+            abi.encode(uint96(0), nativeBalance, uint64(0), address(0), new address[](0)));
     }
 
     function _expectFailure(bytes4 reason, uint256 limit) private returns (uint256 used) {
@@ -358,13 +358,15 @@ contract MinerNoProgressTest is Test {
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, request, 0);
         _expectFailure(GameMiner.NoWork.selector, 16_700_000);
         game.setMiddayThreshold(0);
-        _fundCoordinator(1 ether);
-        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "LINK floor is checked first");
+        // Below 1.5x the lane minimum (at least 0.0744 ETH for any callback limit) a lootbox
+        // request is ineligible.
+        _fundCoordinator(0.07 ether);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "native floor is checked first");
         game.pendingCrapsWrite();
-        _fundCoordinator(10 ether);
+        _fundCoordinator(0);
         game.setMiddayThreshold(500);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday),
-            "pending Craps window waives the value gates at its own LINK floor");
+            "pending Craps window waives the value gates and the native floor");
     }
 
     function test_IneligibleOptionalRequestKeepsEarlierWorkWithoutAttempt() public {
