@@ -23,7 +23,9 @@ for (const [, target, body] of branches) {
   const methods = new Set();
   const selectors = new Set();
   for (const [, type, method] of body.matchAll(/(\w+)\.(\w+)\.selector/g)) {
-    assert.ok(type === name || (target === "CRAPS" && type === "JackpotBattle"), `${target}: selector from wrong ABI`);
+    // GameFacade is the profile-independent external surface of the Game; JackpotBattle holds the Craps owner calls.
+    assert.ok(type === name || (target === "GAME" && type === "GameFacade") || (target === "CRAPS" && type === "JackpotBattle"),
+      `${target}: selector from wrong ABI`);
     const f = iface.getFunction(method);
     assert.ok(f && !["view", "pure"].includes(f.stateMutability), `${target}: missing mutable method ${method}`);
     assert.ok(!selectors.has(f.selector), `${target}: duplicate/colliding selector ${method}`);
@@ -33,7 +35,7 @@ for (const [, target, body] of branches) {
     assert.ok(!selectors.has(f.selector), `${target}: excluded selector collision ${f.name}`);
   }
   // Discover direct public gates. Delegated facades are checked against their module source below.
-  for (const file of [name, ...(target === "GAME" ? ["modules/DegenerusGameAdvanceModule", "modules/DegenerusGameMintModule"] : []),
+  for (const file of [name, ...(target === "GAME" ? ["modules/GameFacade", "modules/DegenerusGameAdvanceModule", "modules/DegenerusGameMintModule"] : []),
     ...(target === "CRAPS" ? ["JackpotBattle"] : [])]) {
     const text = fs.readFileSync(`contracts/${file}.sol`, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
     for (const m of text.matchAll(/function\s+(\w+)\s*\([^)]*\)[^{;]*\{/g)) {
