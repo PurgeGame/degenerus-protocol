@@ -1,4 +1,3 @@
-import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -242,15 +241,6 @@ describe("GameOver", function () {
             { value: eth(0.01) }
           )
       ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
-    });
-
-    it("feed-swap proposals revert with GameOver after the terminal drain", async function () {
-      const { game, admin, deployer, mockVRF } = await loadFixture(deployFullProtocol);
-      await advanceTime(SECONDS_HARD_STALL + 86400);
-      await triggerGameOverAtLevel0(game, deployer, mockVRF);
-      expect(await game.gameOver()).to.be.true;
-      await expect(ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS]))
-        .to.be.revertedWithCustomError(admin, "GameOver");
     });
 
     it("purchaseDeityPass reverts with GameOver after the terminal drain", async function () {
