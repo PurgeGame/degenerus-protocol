@@ -583,6 +583,13 @@ contract MiddayRngCreditTest is DeployProtocol {
     // Paths that must REFUSE the credit without consuming it
     // ──────────────────────────────────────────────────────────────────────
 
+    /// @notice A creditless caller below the threshold is refused before the coordinator is read.
+    function test_creditlessCallerSkipsTheCoordinatorRead() public pricedBlock {
+        _purchaseBelowThreshold();
+        vm.expectCall(address(mockVRF), abi.encodeWithSignature("getSubscription(uint256)", uint256(1)), uint64(0));
+        assertEq(_actionFor(outsider), 0, "no mid-day request without credit");
+    }
+
     /// @notice A balance short of the charge buys nothing and is left untouched.
     function test_insufficientCreditRefusesAndPreservesBalance() public pricedBlock {
         _purchaseBelowThreshold();

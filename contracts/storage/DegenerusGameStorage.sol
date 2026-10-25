@@ -1290,8 +1290,8 @@ abstract contract DegenerusGameStorage {
     ///      liveness gates already hold on the path that reaches this check. A pending
     ///      write-side Craps window waives both pending-value gates. Otherwise an empty queue
     ///      is never eligible, and a queue below the threshold is eligible only when `caller`'s
-    ///      donated credit covers the charge, priced last only when
-    ///      every other gate passes.
+    ///      donated credit covers the charge, checked ahead of the coordinator read so a
+    ///      creditless caller never pays for it.
     function _minerMiddayEligible(address caller, MineFlipGas.Meter memory meter) internal view returns (bool) {
         bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
         bool needsCredit;
@@ -1312,12 +1312,14 @@ abstract contract DegenerusGameStorage {
         // No coordinator is wired before VRF setup, so nothing can be requested yet.
         if (address(vrfCoordinator) == address(0)) return false;
         if (!crapsWork) {
+            if (needsCredit) {
+                (bool covered,,,) = _middayCreditCharge(caller);
+                if (!covered) return false;
+            }
             (bool ok, uint256 nativeBal) = _vrfNativeBalance(meter, VRF_READ_RESERVE);
             if (!ok || nativeBal < _vrfMinFulfillBalance() * 3 / 2) return false;
         }
-        if (!needsCredit) return true;
-        (bool covered,,,) = _middayCreditCharge(caller);
-        return covered;
+        return true;
     }
 
     /// @dev Credit is denominated in wei. The basefee floor and the fixed priority-fee allowance
