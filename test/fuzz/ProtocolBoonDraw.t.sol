@@ -37,7 +37,7 @@ contract ProtocolBoonFixture is DegenerusGameStorage, WalletSeed {
         if (!ok) assembly { revert(add(data, 32), mload(data)) }
     }
     /// @dev Read back by Quests when a boon award credits a quest streak.
-    function currentDayView() external view returns (uint24) { return dailyIdx; }
+    function currentDayView_g542950() external view returns (uint24) { return dailyIdx; }
     function endGame() external { gameOver = true; }
     function requireLivenessTriggered() external view { require(_livenessTriggered(), "not past death deadline"); }
     function maxEntries(address issuer, uint24 day) external {

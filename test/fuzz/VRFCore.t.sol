@@ -288,6 +288,7 @@ contract VRFCore is DeployProtocol {
         assertFalse(game.rngLocked(), "the replacement completed the day");
 
         _finishReadConsumers();
+        vm.warp(block.timestamp + 1 days);
         for (uint256 i = 0; i < 40 && !game.rngLocked(); i++) {
             try game.mineFlip(0) {} catch { vm.warp(block.timestamp + 12 hours); }
         }

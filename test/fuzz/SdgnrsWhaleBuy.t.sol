@@ -19,7 +19,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///      sees the live level, claimable, boon lane and RNG state.
 contract WhaleModuleForwarder is DegenerusGameStorage {
     /// @dev The Game's logical day, which the quest handler reads back during the affiliate payout.
-    function currentDayView() external view returns (uint24) {
+    function currentDayView_g542950() external view returns (uint24) {
         return dailyIdx;
     }
 
