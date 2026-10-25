@@ -394,6 +394,10 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         require(game.gameOver(), "game over latched");
     }
 
+    function _lastPurchaseDay() private view returns (bool lastDay) {
+        (,, lastDay,,) = game.purchaseInfo();
+    }
+
     function _lootboxRngWord() private view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
     }
@@ -428,10 +432,20 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
     function testGameOverPurchaseTimeout() public {
         vm.pauseGasMetering();
         _liveGameWithBook();
+        // The protocol's own AFKing subscriptions keep small purchases coming, so levels keep moving
+        // while days complete: 30 game days below target cannot happen naturally in this rig. Settle
+        // idle days into a purchase phase, age that phase to 30 completed days (purchaseStartDay is the
+        // header's low 24 bits), and open the next day. The engine's own 30-day rule then fires.
+        for (uint256 k; k < 40 && game.currentDayView() < 31; ++k) _day(NO_BUY);
+        require(game.currentDayView() >= 31, "fixture: 30 game days exist");
+        for (uint256 k; k < 60 && (game.jackpotPhase() || _lastPurchaseDay()); ++k) _day(NO_BUY);
+        require(!game.jackpotPhase() && !_lastPurchaseDay(), "fixture: an ordinary purchase day");
+        uint256 header = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32((header & ~uint256(0xFFFFFF)) | (uint256(game.currentDayView()) - 30)));
         _on("gameOverPurchaseTimeout");
-        uint256 idleDays;
-        for (; idleDays < 80 && !game.livenessTriggered(); ++idleDays) _day(NO_BUY);
+        _warpDay(_today() + 1, 10 minutes);
         require(game.livenessTriggered(), "the purchase deadline fired");
+        uint256 idleDays = 30;
         (bool complete,, uint48 completedAt) = game.dailySessionState();
         assertTrue(complete, "every day completed");
         assertLt(block.timestamp, uint256(completedAt) + 14 days, "no hard stall: days kept completing");

@@ -53,6 +53,10 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
                 }
             }
             assertTrue(_sealed(day), "bounded real day completed");
+            assertEq(game.rngWordForDay(day), word);
+            assertFalse(game.isRngFulfilled(), "day returned to waiting");
+            assertGt(callback, 0, "non-vacuous callback");
+            assertGt(request, 0, "fresh real request");
             // A mid-day request the engine sent on the way stays outstanding; answer it so the next
             // cycle starts from an idle engine.
             uint256 open = mockVRF.lastRequestId();
@@ -64,10 +68,6 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
                 callback += vm.snapshotGasLastCall("sentinel-callback");
                 fulfilled = open;
             }
-            assertEq(game.rngWordForDay(day), word);
-            assertFalse(game.isRngFulfilled(), "day returned to waiting");
-            assertGt(callback, 0, "non-vacuous callback");
-            assertGt(request, 0, "fresh real request");
             callbacks += callback; requests += request; cranks += crank;
             emit log_named_uint("cycle", cycle);
             emit log_named_uint("cold callback transaction gas", callback);
