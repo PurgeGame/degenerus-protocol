@@ -210,3 +210,24 @@ sweep. An unanswered normal-ending terminal request also takes this path after 1
 The terminal decimator has been removed.
 Read `DegenerusGameGameOverModule` and the reserve-token terminal paths for the exact
 claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md).
+
+## Native randomness funding
+
+VRF requests are paid in ETH. At level entry, funding takes untracked yield before the
+23% stakeholder distributions, then sDGNRS ordinary claimable and finally its prepaid
+AFKing balance if needed. A daily low-water check uses the same order. Each sDGNRS
+debit reduces aggregate claim liabilities by the exact amount sent, so its live price
+and redemption preview reflect that spending immediately. No other player's claim,
+prize pool, redemption reserve or accumulated yield is debited.
+
+Funding is limited to the Game's liquid ETH. It never swaps or unstakes stETH. Staking
+retains one funding target beyond the player-claim ETH reserve; that reserve is soft
+for funding, while total ETH plus stETH must still cover all remaining obligations.
+
+A native donation sends its full value to the subscription and banks floor(value / 4)
+wei of mid-day request credit. Only the donor's own mineFlip can spend that credit,
+against pending work. It earns no FLIP and has no value after game over. Optional
+lootbox requests require the subscription balance floor; daily, retry, terminal and
+craps requests do not. Custom battles and unusually expensive fulfillment can consume
+more than the scheduled-window funding estimate; daily refills and donations replenish
+the subscription when liquid funding sources are available.

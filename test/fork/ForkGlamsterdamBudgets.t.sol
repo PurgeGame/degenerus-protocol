@@ -301,15 +301,11 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol, NativeGasExp
 contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
     function setUp() public {
         _baseSetUp();
-        // Subscription funded with LINK and native balance; the Admin holds its own LINK.
-        address donor = makeAddr("linkDonor");
-        _realLink(donor, 50 ether);
-        vm.prank(donor);
-        require(link.transferAndCall(address(admin), 50 ether, ""), "LINK transferAndCall");
+        address donor = makeAddr("nativeDonor");
         vm.deal(donor, 1 ether);
         vm.prank(donor);
-        ICoordinatorExtra(ForkPins.VRF_COORDINATOR).fundSubscriptionWithNative{value: 1 ether}(subId);
-        _realLink(address(admin), 5 ether);
+        admin.donateVrf{value: 1 ether}();
+
     }
 
     // ------------------------------------------------------------------ stETH reads (50k)
@@ -413,10 +409,7 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
 
     // ------------------------------------------------------------------ feed, sDGNRS
 
-    function test_c01_feed() public {
-        _run("LINK/ETH feed latestRoundData  [Admin:1399]", 50_000,
-            _view(address(admin), ForkPins.LINK_ETH_FEED, abi.encodeWithSignature("latestRoundData()")), true, true);
-    }
+
 
     // ------------------------------------------------------------------ shutdownVrf (800k) and its inner calls
 
@@ -427,16 +420,9 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
             true, true);
     }
 
-    function test_d02_linkBalanceOf() public {
-        _run("LINK.balanceOf(Admin)  [Admin:1238]", 50_000,
-            _view(address(admin), ForkPins.LINK, abi.encodeWithSignature("balanceOf(address)", address(admin))), true, true);
-    }
 
-    function test_d03_linkTransferNewVaultSlot() public {
-        _run("LINK.transfer(Vault, all): Vault slot new, Admin slot cleared  [Admin:1241]", 200_000,
-            _send(address(admin), ForkPins.LINK, 0,
-                abi.encodeWithSignature("transfer(address,uint256)", ContractAddresses.VAULT, 5 ether)), true, true);
-    }
+
+
 
     function test_d04_shutdownWhole() public {
         _run("Admin.shutdownVrf whole frame, cancel succeeds + Admin LINK swept  [GameOver:813]", 800_000,

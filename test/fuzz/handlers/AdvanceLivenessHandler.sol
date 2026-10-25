@@ -11,7 +11,6 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
-import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 import {TicketQueueStorage as TQ} from "../helpers/TicketQueueStorage.sol";
 import {IDegenerusGameRngModule} from "../../../contracts/interfaces/IDegenerusGameModules.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
@@ -83,7 +82,7 @@ contract AdvanceLivenessHandler is Test {
     // ---- error selectors (AdvanceModule / Storage) ----
     bytes4 private constant E_MID_DAY_ACTIVE = bytes4(keccak256("MidDayActive()"));
     bytes4 private constant E_PRE_RESET = bytes4(keccak256("PreResetWindow()"));
-    bytes4 private constant E_INSUFFICIENT_LINK = bytes4(keccak256("InsufficientLink()"));
+    bytes4 private constant E_INSUFFICIENT_LINK = bytes4(keccak256("InsufficientNativeBalance()"));
     bytes4 private constant E_NO_PENDING = bytes4(keccak256("NoPendingLootbox()"));
     bytes4 private constant E_BELOW_THRESHOLD = bytes4(keccak256("BelowThreshold()"));
     bytes4 private constant E_GAS_TOO_HIGH = bytes4(keccak256("GasTooHigh()"));
@@ -254,7 +253,6 @@ contract AdvanceLivenessHandler is Test {
     /// A funded LINK donor whose credit pays the threshold gate on the donor's own mineFlip.
     function _donor() internal returns (address donor) {
         donor = address(uint160(0xD0D0D0));
-        MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(vm.getBlockTimestamp());
         vm.prank(ContractAddresses.ADMIN);
         game.creditMiddayRng(donor, 1 ether);
     }
@@ -440,7 +438,6 @@ contract AdvanceLivenessHandler is Test {
             try game.purchase{value: 0.01 ether}(
                 0, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
-            MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(vm.getBlockTimestamp());
             vm.prank(ContractAddresses.ADMIN);
             game.creditMiddayRng(probe, 1 ether);
             bool ok;

@@ -21,10 +21,8 @@ library ForkPins {
     uint256 internal constant FORK_BLOCK = 26193851;
     uint256 internal constant FORK_TIMESTAMP = 1792018355;
     address internal constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
-    address internal constant LINK = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
     address internal constant VRF_COORDINATOR = 0xD7f86b4b8Cae7D942340FF628F82735b7a20893a;
-    address internal constant LINK_ETH_FEED = 0xDC530D9457755926550b59e8ECcdaE7624181557;
-    bytes32 internal constant VRF_KEY_HASH = 0x3fd2fec10d06ee8f65e7f2e95f5c56511359ece3f33960ad8a866ae24a8ff10b;
+    bytes32 internal constant VRF_KEY_HASH = 0x8077df514608a09f83e4e8d300645594e5d7234665448ba83f51a50f842bd3d9;
 
     /// @dev Lido v3's Accounting contract (LidoLocator.accounting() at FORK_BLOCK): the only caller
     ///      Lido.processClStateUpdate accepts. The oracle report's consensus-layer balance update is

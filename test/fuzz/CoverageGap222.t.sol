@@ -607,31 +607,9 @@ contract CoverageGap222 is DeployProtocol {
     //             minimum and attempt the happy-path where feasible.
     // ====================================================================
 
-    function test_gap_admin_proposeFeedSwap_noStall_reverts() public {
-        address newFeed = makeAddr("newFeed");
-        vm.prank(buyer);
-        (bool ok, ) = address(admin).call(
-            abi.encodeWithSignature(
-                "proposeFeedSwap(address)",
-                newFeed
-            )
-        );
-        // proposeFeedSwap has stall/stake preconditions; non-met reverts.
-        assertFalse(ok, "proposeFeedSwap rejected caller without stall/stake");
-    }
 
-    function test_gap_admin_voteFeedSwap_noProposal_reverts() public {
-        vm.prank(buyer);
-        (bool ok, ) = address(admin).call(
-            abi.encodeWithSignature(
-                "voteFeedSwap(uint256,bool)",
-                uint256(1),
-                true
-            )
-        );
-        // No proposal id 1 → revert expected.
-        assertFalse(ok, "voteFeedSwap rejected vote on nonexistent proposal");
-    }
+
+
 
     function test_gap_admin_swapGameEthForStEth_nonOwner_reverts() public {
         vm.prank(buyer);

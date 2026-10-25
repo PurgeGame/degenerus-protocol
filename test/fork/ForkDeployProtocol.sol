@@ -61,6 +61,7 @@ interface IRealVRFCoordinator {
     function getSubscription(uint256 subId)
         external view
         returns (uint96 balance, uint96 nativeBalance, uint64 reqCount, address subOwner, address[] memory consumers);
+    function fundSubscriptionWithNative(uint256 subId) external payable;
     function pendingRequestExists(uint256 subId) external view returns (bool);
     function s_requestCommitments(uint256 requestId) external view returns (bytes32);
     function s_provingKeys(bytes32 keyHash) external view returns (bool exists, uint64 maxGas);
@@ -77,8 +78,6 @@ interface IRealVRFCoordinator {
             uint8 nativePremiumPercentage,
             uint8 linkPremiumPercentage
         );
-    function LINK() external view returns (address);
-    function LINK_NATIVE_FEED() external view returns (address);
     function MAX_NUM_WORDS() external view returns (uint32);
     function MAX_REQUEST_CONFIRMATIONS() external view returns (uint16);
     function owner() external view returns (address);
@@ -103,29 +102,15 @@ interface ILidoStETH {
     function symbol() external view returns (string memory);
 }
 
-/// @dev The ERC-677 LINK token.
-interface ILinkToken677 {
-    function balanceOf(address) external view returns (uint256);
-    function transfer(address, uint256) external returns (bool);
-    function transferAndCall(address to, uint256 value, bytes calldata data) external returns (bool);
-    function symbol() external view returns (string memory);
-}
-
-interface IChainlinkFeed {
-    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80);
-    function decimals() external view returns (uint8);
-    function description() external view returns (string memory);
-}
-
 /// @title ForkDeployProtocol -- the protocol deployed onto a pinned mainnet fork.
 /// @notice Deploys every contract exactly as DeployProtocol does (four mocks at nonces 1-4 so the
 ///         protocol keeps its CREATE-predicted addresses from nonce 5), but against the REAL
-///         Lido stETH, LINK, Chainlink VRF v2.5 coordinator and LINK/ETH feed, which
+///         Lido stETH and the Chainlink VRF v2.5 coordinator, which
 ///         scripts/lib/patchForFork.js wires into ContractAddresses.sol from ForkPins. The mocks are
 ///         deployed only to hold the nonces; nothing references them.
 ///
 ///         Mainnet time is kept: the fixture never warps to 86400 (the Foundry suites' clock), since
-///         the real LINK/ETH round would then lie in the future. DEPLOY_DAY_BOUNDARY is derived from
+///         the real Lido state would not match. DEPLOY_DAY_BOUNDARY is derived from
 ///         FORK_TIMESTAMP by the patch, and the fixture refuses to run on any other build.
 ///
 ///         VRF fulfilment: a real fulfilment needs an ECVRF proof signed by the Chainlink oracle's
@@ -136,13 +121,11 @@ interface IChainlinkFeed {
 ///         cancelSubscription read), and calls the consumer's rawFulfillRandomWords from the
 ///         coordinator address, with the
 ///         request's 300k callback gas limit and the real requestId. Billing of the fulfilment
-///         (the LINK debit) is not simulated; every request and commitment IS the real
+///         (the native debit) is not simulated; every request and commitment IS the real
 ///         coordinator's.
 abstract contract ForkDeployProtocol is DeployProtocol {
     IRealVRFCoordinator internal constant coordinator = IRealVRFCoordinator(ForkPins.VRF_COORDINATOR);
     ILidoStETH internal constant lido = ILidoStETH(ForkPins.STETH);
-    ILinkToken677 internal constant link = ILinkToken677(ForkPins.LINK);
-    IChainlinkFeed internal constant linkEthFeed = IChainlinkFeed(ForkPins.LINK_ETH_FEED);
 
     bytes4 internal constant NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 internal constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
@@ -180,9 +163,8 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         require(block.number == ForkPins.FORK_BLOCK, "fork: wrong block");
         require(block.timestamp == ForkPins.FORK_TIMESTAMP, "fork: FORK_TIMESTAMP does not match FORK_BLOCK");
         require(
-            ContractAddresses.STETH_TOKEN == ForkPins.STETH && ContractAddresses.LINK_TOKEN == ForkPins.LINK
+            ContractAddresses.STETH_TOKEN == ForkPins.STETH
                 && ContractAddresses.VRF_COORDINATOR == ForkPins.VRF_COORDINATOR
-                && ContractAddresses.LINK_ETH_FEED == ForkPins.LINK_ETH_FEED
                 && ContractAddresses.VRF_KEY_HASH == ForkPins.VRF_KEY_HASH,
             "fork: ContractAddresses.sol is not the fork patch (run node scripts/lib/patchForFork.js)"
         );
@@ -191,10 +173,8 @@ abstract contract ForkDeployProtocol is DeployProtocol {
             "fork: DEPLOY_DAY_BOUNDARY is not derived from FORK_TIMESTAMP"
         );
         // The dependencies really are what the pins say they are at this block.
-        require(ForkPins.STETH.code.length != 0 && ForkPins.LINK.code.length != 0, "fork: token code missing");
-        require(ForkPins.VRF_COORDINATOR.code.length != 0 && ForkPins.LINK_ETH_FEED.code.length != 0, "fork: code missing");
-        require(coordinator.LINK() == ForkPins.LINK, "fork: coordinator LINK mismatch");
-        require(coordinator.LINK_NATIVE_FEED() == ForkPins.LINK_ETH_FEED, "fork: coordinator feed mismatch");
+        require(ForkPins.STETH.code.length != 0, "fork: token code missing");
+        require(ForkPins.VRF_COORDINATOR.code.length != 0, "fork: code missing");
     }
 
     /// @dev DeployProtocol._deployProtocol, minus its warp to 86400.
@@ -401,11 +381,8 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         delivered = lido.balanceOf(to) - before;
     }
 
-    /// @dev Real LINK for `to`, written into the LINK token's balance mapping.
-    function _realLink(address to, uint256 amount) internal {
-        deal(ForkPins.LINK, to, link.balanceOf(to) + amount);
-        require(link.balanceOf(to) >= amount, "fork: LINK deal failed");
-    }
+    /// @dev Native ETH test funding for `to`.
+    function _realNative(address to, uint256 amount) internal { vm.deal(to, to.balance + amount); }
 
     /// @dev Positive Lido rebase through Lido's own report entry point: the Accounting contract's
     ///      consensus-layer balance update (processClStateUpdate) raises the validators' balance by

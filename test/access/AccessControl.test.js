@@ -280,13 +280,7 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(admin, "NotAuthorized");
     });
 
-    it("proposeFeedSwap: reverts when called by alice (no sDGNRS → InsufficientStake)", async function () {
-      const { admin, alice } = await loadFixture(deployFullProtocol);
-      const ZERO = "0x" + "0".repeat(40);
-      await expect(
-        admin.connect(alice).proposeFeedSwap(ZERO)
-      ).to.be.revertedWithCustomError(admin, "InsufficientStake");
-    });
+
 
     // stakeGameEthToStEth and setLootboxRngThreshold removed from Admin in Phase 146
     // (now live directly on DegenerusGame with vault-owner access control)

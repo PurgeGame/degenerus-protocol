@@ -351,7 +351,7 @@ contract VaultPlayerActionsTest is SeatFixture {
     }
 
     function testFuzz_unlistedSelectorCannotBeCalledOnProtocolTargets(uint8 targetIndex, bytes4 selector) public {
-        address[14] memory targets = [
+        address[13] memory targets = [
             ContractAddresses.GAME,
             ContractAddresses.COINFLIP,
             ContractAddresses.COIN,
@@ -364,8 +364,7 @@ contract VaultPlayerActionsTest is SeatFixture {
             ContractAddresses.JACKPOTS,
             ContractAddresses.AFKING_SUB_TOKEN,
             ContractAddresses.GNRUS,
-            ContractAddresses.ADMIN,
-            ContractAddresses.LINK_TOKEN
+            ContractAddresses.ADMIN
         ];
         address target = targets[uint256(targetIndex) % targets.length];
         vm.assume(!VaultPlayerActions.isAllowed(target, selector));

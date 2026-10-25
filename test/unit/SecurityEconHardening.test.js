@@ -64,7 +64,7 @@ async function buyFullTickets(game, buyer, n, totalEth) {
     BigInt(n) * 400n,
     0n,
     ZERO_BYTES32,
-    MintPaymentKind.DirectEth,false, 
+    MintPaymentKind.DirectEth,false,
     { value: eth(totalEth) }
   );
 }
@@ -397,7 +397,7 @@ describe("SecurityEconHardening", function () {
         400n,
         0n,
         ZERO_BYTES32,
-        MintPaymentKind.DirectEth,false, 
+        MintPaymentKind.DirectEth,false,
         { value: eth(0.01) }
       );
 
@@ -508,7 +508,7 @@ describe("SecurityEconHardening", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.Claimable,false, 
+          MintPaymentKind.Claimable,false,
           { value: 0n }
         )
       ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
@@ -549,75 +549,8 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // ECON-05: LINK reward formula correctness
   // =========================================================================
-  describe("ECON-05: LINK reward formula", function () {
-    async function assertDonation(startLink, donatedLink, expectedFlip) {
-      const { admin, mockLINK, mockVRF, mockFeed, game, coinflip, vault, sdgnrs, deployer, alice } =
-        await loadFixture(deployFullProtocol);
-      const adminAddr = await admin.getAddress();
-      const vrfAddr = await mockVRF.getAddress();
-      const feedAddr = await mockFeed.getAddress();
-      const subId = await admin.subscriptionId();
-      expect(subId).to.be.gt(0n);
-      expect(await admin.linkEthPriceFeed()).to.equal(ZERO_ADDRESS);
-      expect((await mockVRF.getSubscription(subId))[0]).to.equal(0n);
 
-      // Public unwrap supplies a real voter; governance installs the healthy feed.
-      await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [deployer.address, hre.ethers.parseUnits("1000", 12)]);
-      expect(await sdgnrs.votingSupply()).to.equal(hre.ethers.parseUnits("1000", 12));
-      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
-      const proposalId = await admin.feedProposalCount();
-      await admin.connect(deployer).voteFeedSwap(proposalId, true);
-      expect(await admin.linkEthPriceFeed()).to.equal(feedAddr);
-      expect((await admin.feedProposals(proposalId)).state).to.equal(1n);
-      expect(await mockFeed.price()).to.equal(eth("0.004"));
-      expect(await game.mintPrice()).to.equal(eth("0.01"));
-
-      // Seed the subscription with an actual LINK transfer, without donor rewards.
-      const initial = eth(startLink);
-      if (initial !== 0n) {
-        await mockLINK.mint(deployer.address, initial);
-        await mockLINK.connect(deployer).transferAndCall(vrfAddr, initial,
-          hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [subId]));
-      }
-      const amount = eth(donatedLink);
-      const reward = BigInt(expectedFlip);
-      expect(reward, "fixture must exercise a nonzero reward").to.be.gt(0n);
-      await mockLINK.mint(alice.address, amount);
-      expect(await mockLINK.balanceOf(alice.address)).to.equal(amount);
-      expect(await mockLINK.balanceOf(adminAddr)).to.equal(0n);
-      expect(await mockLINK.balanceOf(vrfAddr)).to.equal(initial);
-      expect((await mockVRF.getSubscription(subId))[0]).to.equal(initial);
-      expect(await coinflip.coinflipAmount(alice.address)).to.equal(0n);
-      const middayBefore = await game.middayRngCredits(alice.address);
-
-      const tx = await mockLINK.connect(alice).transferAndCall(adminAddr, amount, "0x");
-      await expect(tx).to.emit(admin, "LinkCreditRecorded").withArgs(await game.walletIdOf_g3120(alice.address), reward);
-      expect(await coinflip.coinflipAmount(alice.address), "actual donor reward").to.equal(reward);
-      expect(await mockLINK.balanceOf(alice.address)).to.equal(0n);
-      expect(await mockLINK.balanceOf(adminAddr)).to.equal(0n);
-      expect(await mockLINK.balanceOf(vrfAddr)).to.equal(initial + amount);
-      expect((await mockVRF.getSubscription(subId))[0]).to.equal(initial + amount);
-      expect(await game.middayRngCredits(alice.address)).to.equal(middayBefore + amount);
-    }
-
-    it("10 LINK from empty earns the integrated 2.95x reward: 11800 FLIP", async function () {
-      // Average of 3 and 2.9 over [0,10], times 400 FLIP/LINK at 1x.
-      await assertDonation("0", "10", "11800");
-    });
-
-    it("LINK donation across 200 LINK pays the exact two-tier integral and forwards custody", async function () {
-      // [190,200]: 10*(1.1+1)/2; [200,210]: 10*(1+.9875)/2.
-      // Combined area 20.4375, at 400 FLIP per LINK-equivalent = 8175 FLIP.
-      await assertDonation("190", "20", "8175");
-    });
-
-    it("LINK donation crossing 1000 LINK rewards only its below-cap integral", async function () {
-      // [990,1000]: 10*(.0125+0)/2; [1000,1010]: zero. Area .0625 * 400.
-      await assertDonation("990", "20", "25");
-    });
-  });
 
   // =========================================================================
   // ADDITIONAL: Cross-cutting structural tests
@@ -638,7 +571,7 @@ describe("SecurityEconHardening", function () {
           400n,
           0n,
           ZERO_BYTES32,
-          MintPaymentKind.DirectEth,false, 
+          MintPaymentKind.DirectEth,false,
           { value: eth(0.01) }
         )
       ).to.be.revertedWithCustomError(errorAbi("E()"), "E");

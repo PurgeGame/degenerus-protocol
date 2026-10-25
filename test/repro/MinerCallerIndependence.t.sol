@@ -41,12 +41,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         assertFalse(game.advanceDue(), "real deployment reaches idle");
         assertFalse(game.boxesPending(), "no box can hide the empty-queue control");
         vm.fee(1 gwei);
-        // The canonical local address file can leave the optional feed unpinned.
-        stdstore.target(address(admin)).sig("linkEthPriceFeed()").checked_write(address(mockFeed));
-        mockFeed.setUpdatedAt(vm.getBlockTimestamp());
-        uint256 weiPerLink = admin.linkAmountToEth(1 ether);
-        assertGt(weiPerLink, 0, "installed LINK feed makes the charge nonzero");
-        charge = 201_000 * block.basefee * 6 * 1 ether / weiPerLink;
+        charge = 300_000 * block.basefee * 2;
         assertGt(charge, 0);
         _grant(DONOR, charge * 3);
         // A zero-address donor cannot acquire an ID or own credit.

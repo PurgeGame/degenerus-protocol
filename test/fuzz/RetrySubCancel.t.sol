@@ -3,23 +3,19 @@ pragma solidity 0.8.38;
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {MockLinkToken} from "../../contracts/mocks/MockLinkToken.sol";
 
 /// @dev A retired VRF coordinator that models the two behaviours the shared MockVRFCoordinator
 ///      does not: `cancelSubscription` reverting while the subscription still has an
 ///      outstanding request (Chainlink v2.5 `PendingRequestExists`), and refunding the balance
-///      in LINK rather than native. Both are load-bearing for retrySubCancel — without the
-///      revert there is no retry to test, and without the LINK refund nothing lands to forward.
+///      in native ETH. Both are load-bearing for retrySubCancel — without the
+///      revert there is no retry to test, and without the native ETH refund nothing lands to forward.
 contract RetiredCoordinator {
     error PendingRequestExists();
 
-    MockLinkToken private immutable link;
     bool public backlogPending = true;
     bool public cancelled;
 
-    constructor(MockLinkToken link_) {
-        link = link_;
-    }
+
 
     function clearBacklog() external {
         backlogPending = false;
@@ -28,12 +24,13 @@ contract RetiredCoordinator {
     function cancelSubscription(uint256, address to) external {
         if (backlogPending) revert PendingRequestExists();
         cancelled = true;
-        uint256 bal = link.balanceOf(address(this));
-        if (bal != 0) link.transfer(to, bal);
+        uint256 bal = address(this).balance;
+        (bool ok,) = to.call{value: bal}("");
+        require(ok);
     }
 }
 
-/// @title RetrySubCancel — LINK recovery from a retired VRF subscription must never be one-shot.
+/// @title RetrySubCancel — native ETH recovery from a retired VRF subscription must never be one-shot.
 /// @notice A coordinator swap overwrites `coordinator`/`subscriptionId` but never transfers
 ///         subscription ownership, so DegenerusAdmin stays the retired subscription's owner and
 ///         can still cancel it. `cancelSubscription` reverts while a request is outstanding —
@@ -61,17 +58,17 @@ contract RetrySubCancelTest is DeployProtocol {
             abi.encode(true)
         );
 
-        // A retired coordinator still holding the stranded LINK balance.
-        retired = new RetiredCoordinator(mockLINK);
-        mockLINK.mint(address(retired), STRANDED);
+        // A retired coordinator still holding the stranded native ETH balance.
+        retired = new RetiredCoordinator();
+        vm.deal(address(retired), STRANDED);
     }
 
-    function _linkOf(address a) internal view returns (uint256) {
-        return mockLINK.balanceOf(a);
+    function _nativeOf(address a) internal view returns (uint256) {
+        return a.balance;
     }
 
     function _liveSubBalance() internal view returns (uint96 bal) {
-        (bal, , , , ) = mockVRF.getSubscription(1);
+        (, bal, , , ) = mockVRF.getSubscription(1);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -116,7 +113,7 @@ contract RetrySubCancelTest is DeployProtocol {
         vm.expectRevert(RetiredCoordinator.PendingRequestExists.selector);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
-        assertEq(_linkOf(address(retired)), STRANDED, "failed attempt moved LINK");
+        assertEq(_nativeOf(address(retired)), STRANDED, "failed attempt moved native ETH");
         assertFalse(retired.cancelled(), "cancel recorded despite revert");
 
         // The old coordinator finally drains its backlog.
@@ -125,7 +122,7 @@ contract RetrySubCancelTest is DeployProtocol {
         vm.prank(vaultOwner);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
-        assertEq(_linkOf(address(retired)), 0, "stranded LINK not recovered on retry");
+        assertEq(_nativeOf(address(retired)), 0, "stranded native ETH not recovered on retry");
     }
 
     /// @notice Repeated failures stay retryable — the attempt is not consumed by trying.
@@ -138,14 +135,14 @@ contract RetrySubCancelTest is DeployProtocol {
         retired.clearBacklog();
         vm.prank(vaultOwner);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
-        assertEq(_linkOf(address(retired)), 0, "recovery blocked after repeated failures");
+        assertEq(_nativeOf(address(retired)), 0, "recovery blocked after repeated failures");
     }
 
     // ──────────────────────────────────────────────────────────────────────
     // Routing
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice While the game runs, recovered LINK refuels the LIVE subscription.
+    /// @notice While the game runs, recovered native ETH refuels the LIVE subscription.
     function test_refuelsLiveSubscriptionWhileGameRuns() public {
         retired.clearBacklog();
         uint96 before = _liveSubBalance();
@@ -156,9 +153,9 @@ contract RetrySubCancelTest is DeployProtocol {
         assertEq(
             uint256(_liveSubBalance()),
             uint256(before) + STRANDED,
-            "recovered LINK did not refuel the live subscription"
+            "recovered native ETH did not refuel the live subscription"
         );
-        assertEq(_linkOf(address(admin)), 0, "LINK stalled in Admin");
+        assertEq(_nativeOf(address(admin)), 0, "native ETH stalled in Admin");
     }
 
     /// @notice At game over the vault is the terminal destination, matching shutdownVrf.
@@ -169,15 +166,15 @@ contract RetrySubCancelTest is DeployProtocol {
             abi.encodeWithSignature("gameOver()"),
             abi.encode(true)
         );
-        uint256 vaultBefore = _linkOf(address(vault));
+        uint256 vaultBefore = _nativeOf(address(vault));
 
         vm.prank(vaultOwner);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         assertEq(
-            _linkOf(address(vault)) - vaultBefore,
+            _nativeOf(address(vault)) - vaultBefore,
             STRANDED,
-            "recovered LINK did not reach the vault at game over"
+            "recovered native ETH did not reach the vault at game over"
         );
     }
 
@@ -186,14 +183,14 @@ contract RetrySubCancelTest is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice A failed forward rolls the cancel back with it: the whole call reverts, the
-    ///         retired subscription is untouched, and no LINK is left parked in Admin with the
+    ///         retired subscription is untouched, and no native ETH is left parked in Admin with the
     ///         handle already spent. The same call then succeeds once the forward recovers.
     function test_failedForwardRollsBackAtomically() public {
         retired.clearBacklog();
 
         vm.mockCallRevert(
-            address(mockLINK),
-            abi.encodeWithSelector(MockLinkToken.transferAndCall.selector),
+            address(mockVRF),
+            abi.encodeWithSelector(mockVRF.fundSubscriptionWithNative.selector),
             "forward down"
         );
 
@@ -202,8 +199,8 @@ contract RetrySubCancelTest is DeployProtocol {
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         // Cancel rolled back with the forward — nothing moved, nothing spent.
-        assertEq(_linkOf(address(retired)), STRANDED, "cancel was not rolled back");
-        assertEq(_linkOf(address(admin)), 0, "LINK parked in Admin after a failed forward");
+        assertEq(_nativeOf(address(retired)), STRANDED, "cancel was not rolled back");
+        assertEq(_nativeOf(address(admin)), 0, "native ETH parked in Admin after a failed forward");
         assertFalse(retired.cancelled(), "cancel persisted through a reverted call");
 
         // Forward recovers; the identical call now completes.
@@ -218,7 +215,7 @@ contract RetrySubCancelTest is DeployProtocol {
         vm.prank(vaultOwner);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
-        assertEq(_linkOf(address(admin)), 0, "LINK stalled in Admin");
+        assertEq(_nativeOf(address(admin)), 0, "native ETH stalled in Admin");
         assertEq(
             uint256(_liveSubBalance()),
             uint256(before) + STRANDED,

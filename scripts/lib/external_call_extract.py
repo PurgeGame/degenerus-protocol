@@ -268,7 +268,7 @@ def main():
                 if inst_re:
                     for m in inst_re.finditer(line):
                         found.append((m.start(), f"{instances[m.group(1)]}.{m.group(2)}"))
-                for m in re.finditer(r"\bBoundedCall\.(callRemaining|callValueRemaining|callBoolRemaining|staticcallRemaining|staticWordRemaining)\s*\(", line):
+                for m in re.finditer(r"\bBoundedCall\.(callRemaining|callValueRemaining|callBoolRemaining|staticcallRemaining|staticWordRemaining|staticcallFixed|callValueFixed)\s*\(", line):
                     found.append((m.start(), "bounded:" + m.group(1)))
                 for m in LOWLEVEL_RE.finditer(line):
                     kind = m.group(1)

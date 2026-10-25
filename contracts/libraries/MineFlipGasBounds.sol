@@ -14,17 +14,16 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_DIRECT_GROUP_GAS = 65_000;
     // Dispatch, decoding and checkpoint normalization; selection is admitted separately.
     uint256 internal constant ENGINE_BOUNDARY = 200_000;
-    // Selection plus native ETH admission: 50k + 200k reserve + 794 EIP-150
-    // + 10k frame, optional credit-price read and cold selection reads, with margin.
+    // Selection, one fixed 50k native-balance probe and caller-credit lookup, with margin.
     uint256 internal constant ENGINE_SELECTION = 450_000;
     // Return and one caller credit; native R90 fresh/spill transactions: 130.7k/148.1k.
     uint256 internal constant ENGINE_RETURN = 200_000;
     // Prior cold-century envelope: 5.954M including 25 fresh slots; revalidate R90 callers.
     uint256 internal constant DAILY_APPLY = 7_200_000;
-    // Cold midday 530.7k + request admission 1,017,936 + native ETH admission 260,793,
-    // including the reserves as well as the forwarding minima, with 20% margin.
+    // Native cold request/credit witnesses peak at 523.9k; retain forwarding and frame headroom.
     uint256 internal constant RNG_MIDDAY_REQUEST = 2_200_000;
-    // Cold daily request 2.632M + request admission 1,017,936, with 20% margin.
+    // Native daily witnesses: 1.54M normal, 1.68M refill, 1.87M with a gas-burning fund call.
+    // Includes fixed 50k balance / 50k stETH / 300k funding budgets; transport stays uncapped.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
     uint256 internal constant RNG_DAILY_REQUEST = 4_400_000;
     // Nonempty close plus mixed ETH/stETH pull: 443.5k, including proxy and

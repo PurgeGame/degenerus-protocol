@@ -63,7 +63,6 @@ contract DeployCanary is DeployProtocol {
         // External/mock contracts (4)
         assertEq(address(mockVRF), ContractAddresses.VRF_COORDINATOR, "VRF_COORDINATOR mismatch");
         assertEq(address(mockStETH), ContractAddresses.STETH_TOKEN, "STETH_TOKEN mismatch");
-        assertEq(address(mockLINK), ContractAddresses.LINK_TOKEN, "LINK_TOKEN mismatch");
         // Creator is the test contract itself
         assertEq(address(this), ContractAddresses.CREATOR, "CREATOR mismatch");
     }

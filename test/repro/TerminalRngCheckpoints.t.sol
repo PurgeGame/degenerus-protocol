@@ -12,7 +12,8 @@ contract TerminalCoordinatorFixture {
     uint8 public mode;
     error Refused();
     function setMode(uint8 value) external { mode = value; }
-    function requestRandomWords(VRFRandomWordsRequest calldata) external returns (uint256) {
+    function requestRandomWords(VRFRandomWordsRequest calldata req) external returns (uint256) {
+        require(keccak256(req.extraArgs) == keccak256(abi.encodeWithSelector(bytes4(keccak256("VRF ExtraArgsV1")), true)), "native flag");
         if (mode == 1) revert Refused();
         if (mode == 2) assembly ("memory-safe") { invalid() }
         return ++calls;

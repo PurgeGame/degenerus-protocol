@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import {NativeFailureExport, NativeFailureProbe} from "../helpers/NativeFailureExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {DegenerusAdmin, ILinkTokenLike, IAggregatorV3, IVRFCoordinatorV2_5Owner}
+import {DegenerusAdmin, IVRFCoordinatorV2_5Owner}
     from "../../contracts/DegenerusAdmin.sol";
 
 contract AdminHostileTarget {
@@ -78,22 +78,9 @@ contract AdminIsolationTest is DeployProtocol, NativeFailureExport {
         vm.etch(target, address(new AdminHostileTarget(selector, mode)).code);
     }
 
-    function testFeedAllFailureModesReturnZeroAndOversizeUsesBoundedTuple() public {
-        uint256 snapshot = vm.snapshotState();
-        for (uint256 mode; mode < 7; ++mode) {
-            _etch(address(mockFeed), IAggregatorV3.latestRoundData.selector, mode);
-            assertEq(admin.linkAmountToEth(1 ether), mode == 3 ? 0.004 ether : 0);
-            assertTrue(vm.revertToState(snapshot));
-        }
-    }
 
-    function testFeedUnderfundingRevertsInsteadOfZero() public {
-        (bool ok, bytes memory reason) = address(admin).staticcall{gas: 55_000}(
-            abi.encodeWithSelector(admin.linkAmountToEth.selector, 1 ether)
-        );
-        assertFalse(ok);
-        assertEq(reason, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
-    }
+
+
 
     function testShutdownCoordinatorFailuresDoNotBlockRetirement() public {
         uint256 snapshot = vm.snapshotState();
@@ -106,56 +93,21 @@ contract AdminIsolationTest is DeployProtocol, NativeFailureExport {
         }
     }
 
-    function testShutdownLinkBalanceFailuresDoNotBlockRetirement() public {
-        uint256 snapshot = vm.snapshotState();
-        for (uint256 mode; mode < 6; ++mode) {
-            _etch(address(mockLINK), ILinkTokenLike.balanceOf.selector, mode);
-            vm.prank(address(game));
-            admin.shutdownVrf();
-            assertEq(admin.subscriptionId(), 0);
-            assertTrue(vm.revertToState(snapshot));
-        }
-    }
 
-    function testShutdownLinkTransferFailuresDoNotBlockRetirement() public {
-        uint256 snapshot = vm.snapshotState();
-        for (uint256 mode; mode < 6; ++mode) {
-            _etch(address(mockLINK), ILinkTokenLike.transfer.selector, mode);
-            vm.prank(address(game));
-            admin.shutdownVrf();
-            assertEq(admin.subscriptionId(), 0);
-            assertTrue(vm.revertToState(snapshot));
-        }
-    }
 
-    function testShutdownUnderfundingRollsBackRetirement() public {
-        uint256 sub = admin.subscriptionId();
-        uint256 snapshot = vm.snapshotState();
-        uint256[3] memory gasLimits = [uint256(250_000), 350_000, 480_000];
-        for (uint256 site; site < 3; ++site) {
-            if (site != 0) _etch(address(mockVRF), IVRFCoordinatorV2_5Owner.cancelSubscription.selector, 7);
-            if (site == 2) _etch(address(mockLINK), ILinkTokenLike.balanceOf.selector, 7);
-            vm.prank(address(game));
-            (bool ok, bytes memory reason) = address(admin).call{gas: gasLimits[site]}(
-                abi.encodeWithSelector(admin.shutdownVrf.selector)
-            );
-            assertFalse(ok);
-            assertEq(reason, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
-            assertEq(admin.subscriptionId(), sub);
-            assertTrue(vm.revertToState(snapshot));
-        }
-    }
+
+
+
     function test_NativeTrustedShutdownBoundaries() public {
         vm.etch(address(game), type(NativeFailureProbe).runtimeCode);
         NativeFailureProbe probe = NativeFailureProbe(address(game));
         _nativeCheckedFixture("admin-low", address(this), address(probe), abi.encodeCall(probe.invoke,
             (address(admin), abi.encodeCall(admin.shutdownVrf, ()), 800_000)));
-        bytes4[3] memory selectors = [IVRFCoordinatorV2_5Owner.cancelSubscription.selector,
-            ILinkTokenLike.balanceOf.selector, ILinkTokenLike.transfer.selector];
+        bytes4[1] memory selectors = [IVRFCoordinatorV2_5Owner.cancelSubscription.selector];
         uint256[6] memory modes = [uint256(0), 1, 4, 8, 9, 10];
-        for (uint256 site; site < 3; ++site) for (uint256 i; i < modes.length; ++i) {
+        for (uint256 site; site < 1; ++site) for (uint256 i; i < modes.length; ++i) {
             uint256 snap = vm.snapshotState();
-            _etch(site == 0 ? address(mockVRF) : address(mockLINK), selectors[site], modes[i]);
+            _etch(address(mockVRF), selectors[site], modes[i]);
             _nativeCheckedFixture(string.concat("admin-", vm.toString(site), "-", vm.toString(modes[i])),
                 address(this), address(probe), abi.encodeCall(probe.invoke,
                     (address(admin), abi.encodeCall(admin.shutdownVrf, ()), 5_000_000)));
@@ -167,21 +119,8 @@ contract AdminIsolationTest is DeployProtocol, NativeFailureExport {
         }
     }
 
-    function testExpensiveFeedSucceedsBeyondFormerBudget() public {
-        _etch(address(mockFeed), IAggregatorV3.latestRoundData.selector, 11);
-        assertEq(admin.linkAmountToEth{gas: 3_000_000}(1 ether), 0.004 ether);
-    }
 
-    function test_NativeFeedFailures() public {
-        NativeFailureProbe probe = new NativeFailureProbe();
-        uint256[6] memory modes = [uint256(0), 1, 4, 8, 9, 10];
-        for (uint256 i; i < modes.length; ++i) {
-            uint256 snap = vm.snapshotState();
-            _etch(address(mockFeed), IAggregatorV3.latestRoundData.selector, modes[i]);
-            _nativeCheckedFixture(string.concat("feed-", vm.toString(modes[i])), address(this), address(probe),
-                abi.encodeCall(probe.invoke, (address(admin), abi.encodeCall(admin.linkAmountToEth, (1 ether)), 5_000_000)));
-            require(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
-        }
-    }
+
+
 
 }

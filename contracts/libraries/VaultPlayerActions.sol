@@ -25,8 +25,8 @@ import {
 /// @dev The canonical selectors and overload aliases are ABI-checked by check-vault-player-actions.js. The destination enforces account
 ///      authorization, payment, timing and protocol-account restrictions. Reserve-token
 ///      transfers/approvals, loans, privileged settlement hooks and delegatecalls are absent.
-///      Admin is absent too: sDGNRS.votingSupply excludes the Vault's treasury allocation, so the
-///      Vault never proposes or votes. Seats move through the Vault's sweepNft.
+///      Admin permits only native VRF donation: the Vault never proposes or votes.
+///      Seats move through the Vault's sweepNft.
 library VaultPlayerActions {
     function isAllowed(address target, bytes4 selector) internal pure returns (bool) {
         if (target == ContractAddresses.GAME) {

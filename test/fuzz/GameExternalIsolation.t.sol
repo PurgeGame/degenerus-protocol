@@ -108,7 +108,7 @@ contract GameIsolationHost is DegenerusGame {
     function requestIdentity() external view returns (uint24, uint48, bool) {
         return (rngRequestDay, rngRequestTime, _rngRequestActive());
     }
-    function linkBalance() external view returns (bool, uint256) { return _vrfLinkBalance(MineFlipGas.fromCall(4)); }
+    function nativeBalance() external view returns (bool, uint256) { return _vrfNativeBalance(); }
     function observedSteth() external view returns (uint256) { return _boundedStethBalance(MineFlipGas.fromCall(4), 100_000); }
     function requestProbe() external returns (bool, uint256) { return _boundedVrfRequest(6, MineFlipGas.fromCall(4)); }
     function swept() external view returns (bool) { return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0; }
@@ -133,7 +133,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 100 days);
-        vm.etch(address(game), type(GameIsolationHost).runtimeCode);
+        vm.etch(address(game), vm.getDeployedCode("GameExternalIsolation.t.sol:GameIsolationHost"));
         host = GameIsolationHost(payable(address(game)));
         tokenImplementation = address(0xF001);
         vrfImplementation = address(0xF002);
@@ -248,10 +248,10 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         assertGt(day, 0); assertTrue(active);
     }
 
-    function test_ExpensiveTrustedSubscriptionReadSucceedsBeyondFormerCap() public {
+    function test_ExpensiveSubscriptionReadSkipsAtFixedBudget() public {
         _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, 8);
-        (bool ok, uint256 balance) = host.linkBalance{gas: 3_000_000}();
-        assertTrue(ok); assertGt(balance, 0);
+        (bool ok, uint256 balance) = host.nativeBalance{gas: 3_000_000}();
+        assertFalse(ok); assertEq(balance, 0);
     }
 
     function test_SelectorFailuresPreserveCertificationAndRefuseEligibility() public {
@@ -375,12 +375,12 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function test_UnderfundedReadAndStakeAdmissionRevertsWithoutFailurePolicy() public {
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         host.observedSteth{gas: 50_000}();
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        host.linkBalance{gas: 50_000}();
+        (bool readable, uint256 nativeAmount) = host.nativeBalance{gas: 50_000}();
+        assertTrue(readable); assertGt(nativeAmount, 0);
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         host.requestProbe{gas: 500_000}();
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        host.invoke{gas: 50_000}(ContractAddresses.GAME_JACKPOT_MODULE,
+        // Fixed-budget optional reads no longer impose an admission revert.
+        host.invoke{gas: 500_000}(ContractAddresses.GAME_JACKPOT_MODULE,
             abi.encodeCall(IDegenerusGameJackpotModule.distributeYieldSurplus, (uint256(777))));
         vm.deal(address(game), 1 ether);
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
@@ -427,7 +427,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                 input = abi.encodeCall(game.mineFlip, (uint32(0)));
             } else if (site == 1) {
                 _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, mode);
-                input = abi.encodeCall(host.linkBalance, ());
+                input = abi.encodeCall(host.nativeBalance, ());
             } else if (site == 2) {
                 host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
                 _fault(ContractAddresses.ADMIN, adminImplementation, bytes4(keccak256("shutdownVrf()")), mode);
@@ -451,7 +451,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                     (terminal ? ContractAddresses.GAME_GAMEOVER_MODULE : ContractAddresses.GAME_ADVANCE_MODULE, worker));
             }
             if (site == 3) { input = abi.encodeCall(host.requestProbe, ()); supplied = 500_000; }
-            if (site == 4) { input = abi.encodeCall(host.linkBalance, ()); supplied = 50_000; }
+            if (site == 4) { input = abi.encodeCall(host.nativeBalance, ()); supplied = 50_000; }
             _nativeCheckedFixture(string.concat("game-", vm.toString(site), "-", vm.toString(mode)),
                 address(this), address(probe), abi.encodeCall(probe.invoke, (address(game), input, supplied)));
             require(vm.revertToState(snap));

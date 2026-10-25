@@ -65,20 +65,26 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     // Sequence helpers
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @dev Complete a full day: mineFlip -> VRF fulfill -> drain until unlocked.
+    /// @dev Drain every request created while completing the day. Craps now requests
+    /// at zero subscription balance, so a composed mineFlip can issue another word
+    /// after unlocking the daily request; that word must be answered before mining again.
     function _completeDay(uint256 vrfWord) internal {
-        _finishReadConsumers();
-        game.mineFlip(0);
-        uint256 reqId = mockVRF.lastRequestId();
-        if (reqId != _lastFulfilledReqId && reqId > 0) {
-            mockVRF.fulfillRandomWords(reqId, vrfWord);
-            _lastFulfilledReqId = reqId;
+        for (uint256 i; i < 200; ++i) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                mockVRF.fulfillRandomWords(reqId, vrfWord);
+                _lastFulfilledReqId = reqId;
+            }
+            try game.mineFlip(0) {} catch (bytes memory reason) {
+                if (reason.length >= 4 && bytes4(reason) == bytes4(keccak256("NoWork()"))) {
+                    assertFalse(game.rngLocked(), "daily work drained");
+                    assertTrue(game.rngComplete(), "read consumers drained");
+                    return;
+                }
+                assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+            }
         }
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip(0);
-        }
-        _finishReadConsumers();
+        fail("fixture did not finish daily and scheduled requests");
     }
 
     /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
@@ -92,7 +98,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     /// @dev Drive the game into a state where the mid-day request succeeds AND its buffer
     ///      swap sets LR_MID_DAY=1: complete two days so today's daily RNG is recorded,
     ///      make a lootbox purchase (creates pending ETH + a ticket-queue entry), fund the
-    ///      VRF subscription above MIN_LINK_FOR_LOOTBOX_RNG.
+    ///      native VRF subscription above the lootbox floor.
     function _setupForMidDayRng() internal {
         _completeDay(0xDEAD0001);
         vm.warp(block.timestamp + 1 days);
@@ -154,6 +160,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
 
         // The rotation re-fired the request on the NEW coordinator (re-issue, not zero).
         assertTrue(newVRF.lastRequestId() != 0, "rotation must re-issue the request on the new coordinator");
+        assertTrue(newVRF.lastNativePayment(), "replacement mid-day request pays native");
 
         // LR_INDEX is preserved across the rotation: the same slot N is still reserved.
         assertEq(_readLootboxRngIndex() ^ 1, reservedIndex, "rotation must preserve the reserved index");

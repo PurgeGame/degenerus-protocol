@@ -297,80 +297,8 @@ describe("Governance & Gating (Phase 43)", function () {
   });
 
   // ===========================================================================
-  // ADMIN-04: shutdownVrf() cancels sub, sweeps LINK, sets subscriptionId=0
   // ===========================================================================
-  describe("ADMIN-04: shutdownVrf() cancels subscription and sweeps LINK", function () {
-    it("sets subscriptionId to 0 after shutdown", async function () {
-      const { admin, game } = await loadFixture(deployFullProtocol);
 
-      const subIdBefore = await admin.subscriptionId();
-      expect(subIdBefore).to.be.gt(0n);
-
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      await admin.connect(gameSigner).shutdownVrf();
-      await stopImpersonating(gameAddr);
-
-      expect(await admin.subscriptionId()).to.equal(0n);
-    });
-
-    it("emits SubscriptionShutdown event with correct args", async function () {
-      const { admin, game, vault } = await loadFixture(deployFullProtocol);
-      const subId = await admin.subscriptionId();
-      const vaultAddr = await vault.getAddress();
-
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-
-      await expect(admin.connect(gameSigner).shutdownVrf())
-        .to.emit(admin, "SubscriptionShutdown")
-        .withArgs(subId, vaultAddr, 0n);
-
-      await stopImpersonating(gameAddr);
-    });
-
-    it("cancels subscription on the VRF coordinator", async function () {
-      const { admin, game, mockVRF } = await loadFixture(deployFullProtocol);
-      const subId = await admin.subscriptionId();
-
-      const [, , , ownerBefore] = await mockVRF.getSubscription(subId);
-      const adminAddr = await admin.getAddress();
-      expect(ownerBefore).to.equal(adminAddr);
-
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      await admin.connect(gameSigner).shutdownVrf();
-      await stopImpersonating(gameAddr);
-
-      const [, , , ownerAfter] = await mockVRF.getSubscription(subId);
-      expect(ownerAfter).to.equal(ZERO_ADDRESS);
-    });
-
-    it("sweeps LINK from admin to vault when admin holds LINK", async function () {
-      const { admin, game, vault, mockLINK, deployer } =
-        await loadFixture(deployFullProtocol);
-
-      const adminAddr = await admin.getAddress();
-      const vaultAddr = await vault.getAddress();
-      const subId = await admin.subscriptionId();
-
-      await mockLINK.connect(deployer).mint(adminAddr, eth("50"));
-      expect(await mockLINK.balanceOf(adminAddr)).to.equal(eth("50"));
-
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-
-      const tx = await admin.connect(gameSigner).shutdownVrf();
-      await stopImpersonating(gameAddr);
-
-      expect(await mockLINK.balanceOf(adminAddr)).to.equal(0n);
-      expect(await mockLINK.balanceOf(vaultAddr)).to.equal(eth("50"));
-
-      await expect(tx)
-        .to.emit(admin, "SubscriptionShutdown")
-        .withArgs(subId, vaultAddr, eth("50"));
-    });
-  });
 
   // ===========================================================================
   // ADMIN-05: shutdownVrf() silently succeeds when subscriptionId is already 0
@@ -405,7 +333,6 @@ describe("Governance & Gating (Phase 43)", function () {
   });
 
   // ===========================================================================
-  // ADMIN-06: shutdownVrf() try/catch handles coordinator/LINK failures
   // ===========================================================================
   describe("ADMIN-06: shutdownVrf() try/catch resilience", function () {
     it("completes even if coordinator cancelSubscription has already been called", async function () {

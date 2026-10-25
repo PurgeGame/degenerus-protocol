@@ -11,17 +11,10 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
-/// @title ForkVrf -- the protocol's Chainlink VRF v2.5 and LINK integration against mainnet.
-/// @notice Every request below is accepted (or refused) by the REAL coordinator's validation:
-///         subscription ownership, consumer registration, confirmation bounds, the callback gas
-///         ceiling, numWords and the extraArgs encoding. Funding uses the real LINK token's
-///         ERC-677 transferAndCall into the real coordinator, the reward is priced from the real
-///         LINK/ETH aggregator, and cancellation hits the real coordinator's pending-request guard.
-///         Only the proof step of fulfilment is stood in for (see ForkDeployProtocol).
+/// @title Real-coordinator native funding, request validation and cancellation.
+/// @dev Proof delivery is simulated; native funding and subscription operations are real.
 contract ForkVrfTest is ForkDeployProtocol {
-    bytes32 private constant SUBSCRIPTION_FUNDED = keccak256("SubscriptionFunded(uint256,uint256,uint256)");
     bytes32 private constant SUBSCRIPTION_CANCELED = keccak256("SubscriptionCanceled(uint256,address,uint256,uint256)");
-    bytes32 private constant LINK_CREDIT_RECORDED = keccak256("LinkCreditRecorded(uint32,uint256)");
     /// @dev The coordinator's registered 1000 gwei lane (s_provingKeys -> exists, maxGas 1000 gwei).
     bytes32 private constant KEY_HASH_1000_GWEI = 0xc6bf2e7b88e5cfbb4946ff23af846494ae1f3c65270b79ee7876c9aa99d3d45f;
 
@@ -91,13 +84,13 @@ contract ForkVrfTest is ForkDeployProtocol {
     }
 
     function _donate(address donor, uint256 amount) private {
-        _realLink(donor, amount);
+        vm.deal(donor, amount);
         vm.prank(donor);
-        assertTrue(link.transferAndCall(address(admin), amount, ""), "LINK transferAndCall");
+        admin.donateVrf{value: amount}();
     }
 
     function _subBalance() private view returns (uint96 bal) {
-        (bal,,,,) = coordinator.getSubscription(subId);
+        (,bal,,,) = coordinator.getSubscription(subId);
     }
 
     /// @dev Day 1 settled: the first daily request answered and consumed.
@@ -127,46 +120,45 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(address(uint160(uint256(vm.load(address(game), bytes32(GameSlots.VRF_COORDINATOR))))), ForkPins.VRF_COORDINATOR);
         assertEq(vm.load(address(game), bytes32(GameSlots.VRF_KEY_HASH)), ForkPins.VRF_KEY_HASH);
         assertEq(uint256(vm.load(address(game), bytes32(GameSlots.VRF_SUBSCRIPTION_ID))), subId);
-        assertEq(admin.linkEthPriceFeed(), ForkPins.LINK_ETH_FEED, "the pinned feed is installed");
 
         (bool exists, uint64 maxGas) = coordinator.s_provingKeys(ForkPins.VRF_KEY_HASH);
         assertTrue(exists, "key hash registered on the real coordinator");
-        assertEq(maxGas, 500 gwei, "the 500 gwei lane");
+        assertEq(maxGas, 200 gwei, "the 200 gwei lane");
 
-        (uint16 minConf, uint32 maxGasLimit,,,,,,, uint8 linkPremium) = coordinator.s_config();
+        (uint16 minConf, uint32 maxGasLimit,,,,,, uint8 nativePremium,) = coordinator.s_config();
         assertLe(minConf, 4, "mid-day confirmations (4) are above the coordinator minimum");
         assertGe(coordinator.MAX_REQUEST_CONFIRMATIONS(), 6, "daily confirmations (6) are below the maximum");
-        assertGe(maxGasLimit, GAME_CALLBACK_GAS, "the 300k callback fits the coordinator ceiling");
+        assertGe(maxGasLimit, GAME_CALLBACK_GAS, "the 150k callback fits the coordinator ceiling");
         assertGe(coordinator.MAX_NUM_WORDS(), 1);
-        // DegenerusGameStorage.MIDDAY_RNG_CHARGE_MULT = 6 is "a 5x markup times the coordinator's
-        // 20% LINK premium": the premium it assumes is the live one.
-        assertEq(linkPremium, 20, "MIDDAY_RNG_CHARGE_MULT assumes a 20% LINK premium");
+        // Sizing pins the coordinator native premium.
+        assertEq(nativePremium, 24, "native sizing assumes 24% premium");
     }
 
     // ------------------------------------------------------------------ daily request
 
     /// @notice The daily request is accepted by the real coordinator with the game's exact
-    ///         parameters, LINK billing (nativePayment=false), and is pending on the coordinator.
+    ///         parameters, native billing (nativePayment=true), and is pending on the coordinator.
     function test_dailyRequestIsAcceptedByTheRealCoordinator() public {
+        vm.deal(address(game), 0); // Unfunded transport must still accept a daily request.
         vm.warp(vm.getBlockTimestamp() + 1 days);
         Request memory r = _dailyRequest();
         assertEq(r.keyHash, ForkPins.VRF_KEY_HASH, "keyHash");
         assertEq(r.subId, subId, "subId");
         assertEq(r.sender, address(game), "sender");
         assertEq(r.confirmations, 6, "daily confirmations");
-        assertEq(r.callbackGas, 300_000, "callback gas");
+        assertEq(r.callbackGas, 150_000, "callback gas");
         assertEq(r.numWords, 1, "numWords");
-        assertEq(r.extraArgs, abi.encodeWithSelector(EXTRA_ARGS_V1_TAG, false), "extraArgs = V1{nativePayment:false}");
+        assertEq(r.extraArgs, abi.encodeWithSelector(EXTRA_ARGS_V1_TAG, true), "extraArgs = V1{nativePayment:true}");
         assertEq(r.id, uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))), "the game stored the real id");
         assertTrue(coordinator.s_requestCommitments(r.id) != bytes32(0), "commitment recorded");
         assertTrue(coordinator.pendingRequestExists(subId), "pending on the subscription");
-        // The request was accepted with a ZERO-LINK subscription: v2.5 bills at fulfilment, so
+        // The request was accepted with a ZERO-NATIVE subscription: v2.5 bills at fulfilment, so
         // an unfunded daily request does not revert — it would simply never be fulfilled.
         assertEq(_subBalance(), 0);
     }
 
     /// @notice The coordinator's answer is consumed: only the coordinator may call back, a
-    ///         wrong id is ignored, the word fits the 300k callback, and the day settles with it.
+    ///         wrong id is ignored, the word fits the 150k callback, and the day settles with it.
     ///         The next day issues a fresh request id from the same subscription.
     function test_fulfilledWordIsConsumedAndTheNextDayRequestsAgain() public {
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -228,49 +220,20 @@ contract ForkVrfTest is ForkDeployProtocol {
 
     // ------------------------------------------------------------------ funding
 
-    /// @notice A LINK donation runs the real ERC-677 chain: LINK.transferAndCall -> Admin.onTokenTransfer
-    ///         -> LINK.transferAndCall -> coordinator.onTokenTransfer, which credits the
-    ///         subscription. The donor's FLIP reward is priced from the real LINK/ETH answer.
-    function test_linkDonationFundsTheRealSubscription() public {
+    /// @notice Native donations fund the real subscription and bank quarter-value credit.
+    function test_nativeDonationFundsTheRealSubscription() public {
         address donor = makeAddr("donor");
-        uint96 before = _subBalance();
-        vm.recordLogs();
-        _donate(donor, 50 ether);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_subBalance() - before, 50 ether, "the subscription holds the donation");
-        assertEq(link.balanceOf(address(admin)), 0, "nothing parked on the Admin");
-        assertEq(game.middayRngCredits(donor), 50 ether, "mid-day credit banked verbatim");
-
-        bool funded;
-        uint256 credit;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter == ForkPins.VRF_COORDINATOR && logs[i].topics[0] == SUBSCRIPTION_FUNDED) {
-                assertEq(uint256(logs[i].topics[1]), subId);
-                (uint256 oldBal, uint256 newBal) = abi.decode(logs[i].data, (uint256, uint256));
-                assertEq(newBal - oldBal, 50 ether);
-                funded = true;
-            }
-            if (logs[i].emitter == address(admin) && logs[i].topics[0] == LINK_CREDIT_RECORDED) {
-                credit = abi.decode(logs[i].data, (uint256));
-            }
-        }
-        assertTrue(funded, "coordinator SubscriptionFunded");
-
-        (, int256 answer,, uint256 updatedAt,) = linkEthFeed.latestRoundData();
-        assertGt(answer, 0);
-        assertLt(uint256(answer), 0.05 ether, "below the reward-valuation ceiling");
-        assertLe(vm.getBlockTimestamp() - updatedAt, 1 days, "fresh round at the pinned block");
-        assertEq(admin.linkAmountToEth(1 ether), uint256(answer), "1 LINK valued at the real answer");
-        assertGt(credit, 0, "a priced donation earns a FLIP credit");
-        // The credit is the ETH value of the donation at the real price, scaled by the reward
-        // multiplier (>= 1x on an empty subscription), in FLIP per ticket price.
-        uint256 base = (50 ether * uint256(answer) / 1 ether) * 1000 / game.mintPrice();
-        assertGe(credit, base, "credit at least the 1x valuation of the real price");
+        uint256 before = _subBalance();
+        _donate(donor, 1 ether);
+        assertEq(_subBalance() - before, 1 ether);
+        assertEq(address(admin).balance, 0);
+        assertEq(game.middayRngCredits(donor), 0.25 ether);
     }
 
-    /// @notice The mid-day request reads the REAL subscription balance: below the 40 LINK floor
+    /// @notice The mid-day request reads the REAL subscription balance: below the 0.1302 ETH floor
     ///         the engine declines it; once funded it goes out with 4 confirmations.
     function test_middayRequestIsGatedOnTheRealSubscriptionBalance() public {
+        vm.deal(address(game), 0); // Prevent the fixture bankroll from supplying a daily refill.
         _settleFirstDay();
         address buyer = makeAddr("boxBuyer");
         vm.deal(buyer, 10 ether);
@@ -291,23 +254,6 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(_pendingRequest(), 0, "the mid-day word was consumed");
     }
 
-    // ------------------------------------------------------------------ price feed
-
-    /// @notice The real aggregator reads healthy at the pinned block (a feed-swap proposal is
-    ///         refused) and goes unhealthy once its round is older than the 1-day window: the
-    ///         valuation returns 0 and the swap governance opens.
-    function test_realFeedHealthAndStaleness() public {
-        assertEq(linkEthFeed.decimals(), 18);
-        assertGt(admin.linkAmountToEth(1 ether), 0);
-        vm.prank(_vaultOwner());
-        vm.expectRevert(bytes4(keccak256("FeedHealthy()")));
-        admin.proposeFeedSwap(address(0));
-
-        (,,, uint256 updatedAt,) = linkEthFeed.latestRoundData();
-        vm.warp(updatedAt + 1 days + 1);
-        assertEq(admin.linkAmountToEth(1 ether), 0, "a stale real round values LINK at 0");
-    }
-
     // ------------------------------------------------------------------ coordinator swap
 
     /// @notice The emergency coordinator swap, executed against the real coordinator (rotating to a
@@ -315,9 +261,8 @@ contract ForkVrfTest is ForkDeployProtocol {
     ///         PendingRequestExists (the stalled request) and is absorbed; a new real subscription
     ///         is created with the game as consumer, and the stalled daily request is re-issued on
     ///         it in the same transaction. Once the stalled request clears, retrySubCancel cancels
-    ///         the retired subscription: the real coordinator refunds its LINK to the Admin and
-    ///         makes its unconditional native-refund call (0 wei) into Admin.receive, which must not
-    ///         revert; the LINK is forwarded into the live subscription.
+    ///         the retired subscription: the real coordinator refunds native ETH into Admin.receive, which retains and
+    ///         forwards it to the live subscription without credit.
     function test_coordinatorSwapAndRetiredSubscriptionRecovery() public {
         address voter = makeAddr("voter");
         _giveWalletId(voter);
@@ -333,7 +278,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 45 hours);
 
         vm.prank(_vaultOwner());
-        uint256 proposalId = admin.propose(ForkPins.VRF_COORDINATOR, KEY_HASH_1000_GWEI, 300_000);
+        uint256 proposalId = admin.propose(ForkPins.VRF_COORDINATOR, KEY_HASH_1000_GWEI, 150_000);
         vm.recordLogs();
         vm.prank(voter);
         admin.vote(proposalId, true);
@@ -342,17 +287,17 @@ contract ForkVrfTest is ForkDeployProtocol {
         uint256 newSub = admin.subscriptionId();
         assertTrue(newSub != subId, "a new subscription");
         assertEq(admin.vrfKeyHash(), KEY_HASH_1000_GWEI);
-        (uint96 newBal,,, address newOwner, address[] memory consumers) = coordinator.getSubscription(newSub);
+        (,uint96 newBal,, address newOwner, address[] memory consumers) = coordinator.getSubscription(newSub);
         assertEq(newOwner, address(admin));
         assertEq(consumers.length, 1);
         assertEq(consumers[0], address(game));
-        assertEq(newBal, 0, "the Admin held no LINK to forward");
+        assertEq(newBal, 0, "the Admin held no native ETH to forward");
         assertEq(reissued.length, 1, "the stalled daily request was re-issued");
         assertEq(reissued[0].subId, newSub);
         assertEq(reissued[0].keyHash, KEY_HASH_1000_GWEI);
         assertEq(reissued[0].confirmations, 6);
-        (uint96 oldBal,,, address oldOwner,) = coordinator.getSubscription(subId);
-        assertEq(oldBal, 50 ether, "the retired subscription still holds the LINK");
+        (,uint96 oldBal,, address oldOwner,) = coordinator.getSubscription(subId);
+        assertEq(oldBal, 50 ether, "the retired subscription still holds the native ETH");
         assertEq(oldOwner, address(admin));
 
         // The new coordinator's answer settles the stalled day.
@@ -370,9 +315,9 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(game.lastVrfProcessed(), processed, "late answer on the retired subscription ignored");
         vm.prank(_vaultOwner());
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (ForkPins.VRF_COORDINATOR, subId)), 0);
-        (newBal,,,,) = coordinator.getSubscription(newSub);
-        assertEq(newBal, 50 ether, "the retired LINK funds the live subscription");
-        assertEq(link.balanceOf(address(admin)), 0);
+        (,newBal,,,) = coordinator.getSubscription(newSub);
+        assertEq(newBal, 50 ether, "the retired native ETH funds the live subscription");
+        assertEq(address(admin).balance, 0);
         vm.expectRevert(bytes4(keccak256("InvalidSubscription()")));
         coordinator.getSubscription(subId);
     }
@@ -380,28 +325,28 @@ contract ForkVrfTest is ForkDeployProtocol {
     // ------------------------------------------------------------------ game over
 
     /// @notice The healthy ending: every request answered, so the final sweep's shutdownVrf
-    ///         cancels the REAL subscription and the coordinator refunds its LINK to the vault.
+    ///         cancels the REAL subscription and the coordinator refunds its native ETH to the vault.
     function test_gameOverCancelsTheRealSubscriptionAndRefundsTheVault() public {
         _donate(makeAddr("donor"), 75 ether);
         _driveToGameOver();
         assertFalse(coordinator.pendingRequestExists(subId), "fixture: every request answered");
-        uint256 vaultLink = link.balanceOf(ContractAddresses.VAULT);
-        uint96 subLink = _subBalance();
-        assertEq(subLink, 75 ether, "fulfilment billing is not simulated");
+        uint256 vaultNative = ContractAddresses.VAULT.balance;
+        uint96 subNative = _subBalance();
+        assertEq(subNative, 75 ether, "fulfilment billing is not simulated");
 
         vm.recordLogs();
         vm.warp(vm.getBlockTimestamp() + 30 days + 1);
         _crank(40);
         assertEq(admin.subscriptionId(), 0, "handle spent");
-        assertEq(link.balanceOf(ContractAddresses.VAULT) - vaultLink, subLink, "the vault received the LINK");
+        assertEq(ContractAddresses.VAULT.balance - vaultNative, subNative, "the vault received the native ETH");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool canceled;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == ForkPins.VRF_COORDINATOR && logs[i].topics[0] == SUBSCRIPTION_CANCELED) {
-                (address to, uint256 amountLink, uint256 amountNative) = abi.decode(logs[i].data, (address, uint256, uint256));
+                (address to, uint256 unusedTokenRefund, uint256 amountNative) = abi.decode(logs[i].data, (address, uint256, uint256));
                 assertEq(to, ContractAddresses.VAULT);
-                assertEq(amountLink, subLink);
-                assertEq(amountNative, 0);
+                assertEq(unusedTokenRefund, 0);
+                assertEq(amountNative, subNative);
                 canceled = true;
             }
         }
@@ -413,10 +358,10 @@ contract ForkVrfTest is ForkDeployProtocol {
     /// @notice The VRF-dead ending, on the real coordinator: the unanswered request is still
     ///         pending when the final sweep runs, so cancelSubscription reverts with
     ///         PendingRequestExists. shutdownVrf absorbs it (the sweep completes, the handle is
-    ///         spent) and the LINK stays in the subscription, still owned by the Admin.
+    ///         spent) and the native ETH stays in the subscription, still owned by the Admin.
     ///         retrySubCancel cannot recover it while the request is pending; if the coordinator
     ///         ever answers it, the same call refunds the vault.
-    function test_deadVrfEndingLeavesLinkOnTheCoordinatorUntilTheRequestClears() public {
+    function test_deadVrfEndingLeavesNativeOnTheCoordinatorUntilTheRequestClears() public {
         _donate(makeAddr("donor"), 60 ether);
         vm.recordLogs();
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -454,10 +399,10 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(address(game).balance, 0, "the sweep completed");
         assertTrue(coordinator.pendingRequestExists(subId), "the dead request is still pending");
         (uint96 stranded,,, address owner,) = coordinator.getSubscription(subId);
-        assertEq(stranded, 60 ether, "LINK left on the coordinator");
+        assertEq(stranded, 60 ether, "native ETH left on the coordinator");
         assertEq(owner, address(admin), "still owned by the Admin");
 
-        uint256 vaultLink = link.balanceOf(ContractAddresses.VAULT);
+        uint256 vaultNative = ContractAddresses.VAULT.balance;
         vm.prank(_vaultOwner());
         vm.expectRevert(bytes4(keccak256("PendingRequestExists()")));
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (ForkPins.VRF_COORDINATOR, subId)), 0);
@@ -469,6 +414,6 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertFalse(coordinator.pendingRequestExists(subId));
         vm.prank(_vaultOwner());
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (ForkPins.VRF_COORDINATOR, subId)), 0);
-        assertEq(link.balanceOf(ContractAddresses.VAULT) - vaultLink, 60 ether, "recovered to the vault");
+        assertEq(ContractAddresses.VAULT.balance - vaultNative, 60 ether, "recovered to the vault");
     }
 }

@@ -65,7 +65,7 @@ contract V56SubHardening is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         // The unified miner also requests midday RNG after the read consumers finish.
-        // Fund the mock so a clean-state fixture cannot stall on InsufficientLink.
+        // Fund the mock so a clean-state fixture cannot stall on InsufficientNativeBalance.
         mockVRF.fundSubscription(admin.subscriptionId(), 1_000 ether);
         _t = block.timestamp + 1 days;
         vm.warp(_t);

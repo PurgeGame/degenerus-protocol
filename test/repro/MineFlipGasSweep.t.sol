@@ -150,7 +150,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
             ContractAddresses.GAME, ContractAddresses.COIN, ContractAddresses.COINFLIP, ContractAddresses.VAULT,
             ContractAddresses.AFFILIATE, ContractAddresses.JACKPOTS, ContractAddresses.QUESTS, ContractAddresses.SDGNRS,
             ContractAddresses.DGNRS, ContractAddresses.ADMIN, ContractAddresses.WWXRP, ContractAddresses.STETH_TOKEN,
-            ContractAddresses.LINK_TOKEN, ContractAddresses.GNRUS, ContractAddresses.PARIMUTUEL, ContractAddresses.CRAPS,
+            address(mockLINK), ContractAddresses.GNRUS, ContractAddresses.PARIMUTUEL, ContractAddresses.CRAPS,
             ContractAddresses.CRAPS_ENGINE, ContractAddresses.JACKPOT_BATTLE, ContractAddresses.DEITY_PASS,
             ContractAddresses.AFKING_SUB_TOKEN, ContractAddresses.VRF_COORDINATOR, address(mockVRF)
         ];

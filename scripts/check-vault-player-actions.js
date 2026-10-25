@@ -8,12 +8,15 @@ import assert from "node:assert/strict";
 import { Interface } from "ethers";
 
 const root = process.argv[2] ?? "forge-out";
+// Mangled selector suffixes do not change the role of an excluded internal hook.
+// Allowed actions below still require exact signatures and collision checks.
+const canonical = name => name.replace(/_g\d+$/, "");
 const contracts = {
   GAME: "DegenerusGame", COINFLIP: "Coinflip", COIN: "FLIP", CRAPS: "CrapsBattle",
   PARIMUTUEL: "DegenerusParimutuel", WWXRP: "WWXRP", SDGNRS: "sDGNRS", DGNRS: "DGNRS",
-  AFFILIATE: "DegenerusAffiliate", JACKPOTS: "DegenerusJackpots",
+  JACKPOTS: "DegenerusJackpots",
   AFKING_SUB_TOKEN: "AFKingSubscriptionToken", GNRUS: "GNRUS",
-  LINK_TOKEN: "MockLinkToken", // Test ERC677 ABI; production target is the pinned LINK token.
+  ADMIN: "DegenerusAdmin",
 };
 // These are not missing player controls. Explicit owner controls are called by the
 // DGVE owner directly; token sweeps and Vault-only mints retain their existing wrappers.
@@ -34,6 +37,11 @@ const excluded = {
     "raiseSmurfBaseAllowance", "setLootboxRngThreshold", "setMiddayMaxBasefee", "setThanosLevel",
   ],
   COINFLIP: [
+    // Consolidated Affiliate and Quests hooks: Game, token or Parimutuel authorized.
+    "awardQuestStreakBonus", "awardQuestStreakShield", "beginAfking", "finalizeAfking",
+    "handleAffiliate", "handleDecimator", "handleDegenerette", "handleFlip", "handleFoilPurchase",
+    "handlePurchase", "payAffiliate", "payAffiliateCombined", "recordCrapsAction", "recordGrowthBet",
+    "referSmurf", "rollDailyQuest", "rollLevelQuest",
     "armBafDraw", "armDiceRunRecord", "armRecord", "claimCoinflipsFromFlip",
     "consumeCoinflipsForBurn", "consumeFlipBacking", "creditFlip", "creditFlipBatch",
     "creditFlipPair", "creditSdgnrsBacking", "fundRecordPool", "onDailyRequest",
@@ -45,6 +53,10 @@ const excluded = {
     "mintForGame", "tombstoneAtGameOver",
   ],
   CRAPS: [
+    // Consolidated JackpotBattle settlement: Game-only or table self-call-only.
+    "admitCustom", "appendJackpotBattle", "finalizeBattle", "lockJackpotBattle", "payBattlePot",
+    "prepareJackpotBattle", "registerRngSlot", "runCrapsMaintenance", "runCrapsReadWork",
+    "runDailyBattleWork", "settleHighRollerReserve",
     "vaultComp", "donate", // Dedicated Vault batch/delegate-budget controls.
     "creditPasses", "deliverPasses", "resolveRngSlot_g1079",
     "setBattleCreator", // DGVE owner calls this directly, including to authorize the Vault.
@@ -62,7 +74,6 @@ const excluded = {
     "gameAdvance", // Anyone can trigger this externally; bounty belongs to sDGNRS, not the caller.
   ],
   DGNRS: ["unwrapTo", "approve", "transfer", "transferFrom", "burnForSdgnrs"],
-  AFFILIATE: ["payAffiliate", "payAffiliateCombined", "referSmurf"],
   JACKPOTS: ["beginBafOn", "finalizeBaf", "markBafSkippedAt", "recordBafFlip"],
   AFKING_SUB_TOKEN: [
     "consumeSeat", "mintSeatFor", "setRenderer", "vaultMintSeats",
@@ -72,7 +83,7 @@ const excluded = {
     "burnAtGameOver", "onFinalSweep", "pickCharity",
     "setCharity", "sweepResidualToVault", "vaultRedeemFor", // Direct DGVE-owner controls.
   ],
-  LINK_TOKEN: ["approve", "transfer", "transferFrom", "mint"],
+  ADMIN: ["propose", "vote", "retryGameRng", "retrySubCancel", "shutdownVrf", "swapGameEthForStEth"],
 };
 const source = fs.readFileSync("contracts/libraries/VaultPlayerActions.sol", "utf8");
 const branches = [...source.matchAll(/if \(target == ContractAddresses\.(\w+)\) \{([\s\S]*?)\n        \}/g)];
@@ -80,7 +91,7 @@ assert.deepEqual(branches.map(([, target]) => target).sort(), Object.keys(contra
 const selectorInterfaces = new Map();
 function selectorSignature(name, method) {
   if (!selectorInterfaces.has(name)) {
-    const artifact = JSON.parse(fs.readFileSync(path.join(root, name.startsWith("IVault") ? "IVaultPlayerActions.sol" : name === "ILinkTokenLike" ? "DegenerusAdmin.sol" : `${name}.sol`, `${name}.json`), "utf8"));
+    const artifact = JSON.parse(fs.readFileSync(path.join(root, name.startsWith("IVault") ? "IVaultPlayerActions.sol" : `${name}.sol`, `${name}.json`), "utf8"));
     selectorInterfaces.set(name, new Interface(artifact.abi));
   }
   return selectorInterfaces.get(name).getFunction(method).format("sighash");
@@ -97,12 +108,12 @@ for (const [, target, body] of branches) {
   for (const signature of allowed) assert.ok(signatures.has(signature), `${target}: invalid allowed ABI ${signature}`);
   for (const f of mutable) {
     const signature = f.format("sighash");
-    assert.ok(allowed.has(signature) || excluded[target].includes(f.name), `${target}: unreviewed player surface ${signature}`);
+    assert.ok(allowed.has(signature) || excluded[target].some(name => canonical(name) === canonical(f.name)), `${target}: unreviewed player surface ${signature}`);
     if (!allowed.has(signature)) {
       assert.ok(![...allowed].some(s => iface.getFunction(s).selector === f.selector), `${target}: excluded selector collision ${signature}`);
     }
   }
-  for (const name of excluded[target]) assert.ok(mutable.some(f => f.name === name), `${target}: stale exclusion ${name}`);
+  for (const name of excluded[target]) assert.ok(mutable.some(f => canonical(f.name) === canonical(name)), `${target}: stale exclusion ${name}`);
   count += allowed.size;
 }
 const vault = JSON.parse(fs.readFileSync(path.join(root, "DegenerusVault.sol", "DegenerusVault.json"), "utf8"));

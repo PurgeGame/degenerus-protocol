@@ -332,7 +332,7 @@ contract MinerNoProgressTest is Test {
 
     function test_OptionalRequestRefusalsBubbleWithoutWorkButKeepCertification() public {
         bytes4[5] memory reasons = [IDegenerusGameRngModule.GasTooHigh.selector,
-            IDegenerusGameRngModule.PreResetWindow.selector, IDegenerusGameRngModule.InsufficientLink.selector,
+            IDegenerusGameRngModule.PreResetWindow.selector, IDegenerusGameRngModule.InsufficientNativeBalance.selector,
             IDegenerusGameRngModule.NoPendingLootbox.selector, IDegenerusGameRngModule.BelowThreshold.selector];
         _seed(DegenerusGameStorage.MinerAction.RequestMidday);
         for (uint256 i; i < reasons.length; ++i) {

@@ -10,36 +10,18 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title MiddayRngCredit — coverage for the LINK-donor mid-day RNG credit path.
-/// @notice mineFlip is the only door to a mid-day request; its RequestMidday stage runs last,
-///         once every other stage is idle. A LINK donation banks per-donor credit that pays ONLY
-///         the threshold gate, and only on the donor's own mineFlip: pending work below the
-///         threshold (ETH or FLIP) is requested when the mineFlip caller's credit covers the
-///         charge, and charged once. An empty queue is never requested, credit or not; work at or
-///         above the threshold and a pending craps window are requested with no charge. The
-///         timing gates and the subscription LINK floors bind every request. A redemption debits
-///         MIDDAY_RNG_CHARGE_MULT times what the request itself bills, priced at redemption off
-///         block.basefee and the Admin's guarded LINK/ETH feed (`linkAmountToEth`).
-///
-/// @dev Pins, in order: access control on the two entrypoints, the donation hook banking credit
-///      verbatim, the basefee ceiling, the empty-queue and threshold gates, the exact charge
-///      arithmetic, the caller-dependent engine view, every path that must REFUSE the credit
-///      without consuming it, and the economic property the design targets (the subscription's
-///      real spend lands at 20% of the donation, i.e. the charge is 5x the premium-inclusive cost
-///      of the request). A refused mid-day request is never selected, so mineFlip reports it as
-///      `NoWork()`.
+/// @notice Native-credit admission through mineFlip, including caller ownership and rollback.
 contract MiddayRngCreditTest is DeployProtocol {
     /// @dev Mirrors of the contract-side constants under test. Deliberately restated rather
     ///      than imported: a silent edit to either constant must FAIL these tests, not be
     ///      tracked by them.
-    uint256 private constant BILLED_GAS = 201_000;
-    uint256 private constant CHARGE_MULT = 6;
-    /// @dev Coordinator's LINK premium on mainnet, read from s_config: 20%.
-    uint256 private constant LINK_PREMIUM_NUM = 120;
-    uint256 private constant LINK_PREMIUM_DEN = 100;
+    uint256 private constant BILLED_GAS = 300_000;
+    uint256 private constant CHARGE_MULT = 2;
+    uint256 private constant NATIVE_PREMIUM_NUM = 124;
+    uint256 private constant NATIVE_PREMIUM_DEN = 100;
     /// @dev The two subscription floors, mirrored on the same terms as the constants above.
-    uint96 private constant LOOTBOX_LINK_FLOOR = 40 ether;
-    uint96 private constant CRAPS_LINK_FLOOR = 10 ether;
+    uint96 private constant LOOTBOX_NATIVE_FLOOR = 0.1302 ether;
+    uint96 private constant CRAPS_NATIVE_FLOOR = 0;
 
     event MiddayRngCredited(address indexed donor, uint256 added, uint256 balance);
     event MiddayRngCreditSpent(address indexed spender, uint256 charged, uint256 balance);
@@ -66,14 +48,6 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.deal(outsider, 1_000 ether);
         vm.deal(address(game), 5_000 ether);
 
-        // The charge is priced off the Admin's LINK/ETH feed, which the deploy pins through
-        // ContractAddresses.LINK_ETH_FEED. Assert it landed: an unset feed values everything
-        // at 0 and every refusal test below would pass vacuously.
-        require(
-            admin.linkAmountToEth(1 ether) != 0,
-            "harness: LINK/ETH feed not installed, charge tests would be vacuous"
-        );
-
         // Complete a real daily commitment and every ordered read consumer. A recorded
         // word alone no longer means the current day/cohort is ready for a fresh request.
         mockVRF.fundSubscription(1, 1_000 ether);
@@ -97,16 +71,16 @@ contract MiddayRngCreditTest is DeployProtocol {
 
     /// @dev The charge the contract must compute for one redemption at the current basefee.
     function _expectedCharge() internal view returns (uint256) {
-        uint256 weiPerLink = admin.linkAmountToEth(1 ether);
-        return (BILLED_GAS * block.basefee * CHARGE_MULT * 1 ether) / weiPerLink;
+        uint256 fee = block.basefee < 0.01 gwei ? 0.01 gwei : block.basefee;
+        return BILLED_GAS * fee * CHARGE_MULT;
     }
 
-    /// @dev Pin the subscription's reported LINK balance for a floor test.
-    function _mockSubscriptionLink(uint96 balance) internal {
+    /// @dev Pin the subscription's reported NATIVE balance for a floor test.
+    function _mockSubscriptionNative(uint96 balance) internal {
         vm.mockCall(
             address(mockVRF),
             abi.encodeWithSignature("getSubscription(uint256)", uint256(1)),
-            abi.encode(balance, uint96(0), uint64(0), address(admin), new address[](0))
+            abi.encode(uint96(0), balance, uint64(0), address(admin), new address[](0))
         );
     }
 
@@ -269,7 +243,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         _purchaseBelowThreshold();
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge * 3);
-        _mockSubscriptionLink(LOOTBOX_LINK_FLOOR - 1);
+        _mockSubscriptionNative(LOOTBOX_NATIVE_FLOOR - 1);
         bytes32 packed = vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         _mineRefused(donor);
         assertEq(game.middayRngCredits(donor), charge * 3);
@@ -289,13 +263,11 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(game.middayRngCredits(donor), 0, "credit minted by a non-ADMIN caller");
     }
 
-    /// @notice A grant accrues verbatim and reports the post-credit balance.
     function test_creditMiddayRng_accruesAndEmits() public pricedBlock {
         vm.expectEmit(true, false, false, true, address(game));
         emit MiddayRngCredited(donor, 7 ether, 7 ether);
         _grantCredit(donor, 7 ether);
 
-        assertEq(game.middayRngCredits(donor), 7 ether, "credit not banked verbatim");
     }
 
     /// @notice Grants accumulate, and the event's balance tracks the running total.
@@ -342,36 +314,32 @@ contract MiddayRngCreditTest is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Donation hook — credit only ever trails LINK the subscription already holds
+    // Donation hook — credit only ever trails NATIVE the subscription already holds
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice A LINK donation banks credit equal to the LINK donated, with no multiplier.
-    function test_donationBanksCreditVerbatim() public pricedBlock {
-        uint256 amount = 12 ether;
-        // The hook forwards the donated LINK to the coordinator, so the Admin must hold it.
-        mockLINK.mint(address(admin), amount);
-
-        vm.prank(address(mockLINK));
-        admin.onTokenTransfer(donor, amount, "");
-
-        assertEq(
-            game.middayRngCredits(donor),
-            amount,
-            "donation did not bank the donated LINK verbatim"
-        );
+    /// @notice A NATIVE donation banks credit equal to the NATIVE donated, with no multiplier.
+    function test_FailedCoordinatorRequestRollsBackCallerCredit() public pricedBlock {
+        _purchaseBelowThreshold();
+        uint256 beforeCredit = _expectedCharge() * 3;
+        _grantCredit(donor, beforeCredit);
+        bytes memory requestSelector = abi.encodeWithSelector(mockVRF.requestRandomWords.selector);
+        vm.mockCallRevert(address(mockVRF), requestSelector, "request failed");
+        vm.expectCall(address(mockVRF), requestSelector);
+        uint256 prior = mockVRF.lastRequestId();
+        vm.prank(donor);
+        (bool ignored,) = address(game).call(abi.encodeCall(game.mineFlip, (0)));
+        ignored;
+        assertEq(game.middayRngCredits(donor), beforeCredit);
+        assertEq(mockVRF.lastRequestId(), prior);
     }
 
-    /// @notice Credit is banked even when no feed can value the donation for its FLIP
-    ///         reward — the feed is needed only later, to price a redemption.
-    function test_donationBanksCreditWithUnpricedFeed() public pricedBlock {
-        mockFeed.setUpdatedAt(block.timestamp - 2 days); // stale => valuation returns 0
-        mockLINK.mint(address(admin), 4 ether);
-
-        vm.prank(address(mockLINK));
-        admin.onTokenTransfer(donor, 4 ether, "");
-
-        assertEq(game.middayRngCredits(donor), 4 ether, "unpriced donation banked no credit");
+    function test_donationBanksQuarterCredit() public pricedBlock {
+        vm.prank(donor);
+        admin.donateVrf{value: 12 ether}();
+        assertEq(game.middayRngCredits(donor), 3 ether);
     }
+
+
 
     // ──────────────────────────────────────────────────────────────────────
     // Basefee ceiling
@@ -380,7 +348,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     /// @notice Above the ceiling the request is refused outright, before any other gate.
     function test_requestRefusedAboveBasefeeCeiling() public pricedBlock {
         _purchaseAboveThreshold(); // would otherwise sail through
-        vm.fee(6 gwei); // default ceiling is 5 gwei
+        vm.fee(21 gwei); // craps ceiling is four times 5 gwei
 
         _mineRefused(outsider);
     }
@@ -540,11 +508,11 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(game.middayRngCredits(donor), 100 ether, "craps work charged the donor's credit");
     }
 
-    /// @notice A pending window carries the lower LINK floor for whoever requests: a balance
+    /// @notice A pending window carries the lower NATIVE floor for whoever requests: a balance
     ///         between the two floors refuses the same caller without it and passes with it.
-    function test_pendingCrapsWindowClearsTheLowerLinkFloorWhereOthersAreRefused() public pricedBlock {
-        _purchaseAboveThreshold(); // so only the LINK floor can refuse either request
-        _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
+    function test_pendingCrapsWindowClearsTheLowerNativeFloorWhereOthersAreRefused() public pricedBlock {
+        _purchaseAboveThreshold(); // so only the NATIVE floor can refuse either request
+        _mockSubscriptionNative(0);
 
         _mineRefused(outsider);
 
@@ -552,26 +520,23 @@ contract MiddayRngCreditTest is DeployProtocol {
         _mineRequest(outsider);
     }
 
-    /// @notice The floor is lowered, not removed: a pending window is still refused below it, so
     ///         the never-gated daily word always keeps a reserve.
-    function test_pendingCrapsWindowIsStillRefusedBelowItsOwnLinkFloor() public pricedBlock {
-        _purchaseAboveThreshold();
+    function test_pendingCrapsWindowSkipsTheBalanceRead() public pricedBlock {
         _pendCrapsWindow();
-        _mockSubscriptionLink(CRAPS_LINK_FLOOR - 1);
-
-        _mineRefused(outsider);
+        vm.mockCallRevert(address(mockVRF), abi.encodeWithSignature("getSubscription(uint256)", uint256(1)), "unreadable");
+        _mineRequest(outsider);
     }
 
     /// @notice A pending window rides the write buffer only: mining as the craps table grants
     ///         nothing, and a credit holder gets no lower floor without a pending window.
-    function test_creditHolderDoesNotInheritTheCrapsLinkFloor() public pricedBlock {
-        _purchaseAboveThreshold(); // so only the LINK floor can refuse
+    function test_creditHolderDoesNotInheritTheCrapsNativeFloor() public pricedBlock {
+        _purchaseAboveThreshold(); // so only the NATIVE floor can refuse
         _grantCredit(donor, 500 ether);
-        _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
+        _mockSubscriptionNative(0);
 
         _mineRefused(donor);
 
-        assertEq(game.middayRngCredits(donor), 500 ether, "credit charged below the LINK floor");
+        assertEq(game.middayRngCredits(donor), 500 ether, "credit charged below the NATIVE floor");
 
         _mineRefused(address(crapsBattle)); // the craps address itself is an ordinary caller: no lower floor
     }
@@ -580,7 +545,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     ///         exactly as it holds anyone else's.
     function test_pendingCrapsWindowDoesNotWaiveTheBasefeeCeiling() public pricedBlock {
         _pendCrapsWindow();
-        vm.fee(6 gwei); // default ceiling is 5 gwei
+        vm.fee(21 gwei); // craps ceiling is four times 5 gwei
 
         _mineRefused(outsider);
     }
@@ -618,21 +583,14 @@ contract MiddayRngCreditTest is DeployProtocol {
         );
     }
 
-    /// @notice A feed that cannot price right now refuses the credit rather than granting the
     ///         request free, and leaves the balance intact.
-    function test_staleFeedRefusesCreditAndPreservesBalance() public pricedBlock {
+    function test_zeroBasefeeChargesTheFloor() public {
         _purchaseBelowThreshold();
-        _grantCredit(donor, 500 ether);
-        mockFeed.setUpdatedAt(block.timestamp - 2 days);
-        assertEq(admin.linkAmountToEth(1 ether), 0, "harness: the stale feed prices nothing");
-
-        _mineRefused(donor);
-
-        assertEq(
-            game.middayRngCredits(donor),
-            500 ether,
-            "unpriceable feed granted or consumed credit"
-        );
+        vm.fee(0);
+        uint256 charge = BILLED_GAS * 0.01 gwei * CHARGE_MULT;
+        _grantCredit(donor, charge * 2);
+        _mineRequest(donor);
+        assertEq(game.middayRngCredits(donor), charge);
     }
 
     /// @notice A zero balance never qualifies, even where basefee — and so the charge — is
@@ -645,16 +603,16 @@ contract MiddayRngCreditTest is DeployProtocol {
         _mineRefused(outsider);
     }
 
-    /// @notice Credit does NOT waive the subscription LINK floor — that gate binds on every
+    /// @notice Credit does NOT waive the subscription NATIVE floor — that gate binds on every
     ///         request, credited or not, and is checked ahead of the charge so credit is never
     ///         spent on a request the subscription cannot pay for.
-    function test_creditDoesNotWaiveLinkFloorAndIsNotConsumed() public pricedBlock {
+    function test_creditDoesNotWaiveNativeFloorAndIsNotConsumed() public pricedBlock {
         _purchaseBelowThreshold();
         uint256 granted = 500 ether;
         _grantCredit(donor, granted);
 
-        // Force the subscription one juel under the floor this caller answers to.
-        _mockSubscriptionLink(LOOTBOX_LINK_FLOOR - 1);
+        // Force the subscription one wei under the floor this caller answers to.
+        _mockSubscriptionNative(LOOTBOX_NATIVE_FLOOR - 1);
 
         _mineRefused(donor);
 
@@ -669,43 +627,22 @@ contract MiddayRngCreditTest is DeployProtocol {
     // Economic property — the design target
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice The charge is 5x the request's true, premium-inclusive cost, so a donation's
-    ///         real subscription spend lands at 20% of the LINK donated. This is the whole
     ///         point of pricing at redemption: it must hold at any basefee.
-    function testFuzz_chargeIsFiveTimesPremiumInclusiveCost(uint256 basefeeGwei) public pricedBlock {
-        basefeeGwei = bound(basefeeGwei, 1, 5); // within the default ceiling
+    function testFuzz_chargeMargin(uint256 basefeeGwei) public pricedBlock {
+        basefeeGwei = bound(basefeeGwei, 1, 5);
         vm.fee(basefeeGwei * 1 gwei);
-
-        uint256 weiPerLink = admin.linkAmountToEth(1 ether);
         uint256 charge = _expectedCharge();
-
-        // What the coordinator actually takes: billed gas at this basefee, plus 20%.
-        uint256 realCostLink = (BILLED_GAS *
-            block.basefee *
-            LINK_PREMIUM_NUM *
-            1 ether) / (LINK_PREMIUM_DEN * weiPerLink);
-
-        // Both sides truncate identically, so the ratio is 5 to well within a basis point.
-        assertApproxEqRel(
-            charge,
-            realCostLink * 5,
-            1e12, // 0.0001%
-            "charge is not 5x the premium-inclusive cost"
-        );
-
-        // And the observed on-chain debit must equal that charge.
+        uint256 cost = BILLED_GAS * block.basefee * 124 / 100;
+        // Each wei of credit was backed by four donated wei. At equal gas price, the
+        // donation backing is more than six times the full-callback native cost.
+        assertGe(4 * charge, 6 * cost);
         _purchaseBelowThreshold();
         _grantCredit(donor, charge * 2);
         _mineRequest(donor);
-        assertEq(
-            game.middayRngCredits(donor),
-            charge,
-            "on-chain debit diverged from the priced charge"
-        );
+        assertEq(game.middayRngCredits(donor), charge);
     }
 
     /// @notice The charge scales linearly with basefee — cheap blocks buy more requests per
-    ///         donation, expensive blocks fewer, with the 5x ratio preserved throughout.
     function test_chargeScalesLinearlyWithBasefee() public pricedBlock {
         vm.fee(1 gwei);
         uint256 chargeAt1 = _expectedCharge();

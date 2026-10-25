@@ -144,3 +144,4 @@ POOL-TO-POOL	_addPrizeContribution	_splitDegenesisCohorts	modules/DegenerusGameD
 POOL-TO-POOL	claimablePool	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	WRITE	the redemption reserve debit leaves claimablePool and enters the future prize pool
 PRE-COUNTED	_creditClaimableLogged	_releaseRedemptionReserve	storage/DegenerusGameStorage.sol	READ	Reclassifies Game-held redemption reserve into sDGNRS ordinary claimable; claimablePool already counts the value and is unchanged.
 POOL-TO-POOL	yieldAccumulator	_splitDegenesisCohorts	modules/DegenerusGameDegenesisModule.sol	WRITE	cohort insurance quarter; paired with half-volume claimablePool debit and future-prize quarter
+VALUE-OUT	claimablePool	_topUpVrfNative	storage/DegenerusGameStorage.sol	WRITE	successful native subscription funding: sDGNRS claimable/AFKing debit paired exactly; yield part was untracked surplus, other obligations unchanged

@@ -9,7 +9,6 @@ describe("Deployment optional configuration isolation", function () {
   let target;
   const zero = "0x0000000000000000000000000000000000000000";
   const pinned = {
-    LINK_ETH_FEED: "0x0000000000000000000000000000000000001234",
     ENS_REVERSE_REGISTRAR: "0x0000000000000000000000000000000000005678",
   };
 
@@ -35,16 +34,15 @@ describe("Deployment optional configuration isolation", function () {
     assertAddresses(pinned);
   });
 
-  it("clears both integrations when the next build omits them", function () {
+  it("clears the integration when the next build omits them", function () {
     patchContractAddresses(new Map(), {}, 20700, null, target);
-    assertAddresses({ LINK_ETH_FEED: zero, ENS_REVERSE_REGISTRAR: zero });
+    assertAddresses({ ENS_REVERSE_REGISTRAR: zero });
   });
 
-  it("resets an empty integration while retaining the explicitly selected feed", function () {
+  it("resets an empty integration", function () {
     patchContractAddresses(new Map(), {
-      LINK_ETH_FEED: pinned.LINK_ETH_FEED,
       ENS_REVERSE_REGISTRAR: "",
     }, 20700, null, target);
-    assertAddresses({ LINK_ETH_FEED: pinned.LINK_ETH_FEED, ENS_REVERSE_REGISTRAR: zero });
+    assertAddresses({ ENS_REVERSE_REGISTRAR: zero });
   });
 });

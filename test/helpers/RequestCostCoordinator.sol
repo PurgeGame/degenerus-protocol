@@ -7,7 +7,7 @@ import {VRFRandomWordsRequest} from "../../contracts/interfaces/IVRFCoordinator.
 /// https://github.com/smartcontractkit/chainlink-evm/tree/b723176adfe8f2e9eff47730e21a1ac8f64b46d7/contracts/src/v0.8/vrf
 /// Preserves the production storage shapes, validation reads, consumer nonce/pending write,
 /// fresh commitment, hashes, dynamic extraArgs event and subscription-array return. It does
-/// NOT run proof verification or the 300k callback: those belong to the later fulfillment.
+/// NOT run proof verification or the 150k callback: those belong to the later fulfillment.
 /// A configurable execution floor additionally stresses compiler/version/chain overhead;
 /// tests use 125k. An independent build of the pinned, unmodified Chainlink contract
 /// (solc 0.8.19, optimizer 200, no IR, Paris) measured 41,419 cold request execution gas.
@@ -44,7 +44,7 @@ contract RequestCostCoordinator {
         config.minimumRequestConfirmations = 3;
         config.maxGasLimit = 2_500_000;
         subscriptions[1].owner = msg.sender;
-        balances[1].balance = 100 ether;
+        balances[1].nativeBalance = 100 ether;
         consumers[consumer][1].active = true;
         subscriptions[1].consumers.push(consumer);
         for (uint256 i = 1; i < count; ++i) subscriptions[1].consumers.push(address(uint160(0xD000 + i)));
@@ -70,15 +70,18 @@ contract RequestCostCoordinator {
         ++c.pendingReqCount;
         uint256 preSeed = uint256(keccak256(abi.encode(req.keyHash, msg.sender, req.subId, c.nonce)));
         requestId = uint256(keccak256(abi.encode(req.keyHash, preSeed)));
-        // The Game always uses the production empty-extraArgs default: LINK payment.
-        require(req.extraArgs.length == 0, "fixture expects LINK default");
-        bytes memory extraArgs = abi.encodeWithSelector(bytes4(keccak256("VRF ExtraArgsV1")), false);
+        bytes memory extraArgs = req.extraArgs;
+        require(keccak256(extraArgs) == keccak256(abi.encodeWithSelector(bytes4(keccak256("VRF ExtraArgsV1")), true)), "native payment");
         commitments[requestId] = keccak256(abi.encode(requestId, block.number, req.subId,
             req.callbackGasLimit, req.numWords, msg.sender, extraArgs));
         emit RandomWordsRequested(req.keyHash, requestId, preSeed, req.subId, req.requestConfirmations,
             req.callbackGasLimit, req.numWords, extraArgs, msg.sender);
         consumers[msg.sender][req.subId] = c;
         while (start - gasleft() < executionFloor) { }
+    }
+
+    function fundSubscriptionWithNative(uint256 id) external payable {
+        balances[id].nativeBalance += uint96(msg.value);
     }
 
     function requests(address consumer) external view returns (uint64) { return consumers[consumer][1].nonce; }
