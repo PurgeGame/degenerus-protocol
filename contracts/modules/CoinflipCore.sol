@@ -492,7 +492,7 @@ abstract contract CoinflipCore {
     /// @param id The account receiving the stake (0 = caller).
     /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims);
     ///        floored to whole FLIP.
-    function depositCoinflip(uint32 id, uint256 amount) external coinflipContext {
+    function playCoinflip(uint32 id, uint256 amount) external coinflipContext {
         (address key, address payee, bool authorized) = _resolve(id);
         _depositCoinflip(key, payee, id, amount, !authorized);
     }

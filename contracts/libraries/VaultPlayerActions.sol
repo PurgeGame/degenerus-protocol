@@ -63,7 +63,7 @@ library VaultPlayerActions {
                 || selector == IDegenerusAffiliate.claim.selector) return true;
         }
         if (target == ContractAddresses.COINFLIP) {
-            return selector == ICoinflip.depositCoinflip.selector
+            return selector == ICoinflip.playCoinflip.selector
                 || selector == ICoinflip.claimCoinflips.selector
                 || selector == ICoinflip.claimCoinflipCarry.selector
                 || selector == ICoinflip.setCoinflipAutoRebuy.selector
@@ -84,8 +84,8 @@ library VaultPlayerActions {
                 || selector == JackpotBattle.upgradeReservedDay.selector
                 || selector == CrapsBattle.upgradeDayWindows.selector
                 || selector == CrapsBattle.openBonusDay.selector
-                || selector == CrapsBattle.enterBonusBattle.selector
-                || selector == CrapsBattle.enterBonusDay.selector;
+                || selector == CrapsBattle.throwCraps.selector
+                || selector == CrapsBattle.playCraps.selector;
         }
         if (target == ContractAddresses.PARIMUTUEL) {
             return selector == IDegenerusParimutuel.placeBet.selector;
@@ -93,7 +93,7 @@ library VaultPlayerActions {
         if (target == ContractAddresses.WWXRP) {
             return selector == WWXRP.withdraw.selector
                 || selector == WWXRP.withdrawAcquired.selector
-                || selector == WWXRP.enter.selector || selector == WWXRP.claim.selector;
+                || selector == WWXRP.enterDraw.selector || selector == WWXRP.claim.selector;
         }
         if (target == ContractAddresses.SDGNRS) {
             return selector == IsDGNRS.burn.selector || selector == IsDGNRS.burnWrapped.selector
@@ -113,7 +113,7 @@ library VaultPlayerActions {
                 || selector == AFKingSubscriptionToken.setApprovalForAll.selector;
         }
         if (target == ContractAddresses.GNRUS) {
-            return selector == GNRUS.vote.selector || selector == GNRUS.burn.selector;
+            return selector == GNRUS.castBallot.selector || selector == GNRUS.burn.selector;
         }
         if (target == ContractAddresses.ADMIN) {
             return selector == DegenerusAdmin.donateVrf.selector;

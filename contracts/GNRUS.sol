@@ -665,7 +665,7 @@ contract GNRUS {
     ///      `setCharity`. Voters CAN vote on locked slots once filled.
     ///      Balance and identity checks precede vote writes; registration calls the trusted Game registrar.
     /// @param slot The current-slate slot index (0..MAX_ACTIVE_SLOTS-1) to vote for
-    function vote(uint8 slot) external {
+    function castBallot(uint8 slot) external {
         // 1. Slot bounds check (cheapest — calldata read + compare; shares the InvalidSlot error)
         if (slot >= MAX_ACTIVE_SLOTS) revert InvalidSlot();
 

@@ -790,7 +790,7 @@ contract WWXRP {
     /// @custom:reverts InsufficientBalance When the payee's balance is short.
     /// @custom:reverts E (Game) When `id` is unallocated, or a new self entrant must
     ///                 register past paid admission.
-    function enter(uint32 id, uint256 amount) external {
+    function enterDraw(uint32 id, uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
         // The requested logical day lives in Game slot 0 bits 24..47.
         uint256 gameHeader = uint256(game.extsload_g2807007(bytes32(0)));
@@ -1095,7 +1095,7 @@ contract WWXRP {
       |                       CENTURY BAF INCINERATOR                        |
       +======================================================================+
       |  A hedge on the century BAF's 50/50 fire gate: daily-draw burns made |
-      |  during a level x99 (via enter()) also arm the next x00 bracket and  |
+      |  during a level x99 (via enterDraw()) also arm the x00 bracket and   |
       |  pay one burn-weighted winner iff that level's BAF skips. The        |
       |  award is FLIP, not ETH: INCINERATOR_FLIP_BPS of the armed day's     |
       |  BAF draw book, credited as coinflip stake by this contract. The     |

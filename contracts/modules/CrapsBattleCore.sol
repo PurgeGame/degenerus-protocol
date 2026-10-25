@@ -366,7 +366,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///         all the SLOT's, so no value moves and no field changes. A blank ticket may name a
     ///         pick this way, which is how the vault steers the seats it takes automatically.
     ///         Allowed until the slot closes, which is the moment its table is bound — for a slip
-    ///         that came in through `enterBonusDay`, only until the first window of that entry
+    ///         that came in through `playCraps`, only until the first window of that entry
     ///         closes, and for a DAY ticket, its own day's period zero: a reservation on a future
     ///         day re-spreads freely until then.
     /// @param id The account that owns the slip (0 = the caller).
@@ -1470,7 +1470,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///         The dice scatter the rest of the ten: an all-zero `chips` leaves the whole board
     ///         to the draw.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
-    function enterBonusBattle(uint32 id, uint256 period, uint32 chips, uint16 multiple)
+    function throwCraps(uint32 id, uint256 period, uint32 chips, uint16 multiple)
         public
         returns (uint256 betId)
     {
@@ -1489,14 +1489,14 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///
     ///         Sold only while the first window is still taking bets: a whole-day ticket is a
     ///         commitment made before any of the day is spent. Past that, take what is left one
-    ///         window at a time through `enterBonusBattle`.
+    ///         window at a time through `throwCraps`.
     /// @param chips    Chip allocation entered at every window; an all-zero allocation takes the
     ///                 whole day blind.
     /// @param multiple The day's high-roller multiple to enter at, or 1 for the ordinary lane.
     /// @return placed How many windows took the entry.
     /// @custom:reverts BonusPeriodSpent If the day's first window has already closed.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
-    function enterBonusDay(uint32 id, uint32 chips, uint16 multiple) public returns (uint256 placed) {
+    function playCraps(uint32 id, uint32 chips, uint16 multiple) public returns (uint256 placed) {
         (uint256 word, uint256 account) = _paidDoor(id);
         (placed,) = _enterToday(chips, multiple, account, 0);
         _rememberBoard(word, chips);
@@ -1514,7 +1514,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         // THE DAY LANE OR NOTHING. A whole-day ticket is a commitment made before any of the day
         // is spent, so it is sold only while the first window is still taking bets. Past that the
         // day is part-spent and what is left is taken one window at a time through
-        // `enterBonusBattle` — the same seats at the same prices, without a SET of slips that has
+        // `throwCraps` — the same seats at the same prices, without a SET of slips that has
         // to be stamped with where it began, locked as one and amended as one.
         if (period != 0) revert BonusPeriodSpent();
         return _enterDayLane(today, word, chips, multiple, account, flags);

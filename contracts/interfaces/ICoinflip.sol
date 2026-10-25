@@ -87,7 +87,7 @@ interface ICoinflip {
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.
     /// @custom:reverts StakeAboveDailyCap If the stake with its bonuses would exceed the player's
     ///                 per-day cap of type(uint32).max whole FLIP; every prior mutation rolls back.
-    function depositCoinflip(uint32 id, uint256 amount) external;
+    function playCoinflip(uint32 id, uint256 amount) external;
 
     /// @notice Claim an exact amount of account `id`'s coinflip winnings as FLIP tokens.
     /// @dev Processes pending daily claims, then mints up to the requested amount.
