@@ -92,7 +92,7 @@ contract CrapsRngSeal is DeployProtocol {
     // =========================================================================
 
     function afterInvariant() public view {
-        assertGt(handler.ghost_daysOpened(), 1, "vacuous: the campaign never opened a second craps day");
+        assertGt(handler.ghost_daysSeenOpen(), 1, "vacuous: the campaign never opened a second craps day");
         assertGt(handler.ghost_entries(), 0, "vacuous: no entry ever bound");
         assertGt(handler.ghost_arms(), 0, "vacuous: no field ever shut");
         assertGt(
@@ -114,10 +114,16 @@ contract CrapsRngSeal is DeployProtocol {
     // FOCUSED PINS + FALSIFIABILITY
     // =========================================================================
 
+    /// @dev Roll logical days through the real heartbeat until the first craps day opens. The table
+    ///      opens its first windows on the day after Degenesis day 1, so a day-one deploy needs two.
+    function _openFirstDay() internal {
+        for (uint256 i = 1; i <= 3 && handler.ghost_daysOpened() == 0; ++i) handler.advanceDay(i);
+        require(handler.ghost_daysOpened() == 1, "fixture: the craps day did not open");
+    }
+
     /// @dev Drive one craps day open through the real heartbeat and seat one entrant in period 0.
     function _openDayWithOneEntrant() internal returns (uint64 slot, uint256 betId, address who) {
-        handler.advanceDay(1);
-        require(handler.ghost_daysOpened() == 1, "fixture: the craps day did not open");
+        _openFirstDay();
         who = handler.actors(0);
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(who, 1_000_000 ether);
@@ -198,7 +204,7 @@ contract CrapsRngSeal is DeployProtocol {
     /// @notice A second field shut while the request that sealed the first is in flight is an
     ///         in-window arm, and it moves nothing in the game's consumed set.
     function test_secondArmDuringTheFirstArmsRequestIsInWindow() public {
-        handler.advanceDay(1);
+        _openFirstDay();
         handler.enterWindow(0, 5, 0, false);
         handler.enterWindow(1, 6, 1, false);
         handler.enterWindow(2, 7, 2, false);
@@ -228,7 +234,7 @@ contract CrapsRngSeal is DeployProtocol {
     ///         so a field settles as soon as that request fulfils, and a later arm binds the leaf
     ///         above it.
     function test_eachShutWindowIsSealedByTheNextRequestAndSettles() public {
-        handler.advanceDay(1);
+        _openFirstDay();
         handler.enterWindow(0, 5, 0, false);
         handler.enterWindow(1, 6, 1, false);
         handler.arm(0);

@@ -16,6 +16,7 @@ import {JackpotBattle} from "../../../contracts/JackpotBattle.sol";
 import {MineFlipGas} from "../../../contracts/libraries/MineFlipGas.sol";
 import {CrapsViews} from "../../craps/CrapsViews.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
+import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 
 /// @title CrapsRngSealHandler — the craps lane of the RNG-freeze net, driven against the REAL
 ///        protocol (real game, real FLIP burn gate, real Coinflip credit lane, real VRF lifecycle).
@@ -86,6 +87,9 @@ contract CrapsRngSealHandler is Test {
     // Craps schedule shape
     // -------------------------------------------------------------------------
     uint256 internal constant PERIODS = 7;
+    /// @dev The table opens its first scheduled windows on logical day DEGENESIS_START_DAY + 1; the
+    ///      opened-day latch is born one day below it as a consumed sentinel, not an opened day.
+    uint24 internal constant FIRST_WINDOW_DAY = GameTimeLib.DEGENESIS_START_DAY + 1;
     uint256 internal constant SLOTS_PER_DAY = 8;
     uint256 internal constant CUSTOM_SLOT_BASE = 1 << 40;
     uint256 internal constant FLIP_TOP_UP = 1_000_000;
@@ -136,6 +140,10 @@ contract CrapsRngSealHandler is Test {
     // Ghost surface — non-vacuity and surveillance
     // -------------------------------------------------------------------------
     uint256 public ghost_daysOpened;
+    /// @notice Craps days the table opened, however the crank that opened them was reached: logical days
+    ///         advance inside any action's crank, not only inside `advanceDay`.
+    uint256 public ghost_daysSeenOpen;
+    uint24 internal lastSeenOpenDay;
     uint256 public ghost_entries;
     uint256 public ghost_dayTickets;
     uint256 public ghost_customBattles;
@@ -294,7 +302,7 @@ contract CrapsRngSealHandler is Test {
     ///      fuzzer drives (openDailyWindow + fulfil), not only inside _driveDay.
     function _noteOpenedDay() internal {
         (uint24 od,) = craps.bonusDayOf();
-        if (od == 0) return;
+        if (od < FIRST_WINDOW_DAY) return;
         if (firstOpenedDay == 0 || od < firstOpenedDay) firstOpenedDay = od;
         if (od > lastOpenedDay) lastOpenedDay = od;
     }
@@ -446,7 +454,11 @@ contract CrapsRngSealHandler is Test {
     ///      earliest one, so the keeper bound spans every opened day's windows.
     function _noteBoundDay() internal {
         (uint24 od,) = craps.bonusDayOf();
-        if (od != 0 && (boundFirstDay == 0 || od < boundFirstDay)) boundFirstDay = od;
+        if (od >= FIRST_WINDOW_DAY && (boundFirstDay == 0 || od < boundFirstDay)) boundFirstDay = od;
+        if (od >= FIRST_WINDOW_DAY && od > lastSeenOpenDay) {
+            lastSeenOpenDay = od;
+            ghost_daysSeenOpen++;
+        }
     }
 
     /// @dev Under `measureTableSettlement`: step the engine through the delivered cohort's earlier
@@ -1300,7 +1312,7 @@ contract CrapsRngSealHandler is Test {
 
     function _crapsDayOpen() internal view returns (bool) {
         (uint24 opened,) = craps.bonusDayOf();
-        return opened == craps.currentDayIndex() && craps.dailyWordAt(opened) != 0;
+        return opened >= FIRST_WINDOW_DAY && opened == craps.currentDayIndex() && craps.dailyWordAt(opened) != 0;
     }
 
     function _fund(address who) internal {
