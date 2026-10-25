@@ -189,6 +189,7 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         uint256 reserve = claimablePool > stethSettleable
             ? claimablePool - stethSettleable
             : 0;
+        reserve += _vrfNativeTarget();
         if (ethBal <= reserve) revert Insolvent();
         uint256 stakeable = ethBal - reserve;
         if (amount > stakeable) revert Insolvent();

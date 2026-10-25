@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {JackpotBattle} from "../JackpotBattle.sol";
 
+import {DegenerusAdmin} from "../DegenerusAdmin.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {ICoinflip} from "../interfaces/ICoinflip.sol";
@@ -16,7 +17,6 @@ import {WWXRP} from "../WWXRP.sol";
 import {DGNRS} from "../DGNRS.sol";
 import {AFKingSubscriptionToken} from "../AFKingSubscriptionToken.sol";
 import {GNRUS} from "../GNRUS.sol";
-import {ILinkTokenLike} from "../DegenerusAdmin.sol";
 import {
     IVaultWinnings, IVaultPartialWinnings, IVaultAffiliateClaim, IVaultBatchAffiliateClaim
 } from "../interfaces/IVaultPlayerActions.sol";
@@ -113,11 +113,10 @@ library VaultPlayerActions {
         if (target == ContractAddresses.GNRUS) {
             return selector == GNRUS.vote.selector || selector == GNRUS.burn.selector;
         }
-        // LINK is a foreign, sweepable token. This lets the Vault itself earn the LINK
-        // donation credit; it grants no approval or access to stETH/FLIP reserves.
-        if (target == ContractAddresses.LINK_TOKEN) {
-            return selector == ILinkTokenLike.transferAndCall.selector;
+        if (target == ContractAddresses.ADMIN) {
+            return selector == DegenerusAdmin.donateVrf.selector;
         }
+
         return false;
     }
 }

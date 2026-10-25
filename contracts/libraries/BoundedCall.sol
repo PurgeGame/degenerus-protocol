@@ -87,6 +87,30 @@ library BoundedCall {
         }
     }
 
+    /// @dev Optional external dependency probe with fixed gas and a fixed return-data cap.
+    /// Failure is a skip; it never consumes the caller's checkpoint tail.
+    function staticcallFixed(address target, uint256 budget, bytes memory input, uint256 expected)
+        internal view returns (bool ok, bytes memory output)
+    {
+        output = new bytes(expected);
+        assembly ("memory-safe") {
+            ok := staticcall(budget, target, add(input, 32), mload(input), 0, 0)
+            ok := and(ok, iszero(lt(returndatasize(), expected)))
+            switch ok
+            case 0 { mstore(output, 0) }
+            default { returndatacopy(add(output, 32), 0, expected) }
+        }
+    }
+
+    /// @dev Fixed-cost best-effort funding; no return payload is decoded or copied.
+    function callValueFixed(address target, uint256 value, uint256 budget, bytes memory input)
+        internal returns (bool ok)
+    {
+        assembly ("memory-safe") {
+            ok := call(budget, target, value, add(input, 32), mload(input), 0, 0)
+        }
+    }
+
     function _remaining(MineFlipGas.Meter memory meter, uint256 minimum, uint256 reserve, uint256 overhead)
         private view returns (uint256 available)
     {

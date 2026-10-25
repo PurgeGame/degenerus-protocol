@@ -438,7 +438,7 @@ abstract contract CoinflipCore {
     /// @notice Restricts access to authorized flip creditors.
     /// @dev Allowed callers: GAME (delegatecall modules — incl. the afking router's
     ///      in-context creditFlip bounty, which pays AS the GAME, not a separate miner contract),
-    ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption win-credit at settlement:
+    ///      QUESTS (level quest rewards), AFFILIATE, SDGNRS (redemption win-credit at settlement:
     ///      the escrowed slice was already removed from sDGNRS's backing at batch close via
     ///      withdrawRedeemedFlip, so the settlement mint to the redeemer is FLIP-neutral),
     ///      WWXRP (daily-draw prizes: a fixed, RNG-verified stake credited to the
@@ -452,7 +452,6 @@ abstract contract CoinflipCore {
             sender != ContractAddresses.GAME &&
             sender != ContractAddresses.QUESTS &&
             sender != ContractAddresses.AFFILIATE &&
-            sender != ContractAddresses.ADMIN &&
             sender != ContractAddresses.CRAPS &&
             sender != ContractAddresses.SDGNRS &&
             sender != ContractAddresses.WWXRP &&

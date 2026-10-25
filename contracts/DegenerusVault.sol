@@ -667,7 +667,7 @@ contract DegenerusVault {
 
     /// @notice Sweep a foreign ERC20 out of the vault.
     /// @dev Access: vault owner. The vault can receive tokens it has no other handling for —
-    ///      LINK recovered from a retired VRF subscription lands here with no way back out
+    ///      native ETH recovered from a retired VRF subscription lands here with no way back out
     ///      otherwise. Without this, routing a recovery to the vault only relocates the
     ///      stranding.
     ///      stETH is permanently excluded: it sits here as a real balance backing DGVE, so

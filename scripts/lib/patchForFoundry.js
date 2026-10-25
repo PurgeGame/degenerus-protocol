@@ -58,9 +58,7 @@ export function patchForFoundry() {
   // Build external addresses object
   const external = {
     STETH_TOKEN: mockAddrs.MockStETH,
-    LINK_TOKEN: mockAddrs.MockLinkToken,
     VRF_COORDINATOR: mockAddrs.MockVRFCoordinator,
-    LINK_ETH_FEED: mockAddrs.MockLinkEthFeed,
     CREATOR: FOUNDRY_TEST_CONTRACT,
   };
 
@@ -103,6 +101,4 @@ if (scriptPath && scriptPath.endsWith("patchForFoundry.js")) {
   );
   console.log(`  Mock VRF:       ${result.mockAddrs.MockVRFCoordinator}`);
   console.log(`  Mock stETH:     ${result.mockAddrs.MockStETH}`);
-  console.log(`  Mock LINK:      ${result.mockAddrs.MockLinkToken}`);
-  console.log(`  Mock Feed:      ${result.mockAddrs.MockLinkEthFeed}`);
 }

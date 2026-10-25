@@ -54,7 +54,7 @@ interface IDegenerusGameMinerModule {
 
 interface IDegenerusGameRngModule {
     error PreResetWindow();
-    error InsufficientLink();
+    error InsufficientNativeBalance();
     error NoPendingLootbox();
     error BelowThreshold();
     error GasTooHigh();

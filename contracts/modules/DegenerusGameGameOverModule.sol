@@ -56,7 +56,7 @@ interface IStETH {
 
 /// @dev Admin interface for VRF shutdown during final sweep.
 interface IDegenerusAdminShutdown {
-    /// @notice Cancel the VRF subscription and sweep LINK to the vault (DegenerusAdmin,
+    /// @notice Cancel the VRF subscription and sweep native ETH to the vault (DegenerusAdmin,
     ///         game-over only).
     function shutdownVrf() external;
 }
@@ -755,7 +755,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      are forfeited.
     ///      After GO_SWEPT=1, claimWinnings() reverts, so this is the last
     ///      chance for the three sinks to receive what they earned in-game.
-    ///      Also shuts down the VRF subscription and sweeps LINK to vault.
+    ///      Also shuts down the VRF subscription and sweeps native ETH to vault.
     /// @custom:reverts TransferFailed When ETH or stETH transfer fails
     function _handleFinalSweep(MineFlipGas.Meter memory meter) private {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) return;
@@ -804,7 +804,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     function _shutdownVrf(MineFlipGas.Meter memory meter) private {
-        // Admin needs the cancellation floor plus its LINK-read/transfer reserves.
+        // Admin needs the cancellation floor plus its native refund budget.
         // A failed trusted frame must roll back GO_SWEPT and all asset transfers:
         // otherwise the live subscription cannot be recovered by retrySubCancel.
         (bool ok,) = BoundedCall.callRemaining(meter, ContractAddresses.ADMIN, 1_000_000, 250_000,
@@ -1099,7 +1099,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @dev Access: ContractAddresses.ADMIN only. No post-deploy caller exists on ADMIN;
     ///      emergency VRF rotation uses updateVrfCoordinatorAndSub instead.
     /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
-    /// @param subId VRF subscription ID for LINK billing.
+    /// @param subId VRF subscription ID for native billing.
     /// @param keyHash_ VRF key hash for gas lane selection.
     function wireVrf(
         address coordinator_,
@@ -1142,9 +1142,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Detect what is in flight and re-issue on the new coordinator. A re-issue is the same
         // request sent again: rngRequestTime is left as it was, so the request keeps the day it
         // was first issued for and the VRF-dead window keeps running from the original send.
-        // The request is accepted before the new subscription is LINK-funded; DegenerusAdmin
-        // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
-        // fulfills once funded. If the new coordinator also stalls, the vault owner's one retry is
+        // DegenerusAdmin funds the replacement subscription before this reissue. If the new coordinator also stalls, the vault owner's one retry is
         // the remaining recourse, and a request unanswered _VRF_DEAD_TIMEOUT from its original
         // send reaches the VRF-dead ending.
         if (!rngLockedFlag) {
@@ -1177,7 +1175,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
     /// @dev Write the VRF coordinator, subscription, key hash and callback gas limit together.
     /// @param coord VRF coordinator address.
-    /// @param sub VRF subscription ID for LINK billing.
+    /// @param sub VRF subscription ID for native billing.
     /// @param key VRF key hash for gas lane selection.
     /// @param callbackGas Callback gas limit for VRF requests.
     function _setVrfConfig(address coord, uint256 sub, bytes32 key, uint32 callbackGas) private {
@@ -1198,7 +1196,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 requestConfirmations: confirmations,
                 callbackGasLimit: vrfCallbackGasLimit,
                 numWords: 1,
-                extraArgs: hex""
+                extraArgs: VRF_NATIVE_EXTRA_ARGS
             })
         );
     }

@@ -24,6 +24,7 @@ contract MockVRFCoordinator {
     mapping(uint256 => Subscription) public subs;
     mapping(uint256 => PendingRequest) public pendingRequests;
     uint32 public lastCallbackGasLimit;
+    bool public lastNativePayment;
 
     // --- IVRFCoordinatorV2_5Owner ---
 
@@ -40,7 +41,7 @@ contract MockVRFCoordinator {
         uint96 bal = subs[subId].balance;
         delete subs[subId];
         if (bal > 0) {
-            // fundSubscription records a synthetic LINK balance without funding ETH.
+            // fundSubscription records a synthetic native balance without funding ETH.
             // Distinguish that fixture limitation from an empty/OOG call failure.
             require(address(this).balance >= bal, "mock refund unfunded");
             (bool ok, ) = to.call{value: bal}("");
@@ -62,18 +63,24 @@ contract MockVRFCoordinator {
         )
     {
         Subscription storage s = subs[subId];
-        return (s.balance, 0, 0, s.owner, s.consumers);
+        return (0, s.balance, 0, s.owner, s.consumers);
     }
 
     // --- IVRFCoordinator ---
 
+    bool public requireFunds;
+    function requireFundedRequests(bool on) external { requireFunds = on; }
+
     function requestRandomWords(
         VRFRandomWordsRequest calldata req
     ) external returns (uint256 requestId) {
+        if (requireFunds) require(subs[req.subId].balance != 0, "not funded before request");
+        require(keccak256(req.extraArgs) == keccak256(hex"92fd13380000000000000000000000000000000000000000000000000000000000000001"), "native payment required");
         lastCallbackGasLimit = req.callbackGasLimit;
+        lastNativePayment = true;
         requestId = _nextRequestId++;
         pendingRequests[requestId] = PendingRequest({
-            subId: 0,
+            subId: req.subId,
             consumer: msg.sender,
             fulfilled: false
         });
@@ -130,15 +137,15 @@ contract MockVRFCoordinator {
         return _nextRequestId - 1;
     }
 
-    /// @dev ERC-677 callback: accept LINK funding for a subscription.
-    ///      The real Chainlink VRF coordinator implements this to receive LINK.
-    /// @param amount Amount of LINK received.
-    /// @param data ABI-encoded subscription ID.
-    function onTokenTransfer(address, uint256 amount, bytes calldata data) external {
-        if (data.length == 32) {
-            uint256 subId = abi.decode(data, (uint256));
-            subs[subId].balance += uint96(amount);
-        }
+    function fundSubscriptionWithNative(uint256 subId) external payable {
+        require(subs[subId].owner != address(0), "invalid subscription");
+        require(msg.value <= type(uint96).max, "oversized funding");
+        subs[subId].balance += uint96(msg.value);
+    }
+
+    /// @dev Simulate the native bill in lifecycle tests without needing an oracle proof.
+    function chargeNative(uint256 subId, uint96 amount) external {
+        subs[subId].balance -= amount;
     }
 
     receive() external payable {}

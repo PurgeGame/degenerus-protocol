@@ -36,7 +36,6 @@ library OwnerActions {
             return selector == DegenerusAdmin.retryGameRng.selector
                 || selector == DegenerusAdmin.retrySubCancel.selector
                 || selector == DegenerusAdmin.propose.selector
-                || selector == DegenerusAdmin.proposeFeedSwap.selector
                 || selector == DegenerusAdmin.swapGameEthForStEth.selector;
         }
         if (target == ContractAddresses.GAME) {

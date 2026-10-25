@@ -37,7 +37,7 @@ if (mode === 'prepare') {
   const mockAddresses = Object.fromEntries(mocks.map((name,i)=>[name,getCreateAddress({from:deployer,nonce:nonce+i})]));
   const predicted = predictAddresses(deployer, nonce + mocks.length);
   const pin = path.join(directory,'contracts/ContractAddresses.sol');
-  const external = { CREATOR: deployer, VRF_COORDINATOR:mockAddresses.MockVRFCoordinator, STETH_TOKEN:mockAddresses.MockStETH, LINK_TOKEN:mockAddresses.MockLinkToken, LINK_ETH_FEED:mockAddresses.MockLinkEthFeed };
+  const external = { CREATOR: deployer, VRF_COORDINATOR:mockAddresses.MockVRFCoordinator, STETH_TOKEN:mockAddresses.MockStETH };
   if (optional) external.ENS_REVERSE_REGISTRAR = mockAddresses.NativeEnsRegistrar;
   patchContractAddresses(predicted, external, computeDeployDayBoundary(block.timestamp), '0x'+'ab'.repeat(32), pin);
   function sources(dir, prefix) {

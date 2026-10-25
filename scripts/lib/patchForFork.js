@@ -18,7 +18,6 @@ const PINS_FILE = resolve(__dirname, "../../test/fork/ForkPins.sol");
  * Read the fork pins from test/fork/ForkPins.sol, the single source of truth shared with the
  * Solidity fixture (which re-checks every value against the compiled ContractAddresses).
  * @returns {{FORK_BLOCK:number, FORK_TIMESTAMP:number, STETH:string, LINK:string,
- *            VRF_COORDINATOR:string, LINK_ETH_FEED:string, VRF_KEY_HASH:string}}
  */
 export function readForkPins(file = PINS_FILE) {
   const src = readFileSync(file, "utf8");
@@ -34,9 +33,7 @@ export function readForkPins(file = PINS_FILE) {
     FORK_BLOCK: Number(pick("FORK_BLOCK", "\\d+")),
     FORK_TIMESTAMP: Number(pick("FORK_TIMESTAMP", "\\d+")),
     STETH: pick("STETH", "0x[0-9a-fA-F]{40}"),
-    LINK: pick("LINK", "0x[0-9a-fA-F]{40}"),
     VRF_COORDINATOR: pick("VRF_COORDINATOR", "0x[0-9a-fA-F]{40}"),
-    LINK_ETH_FEED: pick("LINK_ETH_FEED", "0x[0-9a-fA-F]{40}"),
     VRF_KEY_HASH: pick("VRF_KEY_HASH", "0x[0-9a-fA-F]{64}"),
   };
 }
@@ -56,9 +53,7 @@ export function patchForFork() {
   const predicted = predictAddresses(FOUNDRY_TEST_CONTRACT, PROTOCOL_START_NONCE);
   const external = {
     STETH_TOKEN: pins.STETH,
-    LINK_TOKEN: pins.LINK,
     VRF_COORDINATOR: pins.VRF_COORDINATOR,
-    LINK_ETH_FEED: pins.LINK_ETH_FEED,
     CREATOR: FOUNDRY_TEST_CONTRACT,
   };
   const dayBoundary = computeDeployDayBoundary(pins.FORK_TIMESTAMP);
@@ -73,9 +68,7 @@ if (scriptPath && scriptPath.endsWith("patchForFork.js")) {
   console.log(`  Fork block:     ${pins.FORK_BLOCK} (timestamp ${pins.FORK_TIMESTAMP})`);
   console.log(`  Day boundary:   ${dayBoundary}`);
   console.log(`  stETH:          ${external.STETH_TOKEN}`);
-  console.log(`  LINK:           ${external.LINK_TOKEN}`);
   console.log(`  VRF v2.5:       ${external.VRF_COORDINATOR}`);
-  console.log(`  LINK/ETH feed:  ${external.LINK_ETH_FEED}`);
   console.log(`  VRF key hash:   ${pins.VRF_KEY_HASH}`);
   console.log(`  GAME:           ${predicted.get("GAME")}`);
 }

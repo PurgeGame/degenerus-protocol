@@ -238,7 +238,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      SECURITY: Config can be changed via emergency rotation (updateVrfCoordinatorAndSub).
     /// @custom:reverts OnlyAdmin If caller is not ADMIN.
     /// @dev Signature: wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) —
-    ///      Chainlink VRF V2.5 coordinator address, VRF subscription ID for LINK billing,
+    ///      Chainlink VRF V2.5 coordinator address, VRF subscription ID for native billing,
     ///      and the VRF key hash identifying the oracle and gas lane. The signature matches
     ///      the module function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding here would cost contract-size headroom for no behavior change.
@@ -1200,12 +1200,12 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         if (!ok) _revertGameDelegate(data);
     }
 
-    /// @notice Mint mid-day RNG credit to a LINK donor.
-    /// @dev Access: ADMIN only — called from the LINK donation hook once the donated LINK
-    ///      has reached the VRF coordinator, so credit only ever trails LINK the subscription
+    /// @notice Mint mid-day RNG credit to a native ETH donor.
+    /// @dev Access: ADMIN only — called from the native donation hook once the donated native ETH
+    ///      has reached the VRF coordinator, so credit only ever trails native ETH the subscription
     ///      already holds. A donation is a payment, so the donor registers a wallet ID; the
     ///      RNG module holds the body. Signature: creditMiddayRng(address to, uint256
-    ///      linkAmount) — matches the module selector, so the calldata forwards as-is.
+    ///      amount) — matches the module selector, so the calldata forwards as-is.
     /// @return The donor's wallet ID.
     function creditMiddayRng(address, uint256) external returns (uint32) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
@@ -1214,7 +1214,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         assembly ("memory-safe") { return(add(data, 32), mload(data)) }
     }
 
-    /// @notice Read a donor's unspent mid-day RNG credit, in juels of donated LINK.
+    /// @notice Read a donor's unspent mid-day RNG credit, in wei.
     function middayRngCredits(address account) external view returns (uint256) {
         return middayRngCredit[_walletIdOf(account)];
     }
@@ -1255,7 +1255,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      count. Final values 0/1 leave the request pending for retry. Stale/duplicate
     ///      fulfillments (wrong requestId or word already stored) are ignored, not reverted,
     ///      so a late coordinator retry never bricks. Runs in the base contract so the
-    ///      LINK-paid callback carries no delegatecall overhead.
+    ///      Native-paid callback carries no delegatecall overhead.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
         uint16 flags;

@@ -14,14 +14,14 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_DIRECT_GROUP_GAS = 65_000;
     // Dispatch, decoding and checkpoint normalization; selection is admitted separately.
     uint256 internal constant ENGINE_BOUNDARY = 200_000;
-    // Selection plus LINK admission: 50k + 200k reserve + 794 EIP-150
+    // Selection plus native ETH admission: 50k + 200k reserve + 794 EIP-150
     // + 10k frame, optional credit-price read and cold selection reads, with margin.
     uint256 internal constant ENGINE_SELECTION = 450_000;
     // Return and one caller credit; native R90 fresh/spill transactions: 130.7k/148.1k.
     uint256 internal constant ENGINE_RETURN = 200_000;
     // Prior cold-century envelope: 5.954M including 25 fresh slots; revalidate R90 callers.
     uint256 internal constant DAILY_APPLY = 7_200_000;
-    // Cold midday 530.7k + request admission 1,017,936 + LINK admission 260,793,
+    // Cold midday 530.7k + request admission 1,017,936 + native ETH admission 260,793,
     // including the reserves as well as the forwarding minima, with 20% margin.
     uint256 internal constant RNG_MIDDAY_REQUEST = 2_200_000;
     // Cold daily request 2.632M + request admission 1,017,936, with 20% margin.
@@ -59,7 +59,7 @@ library MineFlipGasBounds {
     // Fresh cursor (110.1k) plus 80k frame, with margin.
     uint256 internal constant TERMINAL_TALLY_TAIL = 250_000;
     // Cold sweep 547.3k + shutdown admission (1M + 250k reserve + 15,873 EIP-150
-    // + 10k frame), with margin. Admin's nested cancellation/LINK tails fit in 1M.
+    // + 10k frame), with margin. Admin's nested cancellation/native ETH tails fit in 1M.
     uint256 internal constant TERMINAL_FINAL_SWEEP = 2_200_000;
     // Sweep return reserve.
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;

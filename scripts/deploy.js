@@ -1,4 +1,5 @@
 import { usesAffiliateBootstrap } from "./lib/deploymentManifest.js";
+import { vrfNativeConfig, nativeSeed } from "./lib/vrfNativeConfig.js";
 import hre from "hardhat";
 import {
   readFileSync,
@@ -53,7 +54,6 @@ async function main() {
 
   const external = {
     STETH_TOKEN: process.env.STETH_TOKEN,
-    LINK_TOKEN: process.env.LINK_TOKEN,
     VRF_COORDINATOR: process.env.VRF_COORDINATOR,
     CREATOR: deployer.address,
   };
@@ -69,13 +69,18 @@ async function main() {
     external.ENS_REVERSE_REGISTRAR = process.env.ENS_REVERSE_REGISTRAR;
   }
 
-  // Optional: Chainlink LINK/ETH aggregator (mainnet proxy
-  // 0xDC530D9457755926550b59e8ECcdaE7624181557). DegenerusAdmin's constructor
-  // installs it, so donation rewards price from block one. If unset, the
-  // constant stays address(0) and the feed arrives later via proposeFeedSwap.
-  if (process.env.LINK_ETH_FEED) {
-    external.LINK_ETH_FEED = process.env.LINK_ETH_FEED;
+  const vrfConfig = vrfNativeConfig(vrfKeyHash, true);
+  const nativeVrfSeed = nativeSeed(vrfConfig, process.env.VRF_NATIVE_SEED);
+  if (await hre.ethers.provider.getBalance(deployer.address) < nativeVrfSeed) {
+    throw new Error("Deployer cannot cover the native VRF seed");
   }
+  const coordinator = new hre.ethers.Contract(external.VRF_COORDINATOR, [
+    "function s_provingKeys(bytes32) view returns (bool exists,uint64 maxGas)",
+    "function fundSubscriptionWithNative(uint256) payable",
+    "function getSubscription(uint256) view returns (uint96,uint96,uint64,address,address[])"
+  ], deployer);
+  const lane = await coordinator.s_provingKeys(vrfKeyHash);
+  if (!lane.exists || lane.maxGas !== vrfConfig.laneMaxGasPrice) throw new Error("VRF key hash / lane mismatch");
 
   // 4. Patch ContractAddresses.sol
   console.log("Patching ContractAddresses.sol...");
@@ -138,6 +143,14 @@ async function main() {
     verifyAddresses(predicted, deployed);
     console.log("All addresses match predictions.\n");
 
+    // Seed directly: deployment funding earns no donor credit. Keep every CREATE nonce fixed.
+    const admin = await hre.ethers.getContractAt("DegenerusAdmin", deployed.get("ADMIN"), deployer);
+    const subscriptionId = await admin.subscriptionId();
+    await (await coordinator.fundSubscriptionWithNative(subscriptionId, { value: nativeVrfSeed })).wait();
+    if ((await coordinator.getSubscription(subscriptionId))[1] < nativeVrfSeed) {
+      throw new Error("Native VRF seed verification failed");
+    }
+
     // Keep this transaction after all CREATEs so predicted addresses do not shift.
     const game = await hre.ethers.getContractAt("DegenerusGame", deployed.get("GAME"), deployer);
     const genesisReceipt = await (await game.initProtocolDeity({ gasLimit: 16_777_216 })).wait();
@@ -196,6 +209,7 @@ async function main() {
       network,
       deployer: deployer.address,
       startingNonce,
+      nativeVrfSeed: nativeVrfSeed.toString(),
       deployDayBoundary,
       timestamp: block.timestamp,
       contracts: Object.fromEntries(deployed),

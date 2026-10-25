@@ -52,10 +52,6 @@ interface IGameMinerMaintenance {
     function minerMaintenancePending_g11976() external view returns (bool);
 }
 
-interface IAdminLinkValue {
-    function linkAmountToEth(uint256 amount) external view returns (uint256);
-}
-
 /**
  * @title DegenerusGameStorage
  * @author Burnie Degenerus
@@ -957,7 +953,7 @@ abstract contract DegenerusGameStorage {
     ///      the AdvanceModule, so it lives in the shared base.
     event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
 
-    /// @dev Emitted when a LINK donation adds mid-day RNG credit, in juels.
+    /// @dev Emitted when a native donation adds mid-day RNG credit, in wei.
     ///      `balance` is the post-credit balance.
     event MiddayRngCredited(
         address indexed donor,
@@ -1141,13 +1137,123 @@ abstract contract DegenerusGameStorage {
     // A request may create its id slot and seal packed state before returning to
     // the checkpoint caller. These are caller reserves, never coordinator caps.
     uint256 internal constant VRF_REQUEST_RESERVE = 500_000;
-    uint256 internal constant VRF_READ_RESERVE = 200_000;
 
-    /// @dev Only the first, static uint96 field is used; no dynamic tuple is decoded.
-    function _vrfLinkBalance(MineFlipGas.Meter memory meter) internal view returns (bool ok, uint256 balance) {
-        (ok, balance) = BoundedCall.staticWordRemaining(meter, address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE,
-            abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId));
-        ok = ok && balance <= type(uint96).max;
+    /// @dev Native balance is the second static ABI word; never decode consumers.
+    function _vrfNativeBalance() internal view returns (bool ok, uint256 nativeBalance) {
+        bytes memory result;
+        (ok, result) = BoundedCall.staticcallFixed(address(vrfCoordinator), EXTERNAL_READ_GAS,
+            abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId), 64);
+        if (ok) assembly ("memory-safe") { nativeBalance := mload(add(result, 64)) }
+        ok = ok && nativeBalance <= type(uint96).max;
+    }
+
+    // VRFV2PlusClient.ExtraArgsV1({nativePayment: true}), tag plus one ABI bool.
+    bytes internal constant VRF_NATIVE_EXTRA_ARGS =
+        hex"92fd13380000000000000000000000000000000000000000000000000000000000000001";
+
+    // Five scheduled mid-day windows plus one daily word; each includes one retry.
+    // 33 days plus one boundary and one terminal commitment: 2 * (33 * 6 + 2).
+    uint256 internal constant VRF_REQUESTS_PER_DAY = 12;
+    uint256 internal constant VRF_MAX_REQUESTS_PER_INTERVAL = 400;
+    uint256 internal constant VRF_STRESS_COST =
+        300_000 * 1 gwei * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
+    uint256 internal constant VRF_NATIVE_LOW_WATER =
+        2 * ContractAddresses.VRF_LANE_MAX_GAS_PRICE * 350_000 * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100
+        + 5 * VRF_REQUESTS_PER_DAY * VRF_STRESS_COST;
+    uint256 internal constant VRF_NATIVE_TARGET =
+        VRF_NATIVE_LOW_WATER + 2 * VRF_MAX_REQUESTS_PER_INTERVAL * VRF_STRESS_COST;
+    uint256 internal constant VRF_FUND_GAS = 300_000;
+
+    event VrfFunded(uint24 indexed level, uint256 fromYield, uint256 fromSdgnrs);
+
+    function _vrfMinFulfillBalance() internal view returns (uint256) {
+        return ContractAddresses.VRF_LANE_MAX_GAS_PRICE * (200_000 + uint256(vrfCallbackGasLimit))
+            * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
+    }
+
+    /// @dev Governance may raise the callback cap; reserve and stress allowance rise with it.
+    /// The default-sized constants remain a minimum, even for a smaller callback.
+    function _vrfExtraStressCost() private view returns (uint256) {
+        uint256 callbackGas = vrfCallbackGasLimit;
+        return callbackGas > 150_000
+            ? (callbackGas - 150_000) * 1 gwei * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100 : 0;
+    }
+
+    function _vrfNativeLowWater() internal view returns (uint256) {
+        uint256 minimum = _vrfMinFulfillBalance();
+        uint256 baseMinimum = ContractAddresses.VRF_LANE_MAX_GAS_PRICE * 350_000
+            * (100 + ContractAddresses.VRF_NATIVE_PREMIUM) / 100;
+        return VRF_NATIVE_LOW_WATER + (minimum > baseMinimum ? 2 * (minimum - baseMinimum) : 0)
+            + 5 * VRF_REQUESTS_PER_DAY * _vrfExtraStressCost();
+    }
+
+    function _vrfNativeTarget() internal view returns (uint256) {
+        return _vrfNativeLowWater() + 2 * VRF_MAX_REQUESTS_PER_INTERVAL * (VRF_STRESS_COST + _vrfExtraStressCost());
+    }
+
+    /// @dev Count all ETH obligations, including the frozen purchase buffer, exactly once.
+    function _untrackedYield(uint256 stBal) internal view returns (uint256) {
+        (uint128 nextPool, uint128 futurePool) = _getPrizePools();
+        (uint128 pNext, uint128 pFuture) = _getPendingPools();
+        uint256 obligations = _getCurrentPrizePool() + uint256(nextPool) + uint256(futurePool)
+            + claimablePool + yieldAccumulator + uint256(pNext) + uint256(pFuture);
+        uint256 assets = address(this).balance + stBal;
+        return assets > obligations ? assets - obligations : 0;
+    }
+
+    /// @dev A failed stETH read cannot establish source order, so skip the optional pull.
+    function _vrfYieldSurplus() internal view returns (bool ok, uint256 surplus) {
+        bytes memory result;
+        (ok, result) = BoundedCall.staticcallFixed(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS,
+            abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)), 32);
+        if (!ok) return (false, 0);
+        uint256 stBal = abi.decode(result, (uint256));
+        if (stBal > type(uint128).max) return (false, 0);
+        return (true, _untrackedYield(stBal));
+    }
+
+    /// @dev First step of a fresh daily request. The normal day reads only the subscription.
+    function _refillVrfNative() internal {
+        (bool ok, uint256 balance) = _vrfNativeBalance();
+        if (!ok || balance >= _vrfNativeLowWater() || address(this).balance == 0) return;
+        uint256 surplus;
+        (ok, surplus) = _vrfYieldSurplus();
+        if (ok) _topUpVrfNative(balance, surplus);
+    }
+
+    /// @dev Yield first, then the protocol's ordinary claimable, then AFKing. Claim ETH is a
+    /// soft liquidity reservation; every non-yield wei sent removes one wei of obligations.
+    /// Returns only the yield actually sent, so the caller can split the remaining surplus.
+    function _topUpVrfNative(uint256 balance, uint256 surplus) internal returns (uint256 fromYield) {
+        uint256 target = _vrfNativeTarget();
+        uint256 liquid = address(this).balance;
+        if (balance >= target || liquid == 0 || address(vrfCoordinator).code.length == 0) return 0;
+        uint256 available = target - balance;
+        if (available > liquid) available = liquid;
+        fromYield = available < surplus ? available : surplus;
+        uint256 remaining = available - fromYield;
+        uint256 fromClaimable;
+        uint256 fromAfking;
+        if (remaining != 0) {
+            // The unbacked one-wei wallet sentinel is never a funding source.
+            uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
+            if (claimable != 0) --claimable;
+            fromClaimable = remaining < claimable ? remaining : claimable;
+            remaining -= fromClaimable;
+            if (remaining != 0) {
+                uint256 afking = _afkingOf(SDGNRS_WALLET_ID);
+                fromAfking = remaining < afking ? remaining : afking;
+            }
+        }
+        uint256 fromSdgnrs = fromClaimable + fromAfking;
+        uint256 amount = fromYield + fromSdgnrs;
+        if (amount == 0 || !BoundedCall.callValueFixed(address(vrfCoordinator), amount, VRF_FUND_GAS,
+            abi.encodeWithSelector(IVRFCoordinator.fundSubscriptionWithNative.selector, vrfSubscriptionId))) return 0;
+        if (fromSdgnrs != 0) {
+            _debitClaimableAndAfking(SDGNRS_WALLET_ID, fromClaimable, fromAfking);
+            claimablePool -= uint128(fromSdgnrs);
+        }
+        emit VrfFunded(level, fromYield, fromSdgnrs);
     }
 
     /// @dev Impossible reported balances are refused before they can overflow fund arithmetic.
@@ -1162,21 +1268,19 @@ abstract contract DegenerusGameStorage {
         (ok, result) = BoundedCall.callRemaining(meter, address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE,
             abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({
                 keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations,
-                callbackGasLimit: vrfCallbackGasLimit, numWords: 1, extraArgs: hex""
+                callbackGasLimit: vrfCallbackGasLimit, numWords: 1, extraArgs: VRF_NATIVE_EXTRA_ARGS
             })), 32);
         if (ok) id = abi.decode(result, (uint256));
         ok = ok && id != 0;
     }
 
-    uint96 internal constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
-    uint96 internal constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
 
     /// @dev The mid-day request's own refusal gates, read before selecting it: an optional
     ///      request that would certainly be refused is not work. Daily, read, maintenance and
     ///      liveness gates already hold on the path that reaches this check. A pending
     ///      write-side Craps window waives both pending-value gates. Otherwise an empty queue
     ///      is never eligible, and a queue below the threshold is eligible only when `caller`'s
-    ///      donated credit covers the charge, priced last so the Admin feed is read only when
+    ///      donated credit covers the charge, priced last only when
     ///      every other gate passes.
     function _minerMiddayEligible(address caller, MineFlipGas.Meter memory meter) internal view returns (bool) {
         bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
@@ -1192,35 +1296,29 @@ abstract contract DegenerusGameStorage {
         }
         if (!dailyComplete || _dailyRequestDue()) return false;
         uint256 maxBasefee = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
-        if (maxBasefee != 0 && block.basefee > maxBasefee * 1 gwei) return false;
+        if (maxBasefee != 0 && block.basefee > maxBasefee * (crapsWork ? 4 gwei : 1 gwei)) return false;
         if ((block.timestamp - 82_620) % 1 days >= 1 days - 1 minutes) return false;
         if (_recordedDailyWord(_gameDay()) == 0) return false;
         // No coordinator is wired before VRF setup, so nothing can be requested yet.
         if (address(vrfCoordinator) == address(0)) return false;
-        (bool ok, uint256 linkBal) = _vrfLinkBalance(meter);
-        if (!ok || linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) return false;
+        if (!crapsWork) {
+            (bool ok, uint256 nativeBal) = _vrfNativeBalance();
+            if (!ok || nativeBal < _vrfMinFulfillBalance() * 3 / 2) return false;
+        }
         if (!needsCredit) return true;
-        (bool covered,,,) = _middayCreditCharge(caller, meter);
+        (bool covered,,,) = _middayCreditCharge(caller);
         return covered;
     }
 
-    /// @dev The donated-credit charge for one mid-day request at this block's basefee:
-    ///      MIDDAY_RNG_CHARGE_MULT times the billed gas, converted to juels at the Admin's
-    ///      LINK/ETH price. `covered` is false for a zero balance or an unpriced feed, so the
-    ///      selector and the RNG module's charge always agree within a transaction.
-    function _middayCreditCharge(address caller, MineFlipGas.Meter memory meter)
+    /// @dev Credit is denominated in wei. The floor keeps near-zero basefee requests paid.
+    function _middayCreditCharge(address caller)
         internal view returns (bool covered, uint256 charge, uint256 balance, uint32 id)
     {
         id = _walletIdOf(caller);
         balance = middayRngCredit[id];
-        // A zero balance never qualifies, even where basefee (and so the charge) is zero.
-        if (balance == 0) return (false, 0, 0, id);
-        (bool priced, uint256 weiPerLink) = BoundedCall.staticWordRemaining(meter, ContractAddresses.ADMIN,
-            120_000, 200_000, abi.encodeWithSelector(IAdminLinkValue.linkAmountToEth.selector,
-                1 ether, MineFlipGas.child(meter, 200_000)));
-        if (!priced) return (false, 0, balance, id);
-        if (weiPerLink == 0) return (false, 0, balance, id);
-        charge = (MIDDAY_RNG_BILLED_GAS * block.basefee * MIDDAY_RNG_CHARGE_MULT * 1 ether) / weiPerLink;
+        uint256 fee = block.basefee;
+        if (fee < MIDDAY_BASEFEE_FLOOR) fee = MIDDAY_BASEFEE_FLOOR;
+        charge = MIDDAY_RNG_BILLED_GAS * fee * MIDDAY_RNG_CHARGE_MULT;
         covered = balance >= charge;
     }
 
@@ -3238,7 +3336,7 @@ abstract contract DegenerusGameStorage {
     ///      Rotatable with coordinator; determines gas price tier.
     bytes32 internal vrfKeyHash;
 
-    /// @dev VRF subscription ID for LINK billing.
+    /// @dev VRF subscription ID for native billing.
     ///      Mutable to allow subscription rotation without redeploying.
     uint256 internal vrfSubscriptionId;
 
@@ -3306,27 +3404,13 @@ abstract contract DegenerusGameStorage {
     ///      bits). Zero disables the gate, letting mid-day requests issue at any price.
     uint256 internal constant MIDDAY_MAX_BASEFEE_GWEI_CAP = 255;
 
-    /// @dev Gas a mid-day fulfillment bills, summing the three terms the coordinator
-    ///      charges for: the ~50k callback, mainnet's ~112k proof verification, and the
-    ///      coordinator's own gasAfterPaymentCalculation of 38,900, which it adds to the
-    ///      gas it measured. It bills gas actually used, not the request's
-    ///      callbackGasLimit, so this tracks the real figure rather than the reservation.
-    uint256 internal constant MIDDAY_RNG_BILLED_GAS = 201_000;
+    /// @dev Measured mainnet native billing normalized to the full 150k callback was at most
+    /// 246,071 gas in three samples; 300k includes headroom for coordinator overhead.
+    uint256 internal constant MIDDAY_RNG_BILLED_GAS = 300_000;
+    uint256 internal constant MIDDAY_RNG_CHARGE_MULT = 2;
+    uint256 internal constant MIDDAY_BASEFEE_FLOOR = 0.01 gwei;
 
-    /// @dev Multiple of the billed gas charged against a donor's credit: a 5x markup times
-    ///      the coordinator's 20% LINK premium. Charging a multiple of what the request
-    ///      actually costs — rather than a fixed price — keeps the charge tracking gas
-    ///      with no stored rate to re-calibrate as gas or LINK/ETH drifts. The markup
-    ///      holds while a fulfillment prices within 5x the request block's basefee and the
-    ///      feed tracks the coordinator's own LINK valuation; outside that band a
-    ///      redemption bills more than it charged. What bounds the subscription's exposure
-    ///      is the mid-day LINK floor rather than this multiple — requests stop below
-    ///      MIN_LINK_FOR_LOOTBOX_RNG, leaving that balance to the daily word, which is
-    ///      never gated. A pending craps window answers to MIN_LINK_FOR_CRAPS_RNG instead, a
-    ///      reserve sized to one daily word rather than to a queue that can wait for it.
-    uint256 internal constant MIDDAY_RNG_CHARGE_MULT = 6;
-
-    /// @dev Scale factor for ETH/LINK packing (0.001 resolution).
+    /// @dev Scale factor for pending ETH packing (0.001 ETH resolution).
     uint256 internal constant LR_ETH_SCALE = 1e15;
 
     // Activity score EV multiplier constants (ETH lootbox only)
@@ -4456,13 +4540,8 @@ abstract contract DegenerusGameStorage {
     ///      [216:193] resolve-day ban idx — frozen dailyIdx of the resolve draw
     uint256 internal goldenTicket;
 
-    /// @dev Unspent mid-day RNG credit per donor, in juels of donated LINK (appended so
-    ///      every prior slot keeps its index). Held in LINK because LINK is what the
-    ///      subscription is billed in, so a balance means exactly what it says: the LINK
-    ///      this donor put in and has not yet spent against.
-    ///      A redemption debits MIDDAY_RNG_CHARGE_MULT times what the request itself
-    ///      bills, priced at redemption rather than banked at a fixed rate — so the
-    ///      balance buys fewer requests when gas is expensive and more when it is cheap.
+    /// @dev Unspent request credit in wei; donations bank floor(value / 4).
+    /// Only the donor's own mineFlip can spend it, against nonempty pending work.
     mapping(uint32 => uint256) internal middayRngCredit;
 
     /// @dev Achieved prize pool of every completed century level (x00) — the pre-skim

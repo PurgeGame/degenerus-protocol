@@ -53,9 +53,12 @@ interface IVRFCoordinator {
         VRFRandomWordsRequest calldata request
     ) external returns (uint256);
 
+    /// @notice Fund a subscription with native currency.
+    function fundSubscriptionWithNative(uint256 subId) external payable;
+
     /// @notice Retrieves subscription details
     /// @param subId The subscription ID to query
-    /// @return balance The LINK token balance of the subscription
+    /// @return balance The legacy billing balance (unused)
     /// @return nativeBalance The native token balance of the subscription
     /// @return reqCount The number of requests made by this subscription
     /// @return owner The owner address of the subscription

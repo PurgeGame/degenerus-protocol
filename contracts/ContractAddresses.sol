@@ -36,6 +36,10 @@ library ContractAddresses {
     bytes32 internal constant VRF_KEY_HASH =
         0xabababababababababababababababababababababababababababababababab;
 
+    // Patched with the deployment's key hash: Ethereum 200 gwei / 24%; Base Sepolia 30 gwei / 60%.
+    uint256 internal constant VRF_LANE_MAX_GAS_PRICE = 200000000000;
+    uint256 internal constant VRF_NATIVE_PREMIUM = 24;
+
     address internal constant ICONS_32 =
         address(0xc7183455a4C133Ae270771860664b6B7ec320bB1);
     address internal constant GAME_MINT_MODULE =
@@ -86,8 +90,6 @@ library ContractAddresses {
         address(0x688B74D1C43f65C2236A81bdaADF85671Dfe8072);
     address internal constant STETH_TOKEN =
         address(0x2e234DAe75C793f67A35089C9d99245E1C58470b);
-    address internal constant LINK_TOKEN =
-        address(0xF62849F9A0B5Bf2913b396098F7c7019b51A820a);
     address internal constant GNRUS =
         address(0x883816205341a6ba3C32AE8dAdCEbDD9d59BC2C4);
     // Foil pack module — appended, so it shifts no prior address (AFKING_SUB_TOKEN follows).
@@ -137,10 +139,4 @@ library ContractAddresses {
         address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
     // Owner escrow appended after all existing CREATEs.
     address internal constant OWNER_GOVERNANCE = address(0xe98c2E73E40560f5795a62f67e479927Af573340);
-    // Chainlink LINK/ETH aggregator that values LINK donations. Optional:
-    // address(0) leaves DegenerusAdmin's feed slot empty, so the reward lane
-    // stays dark until the feed-swap governance path installs one. Patched per
-    // network — the mainnet aggregator proxy, or MockLinkEthFeed locally.
-    address internal constant LINK_ETH_FEED =
-        address(0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9);
 }

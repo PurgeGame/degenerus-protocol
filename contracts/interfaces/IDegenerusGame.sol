@@ -378,18 +378,18 @@ interface IDegenerusGame {
     /// @notice Admin-only transport retry of an unanswered request after its 20-hour timeout.
     function retryRng() external;
 
-    /// @notice Mint mid-day RNG credit to a LINK donor.
+    /// @notice Mint mid-day RNG credit to a native ETH donor.
     /// @dev Access: ADMIN only. A donor's mineFlip spends credit on the mid-day request when
-    ///      pending work sits below the threshold; the subscription LINK floor still applies.
+    ///      pending work sits below the threshold; the subscription native ETH floor still applies.
     ///      A donation is a paying action: the donor is registered (existing ID or a new one)
-    ///      and the ID is returned so Admin credits the donation's FLIP reward by ID.
+    ///      and the ID is returned to Admin.
     /// @param to Donor to credit.
-    /// @param linkAmount LINK donated, in juels.
+    /// @param amount Request credit in wei.
     /// @return id The donor's wallet ID (never 0).
     /// @custom:reverts OnlyAdmin If caller is not ADMIN.
     /// @custom:reverts E If the donor is new past paid admission (PAID_ADMISSION_WALLETS
     ///                 registered wallets; a donation quotes no Game spend).
-    function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id);
+    function creditMiddayRng(address to, uint256 amount) external returns (uint32 id);
 
     /// @notice Buy a credit-gated Degenesis box (ETH + claimable shortfall) for account `id`.
     /// @dev Authorized (account rule). The order, its credit gate and the claimable/AFKing legs are

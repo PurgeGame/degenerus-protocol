@@ -761,29 +761,15 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         _distributeYieldSurplus(MineFlipGas.fromCall(36));
     }
 
-    function _distributeYieldSurplus(MineFlipGas.Meter memory meter) internal {
-        uint256 stBal = _boundedStethBalance(meter, 1_200_000);
-        uint256 totalBal = address(this).balance + stBal;
-        (uint128 nextPool, uint128 futurePool) = _getPrizePools();
+    function _distributeYieldSurplus(MineFlipGas.Meter memory) internal {
+        // Compute the existing surplus, fund VRF before its stakeholder split, then reload
+        // the aggregate claimable liability after a successful protocol-wallet debit.
+        (bool readable, uint256 yieldPool) = _vrfYieldSurplus();
+        if (!readable) return;
+        (bool balanceReadable, uint256 nativeBalance) = _vrfNativeBalance();
+        if (balanceReadable) yieldPool -= _topUpVrfNative(nativeBalance, yieldPool);
         uint128 claimablePoolCached = claimablePool;
         uint256 yieldAccCached = yieldAccumulator;
-        uint256 obligations = _getCurrentPrizePool() +
-            uint256(nextPool) +
-            claimablePoolCached +
-            uint256(futurePool) +
-            yieldAccCached;
-
-        // Pending buffer is a live liability backed by ETH already in balance:
-        // freeze-window revenue lands in balance but routes to prizePoolPendingPacked
-        // (outside the live pools above) until _unfreezePool folds it back. Without
-        // this, that ETH is misread as yield surplus and over-distributed.
-        // Reads 0 when not frozen.
-        (uint128 pNext, uint128 pFuture) = _getPendingPools();
-        obligations += uint256(pNext) + uint256(pFuture);
-
-        if (totalBal <= obligations) return;
-
-        uint256 yieldPool = totalBal - obligations;
         uint256 quarterShare = (yieldPool * 2300) / 10_000;
 
         if (quarterShare != 0) {

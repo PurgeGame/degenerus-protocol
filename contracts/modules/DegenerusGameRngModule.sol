@@ -12,7 +12,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 /// @dev The miner engine selects when these actions run. A fresh request is last.
 abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRngUtils {
     error PreResetWindow();
-    error InsufficientLink();
+    error InsufficientNativeBalance();
     error NoPendingLootbox();
     error BelowThreshold();
     error GasTooHigh();
@@ -39,6 +39,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         MineFlipGas.Meter memory meter = MineFlipGas.fromCall(36);
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _minerMaintenancePending()
             || _livenessTriggered() || day != _afkingResetDay || day != dailyIdx + 1 || !dailyComplete || !_dailyRequestDue() || !subsFullyProcessed) revert RngNotReady();
+        _refillVrfNative();
         _rngPrepareRequestBoundary(day);
         _swapTicketSlot();
         _swapFoilSlot();
@@ -89,6 +90,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
             || _minerMaintenancePending() || _livenessTriggered()) revert RngNotReady();
         // Completion already requires no daily lock, active request or mid-day ticket latch.
         if (!_lootboxReadComplete()) revert RngNotReady();
+        bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
         // Decline to issue while the block is expensive: the fulfillment is billed at the
         // node's gas price a block or so later, so holding the request back while the
         // basefee is high bounds what a mid-day word can cost the subscription. Gates only
@@ -96,7 +98,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         // leaves the pending boxes to the next daily word. Zero disables the gate.
         {
             uint256 maxBasefee = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
-            if (maxBasefee != 0 && block.basefee > maxBasefee * 1 gwei) {
+            if (maxBasefee != 0 && block.basefee > maxBasefee * (crapsWork ? 4 gwei : 1 gwei)) {
                 revert GasTooHigh();
             }
         }
@@ -108,35 +110,26 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         // Block until today's daily RNG has been consumed and recorded.
         if (_recordedDailyWord(currentDay) == 0) revert RngNotReady();
 
-        // A closed craps window registered on the write buffer is pending work for this
-        // request. Read once: it picks the LINK reserve here and waives the pending-value
-        // gates below, and both want the same answer.
-        bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
-
-        // LINK balance check
-        (bool readable, uint256 linkBal) = _vrfLinkBalance(meter);
-        if (!readable) revert ExternalRequestRefused();
-        if (linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) {
-            revert InsufficientLink();
-        }
-
         // Pending-value gates. They gate only the mid-day fast path — the daily advance
         // assigns the day's word to the current index regardless, so pending boxes never wait
         // past one cycle. A pending craps window waives both with no charge: its word settles a
         // table already holding staked FLIP, which a lootbox queue cannot price. Every other
-        // gate above still binds, and the LINK floor binds at its own level.
+        // timing gate still binds.
         if (!crapsWork) {
             uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
             // An empty queue has nothing for a word to settle, credit or not.
             if (pendingEth == 0 && _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) == 0) {
                 revert NoPendingLootbox();
             }
+            (bool readable, uint256 nativeBal) = _vrfNativeBalance();
+            if (!readable) revert ExternalRequestRefused();
+            if (nativeBal < _vrfMinFulfillBalance() * 3 / 2) revert InsufficientNativeBalance();
             // Pending FLIP counts as work but adds nothing to the threshold: only ETH pays for a
             // mid-day word. Below the threshold the caller's donated credit pays the gate,
-            // charged after the LINK floor so credit is never spent on a request the
+            // charged after the native floor so credit is never spent on a request the
             // subscription cannot pay for.
             uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
-            if (threshold != 0 && pendingEth < threshold && !_tryChargeMiddayCredit(caller, meter)) {
+            if (threshold != 0 && pendingEth < threshold && !_tryChargeMiddayCredit(caller)) {
                 revert BelowThreshold();
             }
         }
@@ -208,25 +201,18 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         _setRngRequestActive(true);
     }
 
-    /// @notice Mint mid-day RNG credit to a LINK donor (ADMIN only, from the donation hook).
-    /// @dev The donated LINK is banked verbatim, with no reward multiplier applied — a request
-    ///      debits a multiple of what it actually bills, so the price lives at redemption rather
-    ///      than in a stored rate. The donation is the donor's paying action: it registers the
-    ///      donor's wallet ID (no Game spend to quote, so paid admission refuses new donors at
-    ///      PAID_ADMISSION_WALLETS registered wallets).
-    /// @param to Donor to credit.
-    /// @param linkAmount LINK donated, in juels.
-    /// @return id The donor's wallet ID, which Admin credits the donation's FLIP reward to.
-    function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id) {
+    /// @notice Bank the donor's native request credit (Admin only).
+    /// @dev A donation is a paying action and registers its donor under normal admission rules.
+    function creditMiddayRng(address to, uint256 amount) external returns (uint32 id) {
         if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
         (id, ) = _registerWallet(to, 0);
-        uint256 balance = middayRngCredit[id] + linkAmount;
+        uint256 balance = middayRngCredit[id] + amount;
         middayRngCredit[id] = balance;
-        emit MiddayRngCredited(to, linkAmount, balance);
+        emit MiddayRngCredited(to, amount, balance);
     }
 
-    function _tryChargeMiddayCredit(address caller, MineFlipGas.Meter memory meter) private returns (bool charged) {
-        (bool covered, uint256 charge, uint256 balance, uint32 id) = _middayCreditCharge(caller, meter);
+    function _tryChargeMiddayCredit(address caller) private returns (bool charged) {
+        (bool covered, uint256 charge, uint256 balance, uint32 id) = _middayCreditCharge(caller);
         if (!covered) return false;
         unchecked {
             balance -= charge;

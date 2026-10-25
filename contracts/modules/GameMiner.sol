@@ -71,7 +71,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
 
         // There are fewer than 32 category transitions. Workers own all unbounded queues.
         for (uint256 transitions; transitions < 32; ++transitions) {
-            // Selection can read LINK and its price. Scale its complete admission
+            // Selection can read native ETH and its price. Scale its complete admission
             // with the dependency minima, preserving any committed prefix.
             if (transitions != 0 && MineFlipGas.remaining(meter)
                 < MineFlipGas.scale(meter, GasBounds.ENGINE_SELECTION + RETURN_RESERVE)) break;
@@ -332,7 +332,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
         bytes4 selector;
         assembly ("memory-safe") { selector := mload(add(data, 32)) }
         return selector == IDegenerusGameRngModule.GasTooHigh.selector || selector == IDegenerusGameRngModule.PreResetWindow.selector
-            || selector == IDegenerusGameRngModule.InsufficientLink.selector || selector == IDegenerusGameRngModule.NoPendingLootbox.selector
+            || selector == IDegenerusGameRngModule.InsufficientNativeBalance.selector || selector == IDegenerusGameRngModule.NoPendingLootbox.selector
             || selector == IDegenerusGameRngModule.BelowThreshold.selector;
     }
 

@@ -1,3 +1,4 @@
+import { vrfNativeConfig } from "./vrfNativeConfig.js";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,8 +15,8 @@ const DEFAULT_CONTRACT_FILE = resolve(
  *
  * @param {Map<string, string>} addressMap - Predicted protocol addresses (key → address)
  * @param {object} external - External/config addresses:
- *   { STETH_TOKEN, LINK_TOKEN, VRF_COORDINATOR, CREATOR,
- *     LINK_ETH_FEED?, ENS_REVERSE_REGISTRAR? }
+ *   { STETH_TOKEN, VRF_COORDINATOR, CREATOR,
+ *     ENS_REVERSE_REGISTRAR? }
  *   Omitted optional addresses reset to zero on every build.
  * @param {number} deployDayBoundary - Computed DEPLOY_DAY_BOUNDARY value
  * @param {string} vrfKeyHash - 32-byte VRF key hash (hex string with 0x prefix)
@@ -44,7 +45,7 @@ export function patchContractAddresses(
 
   // Optional integrations belong to this build, never to a previous patch.
   const externalAddresses = { ...external };
-  for (const key of ["LINK_ETH_FEED", "ENS_REVERSE_REGISTRAR"]) {
+  for (const key of ["ENS_REVERSE_REGISTRAR"]) {
     externalAddresses[key] ||= "0x0000000000000000000000000000000000000000";
   }
   for (const [key, addr] of Object.entries(externalAddresses)) {
@@ -74,6 +75,10 @@ export function patchContractAddresses(
     );
   }
 
+  const effectiveKeyHash = vrfKeyHash || src.match(/bytes32 internal constant VRF_KEY_HASH =\s*(0x[0-9a-fA-F]+);/)[1];
+  const native = vrfNativeConfig(effectiveKeyHash);
+  src = replaceScalarConstant(src, "uint256", "VRF_LANE_MAX_GAS_PRICE", "\\d+", String(native.laneMaxGasPrice));
+  src = replaceScalarConstant(src, "uint256", "VRF_NATIVE_PREMIUM", "\\d+", String(native.premium));
   writeFileSync(CONTRACT_FILE, src, "utf8");
 }
 

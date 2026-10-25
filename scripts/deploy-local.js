@@ -51,14 +51,10 @@ async function main() {
   const mocks = {
     VRF_COORDINATOR: await mockVRF.getAddress(),
     STETH_TOKEN: await mockStETH.getAddress(),
-    LINK_TOKEN: await mockLINK.getAddress(),
-    LINK_ETH_FEED: await mockFeed.getAddress(),
   };
 
   console.log(`  MockVRFCoordinator: ${mocks.VRF_COORDINATOR}`);
   console.log(`  MockStETH:          ${mocks.STETH_TOKEN}`);
-  console.log(`  MockLINK:           ${mocks.LINK_TOKEN}`);
-  console.log(`  MockLinkEthFeed:    ${mocks.LINK_ETH_FEED}`);
   console.log("");
 
   // =========================================================================
@@ -75,9 +71,7 @@ async function main() {
     "0xabababababababababababababababababababababababababababababababab";
   const external = {
     STETH_TOKEN: mocks.STETH_TOKEN,
-    LINK_TOKEN: mocks.LINK_TOKEN,
     VRF_COORDINATOR: mocks.VRF_COORDINATOR,
-    LINK_ETH_FEED: mocks.LINK_ETH_FEED,
     CREATOR: deployer.address,
   };
 
