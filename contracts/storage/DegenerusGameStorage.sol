@@ -1319,7 +1319,8 @@ abstract contract DegenerusGameStorage {
         return covered;
     }
 
-    /// @dev Credit is denominated in wei. The floor keeps near-zero basefee requests paid.
+    /// @dev Credit is denominated in wei. The basefee floor and the fixed priority-fee allowance
+    ///      keep near-zero basefee requests paid.
     function _middayCreditCharge(address caller)
         internal view returns (bool covered, uint256 charge, uint256 balance, uint32 id)
     {
@@ -1327,7 +1328,7 @@ abstract contract DegenerusGameStorage {
         balance = middayRngCredit[id];
         uint256 fee = block.basefee;
         if (fee < MIDDAY_BASEFEE_FLOOR) fee = MIDDAY_BASEFEE_FLOOR;
-        charge = MIDDAY_RNG_BILLED_GAS * fee * MIDDAY_RNG_CHARGE_MULT;
+        charge = MIDDAY_RNG_BILLED_GAS * (fee + VRF_TIP_ALLOWANCE) * MIDDAY_RNG_CHARGE_MULT;
         covered = balance >= charge;
     }
 
@@ -3428,9 +3429,16 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Measured mainnet native billing normalized to the full 150k callback was at most
     /// 246,071 gas in three samples; 300k includes headroom for coordinator overhead.
+    /// Each credit wei is backed by four donated wei, so a request is paid for while
+    /// 4 * 2 * 300k * (basefee + allowance) covers billed * 1.24 * fulfilment gas price. The
+    /// callback now bills about 76k gas (10.8k measured callback plus about 65k coordinator
+    /// overhead): the donation backing covers a fulfilment price of about 25 times
+    /// (basefee + allowance).
     uint256 internal constant MIDDAY_RNG_BILLED_GAS = 300_000;
     uint256 internal constant MIDDAY_RNG_CHARGE_MULT = 2;
     uint256 internal constant MIDDAY_BASEFEE_FLOOR = 0.01 gwei;
+    /// @dev Priority fee the fulfilment is assumed to add to the request block's basefee.
+    uint256 internal constant VRF_TIP_ALLOWANCE = 0.25 gwei;
 
     /// @dev Scale factor for pending ETH packing (0.001 ETH resolution).
     uint256 internal constant LR_ETH_SCALE = 1e15;

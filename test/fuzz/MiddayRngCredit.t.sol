@@ -17,6 +17,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     ///      tracked by them.
     uint256 private constant BILLED_GAS = 300_000;
     uint256 private constant CHARGE_MULT = 2;
+    uint256 private constant TIP_ALLOWANCE = 0.25 gwei;
     uint256 private constant NATIVE_PREMIUM_NUM = 124;
     uint256 private constant NATIVE_PREMIUM_DEN = 100;
     /// @dev The two subscription floors, mirrored on the same terms as the constants above.
@@ -72,7 +73,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     /// @dev The charge the contract must compute for one redemption at the current basefee.
     function _expectedCharge() internal view returns (uint256) {
         uint256 fee = block.basefee < 0.01 gwei ? 0.01 gwei : block.basefee;
-        return BILLED_GAS * fee * CHARGE_MULT;
+        return BILLED_GAS * (fee + TIP_ALLOWANCE) * CHARGE_MULT;
     }
 
     /// @dev Pin the subscription's reported NATIVE balance for a floor test.
@@ -601,7 +602,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function test_zeroBasefeeChargesTheFloor() public {
         _purchaseBelowThreshold();
         vm.fee(0);
-        uint256 charge = BILLED_GAS * 0.01 gwei * CHARGE_MULT;
+        uint256 charge = BILLED_GAS * (0.01 gwei + TIP_ALLOWANCE) * CHARGE_MULT;
         _grantCredit(donor, charge * 2);
         _mineRequest(donor);
         assertEq(game.middayRngCredits(donor), charge);
@@ -646,9 +647,10 @@ contract MiddayRngCreditTest is DeployProtocol {
         basefeeGwei = bound(basefeeGwei, 1, 5);
         vm.fee(basefeeGwei * 1 gwei);
         uint256 charge = _expectedCharge();
-        uint256 cost = BILLED_GAS * block.basefee * 124 / 100;
-        // Each wei of credit was backed by four donated wei. At equal gas price, the
-        // donation backing is more than six times the full-callback native cost.
+        uint256 cost = BILLED_GAS * (block.basefee + TIP_ALLOWANCE) * 124 / 100;
+        // Each wei of credit was backed by four donated wei. At a fulfilment price of basefee
+        // plus the tip allowance, the donation backing is more than six times the full-callback
+        // native cost.
         assertGe(4 * charge, 6 * cost);
         _purchaseBelowThreshold();
         _grantCredit(donor, charge * 2);
@@ -656,7 +658,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(game.middayRngCredits(donor), charge);
     }
 
-    /// @notice The charge scales linearly with basefee — cheap blocks buy more requests per
+    /// @notice The charge is linear in the basefee above the floor, with the allowance as its offset.
     function test_chargeScalesLinearlyWithBasefee() public pricedBlock {
         vm.fee(1 gwei);
         uint256 chargeAt1 = _expectedCharge();
@@ -664,6 +666,19 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.fee(4 gwei);
         uint256 chargeAt4 = _expectedCharge();
 
-        assertEq(chargeAt4, chargeAt1 * 4, "charge is not linear in basefee");
+        assertEq(chargeAt4 - chargeAt1, BILLED_GAS * 3 gwei * CHARGE_MULT, "charge is not linear in basefee");
+    }
+
+    /// @notice At near-zero basefee the allowance dominates: the donation backing still covers
+    ///         the billed callback (about 76k gas at 1.24x) at a fulfilment price of 0.26 gwei
+    ///         and above.
+    function test_lowBasefeeChargeCoversTheAllowance() public pricedBlock {
+        uint256[3] memory fees = [uint256(0.01 gwei), 0.1 gwei, 1 gwei];
+        for (uint256 i; i < 3; ++i) {
+            vm.fee(fees[i]);
+            uint256 charge = _expectedCharge();
+            assertEq(charge, 600_000 * (fees[i] + 0.25 gwei));
+            assertGe(4 * charge, 76_000 * 124 / 100 * (fees[i] + 0.25 gwei) * 25);
+        }
     }
 }
