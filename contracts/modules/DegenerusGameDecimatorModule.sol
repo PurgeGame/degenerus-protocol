@@ -91,6 +91,8 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     // 48 shooters (escalation <= 2^27) and at most 30% boost, peak < 2^110.
     // Even a full 66-bit stack therefore produces a score below the 192-bit lane.
 
+    error TooManyChipsOnALeg();
+
     event DecBurnRecorded(
         uint32 indexed player,
         uint24 indexed lvl,
@@ -163,13 +165,11 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     }
 
     /// @dev A normal battle's board rules: at most three on each of the first nine legs, five
-    ///      on Don't Pass, seven named in all, and
-    ///      never both the pass line and don't pass.
+    ///      on Don't Pass, seven named in all, and never both the pass line and don't pass.
+    ///      A leg over its cap reverts with the battle's error; the other violations revert E.
     function _checkBoard(uint256 chips) private pure {
-        if (
-            chips > 0x3FFFFFFF || (chips & 7 != 0 && chips >> 27 != 0)
-                || ((chips >> 2) & 0x1249249) | ((chips >> 28) & (chips >> 29) & 1) != 0 || _named(chips) > 7
-        ) revert E();
+        if (chips > 0x3FFFFFFF || (chips & 7 != 0 && chips >> 27 != 0) || _named(chips) > 7) revert E();
+        if (((chips >> 2) & 0x1249249) | ((chips >> 28) & (chips >> 29) & 1) != 0) revert TooManyChipsOnALeg();
     }
 
     /// @dev How many chips a board names across its ten three-bit legs.
