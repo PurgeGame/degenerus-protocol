@@ -4426,10 +4426,10 @@
   {
     "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._extsload",
-    "kind": "external",
-    "expression": "IGameSlotReader(_GAME).extsload_g2807007(slot)",
+    "kind": "assembly",
+    "expression": "staticcall(gas(), game, 0, 36, 0, 32)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Raw-slot read of the pinned Game (extsload_g2807007): one 36-byte staticcall forwarding all gas into a pure SLOAD, 32-byte answer required, any other result reverts. Same target, selector and caller context as the interface call it replaces; no value, no state change, no payee."
   },
   {
     "path": "contracts/LootboxCraps.sol",

@@ -38,6 +38,9 @@ REVIEWED = {
         "uint256 used = MineFlipGas.consumed(rewardStart, gasleft());"],
     ("libraries/MineFlipGas.sol", "available"): ["uint256 actual = gasleft();"],
     # Pinned lifecycle worker: uncapped forwarding, with exact return/revert propagation.
+    # Read-only raw-slot reader of the pinned Game; forwards all gas into a pure SLOAD.
+    ("LootboxCraps.sol", "_extsload"): [
+        "if iszero(staticcall(gas(), game, 0, 36, 0, 32)) { revert(0, 0) }"],
     ("modules/CrapsLifecycleRouter.sol", "_delegateLifecycle"): [
         "let ok := delegatecall(gas(), target, data, calldatasize(), 0, 0)"],
 }

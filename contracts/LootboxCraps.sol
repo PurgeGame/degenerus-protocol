@@ -150,10 +150,17 @@ contract LootboxCraps is Craps {
         return uint256(_extsload(bytes32(slot)));
     }
 
-    function _extsload(bytes32 slot) private view returns (bytes32) {
-        // A zero GAME — the un-pinned placeholder this repo ships on `main` — has no code, so this
-        // high-level call reverts on its extcodesize check: every read fails closed until CRAPS is
-        // deployed against a pinned game.
-        return IGameSlotReader(_GAME).extsload_g2807007(slot);
+    function _extsload(bytes32 slot) private view returns (bytes32 value) {
+        bytes4 selector = IGameSlotReader.extsload_g2807007.selector;
+        address game = _GAME;
+        // A zero GAME — the un-pinned placeholder this repo ships on `main` — has no code, so the
+        // call returns no data: every read fails closed until CRAPS is deployed against a pinned game.
+        assembly ("memory-safe") {
+            mstore(0, selector)
+            mstore(4, slot)
+            if iszero(staticcall(gas(), game, 0, 36, 0, 32)) { revert(0, 0) }
+            if iszero(eq(returndatasize(), 32)) { revert(0, 0) }
+            value := mload(0)
+        }
     }
 }
