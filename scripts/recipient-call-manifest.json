@@ -12478,5 +12478,21 @@
     "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, tail, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
     "count": 1,
     "review": "EXTERNAL READ: stETH balance read with all gas above the meter floor and caller tail, 32-byte prefix and uint128 sanity limit; failure skips optional funding so source order is never guessed."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameRngModule.sol",
+    "scope": "DegenerusGameRngModule._requestLootboxRng",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE)",
+    "count": 1,
+    "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
+  },
+  {
+    "path": "contracts/storage/DegenerusGameStorage.sol",
+    "scope": "DegenerusGameStorage._boundedVrfRequest",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE)",
+    "count": 1,
+    "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
   }
 ]

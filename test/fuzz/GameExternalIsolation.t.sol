@@ -240,6 +240,97 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         }
     }
 
+    /// @dev The mandatory first unit forwards all its gas to the coordinator. A shortage of gas
+    ///      must be refused before that call; a coordinator that ran out inside is never read as a
+    ///      dependency refusal that returns success without work.
+    function test_UnderfundedFirstRequestRevertsAndNeverReturnsWithoutWork() public {
+        uint256 refused;
+        uint256 requested;
+        for (uint256 kind; kind < 2; ++kind) {
+            for (uint256 supplied = 150_000; supplied <= 1_500_000; supplied += 5_000) {
+                uint256 snap = vm.snapshotState();
+                host.seedRng(kind == 1, false);
+                (bool ok, bytes memory err) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (uint32(0))));
+                (, , bool active) = host.requestIdentity();
+                if (ok) {
+                    assertTrue(active, "a successful first unit is a sent request");
+                    ++requested;
+                } else {
+                    assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "a short first unit is refused for gas");
+                    assertFalse(active);
+                    ++refused;
+                }
+                assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
+            }
+        }
+        assertGt(refused, 0);
+        assertGt(requested, 0);
+    }
+
+    /// @dev The first unit ignores the caller multiplier, like its forwarding: a huge value still
+    ///      sends a funded request and only makes optional continuation inadmissible.
+    function test_FundedFirstRequestIgnoresTheCallerMultiplier() public {
+        for (uint256 kind; kind < 2; ++kind) {
+            uint256 snap = vm.snapshotState();
+            host.seedRng(kind == 1, false);
+            game.mineFlip{gas: 3_000_000}(type(uint32).max);
+            (, , bool active) = host.requestIdentity();
+            assertTrue(active, "the request is sent");
+            assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
+        }
+    }
+
+    function test_UnderfundedFirstTerminalRequestRevertsAfterRefusal() public {
+        host.seedTerminal(false);
+        _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, 1);
+        game.mineFlip{gas: 10_000_000}(0);
+        (uint24 day, uint48 origin, bool active) = host.requestIdentity();
+        assertGt(day, 0);
+        assertFalse(active);
+        uint256 refused;
+        for (uint256 supplied = 150_000; supplied <= 1_500_000; supplied += 25_000) {
+            uint256 snap = vm.snapshotState();
+            (bool ok, bytes memory err) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (uint32(0))));
+            if (!ok) {
+                assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "a short terminal retry is refused for gas");
+                ++refused;
+            }
+            (uint24 retryDay, uint48 retryOrigin,) = host.requestIdentity();
+            assertEq(retryDay, day);
+            assertEq(retryOrigin, origin);
+            assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
+        }
+        assertGt(refused, 0);
+        (bool funded,) = address(game).call{gas: 3_000_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
+        assertTrue(funded, "an adequately funded retry against a refusing coordinator succeeds");
+    }
+
+    /// @dev A dead coordinator (revert, no code, short or empty return) with adequate gas is a
+    ///      refusal the miner skips, never a brick; once the coordinator answers, the same call
+    ///      sends the request.
+    function test_AdequatelyFundedFirstRequestSkipsDeadCoordinatorAndRecovers() public {
+        for (uint256 kind; kind < 2; ++kind) {
+            for (uint8 mode = 0; mode <= 7; ++mode) {
+                // Mode 0 is a coordinator without code; its failed subscription read already
+                // makes a mid-day request ineligible, which is NoWork rather than a refusal.
+                if (mode == 4 || mode == 6 || (mode == 0 && kind == 0)) continue;
+                uint256 snap = vm.snapshotState();
+                host.seedRng(kind == 1, false);
+                if (mode == 0) vm.etch(address(mockVRF), "");
+                else _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
+                (bool ok,) = address(game).call{gas: 3_000_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
+                assertTrue(ok, "a refusing coordinator never reverts a funded first unit");
+                (, , bool active) = host.requestIdentity();
+                assertFalse(active);
+                vm.etch(address(mockVRF), vrfImplementation.code);
+                game.mineFlip{gas: 3_000_000}(0);
+                (, , active) = host.requestIdentity();
+                assertTrue(active, "the next funded call sends the request");
+                assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
+            }
+        }
+    }
+
     function test_ExpensiveCoordinatorRequestSucceedsBeyondFormerCap() public {
         host.seedRng(true, true);
         _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, 8);

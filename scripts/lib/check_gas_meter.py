@@ -25,6 +25,9 @@ REVIEWED = {
         # The first mandatory checkpoint forwards all remaining gas, regardless of estimates.
         # mustProgress is a deterministic checkpoint flag, never a gas-dependent outcome branch.
         "if (meter.mustProgress) return gasleft();", "available = gasleft();"],
+    # Pre-call admission of the mandatory first unit; never classifies a callee failure.
+    ("libraries/BoundedCall.sol", "admitFirst"): [
+        "if (meter.mustProgress && gasleft() < minimum + reserve) revert MineFlipGas.InsufficientExecutionGas();"],
     ("modules/GameMiner.sol", "_mineFlip"): [
         "uint256 rewardStart = gasleft();",
         "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",

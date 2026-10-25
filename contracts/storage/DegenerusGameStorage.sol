@@ -1270,6 +1270,7 @@ abstract contract DegenerusGameStorage {
     }
 
     function _boundedVrfRequest(uint16 confirmations, MineFlipGas.Meter memory meter) internal returns (bool ok, uint256 id) {
+        BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE);
         bytes memory result;
         (ok, result) = BoundedCall.callRemaining(meter, address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE,
             abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({

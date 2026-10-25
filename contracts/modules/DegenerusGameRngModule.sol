@@ -5,6 +5,7 @@ import {GameDailyInternals} from "./GameDailyInternals.sol";
 
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
@@ -123,6 +124,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
                 revert NoPendingLootbox();
             }
             // The request that follows admits at its own floor and reserve.
+            BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE);
             (bool readable, uint256 nativeBal) = _vrfNativeBalance(meter, VRF_REQUEST_MIN_GAS + VRF_REQUEST_RESERVE);
             if (!readable) revert ExternalRequestRefused();
             if (nativeBal < _vrfMinFulfillBalance() * 3 / 2) revert InsufficientNativeBalance();

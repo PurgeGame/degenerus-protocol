@@ -14,6 +14,13 @@ library BoundedCall {
     /// The scaled minimum is admission only. Never classify failures using gasleft.
     /// Malformed successful output does not undo callee writes: callers needing
     /// receipt atomicity must retain their separate rollback frame.
+    /// @dev The mandatory first unit forwards all gas, so a coordinator call it cannot finish
+    ///      must revert here, before the call: a failure after the call is a dependency refusal,
+    ///      never a shortage of gas. The caller multiplier never scales the first unit.
+    function admitFirst(MineFlipGas.Meter memory meter, uint256 minimum, uint256 reserve) internal view {
+        if (meter.mustProgress && gasleft() < minimum + reserve) revert MineFlipGas.InsufficientExecutionGas();
+    }
+
     function callRemaining(MineFlipGas.Meter memory meter, address target, uint256 minimum,
         uint256 reserve, bytes memory input, uint256 expected)
         internal returns (bool ok, bytes memory output)
