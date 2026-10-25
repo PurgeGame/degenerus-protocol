@@ -59,6 +59,8 @@ contract NativeFundingCoordinator {
     uint256 public requests;
     uint8 public readMode;
     uint8 public fundMode;
+    bool public wideIds;
+    function setWideIds(bool on) external { wideIds = on; }
     function configure(uint256 balance, uint8 read, uint8 fund) external {
         nativeBalance = balance; readMode = read; fundMode = fund;
     }
@@ -75,7 +77,7 @@ contract NativeFundingCoordinator {
     }
     function requestRandomWords(VRFRandomWordsRequest calldata req) external returns (uint256) {
         require(keccak256(req.extraArgs) == keccak256(abi.encodeWithSelector(bytes4(keccak256("VRF ExtraArgsV1")), true)), "native flag");
-        return ++requests;
+        return wideIds ? ++requests << 64 : ++requests;
     }
     function charge(uint256 cost) external { nativeBalance -= cost; }
 }
@@ -192,6 +194,12 @@ contract VrfNativeFundingTest is Test {
             assertEq(h.freshDailyTransport(), ++requests);
             assertEq(c.sent(), 0); _unchanged(2 ether + 1, 3 ether, 5 ether);
         }
+    }
+    /// @dev The Game keeps the low 64 bits of the ID: a zero there is refused like ID 0.
+    function testRequestIdWithZeroLowWordIsRefused() public {
+        c.setWideIds(true);
+        vm.expectRevert(bytes("request"));
+        h.freshDailyTransport();
     }
     function testBrokenFundingSkipsDebitButStillRequests() public {
         c.configure(0, 0, 1);

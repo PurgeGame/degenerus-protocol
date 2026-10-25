@@ -1280,7 +1280,8 @@ abstract contract DegenerusGameStorage {
                 callbackGasLimit: vrfCallbackGasLimit, numWords: 1, extraArgs: VRF_NATIVE_EXTRA_ARGS
             })), 32);
         if (ok) id = abi.decode(result, (uint256));
-        ok = ok && id != 0;
+        // The kept request ID is the low 64 bits; a zero there could never match a callback.
+        ok = ok && uint64(id) != 0;
     }
 
 
