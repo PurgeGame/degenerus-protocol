@@ -179,12 +179,12 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_gameId(p), 0);
 
         vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (expectedId, 1_000, _fixtureGameDay())), 0);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (expectedId, 1_000, _fixtureGameDay())), 1);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(p);
         coinflip.depositCoinflip(0, 1_000);
-        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(coinflip)), expectedId, "internal quest uses credited wallet");
+        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(quests)), expectedId, "internal quest uses credited wallet");
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 n, uint32 rid, address owner) = _registrations(logs);
@@ -217,12 +217,12 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (expectedId, o)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (expectedId, 1_000, _fixtureGameDay())), 0);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (expectedId, 1_000, _fixtureGameDay())), 1);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(o);
         coinflip.depositCoinflip(expectedId, 1_000);
-        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(coinflip)), expectedId, "internal quest uses credited wallet");
+        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(quests)), expectedId, "internal quest uses credited wallet");
 
         (uint256 n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0, "no registration on an ID-addressed deposit");
@@ -259,12 +259,12 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (rid, f)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector, r), 0);
         vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (f, true)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (fid, 1_000, _fixtureGameDay())), 0);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (fid, 1_000, _fixtureGameDay())), 1);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(f);
         coinflip.depositCoinflip(rid, 1_000);
-        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(coinflip)), fid, "internal quest uses credited wallet");
+        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(quests)), fid, "internal quest uses credited wallet");
 
         (uint256 n, uint32 regId, address owner) = _registrations(vm.getRecordedLogs());
         assertEq(n, 1, "only the funder registers");

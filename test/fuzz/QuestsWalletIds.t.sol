@@ -92,15 +92,14 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.store(address(quests), bytes32(ACTIVE_ROOT), bytes32(w));
     }
 
-    /// @dev Publish `day` with slot 0 MINT_ETH and slot 1 `slot1Type`, and advance its logical-day mirror.
+    /// @dev Publish `day` with slot 0 MINT_ETH and slot 1 `slot1Type`, and advance the logical day (Game header and Coinflip mirror).
     function _setDaily(uint24 day, uint8 slot1Type) private {
         uint256 w = _active();
         uint256 rec0 = uint256(day) | (uint256(QT_MINT_ETH) << 24);
         uint256 rec1 = uint256(day) | (uint256(slot1Type) << 24);
         w = (w & ~uint256(type(uint128).max)) | rec0 | (rec1 << 64);
         vm.store(address(quests), bytes32(ACTIVE_ROOT), bytes32(w));
-        uint256 mirror = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
-        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((mirror & ~(uint256(0xffffff) << 176)) | (uint256(day) << 176)));
+        _setRequestedFixtureDay(day);
     }
 
     /// @dev A mint word passing the level-quest gates at the current level (400 units at

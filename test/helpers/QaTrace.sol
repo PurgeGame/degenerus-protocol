@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Observe the storage effects of internalized QA calls, including their order.
 ///      Independent mapping preimages and the published seven-lane codec are used.
@@ -51,7 +52,10 @@ library QaTrace {
                 // in this Call record. Resume records can group later parent writes, so
                 // attribute those by StorageAccess.account rather than AccountAccess.account.
                 bytes4 sel=bytes4(acc[i].data);
-                if (sel==bytes4(keccak256("creditFlip_g317(uint32,uint256)")) || sel==bytes4(keccak256("creditFlipPair_g578(uint32,uint256,uint32,uint256)")) || sel==bytes4(keccak256("creditFlipBatch(uint32[],uint256[])"))) continue;
+                if (acc[i].accessor == ContractAddresses.AFFILIATE || acc[i].accessor == ContractAddresses.QUESTS) {
+                    // Separately deployed Affiliate and Quests: their own credit calls are
+                    // the affiliate-path credits (the merged host wrote them internally).
+                } else if (sel==bytes4(keccak256("creditFlip_g317(uint32,uint256)")) || sel==bytes4(keccak256("creditFlipPair_g578(uint32,uint256,uint32,uint256)")) || sel==bytes4(keccak256("creditFlipBatch(uint32[],uint256[])"))) continue;
             }
             for (uint256 j; j < acc[i].storageAccesses.length; ++j) _recordCredit(acc[i].storageAccesses[j],host,sink);
         }
@@ -83,13 +87,15 @@ library QaTrace {
         require(seen,"no quest effect");
     }
 
-    function order(Vm.AccountAccess[] memory acc,address host,uint32 id) internal view returns (uint256 quest,uint256 credit) {
+    function order(Vm.AccountAccess[] memory acc,address questHost,address host,uint32 id) internal view returns (uint256 quest,uint256 credit) {
         quest=type(uint256).max;credit=type(uint256).max;uint256 at;
         for (uint256 i; i < acc.length; ++i) for (uint256 j; j < acc[i].storageAccesses.length; ++j) {
             ++at;Vm.StorageAccess memory s=acc[i].storageAccesses[j];
-            if (acc[i].reverted || s.reverted || s.account!=host) continue;
-            (bool found,uint32 key)=questKey(host,s.slot);
+            if (acc[i].reverted || s.reverted) continue;
+            (bool found,uint32 key)=(false,0);
+            if (s.account==questHost) (found,key)=questKey(questHost,s.slot);
             if(found && key==id && quest==type(uint256).max)quest=at;
+            if (s.account!=host) continue;
             (found,key,)=stakeKey(host,s);
             if(found && s.isWrite && key==id && credit==type(uint256).max)credit=at;
         }

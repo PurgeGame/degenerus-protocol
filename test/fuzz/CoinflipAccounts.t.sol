@@ -28,7 +28,7 @@ contract CoinflipAccountsTest is DeployProtocol {
     address internal constant VAULT = ContractAddresses.VAULT;
 
     bytes32 internal constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
-    bytes32 internal constant QUEST_COMPLETED = keccak256("QuestCompleted(uint32,uint8,uint32,uint256)");
+    bytes32 internal constant QUEST_COMPLETED = keccak256("QuestCompleted(uint32,uint24,uint8,uint8,uint32,uint256)");
     bytes32 internal constant CLAIM_STATE = keccak256("CoinflipClaimState(uint32,uint128,uint128,uint24)");
     bytes32 internal constant DEPOSIT = keccak256("CoinflipDeposit(uint32,uint256)");
     bytes32 internal constant TOGGLED = keccak256("CoinflipAutoRebuyToggled(uint32,bool)");
@@ -54,14 +54,14 @@ contract CoinflipAccountsTest is DeployProtocol {
     function _checkExpectedQuest() private {
         if (_expectedQuestId==0) return;
         bytes32 slot=keccak256(abi.encode(uint256(_expectedQuestId),QaTrace.QUESTS+1));
-        uint256 word=uint256(vm.load(address(coinflip),slot));
-        assertEq(uint24(word>>48),uint24(uint256(vm.load(address(coinflip),bytes32(QaTrace.QUESTS)))),"correct quest wallet synchronized");
+        uint256 word=uint256(vm.load(address(quests),slot));
+        assertEq(uint24(word>>48),uint24(uint256(vm.load(address(quests),bytes32(QaTrace.QUESTS)))),"correct quest wallet synchronized");
         _expectedQuestId=0;
     }
     function _readyFlipQuest(uint32 id) private {
         uint256 day=_today();
-        vm.store(address(coinflip),bytes32(QaTrace.QUESTS),bytes32((day|(1<<24))|((day|(2<<24))<<64)));
-        vm.store(address(coinflip),keccak256(abi.encode(uint256(id),QaTrace.QUESTS+1)),bytes32(day|(day<<24)|(day<<48)|(uint256(1)<<192)));
+        vm.store(address(quests),bytes32(QaTrace.QUESTS),bytes32((day|(1<<24))|((day|(2<<24))<<64)));
+        vm.store(address(quests),keccak256(abi.encode(uint256(id),QaTrace.QUESTS+1)),bytes32(day|(day<<24)|(day<<48)|(uint256(1)<<192)));
     }
 
     function setUp() public {
@@ -102,9 +102,9 @@ contract CoinflipAccountsTest is DeployProtocol {
         _setRequestedFixtureDay(d);
         // Direct settlement fixtures also roll the active quest day, preserving quest types.
         bytes32 root = bytes32(QaTrace.QUESTS);
-        uint256 pair = uint256(vm.load(address(coinflip), root));
+        uint256 pair = uint256(vm.load(address(quests), root));
         uint256 mask = uint256(0xffffff) | (uint256(0xffffff) << 64);
-        vm.store(address(coinflip), root, bytes32((pair & ~mask) | d | (uint256(d) << 64)));
+        vm.store(address(quests), root, bytes32((pair & ~mask) | d | (uint256(d) << 64)));
         vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
     }
 
@@ -301,8 +301,8 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.depositCoinflip(smurfId, 2_000);
         _checkExpectedQuest();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 1, "quest names S's key");
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(owner)))), 0);
+        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 1, "quest names S's key");
+        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(owner)))), 0);
         assertEq(_lane(target, smurfId) - before, 2_100, "quest reward joins S's stake");
 
         vm.prank(address(coinflip));
@@ -315,8 +315,8 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.depositCoinflip(smurfId, 2_000);
         _checkExpectedQuest();
         logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(stranger)))), 1, "a gift's quest names the funder");
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 0);
+        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(stranger)))), 1, "a gift's quest names the funder");
+        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 0);
         assertEq(_lane(target, smurfId) - before, 2_100, "the funder's quest reward joins S's stake");
         assertEq(_gameId(stranger), funderId);
     }

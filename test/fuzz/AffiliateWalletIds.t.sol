@@ -1205,9 +1205,9 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             Vm.Log[] memory logs = vm.getRecordedLogs();
             assertEq(kb, 100, "10% kickback of 1000");
-            (uint256 hop, uint256 credit) = QaTrace.order(acc,address(coinflip),w);
+            (uint256 hop, uint256 credit) = QaTrace.order(acc,address(quests),address(coinflip),w);
             assertLt(hop,credit,"quest state precedes the credit");
-            assertEq(QaTrace.questId(acc,address(coinflip)),w,"quest effect by winner ID");
+            assertEq(QaTrace.questId(acc,address(quests)),w,"quest effect by winner ID");
             bytes[] memory c = _affiliateCredits(acc);
             assertEq(c.length, 1);
             uint256 expected = 900 + _questRewards(logs, w);
