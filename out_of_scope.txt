@@ -15,7 +15,7 @@ forge-out/
 out/
 # Separate frontend, indexer and website repositories.
 # Style-only reports and gas micro-optimizations are not audit priorities; any reachable
-# state that leaves the mineFlip chain unable to complete (gas-limit failures, unbounded
+# state that leaves the mineRun chain unable to complete (gas-limit failures, unbounded
 # work, reverts, stuck cursors) IS in scope.
 # Accepted mechanisms are enumerated in KNOWN-ISSUES.md.
 # Outcomes requiring valid sDGNRS governance approval are governance decisions, not findings.

@@ -51,8 +51,9 @@ price tables and reward curves.
     pays no affiliate commission. The purchase itself earns no quest, streak or activity credit;
     an additional drawn boon can grant activity or a quest shield.
   - **ETH routing.** Each day's ETH is held as a reserved obligation, then split once per daily
-    cohort at the first daily request after the day ends: **50%** to the future prize pool, **25%** to
-    a restricted Vault purchase budget, **25%** to sDGNRS AFKing funding. The Vault budget buys
+    cohort at the first daily request after the day ends: **25%** to the future prize pool, **25%**
+    to the insurance accumulator (yield), **25%** to a restricted Vault purchase budget, **25%** to
+    sDGNRS AFKing funding. The Vault budget buys
     tickets, lootboxes or whale passes for the Vault through `spendDegenesis` and is never
     withdrawable. Unspent Vault budget and all sDGNRS AFKing funding join the final prize
     distribution at game over.
@@ -182,11 +183,11 @@ reserve or cash claim. They must be claimed under the existing pass rules and
 depend on continued play. Repeated ticket wins each retain their 25-ticket award;
 they do not add chances to the separate pass draw.
 
-After level 0, the purchase target has a **30-day** window: day 30 is the distress
-rescue day, and an unmet target can trigger game over on day 31. Level 0 keeps its
-365-day deadline, provided a day is sealed at least every 30 days (the VRF deadman
-applies at every level). Funded jackpot phases and the existing VRF recovery rules can
-extend elapsed wall-clock time. Ordinary purchase dailies budget **4% of the future
+Every level's purchase target, level 0 included, has a **30-game-day** window: day 30 is
+the distress rescue day, and an unmet target can trigger game over on day 31. Level 0's
+window starts after the Degenesis sale. Game days advance at completed daily requests, so
+a stall adds no game days; 14 days without a completed daily session takes the hard-stall
+ending instead. Funded jackpot phases can extend elapsed wall-clock time. Ordinary purchase dailies budget **4% of the future
 pool**, retaining the 75/23/2 ticket-backing / ETH-prize / insurance split; unpaid ETH
 prizes stay in the future pool. Level 0 keeps its FLIP-only daily path. The faster
 deadline and revised transition skim change when funds become available for prizes;
@@ -206,7 +207,7 @@ Later affiliate claims cannot change the credited winner or the terminal pool.
 When VRF is dead, the ending is deterministic: it pays no affiliate share and performs no
 jackpot draw. After existing claims and applicable deity refunds are reserved, the remaining
 pool is shared across the terminal level's tickets through `claimDeadVrf` until the final
-sweep. An unanswered normal-ending terminal request also takes this path after 14 days.
+sweep. An unanswered normal-ending terminal request, or 14 days without a completed daily session, also takes this path.
 The terminal decimator has been removed.
 Read `DegenerusGameGameOverModule` and the reserve-token terminal paths for the exact
 claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md).
@@ -227,7 +228,7 @@ retains one funding target beyond the player-claim ETH reserve; that reserve is 
 for funding, while total ETH plus stETH must still cover all remaining obligations.
 
 A native donation sends its full value to the subscription and banks floor(value / 4)
-wei of mid-day request credit. Only the donor's own mineFlip can spend that credit,
+wei of mid-day request credit. Only the donor's own mineRun can spend that credit,
 against pending work. It earns no FLIP and has no value after game over. Optional
 lootbox requests require the subscription balance floor; daily, retry, terminal and
 craps requests do not. Custom battles and unusually expensive fulfillment can consume

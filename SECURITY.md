@@ -12,7 +12,7 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
 | Voting delegate | May assign or clear an owner's escrowed DGVE votes; a majority under one caller's control also permits direct Vault gameplay and restricted-budget purchases. Cannot withdraw, redeem or transfer that owner's tokens, change their delegate, or use their player account. |
 | Comp delegate | Owner-set FLIP-value spending limit. May grant any supported comp to any recipient. Cannot set prices, refill the shared budget or authorize delegates. Setting an allowance replaces it; zero revokes it. |
 | Battle creator | Owner-authorized custom-battle creation within contract bounds. No comp-budget authority. |
-| sDGNRS governance | VRF/feed recovery proposals and votes under stall, threshold and recovery-cancellation rules; balance-weighted charity voting through `GNRUS.vote`, once per slot per level, with multiple slots allowed. |
+| sDGNRS governance | Emergency VRF coordinator-swap proposals and votes under stall, threshold and recovery-cancellation rules; balance-weighted charity voting through `GNRUS.castBallot`, once per slot per level, with multiple slots allowed. |
 | Player-approved operator | Only the authority granted through the Game's operator mechanism; permissionless settlement alone grants no spending or withdrawal rights. |
 | CREATOR | Initial allocations; one-time installation of each icon path/name quadrant. This bootstrap closes on completion or the first successful governance icon write/finalization. Later icon changes require governance and remain possible only before finalization. |
 
@@ -45,9 +45,9 @@ borrowing across blocks. Proposals expire after seven days. See [DGVE owner appr
   original timeout. It cannot replace a word already accepted by the Game. This recovery
   power does not prove that a privileged actor with advance knowledge of an undelivered
   VRF result cannot prefer a replacement request.
-- Propose VRF recovery after 44 hours of stall, or feed recovery after two unhealthy days.
-  Community proposal paths open only after a seven-day stall and require the proposer
-  to hold at least 0.5% of sDGNRS voting supply; there is no post-proposal delay.
+- Propose a VRF coordinator swap after 44 hours of stall. The community proposal path
+  opens only after a seven-day stall and requires the proposer to hold at least 0.5% of
+  sDGNRS voting supply; there is no post-proposal delay.
   Execution still needs the decaying vote threshold; recovery cancels applicable proposals.
   Retry retired-subscription cancellation with prescribed recovery destinations.
 - Manage permitted charity slots; burn or unwrap the Vault's DGNRS under its restrictions
@@ -57,12 +57,13 @@ borrowing across blocks. Proposals expire after seven days. See [DGVE owner appr
 
 There is no owner setter for the craps engine, comp rate or shared comp balance. Contracts
 have no proxy upgrade path. This does not make every configuration immutable: governance
-can replace external VRF/feed endpoints and the owner can change the controls listed above.
+can replace the external VRF coordinator endpoint and the owner can change the controls listed above.
 
 ## External dependencies and settlement
 
-Chainlink supplies VRF randomness and the LINK/ETH price feed. LINK funds VRF requests;
-the feed supports donation valuation. Lido stETH supplies external asset accounting.
+Chainlink VRF v2.5 supplies randomness. Requests are paid in native ETH from the
+subscription, which yield surplus, sDGNRS balances and `donateVrf` donations fund; there is no
+LINK token or price feed. Lido stETH supplies external asset accounting.
 
 Treat external failures, compromised owners and permissionless callers according to the
 explicit boundaries above. Trusted governance decisions within those powers and the
