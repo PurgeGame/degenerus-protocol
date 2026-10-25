@@ -95,7 +95,7 @@ async function jumpToNextGameDayBoundary(offsetSeconds = 5) {
  * alone does not mean there is a new request to fulfill.
  */
 async function advanceGameOneDay(game, caller, mockVRF) {
-  const targetDay = BigInt(await game.currentDayView());
+  const targetDay = BigInt(await game.currentDayView_g542950());
   const address = await game.getAddress();
   for (let i = 0; i < 128; ++i) {
     const state = BigInt(await hre.ethers.provider.getStorage(address, 0));
@@ -396,7 +396,7 @@ describe("Governance & Gating (Phase 43)", function () {
     it("a same-day purchase does not change mining participation", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
-      const { priceWei } = await game.purchaseInfo();
+      const { priceWei } = await game.purchaseInfo_g1027();
       await game.connect(alice).purchase(
         0, 400, 0, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: priceWei }
       );

@@ -217,7 +217,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
         }
         uint24 pokedAt = _lastClaim(VAULT);
         _driveToEve(_slow() ? 19 : 9);
-        latchDay = game.currentDayView() + 1;
+        latchDay = game.currentDayView_g542950() + 1;
         _stageDay();
         if (!_slow()) {
             require(_lastClaim(VAULT) == pokedAt, "harness: no intermediate vault settlement");
@@ -269,7 +269,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
     }
 
     function _latched() internal view returns (bool) {
-        (, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+        (, , bool lastPurchaseDay_, , ) = game.purchaseInfo_g1027();
         return lastPurchaseDay_;
     }
 

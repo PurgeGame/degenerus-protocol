@@ -118,7 +118,7 @@ contract C1BoxAutoOpen is DeployProtocol {
     // =========================================================================
 
     function _driveDailyCycleOnce() internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}

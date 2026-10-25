@@ -143,8 +143,8 @@ describe("GameLifecycle", function () {
       await purchaseTickets(game, bob);
       await purchaseTickets(game, carol);
 
-      // purchaseInfo reflects purchase phase and the actual game level.
-      const info = await game.purchaseInfo();
+      // purchaseInfo_g1027 reflects purchase phase and the actual game level.
+      const info = await game.purchaseInfo_g1027();
       expect(info.inJackpotPhase).to.equal(false);
       expect(info.lvl).to.equal(0); // actual level; buys route to level+1 via priceWei
     });
@@ -469,14 +469,14 @@ describe("GameLifecycle", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // purchaseInfo consistency
+  // purchaseInfo_g1027 consistency
   // ---------------------------------------------------------------------------
 
-  describe("purchaseInfo view", function () {
+  describe("purchaseInfo_g1027 view", function () {
     it("returns initial state immediately after deploy", async function () {
       const { game } = await loadFixture(deployFullProtocol);
 
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.inJackpotPhase).to.equal(false);
       expect(info.rngLocked_).to.equal(false);
       expect(info.priceWei).to.equal(eth("0.01"));
@@ -491,23 +491,23 @@ describe("GameLifecycle", function () {
       expect(await game.mintPrice()).to.equal(eth("0.01"));
     });
 
-    it("rngLocked_ is true in purchaseInfo while VRF is pending", async function () {
+    it("rngLocked_ is true in purchaseInfo_g1027 while VRF is pending", async function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
       await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
 
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.rngLocked_).to.equal(true);
     });
 
-    it("rngLocked_ is false in purchaseInfo after VRF cycle completes", async function () {
+    it("rngLocked_ is false in purchaseInfo_g1027 after VRF cycle completes", async function () {
       const { game, deployer, mockVRF, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
       await driveFullVRFCycle(game, mockVRF, advanceModule, deployer);
 
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.rngLocked_).to.equal(false);
     });
   });

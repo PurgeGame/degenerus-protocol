@@ -108,7 +108,7 @@ describe("WhaleBoonDeityLapse", function () {
   ///      then return the matching slot index WITHOUT issuing it -- the caller seeds
   ///      the recipient's lane relative to the now-current day first, then issues in
   ///      the same day so the contract's logical day at issuance matches
-  ///      the day the caller seeded against. Skips any day where currentDayView() < 10
+  ///      the day the caller seeded against. Skips any day where currentDayView_g542950() < 10
   ///      so a caller seeding `currentDay - N` (N up to 6) never underflows the uint24.
   async function findWhaleTenSlot(game, deity, deployer, mockVRF, seedBase, maxDays) {
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
@@ -118,7 +118,7 @@ describe("WhaleBoonDeityLapse", function () {
       try {
         await settleRngDay(game, deployer, mockVRF, BigInt(seedBase + dayOffset));
       } catch (error) {
-        const state = { offset: dayOffset, logical: String(await game.currentDayView()),
+        const state = { offset: dayOffset, logical: String(await game.currentDayView_g542950()),
           wall: String(await game.currentWallDayView()), level: String(await game.level()),
           action: String(await game.nextMinerAction()), complete: (await game.dailySessionState())[0],
           locked: await game.rngLocked(), over: await game.gameOver() };
@@ -126,7 +126,7 @@ describe("WhaleBoonDeityLapse", function () {
         throw error;
       }
 
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       if (currentDay < 10n) continue;
 
       const [slots] = await viewer.deityBoonSlots(await game.getAddress(), deity.address);
@@ -149,7 +149,7 @@ describe("WhaleBoonDeityLapse", function () {
 
     // Fixed menu witness within the thirty-round purchase phase.
     const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9500, 30);
-    const currentDay = await game.currentDayView();
+    const currentDay = await game.currentDayView_g542950();
 
     // Seed bob with a lootbox-rolled tier-3 whale discount 6 days stale (>4-day
     // window, deityWhaleDay = 0) -- lapsed, but never swept (bob never opened a box).
@@ -177,7 +177,7 @@ describe("WhaleBoonDeityLapse", function () {
 
     // Fixed menu witness within the thirty-round purchase phase.
     const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9500, 30);
-    const currentDay = await game.currentDayView();
+    const currentDay = await game.currentDayView_g542950();
 
     // Seed bob with a lootbox-rolled tier-3 whale discount from yesterday -- still
     // live (inside the 4-day window), deityWhaleDay = 0.

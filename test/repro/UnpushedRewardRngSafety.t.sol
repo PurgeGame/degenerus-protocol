@@ -92,7 +92,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _pending() private view returns (uint256) {
-        return (uint256(game.extsload_g8132(bytes32(GameSlots.PENDING_BOX_COUNT))) >> (GameSlots.PENDING_BOX_COUNT_OFFSET * 8)) & 0xFFFF;
+        return (uint256(game.extsload_g2807007(bytes32(GameSlots.PENDING_BOX_COUNT))) >> (GameSlots.PENDING_BOX_COUNT_OFFSET * 8)) & 0xFFFF;
     }
 
     function _openedDay() private view returns (uint24) {
@@ -100,7 +100,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _humanComplete() private view returns (bool) {
-        return uint8(uint256(game.extsload_g8132(bytes32(GameSlots.HUMAN_READ_COMPLETE))) >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) != 0;
+        return uint8(uint256(game.extsload_g2807007(bytes32(GameSlots.HUMAN_READ_COMPLETE))) >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) != 0;
     }
 
     event StampedBoxResolved(uint32 id, uint256 amount, uint256 seed);
@@ -150,7 +150,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function test_UnderfundedAfkingScanCannotCompleteSessionThroughEmptyHumanQueue() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         _seed(day, day, 1900, false);
 
         // Completed prefix positions are behind the monotonic cursor and never rescanned.
@@ -180,7 +180,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function test_PreRequestStampCannotUsePreviouslyPublishedWord() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         _seed(day - 1, day, 0, true);
         assertEq(_pending(), 1, "pre-seal stamp remains pending");
         assertTrue(game.rngComplete(), "cached prior completion still permits the daily seal");
@@ -211,7 +211,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function test_DelayedStampUsesActiveSessionAfterDailyParityReuse() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint24 stampDay = day - 3;
         _seed(day, stampDay, 0, false);
         RecyclingState.seedDailyWord(address(game), stampDay, 0xBAD);
@@ -228,7 +228,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function test_DelayedDailyFulfillmentRetainsOriginalStampWithActiveWord() public {
-        uint24 stampDay = game.currentDayView();
+        uint24 stampDay = game.currentDayView_g542950();
         _seed(stampDay - 1, stampDay, 0, true);
         // A chunked pre-request STAGE can resume days after it stamped this subscriber.
         // The no-orphan rule retains the stamp while the eventual request binds its own day.
@@ -278,11 +278,11 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _dailyIdx() private view returns (uint24) {
-        return uint24(uint256(game.extsload_g8132(bytes32(0))) >> 24);
+        return uint24(uint256(game.extsload_g2807007(bytes32(0))) >> 24);
     }
 
     function test_NewWriteBoxesDoNotKeepCompletedReadSessionOpen() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         _seed(day, day, 1900, false);
         _underfundedKeep();
         _buyWriteBox();
@@ -299,7 +299,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function test_AfkingDrainAllowsMiddaySessionWithoutReopeningStamp() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         // setUp's 5-day jump leaves scheduled Craps maintenance owed, which also refuses a
         // mid-day request (RngModule: _minerMaintenancePending). Run it through the table's own
         // permissionless keeper first (it runs only between read sessions), so the refusals and

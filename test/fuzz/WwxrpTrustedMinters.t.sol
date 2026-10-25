@@ -178,7 +178,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
     /// @dev Write a lootbox-rolled (non-deity) lane stamped today; other lanes are kept.
     function _grantLane(address who, uint256 shift, uint8 tier) private {
-        uint256 lane = (uint256(game.currentDayView() & 0x1FFFFF) << LANE_DAY_SHIFT) | tier;
+        uint256 lane = (uint256(game.currentDayView_g542950() & 0x1FFFFF) << LANE_DAY_SHIFT) | tier;
         uint256 s1 = (_slot1(who) & ~(LANE_MASK << shift)) | (lane << shift);
         vm.store(address(game), _slot1Key(who), bytes32(s1));
     }

@@ -223,7 +223,7 @@ contract StethLossLiveness is RedemptionFixture {
     function _playUntilLevel(uint24 target, uint256 maxDays) private {
         for (uint256 day; day < maxDays && game.level() < target && !game.gameOver(); ++day) {
             vm.warp(vm.getBlockTimestamp() + 1 days + 1);
-            (, , , bool locked, uint256 priceWei) = game.purchaseInfo();
+            (, , , bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked) {
                 uint256 box = 60 ether;
                 vm.prank(driver);

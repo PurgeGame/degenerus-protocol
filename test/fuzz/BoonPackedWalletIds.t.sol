@@ -91,7 +91,7 @@ contract BoonPackedWalletIds is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
-        _seedLogicalFixtureDay(game.currentDayView() + 1);
+        _seedLogicalFixtureDay(game.currentDayView_g542950() + 1);
         vm.etch(address(game), address(new BoonGameExt()).code);
         ext = BoonGameExt(payable(address(game)));
         vm.deal(address(game), 1_000 ether);
@@ -110,7 +110,7 @@ contract BoonPackedWalletIds is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function _today() private view returns (uint256) {
-        return game.currentDayView();
+        return game.currentDayView_g542950();
     }
 
     /// @dev A fresh, live lane value (tier | day << 3) for the shared 24-bit lane encoding.
@@ -191,7 +191,7 @@ contract BoonPackedWalletIds is DeployProtocol {
             }
             assertTrue(awarded, "fixture awarded slot1 boon");
             vm.warp(vm.getBlockTimestamp() + 5 days);
-            _seedLogicalFixtureDay(game.currentDayView() + 5);
+            _seedLogicalFixtureDay(game.currentDayView_g542950() + 5);
             ext.x_delegate(ContractAddresses.GAME_BOON_MODULE,
                 abi.encodeCall(DegenerusGameBoonModule.checkAndClearExpiredBoon, (id)));
             (, uint256 retained) = _boon(id);
@@ -245,7 +245,7 @@ contract BoonPackedWalletIds is DeployProtocol {
             vm.prank(last);
             game.issueDeityBoon(lastId, rid, 0);
             vm.warp(block.timestamp + 1 days);
-        _seedLogicalFixtureDay(game.currentDayView() + 1);
+        _seedLogicalFixtureDay(game.currentDayView_g542950() + 1);
         }
         uint24 today = uint24(_today());
         RecyclingState.seedDailyWord(address(game), today - 1, 123);
@@ -294,7 +294,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         _placeBet(player, 0, 0.05 ether, 1, 0);
 
         vm.warp(block.timestamp + 1 days);
-        _seedLogicalFixtureDay(game.currentDayView() + 1);
+        _seedLogicalFixtureDay(game.currentDayView_g542950() + 1);
         uint24 awardDay = uint24(_today());
         RecyclingState.seedDailyWord(address(game), betDay, uint256(keccak256("protocol_menu")));
         RecyclingState.seedDailyWord(address(game), awardDay, uint256(keccak256("protocol_winner")));

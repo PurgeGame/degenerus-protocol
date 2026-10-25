@@ -92,7 +92,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     function _seedWwxrpLane(uint32 id, uint256 tier) internal {
         bytes32 s = _boonSlot1(id);
         uint256 v = uint256(vm.load(address(game), s));
-        uint256 lane = tier | (uint256(game.currentDayView()) << 3);
+        uint256 lane = tier | (uint256(game.currentDayView_g542950()) << 3);
         vm.store(address(game), s, bytes32((v & ~(uint256(0xFFFFFF) << WWXRP_LANE_SHIFT)) | (lane << WWXRP_LANE_SHIFT)));
     }
 

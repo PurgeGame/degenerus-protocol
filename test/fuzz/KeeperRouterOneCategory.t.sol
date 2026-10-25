@@ -218,7 +218,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         (, , uint256 requestReward) = _minerWork(requestLogs);
         assertEq(_countFor(requestLogs, keeper), requestReward == 0 ? 0 : 1, "request call: at most one credit");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xADADADAD0002);
-        uint24 newDay = game.currentDayView();
+        uint24 newDay = game.currentDayView_g542950();
         assertEq(game.rngWordForDay(newDay), 0, "pre: the new day's word is not yet applied");
 
         vm.recordLogs();

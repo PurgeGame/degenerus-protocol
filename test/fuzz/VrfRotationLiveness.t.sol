@@ -157,7 +157,7 @@ contract VrfRotationLiveness is DeployProtocol {
         }
         assertFalse(game.rngLocked(), "the day completes and unlocks");
         // The daily request advances the logical day; its word is recorded on that day.
-        assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "today is sealed on its own word");
+        assertTrue(game.rngWordForDay(game.currentDayView_g542950()) != 0, "today is sealed on its own word");
     }
 
     /// @dev Drive the game into a mid-day RNG state where the mid-day request (mineFlip's
@@ -303,7 +303,7 @@ contract VrfRotationLiveness is DeployProtocol {
         assertTrue(game.rngLocked(), "daily VRF request must be in flight (locked)");
         assertEq(_readRngWordCurrent(), 0, "daily word not yet delivered before rotation");
 
-        uint32 day = game.currentDayView();
+        uint32 day = game.currentDayView_g542950();
 
         // Rotate while the daily request is in flight (rngWordCurrent==0 re-issue branch).
         MockVRFCoordinator newVRF = _rotateTo();
@@ -341,7 +341,7 @@ contract VrfRotationLiveness is DeployProtocol {
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "daily VRF request must be in flight");
 
-        uint32 day = game.currentDayView();
+        uint32 day = game.currentDayView_g542950();
 
         // Deliver the daily word on the OLD coordinator BEFORE rotating -> rngWordCurrent != 0.
         uint256 oldReqId = mockVRF.lastRequestId();

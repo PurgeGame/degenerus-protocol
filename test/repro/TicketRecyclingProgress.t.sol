@@ -138,7 +138,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         RecyclingProgressSeeder s = _overlay();
         s.seedWrappedPending(buyer);
         vm.etch(address(game), realCode);
-        _syncCoinflipFixtureDay(uint24(game.currentDayView()));
+        _syncCoinflipFixtureDay(uint24(game.currentDayView_g542950()));
         game.mineFlip(0);
         assertEq(RecyclingState.word(address(game), 1), 2, "wrapped nudge normalized before ticket generation");
         s = _overlay();
@@ -168,7 +168,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         s.seedCreated(4, 7, makeAddr("old-retained-owner"), 1);
         s.seedDeadlineWithLandedCohort(5, 0xB0B5);
         uint32 position = s.seedQueued(6, true, buyer, 1024, 0);
-        uint24 terminalDay = game.currentDayView();
+        uint24 terminalDay = game.currentDayView_g542950();
         address oldFoil = makeAddr("retired-terminal-foil");
         s.seedPaidFoil(4, terminalDay, oldFoil);
         uint256 paidRecord = s.foilRecordWord(4, oldFoil);

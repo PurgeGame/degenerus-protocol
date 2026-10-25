@@ -740,7 +740,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         _drainUntilUnlocked();
         require(game.jackpotPhase(), "harness: must be inside the jackpot phase");
         L = _level();
-        (, , , , priceWei) = game.purchaseInfo();
+        (, , , , priceWei) = game.purchaseInfo_g1027();
 
         bool requested;
         for (uint256 d = 0; d < 12 && game.jackpotPhase(); d++) {
@@ -809,7 +809,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     }
 
     function _buyTickets() internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(
@@ -826,7 +826,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     ///      land on the write buffer; the checked helper's lock-skip would silently
     ///      drop a stall-window cohort.
     function _buyTicketsUnchecked() internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(
             0,
@@ -963,7 +963,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         uint256 stalledDays;
         for (uint256 i = 0; i < 4000; i++) {
             require(!game.gameOver(), "harness: gameOver before the seal");
-            (uint24 lvl, bool inJackpot, bool lpd, bool rngL, ) = game.purchaseInfo();
+            (uint24 lvl, bool inJackpot, bool lpd, bool rngL, ) = game.purchaseInfo_g1027();
             if (!inJackpot && lpd && !rngL) return lvl;
             _fulfillPending();
             (bool ok, ) = address(game).call(

@@ -81,11 +81,11 @@ describe("DegenerusGame", function () {
       expect(await game.rngLocked()).to.be.false;
     });
 
-    it("purchaseInfo().lvl reports the actual game level (0 at genesis)", async function () {
+    it("purchaseInfo_g1027().lvl reports the actual game level (0 at genesis)", async function () {
       const { game } = await loadFixture(deployFullProtocol);
       // lvl is the ACTUAL game level; purchase-phase routing to level+1
       // shows up in priceWei (quoted at the routed level), not in lvl.
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.lvl).to.equal(0n);
       expect(await game.level()).to.equal(0n);
     });
@@ -99,10 +99,10 @@ describe("DegenerusGame", function () {
       expect(await game.entriesOwedView(1, sdgnrsAddr)).to.equal(4n);
     });
 
-    it("purchaseInfo returns consistent initial state", async function () {
+    it("purchaseInfo_g1027 returns consistent initial state", async function () {
       const { game } = await loadFixture(deployFullProtocol);
       const [lvl, inJackpotPhase, lastPurchaseDay, rngLocked_, priceWei] =
-        await game.purchaseInfo();
+        await game.purchaseInfo_g1027();
       // lvl is the actual game level (0 at start); priceWei is quoted at the
       // routed ticket level (level + 1 during the purchase phase).
       expect(lvl).to.equal(0n);
@@ -299,7 +299,7 @@ describe("DegenerusGame", function () {
 
     it("lootbox purchase also completes slot-0 MINT_ETH quest like ticket purchases", async function () {
       const { game, coin, coinflip, quests, alice } = await loadFixture(deployFullProtocol);
-      const day = (await game.currentDayView()) + 1n;
+      const day = (await game.currentDayView_g542950()) + 1n;
       await setPackedField(game, "dailyIdx", day);
       await setPackedField(coinflip, "requestedDailyIdx", day, "Coinflip");
       await rollQuestAsGame(quests, game, day, 99n);
@@ -490,9 +490,9 @@ describe("DegenerusGame", function () {
     // ethMintLevelCount, ethMintStreakCount, hasActiveLazyPass, autoRebuyEnabledFor,
     // decimatorAutoRebuyEnabledFor, lootboxRngWord removed in Phase 146 ABI cleanup
 
-    it("currentDayView returns a non-zero day", async function () {
+    it("currentDayView_g542950 returns a non-zero day", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      const day = await game.currentDayView();
+      const day = await game.currentDayView_g542950();
       expect(day).to.be.gt(0n);
     });
 

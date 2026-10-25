@@ -571,13 +571,13 @@ contract GameWalletIdViews is DeployProtocol {
 
         vm.prank(makeAddr("not_quests"));
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
-        game.recordAfkingSecondary(id, 1);
+        game.recordAfkingSecondary_g3316(id, 1);
         vm.prank(makeAddr("not_quests"));
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
         game.floorAfkingStreakBase(id, 1);
 
         vm.prank(ContractAddresses.QUESTS);
-        game.recordAfkingSecondary(id, 3);
+        game.recordAfkingSecondary_g3316(id, 3);
         assertEq(ext.x_streak(id), 8, "secondary bumps the ID's base");
         vm.prank(ContractAddresses.QUESTS);
         game.floorAfkingStreakBase(id, 20);
@@ -591,9 +591,9 @@ contract GameWalletIdViews is DeployProtocol {
         ext.x_setSub(idle, 1, ext.x_today(), 4, true);
         vm.record();
         vm.startPrank(ContractAddresses.QUESTS);
-        game.recordAfkingSecondary(0, 3);
+        game.recordAfkingSecondary_g3316(0, 3);
         game.floorAfkingStreakBase(0, 50);
-        game.recordAfkingSecondary(idle, 3);
+        game.recordAfkingSecondary_g3316(idle, 3);
         game.floorAfkingStreakBase(idle, 50);
         vm.stopPrank();
         (, bytes32[] memory writes) = vm.accesses(address(game));
@@ -616,9 +616,9 @@ contract GameWalletIdViews is DeployProtocol {
         RecyclingState.seedWord(address(game), IDX, bytes32(word));
         // This resolver fixture already serviced the current wall reset; the crank
         // must not open an unrelated daily round and credit its protocol seeds.
-        _seedLogicalFixtureDay(game.currentDayView());
+        _seedLogicalFixtureDay(game.currentDayView_g542950());
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
         vm.recordLogs();
         vm.prank(makeAddr("degen_crank"));
@@ -693,7 +693,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint256 totalBet = 0.02 ether;
         vm.expectCall(
             address(quests),
-            abi.encodeCall(IDegenerusQuests.handleDegenerette, (expectedFunderId, totalBet, true, PriceLookupLib.priceForLevel(game.level() + 1)))
+            abi.encodeCall(IDegenerusQuests.handleDegenerette_g3, (expectedFunderId, totalBet, true, PriceLookupLib.priceForLevel(game.level() + 1), _fixtureGameDay()))
         );
         vm.recordLogs();
         _place(funder, player, ETH, 0.01 ether, 2, totalBet);
@@ -753,7 +753,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint32 expectedId = uint32(_walletsLength());
         vm.expectCall(
             address(quests),
-            abi.encodeCall(IDegenerusQuests.handleDegenerette, (expectedId, 0.01 ether, true, PriceLookupLib.priceForLevel(game.level() + 1)))
+            abi.encodeCall(IDegenerusQuests.handleDegenerette_g3, (expectedId, 0.01 ether, true, PriceLookupLib.priceForLevel(game.level() + 1), _fixtureGameDay()))
         );
         vm.recordLogs();
         _place(player, address(0), ETH, 0.01 ether, 1, 0.01 ether);
@@ -900,7 +900,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.deal(buyer, 10 ether);
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector),
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g23478.selector),
             abi.encode(uint256(0), uint8(0), uint32(0), false, false)
         );
         vm.mockCall(
@@ -927,7 +927,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint32 expectedId = uint32(_walletsLength());
         vm.expectCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector, expectedId, uint256(0))
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g23478.selector, _fixtureGameDay(), expectedId, uint256(0))
         );
         vm.recordLogs();
         vm.prank(buyer);
@@ -979,7 +979,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.store(address(game), mintSlot, bytes32(word));
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking_g2654.selector, id),
+            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking_g1521.selector, id),
             abi.encode(uint32(5), true)
         );
         vm.mockCall(

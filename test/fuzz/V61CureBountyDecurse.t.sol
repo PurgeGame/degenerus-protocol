@@ -302,7 +302,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedCurse(p, 4);
         assertEq(_lastEthDayOf(p), previousDay, "fixture: a prior ticket mint-day stamp exists");
         assertEq(game.curseCountOf(p), 4, "fixture: buyer is cursed");
-        assertNotEq(game.currentDayView(), 100, "fixture: wall-clock day differs from the saved daily index");
+        assertNotEq(game.currentDayView_g542950(), 100, "fixture: wall-clock day differs from the saved daily index");
 
         uint256 boxAmount = _oneTicketCost();
         vm.deal(p, boxAmount);
@@ -449,7 +449,7 @@ contract V61CureBountyDecurse is DeployProtocol {
     /// @dev Align dailyIdx to the wall-clock day so the cure-before-score contrast computes both
     ///      buyers' streak bases at a consistent day. Keep the index nonzero.
     function _alignDailyIdxToSimDay() internal {
-        uint256 simDay = uint256(game.currentDayView());
+        uint256 simDay = uint256(game.currentDayView_g542950());
         if (simDay == 0) simDay = 1;
         _seedDailyIdx(simDay);
     }

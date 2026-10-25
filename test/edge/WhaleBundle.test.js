@@ -251,7 +251,7 @@ describe("WhaleBundle", function () {
 
       // Seed five additional completed logical days in this pricing unit fixture.
       await advanceTime(5 * 86400);
-      await seedLogicalDay(game, (await game.currentDayView()) + 5n, coinflip);
+      await seedLogicalDay(game, (await game.currentDayView_g542950()) + 5n, coinflip);
 
       // The logical boon window has expired, so the FULL early price (2.4 ETH) is
       // required and no discount applies. Paying the would-be discounted early
@@ -803,7 +803,7 @@ describe("WhaleBundle", function () {
 
       // Advance past 4-day boon window
       await advanceTime(5 * 86400);
-      await seedLogicalDay(game, (await game.currentDayView()) + 5n, coinflip);
+      await seedLogicalDay(game, (await game.currentDayView_g542950()) + 5n, coinflip);
 
       // Discounted price should revert (boon expired)
       const discountedPrice =

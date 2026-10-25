@@ -387,7 +387,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
 
     function test_RecipientWhaleAndBoxBoons_OnlyRecipientConsumed() public {
         (address who, uint32 id) = _recipient();
-        uint256 day = game.currentDayView();
+        uint256 day = game.currentDayView_g542950();
         // Whale tier 3 discounts 35%; box tier 3 boosts 25%.
         uint256 recipientBoon = (day << 200) | (uint256(3) << 248) | (day << 56) | (uint256(3) << 104);
         vm.store(address(game), _boon(id), bytes32(recipientBoon));
@@ -422,7 +422,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
         vm.deal(address(vault), 4 ether);
         vm.prank(address(vault));
         game.depositAfkingFunding{value: 4 ether}(VAULT_ID);
-        bytes32 boon = bytes32((uint256(game.currentDayView()) << 200) | (uint256(3) << 248));
+        bytes32 boon = bytes32((uint256(game.currentDayView_g542950()) << 200) | (uint256(3) << 248));
         vm.store(address(game), _boon(id), boon);
         Snap memory before = _snap();
         uint256 recipientBalance = _packed(id);
@@ -507,7 +507,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
         vm.expectRevert(); vault.spendDegenesis(id, true, 1001, 0, budget);
         vm.expectRevert(); vault.spendDegenesis(id, true, 1, 0, budget);
         vm.stopPrank();
-        vm.store(address(game), _boon(id), bytes32((uint256(game.currentDayView()) << 200) | (uint256(3) << 248)));
+        vm.store(address(game), _boon(id), bytes32((uint256(game.currentDayView_g542950()) << 200) | (uint256(3) << 248)));
         Snap memory before = _snap();
         _spendFor(id, true, 1, 0, budget);
         _assertExactSpend(before, 2.6 ether);
@@ -533,7 +533,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
         uint256 credit = _credit(id);
         uint256 cost = 100 * game.mintPrice();
         Snap memory before = _snap();
-        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector, id));
+        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g23478.selector, _fixtureGameDay(), id));
         vm.expectCall(address(affiliate), abi.encodeWithSelector(affiliate.payAffiliateCombined_g978.selector, bytes32(0), id));
         vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.armRecord.selector, RECORD_KIND_BUY, id, uint256(100)));
         _spendFor(id, false, 40_000, 0, budget);

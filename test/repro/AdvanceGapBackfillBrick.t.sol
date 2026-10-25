@@ -26,10 +26,10 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         uint24 baseline = uint24(uint256(vm.load(address(game), bytes32(0))));
         vm.warp(block.timestamp + 1 days);
         uint256 request = _request();
-        uint24 committed = game.currentDayView();
+        uint24 committed = game.currentDayView_g542950();
         uint256 pool = coinflip.recordPool();
         vm.warp(block.timestamp + 8 days);
-        assertEq(game.currentDayView(), committed, "calendar gaps create no rounds");
+        assertEq(game.currentDayView_g542950(), committed, "calendar gaps create no rounds");
         mockVRF.fulfillRandomWords(request, 0xCAFEBABE);
         for (uint256 i; i < 500; ++i) {
             if (mockVRF.lastRequestId() != request) break;
@@ -37,7 +37,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         }
         assertEq(uint24(uint256(vm.load(address(game), bytes32(0)))), baseline,
             "no purchase-clock compensation or underflow");
-        assertEq(game.currentDayView(), committed + 1, "one next request, no backfill");
+        assertEq(game.currentDayView_g542950(), committed + 1, "one next request, no backfill");
         assertEq(coinflip.requestedDailyIdx(), committed + 1);
         assertEq(coinflip.recordPool(), pool + 2_000, "only the real result funds rewards");
         (uint16 reward, bool win) = coinflip.getCoinflipDayResult(committed);

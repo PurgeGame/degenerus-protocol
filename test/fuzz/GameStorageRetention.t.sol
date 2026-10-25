@@ -27,7 +27,7 @@ contract GameRetentionHarness is DegenerusGameRngUtils {
     function idAt(uint24 lvl, uint8 trait, uint256 index) external view returns (uint32) {
         return _bucketIdAtUnchecked(lvl, trait, index);
     }
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
     function swapFoil() external { _swapFoilSlot(); }

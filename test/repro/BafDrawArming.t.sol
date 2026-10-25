@@ -59,7 +59,7 @@ contract BafDrawArming is DeployProtocol {
 
         // The latch armed tomorrow's flip day; nothing was armed before it
         // (asserted every pre-latch day inside the driver).
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         (uint24 armedDay, uint96 totalBefore, uint32 countBefore) = coinflip.bafDrawInfo();
         assertEq(armedDay, today + 1, "the x0 latch arms day + 1");
         assertEq(totalBefore, 0, "the armed day's book opens empty");
@@ -93,14 +93,14 @@ contract BafDrawArming is DeployProtocol {
     // ---------------------------------------------------------------------
 
     /// @dev Turbo-chain levels 1-9, stopping ON the day the level-10 evening latch
-    ///      fires (lastPurchaseDay with the tier-2 flag; purchaseInfo's lvl reads 9).
+    ///      fires (lastPurchaseDay with the tier-2 flag; purchaseInfo_g1027's lvl reads 9).
     ///      Every pre-latch day asserts the draw is still un-armed: the levels
     ///      1-9 latches must never arm it.
     function _driveToLevelTenLatchDay() internal {
         _settleToday();
         for (uint256 i = 0; i < 120; i++) {
             require(!game.gameOver(), "harness: gameOver before the level-10 latch");
-            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo_g1027();
             if (lastPurchaseDay_ && lvl == 9) {
                 require(_jackpotFlags() == 1, "harness: the x0 latch must be tier 2");
                 return;
@@ -168,7 +168,7 @@ contract BafDrawArming is DeployProtocol {
     }
 
     function _buyTickets() internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(

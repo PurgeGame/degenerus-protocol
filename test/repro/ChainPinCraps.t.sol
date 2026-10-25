@@ -26,7 +26,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @dev Game storage with the Game's own flag setters. Etched at the GAME pin so LootboxCraps reads it.
 contract ChainPinGameFlags is DegenerusGameStorage {
-    function extsload_g8132(bytes32 s) external view returns (bytes32 v) {
+    function extsload_g2807007(bytes32 s) external view returns (bytes32 v) {
         assembly { v := sload(s) }
     }
     function setPublished(bool on) external { _setRngSessionPublished(on); }
@@ -334,7 +334,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
     }
 
     function _word(address who) internal view returns (uint256) {
-        return uint256(craps.extsload_g8132(_boardKey(who)));
+        return uint256(craps.extsload_g2807007(_boardKey(who)));
     }
 
     /// @dev A board of up to twelve chips, at most three a leg, starting at a random leg. Leg 0 is the
@@ -628,13 +628,13 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         _giveWalletId(m3);
         _grantSmurfBase(m1, 2);
         vm.deal(m1, 10 ether);
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(m1);
         game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
 
         uint32 n;
         for (uint32 id = 1;; ++id) {
-            try game.resolveAccount_g502(id, address(0)) returns (address, address payee, bool) {
+            try game.resolveAccount_g7029(id, address(0)) returns (address, address payee, bool) {
                 assertTrue(payee != address(0), "an allocated id resolves to a zero payee");
                 n = id;
             } catch {
@@ -649,7 +649,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
             uint256 score = 1_000_000 * (uint256(id) + 1);
             vm.prank(ContractAddresses.CRAPS);
             coinflip.armDiceRunRecord(id, score);
-            (, address payee,) = game.resolveAccount_g502(id, address(0));
+            (, address payee,) = game.resolveAccount_g7029(id, address(0));
             (address holder, uint128 mark,,) = recordBounty.recordInfo(4);
             assertEq(holder, payee, "record holder is not the winner's payee");
             assertEq(uint256(mark), score);
@@ -672,7 +672,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
     /// forge-config: default.fuzz.runs = 6
     function testFuzz_F7_idleGapViewsReturnAndMineFlipProceeds(uint256 gapRaw) public {
         uint256 gap = bound(gapRaw, 2, 12);
-        uint24 beforeDay = game.currentDayView();
+        uint24 beforeDay = game.currentDayView_g542950();
         uint64 beforeCursor = crapsBattle.minerSlot();
         vm.warp(vm.getBlockTimestamp() + gap * 1 days);
         assertEq(crapsBattle.currentDayIndex(), beforeDay, "calendar gap creates no table days");
@@ -681,12 +681,12 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         assertTrue(game.nextMinerAction() != 1, "gap is inside the completion deadline");
         for (uint256 i; i < 300; ++i) {
             _fulfilPending();
-            if (game.currentDayView() == beforeDay + 1) {
+            if (game.currentDayView_g542950() == beforeDay + 1) {
                 (bool complete,,) = game.dailySessionState();
                 if (complete && !crapsBattle.minerMaintenancePending_g11976()) return;
             }
             game.mineFlip{gas: 16_700_000}(0);
-            assertLe(game.currentDayView(), beforeDay + 1, "one round per actual reset");
+            assertLe(game.currentDayView_g542950(), beforeDay + 1, "one round per actual reset");
         }
         fail("one delayed round did not complete");
     }

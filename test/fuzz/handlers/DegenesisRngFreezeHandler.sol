@@ -213,7 +213,7 @@ contract DegenesisRngFreezeHandler is Test {
     function buyDegenesis(uint256 actorSeed, uint256 amountSeed) external {
         address a = actors[actorSeed % actors.length];
         uint256 amount = 0.01 ether + (amountSeed % 2000) * UNIT;
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         if (game.gameOver() || game.livenessTriggered()) return;
         if (today < GameTimeLib.DEGENESIS_START_DAY || today >= GameTimeLib.MAIN_LAUNCH_DAY) return;
         if (game.degenesisCreditOf(a) < amount) return;
@@ -535,7 +535,7 @@ contract DegenesisRngFreezeHandler is Test {
     function _onBuy(Vm.Log memory l) internal {
         (uint8 c,,,) = abi.decode(l.data, (uint8, uint32, uint256, uint256));
         // An order only ever joins today's cohort, never a sealed (or priced) one.
-        if (uint256(c) != uint256(game.currentDayView()) - GameTimeLib.DEGENESIS_START_DAY + 1) {
+        if (uint256(c) != uint256(game.currentDayView_g542950()) - GameTimeLib.DEGENESIS_START_DAY + 1) {
             ++ghost_windowOrdersIntoSealedCohort;
         }
         if (snapLive && c == snapCohort) ++ghost_windowOrdersIntoSealedCohort;

@@ -48,7 +48,7 @@ contract ResolutionCleanupGasTest is DeployProtocol {
         RecyclingState.seedWord(address(game), buffer, bytes32(WORD));
         uint256 state = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32((state & ~(uint256(0xffffff) << 24))
-            | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192)));
+            | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192)));
         uint256 resolveGas;
         // The miner preserves one-field finalization per transaction.
         for (uint256 i; i < 5; ++i) {
@@ -61,10 +61,10 @@ contract ResolutionCleanupGasTest is DeployProtocol {
     }
 
     function test_CrapsFiveFieldsOneSeat() public {
-        _cycle(game.currentDayView() + 1, 1, "one-seat");
+        _cycle(game.currentDayView_g542950() + 1, 1, "one-seat");
     }
 
     function test_CrapsFiveFieldsThreeSeats() public {
-        _cycle(game.currentDayView() + 1, 3, "three-seats");
+        _cycle(game.currentDayView_g542950() + 1, 3, "three-seats");
     }
 }

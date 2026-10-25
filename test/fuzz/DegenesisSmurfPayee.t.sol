@@ -44,7 +44,7 @@ contract DegenesisSmurfPayee is DegenesisHarness {
     }
 
     function test_SmurfOrderLegs() public {
-        (address key, address payee,) = game.resolveAccount_g502(smurfId, address(0));
+        (address key, address payee,) = game.resolveAccount_g7029(smurfId, address(0));
         assertEq(key, address(0), "smurf has no key");
         assertEq(payee, mainOwner, "smurf payee is the main");
         assertGe(_smurfCredit(), 5 ether, "smurf earned credit from the main's purchase for it");

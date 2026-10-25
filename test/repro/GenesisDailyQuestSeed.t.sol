@@ -47,7 +47,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
 
     function testDeployDayCarriesTheSeededPair() public {
         QuestInfo[2] memory q = quests.getActiveQuests();
-        uint24 day0 = uint24(game.currentDayView());
+        uint24 day0 = uint24(game.currentDayView_g542950());
         assertEq(q[0].day, day0, "slot 0 must be stamped for the deploy day");
         assertEq(
             q[0].questType,
@@ -66,7 +66,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
     function testDeployDayPairCompletesInOrder() public {
         // Slot 1 is the bonus slot — locked until the slot-0 primary completes
         // (the standing daily design) — so clear MINT_ETH with a ticket buy first.
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(player);
         game.purchase{value: priceWei * 4}(
             0,
@@ -94,7 +94,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
     }
 
     function testSameDayRollIsANoOpAndNextDayReplaces() public {
-        uint24 day0 = uint24(game.currentDayView());
+        uint24 day0 = uint24(game.currentDayView_g542950());
         vm.prank(address(game));
         quests.rollDailyQuest(
             day0,

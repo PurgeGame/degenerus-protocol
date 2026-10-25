@@ -38,7 +38,7 @@ contract DecimatorGeneratedEngineMeter {
 }
 
 contract DecimatorGeneratedFlatEngine {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 
@@ -298,7 +298,7 @@ contract DecimatorJackpotGasTest is NativeGasExport {
         DecimatorJackpotTerms memory terms;
         terms.word = word;
         vm.cool(address(h)); vm.cool(ContractAddresses.CRAPS);
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g8132(bytes32)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g2807007(bytes32)"), hex"12345678");
         uint256 nativeBeforeSkip = vm.snapshotState();
         vm.recordLogs();
         (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, 150_000);

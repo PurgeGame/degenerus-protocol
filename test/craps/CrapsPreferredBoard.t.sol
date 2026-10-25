@@ -39,7 +39,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
     function _idKey(address p) private view returns (bytes32) {
         return keccak256(abi.encode(uint256(game.walletIdOf_g3120(p)), CrapsPreferenceLib.PASS_SLOT));
     }
-    function _word(address p) private view returns (uint256) { return uint256(c.extsload_g8132(_idKey(p))); }
+    function _word(address p) private view returns (uint256) { return uint256(c.extsload_g2807007(_idKey(p))); }
     function _raw(address p) private view returns (uint256) { return _word(p); }
     function _save(address p, uint32 b) private { vm.prank(p); c.setPreferredBoard(0, b); }
     function _dayChips(uint24 day, address p) private view returns (uint256) {

@@ -92,7 +92,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
     // ------------------------------------------------------------------ the opening
 
     function _degenesisWeek(bool turbo) internal {
-        require(game.currentDayView() == 1, "DegenesisWeekOpening: deploy on day index 1");
+        require(game.currentDayView_g542950() == 1, "DegenesisWeekOpening: deploy on day index 1");
         dgw.turbo = turbo;
         dgwOpening = true;
         dgwWordSalt = turbo ? 0xD6E7 : 0xD6E8;
@@ -151,7 +151,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
         uint24 d = uint24(GameTimeLib.DEGENESIS_START_DAY + c - 1);
         _dgwWarp(d, 5 minutes);
         _dgwDrive();
-        require(game.currentDayView() == d, "DegenesisWeekOpening: accepted logical cohort");
+        require(game.currentDayView_g542950() == d, "DegenesisWeekOpening: accepted logical cohort");
         uint256 buyers = 7 + uint256(keccak256(abi.encode(dgwWordSalt, c))) % 5;
         uint256[3] memory driveAt = [uint256(1 hours), 7 hours, 13 hours];
         uint256 drives;
@@ -211,7 +211,7 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
 
     /// @dev Run mineFlip until idle, answering every request with a derived word.
     function _dgwDrive() internal {
-        bool lag = _dgwBacklog() && dgwOpening && game.currentDayView() >= 7;
+        bool lag = _dgwBacklog() && dgwOpening && game.currentDayView_g542950() >= 7;
         for (uint256 i; i < 2000; ++i) {
             _dgwFulfil();
             uint8 a = game.nextMinerAction();

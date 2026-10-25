@@ -25,7 +25,7 @@ contract WwxrpClaimableTest is DeployProtocol {
 
     function test_AwardTouchesOnlyTheIdLedgerAndNoSupplyOrWallet() public {
         uint256 supply = wwxrp.totalSupply();
-        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount_g502.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount_g7029.selector), 0);
         vm.expectCall(address(game), abi.encodeWithSelector(game.walletIdOf_g3120.selector), 0);
         vm.record();
         _credit(aliceId, 100);
@@ -53,7 +53,7 @@ contract WwxrpClaimableTest is DeployProtocol {
 
     function test_SmurfAndOwnerBalancesStaySeparateOperatorCannotRedirectWithdrawal() public {
         _grantSmurfBase(alice, 1);
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.deal(alice, price);
         vm.prank(alice);
         uint32 smurf = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
@@ -118,7 +118,7 @@ contract WwxrpClaimableTest is DeployProtocol {
         _credit(aliceId, 100);
         vm.expectRevert(WWXRP.OnlyMinter.selector);
         wwxrp.burnForAccount(aliceId, 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount_g502.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount_g7029.selector), 0);
         vm.prank(address(game)); wwxrp.burnForAccount(aliceId, 40);
         assertEq(wwxrp.claimable(aliceId), 60);
     }

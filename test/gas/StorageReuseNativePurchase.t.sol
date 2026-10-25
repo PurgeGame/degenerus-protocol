@@ -21,7 +21,7 @@ contract StorageReuseNativePurchaseTest is PurchaseDailyLevelOneSaturated, Nativ
     function _purchaseFixtureDay() internal pure override returns (uint24) { return 21_000; }
 
     function test_nativeLevelOneFiftyShareDraw() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint256 word = game.rngWordForDay(day);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, word, day);

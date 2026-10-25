@@ -13,10 +13,10 @@ contract WwxrpRecyclingGameMock {
     mapping(uint24 => uint256) public rngWordForDay;
     mapping(uint32 => uint256) public playerActivityScore;
     uint24 public level;
-    uint24 public currentDayView;
+    uint24 public currentDayView_g542950;
     uint24 public latestDailyResultDay;
     bool public livenessTriggered;
-    function setDay(uint24 day) external { currentDayView = day; latestDailyResultDay = day; }
+    function setDay(uint24 day) external { currentDayView_g542950 = day; latestDailyResultDay = day; }
     function setWord(uint24 day, uint256 word) external { rngWordForDay[day] = word; }
     function setActivity(address player, uint256 score) external { playerActivityScore[walletIdOf_g3120[player]] = score; }
     mapping(address => uint32) public walletIdOf_g3120;
@@ -25,12 +25,12 @@ contract WwxrpRecyclingGameMock {
         id = walletIdOf_g3120[player];
         require(id != 0, "fixture actor must be registered");
     }
-    function playerActivityScoreCachedById(uint32 id) external view returns (uint256) {
+    function playerActivityScoreCachedById_g975(uint32 id) external view returns (uint256) {
         return playerActivityScore[id];
     }
     function setLevel(uint24 value) external { level = value; }
-    function extsload_g8132(bytes32 slot) external view returns (bytes32) {
-        if (slot == bytes32(0)) return bytes32(uint256(currentDayView) << 24);
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32) {
+        if (slot == bytes32(0)) return bytes32(uint256(currentDayView_g542950) << 24);
         return bytes32(0);
     }
 }

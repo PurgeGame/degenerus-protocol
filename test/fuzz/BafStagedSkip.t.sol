@@ -79,7 +79,7 @@ contract BafStagedSkipTest is BafBracketFixture {
         }
         assertTrue(skipped, "markBafSkippedAt ran in the consolidation transaction");
         assertTrue(settled, "pools settled in the same transaction");
-        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView(), "the skip records the resolution day");
+        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView_g542950(), "the skip records the resolution day");
 
         BafStageHost.WorkView memory w = host.workView();
         assertEq(w.kind, 0, "no award record armed");

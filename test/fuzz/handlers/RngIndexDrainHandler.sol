@@ -229,7 +229,7 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         // Small paid buys keep this campaign below the genesis prize target and
         // avoid unrelated level transitions; quantity remains fuzzed, including dust.
         qty = bound(qty, 100, 2000);
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = priceWei * qty / 400;
         vm.prank(actor);
         try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}

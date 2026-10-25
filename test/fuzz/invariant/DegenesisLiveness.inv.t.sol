@@ -69,7 +69,7 @@ contract DegenesisLiveness is DegenesisDeployProtocol {
         if (!handler.finishSettled() || handler.finishLevel() == 0 || !handler.finishLeftSale()) {
             console.log("=== COMPLETION FAILURE ===");
             console.log("trace", handler.trace());
-            console.log("day", uint256(game.currentDayView()));
+            console.log("day", uint256(game.currentDayView_g542950()));
             console.log("level", uint256(game.level()));
             console.log("gameOver", game.gameOver());
             console.log("closed", uint256(uint8(uint256(vm.load(address(game), bytes32(0))) >> 216)));

@@ -41,7 +41,7 @@ contract GameRingsHarness is DegenerusGameStorage {
     function owed(uint24 lvl, uint32 id) external view returns (uint256) { return _farFutureLane(lvl, id) & 0x3fffffff; }
     function sub(uint32 id, uint256 value) external { _setSubMetaLane(id, value); }
     function sub(uint32 id) external view returns (uint256) { return _subMetaLane(id); }
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 }

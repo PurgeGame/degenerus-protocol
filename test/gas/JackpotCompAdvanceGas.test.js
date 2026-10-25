@@ -185,7 +185,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   expect(await game.rngLocked(), "bounded setup must reach a real request").to.equal(true);
   const requestId = await getLastVRFRequestId(mockVRF);
   expect(requestId).to.be.gt(oldRequest);
-  const requestDay = await game.currentDayView();
+  const requestDay = await game.currentDayView_g542950();
   const locked = await battle.jackpotProgress();
   const baseline = recordedPool * 1000n / (ethers.parseEther("0.01") * 200n);
   const price = await lens.jackpotEntryPriceOf(locked.slot);

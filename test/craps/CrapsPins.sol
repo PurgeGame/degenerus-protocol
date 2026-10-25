@@ -87,6 +87,8 @@ contract MockGame {
             walletIdOf_g3120[owner] = id;
             ownerOfId[id] = owner;
             slots[GameSlotKeys.walletElement(id)] = bytes32(uint256(uint160(owner)));
+            // Mirror the Game's address-to-ID word, which the table reads through extsload.
+            slots[GameSlotKeys.walletId(owner)] = bytes32(uint256(id));
         }
     }
 
@@ -114,7 +116,7 @@ contract MockGame {
 
     /// @dev The Game's account resolution: key, payee (the owner's key for a smurf) and whether
     ///      `caller` is the payee or an operator approved for `id`. Reverts `E` for 0 or unallocated.
-    function resolveAccount_g502(uint32 id, address caller)
+    function resolveAccount_g7029(uint32 id, address caller)
         external
         view
         returns (address key, address payee, bool authorized)
@@ -129,15 +131,15 @@ contract MockGame {
 
     /// @dev Ordinary-operation table double: each advanced fixture reset represents one
     ///      served request. Production pause/delay behavior is exercised against the real Game.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32) {
         uint256 value = uint256(slots[slot]);
         uint24 day = GameTimeLib.currentDayIndex();
         if (slot == bytes32(0)) value = (value & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24);
         if (slot == bytes32(uint256(5))) value = (value & ~(uint256(0xffffff) << 216)) | (uint256(day) << 216);
         return bytes32(value);
     }
-    function currentDayView() external view returns (uint24) { return GameTimeLib.currentDayIndex(); }
-    function dailyScheduleOpen() external view returns (bool) {
+    function currentDayView_g542950() external view returns (uint24) { return GameTimeLib.currentDayIndex(); }
+    function dailyScheduleOpen_g214() external view returns (bool) {
         return uint256(slots[bytes32(0)]) & (uint256(1) << 253) == 0;
     }
 

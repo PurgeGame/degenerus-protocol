@@ -136,21 +136,21 @@ contract AccountRuleGame is DeployProtocol {
 
     function test_ResolveAccount_ZeroAndUnallocatedRevertE() public {
         vm.expectRevert(E.selector);
-        game.resolveAccount_g502(0, owner);
+        game.resolveAccount_g7029(0, owner);
         uint32 next = uint32(_walletsLength());
         vm.expectRevert(E.selector);
-        game.resolveAccount_g502(next, owner);
+        game.resolveAccount_g7029(next, owner);
     }
 
     function test_ResolveAccount_KeyAsCaller() public view {
-        (address key, address payee, bool ok) = game.resolveAccount_g502(ownerId, owner);
+        (address key, address payee, bool ok) = game.resolveAccount_g7029(ownerId, owner);
         assertEq(key, owner);
         assertEq(payee, owner);
         assertTrue(ok);
     }
 
     function test_ResolveAccount_SmurfOwner() public view {
-        (address key, address payee, bool ok) = game.resolveAccount_g502(smurfId, owner);
+        (address key, address payee, bool ok) = game.resolveAccount_g7029(smurfId, owner);
         assertEq(key, address(0));
         assertEq(payee, owner);
         assertTrue(ok);
@@ -158,7 +158,7 @@ contract AccountRuleGame is DeployProtocol {
 
     function test_ResolveAccount_OperatorOnSmurf_PayeeIsOwner() public {
         _approve(owner, smurfId, operator);
-        (address key, address payee, bool ok) = game.resolveAccount_g502(smurfId, operator);
+        (address key, address payee, bool ok) = game.resolveAccount_g7029(smurfId, operator);
         assertEq(key, address(0));
         assertEq(payee, owner, "an operator acts for the smurf, value still goes to the owner");
         assertTrue(ok);
@@ -166,8 +166,8 @@ contract AccountRuleGame is DeployProtocol {
 
     function test_ResolveAccount_OwnerIdOperatorNotForSmurf() public {
         _approve(owner, 0, operator); // approved on the OWNER's ID
-        (, , bool onOwner) = game.resolveAccount_g502(ownerId, operator);
-        (address key, address payee, bool onSmurf) = game.resolveAccount_g502(smurfId, operator);
+        (, , bool onOwner) = game.resolveAccount_g7029(ownerId, operator);
+        (address key, address payee, bool onSmurf) = game.resolveAccount_g7029(smurfId, operator);
         assertTrue(onOwner, "authorized for the owner's account");
         assertFalse(onSmurf, "not for the smurf: approvals are per account ID");
         assertEq(key, address(0));
@@ -175,9 +175,9 @@ contract AccountRuleGame is DeployProtocol {
     }
 
     function test_ResolveAccount_StrangerFalseNoRevert() public view {
-        (address k1, address p1, bool ok1) = game.resolveAccount_g502(ownerId, stranger);
-        (address k2, address p2, bool ok2) = game.resolveAccount_g502(smurfId, stranger);
-        (, , bool ok3) = game.resolveAccount_g502(smurfId, wallet);
+        (address k1, address p1, bool ok1) = game.resolveAccount_g7029(ownerId, stranger);
+        (address k2, address p2, bool ok2) = game.resolveAccount_g7029(smurfId, stranger);
+        (, , bool ok3) = game.resolveAccount_g7029(smurfId, wallet);
         assertEq(k1, owner);
         assertEq(p1, owner);
         assertFalse(ok1);
@@ -202,14 +202,14 @@ contract AccountRuleGame is DeployProtocol {
         emit OperatorApproval(ownerId, operator, true);
         _approve(owner, 0, operator);
         assertEq(uint256(vm.load(address(game), _approvalSlot(ownerId, operator))), 1, "operatorApprovals[ownId][op]");
-        (, , bool ok) = game.resolveAccount_g502(ownerId, operator);
+        (, , bool ok) = game.resolveAccount_g7029(ownerId, operator);
         assertTrue(ok);
 
         vm.expectEmit(true, true, false, true, address(game));
         emit OperatorApproval(ownerId, operator, false);
         vm.prank(owner);
         game.setOperatorApproval(0, operator, false);
-        (, , ok) = game.resolveAccount_g502(ownerId, operator);
+        (, , ok) = game.resolveAccount_g7029(ownerId, operator);
         assertFalse(ok, "revoked");
     }
 
@@ -219,13 +219,13 @@ contract AccountRuleGame is DeployProtocol {
         _approve(owner, smurfId, operator);
         assertEq(uint256(vm.load(address(game), _approvalSlot(smurfId, operator))), 1, "stored under the smurf ID");
         assertEq(uint256(vm.load(address(game), _approvalSlot(ownerId, operator))), 0, "not under the owner's");
-        (, address payee, bool ok) = game.resolveAccount_g502(smurfId, operator);
+        (, address payee, bool ok) = game.resolveAccount_g7029(smurfId, operator);
         assertTrue(ok);
         assertEq(payee, owner);
 
         vm.prank(owner);
         game.setOperatorApproval(smurfId, operator, false);
-        (, , ok) = game.resolveAccount_g502(smurfId, operator);
+        (, , ok) = game.resolveAccount_g7029(smurfId, operator);
         assertFalse(ok);
     }
 
@@ -488,7 +488,7 @@ contract AccountRuleGame is DeployProtocol {
         game.subscribe(0, true, 1, seat);
         (uint256 lane, uint256 position1) = _lane(walletId);
         assertGt(position1, 0, "the run is live");
-        assertEq((lane >> 46) & 0x3fffff, game.currentDayView(), "checkpointed on the signup day");
+        assertEq((lane >> 46) & 0x3fffff, game.currentDayView_g542950(), "checkpointed on the signup day");
         assertEq(_fixtureAfking(wallet), 1 ether, "no purchase at signup");
         assertEq(afkingSubToken.balanceOf(wallet), 0, "the seat burned");
     }
@@ -593,7 +593,7 @@ contract AccountRuleGame is DeployProtocol {
         uint32[] memory ids = new uint32[](1);
         uint24[] memory dayList = new uint24[](1);
         uint8[] memory idx = new uint8[](1);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         dayList[0] = day;
         vm.expectCall(
             address(game),

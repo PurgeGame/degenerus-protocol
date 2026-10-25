@@ -43,7 +43,7 @@ contract AccountIdOnlyTest is DeployProtocol {
             uint256 element = uint256(vm.load(address(game), bytes32(base + id)));
             assertEq(uint160(element), 0);
             assertEq(uint32(element >> 160), ownerId);
-            (address key, address payee, bool authorized) = game.resolveAccount_g502(id, owner);
+            (address key, address payee, bool authorized) = game.resolveAccount_g7029(id, owner);
             assertEq(key, address(0));
             assertEq(payee, owner);
             assertTrue(authorized);

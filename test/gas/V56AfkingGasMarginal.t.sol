@@ -235,23 +235,23 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address[] memory subs = _setupFundedSubs(N_HI, "logical_resume_", 5 ether, false);
         _settleClean(uint256(keccak256("logical_resume_clean")) | 1);
         _finishReadConsumers();
-        uint24 previous = game.currentDayView();
+        uint24 previous = game.currentDayView_g542950();
         uint24 oldWall = game.currentWallDayView();
         uint32 purchaseBaseline = _purchaseStartDay();
         (bool complete,, uint48 completedAt) = game.dailySessionState();
         assertTrue(complete, "stall begins after final daily completion");
 
         vm.warp(vm.getBlockTimestamp() + STALL_DAYS * 1 days);
-        assertEq(game.currentDayView(), previous, "calendar stalls cannot create logical rounds");
+        assertEq(game.currentDayView_g542950(), previous, "calendar stalls cannot create logical rounds");
         assertEq(game.currentWallDayView(), oldWall + STALL_DAYS);
         assertFalse(game.livenessTriggered(), "eight days remain inside the hard timeout");
         uint256 peak;
-        for (uint256 i; i < 500 && game.currentDayView() == previous; ++i) {
+        for (uint256 i; i < 500 && game.currentDayView_g542950() == previous; ++i) {
             uint256 used = _logicalResumeStep();
             if (used > peak) peak = used;
         }
         uint24 requested = previous + 1;
-        assertEq(game.currentDayView(), requested, "resume accepts exactly the next round");
+        assertEq(game.currentDayView_g542950(), requested, "resume accepts exactly the next round");
         assertTrue(_subsFullyProcessed(), "all subscribers are stamped before requesting");
         assertTrue(game.rngLocked());
         uint48 atRequest;
@@ -268,7 +268,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             if (complete) break;
             uint256 used = _logicalResumeStep();
             if (used > peak) peak = used;
-            assertEq(game.currentDayView(), requested, "all consumers use the one requested round");
+            assertEq(game.currentDayView_g542950(), requested, "all consumers use the one requested round");
         }
         (complete,,) = game.dailySessionState();
         assertTrue(complete, "the full normal chain finishes at bounded checkpoints");
@@ -1052,10 +1052,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev The simulated day index the next advance stamps with — read in-context via the game's view
-    ///      (`currentDayView()` == `_wallDayAt(block.timestamp)`, the exact `processDay` the STAGE
+    ///      (`currentDayView_g542950()` == `_wallDayAt(block.timestamp)`, the exact `processDay` the STAGE
     ///      stamps with, AdvanceModule:169). Used to align the warp onto a settle boundary.
     function _logicalDay() internal view returns (uint32) {
-        return game.currentDayView();
+        return game.currentDayView_g542950();
     }
 
     /// @dev Minimal uint -> decimal string for makeAddr label uniqueness.

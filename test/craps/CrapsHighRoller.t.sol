@@ -47,7 +47,7 @@ contract HighHarness is CrapsViews {
     ///      the arithmetic rather than restate it needs it on its own.
     function baseRunOf(uint256 betId) external view returns (uint256 won, uint256 paid) {
         Settlement memory s =
-            _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+            _fullSettlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
         return (s.won, s.paid);
     }
 }

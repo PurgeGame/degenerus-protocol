@@ -75,7 +75,7 @@ contract LootboxTierSizes is DeployProtocol {
     }
 
     function _driveDailyCycleOnce() internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
@@ -126,7 +126,7 @@ contract LootboxTierSizes is DeployProtocol {
     ///         custom its exact units; the charged wei is quantity times that value.
     function test_kindsStoreOneFiveTwentyFivePricesPerBox() public {
         _driveDailyCycleOnce();
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint48 N = _idx();
         uint256[4] memory orders =
             [BoxOrderLib.boSmalls(2), BoxOrderLib.boMeds(2), BoxOrderLib.boLarges(2), BoxOrderLib.boCustoms(2, 1.234 ether)];
@@ -181,7 +181,7 @@ contract LootboxTierSizes is DeployProtocol {
     function test_singleTierOrdersOpenAtTheirMultiples() public {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: a fresh day");
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint48 N = _idx();
 
         address[3] memory who = [makeAddr("smalls"), makeAddr("mediums"), makeAddr("larges")];

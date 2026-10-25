@@ -123,7 +123,7 @@ abstract contract LoanSeizureGasBase is DeployProtocol, NativeGasExport {
     }
 
     function _etch() internal { vm.etch(address(game), seeder.code); }
-    function _unetch() internal { vm.etch(address(game), gameRuntime); _syncCoinflipFixtureDay(game.currentDayView()); }
+    function _unetch() internal { vm.etch(address(game), gameRuntime); _syncCoinflipFixtureDay(game.currentDayView_g542950()); }
 
     function _sub(uint32 id) internal {
         uint256 seat = _grantSeat(borrower);
@@ -148,7 +148,7 @@ abstract contract LoanSeizureGasBase is DeployProtocol, NativeGasExport {
         }
         _unetch();
         emit log_named_uint(label, used);
-        (, address payee, ) = game.resolveAccount_g502(root, address(0));
+        (, address payee, ) = game.resolveAccount_g7029(root, address(0));
         assertEq(payee, expectedPayee, expectedPayee == borrower ? "auto-repaid" : "seized");
         uint256 bound = MineFlipGasBounds.LOAN_SEIZE_BASE + family * MineFlipGasBounds.LOAN_SEIZE_SUB
             + MineFlipGasBounds.LOAN_SEIZE_DEITY + MineFlipGasBounds.LOAN_SEIZE_TAIL;
@@ -229,7 +229,7 @@ contract LoanTerminalGasWorst is LoanTerminalGasBase {
 
     function test_Gas_TerminalWorstFamilyAndFullScan() public {
         uint256 used = _measureTerminal("terminal_worst_family_and_99_level_scan_cold");
-        (, address payee, ) = game.resolveAccount_g502(root, address(0));
+        (, address payee, ) = game.resolveAccount_g7029(root, address(0));
         assertEq(payee, address(sdgnrs), "seized");
         uint256 bound = MineFlipGasBounds.LOAN_SEIZE_BASE + family * MineFlipGasBounds.LOAN_SEIZE_SUB
             + MineFlipGasBounds.LOAN_SEIZE_DEITY + 99 * MineFlipGasBounds.LOAN_TERMINAL_LEVEL

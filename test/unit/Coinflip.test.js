@@ -66,7 +66,7 @@ async function deposit(coinflip, player, amount) {
  */
 async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonus = 0) {
   const gameAddr = await game.getAddress();
-  if (BigInt(epoch) > (await game.currentDayView())) {
+  if (BigInt(epoch) > (await game.currentDayView_g542950())) {
     await setPackedField(game, "dailyIdx", epoch);
     await setPackedField(coinflip, "requestedDailyIdx", epoch, "Coinflip");
   }
@@ -90,7 +90,7 @@ async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonus = 0) 
  * and no claimable accrues to perturb the caller's assertions.
  */
 async function applyToday(hreEthers, game, coinflip) {
-  const day = await game.currentDayView();
+  const day = await game.currentDayView_g542950();
   return resolveDay(hreEthers, game, coinflip, day, 2n);
 }
 
@@ -162,7 +162,7 @@ describe("Coinflip", function () {
       );
       const vaultAddr = await vault.getAddress();
       await giveFlip(coin, alice, flip(500), await coinflip.getAddress());
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       const tx = await deposit(coinflip, alice, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipStakeUpdated");
       // Target day is currentDay + 1
@@ -632,7 +632,7 @@ describe("Coinflip", function () {
       await giveFlip(coin, alice, flip(2000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(1000));
 
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       const epoch = currentDay + 1n;
 
       // Win (odd rngWord)
@@ -945,7 +945,7 @@ describe("Coinflip", function () {
       // that hold a carry: arming is always open, because there is no carry to front-run yet.
       const { coinflip, game, alice } = await loadFixture(deployFullProtocol);
       // The deploy day opens with the previous flip day settled, as the daily engine leaves it.
-      await resolveDay(hre.ethers, game, coinflip, (await game.currentDayView()) - 1n, 2n);
+      await resolveDay(hre.ethers, game, coinflip, (await game.currentDayView_g542950()) - 1n, 2n);
       expect(await game.rngLocked()).to.equal(false);
       expect(await coinflip.flipResolvedToday()).to.equal(false);
 
@@ -1028,7 +1028,7 @@ describe("Coinflip", function () {
       await giveFlip(coin, alice, flip(1000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(500));
 
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       await resolveDay(hre.ethers, game, coinflip, currentDay + 1n, 1n);
 
       const [day, totalWeight, entryCount] = await coinflip.bafDrawInfo();
@@ -1086,7 +1086,7 @@ describe("Coinflip", function () {
       await giveFlip(coin, alice, flip(2000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(1000));
 
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       const epoch = currentDay + 1n;
 
       // Win: odd rngWord => win=true
@@ -1109,7 +1109,7 @@ describe("Coinflip", function () {
       await giveFlip(coin, alice, flip(2000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(1000));
 
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       const epoch = currentDay + 1n;
 
       // Loss: even rngWord => win=false
@@ -1138,7 +1138,7 @@ describe("Coinflip", function () {
       // First deposit
       await deposit(coinflip, alice, flip(1000));
 
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       // Resolve day 1 as win
       await resolveDay(hre.ethers, game, coinflip, currentDay + 1n, 1n);
 

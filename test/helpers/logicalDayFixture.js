@@ -49,15 +49,15 @@ export async function seedLogicalDay(game, day, coinflip) {
 
 /** Request and fulfill the next real logical round, including any prior midday work. */
 export async function requestLogicalDay(game, signer, vrf, word) {
-  const previous = await game.currentDayView();
+  const previous = await game.currentDayView_g542950();
   await hre.ethers.provider.send("evm_increaseTime", [86400]);
   await hre.ethers.provider.send("evm_mine");
-  for (let i = 0; i < 300 && (await game.currentDayView()) === previous; ++i) {
+  for (let i = 0; i < 300 && (await game.currentDayView_g542950()) === previous; ++i) {
     const pending = await vrf.lastRequestId();
     if (pending && !(await vrf.pendingRequests(pending))[2]) await vrf.fulfillRandomWords(pending, 777n);
     await game.connect(signer).mineFlip(0xffffffff, { gasLimit: 16_777_216 });
   }
-  if ((await game.currentDayView()) !== previous + 1n || !(await game.rngLocked()))
+  if ((await game.currentDayView_g542950()) !== previous + 1n || !(await game.rngLocked()))
     throw new Error("next logical request did not commit");
   const id = await vrf.lastRequestId();
   await vrf.fulfillRandomWords(id, word);

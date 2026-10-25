@@ -43,7 +43,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         uint256 reqR = _requestFreshDaily();
         _t += 3 days;
         vm.warp(_t);
-        uint24 W = game.currentDayView();
+        uint24 W = game.currentDayView_g542950();
 
         // Stalled with the word outstanding: arming frozen, and the armed position frozen.
         vm.prank(player);
@@ -107,7 +107,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
     ///      delivered mid-day request still waits for its word.
     function _daySealed() internal view returns (bool) {
         uint24 sealedDay = uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
-        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked()
+        return game.currentDayView_g542950() == sealedDay && !game.advanceDue() && !game.rngLocked()
             && !_requestOutstanding();
     }
 

@@ -222,7 +222,7 @@ contract TurboBafTicketFloor is DeployProtocol {
 
     /// @dev Turbo-chain levels 1-9 (same seeding as above), stopping ON the day the
     ///      level-10 evening latch fires: lastPurchaseDay with the tier-2 flag, the
-    ///      phase not yet entered — the x0 last-purchase window. purchaseInfo's lvl
+    ///      phase not yet entered — the x0 last-purchase window. purchaseInfo_g1027's lvl
     ///      runs one behind the level being sold, so the latch day reads lvl == 9.
     function _driveToLevelTenLatchDay() internal {
         _settleToday();
@@ -231,7 +231,7 @@ contract TurboBafTicketFloor is DeployProtocol {
                 !game.gameOver(),
                 "harness: gameOver before the level-10 latch"
             );
-            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo_g1027();
             if (lastPurchaseDay_ && lvl == 9) {
                 require(
                     _jackpotFlags() == 1,
@@ -259,7 +259,7 @@ contract TurboBafTicketFloor is DeployProtocol {
             require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             if (!_mine()) break;
-            (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo();
+            (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo_g1027();
             if (lastPurchaseDay_ && lvl == 9 && (!locked || (_jackpotFlags() == 1 && _requestInFlight()))) break;
         }
     }
@@ -329,7 +329,7 @@ contract TurboBafTicketFloor is DeployProtocol {
     }
 
     function _buyTicketsFor(address player) internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(player);
         game.purchase{value: (priceWei * 4000) / 400}(

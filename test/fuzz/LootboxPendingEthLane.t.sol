@@ -45,7 +45,7 @@ contract LootboxPendingEthLane is DeployProtocol {
     }
 
     function test_boxOrderCostLandsInThePendingEthLane() public {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         (uint48 idx0, uint64 pend0, uint64 thr0, uint40 flip0) = _lanes();
 
         // Two 0.25 ETH customs: cost is the order's nominal.

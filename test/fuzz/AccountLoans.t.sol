@@ -140,7 +140,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function _payee(uint32 id) private view returns (address payee) {
-        (, payee, ) = game.resolveAccount_g502(id, address(0));
+        (, payee, ) = game.resolveAccount_g7029(id, address(0));
     }
 
     function _pool() private view returns (uint256) {
@@ -873,7 +873,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint32 replacement = _giveWalletId(seller);
         assertTrue(replacement != root);
         assertEq(lens.smurfCreationInfo(address(game), replacement).createdLifetime, 0);
-        assertEq(game.walletIdentityOf(seller), root);
+        assertEq(game.walletIdentityOf_g8516(seller), root);
     }
 
     function testFuzz_LaterAwardsRemainCollectibleByAuthorizedCaller(bool vaultLender) public {
@@ -1037,7 +1037,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(_payee(child), address(sdgnrs));
         assertEq(vm.load(address(game), bytes32(table + child)), childElement);
         assertEq(game.walletIdOf_g3120(seller), 0);
-        (, , bool authorized) = game.resolveAccount_g502(child, seller);
+        (, , bool authorized) = game.resolveAccount_g7029(child, seller);
         assertFalse(authorized);
     }
 
@@ -1072,7 +1072,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         game.setOperatorApproval(child, operator, true);
         vm.stopPrank();
         _default(root);
-        (, , bool allowed) = game.resolveAccount_g502(child, operator);
+        (, , bool allowed) = game.resolveAccount_g7029(child, operator);
         assertFalse(allowed);
     }
 
@@ -1130,7 +1130,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _default(root);
         uint32 replacement = _giveWalletId(seller);
         assertNotEq(replacement, root);
-        assertEq(game.walletIdentityOf(seller), root);
+        assertEq(game.walletIdentityOf_g8516(seller), root);
         assertTrue(gnrus.hasVoted(lvl, seller, 3));
         (address owner, uint32 codeId, ) = affiliate.affiliateCode(bytes32(uint256(uint160(seller))));
         assertEq(owner, address(sdgnrs)); assertEq(codeId, root);

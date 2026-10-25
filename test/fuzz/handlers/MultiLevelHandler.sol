@@ -91,7 +91,7 @@ contract MultiLevelHandler is Test {
             vm.warp(t);
             ++openingDays;
 
-            (, , , bool locked, uint256 priceWei) = game.purchaseInfo();
+            (, , , bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked && !game.gameOver()) {
                 uint256 cost = priceWei * 10 + OPENING_BOX;
                 vm.prank(driver);
@@ -132,7 +132,7 @@ contract MultiLevelHandler is Test {
 
         qty = bound(qty, 1000, 4000);
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0 || cost > currentActor.balance) return;
 
@@ -176,7 +176,7 @@ contract MultiLevelHandler is Test {
 
         qty = bound(qty, 100, 1000);
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0 || cost > currentActor.balance) return;
 

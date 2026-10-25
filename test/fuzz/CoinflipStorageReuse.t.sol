@@ -46,7 +46,7 @@ contract CoinflipStorageReuseTest is Test {
         r = new CoinflipReuseHarness();
         oracle = new CoinflipReuseReference();
         oracle.setSeedWindow(2, 21); // twenty requested flips; bootstrap index 1 has no word
-        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("purchaseInfo()"), abi.encode(uint24(4), false, false, false, uint256(0)));
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("purchaseInfo_g1027()"), abi.encode(uint24(4), false, false, false, uint256(0)));
         vm.mockCall(ContractAddresses.JACKPOTS, abi.encodeWithSignature("getLastBafResolvedDay()"), abi.encode(uint24(0)));
         vm.mockCall(ContractAddresses.JACKPOTS, abi.encodeWithSignature("recordBafFlip(uint32,uint24,uint256)"), hex"");
         vm.mockCall(ContractAddresses.WWXRP, abi.encodeWithSignature("creditPrize(uint32,uint256)"), hex"");

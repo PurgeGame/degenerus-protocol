@@ -157,7 +157,7 @@ contract VRFPathHandler is Test {
         qty = bound(qty, 100, 4000);
         lootboxAmt = bound(lootboxAmt, 0, 2 ether);
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * qty) / 400;
         uint256 totalCost = ticketCost + lootboxAmt;
 
@@ -277,7 +277,7 @@ contract VRFPathHandler is Test {
 
         if (game.gameOver()) return;
 
-        ghost_dayBeforeSwap = game.currentDayView();
+        ghost_dayBeforeSwap = game.currentDayView_g542950();
         bool lockedBefore = game.rngLocked();
         uint48 indexBefore = _lootboxRngIndex();
 

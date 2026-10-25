@@ -134,7 +134,7 @@ async function readDailyHeroWagersSlots(addr, D, baseSlot) {
   let key = (meta >> 38n) & 1n;
   const out = [0n, 0n, 0n, 0n];
   if (day + 1n === (meta & 0xffffffn)) key ^= 1n;
-  else if (day !== await game.currentDayView()) return out;
+  else if (day !== await game.currentDayView_g542950()) return out;
   for (let q = 0; q < 3; ++q) {
     if ((meta & (1n << (24n + key * 3n + BigInt(q)))) !== 0n) {
       out[q] = BigInt(await hre.ethers.provider.getStorage(addr, derivedailyHeroWagersSlot(key, q, baseSlot)));
@@ -202,7 +202,7 @@ async function seedDailyHeroWagersDirect(addr, D, baseSlot, rawAmounts) {
   const metaSlot = await deriveDailyHeroWagersBaseSlot("lootboxRngPacked");
   const meta = BigInt(await hre.ethers.provider.getStorage(addr, metaSlot));
   const game = await hre.ethers.getContractAt("DegenerusGame", addr);
-  expect(await game.currentDayView(), "seed belongs to the accumulating logical day").to.equal(day);
+  expect(await game.currentDayView_g542950(), "seed belongs to the accumulating logical day").to.equal(day);
   const key = (meta >> 38n) & 1n;
   for (let q = 0; q < 3; ++q) {
     await hre.network.provider.send("hardhat_setStorageAt", [
@@ -581,7 +581,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           await advanceToNextDay();
           for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0, { gasLimit: 16_777_216 });
           expect(await game.rngLocked(), "daily request seals the hero pool").to.equal(true);
-          const requestedDayAfter = Number(await game.currentDayView());
+          const requestedDayAfter = Number(await game.currentDayView_g542950());
           expect(
             requestedDayAfter,
             `requested logical day must advance from D=${dayD} to D+1=${dayD + 1}`
@@ -1044,7 +1044,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             await seedDailyHeroWagersDirect(gameAddr, committedHeroDay, baseSlot, raw);
             const capturedSlots = await readDailyHeroWagersSlots(gameAddr, committedHeroDay, baseSlot);
             await pinDailyEntropy(game, deployer, mockVRF, entropy);
-            expect(await game.currentDayView(), "request advances beyond its sealed hero pool")
+            expect(await game.currentDayView_g542950(), "request advances beyond its sealed hero pool")
               .to.equal(BigInt(committedHeroDay + 1));
             expect(await readDailyHeroWagersSlots(gameAddr, committedHeroDay, baseSlot),
               "request preserves the committed hero weights").to.deep.equal(capturedSlots);

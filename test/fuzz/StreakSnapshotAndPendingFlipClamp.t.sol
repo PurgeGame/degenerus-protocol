@@ -15,7 +15,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   1. A manual quest streak carried into an afking run is snapshotted EXACTLY into the lane's 16-bit
 ///      checkpoint streak, including values above 255; the live streak is the checkpoint streak plus the
 ///      days from the checkpoint to the endpoint, and the finalize hands back exactly that.
-///   2. The checkpoint streak SATURATES at `type(uint16).max`: a live `recordAfkingSecondary` bump and a
+///   2. The checkpoint streak SATURATES at `type(uint16).max`: a live `recordAfkingSecondary_g3316` bump and a
 ///      settlement that folds elapsed days in never wrap it to a small value. Settlement pays the derived
 ///      reward once, from the elapsed days, and a repeat claim finds nothing.
 ///
@@ -51,7 +51,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     uint256 private constant OFF_QS_SYNCDAY = 6;
     uint256 private constant OFF_QS_STREAK = 9;
 
-    /// @dev recordAfkingSecondary is QUESTS-gated; the live +1 bump is driven by pranking as this caller.
+    /// @dev recordAfkingSecondary_g3316 is QUESTS-gated; the live +1 bump is driven by pranking as this caller.
     address private constant QUESTS_CALLER = ContractAddresses.QUESTS;
 
     /// @dev The checkpoint streak saturates at type(uint16).max.
@@ -97,7 +97,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     /// @notice The checkpoint streak saturates at `type(uint16).max`. Driving it to the ceiling and then
-    ///         exercising the live `recordAfkingSecondary` bump reads 65535 (saturated), never 0 (wrapped).
+    ///         exercising the live `recordAfkingSecondary_g3316` bump reads 65535 (saturated), never 0 (wrapped).
     function test_SecondaryBumpClampSaturatesAtUint16Max() public {
         address p = makeAddr("clamp_p");
         _fundPool(p, 50 ether);
@@ -108,28 +108,28 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         _setCheckpointStreak(p, STREAK_LATCH_CEILING);
         assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "streak pinned at the uint16 ceiling");
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(pId, 1);
+        game.recordAfkingSecondary_g3316(pId, 1);
         assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "+1 at the ceiling stays 65535 (saturates, never wraps to 0)");
 
         _setCheckpointStreak(p, STREAK_LATCH_CEILING - 1);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(pId, 1);
+        game.recordAfkingSecondary_g3316(pId, 1);
         assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "a +1 from one-below reaches exactly the ceiling");
 
         _setCheckpointStreak(p, 255);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(pId, 1);
+        game.recordAfkingSecondary_g3316(pId, 1);
         assertEq(_checkpointStreakOf(p), 256, "a +1 from 255 reads 256 (past the old 8-bit ceiling)");
 
         // amount > 1 (the level-quest path): the full amount is added, then the clamp binds at the ceiling.
         _setCheckpointStreak(p, 250);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(pId, 5);
+        game.recordAfkingSecondary_g3316(pId, 5);
         assertEq(_checkpointStreakOf(p), 255, "a +5 from 250 reaches 255 (full amount applied)");
 
         _setCheckpointStreak(p, STREAK_LATCH_CEILING - 3);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(pId, 5);
+        game.recordAfkingSecondary_g3316(pId, 5);
         assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "a +5 overshooting the ceiling saturates at 65535");
     }
 
@@ -144,7 +144,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         assertEq(before.effectiveStreak, 1, "one credited day on a zero base");
 
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(pId, 1);
+        game.recordAfkingSecondary_g3316(pId, 1);
         DegenerusGameLens.SubFull memory bumped = lens.subInfoFullById(address(game), pId);
         assertEq(bumped.effectiveStreak, 2, "the bump adds to the live streak");
         assertEq(bumped.checkpointDay, before.checkpointDay, "the checkpoint day does not move");
@@ -267,7 +267,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
 
     /// @dev The manual quest streak handed back to `who` after finalize.
     function _manualStreakOf(address who) internal view returns (uint256 streak) {
-        (streak, ) = quests.effectiveBaseStreakAndAfking_g2654(game.walletIdOf_g3120(who));
+        (streak, ) = quests.effectiveBaseStreakAndAfking_g1521(game.walletIdOf_g3120(who), _fixtureGameDay());
     }
 
     /// @dev Drive `player`'s dormant manual quest streak to `q` by writing `questPlayerState[player]` directly:

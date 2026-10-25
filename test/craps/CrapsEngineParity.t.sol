@@ -94,6 +94,28 @@ contract CrapsEngineParity is Test {
         assertEq(keccak256(abi.encode(before)), keccak256(abi.encode(after_)), "compact header changed a run");
     }
 
+    /// @dev The table's compact settlement returns exactly the four words it reads from the full run.
+    function testFuzz_CompactSettlementMatchesFullRun(
+        uint32 owner, uint256 word, uint8 chipsRaw, bool awarded, bool custom, uint16 entrants
+    ) public {
+        owner = uint32(bound(owner, 1, type(uint32).max));
+        // One named leg of up to seven chips, as an admitted board carries.
+        uint256 chips = (uint256(chipsRaw) % 8) << ((word % 10) * 3);
+        uint256 header = owner | (chips << 32) | (uint256(4) << 62) | (uint256(0x7f) << 65);
+        if (awarded) header |= uint256(1) << 72;
+        uint48 slot = custom ? uint48((1 << 40) + 7) : 86;
+        uint256 betId = (uint256(slot) << 64) | 3;
+        uint256 field = (uint256(entrants) << 64) | 3;
+        CrapsEngine engine = new SelectedCrapsEngine();
+        Craps.SlipResult memory full = engine.settleBattle(betId, header, 30, 1500, 7500, slot, field, word);
+        (uint256 paid, uint256 won, uint256 rank, uint256 hottest) =
+            engine.settleBattleCompact_g439244(betId, header, 30, 1500, 7500, slot, field, word);
+        assertEq(paid, full.bankrollIn, "paid");
+        assertEq(won, full.bankrollOut, "won");
+        assertEq(rank, full.unitsPlayed, "rank");
+        assertEq(hottest, full.hottestHand, "hottest hand");
+    }
+
     /// forge-config: default.fuzz.runs = 64
     function testFuzz_directRunUsesSharedRollCeiling(bytes32 seed, bool latched) public {
         CrapsEngine e = new SelectedCrapsEngine();

@@ -8,6 +8,7 @@ import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {CrapsPins, MockGame, MockFlip, MockQuests, MockCoinflip} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
+import {GameSlotKeys} from "../helpers/GameSlots.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
@@ -293,7 +294,9 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint24 reserved = c.deliverPasses(id, 1, 0);
         c.creditPasses(id, 21, 0);
         vm.stopPrank();
-        vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet_g9539, (alice, false)), 2);
+        // A registered wallet's ID comes from the Game's wallet word; registration is not entered.
+        vm.expectCall(address(game), abi.encodeCall(MockGame.extsload_g2807007, (GameSlotKeys.walletId(alice))), 2);
+        vm.expectCall(address(game), abi.encodeWithSelector(MockGame.registerWallet_g9539.selector), 0);
         vm.prank(alice);
         c.convertNormalToHigh(0, 1);
         uint256 w = c.idWord(id);

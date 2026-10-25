@@ -60,7 +60,7 @@ abstract contract VaultBafRig is DeployProtocol {
     // Driver (shape of BafDrawArming / TurboBafTicketFloor)
     // ---------------------------------------------------------------------
 
-    /// @dev Whole days until the latch whose purchaseInfo level is `lvlBefore` fires, then rewinds
+    /// @dev Whole days until the latch whose purchaseInfo_g1027 level is `lvlBefore` fires, then rewinds
     ///      to the close of the day before the latch day. Each day is staged identically on the
     ///      replay, so the latch reproduces.
     function _driveToEve(uint24 lvlBefore) internal {
@@ -70,7 +70,7 @@ abstract contract VaultBafRig is DeployProtocol {
             uint256 snap = vm.snapshotState();
             _stageDay();
             _runFullDay();
-            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo_g1027();
             if (lastPurchaseDay_ && lvl == lvlBefore) {
                 vm.revertToState(snap);
                 return;
@@ -85,7 +85,7 @@ abstract contract VaultBafRig is DeployProtocol {
         vm.prank(address(game));
         coinflip.creditFlip_g317(1, VAULT_CREDIT);
         if (!game.jackpotPhase()) {
-            (uint24 lvl, , , , ) = game.purchaseInfo();
+            (uint24 lvl, , , , ) = game.purchaseInfo_g1027();
             if (lvl != heldLevel) (heldLevel, heldDays) = (lvl, 0);
             if (heldDays < _holdFor(lvl)) {
                 // Hold the pool under target so the day seals without latching.
@@ -98,7 +98,7 @@ abstract contract VaultBafRig is DeployProtocol {
             }
         }
         // Tomorrow's lane is final once today's actions are in (purchases credit the vault too).
-        if (mirrorDaily) _mirrorLane(game.currentDayView() + 1);
+        if (mirrorDaily) _mirrorLane(game.currentDayView_g542950() + 1);
     }
 
     function _holdFor(uint24 lvl) internal view virtual returns (uint256) {
@@ -106,7 +106,7 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _assertLatched(uint24 lvlBefore, uint24 latchDay) internal view {
-        (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+        (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo_g1027();
         require(lastPurchaseDay_ && lvl == lvlBefore, "harness: the replayed day must latch");
         (uint24 armed, , ) = coinflip.bafDrawInfo();
         require(armed == latchDay + 1, "harness: the latch arms the next day");
@@ -154,7 +154,7 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _buyTickets() internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
@@ -313,7 +313,7 @@ contract VaultBafSettlement is VaultBafRig {
     function testVaultMatchesLastMomentClaimerAcrossTwoBrackets() public {
         vm.pauseGasMetering();
         _driveToEve(9);
-        uint24 latchDay = game.currentDayView() + 1;
+        uint24 latchDay = game.currentDayView_g542950() + 1;
         uint24 bafDay = latchDay + 1;
 
         _stageDay();
@@ -364,7 +364,7 @@ contract VaultBafSettlement is VaultBafRig {
         // final (staged on the eve of that day), ahead of any intermediate vault settlement.
         mirrorDaily = true;
         _driveToEve(19);
-        uint24 latch2 = game.currentDayView() + 1;
+        uint24 latch2 = game.currentDayView_g542950() + 1;
         _stageDay();
         _runFullDay();
         _assertLatched(19, latch2);
@@ -386,7 +386,7 @@ contract VaultBafSettlement is VaultBafRig {
         holdLevel = 9;
         holdDays = 3;
         _driveToEve(9);
-        uint24 latchDay = game.currentDayView() + 1;
+        uint24 latchDay = game.currentDayView_g542950() + 1;
 
         _stageDay();
         _mirrorVault(latchDay);
@@ -424,7 +424,7 @@ contract VaultBafSettlement is VaultBafRig {
     function testLatchDayWinCountsAfterItsResolution() public {
         vm.pauseGasMetering();
         _driveToEve(9);
-        uint24 latchDay = game.currentDayView() + 1;
+        uint24 latchDay = game.currentDayView_g542950() + 1;
 
         // Settle everything before the latch day, so the latch day's stake is the vault's only
         // unsettled flip; then stake it.
@@ -462,7 +462,7 @@ contract VaultBafSettlement is VaultBafRig {
     function testSkippedBafFindsTheVaultSettled() public {
         vm.pauseGasMetering();
         _driveToEve(9);
-        uint24 latchDay = game.currentDayView() + 1;
+        uint24 latchDay = game.currentDayView_g542950() + 1;
         _stageDay();
         assertLt(_lastClaim(VAULT), latchDay, "harness: the vault holds unsettled days into the latch");
         _runFullDay();

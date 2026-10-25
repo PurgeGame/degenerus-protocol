@@ -590,7 +590,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         positions = 2 * rounds + 3;
         CenturyConsolidationSeeder(payable(address(game))).seedRounds(word, s.nextPool, s.futurePool, rounds);
         vm.etch(address(game), original);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         // Total obligations + 100 ETH of actual surplus. Nonzero stETH forces the
         // mock's full shares-based balanceOf path rather than its empty fast path.
         vm.deal(address(game), uint256(s.nextPool) + s.futurePool + 68.25 ether + uint256(s.nextPool) / 400);
@@ -693,7 +693,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         vm.etch(address(game), type(ProtocolBoonDrawSeeder).runtimeCode);
         ProtocolBoonDrawSeeder(address(game)).seedPools(day, word);
         vm.etch(address(game), original);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
     }
 
     /// @dev The real miner composes every admitted checkpoint into a call, so a whole call is not

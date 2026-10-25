@@ -124,12 +124,12 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
     }
 
     /// @dev A partial (non-completing) quest action: 1-wei FLIP credit, far below the FLIP target.
-    ///      Drives the real `handleFlip` entrypoint, so `_questSyncState` runs exactly as it does
+    ///      Drives the real `handleFlip_g217` entrypoint, so `_questSyncState` runs exactly as it does
     ///      for any live below-target flip/decimator/affiliate action.
     function _partialFlip(address player) private {
         uint32 qid3 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (, , , bool completed) = quests.handleFlip(qid3, 1);
+        (, , , bool completed) = quests.handleFlip_g217(qid3, 1, _fixtureGameDay());
         assertFalse(completed, "partial flip must not complete the quest");
     }
 

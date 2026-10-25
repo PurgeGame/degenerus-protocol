@@ -84,7 +84,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
         uint32 id = game.walletIdOf_g3120(HOUSE);
         vm.mockCall(
             address(game),
-            abi.encodeWithSelector(IDegenerusGame.playerActivityScoreCachedById.selector, id),
+            abi.encodeWithSelector(IDegenerusGame.playerActivityScoreCachedById_g975.selector, id),
             abi.encode(uint256(1_000_000))
         );
         vm.mockCall(
@@ -314,7 +314,7 @@ contract ChainPinAfking is DeployProtocol {
         vm.etch(address(game), type(PinReentryGameHarness).runtimeCode);
         PinReentryGameHarness h = PinReentryGameHarness(payable(address(game)));
         h.setStreak(id, start);
-        h.awardViaQuests(id, uint16(amount), game.currentDayView());
+        h.awardViaQuests(id, uint16(amount), game.currentDayView_g542950());
         uint256 sum = start + amount;
         assertEq(h.streakOf(id), sum > 0xffff ? 0xffff : sum, "F-B7: the streak adds and saturates, no revert");
     }
@@ -325,10 +325,10 @@ contract ChainPinAfking is DeployProtocol {
         vm.etch(address(game), type(PinReentryGameHarness).runtimeCode);
         PinReentryGameHarness h = PinReentryGameHarness(payable(address(game)));
         h.setStreak(id, 0xffff);
-        h.awardViaQuests(id, 0xffff, game.currentDayView());
+        h.awardViaQuests(id, 0xffff, game.currentDayView_g542950());
         assertEq(h.streakOf(id), 0xffff);
         vm.prank(address(quests));
-        game.recordAfkingSecondary(id, 0xffff);
+        game.recordAfkingSecondary_g3316(id, 0xffff);
         assertEq(h.streakOf(id), 0xffff);
     }
 
@@ -339,7 +339,7 @@ contract ChainPinAfking is DeployProtocol {
         PinReentryGameHarness h = PinReentryGameHarness(payable(address(game)));
         h.setStreak(id, 7);
         h.markRemoval(id);
-        h.awardViaQuests(id, 50, game.currentDayView());
+        h.awardViaQuests(id, 50, game.currentDayView_g542950());
         assertEq(h.streakOf(id), 7, "a run pending removal ignores the award");
     }
 }

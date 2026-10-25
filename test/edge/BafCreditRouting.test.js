@@ -174,7 +174,7 @@ describe("BafCreditRouting", function () {
 
     // Scan resolved days for the winning flip — coinflipDayResult only has win=true
     // for days where the daily VRF word's bit 0 was 1.
-    const currentDay = Number(await game.currentDayView());
+    const currentDay = Number(await game.currentDayView_g542950());
     for (let d = currentDay; d >= 1; d--) {
       const res = await coinflip.getCoinflipDayResult(d);
       if (res.win) return d;
@@ -207,11 +207,11 @@ describe("BafCreditRouting", function () {
       // Confirm the external view returns the window state. With the OLD predicate
       // (purchaseLevel_ % 10 == 0) this would mis-fire: purchaseLevel_ = level + 1 = 11.
       // With the FIXED predicate (cachedLevel % 10 == 0) the lock fires correctly.
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.inJackpotPhase).to.equal(false);
       expect(info.lastPurchaseDay_).to.equal(true);
       expect(info.rngLocked_).to.equal(true);
-      expect(info.lvl).to.equal(10n); // purchaseInfo.lvl now returns the actual game level (not level+1)
+      expect(info.lvl).to.equal(10n); // purchaseInfo_g1027.lvl now returns the actual game level (not level+1)
       expect(await game.level()).to.equal(10n);
 
       const balBefore = await coin.balanceOf(alice.address);
@@ -565,7 +565,7 @@ describe("BafCreditRouting", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
       const dayBefore = await jackpots.getLastBafResolvedDay();
-      const skipTx = await jackpots.connect(gameSigner).markBafSkippedAt(10, await game.currentDayView());
+      const skipTx = await jackpots.connect(gameSigner).markBafSkippedAt(10, await game.currentDayView_g542950());
       const skipReceipt = await skipTx.wait();
 
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
@@ -577,10 +577,10 @@ describe("BafCreditRouting", function () {
       expect(skipEvents.length).to.equal(1);
       expect(skipEvents[0].args.lvl).to.equal(10n);
 
-      // lastBafResolvedDay must have advanced to "today" (currentDayView).
+      // lastBafResolvedDay must have advanced to "today" (currentDayView_g542950).
       const dayAfter = await jackpots.getLastBafResolvedDay();
       expect(dayAfter).to.be.gte(dayBefore);
-      const currentDay = await game.currentDayView();
+      const currentDay = await game.currentDayView_g542950();
       expect(dayAfter).to.equal(currentDay);
 
       // Day-D claim post-skip: the skip bumped lastBafResolvedDay to the same

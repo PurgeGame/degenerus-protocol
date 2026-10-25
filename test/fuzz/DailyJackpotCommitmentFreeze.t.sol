@@ -107,7 +107,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         vm.etch(address(game), type(DailyJackpotCommitmentSeeder).runtimeCode);
         DailyJackpotCommitmentSeeder(payable(address(game))).seed(ATTACKER);
         vm.etch(address(game), runtime);
-        day = game.currentDayView() + 1;
+        day = game.currentDayView_g542950() + 1;
         _syncCoinflipFixtureDay(day - 1);
         vm.warp(start - 1 days);
         vm.prank(address(game));

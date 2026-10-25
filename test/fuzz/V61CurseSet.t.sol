@@ -82,7 +82,7 @@ contract V61CurseSet is DeployProtocol {
         // by construction (0 + 5 <= 100), and a "today" claimant (lastEthDay == 100) is non-stale.
         _seedDailyIdx(100);
         _finishSubscriptionWindow();
-        _seedEndpoint(uint24(game.currentDayView()));
+        _seedEndpoint(uint24(game.currentDayView_g542950()));
     }
 
     // =========================================================================
@@ -248,7 +248,7 @@ contract V61CurseSet is DeployProtocol {
 
         // setUp seeds dailyIdx = 100, ahead of the wall clock; the engine stamps a daily box only
         // once the wall day passes dailyIdx (a new day is due), so bring the wall clock to day 100.
-        _t += (100 - uint256(game.currentDayView())) * 1 days;
+        _t += (100 - uint256(game.currentDayView_g542950())) * 1 days;
         vm.warp(_t);
         _deliverDay(0x5C0E); // freezes the score for both subs at this delivery
 

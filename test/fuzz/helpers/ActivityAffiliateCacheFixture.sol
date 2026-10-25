@@ -16,7 +16,7 @@ contract ActivityAffiliateRealQA is DegenerusQuests, DegenerusAffiliate {
 
 contract ActivityAffiliateStubQA is DegenerusAffiliate {
     constructor() DegenerusAffiliate(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)) {}
-    function effectiveBaseStreakAndAfking_g2654(uint32) external pure returns (uint32, bool) { return (17, false); }
+    function effectiveBaseStreakAndAfking_g1521(uint32, uint24) external pure returns (uint32, bool) { return (17, false); }
 }
 
 contract ActivityAffiliateCacheHost is DegenerusGameMintStreakUtils {

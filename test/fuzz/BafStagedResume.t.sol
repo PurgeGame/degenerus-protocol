@@ -303,7 +303,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         assertTrue(r.progressed && r.done, "consolidation completes");
         assertTrue(game.jackpotPhase(), "the jackpot phase opened");
         assertEq(_actualMarks(logs, LVL, LVL).length, 0, "no award is paid in the consolidation transaction");
-        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView(), "beginBafOn records the resolution day");
+        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView_g542950(), "beginBafOn records the resolution day");
 
         BafStageHost.WorkView memory w = host.workView();
         assertEq(w.kind, 7, "the award stage is armed");

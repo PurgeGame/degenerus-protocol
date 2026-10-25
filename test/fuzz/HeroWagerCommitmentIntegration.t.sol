@@ -16,7 +16,7 @@ contract HeroWagerCommitmentIntegrationTest is RedemptionFixture {
         game.placeDegeneretteBet{value: amount}(0, 0, amount, 1, symbol);
     }
     function _metadata() private view returns (uint256) {
-        return uint256(game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & HERO_MASK;
+        return uint256(game.extsload_g2807007(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & HERO_MASK;
     }
     function _retry() private {
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
@@ -25,7 +25,7 @@ contract HeroWagerCommitmentIntegrationTest is RedemptionFixture {
 
     function test_LateWagersAcrossSeveralDaysAllEnterNextCommitment() public {
         _bet(13, 0.01 ether);
-        uint24 originalDay = game.currentDayView();
+        uint24 originalDay = game.currentDayView_g542950();
         assertEq(game.getDailyHeroWager(originalDay, 1, 5), 100);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         assertTrue(_runUntilNewRequestOrIdle(), "fresh daily request");
@@ -45,9 +45,9 @@ contract HeroWagerCommitmentIntegrationTest is RedemptionFixture {
             vm.warp(vm.getBlockTimestamp() + 1 days);
             _bet(15, 0.02 ether);
             assertEq(game.getDailyHeroWager(originalDay, 1, 5), 100, "frozen pool survives stalled days");
-            assertEq(game.getDailyHeroWager(game.currentDayView(), 1, 7), (i + 2) * 200);
+            assertEq(game.getDailyHeroWager(game.currentDayView_g542950(), 1, 7), (i + 2) * 200);
         }
-        uint24 nextDay = game.currentDayView() + 1;
+        uint24 nextDay = game.currentDayView_g542950() + 1;
         uint256 delayed = mockVRF.lastRequestId();
         assertTrue(_fulfillPending(0xBEEF));
         assertEq(_metadata(), beforeRetry, "callback does not rotate hero buffers");
@@ -73,6 +73,6 @@ contract HeroWagerCommitmentIntegrationTest is RedemptionFixture {
         assertEq(_metadata(), beforeRequest, "midday retry leaves hero pools intact");
         assertTrue(_fulfillPending(0xCAFE));
         assertEq(_metadata(), beforeRequest, "midday callback leaves hero pools intact");
-        assertEq(game.getDailyHeroWager(game.currentDayView(), 1, 5), 100);
+        assertEq(game.getDailyHeroWager(game.currentDayView_g542950(), 1, 5), 100);
     }
 }

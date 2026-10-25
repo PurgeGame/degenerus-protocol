@@ -222,7 +222,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _driveToLevel(2);
         _flushAdvance();
         for (uint160 i; i < 19; ++i) assertEq(_ticketsOwed(key, address(0xDA00 + i)), 0);
-        (, bool inJackpot,,, ) = game.purchaseInfo();
+        (, bool inJackpot,,, ) = game.purchaseInfo_g1027();
         uint24 target = inJackpot ? game.level() : game.level() + 1;
         uint24 nextKey = _writeKeyForLevel(target);
         for (uint160 i; i < 19; ++i) {
@@ -236,7 +236,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertEq(game.level(), 0, "Should start at level 0");
 
         // Verify we are in purchase phase (not jackpot)
-        (, bool inJackpot, , ,) = game.purchaseInfo();
+        (, bool inJackpot, , ,) = game.purchaseInfo_g1027();
         assertFalse(inJackpot, "Should be in purchase phase at start");
 
         // Buy tickets at level 0 purchase phase -> targets level 1
@@ -580,7 +580,7 @@ contract TicketLifecycleTest is DeployProtocol {
             _seedNextPrizePool(49.9 ether);
 
             // Check if we entered jackpot phase before buying
-            (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo();
+            (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo_g1027();
             if (inJackpot && !rngLocked_) {
                 foundJackpot = true;
                 jackpotLevel = game.level();
@@ -660,7 +660,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(slot0));
 
         // Verify we set the state correctly
-        (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo();
+        (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo_g1027();
         assertTrue(inJackpot, "Should be in jackpot phase after vm.store");
         assertTrue(rngLocked_, "Should have rngLocked after vm.store");
 
@@ -682,7 +682,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // only prevents far-future ticket queuing, not direct purchases.
         uint256 priceWei;
         {
-            (, , , , uint256 pw) = game.purchaseInfo();
+            (, , , , uint256 pw) = game.purchaseInfo_g1027();
             priceWei = pw;
         }
         uint256 qty = 4000;
@@ -1247,7 +1247,7 @@ contract TicketLifecycleTest is DeployProtocol {
             _seedNextPrizePool(49.9 ether);
 
             // Check if we entered jackpot phase
-            (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo();
+            (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo_g1027();
             if (inJackpot && !rngLocked_) {
                 foundJackpot = true;
                 jackpotLevel = game.level();
@@ -1447,13 +1447,13 @@ contract TicketLifecycleTest is DeployProtocol {
         _setRngLocked(true);
 
         // Verify rngLocked is set
-        (, , , bool rngLocked_,) = game.purchaseInfo();
+        (, , , bool rngLocked_,) = game.purchaseInfo_g1027();
         assertTrue(rngLocked_, "rngLockedFlag should be true after vm.store");
 
         // Normal purchase targets level+1 (near-future, <= level+5) -- should succeed.
         // Use buyer3 who has not been used by _driveToLevel.
         // Call purchase directly (bypass _buyTickets helper which skips when rngLocked).
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 qty = 400;
         uint256 cost = (priceWei * qty) / 400;
         vm.deal(buyer3, cost + 50 ether);
@@ -1527,7 +1527,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Set rngLockedFlag=true
         _setRngLocked(true);
-        (, , , bool rngLocked_,) = game.purchaseInfo();
+        (, , , bool rngLocked_,) = game.purchaseInfo_g1027();
         assertTrue(rngLocked_, "rngLockedFlag should be true");
 
         uint256 checked = 0;
@@ -1572,8 +1572,8 @@ contract TicketLifecycleTest is DeployProtocol {
         // Determine the actual target level AFTER setting rngLocked.
         // During purchase phase, tickets target level+1. During jackpot phase with
         // rngLocked + last-day, tickets may target level+1 as well.
-        // Check purchaseInfo to get state.
-        (, , , bool rngLocked_,) = game.purchaseInfo();
+        // Check purchaseInfo_g1027 to get state.
+        (, , , bool rngLocked_,) = game.purchaseInfo_g1027();
         assertTrue(rngLocked_, "rngLockedFlag should be true");
 
         // The target level depends on phase:
@@ -1600,7 +1600,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 readLenL1 = _queueLength(_readKeyForLevel(lPlus1));
 
         // Buy tickets via direct purchase (bypass _buyTickets which skips when rngLocked)
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 qty = 400;
         uint256 cost = (priceWei * qty) / 400;
         vm.deal(buyer3, cost + 50 ether);
@@ -1656,7 +1656,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Buy tickets at level L1 (near-future)
         {
-            (, , , , uint256 priceWei) = game.purchaseInfo();
+            (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
             uint256 cost = (priceWei * 400) / 400;
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
@@ -1694,7 +1694,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Buy tickets at level L2 (near-future)
         {
-            (, , , , uint256 priceWei) = game.purchaseInfo();
+            (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
             uint256 cost = (priceWei * 400) / 400;
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
@@ -2267,7 +2267,7 @@ contract TicketLifecycleTest is DeployProtocol {
         internal
         returns (uint48 lootboxIndex)
     {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return 0;
         if (game.gameOver()) return 0;
 
@@ -2382,7 +2382,7 @@ contract TicketLifecycleTest is DeployProtocol {
         for (uint256 i = 0; i < 200; i++) {
             _fulfillVrfIfPending();
             if (!game.rngLocked() && game.rngComplete()
-                && game.rngWordForDay(game.currentDayView()) != 0) return;
+                && game.rngWordForDay(game.currentDayView_g542950()) != 0) return;
             (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 bytes4 sel = bytes4(err);
@@ -2508,13 +2508,13 @@ contract TicketLifecycleTest is DeployProtocol {
 
     /// @dev Set dailyIdx (slot 0, uint24 @ byte 3) to the current simulated day. The aggressive
     ///      pool-seeded _driveToLevel advances dailyIdx (the per-day sealed-RNG counter) faster than
-    ///      the wall clock, leaving the impossible-on-chain state dailyIdx > currentDayView(). On a
+    ///      the wall clock, leaving the impossible-on-chain state dailyIdx > currentDayView_g542950(). On a
     ///      jackpot-phase purchase the VRF-death deadman (`currentDay - dailyIdx`) then underflows.
-    ///      Restoring dailyIdx == currentDayView() reproduces a reachable caught-up game (deadman
+    ///      Restoring dailyIdx == currentDayView_g542950() reproduces a reachable caught-up game (deadman
     ///      not fired) without disturbing the ticket-routing keys under test.
     function _syncDailyIdxToCurrentDay() internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
-        uint256 day = uint256(game.currentDayView());
+        uint256 day = uint256(game.currentDayView_g542950());
         slot0 = (slot0 & ~(DAILY_IDX_MASK << DAILY_IDX_SHIFT))
               | ((day & DAILY_IDX_MASK) << DAILY_IDX_SHIFT);
         vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(slot0));
@@ -2571,7 +2571,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
     /// @notice Buy tickets for a buyer at the current price
     function _buyTickets(address who, uint256 qty) internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         if (game.gameOver()) return;
 

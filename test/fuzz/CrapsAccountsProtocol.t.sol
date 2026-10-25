@@ -27,7 +27,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     bytes4 internal constant GAME_E = bytes4(keccak256("E()"));
     bytes4 internal constant BURN_FOR_CRAPS = bytes4(keccak256("burnCoinForCraps(address,uint32,uint256)"));
     bytes4 internal constant RECORD_CRAPS = bytes4(keccak256("recordCrapsAction_g14623(uint32,uint8)"));
-    bytes4 internal constant RESOLVE_ACCOUNT = bytes4(keccak256("resolveAccount_g502(uint32,address)"));
+    bytes4 internal constant RESOLVE_ACCOUNT = bytes4(keccak256("resolveAccount_g7029(uint32,address)"));
     bytes32 internal constant COMP_SPENT = keccak256("CrapsCompSpent(uint32,uint256)");
 
     address internal owner = makeAddr("pacct-owner");
@@ -48,7 +48,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         _deployProtocol();
         // Genesis is the Craps warm-up day; play from genesis + 1.
         vm.warp(block.timestamp + 1 days);
-        _seedLogicalFixtureDay(game.currentDayView() + 1);
+        _seedLogicalFixtureDay(game.currentDayView_g542950() + 1);
         _primeCurrentDayRng();
         day = crapsBattle.currentDayIndex();
         ownerId = _giveWalletId(owner);
@@ -81,12 +81,12 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     }
 
     function _createSmurf(address o) internal returns (uint32 id, uint32 account) {
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.deal(o, o.balance + price);
         vm.prank(o);
         id = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
         bool authorized;
-        (,, authorized) = game.resolveAccount_g502(id, o);
+        (,, authorized) = game.resolveAccount_g7029(id, o);
         account = id;
         assertTrue(authorized, "fixture: the owner may act for its smurf");
     }
@@ -98,7 +98,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
 
 
     function _idWord(uint32 id) internal view returns (uint256) {
-        return uint256(crapsBattle.extsload_g8132(keccak256(abi.encode(uint256(id), crapsBattle.passCreditsByIdSlot()))));
+        return uint256(crapsBattle.extsload_g2807007(keccak256(abi.encode(uint256(id), crapsBattle.passCreditsByIdSlot()))));
     }
 
 

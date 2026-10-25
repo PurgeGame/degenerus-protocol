@@ -40,7 +40,7 @@ contract DecimatorJackpotPreferenceProbe {
         uint256 word = (CrapsPreferenceLib.compress(chips) << 64) | CrapsPreferenceLib.INITIALIZED;
         assembly ("memory-safe") { sstore(slot, word) }
     }
-    function extsload_g8132(bytes32 slot) external view returns (uint256 word) {
+    function extsload_g2807007(bytes32 slot) external view returns (uint256 word) {
         assembly ("memory-safe") { word := sload(slot) }
     }
     function preferredBoardOf(uint32 id) external view returns (uint32 chips) {
@@ -124,7 +124,7 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
     }
     function queue() external view returns (uint256) { return decBattleQueue; }
     function paid() external view returns (uint256) { return jackpotWork.paid; }
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) { assembly { value := sload(slot) } }
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) { assembly { value := sload(slot) } }
 }
 
 contract DecimatorJackpotIntegrationTest is Test {
@@ -410,7 +410,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     function test_NoNonSoloCohortCannotGenerateFromSoloExcess() public {
         h.prepare(LVL, 40, 140 ether, 1000 ether, 6, false);
         for (uint8 q; q < 3; ++q) h.setDeity(q, address(0));
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g8132(bytes32)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g2807007(bytes32)"), hex"12345678");
         _daily(6, 2_000_000);
         assertEq(h.plan(LVL).generatedEntries, 0);
         assertEq(h.plan(LVL).weights, 0);
@@ -599,7 +599,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         h.prepare(LVL, 100, 10 ether, 100 ether, WORD, false);
         h.daily(LVL, WORD, 1_000_000);
         uint16 beforeCursor = h.plan(LVL).cursor;
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g8132(bytes32)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g2807007(bytes32)"), hex"12345678");
         vm.expectRevert(bytes4(0x12345678));
         h.daily(LVL, WORD, 3_000_000);
         assertEq(h.plan(LVL).cursor, beforeCursor);

@@ -19,7 +19,7 @@ contract MintStreakPairCompletion is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        (,,,, price) = game.purchaseInfo();
+        (,,,, price) = game.purchaseInfo_g1027();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -74,7 +74,7 @@ contract MintStreakPairCompletion is DeployProtocol {
     function _slot1Today() private view returns (uint8 t1, bool today) {
         QuestInfo[2] memory q = quests.getActiveQuests();
         t1 = q[1].questType;
-        today = q[1].day == uint24(game.currentDayView()) && q[0].day == q[1].day
+        today = q[1].day == uint24(game.currentDayView_g542950()) && q[0].day == q[1].day
             && q[0].questType == QT_MINT_ETH;
     }
 
@@ -143,7 +143,7 @@ contract MintStreakPairCompletion is DeployProtocol {
         }
         assertTrue(found, "a LOOTBOX secondary rolled for some ordinary VRF word");
         emit log_named_uint("salt producing LOOTBOX day", salt);
-        (,,,, price) = game.purchaseInfo();
+        (,,,, price) = game.purchaseInfo_g1027();
 
         address ctl = makeAddr("lbCtl");
         _ticket(ctl);

@@ -35,7 +35,7 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
             (uint8(2), uint256(0xBEEF), uint24(2))));
         _finishLogical();
         assertEq(game.rngWordForDay(2), 0xBEEF);
-        assertLe(game.currentDayView(), 3);
+        assertLe(game.currentDayView_g542950(), 3);
     }
     function test_RetryKeepsCommitmentAndCannotRefreshHardDeadline() public {
         _requestAtNextReset();
@@ -61,20 +61,20 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
             (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
-        uint24 beforeDay = game.currentDayView();
+        uint24 beforeDay = game.currentDayView_g542950();
         (bool complete,uint24 sent,uint48 completed) = game.dailySessionState();
         bytes32 mirror = vm.load(address(coinflip), bytes32(uint256(4)));
         bytes32 commitment = vm.load(address(game), bytes32(0));
         (bool accepted,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         assertTrue(accepted, "coordinator refusal is a non-reverting uncharged no-op");
-        assertEq(game.currentDayView(), beforeDay);
+        assertEq(game.currentDayView_g542950(), beforeDay);
         assertEq(vm.load(address(coinflip), bytes32(uint256(4))), mirror);
         assertEq(vm.load(address(game), bytes32(0)), commitment);
         (bool ac,uint24 as_,uint48 at) = game.dailySessionState();
         assertEq(ac, complete); assertEq(as_, sent); assertEq(at, completed);
         vm.clearMockedCalls();
         _requestLogical();
-        assertEq(game.currentDayView(), beforeDay + 1);
+        assertEq(game.currentDayView_g542950(), beforeDay + 1);
         assertEq(coinflip.requestedDailyIdx(), beforeDay + 1);
     }
     function test_KnownWordCannotRepriceCarryAndNewDepositTargetsFollowingRound() public {
@@ -103,7 +103,7 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
             game.mineFlip(type(uint32).max);
         }
         (,,uint48 completed) = game.dailySessionState();
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         address buyer = address(0xB0B);
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
@@ -112,7 +112,7 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
         for (uint256 i; i < 100 && mockVRF.lastRequestId() == old; ++i) game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), old);
         assertFalse(game.rngLocked());
-        assertEq(game.currentDayView(), day);
+        assertEq(game.currentDayView_g542950(), day);
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 1234);
         _finishReadConsumers();
@@ -133,6 +133,6 @@ contract VRFStallEdgeCases is LogicalDaysFixture {
         uint256 nudges = RecyclingState.nudgeCount(address(game));
         _rotateLogical();
         assertEq(RecyclingState.nudgeCount(address(game)), nudges);
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
     }
 }

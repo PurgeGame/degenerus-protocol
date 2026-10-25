@@ -18,9 +18,9 @@ contract LanePStorageReuseCensus is StorageCensus {
         vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.balanceOf.selector, ALICE), abi.encode(uint256(100e12)));
         _censusBegin("lane-p-generations");
         uint256 startTime = vm.getBlockTimestamp();
-        uint24 startDay = game.currentDayView();
+        uint24 startDay = game.currentDayView_g542950();
         for (uint24 generation; generation < 6; ++generation) {
-            assertEq(game.currentDayView(), startDay + generation, "fresh census day");
+            assertEq(game.currentDayView_g542950(), startDay + generation, "fresh census day");
             uint24 level_ = 99 + generation * 100;
             uint256 word = uint256(vm.load(address(game), bytes32(0)));
             vm.store(address(game), bytes32(0), bytes32((word & ~(uint256(type(uint24).max) << 96)) | (uint256(level_) << 96)));
@@ -33,7 +33,7 @@ contract LanePStorageReuseCensus is StorageCensus {
             _must("charity-vote", false, ALICE, address(gnrus), abi.encodeCall(gnrus.vote, (0)));
             for (uint32 n; n < 4; ++n) _must("baf-score", false, address(coinflip), address(jackpots), abi.encodeCall(jackpots.recordBafFlip, (id + n, uint24(10 + generation * 40), uint256(100 - n))));
             vm.prank(address(game)); coin.mintForGame(ALICE, 1000);
-            uint24 day = game.currentDayView() + 1;
+            uint24 day = game.currentDayView_g542950() + 1;
             _must("arm-draw", true, address(game), address(coinflip), abi.encodeCall(coinflip.armBafDraw, (day)));
             for (uint32 n; n < 4; ++n) _must("draw-deposit", false, ALICE, address(coinflip), abi.encodeCall(coinflip.depositCoinflip, (0, 100)));
             vm.warp(startTime + (uint256(generation) + 1) * 1 days);

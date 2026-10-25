@@ -336,16 +336,16 @@ contract AdvanceLivenessHandler is Test {
         address a = _actor(seed);
         // finish whatever is outstanding today
         _runToIdle(false);
-        (uint24 lvl, bool inJp, bool lpd, bool locked,) = game.purchaseInfo();
+        (uint24 lvl, bool inJp, bool lpd, bool locked,) = game.purchaseInfo_g1027();
         if (inJp || locked) {
             // walk out of the jackpot phase (bounded)
             for (uint256 d = 0; d < 8; d++) {
-                (, inJp,, locked,) = game.purchaseInfo();
+                (, inJp,, locked,) = game.purchaseInfo_g1027();
                 if (!inJp && !locked) break;
                 vm.warp(_nextDayStart() + 1 hours);
                 _runToIdle(false);
             }
-            (lvl, inJp, lpd, locked,) = game.purchaseInfo();
+            (lvl, inJp, lpd, locked,) = game.purchaseInfo_g1027();
             if (inJp || locked || game.gameOver()) return;
         }
         if (!lpd) {
@@ -364,12 +364,12 @@ contract AdvanceLivenessHandler is Test {
             for (uint256 d = 0; d < 4; d++) {
                 vm.warp(_nextDayStart() + 1 hours);
                 _runToIdle(false);
-                (, inJp, lpd, locked,) = game.purchaseInfo();
+                (, inJp, lpd, locked,) = game.purchaseInfo_g1027();
                 if (lpd || inJp || game.gameOver()) break;
                 _seedNextPool(1 ether);
             }
         }
-        (lvl, inJp, lpd, locked,) = game.purchaseInfo();
+        (lvl, inJp, lpd, locked,) = game.purchaseInfo_g1027();
         if (!lpd || inJp || locked || game.gameOver()) return;
         ghost_biasedReachedLpd++;
         // write-side work + pending lootbox value, then the mid-day request
@@ -427,7 +427,7 @@ contract AdvanceLivenessHandler is Test {
         }
         if (v.code == V_NONE && !game.gameOver()) {
             // (4) donor probe: a full mid-day cycle must return to idle
-            (, bool inJp, bool lpd,,) = game.purchaseInfo();
+            (, bool inJp, bool lpd,,) = game.purchaseInfo_g1027();
             bool turbo = (uint8(uint256(vm.load(address(game), bytes32(SLOT0))) >> 184) & JACKPOT_TURBO) != 0;
             uint24 lvl = _level();
             bool ffNonEmpty = _queueLen(lvl + 2 | TICKET_FAR_FUTURE_BIT) != 0;
@@ -492,7 +492,7 @@ contract AdvanceLivenessHandler is Test {
         if (!quiet) return _snapshot(V_NO_QUIESCENCE, sel, cranks, phase);
         if (_midDayLatch() != 0) return _snapshot(V_LATCH_STUCK, sel, cranks, phase);
         if (sel != E_NOT_TIME_YET) return _snapshot(V_TERMINAL_REVERT, sel, cranks, phase);
-        uint24 logicalDay = game.currentDayView();
+        uint24 logicalDay = game.currentDayView_g542950();
         if (_wordByDay(logicalDay) == 0 || game.rngLocked()) return _snapshot(V_NOT_SEALED, sel, cranks, phase);
         if (!_ticketsFullyProcessed() && !_requestActive()) {
             return _snapshot(V_STAGED_NO_WORKER, sel, cranks, phase);
@@ -522,7 +522,7 @@ contract AdvanceLivenessHandler is Test {
         v.ticketsFullyProcessed = uint8(s0 >> 192) != 0;
         v.midDayLatch = _midDayLatch();
         v.rngRequestTime = uint48(s0 >> 48);
-        v.wordToday = _wordByDay(game.currentDayView());
+        v.wordToday = _wordByDay(game.currentDayView_g542950());
         v.advanceDue = game.advanceDue();
         v.readLenL = _queueLen(_readKey(lvl));
         v.readLenL1 = _queueLen(_readKey(lvl + 1));
@@ -575,7 +575,7 @@ contract AdvanceLivenessHandler is Test {
     /// the engine's next action for `who`, so the call is the request alone.
     function _request(address who) internal {
         bool latchBefore = _midDayLatch() != 0;
-        (uint24 lvl, bool inJp, bool lpd,,) = game.purchaseInfo();
+        (uint24 lvl, bool inJp, bool lpd,,) = game.purchaseInfo_g1027();
         bool ffNonEmpty = _queueLen(lvl + 2 | TICKET_FAR_FUTURE_BIT) != 0;
         vm.prank(who);
         if (game.minerAction() != uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return;
@@ -614,7 +614,7 @@ contract AdvanceLivenessHandler is Test {
 
     function _buyTickets(address a, uint256 tickets) internal {
         if (game.gameOver()) return;
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(a);
         try game.purchase{value: priceWei * tickets}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_ticketBuys++;
@@ -631,7 +631,7 @@ contract AdvanceLivenessHandler is Test {
 
     function _buyFoil(address a) internal {
         if (game.gameOver()) return;
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(a);
         // overpay is credited to the payer's afking balance, never reverts
         try game.purchase{value: priceWei * 80}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {

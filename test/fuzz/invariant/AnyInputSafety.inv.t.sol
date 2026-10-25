@@ -143,7 +143,7 @@ contract AnyInputSafety is DeployProtocol {
         game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
         game.depositAfkingFunding{value: 5 ether}(game.walletIdOf_g3120(BYSTANDER));
         game.purchaseDeityPass{value: 45 ether}(0, 5, bytes32(0)); // overpay lands in its own afking
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.stopPrank();
         _dgnrsFromVault(BYSTANDER, 1_000_000e12);
@@ -304,7 +304,7 @@ contract AnyInputSafety is DeployProtocol {
                 || s == bytes4(keccak256("EmptyRevert()"))) r.gasFailure = true;
             break;
         }
-        r.sealedDay = game.gameOver() || (game.rngWordForDay(game.currentDayView()) != 0 && !game.rngLocked());
+        r.sealedDay = game.gameOver() || (game.rngWordForDay(game.currentDayView_g542950()) != 0 && !game.rngLocked());
         vm.revertToStateAndDelete(snap);
     }
 
@@ -629,7 +629,7 @@ contract AnyInputSafety is DeployProtocol {
         vm.etch(address(game), address(new AnyInputSeizer()).code);
         AnyInputSeizer(address(game)).seizeDueInPlace(due);
         vm.etch(address(game), runtime);
-        (, address payee, bool authorized) = game.resolveAccount_g502(id, actors[1]);
+        (, address payee, bool authorized) = game.resolveAccount_g7029(id, actors[1]);
         assertTrue(payee == address(vault) || payee == address(sdgnrs), "fixture must sell the account");
         assertFalse(authorized, "seller loses authority");
         _checkSolvency();
@@ -652,7 +652,7 @@ contract AnyInputSafety is DeployProtocol {
         assertGt(h[9], 0, "DGVF");
         assertGt(h[10], 0, "WWXRP");
         assertGt(h[11], 0, "deity pass");
-        (,, bool authorized) = game.resolveAccount_g502(game.walletIdOf_g3120(BYSTANDER), actors[0]);
+        (,, bool authorized) = game.resolveAccount_g7029(game.walletIdOf_g3120(BYSTANDER), actors[0]);
         assertFalse(authorized, "bystander approves nobody");
     }
 

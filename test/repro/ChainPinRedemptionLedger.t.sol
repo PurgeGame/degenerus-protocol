@@ -164,12 +164,12 @@ contract ChainPinConsumerStage is DeployProtocol {
         if (redemption) {
             assertEq(stage, 1, "selected Redemption would hit RedemptionStageBlocked");
             ++redemptionHits;
-            if (game.currentDayView() > uint256(s.purchaseStart) + 30) ++deadlineHits;
+            if (game.currentDayView_g542950() > uint256(s.purchaseStart) + 30) ++deadlineHits;
         }
     }
 
     function _today() internal view returns (uint24) {
-        return uint24(game.currentDayView());
+        return uint24(game.currentDayView_g542950());
     }
 
     /// @notice Fuzz over storage states, with the purchase-deadline boundary day and the VRF deadman edge

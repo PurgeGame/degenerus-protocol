@@ -45,7 +45,7 @@ contract PariSettleMockGame {
         return (0, 0, 0, round, open, 0);
     }
 
-    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized) {
+    function resolveAccount_g7029(uint32 id, address caller) external view returns (address key, address payee, bool authorized) {
         require(id != 0, "E");
         key = idKey[id];
         require(key != address(0), "E");
@@ -1418,7 +1418,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
             "a due day comes first"
         );
 
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         uint256 selected;
         uint256 paidWinners;
         bool sawLock;

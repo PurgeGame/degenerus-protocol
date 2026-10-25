@@ -587,7 +587,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         for (uint8 slot; slot < 2; ++slot) _success("hot-deity-gift", cast[2], address(game), 0,
             abi.encodeCall(game.issueDeityBoon, (issuer, id, slot)));
         _success("hot-activity-cache", cast[1], address(game), 0,
-            abi.encodeCall(game.playerActivityScoreCachedById, (id)));
+            abi.encodeCall(game.playerActivityScoreCachedById_g975, (id)));
         uint32[8] memory slots;
         _success("hot-bingo", cast[1], address(game), 0,
             abi.encodeCall(game.claimBingo, (id, uint24(10), uint8(0), slots)));

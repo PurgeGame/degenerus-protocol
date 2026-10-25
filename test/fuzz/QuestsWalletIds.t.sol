@@ -49,7 +49,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     function setUp() public {
         vm.startMappingRecording();
         _deployProtocol();
-        (,,,, price) = game.purchaseInfo();
+        (,,,, price) = game.purchaseInfo_g1027();
     }
 
     // =====================================================================
@@ -133,7 +133,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     }
 
     function _primary(uint32 id) private {
-        _as(address(game), abi.encodeCall(quests.handlePurchase_g4831, (id, price, 0, 0, price, price)));
+        _as(address(game), abi.encodeCall(quests.handlePurchase_g23478, (_fixtureGameDay(), id, price, 0, 0, price, price)));
     }
 
     function _buy(address buyer) private returns (uint32) {
@@ -217,7 +217,10 @@ contract QuestsWalletIdsTest is DeployProtocol {
         }
         bytes[] memory c = _calls(acc, from, address(quests), sel);
         assertEq(c.length, 1, "one handler call");
-        id = uint32(uint256(bytes32(c[0])));
+        // The purchase handler leads with the Game day; every other handler leads with the ID.
+        uint256 offset = sel == quests.handlePurchase_g23478.selector ? 32 : 0;
+        bytes memory args = c[0];
+        assembly ("memory-safe") { id := mload(add(add(args, 32), offset)) }
     }
 
     /// @dev Quests credited `amount` to `id`, and every Quests credit in the window went to `id`.
@@ -254,7 +257,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 id = game.walletIdOf_g3120(p);
         assertGt(id, 0, "the deposit registers the depositor");
-        assertEq(_onlyId(acc, address(coinflip), quests.handleFlip.selector), id);
+        assertEq(_onlyId(acc, address(coinflip), quests.handleFlip_g217.selector), id);
         _assertWritesUnder(writes, id);
         assertEq(uint256(vm.load(address(quests), keccak256(abi.encode(p, STATE_ROOT)))), 0, "nothing keyed by address");
     }
@@ -273,7 +276,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 gid = game.walletIdOf_g3120(g);
         assertGt(gid, 0, "the paying funder registers");
-        assertEq(_onlyId(acc, address(coinflip), quests.handleFlip.selector), gid, "quest goes to the funder");
+        assertEq(_onlyId(acc, address(coinflip), quests.handleFlip_g217.selector), gid, "quest goes to the funder");
         _assertWritesUnder(writes, gid);
         assertEq(_qs(rid), 0, "the recipient's quest state is untouched");
     }
@@ -283,7 +286,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(p, 10_000);
         vm.mockCall(address(game), abi.encodeWithSelector(game.decWindow.selector), abi.encode(true));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn_g5574.selector), abi.encode(uint64(1)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn_g1271.selector), abi.encode(uint64(1)));
         _setLevelQuest(QT_DECIMATOR);
         vm.record();
         vm.startStateDiffRecording();
@@ -309,7 +312,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
             abi.encode(uint256(5_000))
         );
         vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.consumeFlipBacking.selector), abi.encode(uint256(5_000)));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn_g5574.selector), abi.encode(uint64(1)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn_g1271.selector), abi.encode(uint64(1)));
         // sDGNRS's daily state already synced at deploy; the level-quest leg writes its record.
         _setLevelQuest(QT_DECIMATOR);
         vm.record();
@@ -360,7 +363,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
             affiliate.payAffiliate(4000, bytes32(0), sid, 1, true, 0);
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             (, bytes32[] memory writes) = vm.accesses(address(quests));
-            assertEq(_onlyId(acc, address(affiliate), quests.handleAffiliate.selector), expected[cls]);
+            assertEq(_onlyId(acc, address(affiliate), quests.handleAffiliate_g55809.selector), expected[cls]);
             _assertWritesUnder(writes, expected[cls]);
         }
     }
@@ -376,7 +379,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 pid = game.walletIdOf_g3120(p);
         assertGt(pid, 0);
-        assertEq(_onlyId(acc, address(game), quests.handleDegenerette.selector), pid);
+        assertEq(_onlyId(acc, address(game), quests.handleDegenerette_g3.selector), pid);
         _assertWritesUnder(writes, pid);
 
         address r = makeAddr("degRecipient");
@@ -391,7 +394,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         (, writes) = vm.accesses(address(quests));
         uint32 gid = game.walletIdOf_g3120(g);
         assertGt(gid, 0, "the paying funder registers");
-        assertEq(_onlyId(acc, address(game), quests.handleDegenerette.selector), gid, "quest goes to the funder");
+        assertEq(_onlyId(acc, address(game), quests.handleDegenerette_g3.selector), gid, "quest goes to the funder");
         _assertWritesUnder(writes, gid);
         assertEq(_qs(rid), 0, "the bet owner's quest state is untouched");
     }
@@ -403,7 +406,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint32 id = _buy(b);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        assertEq(_onlyId(acc, address(game), quests.handlePurchase_g4831.selector), id);
+        assertEq(_onlyId(acc, address(game), quests.handlePurchase_g23478.selector), id);
         _assertWritesUnder(writes, id);
         (,,, bool[2] memory done) = quests.playerQuestStates(id);
         assertTrue(done[0], "primary completed under the buyer's ID");
@@ -477,10 +480,10 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _setLevelQuest(QT_AFFILIATE);
         vm.recordLogs();
         vm.startStateDiffRecording();
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 6_000)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 6_000)));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes[] memory ext = _calls(acc, address(quests), address(game), game.extsload_g8132.selector);
+        bytes[] memory ext = _calls(acc, address(quests), address(game), game.extsload_g2807007.selector);
         assertEq(ext.length, 0, "ID history needs no wallet-table read");
         bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
         assertEq(mp.length, 1, "one mint-word read");
@@ -496,9 +499,9 @@ contract QuestsWalletIdsTest is DeployProtocol {
         address[2] memory keys = [ContractAddresses.VAULT, ContractAddresses.SDGNRS];
         for (uint32 id = 1; id <= 2; ++id) {
             vm.startStateDiffRecording();
-            _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 6_000)));
+            _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 6_000)));
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-            assertEq(_calls(acc, address(quests), address(game), game.extsload_g8132.selector).length, 0, "no extsload");
+            assertEq(_calls(acc, address(quests), address(game), game.extsload_g2807007.selector).length, 0, "no extsload");
             bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
             assertEq(mp.length, 1);
             assertEq(abi.decode(mp[0], (uint32)), id, "protocol account ID");
@@ -510,15 +513,15 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint32 id = _giveWalletId(o);
         _setLevelQuest(QT_AFFILIATE);
         vm.startStateDiffRecording();
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 6_000)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 6_000)));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        assertEq(_calls(acc, address(quests), address(game), game.extsload_g8132.selector).length, 0);
+        assertEq(_calls(acc, address(quests), address(game), game.extsload_g2807007.selector).length, 0);
         assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip_g317.selector).length, 0, "no credit");
         assertEq((_lq(id) >> 136) & 1, 0, "not completed");
         assertEq(uint128(_lq(id) >> 8), 6_000, "progress kept");
         _eligible(o, false, 5);
         vm.startStateDiffRecording();
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 1)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, 1)));
         acc = vm.stopAndReturnStateDiff();
         _assertQuestCredit(acc, id, 800);
     }
@@ -570,7 +573,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _setLevelQuest(QT_FLIP);
         vm.recordLogs();
         vm.startStateDiffRecording();
-        _as(address(coinflip), abi.encodeCall(quests.handleFlip, (id, 20_000)));
+        _as(address(coinflip), abi.encodeCall(quests.handleFlip_g217, (id, 20_000, _fixtureGameDay())));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_calls(acc, address(quests), address(game), game.hasDeityPass.selector).length, 0);
@@ -658,13 +661,13 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _setDaily(13, QT_DEG_ETH);
         _primary(id);
         vm.startStateDiffRecording();
-        _as(address(game), abi.encodeCall(quests.handleDegenerette, (id, price * 2, true, price)));
+        _as(address(game), abi.encodeCall(quests.handleDegenerette_g3, (id, price * 2, true, price, _fixtureGameDay())));
         _assertQuestCredit(vm.stopAndReturnStateDiff(), id, 100);
 
         _eligible(p, false, 5);
         _setLevelQuest(QT_FLIP);
         vm.startStateDiffRecording();
-        _as(address(coinflip), abi.encodeCall(quests.handleFlip, (id, 20_000)));
+        _as(address(coinflip), abi.encodeCall(quests.handleFlip_g217, (id, 20_000, _fixtureGameDay())));
         _assertQuestCredit(vm.stopAndReturnStateDiff(), id, 800);
 
         vm.startStateDiffRecording();
@@ -696,7 +699,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _primary(id);
         _eligible(p, false, 5);
         _setLevelQuest(QT_FLIP);
-        _as(address(coinflip), abi.encodeCall(quests.handleFlip, (id, 20_000)));
+        _as(address(coinflip), abi.encodeCall(quests.handleFlip_g217, (id, 20_000, _fixtureGameDay())));
         _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.level(), 10)));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32[8] memory sigs =
@@ -819,7 +822,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
         assertEq(mp.length, 1);
         assertEq(abi.decode(mp[0], (uint32)), pid, "eligibility from the same account's word");
-        assertEq(_calls(acc, address(quests), address(game), game.extsload_g8132.selector).length, 0, "no table read");
+        assertEq(_calls(acc, address(quests), address(game), game.extsload_g2807007.selector).length, 0, "no table read");
 
         // An unrelated ID cannot borrow another account's eligibility.
         uint32 other = 7_777_777;
@@ -881,7 +884,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         PlayerQuestView memory v = quests.getPlayerQuestView(id);
         assertTrue(v.completed[0]);
         assertEq(v.baseStreak, quests.effectiveBaseStreak(id));
-        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking_g2654(id);
+        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking_g1521(id, _fixtureGameDay());
         assertEq(eff, quests.effectiveBaseStreak(id));
         assertFalse(afk);
         _as(address(game), abi.encodeCall(quests.awardQuestStreakShield, (id, 1)));
@@ -907,7 +910,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq(v.baseStreak, 0);
         assertEq(v.progress[0] + v.progress[1], 0);
         assertEq(quests.effectiveBaseStreak(id), 0);
-        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking_g2654(id);
+        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking_g1521(id, _fixtureGameDay());
         assertEq(eff, 0);
         assertFalse(afk);
         (uint8 shields, uint8 high) = quests.shieldsOf(id);
@@ -922,7 +925,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint32 id = _buy(p);
         (uint256 before, uint32 wid) = game.playerActivityScore(p);
         assertEq(wid, id);
-        _as(address(game), abi.encodeCall(quests.awardQuestStreakBonus, (id, 40, game.currentDayView())));
+        _as(address(game), abi.encodeCall(quests.awardQuestStreakBonus, (id, 40, game.currentDayView_g542950())));
         // The reward streak is the start-of-day snapshot, so the bonus shows from the next quest day.
         vm.prank(address(game));
         quests.rollDailyQuest(_questDay() + 1, 11, false, false, false);
@@ -937,7 +940,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     function test_StorageRootsAreKeyedByUint32Id() public {
         uint32 id = 4_000_000_001;
         _setLevelQuest(QT_FLIP);
-        _as(address(coinflip), abi.encodeCall(quests.handleFlip, (id, 100)));
+        _as(address(coinflip), abi.encodeCall(quests.handleFlip_g217, (id, 100, _fixtureGameDay())));
         assertEq(_field(id, OFF_LAST_SYNC, 24), _questDay(), "questPlayerState at slot 1 keyed uint256(id)");
         uint256 lq = _lq(id);
         assertEq(uint8(lq), uint8(_active() >> 136), "levelQuestPlayerState at slot 2: version");
@@ -970,17 +973,17 @@ contract QuestsWalletIdsTest is DeployProtocol {
     ) public {
         uint32 id = _pickId(pick, raw);
         amount = bound(amount, 0, 1e24);
-        uint24 wallDay = uint24(game.currentDayView());
+        uint24 wallDay = uint24(game.currentDayView_g542950());
         _setLevelQuest(uint8(bound(levelType, 1, 11)));
         _setDaily(_questDay(), uint8(bound(dailyType, 2, 10)));
         if (afk) _as(address(game), abi.encodeCall(quests.beginAfking, (id, wallDay)));
-        _as(address(coinflip), abi.encodeCall(quests.handleFlip, (id, amount)));
+        _as(address(coinflip), abi.encodeCall(quests.handleFlip_g217, (id, amount, _fixtureGameDay())));
         _as(address(coin), abi.encodeCall(quests.handleDecimator, (id, amount)));
-        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, amount)));
-        _as(address(game), abi.encodeCall(quests.handleDegenerette, (id, amount, amount & 1 == 0, price)));
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g55809, (id, amount)));
+        _as(address(game), abi.encodeCall(quests.handleDegenerette_g3, (id, amount, amount & 1 == 0, price, _fixtureGameDay())));
         _as(
             address(game),
-            abi.encodeCall(quests.handlePurchase_g4831, (id, amount % 10 ether, uint32(amount % 50), amount % 5 ether, price, price))
+            abi.encodeCall(quests.handlePurchase_g23478, (_fixtureGameDay(), id, amount % 10 ether, uint32(amount % 50), amount % 5 ether, price, price))
         );
         _as(
             address(game),

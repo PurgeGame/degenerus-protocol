@@ -53,7 +53,7 @@ contract CrapsOpenerFailOpen is DeployProtocol {
     ///      to catch.
     function _driveDay(uint256 seed) internal returns (bool opened) {
         vm.warp(_dayStart() + 1 days + 5 minutes);
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         vm.prank(keeper);
         game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         for (uint256 i; i < 6; i++) {

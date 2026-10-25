@@ -89,7 +89,7 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
   // Admit a gambling burn using the authenticated current-day parity word.
-  await seedDailyWord(game, await game.currentDayView(), BigInt("0x" + "de".repeat(32)));
+  await seedDailyWord(game, await game.currentDayView_g542950(), BigInt("0x" + "de".repeat(32)));
 }
 
 // Helper: set game level via storage slot 0 (level is at offset 18, 3 bytes)

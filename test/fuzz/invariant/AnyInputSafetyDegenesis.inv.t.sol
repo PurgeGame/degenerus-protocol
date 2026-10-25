@@ -105,7 +105,7 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
         game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
         game.depositAfkingFunding{value: 5 ether}(game.walletIdOf_g3120(BYSTANDER));
         game.purchaseDeityPass{value: 45 ether}(0, 5, bytes32(0)); // overpay lands in its own afking
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.stopPrank();
         _dgnrsFromVault(BYSTANDER, 1_000_000e12);

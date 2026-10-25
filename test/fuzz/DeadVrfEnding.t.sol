@@ -216,7 +216,7 @@ contract DeadVrfEndingTest is DeployProtocol {
     function _restore() private {
         vm.etch(address(game), realCode);
         uint256 packed = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
-        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((packed & ~(uint256(0xffffff) << 176)) | (uint256(game.currentDayView()) << 176)));
+        vm.store(address(coinflip), bytes32(uint256(4)), bytes32((packed & ~(uint256(0xffffff) << 176)) | (uint256(game.currentDayView_g542950()) << 176)));
     }
 
     function _seedHoldings() private {
@@ -407,7 +407,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         // The synthetic 200-day setup also owes expired scheduled-day maintenance (one engine
         // checkpoint per call) before the daily commitment, as in test_swapSpendsTheDailyRetry.
         for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
-        uint24 r = game.currentDayView();
+        uint24 r = game.currentDayView_g542950();
         uint256 req = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "day R requested");
 
@@ -519,7 +519,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         // The engine requests a mid-day word on its own for closed Craps windows once the day
         // seals (6d0e64b09); settle that so the buyer's request below is the one left unanswered.
         _runDay(mockVRF);
-        uint24 requestDay = game.currentDayView();
+        uint24 requestDay = game.currentDayView_g542950();
         assertTrue(game.rngWordForDay(requestDay) != 0, "mid-day request's day has its daily word");
         address buyer = makeAddr("midday-buyer");
         vm.deal(buyer, 2 ether);
@@ -673,14 +673,14 @@ contract DeadVrfEndingTest is DeployProtocol {
         DeadlineSeeder(payable(address(game))).seed(30);
         _restore();
         _runDay(mockVRF);
-        uint24 completed = game.currentDayView();
+        uint24 completed = game.currentDayView_g542950();
         vm.warp(vm.getBlockTimestamp() + 2 days);
-        assertEq(game.currentDayView(), completed);
+        assertEq(game.currentDayView_g542950(), completed);
         assertTrue(game.livenessTriggered());
         uint256 before = mockVRF.lastRequestId();
         _runDay(mockVRF);
         assertTrue(game.gameOver());
-        assertEq(game.currentDayView(), completed);
+        assertEq(game.currentDayView_g542950(), completed);
         assertGt(mockVRF.lastRequestId(), before, "one terminal cohort receives its own word");
         assertGt(game.rngWordForDay(completed + 1), 0);
         assertEq(game.rngWordForDay(completed + 2), 0);

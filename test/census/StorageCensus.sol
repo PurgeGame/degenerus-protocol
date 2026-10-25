@@ -131,7 +131,7 @@ abstract contract StorageCensus is DeployProtocol {
     }
 
     function _censusDay() internal view returns (uint24 d) {
-        try game.currentDayView() returns (uint24 v) { d = v; } catch {}
+        try game.currentDayView_g542950() returns (uint24 v) { d = v; } catch {}
     }
 
     function _censusLevel() internal view returns (uint24 l) {

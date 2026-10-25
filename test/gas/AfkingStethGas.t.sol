@@ -80,7 +80,7 @@ contract AfkingStethGasTest is DeployProtocol {
 
     function _assertDelivered(address player, bool tickets) private view {
         (uint24 bought, uint24 opened) = host.delivered(player);
-        assertEq(bought, game.currentDayView(), "paid day committed");
+        assertEq(bought, game.currentDayView_g542950(), "paid day committed");
         assertEq(opened, tickets ? bought : bought - 1, "correct delivery mode");
     }
 
@@ -153,7 +153,7 @@ contract AfkingStethGasTest is DeployProtocol {
         _authorize(PLAYER, true);
         host.addStethSubscriber(PLAYER, true);
         // Activate production quest bookkeeping so failure measures real handback.
-        uint24 yesterday = game.currentDayView() - 1;
+        uint24 yesterday = game.currentDayView_g542950() - 1;
         uint32 playerId = game.walletIdOf_g3120(PLAYER);
         vm.prank(address(game));
         quests.beginAfking(playerId, yesterday);
@@ -207,7 +207,7 @@ contract AfkingStethGasTest is DeployProtocol {
         assertEq(mockStETH.sharesOf(PLAYER), sourceShares);
         assertEq(mockStETH.allowance(PLAYER, address(game)), allowanceBefore);
         (uint24 bought,) = host.delivered(PLAYER);
-        assertLt(bought, game.currentDayView());
+        assertLt(bought, game.currentDayView_g542950());
         // A later miner with adequate budget admits and pays exactly this item.
         _work();
         _assertDelivered(PLAYER, false);

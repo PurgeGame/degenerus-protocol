@@ -42,7 +42,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         (other, otherId) = _wallet("deity_other");
         (stranger, strangerId) = _wallet("deity_stranger");
         // issueDeityBoon reads the preceding day's recorded word.
-        RecyclingState.seedDailyWord(address(game), game.currentDayView() - 1, uint256(keccak256("deity_prev_word")));
+        RecyclingState.seedDailyWord(address(game), game.currentDayView_g542950() - 1, uint256(keccak256("deity_prev_word")));
     }
 
     function _buyDeity(address caller, uint32 id, uint8 symbol) private {
@@ -148,7 +148,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
 
     function test_OwnerIssuesBoonsAsTheSmurfDeity() public {
         _buyDeity(owner, smurfId, 3);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
 
         vm.recordLogs();
         vm.prank(owner);

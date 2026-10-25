@@ -488,7 +488,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     /// @notice A daily word of 0 never records as 0 or as the request sentinel 1.
     function test_zeroGuardRawFulfill() public {
         uint48 buffer = _readLootboxRngIndex();
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         game.mineFlip(0);
         uint256 request = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(request, 0);

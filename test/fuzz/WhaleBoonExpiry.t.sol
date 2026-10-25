@@ -116,7 +116,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     ///      the live level -- identical shape to LootboxBoonCoexistence.t.sol's _setupLootbox.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount) internal {
         if (game.walletIdOf_g3120(player) == 0) {
-            (, , , , uint256 priceWei) = game.purchaseInfo();
+            (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
             vm.prank(player);
             game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
@@ -153,7 +153,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         address player = makeAddr("whaleLapsed");
         vm.deal(player, 100 ether);
 
-        uint24 currentDay = game.currentDayView();
+        uint24 currentDay = game.currentDayView_g542950();
         _injectWhaleBoon(player, currentDay - 5, 0, 3);
 
         (uint24 whaleDayBefore, uint24 deityDayBefore, uint8 tierBefore) = _readWhaleLane(player);
@@ -172,7 +172,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         address player = makeAddr("whaleFresh");
         vm.deal(player, 100 ether);
 
-        uint24 currentDay = game.currentDayView();
+        uint24 currentDay = game.currentDayView_g542950();
         _injectWhaleBoon(player, currentDay - 2, 0, 3);
 
         _triggerSweep(player, 0);
@@ -192,7 +192,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         address player = makeAddr("whaleDeity");
         vm.deal(player, 100 ether);
 
-        uint24 currentDay = game.currentDayView();
+        uint24 currentDay = game.currentDayView_g542950();
         _injectWhaleBoon(player, currentDay, currentDay, 3);
 
         _triggerSweep(player, 1);
@@ -204,8 +204,8 @@ contract WhaleBoonExpiry is DeployProtocol {
 
         // Advance one day so currentDay no longer matches the stamped deity day.
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        _seedLogicalFixtureDay(game.currentDayView() + 1);
-        uint24 newDay = game.currentDayView();
+        _seedLogicalFixtureDay(game.currentDayView_g542950() + 1);
+        uint24 newDay = game.currentDayView_g542950();
         assertGt(newDay, currentDay, "day must have advanced past the deity stamp");
 
         _triggerSweep(player, 0);
@@ -222,7 +222,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         address player = makeAddr("whaleBoundary");
         vm.deal(player, 100 ether);
 
-        uint24 currentDay = game.currentDayView();
+        uint24 currentDay = game.currentDayView_g542950();
         _injectWhaleBoon(player, currentDay - 4, 0, 3);
 
         _triggerSweep(player, 1);

@@ -54,7 +54,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         _deployProtocol();
         isolated = vm.envOr("FOUNDRY_ISOLATE", false);
         // The benign purchase window the other coinflip suites use, so the post-walk BAF
-        // guard / purchaseInfo read behaves as in production.
+        // guard / purchaseInfo_g1027 read behaves as in production.
         _warpToDay(2);
         regularPlayer = makeAddr("regular_claim_player");
         rebuyPlayer = makeAddr("rebuy_claim_player");

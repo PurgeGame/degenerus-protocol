@@ -70,7 +70,7 @@ contract StaleBufferedDailyWordClamp is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "daily VRF request in flight on day D");
-        uint24 dayD = game.currentDayView();
+        uint24 dayD = game.currentDayView_g542950();
         assertEq(dayD, idxSealed + 1, "day D is the in-progress day");
         uint256 staleReqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(staleReqId, WORD_D);

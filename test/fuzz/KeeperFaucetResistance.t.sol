@@ -308,7 +308,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         }
         if (shape == 2) {
             // The warm-ring shape really entered the boon draw: the ring slot now holds today.
-            uint24 d = game.currentDayView();
+            uint24 d = game.currentDayView_g542950();
             uint256 w = uint256(vm.load(address(game), bytes32(uint256(GameSlots.PROTOCOL_BOON_POOLS) + (uint256(uint32(1)) == 1 ? 0 : 2) + (uint256(d & 1) & 1))));
             assertEq(uint24(w >> 216), d, "ring slot not retagged to today");
             assertEq(uint32(w >> 176), n, "every bet entered the boon draw");
@@ -347,7 +347,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     ///      an older, drawn day and its entry slots hold old entries, so a new day's entries rewrite
     ///      warm-shaped slots (the cheapest boon-draw placement there is).
     function _warmBoonRing(uint32 issuer, uint256 entries) internal {
-        uint24 d = game.currentDayView();
+        uint24 d = game.currentDayView_g542950();
         uint256 ring = uint256(d & 1);
         bytes32 poolRoot = bytes32(GameSlots.PROTOCOL_BOON_POOLS + (issuer == 1 ? 0 : 2) + ring);
         bytes32 entryRoot = bytes32(uint256(GameSlots.PROTOCOL_BOON_ENTRIES) + (uint256(issuer) == 1 ? 0 : 2) + (uint256(ring) & 1));
@@ -426,7 +426,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 elapsed = (vm.getBlockTimestamp() - 82620) % 1 days;
         if (elapsed < 30 minutes) vm.warp(vm.getBlockTimestamp() + 30 minutes - elapsed);
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
         _quietCrapsTable();
         uint8 next = game.nextMinerAction();

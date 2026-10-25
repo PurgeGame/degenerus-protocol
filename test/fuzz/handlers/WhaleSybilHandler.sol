@@ -128,7 +128,7 @@ contract WhaleSybilHandler is Test {
         if (game.gameOver()) return;
 
         // Buy minimum: 1/4 ticket (qty=100)
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * 100) / 400;
         if (cost == 0 || cost > currentActor.balance) return;
 

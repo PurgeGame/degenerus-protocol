@@ -294,7 +294,7 @@ abstract contract BafBracketFixture is DeployProtocol {
         vm.etch(address(game), type(BafStageHost).runtimeCode);
         host = BafStageHost(payable(address(game)));
         host.seedSession(lvl, word, jackpot);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
     }
 
     /// @dev Candidates and scores for bracket `lvl` (the game level of the stage).

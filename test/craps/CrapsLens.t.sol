@@ -8,7 +8,7 @@ import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.s
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract CrapsLensState is CrapsBattleStorage {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 

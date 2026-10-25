@@ -82,31 +82,31 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
             }
             (bool complete,,) = game.dailySessionState();
             assertTrue(complete, "mandatory phase includes its complete sealing tail");
-            assertEq(game.currentDayView(), day);
+            assertEq(game.currentDayView_g542950(), day);
         }
     }
 
     function test_BootstrapAndRequestOwnLogicalDay() public {
-        assertEq(game.currentDayView(), 1);
+        assertEq(game.currentDayView_g542950(), 1);
         assertEq(coinflip.requestedDailyIdx(), 1);
         (uint16 first,) = coinflip.getCoinflipDayResult(1);
         assertEq(first, 0, "opening day has no phantom flip");
         vm.warp(block.timestamp + 8 days);
-        assertEq(game.currentDayView(), 1, "calendar creates no rounds");
+        assertEq(game.currentDayView_g542950(), 1, "calendar creates no rounds");
         uint256 request = _request();
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(coinflip.requestedDailyIdx(), 2);
         (bool complete, uint24 wall, uint48 completedAt) = game.dailySessionState();
         assertFalse(complete);
         assertEq(wall, game.currentWallDayView());
         assertLt(completedAt, block.timestamp);
         mockVRF.fulfillRandomWords(request, 777);
-        assertEq(game.currentDayView(), 2, "callback cannot increment");
+        assertEq(game.currentDayView_g542950(), 2, "callback cannot increment");
         _finishDaily();
         (complete,, completedAt) = game.dailySessionState();
         assertTrue(complete);
         assertEq(completedAt, block.timestamp);
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(game.latestDailyResultDay(), 2);
         (uint16 nonexistent,) = coinflip.getCoinflipDayResult(3);
         assertEq(nonexistent, 0);
@@ -129,7 +129,7 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
         _fixture(abi.encodeCall(LogicalDayHeaders.latchPreparation, ()));
         vm.warp(block.timestamp + 3 days);
         _request();
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         (,uint24 wall,) = game.dailySessionState();
         assertEq(wall, game.currentWallDayView());
     }
@@ -175,7 +175,7 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
         (,,uint48 completed) = game.dailySessionState();
         vm.warp(uint256(completed) + (stuck < 5 ? 14 days : 1 days));
         // Exercise the newly admitted trigger-to-closure window in all seven exits.
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         address late = address(0x1A7E);
         uint32 lateId = _giveWalletId(late);
         vm.prank(address(game)); coin.mintForGame(late, 200_000);

@@ -36,7 +36,7 @@ contract WaterHarness is CrapsViews {
 
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
         uint256 slot = betId >> 64;
-        return _settlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
+        return _fullSettlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
     }
 
     /// @dev A slot's terms, so a fixture can drive the engine on exactly what a settlement did.

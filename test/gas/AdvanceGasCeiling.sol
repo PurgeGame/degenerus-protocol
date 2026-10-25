@@ -183,7 +183,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         GameSeeder(payable(address(game)))
             .seedAdvanceWorstCase(lvl, word, readOwed, writeOwed, traitIds, bucketCounts, base);
         vm.etch(address(game), realGameCode);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
 
         // Fund the contract so the terminal jackpot pool reaches the 305-winner geometry.
         vm.deal(address(game), GAME_FUNDS);

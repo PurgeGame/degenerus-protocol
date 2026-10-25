@@ -188,7 +188,7 @@ abstract contract BoundaryGasFixture is AdvanceStageStream {
 
     function _restore(bytes memory realCode) internal {
         vm.etch(address(game), realCode);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(address(game), 1000 ether);
         wwxrpBefore = wwxrp.totalSupply();
     }
@@ -321,7 +321,7 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
         );
 
         // Non-vacuity: the purchase phase reopened in this one tx, with no seed window opened.
-        (, bool jackpotPhase_, , , ) = game.purchaseInfo();
+        (, bool jackpotPhase_, , , ) = game.purchaseInfo_g1027();
         assertFalse(jackpotPhase_, "the transition completed and the purchase phase reopened");
         assertFalse(seedArmed, "the x00 transition opens no seed window");
         assertEq(wwxrp.totalSupply(), wwxrpBefore, "the x00 transition mints no WWXRP");

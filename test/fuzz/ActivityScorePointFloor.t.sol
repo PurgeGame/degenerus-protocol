@@ -155,7 +155,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     /// @dev The effective quest streak the activity score reads for `player` — the same value
     ///      `_effectiveQuestStreak` resolves (manual for a non-afker, live compute-on-read for an afker).
     function _effectiveStreakSeenByScore(address player) internal view returns (uint32 streak) {
-        (streak, ) = quests.effectiveBaseStreakAndAfking_g2654(game.walletIdOf_g3120(player));
+        (streak, ) = quests.effectiveBaseStreakAndAfking_g1521(game.walletIdOf_g3120(player), _fixtureGameDay());
     }
 
     // =========================================================================
@@ -200,7 +200,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         _skipDaysNoDelivery(p, 0x0DECA3);
         assertEq(_liveAfkingStreakOf(p), 0, "the run decayed (live afking streak read is 0 after a missed funded day)");
 
-        (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(game.walletIdOf_g3120(p));
+        (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking_g1521(game.walletIdOf_g3120(p), _fixtureGameDay());
         assertFalse(afking, "the underfunded run handed back to manual quests");
         uint256 postScore = activityScoreOf(address(game), p);
         assertEq(postScore - DEITY_BASELINE_POINTS, uint256(manualAfter) / 2,
@@ -320,7 +320,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     /// @dev A false advance hint can mean the read cohort must drain first.
     function _daySealed() internal view returns (bool) {
         uint24 sealedDay = uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
-        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked();
+        return game.currentDayView_g542950() == sealedDay && !game.advanceDue() && !game.rngLocked();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

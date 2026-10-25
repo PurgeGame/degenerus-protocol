@@ -27,7 +27,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  * So to spend exactly `priceWei` (one "full ticket"):
  *   ticketQuantity = 400   (400 / (4 * 100) = 1x multiplier)
  *
- * purchaseInfo() returns: (lvl, inJackpotPhase, lastPurchaseDay_, rngLocked_, priceWei)
+ * purchaseInfo_g1027() returns: (lvl, inJackpotPhase, lastPurchaseDay_, rngLocked_, priceWei)
  */
 describe("PriceEscalation", function () {
   after(function () {
@@ -56,17 +56,17 @@ describe("PriceEscalation", function () {
   // =========================================================================
 
   describe("initial price at level 0", function () {
-    it("purchaseInfo().priceWei is 0.01 ETH", async function () {
+    it("purchaseInfo_g1027().priceWei is 0.01 ETH", async function () {
       const { game } = await loadFixture(deployFullProtocol);
 
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.priceWei).to.equal(eth(0.01));
     });
 
-    it("purchaseInfo().lvl is the actual level (0); price is quoted at the routed level", async function () {
+    it("purchaseInfo_g1027().lvl is the actual level (0); price is quoted at the routed level", async function () {
       const { game } = await loadFixture(deployFullProtocol);
 
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.lvl).to.equal(0n);
       expect(await game.level()).to.equal(0n);
     });

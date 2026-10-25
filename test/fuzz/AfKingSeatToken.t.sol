@@ -79,10 +79,10 @@ contract AfKingSeatToken is SeatFixture {
         (uint256 lane,) = _laneOf(id);
         assertTrue(_active(player), "sub active");
         assertEq(_qty(id), 1, "daily quantity stored");
-        assertEq(uint24((lane >> 46) & ((uint256(1) << 22) - 1)), game.currentDayView(), "checkpointed today");
+        assertEq(uint24((lane >> 46) & ((uint256(1) << 22) - 1)), game.currentDayView_g542950(), "checkpointed today");
         uint256 meta = uint256(vm.load(address(game), keccak256(abi.encode(uint256(id >> 2), GameSlots.SUB_META))))
             >> ((id & 3) * 64);
-        assertEq(uint24((meta >> 11) & ((uint256(1) << 22) - 1)), game.currentDayView(), "run starts today");
+        assertEq(uint24((meta >> 11) & ((uint256(1) << 22) - 1)), game.currentDayView_g542950(), "run starts today");
         assertEq(game.subscriberSetLength(), 3, "set grew by one");
         assertEq(afkingSubToken.balanceOf(player), 0, "the seat was burned");
     }

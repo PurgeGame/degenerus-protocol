@@ -51,7 +51,7 @@ contract LootboxOpenGoldens is DeployProtocol {
     }
 
     function _driveDailyCycleOnce() internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
@@ -123,7 +123,7 @@ contract LootboxOpenGoldens is DeployProtocol {
     function _goldenFixture() internal returns (address whale) {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         assertEq(game.level(), 0, "golden fixture level");
         assertEq(priceWei, 0.01 ether, "golden fixture price");
         assertEq(_idx(), 0, "golden fixture tag");

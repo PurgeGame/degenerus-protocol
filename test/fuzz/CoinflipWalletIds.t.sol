@@ -61,7 +61,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     // =====================================================================
 
     function _today() internal view returns (uint24) {
-        return game.currentDayView();
+        return game.currentDayView_g542950();
     }
 
     function _warpToDay(uint24 d) internal {
@@ -179,7 +179,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_gameId(p), 0);
 
         vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 0);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (expectedId, 1_000, _fixtureGameDay())), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(p);
@@ -216,8 +216,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         game.setOperatorApproval(0, o, true);
 
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
-        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (expectedId, o)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 0);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (expectedId, o)), 1);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (expectedId, 1_000, _fixtureGameDay())), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(o);
@@ -256,10 +256,10 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _fund(f, 10_000);
         uint32 fid = uint32(_walletCount());
 
-        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g502, (rid, f)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (rid, f)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector, r), 0);
         vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (f, true)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (fid, 1_000)), 0);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip_g217, (fid, 1_000, _fixtureGameDay())), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(f);

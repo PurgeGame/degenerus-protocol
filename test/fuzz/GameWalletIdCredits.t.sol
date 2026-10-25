@@ -211,7 +211,7 @@ contract GameWalletIdCredits is DeployProtocol {
     function test_FoilFlipSpinCreditsBuyerId() public {
         (address player, uint32 id) = _wallet("foil_spin_player");
         uint24 L = game.level() + 1;
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         // Ticket 0 shares every quadrant's symbol with the draw but no colour: score 4.
         uint32 sel;
         uint32 win;
@@ -254,7 +254,7 @@ contract GameWalletIdCredits is DeployProtocol {
     function test_GoldenTicketClaimCreditsPackOwnerId() public {
         (address player, uint32 id) = _wallet("golden_player");
         uint24 L = game.level() + 1;
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         // Three gold quadrants (colour bits 3..5 == 7) on the first line.
         uint32 line = uint32(0x38) | (uint32(0x38 | 0x40) << 8) | (uint32(0x38 | 0x80) << 16) | (uint32(0xC1) << 24);
         ext.x_setFoilRecord(
@@ -412,7 +412,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.store(address(game), bytes32(uint256(2)), bytes32((pools & ~uint256(type(uint128).max)) | 60 ether));
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector),
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g23478.selector),
             abi.encode(uint256(4_321), uint8(2), uint32(0), true, false)
         );
         assertEq(game.walletIdOf_g3120(buyer), 0, "fixture: unregistered buyer");
@@ -438,7 +438,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.deal(buyer, 10 ether);
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector),
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g23478.selector),
             abi.encode(uint256(0), uint8(0), uint32(0), false, false)
         );
 

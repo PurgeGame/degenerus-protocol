@@ -201,7 +201,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
     function _emptyRecipientSlots() private view returns (uint256 n) {
         address[3] memory who = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
         for (uint256 i; i < 3; ++i) {
-            if (game.extsload_g8132(_balanceSlot(who[i])) == bytes32(0)) ++n;
+            if (game.extsload_g2807007(_balanceSlot(who[i])) == bytes32(0)) ++n;
         }
     }
 

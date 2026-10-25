@@ -104,7 +104,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         lens = new DegenerusGameLens();
         fixture = new ProtocolBoonFixture();
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        day = game.currentDayView();
+        day = game.currentDayView_g542950();
         bettor = makeAddr("bettor");
         vm.deal(bettor, 1_000_000 ether);
         vm.deal(address(this), 1_000_000 ether);
@@ -126,7 +126,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
     function _score(address who, uint256 score) private {
         uint32 id = _giveWalletId(who);
-        vm.mockCall(address(quests), abi.encodeWithSelector(quests.effectiveBaseStreakAndAfking_g2654.selector, id), abi.encode(uint32(score * 2), false));
+        vm.mockCall(address(quests), abi.encodeWithSelector(quests.effectiveBaseStreakAndAfking_g1521.selector, id), abi.encode(uint32(score * 2), false));
     }
     function _ready() private {
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, uint256(12345))));
@@ -145,7 +145,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
                 (,, bool done) = mockVRF.pendingRequests(request);
                 if (!done) mockVRF.fulfillRandomWords(request, seed);
             }
-            if (!game.rngLocked() && game.rngWordForDay(game.currentDayView()) != 0) return;
+            if (!game.rngLocked() && game.rngWordForDay(game.currentDayView_g542950()) != 0) return;
             if (game.advanceDue()) game.mineFlip(0);
         }
         fail("daily advance must finish after the boon stage");
@@ -289,7 +289,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
 
     function testLaunchDayEthBetsReceiveAllSixBoonsThroughRealAdvance() public {
         vm.warp(_deployTimestamp());
-        day = game.currentDayView();
+        day = game.currentDayView_g542950();
         assertEq(day, _deployDay());
         assertEq(game.rngWordForDay(day), 0);
         vm.prank(bettor); _bet(0, 0.005 ether);
@@ -463,7 +463,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             if (d == 1) {
                 vm.prank(bettor); _bet(0, 0.005 ether);
                 vm.prank(bettor); _bet(6, 0.005 ether);
-                day = game.currentDayView();
+                day = game.currentDayView_g542950();
                 vm.warp(vm.getBlockTimestamp() + 1 days);
             }
             bool finished;
@@ -474,7 +474,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
                     mockVRF.fulfillRandomWords(request, 12345 + d);
                     fulfilled = request;
                 }
-                if (!game.rngLocked() && game.rngWordForDay(game.currentDayView()) != 0) { finished = true; break; }
+                if (!game.rngLocked() && game.rngWordForDay(game.currentDayView_g542950()) != 0) { finished = true; break; }
             }
             assertTrue(finished, "daily advance must finish after the boon stage");
         }
@@ -507,7 +507,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
 
     function testLivenessDeadlineRejectsEthEntries() public {
         vm.warp(vm.getBlockTimestamp() + 1_000 days);
-        day = game.currentDayView();
+        day = game.currentDayView_g542950();
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.requireLivenessTriggered, ()));
         assertFalse(game.gameOver());
         vm.expectRevert(bytes4(keccak256("GameOver()"))); vm.prank(bettor); _bet(0, 0.005 ether);
@@ -715,7 +715,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _finishDailyAdvance(5);
         vm.prank(bettor); _bet(0, 0.005 ether);
         vm.prank(bettor); _bet(6, 0.005 ether);
-        uint24 x = game.currentDayView();
+        uint24 x = game.currentDayView_g542950();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _finishDailyAdvance(2);
         assertEq(lens.protocolBoonPool(address(game), address(vault), x).awardedMask, 7, "x drawn on x + 1");

@@ -79,7 +79,7 @@ contract AfkingStreakFrameNoRegress is DeployProtocol {
     /// A later wall day cannot move a run while its earlier preparation is active, and the
     /// lagging pass leaves every checkpoint at or before the endpoint.
     function test_VaultUpdateWaitsWhileEarlierDayPreparationIsPinned() public {
-        uint24 dayD = host.currentDayView();
+        uint24 dayD = host.currentDayView_g542950();
         host.pin(dayD);
         vm.warp(block.timestamp + 1 days);
         uint32 vaultId = _aid(address(vault));

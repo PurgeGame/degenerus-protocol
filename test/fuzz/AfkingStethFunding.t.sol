@@ -129,7 +129,7 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         assertEq(game.claimablePoolView(), poolBefore + missing - cost, "receipt and both debits conserve liabilities");
         assertEq(game.nextPrizePoolView() + game.futurePrizePoolView(), prizesBefore + cost);
         assertGt(host.memberOf(PLAYER), 0);
-        assertEq(host.endpoint(), game.currentDayView(), "the pass completed");
+        assertEq(host.endpoint(), game.currentDayView_g542950(), "the pass completed");
         if (tickets) assertGt(host.entries(PLAYER), 0);
         else assertEq(host.pendingBoxes(), 1);
     }
@@ -461,7 +461,7 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         vm.prank(PLAYER);
         game.subscribe(0, true, 2, 0);
         assertEq(mockStETH.balanceOf(PLAYER), 1 ether - host.price(), "a change after the daily purchase buys nothing");
-        assertEq(host.endpoint(), game.currentDayView());
+        assertEq(host.endpoint(), game.currentDayView_g542950());
     }
 
     function test_SameDayReenrollmentPaysNothingAndKeepsAllowance() public {

@@ -216,7 +216,7 @@ contract DegeneretteWinLootboxAllowance is DeployProtocol {
     function _land() private {
         RecyclingState.seedWord(address(game), INDEX, bytes32(_winningWord()));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 

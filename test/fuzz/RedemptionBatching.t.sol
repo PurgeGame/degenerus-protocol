@@ -141,7 +141,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     /// @dev One entry of `count` small boxes; returns its position in the write buffer.
     function _buyHuman(address buyer, uint256 count) private returns (uint256 position) {
         position = RecyclingState.boxCount(address(game), RecyclingState.writeBuffer(address(game)));
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.deal(buyer, price * count);
         vm.prank(buyer);
         game.purchase{value: price * count}(0, 0, BoxOrderLib.boSmalls(count), bytes32(0), MintPaymentKind.DirectEth, false);

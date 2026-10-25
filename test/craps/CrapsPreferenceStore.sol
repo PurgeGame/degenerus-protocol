@@ -3,7 +3,7 @@ pragma solidity 0.8.38;
 
 /// @dev Isolated jackpot battle fixtures retain the real reader's SLOAD and call cost.
 contract CrapsPreferenceStore {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 

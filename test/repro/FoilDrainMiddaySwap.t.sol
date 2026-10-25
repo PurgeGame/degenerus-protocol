@@ -313,7 +313,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     /// the buy froze.
     function _buyFoil(address p) internal returns (Pack memory pack) {
         vm.deal(p, 50_000 ether);
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint24 lvl = _activeTicketLevelProbe();
         vm.prank(p);
         game.purchase{value: priceWei * 10}(
@@ -349,7 +349,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     }
 
     function _buyTickets() internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(ticketBuyer);
         game.purchase{value: (priceWei * 4000) / 400}(

@@ -43,7 +43,7 @@ contract DegenesisDayMapping is DegenesisHarness {
     function _open(uint24 day) internal {
         _warpTo(day, 1 hours);
         _drive(0);
-        assertEq(game.currentDayView(), day, "one accepted request per logical day");
+        assertEq(game.currentDayView_g542950(), day, "one accepted request per logical day");
     }
 
     function test_BonusMeasuresExactLateRequestAndNeverWraps() public {
@@ -65,7 +65,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         _buy(a, 0.01 ether);
         assertEq(_lane(1, 4) >> 70, 6 hours, "stalled cohort never reopens bonus");
         _drive(0);
-        assertEq(game.currentDayView(), 3);
+        assertEq(game.currentDayView_g542950(), 3);
         _buy(a, 0.01 ether);
         assertEq(_lane(2, 0) >> 70, 0, "only a new daily request opens a new bonus");
     }
@@ -75,7 +75,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         vm.recordLogs();
         _drive(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(_closed(), 0);
         assertEq(_active(), 0);
         assertFalse(_split(1));
@@ -100,7 +100,7 @@ contract DegenesisDayMapping is DegenesisHarness {
             vm.recordLogs();
             _drive(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            assertEq(game.currentDayView(), _dayOf(c));
+            assertEq(game.currentDayView_g542950(), _dayOf(c));
             assertFalse(_split(c));
             if (c > 1) {
                 assertEq(_splitDays(logs), uint256(1) << (c - 1));
@@ -140,7 +140,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         _buy(a, 0.02 ether);
         vm.warp(_dayStart(3));
         _buy(a, 0.03 ether);
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(_count(1), 3);
         assertEq(_count(2), 0);
         _drive(0);
@@ -158,7 +158,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         _buy(c3, 0.7777 ether);
         _warpTo(5, 10);
         _buy(b, 0.3 ether);
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(_count(1), 5);
         uint256 v = 4.5901 ether;
         assertEq(_volumeUnits(1) * UNIT, v);
@@ -172,7 +172,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         vm.recordLogs();
         game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(game.currentDayView(), 3);
+        assertEq(game.currentDayView_g542950(), 3);
         assertEq(claimable0 - game.claimablePoolView(), 2 * q);
         assertEq(_futureTotal() - future0, q);
         assertEq(game.yieldAccumulatorView() - insurance0, q);
@@ -183,7 +183,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         assertEq(priced, 1 << 1);
         assertEq(bound, 3);
         _drive(0);
-        assertEq(game.currentDayView(), 3, "no calendar catch-up");
+        assertEq(game.currentDayView_g542950(), 3, "no calendar catch-up");
         assertEq(_closed(), 1);
     }
 
@@ -195,7 +195,7 @@ contract DegenesisDayMapping is DegenesisHarness {
         game.mineFlip(0);
         uint256 stalled = mockVRF.lastRequestId();
         lastFulfilledReq = stalled;
-        assertEq(game.currentDayView(), 3);
+        assertEq(game.currentDayView_g542950(), 3);
         assertTrue(_split(1));
         assertEq(_activeDay(), 3);
         _buy(b, 1.5 ether);
@@ -213,14 +213,14 @@ contract DegenesisDayMapping is DegenesisHarness {
         _drive(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // Completion admits at most one fresh request in this later window.
-        assertEq(game.currentDayView(), 4);
+        assertEq(game.currentDayView_g542950(), 4);
         assertEq(_splitDays(logs), 1 << 2);
         assertEq(game.rngWordForDay(3), w3);
         assertEq(game.rngWordForDay(5), 0);
         assertEq(_closed(), 1, "the old active cohort settles after the new request");
         _warpTo(6, 2 hours);
         _drive(0);
-        assertEq(game.currentDayView(), 5);
+        assertEq(game.currentDayView_g542950(), 5);
         assertEq(_closed(), 2, "next request prices and settles the backlog");
     }
 }

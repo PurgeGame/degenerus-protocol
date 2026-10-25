@@ -74,11 +74,11 @@ contract CustomerHotPathGasTest is DeployProtocol {
         CustomerHotPathSeeder(address(game)).seed(PLAYER);
         (heroRoot, heroMetaSlot) = CustomerHotPathSeeder(address(game)).heroStorageSlots();
         vm.etch(address(game), code);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(PLAYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
         vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
         _seedCrapsFixtureCursor(day);
@@ -127,7 +127,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
             readSeen[j] = wasRead;
         }
         bytes32 state;
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         for (uint256 i; i < count; ++i) {
             Vm.StorageAccess memory a = unique[i];
             bytes32 value = vm.load(a.account, a.slot);
@@ -255,7 +255,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
     function test_Gas_DegeneretteProtocolSymbol() public { _begin(); _degen(0, 0, 0.01 ether); _end("degen_protocol_symbol"); }
 
     function _openDay() private {
-        RecyclingState.seedDailyWord(address(game), uint24(game.currentDayView()), 40 << 8);
+        RecyclingState.seedDailyWord(address(game), uint24(game.currentDayView_g542950()), 40 << 8);
         vm.prank(address(game)); crapsBattle.openBonusDay();
     }
     function test_Gas_CrapsWindowFirst() public {
@@ -270,7 +270,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.enterBonusDay(0, BOARD, 1); _end("craps_day");
     }
     function _future(string memory label, uint8 days_) private {
-        uint24 day = uint24(game.currentDayView()) + 1;
+        uint24 day = uint24(game.currentDayView_g542950()) + 1;
         _begin(); vm.prank(PLAYER); crapsBattle.buyFutureCrapsDays(0, day, days_, false, BOARD); _end(label);
     }
     function test_Gas_CrapsFutureOne() public { _future("craps_future_1", 1); }
@@ -286,7 +286,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
     function test_Gas_CrapsPass() public {
         uint32 id = game.walletIdOf_g3120(PLAYER);
         vm.prank(address(game)); crapsBattle.creditPasses(id, 5, 0);
-        uint24 day = uint24(game.currentDayView()) + 1;
+        uint24 day = uint24(game.currentDayView_g542950()) + 1;
         _begin(); vm.prank(PLAYER); crapsBattle.applyCrapsPasses(0, day, 1, false, BOARD); _end("craps_pass");
     }
 
@@ -319,7 +319,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
     }
 
     function test_FutureWordRejectsWholeRunAndRollsBackFunding() public {
-        uint24 day = uint24(game.currentDayView()) + 1;
+        uint24 day = uint24(game.currentDayView_g542950()) + 1;
         RecyclingState.seedDailyWord(address(game), day + 1, 12345);
         uint256 balance = coin.balanceOf(PLAYER);
         vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);

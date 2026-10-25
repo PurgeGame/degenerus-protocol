@@ -89,7 +89,7 @@ contract DegenesisBoonGasTest is DegenesisGasBase, NativeMeasuredGasExport {
             slot,
             bytes32((element & ((uint256(1) << 192) - 1)) | ((uint256(type(uint64).max) - 6) << 192))
         );
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         vm.prank(address(game));
         quests.awardQuestStreakBonus(id, type(uint16).max, day);
         vm.prank(address(game));
@@ -104,7 +104,7 @@ contract DegenesisBoonGasTest is DegenesisGasBase, NativeMeasuredGasExport {
         // Seeding through the production subscription entry is covered by the regular AFKing
         // suites; the host helper mirrors its valid set membership for this isolated call.
         host.hostAfkingBoonMember(id);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         vm.prank(address(game));
         quests.beginAfking(id, day);
         _export("degenesis-boon-afking-activity", 15_071);

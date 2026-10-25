@@ -107,7 +107,7 @@ contract StallResilience is DeployProtocol {
     /// @dev Catch up after the stalled day finished: the wall day's fresh request is answered
     ///      with `word`, which derives the skipped days in between, and the wall day completes.
     function _catchUp(MockVRFCoordinator vrf, uint256 word) internal {
-        uint24 wallDay = game.currentDayView();
+        uint24 wallDay = game.currentDayView_g542950();
         for (uint256 i = 0; i < 60; i++) {
             uint256 id = vrf.lastRequestId();
             if (id != 0) {
@@ -128,7 +128,7 @@ contract StallResilience is DeployProtocol {
     function test_stallSwapResume() public {
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
-        assertEq(game.currentDayView(), _relDay(2));
+        assertEq(game.currentDayView_g542950(), _relDay(2));
         assertTrue(game.rngWordForDay(_relDay(2)) != 0, "Day 2 has RNG word");
 
         // Warp to the next day, trigger VRF request (this will stall)

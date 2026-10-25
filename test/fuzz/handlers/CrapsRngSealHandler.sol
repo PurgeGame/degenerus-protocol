@@ -1311,7 +1311,7 @@ contract CrapsRngSealHandler is Test {
     }
 
     function _buyTicket() internal {
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei == 0 || priceWei > currentActor.balance) return;
         vm.prank(currentActor);
         try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {}
@@ -1380,7 +1380,7 @@ contract CrapsRngSealHandler is Test {
     ///      reserved leaf, LR_MID_DAY, ticketWriteSlot, vrfRequestId, rngRequestTime, rngLockedFlag)
     ///      plus the next leaf the craps table would bind.
     function _setHash() internal view returns (bytes32) {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint256 cursor = _cursor();
         uint256 reserved = _lootboxRngWord(uint48(cursor ^ 1));
         uint256 raw0 = uint256(vm.load(address(game), bytes32(uint256(0))));

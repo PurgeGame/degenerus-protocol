@@ -100,7 +100,7 @@ contract LoanSeizureTest is DeployProtocol {
     }
 
     function _payee(uint32 id) private view returns (address payee) {
-        (, payee, ) = game.resolveAccount_g502(id, address(0));
+        (, payee, ) = game.resolveAccount_g7029(id, address(0));
     }
 
     function _borrow(address who, uint32 id, uint24 due) private returns (uint256 principal) {
@@ -130,7 +130,7 @@ contract LoanSeizureTest is DeployProtocol {
     }
 
     function _buyTickets(address who, uint256 qty) private {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_ || game.gameOver()) return;
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;

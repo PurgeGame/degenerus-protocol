@@ -50,7 +50,7 @@ contract LootboxBudgetResume is DeployProtocol {
     }
 
     function _driveDailyCycleOnce() internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
@@ -105,7 +105,7 @@ contract LootboxBudgetResume is DeployProtocol {
         RecyclingState.seedWord(address(game), index, keccak256("budget-resume-word"));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(GameSlots.DAILY_IDX)));
         slot0 = (slot0 & ~(uint256(0xFFFFFF) << (GameSlots.DAILY_IDX_OFFSET * 8)))
-            | (uint256(game.currentDayView()) << (GameSlots.DAILY_IDX_OFFSET * 8))
+            | (uint256(game.currentDayView_g542950()) << (GameSlots.DAILY_IDX_OFFSET * 8))
             | (uint256(1) << (GameSlots.TICKETS_FULLY_PROCESSED_OFFSET * 8));
         vm.store(address(game), bytes32(GameSlots.DAILY_IDX), bytes32(slot0));
     }
@@ -170,7 +170,7 @@ contract LootboxBudgetResume is DeployProtocol {
 
     function test_smallBudgetOpensOneEntryPerCallAndDrainsTheIndex() public {
         _driveDailyCycleOnce();
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint48 N = _idx();
         uint256[5] memory entries = _buyFive("budgetActor", N, priceWei);
 
@@ -217,7 +217,7 @@ contract LootboxBudgetResume is DeployProtocol {
     ///         Five such calls drain the five entries; the last one has no second to refuse.
     function test_budgetThatFitsOneEntryRefusesTheSecond() public {
         _driveDailyCycleOnce();
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint48 N = _idx();
         uint256[5] memory entries = _buyFive("budgetActorB", N, priceWei);
         _deliverCohort(N);
@@ -248,7 +248,7 @@ contract LootboxBudgetResume is DeployProtocol {
     ///         replayed — and leaves the cursor where it was.
     function test_settledTailCompletesWithoutReplay() public {
         _driveDailyCycleOnce();
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint48 N = _idx();
         _buyFive("budgetActorC", N, priceWei);
         _deliverCohort(N);

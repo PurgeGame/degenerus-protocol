@@ -185,7 +185,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
             _warpTo(d, 30 minutes);
             _walkToIdle(gasSeed == 0);
             for (uint256 k; k < perDay; ++k) _orderAtBound(buyers[(c * perDay + k) % buyers.length], c * 11 + k);
-            (,,,, uint256 price) = game.purchaseInfo();
+            (,,,, uint256 price) = game.purchaseInfo_g1027();
             vm.prank(buyers[c % buyers.length]);
             game.purchase{value: price * 40}(0, 40 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
             _walkToIdle(gasSeed == 0);
@@ -270,7 +270,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
     }
 
     function _walkToIdle(bool minimum) internal {
-        bool focus = game.currentDayView() % 2 == 0;
+        bool focus = game.currentDayView_g542950() % 2 == 0;
         for (uint256 i; i < 1500; ++i) {
             if (focus && _closed() < 7 && _active() != 0) _settleFirst(minimum);
             _fulfillPending(0);
@@ -330,7 +330,7 @@ contract DegenesisMineFlipWalk is DegenesisHarness {
         console2.logBytes4(sel);
         console2.log("gas given", g);
         console2.log("minimum", floor_);
-        console2.log("day", uint256(game.currentDayView()));
+        console2.log("day", uint256(game.currentDayView_g542950()));
         console2.log("level", uint256(game.level()));
         console2.log("degenesisClosed", uint256(_closed()));
         fail(why);

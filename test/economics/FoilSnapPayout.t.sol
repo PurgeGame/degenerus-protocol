@@ -135,7 +135,7 @@ contract FoilSnapPayout is DeployProtocol {
             ) {} catch {}
         }
 
-        _buyDay = game.currentDayView();
+        _buyDay = game.currentDayView_g542950();
 
         address whale = makeAddr("whale");
         vm.deal(whale, 1_000_000 ether);
@@ -153,7 +153,7 @@ contract FoilSnapPayout is DeployProtocol {
                 ) {} catch {}
             }
             _completeDay(_seed(_wordSeries(), d));
-            _endDay = game.currentDayView();
+            _endDay = game.currentDayView_g542950();
             _seedMatchesOnSealedBoard();
             uint256 snapshot = vm.snapshotState();
             (, uint256 paidFlip,, uint256 claims) = _claimAll();
@@ -161,7 +161,7 @@ contract FoilSnapPayout is DeployProtocol {
             if (claims != 0 && paidFlip != 0) break;
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
-        _endDay = game.currentDayView();
+        _endDay = game.currentDayView_g542950();
 
         uint256 worded;
         for (uint24 day = _buyDay + 1; day <= _endDay; day++) {

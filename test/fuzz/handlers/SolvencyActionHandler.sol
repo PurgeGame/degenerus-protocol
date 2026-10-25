@@ -257,7 +257,7 @@ contract SolvencyActionHandler is Test {
 
     /// @dev One ticket of fresh ETH plus a lootbox spend: persists a box and, in the credit window, earns credit.
     function _boxBuy(uint256 lbSeed) internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei == 0) return;
         uint256 lootBoxAmount = bound(lbSeed, 0.01 ether, 1 ether);
         uint256 ethSent = priceWei + lootBoxAmount;
@@ -273,7 +273,7 @@ contract SolvencyActionHandler is Test {
     function spendVaultBudget(uint256 qtySeed, uint256 extraSeed, uint256 whaleSeed) external {
         calls_vaultSpend++;
         if (game.gameOver()) return;
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei == 0) return;
         bool whale = whaleSeed % 4 == 0;
         uint256 qty = whale ? 1 : bound(qtySeed, 400, 4000);
@@ -322,7 +322,7 @@ contract SolvencyActionHandler is Test {
         if (game.gameOver() || game.rngLocked()) return;
         if (AFKingSubscriptionToken(ContractAddresses.AFKING_SUB_TOKEN).balanceOf(currentActor) == 0) return;
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei == 0) return;
         IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
         uint256 inventory = token.balanceOf(currentActor);
@@ -355,7 +355,7 @@ contract SolvencyActionHandler is Test {
         calls_foil++;
         if (game.gameOver()) return;
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei == 0) return;
         uint256 cost = 10 * priceWei; // FOIL_PACK_TICKETS ticket prices (no thanos shift in this campaign)
         uint256 fresh = bound(freshSeed, 0, cost);
@@ -393,7 +393,7 @@ contract SolvencyActionHandler is Test {
         calls_advance++;
         if (game.gameOver()) return;
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
             vm.prank(currentActor);
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}

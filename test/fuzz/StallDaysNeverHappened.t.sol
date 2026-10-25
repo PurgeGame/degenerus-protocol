@@ -7,14 +7,14 @@ contract StallDaysNeverHappened is LogicalDaysFixture {
         _nextLogical(777);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         uint256 id = _requestLogical();
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint24 wall = game.currentWallDayView();
         vm.warp(vm.getBlockTimestamp() + 8 days);
-        assertEq(game.currentDayView(), day);
+        assertEq(game.currentDayView_g542950(), day);
         assertEq(game.currentWallDayView(), wall + 8);
         mockVRF.fulfillRandomWords(id, 0xBEEF0001);
         _nextRequestAfter(id);
-        assertEq(game.currentDayView(), day + 1);
+        assertEq(game.currentDayView_g542950(), day + 1);
         assertEq(coinflip.requestedDailyIdx(), day + 1);
         assertEq(game.rngWordForDay(day), 0xBEEF0001);
         assertEq(game.rngWordForDay(day + 1), 0);
@@ -24,10 +24,10 @@ contract StallDaysNeverHappened is LogicalDaysFixture {
         }
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xC0FFEE0002);
         _finishLogical();
-        assertEq(game.currentDayView(), day + 1);
+        assertEq(game.currentDayView_g542950(), day + 1);
         (,uint24 sent,) = game.dailySessionState();
         assertEq(sent, game.currentWallDayView(), "actual send window owns pacing");
-        assertEq(game.currentDayView(), day + 1);
+        assertEq(game.currentDayView_g542950(), day + 1);
     }
     function test_LateEntropyCannotRescueExpiredProgressDeadline() public {
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -38,7 +38,7 @@ contract StallDaysNeverHappened is LogicalDaysFixture {
         assertTrue(game.livenessTriggered());
         for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineFlip(0);
         assertTrue(game.gameOver());
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(game.rngWordForDay(2), 0, "expired normal result is never applied");
     }
 }

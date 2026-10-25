@@ -41,7 +41,7 @@ contract EconHarness is CrapsViews {
     /// @dev The whole settlement of a bet, stop included — production decides a FORFEIT off the
     ///      stop, so a suite grading the money path has to be able to see it.
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _fullSettlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
     /// @dev Engine-only: a run off a bare table seed, for comparisons that hold no bet.

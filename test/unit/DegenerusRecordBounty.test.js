@@ -60,7 +60,7 @@ describe("DegenerusRecordBounty", function () {
   async function recordSetViaCoinflip(f, bounty, kind, to, mark) {
     const coinflipAddr = f.deployedAddrs.get("COINFLIP");
     const signer = await impersonate(coinflipAddr);
-    const tx = await bounty.connect(signer).recordSet(kind, to, mark, await f.game.currentDayView());
+    const tx = await bounty.connect(signer).recordSet(kind, to, mark, await f.game.currentDayView_g542950());
     return tx;
   }
 
@@ -272,7 +272,7 @@ describe("DegenerusRecordBounty", function () {
       await recordSetViaCoinflip(f, bounty, 2, f.alice.address, 10n);
       await time.increase(7 * 86400);
       expect((await bounty.recordInfo(2))[3]).to.equal(0n, "elapsed resets do not count as rounds");
-      await seedLogicalDay(f.game, (await f.game.currentDayView()) + 7n, f.coinflip);
+      await seedLogicalDay(f.game, (await f.game.currentDayView_g542950()) + 7n, f.coinflip);
       const json = decodeTokenURI(await bounty.tokenURI(2));
       expect(attr(json, "Days Held")).to.equal(7);
       const [, , , daysHeld] = await bounty.recordInfo(2);

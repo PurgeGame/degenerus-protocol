@@ -15,7 +15,7 @@ contract CrapsPassRootProbe is CrapsBattleStorage {
 }
 
 contract CrapsReaderStub {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 

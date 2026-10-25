@@ -184,7 +184,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture, NativeGasExport
         assertEq(sdgnrs.totalSupply(), expectedSupply);
         assertEq(sdgnrs.centurySupplyCheckpoint(), expectedSupply);
         assertEq(sdgnrs.lastRecycledCentury(), 1);
-        (, bool inJackpot,,,) = game.purchaseInfo();
+        (, bool inJackpot,,,) = game.purchaseInfo_g1027();
         assertFalse(inJackpot, "next purchase phase opened");
         assertFalse(game.rngLocked());
         assertEq(wwxrp.totalSupply(), wwxrpBefore);

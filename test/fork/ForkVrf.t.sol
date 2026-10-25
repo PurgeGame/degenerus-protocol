@@ -162,7 +162,7 @@ contract ForkVrfTest is ForkDeployProtocol {
     ///         The next day issues a fresh request id from the same subscription.
     function test_fulfilledWordIsConsumedAndTheNextDayRequestsAgain() public {
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         Request memory r = _dailyRequest();
         assertEq(game.rngWordForDay(day), 0, "no word before fulfilment");
 

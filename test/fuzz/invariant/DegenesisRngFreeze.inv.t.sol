@@ -169,7 +169,7 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
             " resolved=", vm.toString(handler.snapResolvedCount()),
             " fulfil=", vm.toString(handler.ghost_fulfilments()),
             " req=", vm.toString(handler.ghost_requests()),
-            " day=", vm.toString(game.currentDayView()),
+            " day=", vm.toString(game.currentDayView_g542950()),
             " action=", vm.toString(game.nextMinerAction()),
             " locked=", vm.toString(game.rngLocked())
         ));
@@ -178,7 +178,7 @@ contract DegenesisRngFreeze is DegenesisDeployProtocol {
         assertGe(handler.ghost_frozenChecks(), 1, "vacuous: frozen inputs never re-checked");
         assertGe(handler.ghost_boxEpochChecks(), 1, "vacuous: sealed boxes never re-checked");
         // The fixed first window is day 3; a run ending on day 3 has no battle yet.
-        if (game.currentDayView() >= 4 && !game.gameOver())
+        if (game.currentDayView_g542950() >= 4 && !game.gameOver())
             assertGe(handler.ghost_battleLocks(), 1, "vacuous: no jackpot battle locked");
         assertGe(
             handler.ghost_buysWhileRequestOpen() + handler.ghost_boxBuysWhileRequestOpen()

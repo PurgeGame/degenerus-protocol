@@ -55,7 +55,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.store(address(game), flagsSlot, bytes32(flags | (uint256(1) << (GameSlots.DECIMATOR_FLAGS_OFFSET * 8))));
         bytes32 roundSlot = keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS));
         uint256 round = uint256(vm.load(address(game), roundSlot));
-        vm.store(address(game), roundSlot, bytes32(round | (uint256(game.currentDayView()) << OPENED_DAY_SHIFT)));
+        vm.store(address(game), roundSlot, bytes32(round | (uint256(game.currentDayView_g542950()) << OPENED_DAY_SHIFT)));
         require(game.decWindow(), "harness: decimator window flag");
     }
 
@@ -81,7 +81,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
     function _seedCrapsLane(uint32 id, uint256 tier) internal {
         bytes32 s = bytes32(uint256(GameSlotKeys.byId(id, GameSlots.BOON_PACKED)) + 1);
         uint256 v = uint256(vm.load(address(game), s));
-        uint256 lane = tier | (uint256(game.currentDayView()) << 3);
+        uint256 lane = tier | (uint256(game.currentDayView_g542950()) << 3);
         vm.store(address(game), s, bytes32((v & ~uint256(0xFFFFFF)) | lane));
     }
 
@@ -92,7 +92,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
     /// @dev Roll today's quests with slot 1 forced to the Decimator quest; returns today.
     function _rollDecimatorQuest() internal returns (uint24 today) {
-        today = game.currentDayView();
+        today = game.currentDayView_g542950();
         vm.prank(address(game));
         quests.rollDailyQuest(today, 1, false, false, true);
         QuestInfo[2] memory active = quests.getActiveQuests();
@@ -179,7 +179,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (expectedId, BURN)), 1);
         vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeDecimatorBoon, (expectedId)), 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector, expectedId, lvl), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g1271.selector, expectedId, lvl), 1);
         vm.recordLogs();
         vm.prank(p);
         coin.decimatorBurn(0, BURN, 0);
@@ -211,7 +211,9 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         assertEq(n, 0);
 
         uint256 walletsBefore = _walletCount();
-        vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (p, true)), 1);
+        // A registered burner's ID comes from the Game lookup; registration is not entered.
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.walletIdOf_g3120, (p)), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (id, BURN)), 1);
         vm.recordLogs();
         vm.prank(p);
@@ -236,14 +238,14 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         _rollDecimatorQuest();
         uint256 price = game.mintPrice();
         vm.prank(address(game));
-        (,,, bool primaryDone,) = quests.handlePurchase_g4831(id, 1 ether, 0, 0, price, price);
+        (,,, bool primaryDone,) = quests.handlePurchase_g23478(_fixtureGameDay(), id, 1 ether, 0, 0, price, price);
         assertTrue(primaryDone, "fixture: the primary quest completes first (unlocks slot 1)");
 
         (uint256 reward, uint256 postScore) = _previewQuestBurn(id, p);
         vm.expectCall(
             address(game),
             abi.encodeCall(
-                GameFacade.recordDecBurn_g5574,
+                GameFacade.recordDecBurn_g1271,
                 (id, lvl, BURN + reward, ActivityCurveLib.decBattleMultBps(postScore), uint32(0))
             ),
             1
@@ -255,7 +257,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
     /// @notice A burn that completes the Decimator quest during a live afking run is weighted by the
     ///         post-quest activity score: the in-run secondary raises the run's streak base at once,
-    ///         and recordDecBurn_g5574 receives the multiplier of the score read after handleDecimator,
+    ///         and recordDecBurn_g1271 receives the multiplier of the score read after handleDecimator,
     ///         which differs from the pre-quest one.
     function test_QuestCompletingBurn_AfkingRun_UsesPostQuestActivityScore() public {
         address p = makeAddr("dec_afking_quester");
@@ -267,7 +269,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         _finishSubscriptionWindow();
         _subscribeLootbox(p, 1);
         _deliverDay(0xD3C1);
-        (, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
+        (, bool afking) = quests.effectiveBaseStreakAndAfking_g1521(id, _fixtureGameDay());
         assertTrue(afking, "fixture: mid afking run");
 
         // A fresh quest day whose slot 1 is the Decimator quest (an afker's slot 1 is never locked).
@@ -293,7 +295,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
         vm.expectCall(
             address(game),
-            abi.encodeCall(GameFacade.recordDecBurn_g5574, (id, lvl, BURN + reward, postMult, uint32(0))),
+            abi.encodeCall(GameFacade.recordDecBurn_g1271, (id, lvl, BURN + reward, postMult, uint32(0))),
             1
         );
         vm.prank(p);
@@ -342,10 +344,11 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         uint24 lvl = _openWindow();
         uint256 walletsBefore = _walletCount();
 
-        vm.expectCall(address(game), abi.encodeCall(GameFacade.registerWallet_g9539, (SDGNRS, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.walletIdOf_g3120, (SDGNRS)));
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (uint32(2), 8_000)), 1);
         vm.expectCall(address(game), abi.encodeCall(GameFacade.consumeDecimatorBoon, (uint32(2))), 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector, uint32(2), lvl), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g1271.selector, uint32(2), lvl), 1);
         vm.recordLogs();
         vm.prank(address(game));
         uint256 spent = coin.autoDecimatorBurn(lvl, 8_000);

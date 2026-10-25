@@ -209,7 +209,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
     /// @dev Drive a genesis daily cycle so _recordedDailyWord(today) != 0 and the lock clears.
     function _driveDailyCycleOnce() internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}

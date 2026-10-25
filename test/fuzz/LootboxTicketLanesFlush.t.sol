@@ -51,7 +51,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
     }
 
     function _driveDailyCycleOnce() internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
@@ -139,7 +139,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
     function test_flushQueuesEachAnnouncedLevelExactlyOnce() public {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint48 N = _idx();
         uint256 position = RecyclingState.boxCount(address(game), N);
         uint48 ref = QUEUED_ENTRY_TAG | (uint48(position) << 1) | N;

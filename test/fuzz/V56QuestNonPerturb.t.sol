@@ -33,7 +33,7 @@ import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 /// @dev Drives the DegenerusQuests core directly through its access-gated entrypoints — pranking the
 ///      GAME address for the `onlyGame` surface (`rollDailyQuest`/`beginAfking`/`awardQuestStreakBonus`/
 ///      `finalizeAfking`) and the COIN address for the `onlyCoin` progress handlers
-///      (`handlePurchase_g4831`/`handleFlip`/...). State is read through the `playerQuestStates` view (streak) and
+///      (`handlePurchase_g23478`/`handleFlip_g217`/...). State is read through the `playerQuestStates` view (streak) and
 ///      direct `vm.load` of the single-slot PlayerQuestState (RE-DERIVED via `forge inspect
 ///      DegenerusQuests storageLayout`: `questPlayerState` root = slot 1; the struct packs into one
 ///      256-bit word — lastActiveDay u24 byte-3, streak u16 byte-9, afkingActive bool byte-13).
@@ -326,20 +326,20 @@ contract V56QuestNonPerturb is DeployProtocol {
         quests.finalizeAfking(qid3, earned, uint24(coveredDay), uint24(day));
     }
 
-    /// @dev Complete a LOOTBOX slot-1 quest via the COIN-gated handlePurchase_g4831 (the O1 region) with the
+    /// @dev Complete a LOOTBOX slot-1 quest via the COIN-gated handlePurchase_g23478 (the O1 region) with the
     ///      lootbox leg ISOLATED: slot 0 (MINT_ETH) is completed first in a separate purchase, then a
-    ///      lootbox-only handlePurchase_g4831 (ethMintSpendWei = 0) clears the slot-1 LOOTBOX target so the
+    ///      lootbox-only handlePurchase_g23478 (ethMintSpendWei = 0) clears the slot-1 LOOTBOX target so the
     ///      returned reward is PURELY the single lootbox reward (the value the caller credits once).
     function _completeLootboxSlot1(address player, uint32 /*day*/) internal returns (uint256 reward) {
         uint32 qid4 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        quests.handlePurchase_g4831(qid4, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
+        quests.handlePurchase_g23478(_fixtureGameDay(), qid4, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
         uint32 qid5 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (reward, , , , ) = quests.handlePurchase_g4831(qid5, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
+        (reward, , , , ) = quests.handlePurchase_g23478(_fixtureGameDay(), qid5, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
     }
 
-    /// @dev Complete slot 0 (MINT_ETH) via the COIN-gated handlePurchase_g4831 with a 1-ticket ETH mint sized
+    /// @dev Complete slot 0 (MINT_ETH) via the COIN-gated handlePurchase_g23478 with a 1-ticket ETH mint sized
     ///      above the slot-0 target. Returns the handler tuple.
     function _completeSlot0(address player, uint32 /*day*/)
         internal
@@ -347,7 +347,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     {
         uint32 qid6 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (reward, questType, streak, completed, ) = quests.handlePurchase_g4831(qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
+        (reward, questType, streak, completed, ) = quests.handlePurchase_g23478(_fixtureGameDay(), qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     /// @dev Complete the player's own slot 1 by reading its rolled type and routing the matching
@@ -362,7 +362,7 @@ contract V56QuestNonPerturb is DeployProtocol {
         if (t == QT_FLIP) {
             uint32 qid7 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleFlip(qid7, 100_000 ether);
+            (reward, qt, s, completed) = quests.handleFlip_g217(qid7, 100_000 ether, _fixtureGameDay());
         } else if (t == QT_DECIMATOR) {
             uint32 qid8 = _qid(player);
             vm.prank(ContractAddresses.COIN);
@@ -370,26 +370,26 @@ contract V56QuestNonPerturb is DeployProtocol {
         } else if (t == QT_AFFILIATE) {
             uint32 qid9 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleAffiliate(qid9, 100_000 ether);
+            (reward, qt, s, completed) = quests.handleAffiliate_g55809(qid9, 100_000 ether);
         } else if (t == QT_DEGENERETTE_FLIP) {
             uint32 qid10 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleDegenerette(qid10, 100_000 ether, false, MINT_PRICE);
+            (reward, qt, s, completed) = quests.handleDegenerette_g3(qid10, 100_000 ether, false, MINT_PRICE, _fixtureGameDay());
         } else if (t == QT_DEGENERETTE_ETH) {
             uint32 qid11 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleDegenerette(qid11, 10_000 ether, true, MINT_PRICE);
+            (reward, qt, s, completed) = quests.handleDegenerette_g3(qid11, 10_000 ether, true, MINT_PRICE, _fixtureGameDay());
         } else if (t == QT_MINT_FLIP) {
             uint32 qid12 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed, ) = quests.handlePurchase_g4831(qid12, 0, 100, 0, MINT_PRICE, MINT_PRICE);
+            (reward, qt, s, completed, ) = quests.handlePurchase_g23478(_fixtureGameDay(), qid12, 0, 100, 0, MINT_PRICE, MINT_PRICE);
         } else {
             // LOOTBOX / MINT_ETH share the purchase path; an ETH-mint spend + lootbox spend clears the
-            // ETH-denominated target. handlePurchase_g4831 credits the lootbox reward via the caller, so the
+            // ETH-denominated target. handlePurchase_g23478 credits the lootbox reward via the caller, so the
             // returned reward is the slot's QUEST_RANDOM_REWARD.
             uint32 qid13 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed, ) = quests.handlePurchase_g4831(qid13, 10 ether, 100, 10 ether, MINT_PRICE, MINT_PRICE);
+            (reward, qt, s, completed, ) = quests.handlePurchase_g23478(_fixtureGameDay(), qid13, 10 ether, 100, 10 ether, MINT_PRICE, MINT_PRICE);
         }
     }
 

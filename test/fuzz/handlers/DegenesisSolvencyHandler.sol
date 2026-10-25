@@ -138,7 +138,7 @@ contract DegenesisSolvencyHandler is Test {
     }
 
     function dayIndex() public view returns (uint256) {
-        return game.currentDayView();
+        return game.currentDayView_g542950();
     }
 
     function header(uint256 c) public view returns (uint256) {
@@ -208,7 +208,7 @@ contract DegenesisSolvencyHandler is Test {
     function earnCredit(uint256 actorSeed, uint256 boxSeed, uint256 ticketSeed) external {
         if (game.gameOver()) return;
         address a = _actor(actorSeed);
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 box = bound(boxSeed, 0.01 ether, 12 ether) / 0.001 ether * 0.001 ether;
         uint256 qty = ticketSeed % 3 == 0 ? 0 : bound(ticketSeed, 400, 400 * 600);
         uint256 value = box + priceWei * qty / 400;
@@ -289,7 +289,7 @@ contract DegenesisSolvencyHandler is Test {
         if (game.gameOver()) return;
         address a = _actor(actorSeed);
         if (game.nextPrizePoolView() <= 50 ether) {
-            (,,,, uint256 priceWei) = game.purchaseInfo();
+            (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
             uint256 qty = 25 ether / priceWei * 400;
             uint256 value = priceWei * qty / 400;
             vm.prank(a);
@@ -338,7 +338,7 @@ contract DegenesisSolvencyHandler is Test {
         if (game.gameOver()) return;
         uint256 budget = vaultBudget();
         if (budget == 0) return;
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 qty = bound(qtySeed, 400, 2000);
         uint256 box = boxSeed % 2 == 0 ? 0 : bound(boxSeed, 0.01 ether, 0.2 ether) / 0.001 ether * 0.001 ether;
         uint256 cost = priceWei * qty / 400 + box;

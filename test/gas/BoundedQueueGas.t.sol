@@ -57,10 +57,10 @@ contract BoundedQueueGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(game), vm.getDeployedCode("BoundedQueueGas.t.sol:BoundedQueueHost"));
         host = BoundedQueueHost(payable(address(game)));
         host.seed(PLAYER);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 1000 ether);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
     }
     function _boxes() private {

@@ -225,10 +225,10 @@ contract V62GasBrickCompose is DeployProtocol {
 
         uint32 idxBeforeStall = _dailyIdx();
 
-        // The stall: warp STALL_DAYS whole days WITHOUT advancing so currentDayView() runs far ahead of
+        // The stall: warp STALL_DAYS whole days WITHOUT advancing so currentDayView_g542950() runs far ahead of
         // dailyIdx -> `day > idx + 1 && _recordedDailyWord(idx + 1) == 0` (the backfill precondition).
         vm.warp(block.timestamp + STALL_DAYS * 1 days);
-        uint32 resumeDay = game.currentDayView();
+        uint32 resumeDay = game.currentDayView_g542950();
         _setHeaderField(0, 3, resumeDay - 1);            // psd kept recent (game alive: resumeDay-psd=1)
 
         require(resumeDay > idxBeforeStall + 1, "fixture: a multi-day gap opened (day >> dailyIdx)");

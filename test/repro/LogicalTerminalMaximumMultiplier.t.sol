@@ -24,13 +24,13 @@ contract LogicalTerminalMaximumMultiplierTest is DeployProtocol {
         vm.prank(deity);
         game.purchaseDeityPass{value: 24 ether}(0, 4, bytes32(0));
         for (uint256 round; round < 30; ++round) {
-            uint24 previous = game.currentDayView();
+            uint24 previous = game.currentDayView_g542950();
             vm.warp(vm.getBlockTimestamp() + 1 days);
-            for (uint256 call; call < 500 && game.currentDayView() == previous; ++call) {
+            for (uint256 call; call < 500 && game.currentDayView_g542950() == previous; ++call) {
                 _answer(9000 + round);
                 _mine();
             }
-            assertEq(game.currentDayView(), previous + 1, "one accepted round per reset");
+            assertEq(game.currentDayView_g542950(), previous + 1, "one accepted round per reset");
             _answer(9000 + round);
             for (uint256 call; call < 500; ++call) {
                 (bool complete,,) = game.dailySessionState();
@@ -40,7 +40,7 @@ contract LogicalTerminalMaximumMultiplierTest is DeployProtocol {
             (bool done,,) = game.dailySessionState();
             assertTrue(done, "every round receives its final completion certificate");
         }
-        assertEq(game.currentDayView(), 39);
+        assertEq(game.currentDayView_g542950(), 39);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         assertTrue(game.livenessTriggered(), "normal timeout after thirty completed rounds");
         for (uint256 call; call < 500 && game.gameOverTimestamp() == 0; ++call) {

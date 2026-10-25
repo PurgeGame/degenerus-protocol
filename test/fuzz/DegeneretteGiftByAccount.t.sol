@@ -62,7 +62,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     function _grantBoon(uint32 id, uint8 currency, uint8 tier) private {
         uint256 shift = BP_DEGEN_LANE0_SHIFT + 24 * uint256(currency);
         uint256 s1 = uint256(vm.load(address(game), _boonSlot1(id)));
-        uint256 lane = (uint256(game.currentDayView() & 0x1FFFFF) << 3) | tier;
+        uint256 lane = (uint256(game.currentDayView_g542950() & 0x1FFFFF) << 3) | tier;
         s1 = (s1 & ~(BP_LANE_MASK << shift)) | (lane << shift);
         vm.store(address(game), _boonSlot1(id), bytes32(s1));
         assertEq(_lane(id, currency) & 3, tier, "fixture: boon written");
@@ -74,8 +74,8 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     }
 
     function _expectQuest(uint32 earner, uint32 notEarner) private {
-        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette.selector, earner), 1);
-        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette.selector, notEarner), 0);
+        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette_g3.selector, earner), 1);
+        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette_g3.selector, notEarner), 0);
     }
 
     /// @dev Place a bet as `caller` for account `id`; returns the stored bet word.
@@ -147,7 +147,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
         address fresh = makeAddr("gift_fresh_giver");
         vm.deal(fresh, 1 ether);
         assertEq(game.walletIdOf_g3120(fresh), 0, "fixture: unregistered giver");
-        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette.selector, recipientId), 0);
+        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette_g3.selector, recipientId), 0);
         (uint256 bet,) = _bet(fresh, recipientId, CURRENCY_ETH, 0.01 ether, 2, 0.02 ether);
         uint32 freshId = game.walletIdOf_g3120(fresh);
         assertGt(freshId, 0, "the paying funder registered");
@@ -210,7 +210,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
         _fundFlip(owner, 10_000);
         _fundFlip(operator, 10_000);
 
-        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette.selector, smurfId), 1);
+        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette_g3.selector, smurfId), 1);
         (uint256 bet,) = _bet(operator, smurfId, CURRENCY_FLIP, 500, 2, 0);
 
         assertEq(uint32(bet), smurfId, "the bet belongs to the smurf's ID");

@@ -154,7 +154,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     function _terminal() private {
         host.invoke{gas: 10_000_000}(ContractAddresses.GAME_GAMEOVER_MODULE,
             abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
-                (game.currentDayView(), uint24(10), uint256(10_000_000))));
+                (game.currentDayView_g542950(), uint24(10), uint256(10_000_000))));
     }
 
     function test_BalanceReadAllFailuresSkipYieldAndDaySealContinues() public {
@@ -312,7 +312,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             uint256 beforeSD = ContractAddresses.SDGNRS.balance;
             uint256 sub = admin.subscriptionId();
             bytes memory sweep = abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
-                (game.currentDayView(), uint24(10), uint256(10_000_000)));
+                (game.currentDayView_g542950(), uint24(10), uint256(10_000_000)));
             vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
             host.invoke{gas: 10_000_000}(ContractAddresses.GAME_GAMEOVER_MODULE, sweep);
             assertFalse(host.swept()); assertEq(game.redemptionReserve(), 9 ether);
@@ -407,7 +407,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         bytes32 tableSlot = bytes32(uint256(11)); // CrapsBattleStorage._minerSlot, checked by layout oracle.
         uint256 tableWord = uint256(vm.load(ContractAddresses.CRAPS, tableSlot));
         vm.store(ContractAddresses.CRAPS, tableSlot,
-            bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView()) * 8)));
+            bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView_g542950()) * 8)));
         NativeFailureProbe probe = new NativeFailureProbe();
         uint8[6] memory modes = [uint8(1), 2, 5, 8, 9, 10];
         for (uint256 site; site < 9; ++site) for (uint256 i; i < modes.length; ++i) {
@@ -422,7 +422,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             uint256 supplied = 10_000_000;
             if (site == 0) {
                 host.seedRng(true, true);
-                _seedCrapsFixtureCursor(game.currentDayView());
+                _seedCrapsFixtureCursor(game.currentDayView_g542950());
                 vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector));
                 _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
                 input = abi.encodeCall(game.mineFlip, (uint32(0)));
@@ -434,7 +434,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                 _fault(ContractAddresses.ADMIN, adminImplementation, bytes4(keccak256("shutdownVrf()")), mode);
                 input = abi.encodeCall(host.invoke, (ContractAddresses.GAME_GAMEOVER_MODULE,
                     abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
-                        (game.currentDayView(), uint24(10), uint256(10_000_000)))));
+                        (game.currentDayView_g542950(), uint24(10), uint256(10_000_000)))));
             }
             if (site >= 5) {
                 bool terminal = site == 8;
@@ -445,7 +445,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                     site == 6 ? IStETH.submit.selector : IStETH.balanceOf.selector, mode);
                 bytes memory worker = terminal
                     ? abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
-                        (game.currentDayView(), uint24(10), uint256(10_000_000)))
+                        (game.currentDayView_g542950(), uint24(10), uint256(10_000_000)))
                     : site == 7 ? abi.encodeCall(IDegenerusGameJackpotModule.distributeYieldSurplus, (uint256(777)))
                     : abi.encodeCall(IDegenerusGameAdvanceModule.runDailyPhase_g2582, (uint256(10_000_000)));
                 input = abi.encodeCall(host.invoke,
@@ -464,7 +464,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         bytes32 tableSlot = bytes32(uint256(11));
         uint256 tableWord = uint256(vm.load(ContractAddresses.CRAPS, tableSlot));
         vm.store(ContractAddresses.CRAPS, tableSlot,
-            bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView()) * 8)));
+            bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView_g542950()) * 8)));
         NativeFailureProbe probe = new NativeFailureProbe();
         for (uint256 kind; kind < 3; ++kind) this.exportNativeAdmissionCase(kind, probe);
     }
@@ -477,7 +477,7 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
         } else {
             host.seedRng(kind == 1, true);
-            _seedCrapsFixtureCursor(game.currentDayView());
+            _seedCrapsFixtureCursor(game.currentDayView_g542950());
         }
         bytes memory input = abi.encodeCall(game.mineFlip, (uint32(10_000)));
         string memory label = kind == 0 ? "optfix-sweep" : kind == 1 ? "optfix-daily" : "optfix-midday";

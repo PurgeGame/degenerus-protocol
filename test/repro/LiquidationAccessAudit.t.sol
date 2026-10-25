@@ -83,7 +83,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         vm.etch(address(game), type(LiquidationAuditHost).runtimeCode);
         host = LiquidationAuditHost(payable(address(game)));
         host.openWindow();
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(address(game), 1000 ether);
         host.fundLender();
         borrower = makeAddr("audit-borrower");
@@ -178,7 +178,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         address[2] memory callers = [borrower, operator];
         for (uint256 i; i < ids.length; ++i) {
             for (uint256 j; j < callers.length; ++j) {
-                (, address payee, bool authorized) = game.resolveAccount_g502(ids[i], callers[j]);
+                (, address payee, bool authorized) = game.resolveAccount_g7029(ids[i], callers[j]);
                 assertEq(payee, address(sdgnrs));
                 assertFalse(authorized);
                 vm.startPrank(callers[j]);
@@ -197,9 +197,9 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         }
         uint32 replacement = _giveWalletId(borrower);
         assertNotEq(replacement, root);
-        (,, bool allowed) = game.resolveAccount_g502(replacement, borrower);
+        (,, bool allowed) = game.resolveAccount_g7029(replacement, borrower);
         assertTrue(allowed, "new main is usable");
-        (,, allowed) = game.resolveAccount_g502(replacement, operator);
+        (,, allowed) = game.resolveAccount_g7029(replacement, operator);
         assertFalse(allowed, "old approval does not migrate to new main");
     }
 
@@ -232,11 +232,11 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         _default(child);
 
         assertEq(game.walletIdOf_g3120(borrower), root, "main account remains current");
-        (,, bool allowed) = game.resolveAccount_g502(child, operator);
+        (,, bool allowed) = game.resolveAccount_g7029(child, operator);
         assertFalse(allowed, "approval on seized child is dead");
-        (,, allowed) = game.resolveAccount_g502(root, operator);
+        (,, allowed) = game.resolveAccount_g7029(root, operator);
         assertTrue(allowed, "unseized main approval survives");
-        (,, allowed) = game.resolveAccount_g502(sibling, operator);
+        (,, allowed) = game.resolveAccount_g7029(sibling, operator);
         assertTrue(allowed, "unseized sibling approval survives");
         uint256 before = borrower.balance;
         vm.prank(operator);

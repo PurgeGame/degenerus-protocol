@@ -63,7 +63,7 @@ contract CompositionDegenesisBacklog is CompositionInvariant, DegenesisWeekOpeni
     /// @notice From the hand-off, ordinary days drain the backlog: every remaining order resolves
     ///         exactly once, cohort 7 prices at a later request and closes, and the inventory burns.
     function test_backlogDrainsUnderOrdinaryDays() public {
-        uint24 d = game.currentDayView();
+        uint24 d = game.currentDayView_g542950();
         while (_dgwClosed() < 7) {
             ++d;
             require(d <= dgw.endDay + 5, "backlog never drained");

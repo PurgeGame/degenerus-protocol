@@ -29,7 +29,7 @@ contract CursorProbe {
     }
 
     function creditFlip_g317(uint32, uint256) external {
-        uint256 value = uint256(DegenerusGame(payable(GAME)).extsload_g8132(bytes32(SLOT)));
+        uint256 value = uint256(DegenerusGame(payable(GAME)).extsload_g2807007(bytes32(SLOT)));
         uint256 base = BASE;
         assembly ("memory-safe") {
             let n := sload(base)
@@ -713,7 +713,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     function test_Counters_FoilWriteCount() public {
         uint256 slot = uint256(vm.load(address(game), bytes32(GameSlotsFoil.SLOT)));
         uint256 before = (slot >> (GameSlotsFoil.WRITE_OFFSET * 8)) & type(uint32).max;
-        (,,,, uint256 priceWei) = host.purchaseInfo();
+        (,,,, uint256 priceWei) = host.purchaseInfo_g1027();
         vm.prank(alice);
         host.purchase{value: priceWei * 20}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         slot = uint256(vm.load(address(game), bytes32(GameSlotsFoil.SLOT)));

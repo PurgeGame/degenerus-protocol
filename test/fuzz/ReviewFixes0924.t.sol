@@ -149,14 +149,14 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
         vm.etch(address(game), type(ReviewDeadlineSeeder).runtimeCode);
         ReviewDeadlineSeeder(payable(address(game))).seed(29);
         vm.etch(address(game), realCode);
-        _syncCoinflipFixtureDay(game.currentDayView());
-        _seedCrapsFixtureCursor(game.currentDayView());
-        uint24 d = game.currentDayView() + 1;
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
+        _seedCrapsFixtureCursor(game.currentDayView_g542950());
+        uint24 d = game.currentDayView_g542950() + 1;
         for (uint256 i; i < 800 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "round requested");
         (uint24 baseline,) = _clock();
         vm.warp(vm.getBlockTimestamp() + 3 days);
-        assertEq(game.currentDayView(), d, "elapsed resets cannot fabricate rounds");
+        assertEq(game.currentDayView_g542950(), d, "elapsed resets cannot fabricate rounds");
         assertFalse(game.livenessTriggered(), "unfinished round inside hard deadline");
         _answer();
         for (uint256 i; i < 500; ++i) {
@@ -165,7 +165,7 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
             game.mineFlip{gas: 16_700_000}(type(uint32).max);
         }
         assertGt(game.rngWordForDay(d), 0, "delayed result remains retained");
-        assertEq(game.currentDayView(), d);
+        assertEq(game.currentDayView_g542950(), d);
         assertFalse(game.livenessTriggered(), "29 completed rounds");
         uint256 prior = mockVRF.lastRequestId();
         for (uint256 i; i < 800 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip(0);

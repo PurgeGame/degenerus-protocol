@@ -52,7 +52,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
         RecyclingState.seedWord(address(game), 1, bytes32(WORD));
         uint256 state = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32((state & ~(uint256(0xffffff) << 24))
-            | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192)));
+            | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192)));
         vm.record();
         game.mineFlip(0);
         total += _sample(string.concat(prefix, "-resolve"), address(game));
@@ -77,7 +77,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
             | (uint256(1) << (GameSlots.DECIMATOR_FLAGS_OFFSET * 8))));
         bytes32 round = keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS));
         vm.store(address(game), round, bytes32(uint256(vm.load(address(game), round))
-            | (uint256(game.currentDayView()) << 200)));
+            | (uint256(game.currentDayView_g542950()) << 200)));
         for (uint256 i; i < 3; ++i) {
             vm.record(); vm.prank(address(uint160(A) + uint160(i)));
             coin.decimatorBurn(0, 2000, 0);

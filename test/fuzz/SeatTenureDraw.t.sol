@@ -158,7 +158,7 @@ contract SeatTenureDraw is DeployProtocol {
 
             // The seal's draw reads span AFTER the sealed day's STAGE delivery;
             // nothing moves it between the seal and this read.
-            uint24 sealedDay = game.currentDayView();
+            uint24 sealedDay = game.currentDayView_g542950();
             uint256 word = game.rngWordForDay(sealedDay);
             if (word == 0) continue; // day did not seal through the draw path
             uint256 idx = _expectedIdx(word, 3);

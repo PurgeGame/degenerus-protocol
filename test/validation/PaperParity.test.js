@@ -127,9 +127,9 @@ describe("Paper Parity (Phase 46)", function () {
       });
     }
 
-    it("verifies price at level 0 matches purchaseInfo().priceWei", async function () {
+    it("verifies price at level 0 matches purchaseInfo_g1027().priceWei", async function () {
       const { game, priceTester } = await loadFixture(deployWithTester);
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       const contractPrice = info.priceWei;
       const testerPrice = await priceTester.priceForLevel(0);
       expect(contractPrice).to.equal(testerPrice);
@@ -139,7 +139,7 @@ describe("Paper Parity (Phase 46)", function () {
   describe("PAR-02: Ticket cost formula costWei = (priceWei * qty) / 400", function () {
     it("1 full ticket (qty=400) costs exactly priceWei", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       const priceWei = info.priceWei;
 
       // 1 full ticket = qty 400 (4 entries, each scaled by 100)
@@ -162,7 +162,7 @@ describe("Paper Parity (Phase 46)", function () {
 
     it("1 entry (qty=100) costs priceWei/4", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       const priceWei = info.priceWei;
 
       const qty = 100;
@@ -176,7 +176,7 @@ describe("Paper Parity (Phase 46)", function () {
 
     it("10 full tickets (qty=4000) costs 10 * priceWei", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       const priceWei = info.priceWei;
 
       const qty = 4000;
@@ -192,7 +192,7 @@ describe("Paper Parity (Phase 46)", function () {
   describe("PAR-03: Prize pool split BPS", function () {
     it("ticket purchase: 90% next pool, 10% future pool", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       const priceWei = info.priceWei;
 
       const nextBefore = await game.nextPrizePoolView();

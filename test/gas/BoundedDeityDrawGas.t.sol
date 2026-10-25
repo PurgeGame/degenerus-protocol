@@ -40,11 +40,11 @@ contract BoundedDeityDrawGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(game), vm.getDeployedCode("BoundedDeityDrawGas.t.sol:BoundedDeityDrawHost"));
         BoundedDeityDrawHost host = BoundedDeityDrawHost(payable(address(game)));
         host.seed(deities);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         if (repeat) host.draw();
         _measureBounded(label, address(host), address(this), 0, abi.encodeCall(host.draw, ()), false);
         uint256 total;
-        uint24 day = game.currentDayView() + 1;
+        uint24 day = game.currentDayView_g542950() + 1;
         for (uint8 q; q < 4; ++q) {
             total += CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(address(uint160(0xA000 + q))), day);
             if (deities) total += CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(address(uint160(0xD000 + q))), day);

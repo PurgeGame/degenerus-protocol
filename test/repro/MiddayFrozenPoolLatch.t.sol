@@ -172,7 +172,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         currentOwed = uint32(TicketQueueStorage.owed(address(game), currentKey, buyer) >> 8);
         assertGt(currentOwed, 0, "reachability: current tickets await their own commitment");
         if (withFoil) {
-            (,,,, uint256 foilPrice) = game.purchaseInfo();
+            (,,,, uint256 foilPrice) = game.purchaseInfo_g1027();
             vm.prank(buyer);
             game.purchase{value: foilPrice * 10}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         }
@@ -190,14 +190,14 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         }
         assertEq(_ticketWriteSlot(), before, "the early future-pool request preserves current writes");
         assertEq(_midDayLatch(), 2, "reachability: the mid-day request must isolate the future pool");
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(lateBuyer);
         game.purchase{value: price * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        day = game.currentDayView();
+        day = game.currentDayView_g542950();
     }
 
     function _assertReleased(uint24 ffKey, uint24 day, bytes4 lastRevert) internal {
-        assertEq(game.currentDayView(), day, "harness: everything above ran within the request day");
+        assertEq(game.currentDayView_g542950(), day, "harness: everything above ran within the request day");
         assertEq(_queueLen(ffKey), 0, "the mid-day drain must empty the frozen pool");
         assertEq(_midDayLatch(), 0, "the latch must release once the frozen pool is drained");
         assertTrue(_ticketsFullyProcessed(), "the read slot must be marked drained");
@@ -241,9 +241,9 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     function _driveToSealedPurchaseDay() internal returns (uint24 programLevel) {
         for (uint256 i = 0; i < 4000; i++) {
             require(!game.gameOver(), "harness: gameOver before the seal");
-            (uint24 lvl, bool inJackpot, bool lpd, bool rngL, ) = game.purchaseInfo();
+            (uint24 lvl, bool inJackpot, bool lpd, bool rngL, ) = game.purchaseInfo_g1027();
             if (!inJackpot && !lpd && !rngL && _ticketsFullyProcessed()
-                && game.rngWordForDay(game.currentDayView()) != 0 && game.rngComplete()
+                && game.rngWordForDay(game.currentDayView_g542950()) != 0 && game.rngComplete()
                 && !game.advanceDue()) return lvl;
             _fulfillPending();
             (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
@@ -285,7 +285,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     }
 
     function _buyTickets() internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);

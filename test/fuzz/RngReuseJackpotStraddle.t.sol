@@ -109,11 +109,11 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         // drain until the day fully unlocks. No wall-day straddle.
         _drainUntilUnlocked();
         assertTrue(!game.rngLocked(), "control: day D must fully unlock same-day");
-        assertEq(game.currentDayView(), D, "control: still day D after same-day completion");
+        assertEq(game.currentDayView_g542950(), D, "control: still day D after same-day completion");
 
         // Cross the wall-day and run the next day normally: it must request a FRESH word.
         vm.warp(block.timestamp + 1 days + 1);
-        uint24 D1 = game.currentDayView();
+        uint24 D1 = game.currentDayView_g542950();
         assertGt(D1, D, "control: warp advanced to a later day");
         uint256 wordD1 = _advanceUntilWordRecorded(D1); // fulfills the fresh request
 
@@ -140,7 +140,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
         // STRADDLE: cross the wall-day WITHOUT completing the deferred settlement.
         vm.warp(block.timestamp + 1 days + 1);
-        uint24 D1 = game.currentDayView();
+        uint24 D1 = game.currentDayView_g542950();
         assertGt(D1, D, "warp advanced to a later day");
 
         // Advance + fulfill: the clamp seals day D (deferred half on wordD), then D+1 asks fresh.
@@ -174,7 +174,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         // before the entry: the transition word is applied, the lock is held, and the next chunk
         // is the consolidation that enters the jackpot phase (pending flag false by construction).
         _driveToTransitionCheckpoint();
-        uint24 D = game.currentDayView();
+        uint24 D = game.currentDayView_g542950();
         uint256 wordD = game.rngWordForDay(D);
         emit log_named_uint("[transition] entered jackpot on day", D);
         emit log_named_uint("[transition] rngWordForDay(D)", wordD);
@@ -184,7 +184,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
         // STRADDLE across the wall-day WITHOUT completing/sealing the day.
         vm.warp(block.timestamp + 1 days + 1);
-        uint24 D1 = game.currentDayView();
+        uint24 D1 = game.currentDayView_g542950();
         assertGt(D1, D, "transition: warp advanced to a later day");
         // Advance + fulfill: the clamp processes day D's jackpot sequence on wordD, then
         // the wall-day requests its own fresh word.
@@ -237,7 +237,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         for (uint256 i = 0; i < 400; i++) {
             require(!game.gameOver(), "gameOver before jackpot pending-set");
             require(game.jackpotPhase(), "left jackpot phase before pending-set");
-            if (_pendingSet() && game.rngLocked()) return game.currentDayView();
+            if (_pendingSet() && game.rngLocked()) return game.currentDayView_g542950();
 
             _fulfillVrf();
             if (!_step()) {
@@ -257,8 +257,8 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
             require(!game.gameOver(), "gameOver before jackpot phase");
             require(!game.jackpotPhase(), "passed the transition checkpoint");
             _fulfillVrf();
-            (, , bool lpd, bool locked, ) = game.purchaseInfo();
-            if (lpd && locked && game.rngWordForDay(game.currentDayView()) != 0) {
+            (, , bool lpd, bool locked, ) = game.purchaseInfo_g1027();
+            if (lpd && locked && game.rngWordForDay(game.currentDayView_g542950()) != 0) {
                 uint256 snap = vm.snapshotState();
                 bool stepped = _step();
                 if (game.jackpotPhase()) {
@@ -359,7 +359,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     }
 
     function _buyTickets(address who, uint256 qty) internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_ || game.gameOver()) return;
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;

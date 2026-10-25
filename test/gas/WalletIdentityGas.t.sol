@@ -65,7 +65,7 @@ contract WalletIdentityGasTest is DeployProtocol {
         _seeder().seedLevel(24);
         _restoreGame();
         vm.deal(address(game), 1_000 ether);
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         vm.prank(address(game));
         quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
@@ -93,7 +93,7 @@ contract WalletIdentityGasTest is DeployProtocol {
         return WalletIdentityGasSeeder(address(game));
     }
 
-    function _restoreGame() private { vm.etch(address(game), gameCode); _syncCoinflipFixtureDay(game.currentDayView()); }
+    function _restoreGame() private { vm.etch(address(game), gameCode); _syncCoinflipFixtureDay(game.currentDayView_g542950()); }
 
     function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
 

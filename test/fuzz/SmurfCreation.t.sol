@@ -212,7 +212,7 @@ contract SmurfCreation is DeployProtocol {
         assertEq(loggedSmurf, smurfId);
 
 
-        (address key, address payee, bool authorized) = game.resolveAccount_g502(smurfId, owner);
+        (address key, address payee, bool authorized) = game.resolveAccount_g7029(smurfId, owner);
         assertEq(key, address(0));
         assertEq(payee, owner);
         assertTrue(authorized);
@@ -230,8 +230,8 @@ contract SmurfCreation is DeployProtocol {
         uint32 expectedId = uint32(_walletsLength());
         uint32 expectedKey = expectedId;
 
-        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase_g4831.selector, expectedId), 1);
-        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase_g4831.selector, ownerId), 0);
+        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase_g23478.selector, _fixtureGameDay(), expectedId), 1);
+        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase_g23478.selector, _fixtureGameDay(), ownerId), 0);
         vm.expectEmit(true, false, false, true, address(game));
         emit EntriesBought(expectedId, 400, price);
         (uint32 smurfId, uint32 key) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);
@@ -477,8 +477,8 @@ contract SmurfCreation is DeployProtocol {
         assertTrue(ka != kb);
         assertEq(_element(a) >> 160 & type(uint32).max, ownerId);
         assertEq(_element(b) >> 160 & type(uint32).max, ownerId);
-        (, address pa, bool oka) = game.resolveAccount_g502(a, owner);
-        (, address pb, bool okb) = game.resolveAccount_g502(b, owner);
+        (, address pa, bool oka) = game.resolveAccount_g7029(a, owner);
+        (, address pb, bool okb) = game.resolveAccount_g7029(b, owner);
         assertTrue(oka && okb);
         assertEq(pa, owner);
         assertEq(pb, owner);

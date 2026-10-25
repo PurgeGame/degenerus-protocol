@@ -413,7 +413,7 @@ describe("DegenerusJackpots", function () {
     it("succeeds when called by game contract", async function () {
       const { jackpots, game } = await loadFixture(deployFullProtocol);
       await asGame(hre.ethers, game, async (gameSigner) => {
-        await expect(jackpots.connect(gameSigner).beginBafOn(await game.currentDayView())).to.not.be.reverted;
+        await expect(jackpots.connect(gameSigner).beginBafOn(await game.currentDayView_g542950())).to.not.be.reverted;
         await expect(jackpots.connect(gameSigner).finalizeBaf(10)).to.not.be.reverted;
       });
     });
@@ -446,9 +446,9 @@ describe("DegenerusJackpots", function () {
       const before = await jackpots.bafHeadWinner(10, 1n, 0);
       expect(before).to.equal(await idOf(coinflip, alice.address));
 
-      await asGame(hre.ethers, game, async (gameSigner) => jackpots.connect(gameSigner).beginBafOn(await game.currentDayView()));
+      await asGame(hre.ethers, game, async (gameSigner) => jackpots.connect(gameSigner).beginBafOn(await game.currentDayView_g542950()));
 
-      expect(await jackpots.getLastBafResolvedDay()).to.equal(await game.currentDayView());
+      expect(await jackpots.getLastBafResolvedDay()).to.equal(await game.currentDayView_g542950());
       // The award stage draws across several transactions from the same board.
       expect(await jackpots.bafHeadWinner(10, 1n, 0)).to.equal(await idOf(coinflip, alice.address));
       expect(await jackpots.bafConsolationOf(alice.address, 10)).to.equal(0n);
@@ -460,7 +460,7 @@ describe("DegenerusJackpots", function () {
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
 
       await asGame(hre.ethers, game, async (gameSigner) => {
-        await jackpots.connect(gameSigner).beginBafOn(await game.currentDayView());
+        await jackpots.connect(gameSigner).beginBafOn(await game.currentDayView_g542950());
         await jackpots.connect(gameSigner).finalizeBaf(10);
       });
 

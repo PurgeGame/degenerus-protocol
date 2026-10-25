@@ -190,7 +190,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _keyOf(uint32 id) internal view returns (address) {
-        return address(uint160(uint256(game.extsload_g8132(GameSlotKeys.walletElement(id)))));
+        return address(uint160(uint256(game.extsload_g2807007(GameSlotKeys.walletElement(id)))));
     }
 
     function _nextId() internal view returns (uint32) {
@@ -242,7 +242,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function _price() internal view returns (uint256 p) {
-        (,,,, p) = game.purchaseInfo();
+        (,,,, p) = game.purchaseInfo_g1027();
     }
 
     /// @dev One whole ticket bought with fresh ETH through the Game.
@@ -389,7 +389,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _extsloads(Vm.AccountAccess[] memory acc) internal view returns (uint256) {
-        return _calls(acc, address(affiliate), address(game), game.extsload_g8132.selector).length;
+        return _calls(acc, address(affiliate), address(game), game.extsload_g2807007.selector).length;
     }
 
     function _registrations(Vm.AccountAccess[] memory acc) internal view returns (uint256) {
@@ -1058,7 +1058,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_SdgnrsWhalePassAffiliateIsTraversalFree() public {
         bool[3] memory seen;
-        vm.expectCall(address(game), abi.encodeWithSelector(game.extsload_g8132.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.extsload_g2807007.selector), 0);
         vm.expectCall(address(game), abi.encodeWithSelector(game.registerWallet_g9539.selector), 0);
         vm.startStateDiffRecording();
         for (uint256 d; d < 400 && !(seen[0] && seen[1] && seen[2]); ++d) {
@@ -1183,7 +1183,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             bytes[] memory credits = _affiliateCredits(acc);
             assertEq(credits.length, 1);
             _assertCredit(credits[0], parity == 0 ? 1 : 2, 1000);
-            assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate.selector).length, 0);
+            assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate_g55809.selector).length, 0);
         }
     }
 
@@ -1237,7 +1237,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         vm.startStateDiffRecording();
         _pay(4000, bytes32(0), s, sid, 1);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate.selector).length, 0);
+        assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate_g55809.selector).length, 0);
         assertEq(_calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip_g317.selector).length, 0);
         assertEq(affiliate.affiliateScore(1, oid), 1000, "earnings still booked");
         (uint32 w, uint256 c,) = _payCombined(bytes32(0), s, sid, 1, 4000);
@@ -1799,7 +1799,7 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
     function _landWord(uint256 word) private {
         RecyclingState.seedWord(address(game), IDX, bytes32(word));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 

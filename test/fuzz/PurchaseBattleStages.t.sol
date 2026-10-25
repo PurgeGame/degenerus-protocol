@@ -121,7 +121,7 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
 
     function test_MidnightUsesSameFieldBoardsAndWord() public {
         _apply();
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint256 word = game.rngWordForDay(day);
         uint256 snap = vm.snapshotState();
         (bytes32 sameDay,) = _battle();
@@ -174,7 +174,7 @@ contract PurchaseBattleWithoutTicketsTest is PurchaseBattleStagesBase {
 
     function test_TraitDrawSealsDayWhenThereIsNoTicketLeg() public {
         _apply();
-        uint256 word = game.rngWordForDay(game.currentDayView());
+        uint256 word = game.rngWordForDay(game.currentDayView_g542950());
         // The engine reaches the battle through the metered entry (level, word, allowance); a
         // prefix match pins the level and the day's word.
         vm.expectCall(

@@ -65,7 +65,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         _requestDaily();
-        uint24 R = game.currentDayView();
+        uint24 R = game.currentDayView_g542950();
         assertTrue(GameSlotKeys.afkingBoxPending(address(game), _aid(atk)), "day R: STAGE stamped the attacker");
         assertEq(_afkingResetDay(), R, "day R: STAGE reset stamped R");
         assertTrue(game.rngLocked(), "day R: request outstanding");
@@ -73,7 +73,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
 
         _t += 3 days;
         vm.warp(_t);
-        assertEq(game.currentDayView(), R, "calendar stall preserves the outstanding day");
+        assertEq(game.currentDayView_g542950(), R, "calendar stall preserves the outstanding day");
         uint24 W = R + 1;
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
 
@@ -134,7 +134,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         // ---- Positive control: the next day runs the STAGE (uncommitted word) and the drawing. ----
         _t += 1 days;
         vm.warp(_t);
-        assertEq(game.currentDayView(), W, "new calendar reset alone does not advance");
+        assertEq(game.currentDayView_g542950(), W, "new calendar reset alone does not advance");
         uint24 N = W + 1;
         assertEq(game.rngWordForDay(N), 0, "N's word uncommitted before its STAGE");
         vm.recordLogs();

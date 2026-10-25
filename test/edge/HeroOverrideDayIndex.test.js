@@ -26,7 +26,7 @@ async function requestNextDay(game) {
   await advanceToNextDay();
   for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0, { gasLimit: 16_777_216 });
   expect(await game.rngLocked(), "a real daily request sealed the pool").to.equal(true);
-  return (await game.currentDayView()) - 1n;
+  return (await game.currentDayView_g542950()) - 1n;
 }
 
 describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", function () {
@@ -35,7 +35,7 @@ describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", f
 
   it("carries an unsealed pool across calendar days and exposes it under today's view", async function () {
     const { game, alice, bob } = await loadFixture(deployFullProtocol);
-    const start = await game.currentDayView();
+    const start = await game.currentDayView_g542950();
     const index = await dailyIdx(game);
     await bet(game, alice, 2, 5);
     expect(await game.getDailyHeroWager(start, 2, 5)).to.equal(UNITS);
@@ -48,7 +48,7 @@ describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", f
 
   it("freezes the accumulated winner at the real daily request", async function () {
     const { game, alice, bob } = await loadFixture(deployFullProtocol);
-    const start = await game.currentDayView();
+    const start = await game.currentDayView_g542950();
     await bet(game, alice, 1, 3);
     const expected = await winner(game, start);
     expect(expected).to.deep.equal([1n, 3n, UNITS]);
@@ -58,7 +58,7 @@ describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", f
     expect(await winner(game, sealed)).to.deep.equal(expected, "repeated payout reads agree");
     await bet(game, bob, 2, 7);
     expect(await winner(game, sealed)).to.deep.equal(expected, "later wager cannot alter the frozen draw");
-    expect(await winner(game, await game.currentDayView())).to.deep.equal([2n, 7n, UNITS]);
+    expect(await winner(game, await game.currentDayView_g542950())).to.deep.equal([2n, 7n, UNITS]);
   });
 
   it("keeps both payout reads identical across three stalled days of interleaved wagers", async function () {
@@ -72,7 +72,7 @@ describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", f
       await advanceToNextDay();
       await bet(game, bob, 2, 7);
       expect(await winner(game, sealed)).to.deep.equal(before);
-      expect(await game.getDailyHeroWager(await game.currentDayView(), 2, 7)).to.equal(BigInt(i + 1) * UNITS);
+      expect(await game.getDailyHeroWager(await game.currentDayView_g542950(), 2, 7)).to.equal(BigInt(i + 1) * UNITS);
       expect(await dailyIdx(game)).to.equal(frozenIndex);
     }
     expect(await game.getDailyHeroWager(sealed + 2n, 2, 7)).to.equal(0n, "no invented calendar-day history");
@@ -85,6 +85,6 @@ describe("HeroOverrideDayIndex — daily commitment and stalled accumulation", f
     expect(before[2]).to.equal(0n);
     await bet(game, carol, 1, 6);
     expect(await winner(game, sealed)).to.deep.equal(before);
-    expect(await game.getDailyHeroWager(await game.currentDayView(), 1, 6)).to.equal(UNITS);
+    expect(await game.getDailyHeroWager(await game.currentDayView_g542950(), 1, 6)).to.equal(UNITS);
   });
 });

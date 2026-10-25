@@ -61,9 +61,9 @@ contract IdReviewSeller {
         callbackRan = true;
         for (uint256 i; i < 2; ++i) {
             uint32 id = i == 0 ? root : child;
-            (,, bool authorized) = game.resolveAccount_g502(id, address(this));
+            (,, bool authorized) = game.resolveAccount_g7029(id, address(this));
             require(!authorized, "seller still authorized in callback");
-            (,, authorized) = game.resolveAccount_g502(id, address(operator));
+            (,, authorized) = game.resolveAccount_g7029(id, address(operator));
             require(!authorized, "operator still authorized in callback");
             (bool ok,) = address(game).call(abi.encodeWithSignature("claimWinnings(uint32,uint256)", id, 1));
             require(!ok, "seller withdrew sold credit");
@@ -119,10 +119,10 @@ contract IdAuthorizationReviewTest is DeployProtocol {
 
     function _accountDigest(uint32 id) private view returns (bytes32) {
         return keccak256(abi.encode(
-            game.extsload_g8132(GameSlotKeys.walletElement(id)),
-            game.extsload_g8132(GameSlotKeys.mintPacked(id)),
-            game.extsload_g8132(GameSlotKeys.balances(id)),
-            game.extsload_g8132(GameSlotKeys.byId(id, GameSlots.BOON_PACKED)),
+            game.extsload_g2807007(GameSlotKeys.walletElement(id)),
+            game.extsload_g2807007(GameSlotKeys.mintPacked(id)),
+            game.extsload_g2807007(GameSlotKeys.balances(id)),
+            game.extsload_g2807007(GameSlotKeys.byId(id, GameSlots.BOON_PACKED)),
             coinflip.coinflipAmountById(id), wwxrp.claimable(id)
         ));
     }
@@ -149,8 +149,8 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), root, 1, type(uint256).max);
         assertTrue(q.eligible);
         assertGt(q.principal, 0);
-        bytes32 rootBank = game.extsload_g8132(GameSlotKeys.balances(root));
-        bytes32 childBank = game.extsload_g8132(GameSlotKeys.balances(child));
+        bytes32 rootBank = game.extsload_g2807007(GameSlotKeys.balances(root));
+        bytes32 childBank = game.extsload_g2807007(GameSlotKeys.balances(child));
         IdReviewSeller(payable(owner)).borrow(game, coinflip, operator, root, child);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), address(new IdReviewSeizer()).code);
@@ -163,29 +163,29 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         assertGt(replacement, child);
         assertGt(replacementChild, replacement);
         assertEq(game.walletIdOf_g3120(owner), replacement);
-        assertEq(game.walletIdentityOf(owner), root, "governance identity survives re-registration");
-        assertEq(game.extsload_g8132(GameSlotKeys.balances(root)), rootBank);
-        assertEq(game.extsload_g8132(GameSlotKeys.balances(child)), childBank);
+        assertEq(game.walletIdentityOf_g8516(owner), root, "governance identity survives re-registration");
+        assertEq(game.extsload_g2807007(GameSlotKeys.balances(root)), rootBank);
+        assertEq(game.extsload_g2807007(GameSlotKeys.balances(child)), childBank);
         for (uint256 i; i < 2; ++i) {
             uint32 id = i == 0 ? root : child;
-            (, address payee, bool authorized) = game.resolveAccount_g502(id, owner);
+            (, address payee, bool authorized) = game.resolveAccount_g7029(id, owner);
             assertEq(payee, address(sdgnrs));
             assertFalse(authorized);
-            (,, authorized) = game.resolveAccount_g502(id, address(operator));
+            (,, authorized) = game.resolveAccount_g7029(id, address(operator));
             assertFalse(authorized);
         }
-        (, address newPayee, bool newAuth) = game.resolveAccount_g502(replacementChild, owner);
+        (, address newPayee, bool newAuth) = game.resolveAccount_g7029(replacementChild, owner);
         assertEq(newPayee, owner);
         assertTrue(newAuth);
-        (,, newAuth) = game.resolveAccount_g502(replacementChild, address(operator));
+        (,, newAuth) = game.resolveAccount_g7029(replacementChild, address(operator));
         assertFalse(newAuth, "approvals cannot leak into newly allocated IDs");
     }
 
     function _probeEmpty(uint32 id) private {
         bytes32 before_ = _accountDigest(id);
-        uint256 length = uint256(game.extsload_g8132(bytes32(GameSlots.WALLETS)));
+        uint256 length = uint256(game.extsload_g2807007(bytes32(GameSlots.WALLETS)));
         // Public cache and idempotent settlement calls must not initialize a future account.
-        game.playerActivityScoreCachedById(id);
+        game.playerActivityScoreCachedById_g975(id);
         uint32[] memory ids = new uint32[](3);
         ids[0] = id; ids[1] = id; ids[2] = 0;
         game.claimAfkingFlip(ids);
@@ -196,21 +196,21 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         (ok,) = address(game).call(abi.encodeCall(game.setOperatorApproval, (id, address(this), true)));
         assertFalse(ok, "cannot preapprove an unallocated ID");
         assertEq(_accountDigest(id), before_);
-        assertEq(uint256(game.extsload_g8132(bytes32(GameSlots.WALLETS))), length);
+        assertEq(uint256(game.extsload_g2807007(bytes32(GameSlots.WALLETS))), length);
     }
 
     function testFuzz_PublicCallsCannotPoisonFutureIds(uint32 candidate) public {
-        uint32 next = uint32(uint256(game.extsload_g8132(bytes32(GameSlots.WALLETS))));
+        uint32 next = uint32(uint256(game.extsload_g2807007(bytes32(GameSlots.WALLETS))));
         uint32 target = uint32(bound(candidate, next, type(uint32).max));
         _probeEmpty(0); // This caller has no ID: zero must remain the empty sentinel.
         _probeEmpty(target);
         _probeEmpty(next);
         address newcomer = makeAddr("id-review-newcomer");
         assertEq(_giveWalletId(newcomer), next);
-        assertEq(uint256(game.extsload_g8132(GameSlotKeys.walletElement(next))), uint160(newcomer));
-        assertEq(game.extsload_g8132(GameSlotKeys.mintPacked(next)), bytes32(0));
-        assertEq(game.extsload_g8132(GameSlotKeys.balances(next)), bytes32(uint256(1)), "only the claimable sentinel");
-        (,, bool authorized) = game.resolveAccount_g502(next, address(this));
+        assertEq(uint256(game.extsload_g2807007(GameSlotKeys.walletElement(next))), uint160(newcomer));
+        assertEq(game.extsload_g2807007(GameSlotKeys.mintPacked(next)), bytes32(0));
+        assertEq(game.extsload_g2807007(GameSlotKeys.balances(next)), bytes32(uint256(1)), "only the claimable sentinel");
+        (,, bool authorized) = game.resolveAccount_g7029(next, address(this));
         assertFalse(authorized);
     }
 

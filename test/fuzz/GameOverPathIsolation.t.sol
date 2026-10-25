@@ -109,7 +109,7 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
     ///         best-effort drain inside _handleGameOverPath executed.
     function testGameOverDrainsQueuedTickets() public {
         // Step 1: purchase tickets on level 0; writes to write slot.
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyer);
         game.purchase{value: ticketCost}(

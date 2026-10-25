@@ -70,7 +70,7 @@ contract CompositionHandler is Test {
 
         qty = bound(qty, 100, 2000);
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * qty) / 400;
         if (ticketCost == 0 || ticketCost > currentActor.balance) return;
 
@@ -114,7 +114,7 @@ contract CompositionHandler is Test {
 
         // Then purchase tickets
         qty = bound(qty, 100, 1000);
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * qty) / 400;
         if (ticketCost > 0 && ticketCost <= currentActor.balance) {
             vm.prank(currentActor);
@@ -141,7 +141,7 @@ contract CompositionHandler is Test {
         if (game.gameOver()) return;
 
         // First ensure actor has purchased today (daily gate)
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * 100) / 400;
         if (ticketCost > 0 && ticketCost <= currentActor.balance) {
             vm.prank(currentActor);
@@ -203,7 +203,7 @@ contract CompositionHandler is Test {
         if (game.gameOver()) return;
 
         qty = bound(qty, 100, 4000);
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * qty) / 400;
         if (ticketCost == 0 || ticketCost > currentActor.balance) return;
 

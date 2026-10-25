@@ -487,13 +487,13 @@ describe("RngStall", function () {
       ).to.not.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 
-    it("purchaseInfo confirms rngLocked_ is true during pending VRF", async function () {
+    it("purchaseInfo_g1027 confirms rngLocked_ is true during pending VRF", async function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.rngLocked_).to.equal(true);
     });
   });

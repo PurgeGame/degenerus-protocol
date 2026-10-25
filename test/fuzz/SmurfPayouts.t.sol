@@ -241,7 +241,7 @@ contract SmurfPayoutsTest is SmurfFixture {
     ///      band (c >= 80); a stranger claims; the spin's WWXRP mints to `payee`.
     function _foilWwxrp(uint32 id, uint32 key, address payee) private {
         uint24 L = game.level() + 1;
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint32 sel;
         uint32 win;
         for (uint256 q; q < 4; ++q) {
@@ -359,7 +359,7 @@ contract SmurfPayoutsTest is SmurfFixture {
                 lootbox,
                 abi.encodeCall(
                     DegenerusGameLootboxModule.resolveAfkingBox,
-                    (id, 10 ether, game.currentDayView(), word, uint16(0))
+                    (id, 10 ether, game.currentDayView_g542950(), word, uint16(0))
                 )
             );
         } else if (kind == Box.Redemption) {

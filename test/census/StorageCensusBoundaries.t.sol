@@ -52,7 +52,7 @@ abstract contract CensusBoundaryBase is StorageCensus {
     }
 
     function _today() internal view returns (uint24) {
-        return game.currentDayView();
+        return game.currentDayView_g542950();
     }
 
     function _act(string memory label, uint256 i, address to, uint256 value, bytes memory data)
@@ -237,7 +237,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
     }
 
     function _purchaseInfo() internal view returns (uint24, bool, bool, bool, uint256) {
-        return game.purchaseInfo();
+        return game.purchaseInfo_g1027();
     }
 
     // ------------------------------------------------------------------ BAF bracket, fire and skip

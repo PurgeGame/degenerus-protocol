@@ -159,7 +159,7 @@ contract DegenesisLivenessHandler is Test {
 
     modifier action(string memory name) {
         _where = name;
-        trace = string.concat(trace, name, "@", vm.toString(uint256(game.currentDayView())), " ");
+        trace = string.concat(trace, name, "@", vm.toString(uint256(game.currentDayView_g542950())), " ");
         ++ghost_actions;
         _trackRequest();
         _;
@@ -190,7 +190,7 @@ contract DegenesisLivenessHandler is Test {
         uint256 qty = kindSeed >> 8 & 3 == 0 ? 100 : bound(qtySeed, 1, 100);
         uint256 order;
         uint256 value;
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         if (kind == 0) {
             order = BoxOrderLib.boSmalls(qty);
             value = price * qty;
@@ -219,7 +219,7 @@ contract DegenesisLivenessHandler is Test {
 
     function actFoil(uint256 actorSeed) external action("foil") {
         if (game.gameOver()) return;
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(_actor(actorSeed));
         try game.purchase{value: price * 80}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
             ++ghost_foilBuys;
@@ -245,7 +245,7 @@ contract DegenesisLivenessHandler is Test {
         action("buyDegenesis")
     {
         if (game.gameOver()) return;
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         if (today < GameTimeLib.DEGENESIS_START_DAY || today >= GameTimeLib.MAIN_LAUNCH_DAY) return;
         address a = _actor(actorSeed);
         uint256 shape = amountSeed % 4;
@@ -296,7 +296,7 @@ contract DegenesisLivenessHandler is Test {
     /// @notice The Vault's Degenesis budget buys tickets or a whale pass at the normal price.
     function actVaultSpend(uint256 qtySeed, uint256 whaleSeed) external action("vaultSpend") {
         if (game.gameOver()) return;
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         bool whale = whaleSeed % 4 == 0;
         uint256 qty = whale ? 1 : bound(qtySeed, 400, 4000);
         uint256 cost = whale ? 2.4 ether : price * qty / 400;
@@ -332,7 +332,7 @@ contract DegenesisLivenessHandler is Test {
         kind = kind % 4;
         if (_pending()) ++ghost_stalls;
         if (kind == 3) {
-            if (!_pending() || game.currentDayView() >= GameTimeLib.MAIN_LAUNCH_DAY) return;
+            if (!_pending() || game.currentDayView_g542950() >= GameTimeLib.MAIN_LAUNCH_DAY) return;
             uint256 nextReset = _nextDayStart() + bound(offset, 0, 20 hours);
             ++ghost_stallAcrossReset;
             _warp(nextReset);
@@ -430,14 +430,14 @@ contract DegenesisLivenessHandler is Test {
         _where = "finish";
         for (uint256 d; d < 40; ++d) {
             if (finishLivenessDay == 0 && game.livenessTriggered()) {
-                finishLivenessDay = game.currentDayView();
+                finishLivenessDay = game.currentDayView_g542950();
                 finishLivenessSlot0 = uint256(vm.load(address(game), bytes32(0)));
             }
             if (game.gameOver()) break;
             _fulfillPending();
             _runToIdle(uint256(keccak256(abi.encode(seed, d))), 300);
             _observe();
-            uint24 today = game.currentDayView();
+            uint24 today = game.currentDayView_g542950();
             finishLeftSale = today >= GameTimeLib.MAIN_LAUNCH_DAY;
             finishSettled = _degenesisClosed() == 7;
             finishLevel = game.level();
@@ -513,7 +513,7 @@ contract DegenesisLivenessHandler is Test {
             selector: sel,
             gasGiven: g,
             minGas: minimum,
-            day: game.currentDayView(),
+            day: game.currentDayView_g542950(),
             level: game.level(),
             degenesisClosed: _degenesisClosed(),
             actionNo: ghost_actions,
@@ -574,7 +574,7 @@ contract DegenesisLivenessHandler is Test {
 
     function _buyTickets(address a, uint256 tickets) internal {
         if (game.gameOver()) return;
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(a);
         try game.purchase{value: price * tickets}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             ++ghost_ticketBuys;

@@ -12,7 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionReserveHarness is DegenerusGameRngUtils {
-    function currentDayView() external view returns (uint24) { return _gameDay(); }
+    function currentDayView_g542950() external view returns (uint24) { return _gameDay(); }
     function close() external { _closeRedemptionBatch(); }
     function reserveFromOrdinary(uint256 amount) external {
         _debitClaimable(SDGNRS_WALLET_ID, amount);
@@ -39,7 +39,7 @@ contract RedemptionReserveHarness is DegenerusGameRngUtils {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (uint256));
     }
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
     function pools() external view returns (uint256) {
@@ -100,7 +100,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         _callHarness(abi.encodeCall(RedemptionReserveHarness.topUp, ()));
         assertLt(game.claimableWinningsOf(address(sdgnrs)), ordinary, "AFKing spends ordinary backing");
         ordinary = game.claimableWinningsOf(address(sdgnrs));
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint256 bought = abi.decode(_callHarness(abi.encodeCall(RedemptionReserveHarness.whale, (day))), (uint256));
         assertGt(bought, 0, "whale purchase actually executes");
         assertLt(game.claimableWinningsOf(address(sdgnrs)), ordinary);

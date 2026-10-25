@@ -174,7 +174,7 @@ contract DegeneretteHandler is Test {
     function purchaseTickets(uint256 actorSeed) external useActor(actorSeed) {
         if (game.gameOver()) return;
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * 400) / 400; // 1 full ticket
         if (cost == 0 || cost > currentActor.balance) return;
 
@@ -234,7 +234,7 @@ contract DegeneretteHandler is Test {
             // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day
             // request: the delivered cohort's read consumers are the engine's only work.
             uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-            slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+            slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192);
             vm.store(address(game), bytes32(0), bytes32(slot0));
         }
     }

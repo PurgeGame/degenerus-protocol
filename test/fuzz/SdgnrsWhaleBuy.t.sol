@@ -18,7 +18,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///      sees the live level, claimable, boon lane and RNG state.
 contract WhaleModuleForwarder {
     /// @dev The Game's raw storage read, which the affiliate calls back into during the purchase.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") {
             value := sload(slot)
         }
@@ -260,7 +260,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         assertGt(before[0], 0, "fixture: genesis deity coverage on level 5");
         assertEq(before[5], 0, "fixture: level 101 unregistered for sDGNRS before the buy");
 
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         _prepareDirectEntry(1, 48 ether);
         uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs_g470(day);
         assertEq(paid, 5, "fixture: five paid passes");
@@ -337,7 +337,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     // =====================================================================================
 
     function test_DirectEntry_RngLocked_ReturnsZeroAndTouchesNothing() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         _setRngLocked(true);
         _prepareDirectEntry(4, 1_000 ether);
         uint256 before = _claimableOf(ContractAddresses.SDGNRS);
@@ -347,7 +347,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     function test_DirectEntry_CommittedWord_ReturnsZeroAndTouchesNothing() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         _prepareDirectEntry(4, 1_000 ether);
         RecyclingState.seedDailyWord(address(game), uint24(day), uint256(0xC0FFEE));
         _injectWhaleBoon(ContractAddresses.SDGNRS, day, 3);
@@ -360,7 +360,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     function test_DirectEntry_Unlocked_Buys() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         _prepareDirectEntry(4, 1_000 ether);
         uint256 before = _claimableOf(ContractAddresses.SDGNRS);
         vm.recordLogs();
@@ -384,7 +384,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         _setClaimable(ContractAddresses.SDGNRS, 79 ether + TOP_UP);
         _t += 1 days;
         vm.warp(_t);
-        _injectWhaleBoon(ContractAddresses.SDGNRS, game.currentDayView(), 3);
+        _injectWhaleBoon(ContractAddresses.SDGNRS, game.currentDayView_g542950(), 3);
         vm.recordLogs();
         _settleGame(0x5D70900);
         (bool bought, uint256 qty, uint256 price) = _lastWhalePurchase();

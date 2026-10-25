@@ -202,7 +202,7 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         vm.etch(address(game), type(RequestGameSeeder).runtimeCode);
         host = RequestGameSeeder(payable(address(game)));
         host.seed(_daily(), _transition(), _certify());
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         burnerId = _giveWalletId(BURNER);
         if (!_daily() && !_arm()) host.pendingMidday(_shape(), burnerId);
         // Cover populated foil swaps and the costlier first toggle of an empty foil slot.

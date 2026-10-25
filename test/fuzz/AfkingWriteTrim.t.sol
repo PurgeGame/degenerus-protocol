@@ -384,7 +384,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
     }
 
     function _today() private view returns (uint24) {
-        return uint24(game.currentDayView());
+        return uint24(game.currentDayView_g542950());
     }
 
     function _drainDay(uint256 vrfWord) private {

@@ -50,7 +50,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
     // ==================== Tests ====================
 
     function _generationStart(uint24 lvl) private view returns (uint256) {
-        uint256 word = uint256(game.extsload_g8132(bytes32(GameSlots.TICKET_GENERATION_START_BLOCK)));
+        uint256 word = uint256(game.extsload_g2807007(bytes32(GameSlots.TICKET_GENERATION_START_BLOCK)));
         return uint24(word) == lvl ? word >> 24 : 0;
     }
 
@@ -159,10 +159,10 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         for (uint256 day = 0; day < 800; day++) {
             require(!game.gameOver(), "gameOver before reaching last-purchase-day");
 
-            (, , bool lpd, bool rngL, ) = game.purchaseInfo();
+            (, , bool lpd, bool rngL, ) = game.purchaseInfo_g1027();
             if (game.level() >= 1 && lpd && !rngL) {
                 _settleMidday();
-                (, , lpd, rngL, ) = game.purchaseInfo();
+                (, , lpd, rngL, ) = game.purchaseInfo_g1027();
                 if (lpd && !rngL) return game.level();
             }
 
@@ -173,12 +173,12 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
-                (, , bool lpd2, bool rngL2, ) = game.purchaseInfo();
+                (, , bool lpd2, bool rngL2, ) = game.purchaseInfo_g1027();
                 if (game.level() >= 1 && lpd2 && !rngL2) {
                     // Settle the engine's own mid-day work (closed Craps windows) so the window
                     // is idle, as an unlocked last purchase day was before the engine refactor.
                     _settleMidday();
-                    (, , lpd2, rngL2, ) = game.purchaseInfo();
+                    (, , lpd2, rngL2, ) = game.purchaseInfo_g1027();
                     if (lpd2 && !rngL2) return game.level();
                 }
                 (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
@@ -251,7 +251,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
     }
 
     function _buyTickets(address who, uint256 qty) internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_ || game.gameOver()) return;
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;

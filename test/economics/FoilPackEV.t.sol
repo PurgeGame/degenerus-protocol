@@ -97,7 +97,7 @@ contract FoilPackEV is DeployProtocol {
             } catch {}
         }
 
-        uint24 buyDay = game.currentDayView();
+        uint24 buyDay = game.currentDayView_g542950();
 
         // Whale drives the prize pool to the jackpot phase, then we ride the jackpot days
         // (where the daily foil draws seal). nPurchaseDays sets how long the whale keeps the
@@ -115,7 +115,7 @@ contract FoilPackEV is DeployProtocol {
             }
             _completeDay(_seed(nPurchaseDays, d));
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
-            for (uint24 day = game.currentDayView() > 1 ? game.currentDayView() - 1 : 1; day <= game.currentDayView(); day++) {
+            for (uint24 day = game.currentDayView_g542950() > 1 ? game.currentDayView_g542950() - 1 : 1; day <= game.currentDayView_g542950(); day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint256 ti = 0; ti < 4; ti++) {
                     try game.claimFoilMatch(fid[i], day, ti) {
@@ -128,7 +128,7 @@ contract FoilPackEV is DeployProtocol {
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
 
-        uint24 endDay = game.currentDayView();
+        uint24 endDay = game.currentDayView_g542950();
         r.endLevel = game.level();
 
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {

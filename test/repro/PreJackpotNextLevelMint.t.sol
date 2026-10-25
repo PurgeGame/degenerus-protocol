@@ -121,7 +121,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         _seed(8, parity, turbo, true);
         uint24 currentKey = _writeKey(CURRENT);
         uint256 currentOwed = _owed(currentKey, alice);
-        uint256 oldDayWord = game.rngWordForDay(game.currentDayView());
+        uint256 oldDayWord = game.rngWordForDay(game.currentDayView_g542950());
         assertEq(_queueLen(NEXT | FF_BIT), 1, "fixture: next-level entries are unminted FF entries");
 
         // The early cohort piggybacks on an otherwise eligible, funded mid-day request.
@@ -156,7 +156,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
         assertEq(_minted(CURRENT, alice) + _minted(CURRENT, carol), 0, "no current-level ticket used the early word");
         assertEq(_parity(), parity, "drain completion does not flip current parity");
         assertEq(_queueLen(NEXT | FF_BIT), 0, "committed FF queue emptied");
-        assertEq(game.rngWordForDay(game.currentDayView()), oldDayWord, "mid-day callback leaves daily entropy alone");
+        assertEq(game.rngWordForDay(game.currentDayView_g542950()), oldDayWord, "mid-day callback leaves daily entropy alone");
         assertEq(_ceiling(), NEXT, "the generation ceiling remains raised after the latch clears");
 
         // Early generation does not grant another request without ordinary request funding.
@@ -319,7 +319,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
     function _seed(uint32 nextEntries, bool parity, bool turbo, bool withCurrent) internal {
         _overlay().seed(withCurrent ? alice : address(0), bob, nextEntries, parity, turbo);
         _restore();
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         // The synthetic 200-day jump leaves expired Craps days for real miner maintenance,
         // which refuses every RNG request until it completes (RngModule request gates).
         _finishMaintenance();
@@ -388,7 +388,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
                 }
             }
         }
-        (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo();
+        (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo_g1027();
         assertFalse(locked, "the whole daily jackpot and ticket leg reached their day seal");
         assertTrue(lastPurchase, "the target-met ordinary day opened its last-purchase window");
         assertFalse(jackpot, "the last-purchase window precedes the jackpot phase");
@@ -405,7 +405,7 @@ abstract contract PreJackpotNextLevelMintFixture is DeployProtocol {
     }
 
     function _buyCurrent(address player) internal {
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(player);
         game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
@@ -630,7 +630,7 @@ contract PreJackpotNextLevelMintDailyTest is PreJackpotNextLevelMintFixture {
         uint256 reqId = _requestNextDaily();
         assertGt(reqId, 0, "daily advance requests its ordinary fresh word");
         assertEq(game.level(), CURRENT - 1, "the request does not advance the purchase level");
-        (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo();
+        (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo_g1027();
         assertFalse(jackpot);
         assertFalse(lastPurchase, "the ordinary purchase day is not yet sealed");
         assertTrue(locked, "the daily request keeps its ordinary lock");
@@ -723,7 +723,7 @@ contract PreJackpotNextLevelMintTerminalTest is PreJackpotNextLevelMintFixture {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         bool latched;
         for (uint256 i; i < 100; ++i) {
-            (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo();
+            (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo_g1027();
             if (lastPurchase && !locked) {
                 assertFalse(jackpot, "the next daily seal just opened the last purchase window");
                 latched = true;

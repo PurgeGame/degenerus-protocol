@@ -156,7 +156,7 @@ contract V61AfkingSpendHandler is Test {
         if (game.gameOver()) return;
 
         uint256 qty = bound(qtySeed, 400, 4000); // whole-ticket multiples
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;
 
@@ -246,7 +246,7 @@ contract V61AfkingSpendHandler is Test {
         calls_advance++;
         if (game.gameOver()) return;
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 small = (priceWei * 400) / 400; // one whole ticket to satisfy the daily gate
         if (small != 0 && small <= currentActor.balance) {
             vm.prank(currentActor);

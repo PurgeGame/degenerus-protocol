@@ -240,11 +240,11 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 
-    it("handlePurchase_g4831: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
+    it("handlePurchase_g23478: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        quests.connect(alice).handlePurchase_g4831(1, 1, 0, 0, 0, 0)
+        quests.connect(alice).handlePurchase_g23478(1, 1, 1, 0, 0, 0, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 

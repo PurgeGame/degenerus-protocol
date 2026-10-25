@@ -299,7 +299,7 @@ contract BoxCreationHandler is Test {
         if (game.gameOver()) return;
 
         // Satisfy the daily purchase gate with one whole ticket; a ticket-only buy appends nothing.
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
             uint48 wb = RecyclingState.writeBuffer(address(game));
             uint256 count = RecyclingState.boxCount(address(game), wb);
@@ -351,7 +351,7 @@ contract BoxCreationHandler is Test {
     function _pre() internal view returns (Pre memory p) {
         p.wb = RecyclingState.writeBuffer(address(game));
         p.count = RecyclingState.boxCount(address(game), p.wb);
-        (p.lvl, , , , p.priceWei) = game.purchaseInfo();
+        (p.lvl, , , , p.priceWei) = game.purchaseInfo_g1027();
     }
 
     function _appendViolation(string memory why) internal {

@@ -55,7 +55,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     function test_DustConsumeSkipsTheWindow() public {
         _mockLegs(5_000, 1999);
         uint256 supply = coin.totalSupply();
-        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g1271.selector), 0);
         vm.recordLogs();
 
         uint256 amount = _autoBurn();
@@ -76,10 +76,10 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
         );
         vm.mockCall(
             address(game),
-            abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector),
+            abi.encodeWithSelector(GameFacade.recordDecBurn_g1271.selector),
             abi.encode(uint64(1))
         );
-        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g5574.selector), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.recordDecBurn_g1271.selector), 1);
         vm.recordLogs();
 
         uint256 amount = _autoBurn();

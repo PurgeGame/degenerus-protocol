@@ -116,7 +116,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
         vm.prank(ALICE);
         sdgnrs.burn(amount);
         burnDay = _openBatch();
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         for (uint256 i; i < 6; ++i) {
             address player = address(uint160(0xB0000 + i));
             vm.deal(player, price * 100);
@@ -130,7 +130,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
     }
 
     function _outcome(uint32 burnDay) private view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(game.level(), game.currentDayView(), _batchRoll(burnDay),
+        digest = keccak256(abi.encode(game.level(), game.currentDayView_g542950(), _batchRoll(burnDay),
             sdgnrs.pendingRedemptionEthValue(), game.claimableWinningsOf(ALICE), coinflip.coinflipAmount(ALICE),
             mockVRF.lastRequestId(), game.rngComplete()));
         for (uint256 i; i < 6; ++i) {
@@ -229,7 +229,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
             for (uint256 calls; calls < 1000; ++calls) {
                 _fulfillPending();
                 if (!game.advanceDue() && !game.rngLocked() && game.rngComplete()) break;
-                (, bool jackpot,,,) = game.purchaseInfo();
+                (, bool jackpot,,,) = game.purchaseInfo_g1027();
                 (bool battle, uint8 kind, bool tickets, bool transition) = _phaseCheckpoint();
                 uint256 supplied = HIGH_GAS;
                 if (split && game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.DailyPhase) && jackpot && !transition) {
@@ -248,18 +248,18 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
                     assertEq(mockVRF.lastRequestId(), request, "payout checkpoint requested a replacement word");
                     assertEq(game.rngConsumerStage_g379(), 0, "basic read consumers bypassed daily payout");
                 }
-                (, jackpot,,,) = game.purchaseInfo();
+                (, jackpot,,,) = game.purchaseInfo_g1027();
                 entered = entered || jackpot;
                 if (calls == 999) revert("full cycle did not finish daily work");
             }
-            (, bool jackpot,,,) = game.purchaseInfo();
+            (, bool jackpot,,,) = game.purchaseInfo_g1027();
             if (entered && !jackpot && game.rngComplete()) return checkpoints;
         }
         revert("purchase jackpot purchase cycle did not finish");
     }
 
     function _cycleBalances() private view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(game.level(), game.currentDayView(), mockVRF.lastRequestId(),
+        digest = keccak256(abi.encode(game.level(), game.currentDayView_g542950(), mockVRF.lastRequestId(),
             game.nextPrizePoolView(), game.futurePrizePoolView(), game.currentPrizePoolView()));
         for (uint256 i; i < 32; ++i) {
             address player = address(uint160(0xF1000 + i));
@@ -268,7 +268,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
     }
 
     function test_ColdPurchaseJackpotPurchaseCycleKeepsLocksAndPartitionInvariantPayouts() public {
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         for (uint256 i; i < 32; ++i) {
             address player = address(uint160(0xF1000 + i));
             vm.deal(player, price * 100);

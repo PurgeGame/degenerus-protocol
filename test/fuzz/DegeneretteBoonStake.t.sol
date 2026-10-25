@@ -187,7 +187,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     ///         solvency spine of the whole feature: were collection to run on the boosted
     ///         figure the bet would credit ETH the player never sent.
     function test_ethBoonBoostsPackedStakeButNotCollectedFunds() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false); // ETH +12%
 
         uint128 perSpin = 1 ether;
@@ -208,7 +208,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     /// @notice The bonus is spread across the spins, so a multi-spin bet's TOTAL basis grows
     ///         by the BPS (bar sub-spin integer dust) rather than each spin growing by it.
     function test_bonusIsSpreadAcrossSpinsNotAppliedPerSpin() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false); // ETH +12%
 
         uint128 perSpin = 0.5 ether;
@@ -226,7 +226,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     /// @notice A bet in a different currency neither consumes nor sweeps the boon: it waits
     ///         for a bet in its own currency.
     function test_mismatchedCurrencyLeavesBoonIntactForItsOwnBet() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false); // ETH +12%
 
         _fundFlip(player, 1_000);
@@ -242,7 +242,7 @@ contract DegeneretteBoonStake is DeployProtocol {
 
     /// @notice One boon, one bet: the second bet in the same currency is unboosted.
     function test_boonIsSpentOnceThenGone() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 1, today, false); // ETH +4%
 
         assertEq(_placeAndReadPackedStake(CURRENCY_ETH, 1 ether, 1), 1.04 ether, "first bet");
@@ -257,7 +257,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     ///         the documented currency. This is the encode/decode round trip that the
     ///         weight walk cannot check: a mis-shifted lane pays FLIP money on an ETH boon.
     function test_allSixTiersDecodeToTheirCurrencyAndBps() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         uint256[3] memory bps = [uint256(400), uint256(800), uint256(1200)];
 
         // Every lane holds tier 1/2/3 = +4/8/12%.
@@ -283,7 +283,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     /// @notice ETH and FLIP boons coexist; each bet consumes only its own lane.
     ///         No currency can displace or spend another's boon.
     function test_currencyLanesCoexistAndConsumeIndependently() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 1, today, false); // ETH +4%
         _grantBoon(player, CURRENCY_FLIP, 3, today, false); // FLIP +12%
 
@@ -313,7 +313,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     /// @notice The ETH bonus is computed on the first 10 ETH of the bet only, so an
     ///         oversized bet is boosted on the capped slice.
     function test_ethCapBindsAboveTenEth() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false); // ETH +12%
 
         // 25 ETH total, well past the 10 ETH cap.
@@ -328,7 +328,7 @@ contract DegeneretteBoonStake is DeployProtocol {
 
     /// @notice Same for FLIP at 100k.
     function test_flipCapBindsAboveHundredThousand() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_FLIP, 3, today, false); // FLIP +12%
 
         uint128 perSpin = 300_000;
@@ -346,11 +346,11 @@ contract DegeneretteBoonStake is DeployProtocol {
     /// @notice A DEITY-granted boon is valid on its grant day only: the next day's bet gets
     ///         nothing and the field is swept.
     function test_deityGrantedBoonDiesAtMidnight() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, true); // deity gift
 
         vm.warp(block.timestamp + 1 days);
-        assertGt(game.currentDayView(), today, "day did not roll");
+        assertGt(game.currentDayView_g542950(), today, "day did not roll");
 
         uint256 stake = _placeAndReadPackedStake(CURRENCY_ETH, 1 ether, 1);
         assertEq(stake, 1 ether, "expired deity boon still paid");
@@ -360,7 +360,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     /// @notice A LOOTBOX-rolled boon keeps its 2-day window: live on stampDay + 2, dead on
     ///         stampDay + 3.
     function test_lootboxRolledBoonLivesTwoDaysThenExpires() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false);
 
         vm.warp(block.timestamp + uint256(EXPIRY_DAYS) * 1 days);
@@ -403,7 +403,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     ///         a minimum-size dust gift could otherwise burn a held +12% before the
     ///         player's own bet ever sees it.
     function test_giftBetLeavesRecipientBoonUntouched() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false);
 
         address gifter = makeAddr("degenBoonGifter");
@@ -424,7 +424,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     /// @notice An APPROVED operator spends the player's funds AND the player's boon --
     ///         the approval is the trust boundary; only unapproved gifters are locked out.
     function test_approvedOperatorSpendsTheBoon() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         _grantBoon(player, CURRENCY_ETH, 3, today, false);
 
         address operator = makeAddr("degenBoonOperator");

@@ -833,7 +833,7 @@ contract LoanAccountingHandler is Test {
             uint32 id = accts[i].id;
             uint32 lender = _lenderOf(i);
             assertEq(game.acquiredBuyer(id), lender, "acquiredBuyer != model owner");
-            (, address payee,) = game.resolveAccount_g502(id, address(0));
+            (, address payee,) = game.resolveAccount_g7029(id, address(0));
             address expected = lender == VAULT_ID ? address(vault)
                 : lender == SDGNRS_ID ? address(sdgnrsToken) : actors[accts[i].actor];
             assertEq(payee, expected, "payee != model owner");

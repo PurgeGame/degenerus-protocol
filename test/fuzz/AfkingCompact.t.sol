@@ -86,7 +86,7 @@ contract AfkingCompactTest is DeployProtocol {
     // ───────────────────────────── signup and accrual ─────────────────────────────
 
     function test_SignupBuysNothingAndCreditsFromTheNextCompletedPass() public {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         assertEq(_endpoint(), today, "the deploy day is the first endpoint");
         uint32 id = _subscribe(ALICE, false, 1, 1 ether);
 
@@ -150,7 +150,7 @@ contract AfkingCompactTest is DeployProtocol {
         _finishSubscriptionWindow();
         vm.prank(ALICE);
         game.subscribe{value: 1 ether}(0, false, 1, seat);
-        assertEq(_info(game.walletIdOf_g3120(ALICE)).checkpointDay, game.currentDayView());
+        assertEq(_info(game.walletIdOf_g3120(ALICE)).checkpointDay, game.currentDayView_g542950());
     }
 
     function test_QuantityAboveEightReverts() public {
@@ -202,7 +202,7 @@ contract AfkingCompactTest is DeployProtocol {
         assertEq(_flip(id) - before, 100, "cancel settles the player");
         assertEq(game.subscriberSetLength(), members - 1, "and removes the entry");
         assertFalse(_info(id).member);
-        (, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
+        (, bool afking) = quests.effectiveBaseStreakAndAfking_g1521(id, _fixtureGameDay());
         assertFalse(afking, "the streak handed back to Quests");
 
         // A same-day restart burns another seat and credits nothing.
@@ -332,7 +332,7 @@ contract AfkingCompactTest is DeployProtocol {
         _nextDay();
         DegenerusGameLens.SubFull memory s = _info(id);
         vm.prank(ContractAddresses.QUESTS);
-        game.recordAfkingSecondary(id, 3);
+        game.recordAfkingSecondary_g3316(id, 3);
         DegenerusGameLens.SubFull memory t = _info(id);
         assertEq(t.checkpointStreak, s.checkpointStreak + 3);
         assertEq(t.checkpointDay, s.checkpointDay, "the checkpoint does not move");

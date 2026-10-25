@@ -38,7 +38,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         _roll(10); _award(player, 10, 10); _grantShields(player, 2);
         uint256 beforeStreak = quests.effectiveBaseStreak(_qid(player));
         vm.warp(block.timestamp + 8 days);
-        assertEq(game.currentDayView(), 10);
+        assertEq(game.currentDayView_g542950(), 10);
         assertEq(quests.effectiveBaseStreak(_qid(player)), beforeStreak);
         assertEq(_questField(player, OFF_STREAK, 16), 10);
         assertEq(_questField(player, OFF_SHIELD, 8), 2);
@@ -134,16 +134,16 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     function test_RealDelayedRequestRetainsQuestAndStreakIdentity() public {
         address player = makeAddr("real-delay");
-        uint24 initial = game.currentDayView();
+        uint24 initial = game.currentDayView_g542950();
         _award(player, 10, initial);
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
-        uint24 requested = game.currentDayView();
+        uint24 requested = game.currentDayView_g542950();
         assertEq(requested, initial + 1);
         uint256 request = mockVRF.lastRequestId();
         vm.warp(block.timestamp + 8 days);
-        assertEq(game.currentDayView(), requested);
+        assertEq(game.currentDayView_g542950(), requested);
         mockVRF.fulfillRandomWords(request, 0xBACC_F111);
         for (uint256 i; i < 100 && _activeQuestDay() != requested; ++i) game.mineFlip(0);
         assertEq(_activeQuestDay(), requested);
@@ -153,7 +153,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     function test_AfkingCalendarGapDeliversOneLogicalDay() public {
         address player = _startAfkingPlayer("afking-calendar-gap", 10);
-        uint24 start = game.currentDayView();
+        uint24 start = game.currentDayView_g542950();
         uint256 beforeScore = activityScoreOf(address(game), player);
         vm.warp(block.timestamp + 3 days);
         assertEq(activityScoreOf(address(game), player), beforeScore);
@@ -209,12 +209,12 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     {
         uint32 qid6 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (reward, questType, streak, completed, ) = quests.handlePurchase_g4831(qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
+        (reward, questType, streak, completed, ) = quests.handlePurchase_g23478(_fixtureGameDay(), qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     function _startAfkingPlayer(string memory label, uint16 streak) private returns (address player) {
         player = makeAddr(label);
-        uint24 today = uint24(game.currentDayView());
+        uint24 today = uint24(game.currentDayView_g542950());
         _roll(today);
         _award(player, streak, today);
         uint256 seat = _grantSeat(player);
@@ -228,7 +228,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _driveUntilDelivered(address) private {
-        uint24 today = uint24(game.currentDayView()) + 1;
+        uint24 today = uint24(game.currentDayView_g542950()) + 1;
         for (uint256 i; i < 200 && _endpoint() != today; ++i) {
             _fulfillLatest(uint256(keccak256(abi.encode("drive", i))) | 1);
             game.mineFlip(0);

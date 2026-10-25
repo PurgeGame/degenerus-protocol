@@ -35,13 +35,13 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         game.mineFlip(0);
-        uint24 R = game.currentDayView();
+        uint24 R = game.currentDayView_g542950();
         uint256 reqR = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "R requested on its own day");
 
         _t += 3 days;
         vm.warp(_t);
-        assertEq(game.currentDayView(), R, "calendar stall preserves the outstanding logical day");
+        assertEq(game.currentDayView_g542950(), R, "calendar stall preserves the outstanding logical day");
         uint24 W = R + 1;
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
         _lastFulfilledReqId = reqR;
@@ -89,7 +89,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         _runStageNewDay(WORD_NORMAL ^ 1);
         _t += 1 days;
         vm.warp(_t);
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         assertEq(_dailyIdx(), today, "calendar reset leaves the requested day unchanged");
         assertFalse(game.rngLocked(), "no request yet");
         address buyer = makeAddr("foil_slice");
@@ -133,7 +133,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     }
 
     function _settled() internal view returns (bool) {
-        return _dailyIdx() == game.currentDayView() && !game.rngLocked() && !game.advanceDue()
+        return _dailyIdx() == game.currentDayView_g542950() && !game.rngLocked() && !game.advanceDue()
             && !_requestOutstanding();
     }
 

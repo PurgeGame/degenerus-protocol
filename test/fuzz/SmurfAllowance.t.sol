@@ -37,7 +37,7 @@ contract SmurfAllowanceTest is DeployProtocol {
 
     // Control one input of the real internal score calculation, not the external Game getter.
     function _score(uint16 points) private {
-        vm.mockCall(address(quests), abi.encodeCall(IDegenerusQuests.effectiveBaseStreakAndAfking_g2654, (main)),
+        vm.mockCall(address(quests), abi.encodeCall(IDegenerusQuests.effectiveBaseStreakAndAfking_g1521, (main, _fixtureGameDay())),
             abi.encode(uint32(points) * 2, false));
         assertEq(game.playerActivityScoreById(main), points);
     }
@@ -96,11 +96,11 @@ contract SmurfAllowanceTest is DeployProtocol {
         _create();
         uint256 w = _quotaWord();
         assertEq(game.walletIdOf_g3120(owner), main);
-        assertEq(game.walletIdentityOf(owner), main);
+        assertEq(game.walletIdentityOf_g8516(owner), main);
         assertEq(uint16(w >> 224), 5);
         assertEq(uint16(w >> 240), 3);
         assertEq(_info().allowance, 5);
-        assertEq(game.walletIdentityOf(owner), main);
+        assertEq(game.walletIdentityOf_g8516(owner), main);
     }
 
     function test_VaultOwnerOnly() public {
@@ -143,7 +143,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         assertEq(uint16(w >> 224), uint256(count) + 1);
         assertEq(uint16(w >> 240), base);
         assertEq(game.walletIdOf_g3120(owner), main);
-        assertEq(game.walletIdentityOf(owner), main);
+        assertEq(game.walletIdentityOf_g8516(owner), main);
     }
 
     function test_MaximumCapacity65535AndCounterCannotWrap() public {

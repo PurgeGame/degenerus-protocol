@@ -68,7 +68,7 @@ contract CoinflipPackedStake is DeployProtocol {
     }
 
     function _targetDay() internal view returns (uint24) {
-        return game.currentDayView() + 1;
+        return game.currentDayView_g542950() + 1;
     }
 
     /// @dev Raw lane read against the production contract: slot 0, wallet ring of tagged seven-day pages.

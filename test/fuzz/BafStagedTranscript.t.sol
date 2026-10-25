@@ -618,7 +618,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         (uint128 budget, uint128 paid, uint32 n, uint24 wl, uint16 cursor, uint8 kind, uint8 quadrant) = host.btWork();
         h = keccak256(abi.encode(budget, paid, n, wl, cursor, kind, quadrant));
         Bracket memory b = _bracket();
-        st.consDay = game.currentDayView();
+        st.consDay = game.currentDayView_g542950();
         assertEq(b.resolvedDay, st.consDay, "the consolidation records today's resolution day");
         assertEq(keccak256(abi.encode(b.top)), keccak256(abi.encode(b0.top)), "consolidation leaves the board");
         if (!_expectBaf()) {
@@ -1264,7 +1264,7 @@ abstract contract CenturyBafTranscript is BafTranscriptFixture {
         vm.etch(address(game), type(CenturyTraitRoundSeeder).runtimeCode);
         CenturyTraitRoundSeeder(payable(address(game))).seed(WORD, _rounds());
         vm.etch(address(game), original);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(address(game), uint256(nextPool) + futurePool + 68.25 ether + uint256(nextPool) / 400);
         mockStETH.mint(address(game), 50 ether);
         _armWord(WORD);
@@ -1369,7 +1369,7 @@ abstract contract PlainBafTranscript is BafTranscriptFixture {
         vm.etch(address(game), type(PlainBafSeeder).runtimeCode);
         PlainBafSeeder(payable(address(game))).seed(target, nextPool, futurePool, PLAYERS, PLAYER_BASE);
         vm.etch(address(game), original);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(address(game), uint256(nextPool) + futurePool + 110 ether);
         mockStETH.mint(address(game), 50 ether);
         _armWord(_word());

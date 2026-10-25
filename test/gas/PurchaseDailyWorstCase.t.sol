@@ -409,7 +409,7 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
         vm.etch(address(game), type(PurchaseDailySeeder).runtimeCode);
         PurchaseDailySeeder(payable(address(game))).seedPurchaseDaily(s, mainT, decoyT);
         vm.etch(address(game), realCode);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(address(game), 10_000 ether);
     }
 
@@ -419,7 +419,7 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
         vm.etch(address(game), type(PurchaseDailySeeder).runtimeCode);
         PurchaseDailySeeder(payable(address(game))).unrecordWord();
         vm.etch(address(game), realCode);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
     }
 
     Vm.Log[] internal lastLogs;
@@ -667,7 +667,7 @@ abstract contract PurchaseDailyLevelOneStage is PurchaseDailyFixture {
             COIN_DRAW_SHARES - 1,
             "all but a stray trait-draw repeat are distinct cold wallets"
         );
-        (,, bool lastPurchase,,) = game.purchaseInfo();
+        (,, bool lastPurchase,,) = game.purchaseInfo_g1027();
         assertTrue(lastPurchase, "the trait-draw stage seals level one's day");
         assertFalse(game.rngLocked(), "the sealing stage unlocks");
     }

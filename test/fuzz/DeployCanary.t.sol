@@ -86,7 +86,7 @@ contract DeployCanary is DeployProtocol {
 
     /// @notice The default fixture deploys on MAIN_LAUNCH_DAY.
     function test_legacyFixtureDeploysOnMainLaunchDay() public view {
-        assertEq(game.currentDayView(), GameTimeLib.MAIN_LAUNCH_DAY);
+        assertEq(game.currentDayView_g542950(), GameTimeLib.MAIN_LAUNCH_DAY);
         assertEq(block.timestamp, DEPLOY_TS_LEGACY);
     }
 }
@@ -101,7 +101,7 @@ contract DegenesisDeployCanary is DegenesisDeployProtocol {
         assertEq(address(game), ContractAddresses.GAME, "GAME mismatch");
         assertEq(address(jackpotDrawModule), ContractAddresses.GAME_JACKPOT_DRAW_MODULE, "GAME_JACKPOT_DRAW_MODULE mismatch");
         assertEq(address(degenesisModule), ContractAddresses.GAME_DEGENESIS_MODULE, "GAME_DEGENESIS_MODULE mismatch");
-        assertEq(game.currentDayView(), 1);
+        assertEq(game.currentDayView_g542950(), 1);
         assertEq(block.timestamp, DEPLOY_TS_DEGENESIS);
     }
 }

@@ -94,7 +94,7 @@ contract LootboxQueueGasTest is DeployProtocol {
         _seeder().seedLevel(24);
         _restoreGame();
         vm.deal(address(game), 1_000 ether);
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         _syncCoinflipFixtureDay(day);
         vm.prank(address(game));
         quests.rollDailyQuest(day, 123, false, false, false);

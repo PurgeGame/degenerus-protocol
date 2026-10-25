@@ -216,7 +216,7 @@ abstract contract SeatFixture is DeployProtocol {
     /// @dev Strip account `id`'s funding (afking and claimable) as `caller` and drive days until
     ///      the subscriber pass expires it.
     function _evict(address caller, uint32 id) internal {
-        (address key,,) = game.resolveAccount_g502(id, caller);
+        (address key,,) = game.resolveAccount_g7029(id, caller);
         for (uint256 d; d < 8 && _pos(id) != 0; ++d) {
             uint256 rem = game.afkingFundingOf(key);
             if (rem != 0) {

@@ -51,7 +51,7 @@ contract BoostHarness is CrapsViews {
     /// @dev The whole settlement of a bet, UNSCALED — a high seat's multiple applies after it, so
     ///      this is the one boosted base run a suite has to be able to see on its own.
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _fullSettlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
     /// @dev The field's frozen entrant count — own seats and the day's appended seats.
@@ -76,7 +76,7 @@ contract BoostHarness is CrapsViews {
         uint256 ownN = w.entrants - dayN;
         id = seat <= ownN ? (uint256(slot) << 64) | seat : (daySlot << 64) | (seat - ownN);
         w.seat = uint64(seat);
-        result = _settlementOf(id, _loadBet(id), w, _wordAt(_indexOf(slot)));
+        result = _fullSettlementOf(id, _loadBet(id), w, _wordAt(_indexOf(slot)));
     }
 
     function longestOf(uint64 slot) external view returns (uint256) {

@@ -39,7 +39,7 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
         c.setPreferredBoard(0, 5 << 27);
         c.payProgressiveAt(KEY, winner, 7500, 250_000);
         assertEq(c.preferredBoardOf(game.walletIdOf_g3120(winner)), 5 << 27);
-        uint256 word = uint256(c.extsload_g8132(keccak256(abi.encode(uint256(game.walletIdOf_g3120(winner)), CrapsPreferenceLib.PASS_SLOT))));
+        uint256 word = uint256(c.extsload_g2807007(keccak256(abi.encode(uint256(game.walletIdOf_g3120(winner)), CrapsPreferenceLib.PASS_SLOT))));
         assertNotEq(word & CrapsPreferenceLib.INITIALIZED, 0);
     }
 

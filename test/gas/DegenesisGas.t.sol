@@ -1031,11 +1031,11 @@ contract DegenesisDayNineClosedGas is DegenesisDayNineRequestGas {
 /// @dev Storage construction for the battle shortcut; the measured worker is production code
 ///      (Game -> Jackpot -> Draw -> JackpotBattle).
 contract DegenesisBattleGameSeed is DegenerusGameStorage, WalletSeed {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
-    function currentDayView() external view returns (uint24) { return dailyIdx; }
-    function dailyScheduleOpen() external view returns (bool) { return true; }
+    function currentDayView_g542950() external view returns (uint24) { return dailyIdx; }
+    function dailyScheduleOpen_g214() external view returns (bool) { return true; }
     function seedSession(uint24 day, uint256 word) external {
         level = 0;
         purchaseStartDay = day - 1;

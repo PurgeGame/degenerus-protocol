@@ -97,7 +97,7 @@ contract PeripheralReuseTest is DeployProtocol {
     }
 
     function testBafDrawUsesOneBankAndRejectsOldDayAndTail() public {
-        uint24 day = game.currentDayView() + 1;
+        uint24 day = game.currentDayView_g542950() + 1;
         vm.prank(address(game)); coin.mintForGame(ALICE, 1_000);
         vm.prank(address(game)); coinflip.armBafDraw(day);
         vm.prank(ALICE); coinflip.depositCoinflip(0, 100);

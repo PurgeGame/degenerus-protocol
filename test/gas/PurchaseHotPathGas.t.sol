@@ -58,7 +58,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _seed(24, false);
         vm.prank(REFERRER);
         affiliate.createAffiliateCode(CODE, 10);
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         _syncCoinflipFixtureDay(day);
         vm.prank(address(game));
         quests.rollDailyQuest(day, 123, false, false, false);
@@ -104,7 +104,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.etch(address(game), type(PurchaseHotPathSeeder).runtimeCode);
         PurchaseHotPathSeeder(address(game)).seedAfking(BUYER, lapsed);
         vm.etch(address(game), code);
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         _syncCoinflipFixtureDay(day);
         uint32 buyerId = game.walletIdOf_g3120(BUYER);
         vm.prank(address(game));

@@ -89,7 +89,7 @@ contract RngVectorVrfConfirmations is DegenesisHarness {
         vm.expectCall(address(mockVRF), _reqData(6), 0);
         uint256 req = _middayRequest();
         vm.warp(block.timestamp + 20 hours + 1);
-        assertEq(game.currentDayView(), 2, "still the same day");
+        assertEq(game.currentDayView_g542950(), 2, "still the same day");
         vm.prank(ContractAddresses.ADMIN);
         game.retryRng();
         assertEq(mockVRF.lastRequestId(), req + 1, "retry re-issued");
@@ -246,7 +246,7 @@ contract RngVectorCompactBoxFreeze is DegenesisHarness {
         for (uint256 i; i < 6; ++i) {
             vm.warp(block.timestamp + 3 minutes);
             _boxBuy(buyers[i], 0.013 ether + ((i + salt) % 50) * 0.001 ether);
-            if (game.currentDayView() <= 8) _buy(buyers[(i + 1) % 6], 0.0101 ether + i * 0.0001 ether);
+            if (game.currentDayView_g542950() <= 8) _buy(buyers[(i + 1) % 6], 0.0101 ether + i * 0.0001 ether);
         }
     }
 

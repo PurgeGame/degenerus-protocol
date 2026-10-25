@@ -38,11 +38,11 @@ contract LogicalCrapsDaysTest is LogicalDaysFixture {
     function test_UnservedResetPausesScheduledAdmissions() public {
         _nextLogical(777);
         _nextLogical(779);
-        assertTrue(game.dailyScheduleOpen());
+        assertTrue(game.dailyScheduleOpen_g214());
         uint24 logical = crapsBattle.currentDayIndex();
         vm.warp(vm.getBlockTimestamp() + 3 days);
         assertEq(crapsBattle.currentDayIndex(), logical);
-        assertFalse(game.dailyScheduleOpen());
+        assertFalse(game.dailyScheduleOpen_g214());
         (uint24 before,) = crapsBattle.bonusDayOf();
         vm.prank(ContractAddresses.GAME); crapsBattle.openBonusDay();
         (uint24 afterDay,) = crapsBattle.bonusDayOf();

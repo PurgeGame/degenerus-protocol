@@ -86,7 +86,7 @@ abstract contract TerminalLoanBase is DeployProtocol {
 
     function _restore() internal {
         vm.etch(address(game), gameRuntime);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
     }
 
     function _fund(uint32 id, uint128 amount) internal { _seeder().fund(id, amount); _restore(); }
@@ -102,7 +102,7 @@ abstract contract TerminalLoanBase is DeployProtocol {
     }
 
     function _payee(uint32 id) internal view returns (address payee) {
-        (, payee, ) = game.resolveAccount_g502(id, address(0));
+        (, payee, ) = game.resolveAccount_g7029(id, address(0));
     }
 
     function _open(uint32 id) internal view returns (bool) {
@@ -620,7 +620,7 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
     }
 
     function _buyTickets(uint256 qty) private {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_ || game.gameOver()) return;
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;

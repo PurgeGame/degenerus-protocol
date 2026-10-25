@@ -99,7 +99,7 @@ contract WholeTokenBoundaries is DeployProtocol {
         wwxrp.mintPrize(player, type(uint256).max);
         vm.prank(player);
         wwxrp.enter(0, type(uint256).max);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint8 bucket = wwxrp.bucketOf(day, game.walletIdOf_g3120(player));
         (uint256 raw, uint256 total, uint32 count) = wwxrp.bucketInfo(day, bucket);
         assertEq(raw, type(uint96).max);

@@ -323,7 +323,7 @@ contract BafConsolationClaimTest is DeployProtocol {
     }
 
     function _buyTickets(address who, uint256 qty) internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         if (game.gameOver()) return;
 

@@ -228,7 +228,7 @@ contract OpenBountyCarry is DeployProtocol {
     // advanceDue can defer a new day while delivered read consumers remain.
     // Continue through the real advance router until this wall day is sealed.
     function _wallDaySealed() private view returns (bool) {
-        return uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) == game.currentDayView();
+        return uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) == game.currentDayView_g542950();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

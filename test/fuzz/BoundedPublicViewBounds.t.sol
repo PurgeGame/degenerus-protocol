@@ -24,7 +24,7 @@ contract BoundedPublicViewBoundsTest is BoundedDeployProtocol {
     }
 
     function test_AllInvalidDrawBucketsStillReturnZero() public view {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         for (uint256 bucket = 10; bucket <= type(uint8).max; ++bucket) {
             (uint256 raw, uint256 total, uint32 count) = wwxrp.bucketInfo(day, uint8(bucket));
             assertEq(raw, 0); assertEq(total, 0); assertEq(count, 0);
@@ -34,7 +34,7 @@ contract BoundedPublicViewBoundsTest is BoundedDeployProtocol {
     }
 
     function test_InvalidIssuerDoesNotAliasEitherFundedPool() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         bytes memory original = address(game).code;
         vm.etch(address(game), vm.getDeployedCode("BoundedPublicViewBounds.t.sol:BoundedIssuerViewSeed"));
         BoundedIssuerViewSeed(address(game)).seedPools(day);
@@ -54,9 +54,9 @@ contract BoundedPublicViewBoundsTest is BoundedDeployProtocol {
 
     function test_IneligibleHeroQuadrantsRemainZero() public view {
         for (uint256 quadrant = 3; quadrant <= type(uint8).max; ++quadrant) {
-            assertEq(game.getDailyHeroWager(game.currentDayView(), uint8(quadrant), 7), 0);
+            assertEq(game.getDailyHeroWager(game.currentDayView_g542950(), uint8(quadrant), 7), 0);
         }
-        assertEq(game.getDailyHeroWager(game.currentDayView(), 0, 8), 0);
-        assertEq(game.getDailyHeroWager(game.currentDayView(), 0, 255), 0);
+        assertEq(game.getDailyHeroWager(game.currentDayView_g542950(), 0, 8), 0);
+        assertEq(game.getDailyHeroWager(game.currentDayView_g542950(), 0, 255), 0);
     }
 }

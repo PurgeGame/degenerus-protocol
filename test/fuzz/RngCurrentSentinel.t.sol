@@ -21,7 +21,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
     function setUp() public { _deployProtocol(); vm.warp(vm.getBlockTimestamp() + 1 days); }
 
     function _request() private returns (uint256 id) {
-        assertEq(uint256(game.extsload_g8132(bytes32(uint256(3)))), 1, "initialized waiting payload");
+        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), 1, "initialized waiting payload");
         game.mineFlip(0);
         id = mockVRF.lastRequestId();
         assertGt(id, 0, "real request sent");
@@ -35,25 +35,25 @@ contract RngCurrentSentinelTest is DeployProtocol {
         RecyclingState.seedNudges(address(game), nudges);
         uint256 expected;
         unchecked { expected = input + nudges; }
-        bytes32 state = game.extsload_g8132(bytes32(0));
+        bytes32 state = game.extsload_g2807007(bytes32(0));
         mockVRF.fulfillRandomWords(id, input);
-        assertEq(game.extsload_g8132(bytes32(0)), state, "callback never writes nudge or lifecycle metadata");
+        assertEq(game.extsload_g2807007(bytes32(0)), state, "callback never writes nudge or lifecycle metadata");
         if (expected < 2) {
             assertFalse(game.isRngFulfilled(), "reserved final words leave the request unanswered");
-            assertEq(uint256(game.extsload_g8132(bytes32(uint256(3)))), 1, "nonzero waiting sentinel retained");
+            assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), 1, "nonzero waiting sentinel retained");
             assertEq(RecyclingState.nudgeCount(address(game)), nudges, "retry keeps paid nudges");
             return;
         }
         assertTrue(game.isRngFulfilled(), "final word delivered");
         assertEq(RecyclingState.currentWord(address(game)), expected, "callback stores the final session word");
-        uint256 stored = uint256(game.extsload_g8132(bytes32(uint256(3))));
+        uint256 stored = uint256(game.extsload_g2807007(bytes32(uint256(3))));
         assertEq(stored, expected);
         mockVRF.fulfillRandomWordsRaw(id, address(game), 777777);
-        assertEq(uint256(game.extsload_g8132(bytes32(uint256(3)))), stored, "duplicate must not replace delivered word");
+        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), stored, "duplicate must not replace delivered word");
         mockVRF.fulfillRandomWordsRaw(id + 1, address(game), 888888);
-        assertEq(uint256(game.extsload_g8132(bytes32(uint256(3)))), stored, "wrong identity must not replace word");
+        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), stored, "wrong identity must not replace word");
 
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         bytes memory gameCode = address(game).code;
         CurrentWordApplyHarness recorder = new CurrentWordApplyHarness();
         vm.etch(address(game), address(recorder).code);
@@ -74,7 +74,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
         mockVRF.fulfillRandomWords(id, word);
         uint256 finalWord = RecyclingState.currentWord(address(game));
         assertEq(finalWord, word + (reverse ? 1 : 0));
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, finalWord, day);
         (, win) = coinflip.getCoinflipDayResult(day);
@@ -134,9 +134,9 @@ contract RngCurrentSentinelTest is DeployProtocol {
         mockVRF.fulfillRandomWords(id, 42);
         for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineFlip(0);
         assertFalse(game.rngLocked(), "day completed");
-        assertEq(uint256(game.extsload_g8132(bytes32(uint256(3)))), 42, "read consumers retain the final word after daily unlock");
+        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(3)))), 42, "read consumers retain the final word after daily unlock");
         assertFalse(game.isRngFulfilled());
-        assertEq(game.rngWordForDay(game.currentDayView()), 42, "session word recorded unchanged");
+        assertEq(game.rngWordForDay(game.currentDayView_g542950()), 42, "session word recorded unchanged");
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 100 && mockVRF.lastRequestId() == id; ++i) game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), id, "next real request remains live");

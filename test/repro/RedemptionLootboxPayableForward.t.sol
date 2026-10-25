@@ -141,7 +141,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
     ///      (checkAndClearExpiredBoon via the any-bits gate).
     function _injectBoonState(address who) internal {
         bytes32 base = keccak256(abi.encode(uint256(_giveWalletId(who)), SLOT_BOON_PACKED));
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         uint256 s0 = (uint256(day) << BP_COINFLIP_DAY_SHIFT) | (uint256(1) << BP_COINFLIP_TIER_SHIFT);
         vm.store(address(game), base, bytes32(s0));
     }

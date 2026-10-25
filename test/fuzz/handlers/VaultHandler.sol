@@ -122,7 +122,7 @@ contract VaultHandler is Test {
 
         qty = bound(qty, 100, 4000);
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0 || cost > currentActor.balance) return;
 

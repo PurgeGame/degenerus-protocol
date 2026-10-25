@@ -361,7 +361,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         vm.warp(_dayStart(d) + 1);
         _stepToRequestMetered(plan);
         _mine(dayA); // accepted logical request opens this cohort before its first purchase
-        assertEq(game.currentDayView(), d);
+        assertEq(game.currentDayView_g542950(), d);
         uint256 runs;
         uint256[2] memory runAt = [uint256(1 hours), 12 hours];
         for (uint256 k; k < n; ++k) {
@@ -452,7 +452,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     /// @dev One order, recorded for the exactly-once check: the buy holds the whole amount in
     ///      claimablePool and consumes the same credit.
     function _degenesisBuy(address p, uint256 amount) internal {
-        uint256 c = uint256(game.currentDayView()) - GameTimeLib.DEGENESIS_START_DAY + 1;
+        uint256 c = uint256(game.currentDayView_g542950()) - GameTimeLib.DEGENESIS_START_DAY + 1;
         uint256 index = _count(c);
         uint256 credit0 = game.degenesisCreditOf(p);
         uint256 claimable0 = game.claimablePoolView();
@@ -745,7 +745,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
     function _scan(Vm.Log[] memory logs, bool request, Books memory b0) internal {
         uint256 splitVol;
         uint256 afkFunded;
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
             if (l.emitter != address(game) || l.topics.length == 0) continue;

@@ -104,7 +104,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
             coinflip.setCoinflipAutoRebuy(0, true, 7 ether);
         }
         _driveToEve(_slow() ? 19 : 9);
-        latchDay = game.currentDayView() + 1;
+        latchDay = game.currentDayView_g542950() + 1;
         _stageDay();
         simTime += 1 days + 1;
         vm.warp(simTime);
@@ -119,7 +119,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
     }
 
     function _latched() internal view returns (bool) {
-        (, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+        (, , bool lastPurchaseDay_, , ) = game.purchaseInfo_g1027();
         return lastPurchaseDay_;
     }
 

@@ -40,11 +40,11 @@ contract RedemptionAccountsTest is RedemptionFixture {
     }
 
     function _createSmurf(address o) internal returns (uint32 sid) {
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.deal(o, o.balance + price);
         vm.prank(o);
         sid = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        (address key, address payee,) = game.resolveAccount_g502(sid, o);
+        (address key, address payee,) = game.resolveAccount_g7029(sid, o);
         require(key == address(0) && payee == o, "fixture: account owner");
     }
 
@@ -88,7 +88,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         uint256 before = _received(alice);
         uint256 opBefore = _received(operator);
 
-        vm.expectCall(address(game), abi.encodeCall(GameFacade.resolveAccount_g502, (aliceId, operator)), 1);
+        vm.expectCall(address(game), abi.encodeCall(GameFacade.resolveAccount_g7029, (aliceId, operator)), 1);
         vm.recordLogs();
         vm.prank(operator);
         sdgnrs.claimRedemption(aliceId, id);
@@ -189,7 +189,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         sdgnrs.claimRedemption(aliceId, id);
 
         uint256 before = _received(alice);
-        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.resolveAccount_g502.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(GameFacade.resolveAccount_g7029.selector), 0);
         vm.prank(alice);
         sdgnrs.claimRedemption(0, id);
         assertGt(_received(alice), before, "self claim paid the caller");

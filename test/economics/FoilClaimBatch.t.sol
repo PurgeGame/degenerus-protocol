@@ -140,7 +140,7 @@ contract FoilClaimBatch is DeployProtocol {
             if (i == 0) _packlessId = game.walletIdOf_g3120(tb);
         }
 
-        _buyDay = game.currentDayView();
+        _buyDay = game.currentDayView_g542950();
 
         address whale = makeAddr("whale");
         vm.deal(whale, 1_000_000 ether);
@@ -151,7 +151,7 @@ contract FoilClaimBatch is DeployProtocol {
                 try game.purchase{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             }
             _completeDay(_seed(nPurchaseDays, d));
-            _endDay = game.currentDayView();
+            _endDay = game.currentDayView_g542950();
             (uint32 board, uint24 drawLevel) = _foilDraw(_endDay);
             bytes32 outer = bytes32(FOIL_RECORD_SLOT + uint256(drawLevel & 3));
             bytes32 firstSlot = keccak256(abi.encode(_fid[0], outer));
@@ -495,7 +495,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///      the record the buy froze.
     function _buyFoilPackNow(address p) internal returns (uint24 lvl, uint24 resolveDay, uint16 multBps) {
         vm.deal(p, 1_000 ether);
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         lvl = game.jackpotPhase() ? game.level() : game.level() + 1;
         vm.prank(p);
         game.purchase{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
@@ -704,7 +704,7 @@ contract FoilClaimBatch is DeployProtocol {
             assertEq(FoilMatchTimeSeeder(payable(address(game))).recorded(_endDay), 0, "original word overwritten");
         }
         vm.etch(address(game), runtime);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         assertFalse(game.livenessTriggered(), "fixture remains live");
     }
 
@@ -979,7 +979,7 @@ contract FoilClaimBatch is DeployProtocol {
     function test_persistentSeed_domainEligibilityAndTerminalGuards() public {
         vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], 0, 3);
         vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], uint256(_endDay) + (1 << 24), 3);
-        uint256 futureDay = game.currentDayView() + 1;
+        uint256 futureDay = game.currentDayView_g542950() + 1;
         vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], futureDay, 3);
         vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], _endDay, 4);
         vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_packlessId, _endDay, 3);

@@ -39,7 +39,7 @@ contract BattlePaidMinerProbe {
 contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
     /// @dev Craps reads its logical day through the production raw-slot interface even
     ///      while the test overlay is installing the synthetic paid field.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly { value := sload(slot) }
     }
 

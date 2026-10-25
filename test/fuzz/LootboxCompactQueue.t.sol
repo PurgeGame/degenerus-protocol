@@ -568,7 +568,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
     ///         the same foil purchase without a box: Foil's quote and Mint's charge agree.
     function test_Foil_QuoteMatchesChargeForEveryKind() public {
         _buy(alice, BoxOrderLib.boSmalls(1));
-        (,,,, uint256 priceWei) = host.purchaseInfo();
+        (,,,, uint256 priceWei) = host.purchaseInfo_g1027();
         uint256 value = priceWei * 40;
         uint256 snap = vm.snapshotState();
         uint256 a0 = host.afkingFundingOf(alice);

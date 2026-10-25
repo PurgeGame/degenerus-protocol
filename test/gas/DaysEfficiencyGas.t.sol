@@ -11,7 +11,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 /// @dev Same fixture on both revisions. Only the BAF calldata schema varies by environment.
 contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
     function test_DaysEffBafBegin() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         bytes memory data = vm.envOr("DAYSEFF_NEW_ABI", false)
             ? abi.encodeWithSignature("beginBafOn(uint24)", day) : abi.encodeWithSignature("beginBaf()");
         emit log_named_uint("dayseff_baf_begin", this.measure(address(jackpots), address(game), data));
@@ -21,11 +21,11 @@ contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
     function test_DaysEffBafBeginThroughGame() public {
         emit log_named_uint("dayseff_baf_begin_game", this.measure(address(game), address(game),
             abi.encodeWithSignature("runBafJackpot(uint256,uint24,uint256)", 10 ether, uint24(10), uint256(777))));
-        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView());
+        assertEq(jackpots.getLastBafResolvedDay(), game.currentDayView_g542950());
     }
 
     function test_DaysEffBafSkip() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         bytes memory data = vm.envOr("DAYSEFF_NEW_ABI", false)
             ? abi.encodeWithSignature("markBafSkippedAt(uint24,uint24)", uint24(10), day)
             : abi.encodeWithSignature("markBafSkipped(uint24)", uint24(10));
@@ -40,7 +40,7 @@ contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
         emit log_named_uint("dayseff_record_first", this.measure(address(coinflip), address(game), data));
         (address holder,,uint24 since,) = recordBounty.recordInfo(1);
         assertEq(holder, player);
-        assertEq(since, game.currentDayView());
+        assertEq(since, game.currentDayView_g542950());
         emit log_named_uint("dayseff_record_same_holder", this.measure(address(coinflip), address(game),
             abi.encodeCall(coinflip.armRecord, (uint8(1), id, uint256(2 ether)))));
         (,,uint24 afterDay,) = recordBounty.recordInfo(1);
@@ -71,7 +71,7 @@ contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
             abi.encodeCall(coinflip.armDiceRunRecord, (id, uint256(1_000_000)))));
         (address holder,,uint24 since,) = recordBounty.recordInfo(4);
         assertEq(holder, address(0xEFFE));
-        assertEq(since, game.currentDayView());
+        assertEq(since, game.currentDayView_g542950());
     }
 }
 
@@ -87,7 +87,7 @@ contract DaysEfficiencyCrapsGasTest is CrapsScheduledCursorTest {
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
         if (trace) {
             Vm.AccountAccess[] memory calls = vm.stopAndReturnStateDiff();
-            bytes32 inputHash = keccak256(abi.encodeWithSignature("extsload_g8132(bytes32)", bytes32(0)));
+            bytes32 inputHash = keccak256(abi.encodeWithSignature("extsload_g2807007(bytes32)", bytes32(0)));
             uint256 headers;
             for (uint256 i; i < calls.length; ++i) {
                 if (calls[i].kind == VmSafe.AccountAccessKind.StaticCall && calls[i].account == ContractAddresses.GAME

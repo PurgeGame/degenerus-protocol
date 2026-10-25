@@ -61,7 +61,7 @@ contract XaNativeMinerTest is DeployProtocol, NativeGasExport {
         vm.etch(address(game), type(XaNativeMinerSeed).runtimeCode);
         XaNativeMinerSeed(payable(address(game))).seed(address(0xB0A100), MINER);
         vm.etch(address(game), production);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         this.measureAndExport();
     }
 

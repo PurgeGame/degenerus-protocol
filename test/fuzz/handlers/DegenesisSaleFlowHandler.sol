@@ -113,7 +113,7 @@ contract DegenesisSaleFlowHandler is Test {
         uint256 amount = bound(unitsSeed, 100, 25_000) * UNIT;
         bool malformed = mode % 5 == 0;
         if (malformed) amount = mode % 2 == 0 ? amount + 1 : UNIT * (1 + (mode >> 8) % 99);
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         bool saleDay = today >= START && today < LAUNCH;
         uint256 credit = game.degenesisCreditOf(p);
         if (credit < amount && saleDay && !game.gameOver()) {
@@ -254,7 +254,7 @@ contract DegenesisSaleFlowHandler is Test {
     }
 
     function _scan(Vm.Log[] memory logs) internal {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
             if (l.emitter != address(game) || l.topics.length == 0) continue;
@@ -296,7 +296,7 @@ contract DegenesisSaleFlowHandler is Test {
     }
 
     function _checkState() internal {
-        uint24 today = game.currentDayView();
+        uint24 today = game.currentDayView_g542950();
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         uint24 lvl = uint24(slot0 >> (GameSlots.LEVEL_OFFSET * 8));
         bool latch = uint8(slot0 >> (GameSlots.LAST_PURCHASE_DAY_OFFSET * 8)) != 0;

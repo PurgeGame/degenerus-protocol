@@ -131,7 +131,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         for (uint64 id = 1; id <= COUNT; ++id) {
             uint32 playerId = _giveWalletId(address(uint160(0xD000 + id)));
             vm.prank(ContractAddresses.COIN);
-            game.recordDecBurn_g5574(playerId, LVL, 2000, 10_000, 0);
+            game.recordDecBurn_g1271(playerId, LVL, 2000, 10_000, 0);
         }
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.closeWindow, ()));
         vm.prank(address(game));

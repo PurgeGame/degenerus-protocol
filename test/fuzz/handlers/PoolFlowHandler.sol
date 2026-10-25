@@ -103,7 +103,7 @@ contract PoolFlowHandler is Test {
         if (game.gameOver()) return;
 
         uint256 qty = bound(qtySeed, 400, 4000); // whole-ticket multiples (1 ticket = 4 entries = 1 price)
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * qty) / 400;
         if (ticketCost == 0) return;
 
@@ -133,7 +133,7 @@ contract PoolFlowHandler is Test {
         calls_advance++;
         if (game.gameOver()) return;
 
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 gate = (priceWei * 400) / 400; // one whole ticket to satisfy the daily purchase gate
         if (gate != 0 && gate <= currentActor.balance) {
             vm.prank(currentActor);
@@ -193,7 +193,7 @@ contract PoolFlowHandler is Test {
         uint24 start = game.level();
         for (uint256 d; d < DRIVE_MAX_DAYS && game.level() == start && !game.gameOver(); ++d) {
             vm.warp(vm.getBlockTimestamp() + 1 days + 1);
-            (, , , bool locked, uint256 priceWei) = game.purchaseInfo();
+            (, , , bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked) {
                 uint256 sent = priceWei * 10 + DRIVE_BOX;
                 vm.prank(driver);

@@ -14,11 +14,11 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Overrides nothing: every rule under test is the shipped one. The taps reach internals the
-///      paying path already runs — `settlementAt` reads the same `_settlementOf` a resolution
+///      paying path already runs — `settlementAt` reads the same engine run `_settlementOf` a resolution
 ///      consumes, and `scoreAt` drives the shipped scoreboard fold directly.
 contract BattleHarness is CrapsViews {
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _fullSettlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
 
@@ -42,7 +42,7 @@ contract BattleHarness is CrapsViews {
         uint64 local = uint64(betId);
         w.seat = betId >> 64 == slot ? (local <= ownN ? local : local + dayN) : ownN + local;
         require(betId >> 64 == slot || (betId & ~uint256(type(uint64).max)) == dayBase, "preview field");
-        return _settlementOf(betId, _loadBet(betId), w, _slotWord(slot, _gameState()));
+        return _fullSettlementOf(betId, _loadBet(betId), w, _slotWord(slot, _gameState()));
     }
 
     /// @dev The fold takes the whole WINDOW now, because the boost it announces at finalization

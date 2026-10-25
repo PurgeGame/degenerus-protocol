@@ -414,7 +414,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         }
         assertGt(mockVRF.lastRequestId(), requestBefore, "bounded preparation reaches the daily request");
         assertGt(crapsBattle.slotIndexOf(slot), 0, "the existing field joins the request commitment");
-        assertEq(game.currentDayView(), today + 1, "the request advances only one logical day");
+        assertEq(game.currentDayView_g542950(), today + 1, "the request advances only one logical day");
     }
 
     /// @dev THE BATCH IS SIZED BY MEASURED WORK, NOT BY CAUTION AND NOT BY A HEAD COUNT. A crank

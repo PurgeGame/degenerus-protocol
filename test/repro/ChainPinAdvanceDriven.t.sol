@@ -333,7 +333,7 @@ abstract contract ChainPinBase is DeployProtocol {
     }
 
     function _buyTickets() internal {
-        (,,, bool locked, uint256 priceWei) = game.purchaseInfo();
+        (,,, bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
         if (locked) return;
         vm.prank(buyer);
         try game.purchase{value: (priceWei * 4000) / 400}(
@@ -348,7 +348,7 @@ abstract contract ChainPinBase is DeployProtocol {
 
     /// @dev A whale pass (far-future tickets), a foil pack and a lootbox, each by its own buyer.
     function _extraBuys() internal {
-        (,,, bool locked, uint256 priceWei) = game.purchaseInfo();
+        (,,, bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
         if (locked) return;
         vm.prank(whale);
         try game.purchaseWhalePass{value: 10 ether}(0, 1, bytes32(0)) { ++whaleBuys; } catch {}
@@ -477,7 +477,7 @@ abstract contract ChainPinBase is DeployProtocol {
             if (normalX0) ++x0PurchaseDays;
             _runFullDay();
             if (normalX0 && mode == Mode.NormalEarly && x0PurchaseDays == 2) {
-                (,, bool latched,,) = game.purchaseInfo();
+                (,, bool latched,,) = game.purchaseInfo_g1027();
                 require(latched, "harness: the x0 latch must be set");
                 _middayRequest();
                 _settle();

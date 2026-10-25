@@ -15,7 +15,7 @@ contract StableOwnersHarness is DegenerusGameStorage, WalletSeed {
     function release(uint24 key) external { _releaseTicketQueue(key); }
     function physical(uint24 key) external pure returns(uint24) { return _ticketQueueStorageKey(key); }
     function total(uint24 lvl,address p) external view returns(uint32) { return _entriesOwedTotal(lvl,_walletIdOf(p)); }
-    function extsload_g8132(bytes32 slot) external view returns(bytes32 value) { assembly ("memory-safe") { value := sload(slot) } }
+    function extsload_g2807007(bytes32 slot) external view returns(bytes32 value) { assembly ("memory-safe") { value := sload(slot) } }
     function id(address p) external view returns(uint32) { return _walletIdOf(p); }
     function count() external view returns(uint256) { return (wallets.length - 1); }
     function word(uint24, address p) external view returns(uint256) { return ticketPending[_walletIdOf(p)]; }

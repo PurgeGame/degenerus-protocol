@@ -182,7 +182,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         uint256 score = 500;
         vm.mockCall(
             address(game),
-            abi.encodeWithSignature("playerActivityScoreCachedById(uint32)", aliceId),
+            abi.encodeWithSignature("playerActivityScoreCachedById_g975(uint32)", aliceId),
             abi.encode(score)
         );
         uint256 mult = wwxrp.drawMultBps(score);
@@ -452,7 +452,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
     }
 
     function _buyTickets(address who, uint256 qty) internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         if (game.gameOver()) return;
 

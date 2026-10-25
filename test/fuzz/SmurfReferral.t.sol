@@ -81,7 +81,7 @@ contract SmurfReferralTest is DeployProtocol {
     }
 
     function _price() internal view returns (uint256 p) {
-        (,,,, p) = game.purchaseInfo();
+        (,,,, p) = game.purchaseInfo_g1027();
     }
 
     function _buy(address buyer, bytes32 code) internal {
@@ -465,7 +465,7 @@ contract SmurfReferralTest is DeployProtocol {
             if ((packed & POOL_HALF_MASK) < 500 ether) {
                 vm.store(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT), bytes32((packed & ~POOL_HALF_MASK) | 500 ether));
             }
-            (,,, bool locked, uint256 priceWei) = game.purchaseInfo();
+            (,,, bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
             if (!locked && !game.gameOver()) {
                 vm.prank(driveBuyer);
                 try game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}

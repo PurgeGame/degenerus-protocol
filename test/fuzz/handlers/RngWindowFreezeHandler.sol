@@ -199,7 +199,7 @@ contract RngWindowFreezeHandler is Test {
         _drainReadConsumers();
 
         // Small daily-gate buy so mineFlip has a reason to request the daily word.
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 oneTicket = priceWei; // 400 entries == 1 price (project_ticket_entry_price_units)
         if (oneTicket != 0 && oneTicket <= currentActor.balance) {
             vm.prank(currentActor);
@@ -281,7 +281,7 @@ contract RngWindowFreezeHandler is Test {
         _snapshotEnumeratedSet();
         uint256 qty = bound(qtySeed, 400, 2000); // whole-ticket multiples
         uint256 boxAmt = bound(boxSeed, 0, 1 ether);
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * qty) / 400 + boxAmt + 0.01 ether;
         if (cost > currentActor.balance) {
             _checkFrozenAfterIsolatedAction();
@@ -444,7 +444,7 @@ contract RngWindowFreezeHandler is Test {
             }
 
             // The mid-day request needs TODAY's daily word consumed and recorded.
-            if (_rngWordByDay(game.currentDayView()) == 0) {
+            if (_rngWordByDay(game.currentDayView_g542950()) == 0) {
                 if (!_driveWindowOpen(actorSeed + i)) return false;
                 _closeDailyWindow(actorSeed + i);
                 if (game.rngLocked() || game.gameOver()) return false;
@@ -457,7 +457,7 @@ contract RngWindowFreezeHandler is Test {
                 ((uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) >> LR_THRESHOLD_SHIFT) &
                     LR_THRESHOLD_MASK) * LR_ETH_SCALE;
             uint256 boxAmt = thresholdWei + 0.1 ether;
-            (, , , , uint256 priceWei) = game.purchaseInfo();
+            (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
             uint256 cost = priceWei + boxAmt; // 1 whole ticket (400 entries) + the box leg
             if (cost > currentActor.balance) return false;
             vm.prank(currentActor);
@@ -508,7 +508,7 @@ contract RngWindowFreezeHandler is Test {
         _snapshotMidDaySet();
         uint256 qty = bound(qtySeed, 400, 2000); // whole-ticket multiples
         uint256 boxAmt = bound(boxSeed, 0, 1 ether);
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 cost = (priceWei * qty) / 400 + boxAmt + 0.01 ether;
         if (cost > currentActor.balance) {
             _checkMidDayFrozenAfterIsolatedAction();
@@ -593,7 +593,7 @@ contract RngWindowFreezeHandler is Test {
     ///      positive — the consumption reads the leaf live at request time).
     function _snapshotEnumeratedSet() internal {
         _snapshotFoilDraws();
-        _snapDay = game.currentDayView();
+        _snapDay = game.currentDayView_g542950();
         _snapNudges = _nudgeCount();
         _snapRequestDay = _rngRequestDay();
         _snapIndex = _activeLootboxIndex() ^ 1;

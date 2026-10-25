@@ -60,7 +60,7 @@ contract MinerKeeperRegistration is DeployProtocol {
     /// @dev Ordinary ticket buys queued before the day's request, so the delivered day's work
     ///      measures past the unpaid first million.
     function _queueDayTickets() private {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         for (uint256 i; i < 8; ++i) {
             address buyer = makeAddr(string(abi.encodePacked("day_ticket_buyer", vm.toString(i))));
             vm.deal(buyer, 10 ether);

@@ -506,7 +506,7 @@ contract DegenesisBattleSkipRequestGas is DegenesisGasBase {
         miner = makeAddr("skip-miner");
         _giveWalletId(miner);
         vm.warp(block.timestamp + 1 days);
-        require(game.currentDayView() == 1, "fixture: bootstrap until accepted request");
+        require(game.currentDayView_g542950() == 1, "fixture: bootstrap until accepted request");
         for (uint256 i; i < 50; ++i) {
             if (game.nextMinerAction() == MineFlipAdmission.REQUEST_DAILY) break;
             game.mineFlip{gas: 3_000_000}(0);

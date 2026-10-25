@@ -130,7 +130,7 @@ contract V56SubHardening is DeployProtocol {
         vm.prank(p);
         game.subscribe(0, false, 1, seat); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "unfunded run created");
-        assertEq(_checkpointDayOf(p), uint32(game.currentDayView()), "checkpointed today");
+        assertEq(_checkpointDayOf(p), uint32(game.currentDayView_g542950()), "checkpointed today");
         assertEq(game.afkingFundingOf(p), 0);
         assertFalse(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(p)), "no box at signup");
 
@@ -273,7 +273,7 @@ contract V56SubHardening is DeployProtocol {
         uint32 id = game.walletIdOf_g3120(p);
 
         _subscribeLootbox(p, 1);
-        uint32 today = uint32(game.currentDayView());
+        uint32 today = uint32(game.currentDayView_g542950());
         assertEq(_checkpointDayOf(p), today, "signup checkpoints today");
         uint256 setLen = game.subscriberSetLength();
 

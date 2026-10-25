@@ -431,7 +431,7 @@ contract WalletIdTruthHandler is Test {
     }
 
     function _price() internal view returns (uint256 priceWei) {
-        (,,,, priceWei) = game.purchaseInfo();
+        (,,,, priceWei) = game.purchaseInfo_g1027();
     }
 
     // =====================================================================================
@@ -632,7 +632,7 @@ contract WalletIdTruthHandler is Test {
         uint256 round = uint256(vm.load(GAME, roundSlot));
         if ((round >> 224) & 0xFF != 0) return false; // sealed (phase != 0)
         if ((round >> 200) & 0xFFFFFF == 0) {
-            uint256 day = game.currentDayView();
+            uint256 day = game.currentDayView_g542950();
             vm.store(GAME, roundSlot, bytes32(round | (day << 200)));
         }
         // Entries now reuse a single buffer. Opening only the flag/day leaves

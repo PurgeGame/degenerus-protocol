@@ -109,7 +109,7 @@ contract FSMHandler is Test {
     ///      the VRF word and crank mineFlip until it refuses.
     function _driveDay(uint256 salt) private {
         vm.warp(vm.getBlockTimestamp() + 1 days + 1);
-        (, , , bool locked, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool locked, uint256 priceWei) = game.purchaseInfo_g1027();
         if (!locked && !game.gameOver()) {
             vm.prank(driver);
             try game.purchase{value: priceWei * 10 + DRIVE_BOX}(
@@ -154,7 +154,7 @@ contract FSMHandler is Test {
             qty = bound(qty, 100, 4000);
             lootboxAmt = bound(lootboxAmt, 0, 2 ether);
 
-            (, , , , uint256 priceWei) = game.purchaseInfo();
+            (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
             uint256 ticketCost = (priceWei * qty) / 400;
             uint256 totalCost = ticketCost + lootboxAmt;
 
@@ -221,7 +221,7 @@ contract FSMHandler is Test {
     ///
     ///      NOT A BRICK ORACLE (intentionally): a sound bounded no-brick ghost cannot be wired here.
     ///      Within-day / backlog drain makes real forward progress that is INVISIBLE through the
-    ///      exposed views (level/gameOver/lastVrfProcessed/currentDayView do not change per tick),
+    ///      exposed views (level/gameOver/lastVrfProcessed/currentDayView_g542950 do not change per tick),
     ///      and time-warp actions can accumulate an arbitrarily large owed-day backlog that a
     ///      fixed-time crank must drain over many ticks. So any finite iteration cap either
     ///      false-positives on a large legitimate backlog or, if raised enough to be safe, exceeds

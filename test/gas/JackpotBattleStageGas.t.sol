@@ -358,7 +358,7 @@ contract JackpotPhaseStageSequence is DeployProtocol {
                 if (st == STAGE_JACKPOT_COIN_TICKETS || st == STAGE_JACKPOT_PHASE_ENDED) sealedNow = true;
             }
             if (sealedNow) {
-                (, bool inJackpot,,,) = game.purchaseInfo();
+                (, bool inJackpot,,,) = game.purchaseInfo_g1027();
                 if (inJackpot) {
                     // A non-final day's own stage unlocks the day it just sealed (the final day's
                     // STAGE_JACKPOT_PHASE_ENDED instead keeps the lock through the transition).

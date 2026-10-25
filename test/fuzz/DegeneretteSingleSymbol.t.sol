@@ -66,7 +66,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
 
     function _land(uint256 word) private {
         RecyclingState.seedWord(address(game), 1, bytes32(word));
-        RecyclingState.seedDailyWord(address(game), game.currentDayView(), word);
+        RecyclingState.seedDailyWord(address(game), game.currentDayView_g542950(), word);
         vm.recordLogs();
         game.mineFlip{gas: 15_000_000}(0);
         resolvedLogs = vm.getRecordedLogs();
@@ -151,7 +151,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         coin.mintForGame(alice, 456);
         uint32 aliceId = game.walletIdOf_g3120(alice);
         bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), GameSlots.BOON_PACKED))) + 1);
-        uint256 lane = (uint256(game.currentDayView()) << 3) | 3;
+        uint256 lane = (uint256(game.currentDayView_g542950()) << 3) | 3;
         vm.store(address(game), boonSlot, bytes32((lane << 184) | (lane << 208)));
         uint8[3] memory currencies = [uint8(2), 3, 255];
         address[3] memory callers = [alice, bob, gifter];
@@ -214,7 +214,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                     game.placeDegeneretteBet{value: currency == 0 ? stake : 0}(aliceId, currency, stake, 1, symbol);
                     assertEq(_rejectionState(callers[route], boonSlot), beforeState);
                     assertEq(coin.balanceOf(callers[route]), beforeFlip);
-                    assertEq(game.getDailyHeroWager(game.currentDayView(), 3, symbol & 7), 0);
+                    assertEq(game.getDailyHeroWager(game.currentDayView_g542950(), 3, symbol & 7), 0);
                 }
             }
         }

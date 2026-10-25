@@ -214,7 +214,7 @@ contract V56SecUnmanipulable is DeployProtocol {
             if (_dailyQtyOf(churn.player) != 0) {
                 DegenerusGameLens.SubFull memory f = _owed(churn.player);
                 assertLe(f.checkpointDay, f.endpoint, "checkpoint cannot pass the endpoint");
-                assertLe(f.endpoint, game.currentDayView(), "streak cannot cover a future day");
+                assertLe(f.endpoint, game.currentDayView_g542950(), "streak cannot cover a future day");
             }
         }
         _observeChurnAction(honest, 1);

@@ -28,7 +28,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///             high-water DOWN when the streak drops at finalize).
 ///
 /// @dev Every OTHER quest-streak source already routes the bump into the afking sub streak base while afking
-///      (daily secondary `recordAfkingSecondary(player,1)`; level-quest `recordAfkingSecondary(player,5)`; foil
+///      (daily secondary `recordAfkingSecondary_g3316(player,1)`; level-quest `recordAfkingSecondary_g3316(player,5)`; foil
 ///      floor `floorAfkingStreakBase(...)`). `awardQuestStreakBonus` is the only source missing this routing.
 ///
 ///      Fixture reuse: the afking-run drive (deity grant, funding, lootbox subscribe, day delivery, sub-slot
@@ -87,7 +87,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     ///               bonus is discarded at finalize (value loss); AND
     ///           (b) the granted century shield SURVIVES finalize as an orphan while the finalized earned streak
     ///               is below that century (a re-grantable double-credit).
-    ///         The FIXED code routes the bonus into the afking sub streak base (recordAfkingSecondary), so the
+    ///         The FIXED code routes the bonus into the afking sub streak base (recordAfkingSecondary_g3316), so the
     ///         base rises by the bonus, the finalized earned streak reflects it, and NO orphaned shield is left.
     function test_ActivityBoonDuringAfking_RoutesToSubStreakBase_NoOrphanShield() public {
         address p = makeAddr("boon_afker");
@@ -99,7 +99,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1); // beginAfking: afkingActive = true; snapshots state.streak (95) into the checkpoint streak
         // Deliver one funded day so the run is LIVE (a credited day past the checkpoint) -- the precondition the
-        // boon hits via an afking auto-open, and the precondition recordAfkingSecondary requires to be non-vacuous.
+        // boon hits via an afking auto-open, and the precondition recordAfkingSecondary_g3316 requires to be non-vacuous.
         _deliverDay(0xB00FA1);
         assertGt(_endpoint(), _checkpointDayOf(p), "non-vacuity: a live afking run grounds the streak-bonus routing path");
         assertTrue(_afkingActiveOf(p), "non-vacuity: quest state marks the player mid afking-run");
@@ -112,7 +112,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         // ---- Fire the activity-boon streak award exactly as the boon module reaches it (onlyGame). ----
         // +10 takes the transient manual streak 95 -> 105, crossing the century-100 boundary.
         uint16 amount = 10;
-        uint24 currentDay = uint24(game.currentDayView());
+        uint24 currentDay = uint24(game.currentDayView_g542950());
         uint32 pId = game.walletIdOf_g3120(p);
         vm.prank(ContractAddresses.GAME);
         quests.awardQuestStreakBonus(pId, amount, currentDay);
@@ -120,7 +120,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         // ===================================================================
         // (a) VALUE LOSS: the afking sub streak base (what actually pays the afker) is UNCHANGED.
         //     CURRENT (buggy) code: writes the dormant state.streak, never the sub base -> base unchanged (FAIL).
-        //     FIXED code: routes to recordAfkingSecondary -> base += amount.
+        //     FIXED code: routes to recordAfkingSecondary_g3316 -> base += amount.
         // ===================================================================
         uint256 subBaseAfter = _streakLatch16Of(p);
         assertEq(

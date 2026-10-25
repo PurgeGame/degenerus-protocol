@@ -13,7 +13,7 @@ contract VRFPathCoverage is LogicalDaysFixture {
         vm.warp(vm.getBlockTimestamp() + gap * 1 days);
         mockVRF.fulfillRandomWords(id, word);
         _nextRequestAfter(id);
-        assertEq(game.currentDayView(), 3);
+        assertEq(game.currentDayView_g542950(), 3);
         assertEq(game.rngWordForDay(2), word);
         assertEq(coinflip.recordPool(), pool + 2_000);
         (uint16 reward, bool win) = coinflip.getCoinflipDayResult(2);
@@ -28,7 +28,7 @@ contract VRFPathCoverage is LogicalDaysFixture {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         mockVRF.fulfillRandomWords(_requestLogical(), 0);
         assertTrue(game.rngLocked());
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(game.rngWordForDay(2), 0);
         assertEq(coinflip.requestedDailyIdx(), 2);
     }

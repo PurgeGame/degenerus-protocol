@@ -273,7 +273,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         uint256 requests = mockVRF.lastRequestId();
         _finishHardEnding();
-        assertEq((uint256(game.extsload_g8132(bytes32(0))) >> 254) & 1, 0, "hard ending revokes callback authority");
+        assertEq((uint256(game.extsload_g2807007(bytes32(0))) >> 254) & 1, 0, "hard ending revokes callback authority");
         assertEq(mockVRF.lastRequestId(), requests, "hard ending requests no new entropy");
         assertEq(_holderEntryCount(LEVEL, committedBuyer), 0, "unfinished read tickets stay uncreated");
         assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "unfinished write tickets stay uncreated");
@@ -315,7 +315,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         // The terminal word is applied in its own transaction.
         game.mineFlip(0);
-        assertTrue(game.rngWordForDay(game.currentDayView() + 1) != 0, "separate terminal identity applied");
+        assertTrue(game.rngWordForDay(game.currentDayView_g542950() + 1) != 0, "separate terminal identity applied");
         assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "the application runs no drain batch");
 
         // Drain the frozen cohort, then settle in a separate transaction.
@@ -463,7 +463,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         uint256 requests = mockVRF.lastRequestId();
         _finishHardEnding();
-        assertEq((uint256(game.extsload_g8132(bytes32(0))) >> 254) & 1, 0, "hard ending revokes callback authority");
+        assertEq((uint256(game.extsload_g2807007(bytes32(0))) >> 254) & 1, 0, "hard ending revokes callback authority");
         assertEq(mockVRF.lastRequestId(), requests, "no terminal RNG is needed");
         assertEq(_holderEntryCount(LEVEL, committedBuyer), 0, "promoted tickets stay uncreated");
         assertEq(_totalQueuedOwed(LEVEL, committedBuyer), ENTRIES, "promoted claim weight retained");
@@ -480,19 +480,19 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _decideEnding();
         vm.mockCallRevert(address(mockVRF), bytes4(keccak256("requestRandomWords((bytes32,uint256,uint16,uint32,uint32,bytes))")), abi.encodeWithSignature("Error(string)", "refused"));
         game.mineFlip(0); // arms and asks; the refusal is recorded
-        uint256 state = uint256(game.extsload_g8132(bytes32(0)));
+        uint256 state = uint256(game.extsload_g2807007(bytes32(0)));
         uint256 stamp = (state >> 48) & type(uint48).max;
         assertGt(stamp, 1, "first attempt arms a real refusal timer");
         assertEq((state >> 254) & 1, 0, "failed request has no callback authority");
         assertEq((state >> 255) & 1, 0, "terminal session remains unpublished");
-        assertEq(uint256(game.extsload_g8132(bytes32(uint256(4)))), 1, "nonzero idle ID is retained");
+        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(4)))), 1, "nonzero idle ID is retained");
         mockVRF.fulfillRandomWordsRaw(1, address(game), 42);
         assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
         for (uint256 i; i < 3; ++i) {
             vm.warp(vm.getBlockTimestamp() + 1 hours);
             // A refused request with nothing else to do returns without progress or reward.
             game.mineFlip(0);
-            state = uint256(game.extsload_g8132(bytes32(0)));
+            state = uint256(game.extsload_g2807007(bytes32(0)));
             assertEq((state >> 48) & type(uint48).max, stamp, "refusal cannot reset the timeout");
             assertEq((state >> 254) & 1, 0, "refused request has no callback authority");
         }

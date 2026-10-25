@@ -331,7 +331,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         address ref = seeded[0];
         assertEq(game.walletIdOf_g3120(p), 0, "fixture: seeded[4] starts unregistered");
         vm.recordLogs();
-        (,,,, uint256 price) = game.purchaseInfo();
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(p);
         game.purchase{value: price}(0, 400, 0, bytes32(uint256(uint160(ref))), MintPaymentKind.DirectEth, false);
         uint32 id = game.walletIdOf_g3120(p);
@@ -534,7 +534,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
     function test_oracleDetectsAnUnauthorizedSuccess() public {
         (uint32 sid, uint32 key) = _smurf(seeded[0]);
         // A Game that authorizes everyone: Coinflip then lets a stranger act for the smurf.
-        vm.mockCall(address(game), abi.encodeWithSignature("resolveAccount_g502(uint32,address)"), abi.encode(address(0), seeded[0], true));
+        vm.mockCall(address(game), abi.encodeWithSignature("resolveAccount_g7029(uint32,address)"), abi.encode(address(0), seeded[0], true));
         handler.actAs(57, sid, seeded[1], 0, 0);
         vm.clearMockedCalls();
         assertEq(handler.authViolations(), 1, "fixture: the stranger's auto-rebuy went through");

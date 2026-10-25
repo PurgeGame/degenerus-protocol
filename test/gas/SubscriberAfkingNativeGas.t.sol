@@ -330,7 +330,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol, NativeGasExport {
             if (mode == 3 || mode == 4) assertEq(host.memberCount(), 0, "expired member removed");
             else {
                 (uint24 bought, uint24 opened) = host.delivered(PLAYER);
-                assertEq(bought, game.currentDayView() + 1, "preparation stamps the upcoming logical round");
+                assertEq(bought, game.currentDayView_g542950() + 1, "preparation stamps the upcoming logical round");
                 assertEq(opened, mode == 5 ? bought - 1 : bought);
             }
             if (used > peak) peak = used;

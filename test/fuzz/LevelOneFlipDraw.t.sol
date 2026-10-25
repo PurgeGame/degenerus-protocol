@@ -50,7 +50,7 @@ contract FlipDrawHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 
     /// @dev The real JackpotBattle reads the Game's storage (daily words) through this.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }

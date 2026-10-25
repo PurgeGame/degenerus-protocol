@@ -202,7 +202,7 @@ abstract contract DeployProtocol is Test {
     }
     function _fixtureId(uint32 id) internal pure returns (uint32) { return id; }
     function _fixturePayee(uint32 id) internal view returns (address payee) {
-        if (id != 0) (, payee,) = game.resolveAccount_g502(id, address(0));
+        if (id != 0) (, payee,) = game.resolveAccount_g7029(id, address(0));
     }
 
 
@@ -348,7 +348,6 @@ abstract contract DeployProtocol is Test {
         mintModule = DegenerusGameMintModule(payable(deployCode("Eip170Mint.sol:Eip170Mint", abi.encode())));
         foilModule = DegenerusGameFoilPackModule(payable(deployCode("Eip170DegenesisFoil.sol:Eip170DegenesisFoil", abi.encode())));
         advanceModule = DegenerusGameAdvanceModule(payable(deployCode("Eip170Advance.sol:Eip170Advance", abi.encode())));
-        rngModule = DegenerusGameRngModule(payable(deployCode("Eip170Rng.sol:Eip170Rng", abi.encode())));
         jackpotModule = DegenerusGameJackpotModule(payable(deployCode("Eip170Jackpot.sol:Eip170Jackpot", abi.encode())));
         jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(deployCode("Eip170JackpotDraw.sol:Eip170JackpotDraw", abi.encode())));
         whaleModule = DegenerusGameWhaleModule(payable(deployCode("Eip170Whale.sol:Eip170Whale", abi.encode())));
@@ -359,7 +358,7 @@ abstract contract DeployProtocol is Test {
         afkingModule = GameAfkingModule(payable(deployCode("Eip170Afking.sol:Eip170Afking", abi.encode())));
         gameOverModule = DegenerusGameGameOverModule(payable(deployCode("Eip170Endgame.sol:Eip170Endgame", abi.encode())));
         decimatorModule = DegenerusGameDecimatorModule(payable(deployCode("Eip170Decimator.sol:Eip170Decimator", abi.encode())));
-        minerModule = DegenerusGame(payable(deployCode("Eip170Miner.sol:Eip170Miner", abi.encode())));
+        minerModule = DegenerusGame(payable(deployCode("Eip170MinerRng.sol:Eip170MinerRng", abi.encode())));
         coin = FLIP(payable(deployCode("FLIP.sol:FLIP", abi.encode())));
         game = DegenerusGame(payable(deployCode("DegenerusGame.sol:DegenerusGame", abi.encode())));
         coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode())));
@@ -382,6 +381,7 @@ abstract contract DeployProtocol is Test {
         wwxrp = WWXRP(payable(deployCode("WWXRP.sol:WWXRP", abi.encode())));
         ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
         degenesisModule = DegenerusGameDegenesisModule(payable(address(foilModule)));
+        rngModule = DegenerusGameRngModule(payable(address(minerModule)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS
         // A post-Degenesis unit-test fixture must seed logical headers explicitly:
@@ -516,12 +516,17 @@ abstract contract DeployProtocol is Test {
         );
     }
 
+    /// @dev The Game's logical day, read from storage so it can be an argument of a pranked call.
+    function _fixtureGameDay() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.DAILY_IDX))) >> (GameSlots.DAILY_IDX_OFFSET * 8));
+    }
+
     /// @dev Satisfy the gambling-burn admission gate (rngWordForDay(currentDay) != 0) by landing a
     ///      deterministic non-zero word for the current view day in the game's rngWordByDay map
     ///      (`rngWordByDay`, written through RecyclingState), mirroring a completed daily draw.
     ///      Self-validating: reverts if that slot is stale. No-op when the day is already drawn.
     function _primeCurrentDayRng() internal {
-        uint24 d = game.currentDayView();
+        uint24 d = game.currentDayView_g542950();
         if (game.rngWordForDay(d) == 0) {
             RecyclingState.seedDailyWord(address(game), d, uint256(keccak256(abi.encode("primeRng", d))));
         }

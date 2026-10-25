@@ -5,6 +5,8 @@ import {CrapsBattleCore} from "../../contracts/modules/CrapsBattleCore.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsBattle, IReadCohortLifecycle} from "../../contracts/CrapsBattle.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {ICrapsEngine} from "../../contracts/CrapsInterfaces.sol";
 import {IJackpotBattleViews, JackpotBattleViews} from "./JackpotBattleViews.sol";
 import {CrapsSeedViews} from "./CrapsSeedViews.sol";
 import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
@@ -578,7 +580,17 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
     function settlementOf(uint256 betId) external view returns (Settlement memory) {
         uint256 header = _loadBet(betId);
         uint256 slot = betId >> 64;
-        return _settlementOf(betId, header, _slotWindow(slot), _wordAt(_indexOf(slot)));
+        return _fullSettlementOf(betId, header, _slotWindow(slot), _wordAt(_indexOf(slot)));
+    }
+
+    /// @dev `_settlementOf` with every engine word. The table reads only the payment, scaled
+    ///      bankroll, rank and hottest hand; suites also grade the high point, hands and stop.
+    function _fullSettlementOf(uint256 betId, uint256 header, Window memory w, uint256 word)
+        internal view returns (Settlement memory s)
+    {
+        Craps.SlipResult memory r = ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle(
+            betId, header, w.played / 10, w.bankroll, w.goal, w.bound, (uint256(w.entrants) << 64) | w.seat, word);
+        assembly ("memory-safe") { s := r }
     }
 
     /// @dev The table index a slip settles on, whichever way it was bound. Test-side: the

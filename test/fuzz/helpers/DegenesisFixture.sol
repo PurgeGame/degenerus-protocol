@@ -106,7 +106,7 @@ abstract contract DegenesisFixtureBase is DeployProtocol {
 
     /// @dev Process every day from the current one through `d`, one at a time.
     function _driveThrough(uint256 d) internal {
-        for (uint256 day = game.currentDayView() + 1; day <= d; ++day) _driveDay(day);
+        for (uint256 day = game.currentDayView_g542950() + 1; day <= d; ++day) _driveDay(day);
     }
 
     // ------------------------------------------------------------------ actors

@@ -466,7 +466,7 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 21) {
-            uint32 today = game.currentDayView();
+            uint32 today = game.currentDayView_g542950();
             uint32 claimDay = today == 0 ? 0 : today - 1;
             vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(

@@ -174,7 +174,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         harness.applyOpeningWord(22);
         uint32 playerId = _giveWalletId(player);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500), playerId));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCachedById.selector, playerId), abi.encode(uint256(500)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCachedById_g975.selector, playerId), abi.encode(uint256(500)));
         vm.prank(address(game)); coin.mintForGame(player, 4_000_000);
         vm.recordLogs();
         vm.prank(player); coin.decimatorBurn(0, 2_000_000, 0);
@@ -209,7 +209,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertEq(coin.balanceOf(HOUSE), 0);
         (, bool secondary) = quests.questCompletionToday(HOUSE_ID);
         assertTrue(secondary, "opening day's decimator quest completes");
-        (, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(HOUSE_ID);
+        (, bool afking) = quests.effectiveBaseStreakAndAfking_g1521(HOUSE_ID, _fixtureGameDay());
         assertTrue(afking, "activity reads the active afking run");
         uint256 questReward = coinflip.coinflipAmount(HOUSE);
         assertGt(questReward, 0, "quest pays a next-day flip credit");

@@ -11,7 +11,7 @@ import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract ActivityCacheQuestStub {
-    function effectiveBaseStreakAndAfking_g2654(uint32) external pure returns (uint32, bool) { return (17, false); }
+    function effectiveBaseStreakAndAfking_g1521(uint32, uint24) external pure returns (uint32, bool) { return (17, false); }
 }
 
 contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {

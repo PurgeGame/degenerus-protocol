@@ -547,7 +547,7 @@ describe("JackpotDuration", function () {
 
         // The target-met settlement must select tier 1 even after the old cutoff.
         await driveOneCycle(game, deployer, mockVRF, advanceModule, 41n);
-        expect((await game.purchaseInfo()).lastPurchaseDay_).to.equal(true);
+        expect((await game.purchaseInfo_g1027()).lastPurchaseDay_).to.equal(true);
         expect(await game.jackpotDuration()).to.equal(3);
 
         const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
@@ -608,7 +608,7 @@ describe("JackpotDuration", function () {
       expect(await game.level()).to.equal(levelBefore + 1n, "Level should advance by 1");
       expect(await game.jackpotPhase()).to.equal(false, "Should be back in purchase phase");
       expect(await game.jackpotDuration()).to.equal(3);
-      expect((BigInt(await game.extsload_g8132(ZERO_BYTES32)) >> 184n) & 2n).to.equal(2n, "Turbo bonus remains owed");
+      expect((BigInt(await game.extsload_g2807007(ZERO_BYTES32)) >> 184n) & 2n).to.equal(2n, "Turbo bonus remains owed");
 
       // Drain completed without any day-boundary crossing (timestamp stayed within 24h window).
       expect(tsAfter - tsBefore).to.be.lessThan(86400,

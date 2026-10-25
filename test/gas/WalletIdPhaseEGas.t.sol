@@ -63,7 +63,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _seeder().seedLevel(24);
         _restoreGame();
         vm.deal(address(game), 1_000 ether);
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         _syncCoinflipFixtureDay(day);
         vm.prank(address(game));
         quests.rollDailyQuest(day, 123, false, false, false);
@@ -274,7 +274,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function _openDay() private {
-        RecyclingState.seedDailyWord(address(game), uint24(game.currentDayView()), 40 << 8);
+        RecyclingState.seedDailyWord(address(game), uint24(game.currentDayView_g542950()), 40 << 8);
         vm.prank(address(game));
         crapsBattle.openBonusDay();
     }
@@ -333,7 +333,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
 
     function test_Gas_PassSpend() public {
         _creditPasses(REG, 5);
-        uint24 day = uint24(game.currentDayView()) + 1;
+        uint24 day = uint24(game.currentDayView_g542950()) + 1;
         vm.prank(REG);
         crapsBattle.applyCrapsPasses(0, day, 1, false, BOARD);
         _report("pass_spend");

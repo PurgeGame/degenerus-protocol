@@ -69,7 +69,7 @@ contract BoundedMappingGasTest is BoundedDeployProtocol {
         (bool ok, bytes memory reason) = address(game).call(data);
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
         vm.etch(address(game), original);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
     }
 
     function measured(address sender, uint256 value, bytes calldata data, bool cold,

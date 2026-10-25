@@ -94,8 +94,8 @@ abstract contract StallCreditBase is DeployProtocol {
     function _seed(uint24 age) internal {
         _seeder().seed(age);
         _restore();
-        _syncCoinflipFixtureDay(game.currentDayView());
-        _seedCrapsFixtureCursor(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
+        _seedCrapsFixtureCursor(game.currentDayView_g542950());
     }
 
     function _clock() internal returns (uint24 psd, uint24 idx) {
@@ -270,7 +270,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice A five-calendar-day midday stall consumes no logical purchase rounds.
     function test_middayStallPreservesThePurchaseBaseline() public {
         _seed(28);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         (uint24 psd0,) = _clock();
         _middayRequest();
@@ -278,7 +278,7 @@ contract MidDayStallCreditTest is StallCreditBase {
             _warpDays(1);
             assertFalse(game.livenessTriggered());
             _advUntilBlocked();
-            assertEq(game.currentDayView(), x);
+            assertEq(game.currentDayView_g542950(), x);
         }
         _answer();
         _catchUp(x + 1);
@@ -295,13 +295,13 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice The same timing on the daily request: unchanged behaviour.
     function test_dailyStallPreservesCommitmentAndCreatesNoGapResults() public {
         _seed(28);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         (uint24 psd0,) = _clock();
         for (uint256 i; i < 750 && !game.rngLocked(); ++i) _adv();
-        assertEq(game.currentDayView(), x);
+        assertEq(game.currentDayView_g542950(), x);
         _warpDays(5);
         assertFalse(game.livenessTriggered());
-        assertEq(game.currentDayView(), x);
+        assertEq(game.currentDayView_g542950(), x);
         _answer();
         _catchUp(x + 1);
         (uint24 psd1, uint24 idx) = _clock();
@@ -315,7 +315,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         request; its word lands three days past the deadline.
     function test_rotatedMiddayStallPreservesTheLogicalClock() public {
         _seed(28);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         (uint24 psd0,) = _clock();
         _middayRequest();
@@ -326,7 +326,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         assertEq(sent1, sent0);
         assertEq(vrf.lastRequestId(), id);
         assertFalse(game.rngLocked());
-        assertEq(game.currentDayView(), x);
+        assertEq(game.currentDayView_g542950(), x);
         _warpDays(3);
         _answer();
         _catchUp(x + 1);
@@ -339,11 +339,11 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         and the level ends at the next caught-up day.
     function test_idleGapDoesNotAgeThePurchaseLevel() public {
         _seed(29);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         (uint24 psd0,) = _clock();
         _warpDays(3);
-        assertEq(game.currentDayView(), x);
+        assertEq(game.currentDayView_g542950(), x);
         assertFalse(game.livenessTriggered());
         _catchUp(x + 1);
         (uint24 psd1,) = _clock();
@@ -359,7 +359,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         when that advance pays nothing.
     function test_mineFlipOnTheCaughtUpDayLatchesTheEnding() public {
         _seed(30);
-        uint24 s = game.currentDayView() + 1;
+        uint24 s = game.currentDayView_g542950() + 1;
         _sealDay(s);
         _middayRequest();
         _answer();
@@ -378,7 +378,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         not a case the deadline has to handle; the deadman still bounds it).
     function test_skippingTheEndingWindowCannotReopenTheLevel() public {
         _seed(30);
-        uint24 day = game.currentDayView() + 1;
+        uint24 day = game.currentDayView_g542950() + 1;
         _sealDay(day);
         (uint24 psd0,) = _clock();
         _warpDays(1);
@@ -393,7 +393,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice A gap past the deadline that nobody ever closes still ends at the deadman.
     function test_idleGapEndsAtTheExactCompletionDeadline() public {
         _seed(5);
-        uint24 day = game.currentDayView() + 1;
+        uint24 day = game.currentDayView_g542950() + 1;
         _sealDay(day);
         (,, uint48 completed) = game.dailySessionState();
         vm.warp(uint256(completed) + 14 days - 1);
@@ -406,7 +406,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice Whatever the last request, a game nobody seals for the deadman window ends.
     function test_answeredMiddayGameEndsAtTheDeadman() public {
         _seed(5);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -418,7 +418,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice The Admin retry preserves a stalled mid-day request's mode and original timeout.
     function test_middayRetryTimerUnchanged() public {
         _seed(5);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         uint256 id = _middayRequest();
         (uint48 t0,) = _stamps();
@@ -442,7 +442,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         advance sends the fresh daily request, and no retry is needed or offered.
     function test_answeredMiddayIsNotWaitedOn() public {
         _seed(5);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -459,7 +459,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     /// @notice A second mid-day request on the same day after the first was answered.
     function test_secondMiddayRequestSameDay() public {
         _seed(5);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         uint256 a = _middayRequest();
         _answer();
@@ -472,7 +472,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         long nobody advances afterwards.
     function test_publishedMiddayIsNeverVrfDead() public {
         _seed(5);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -485,7 +485,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         though the coordinator answered it.
     function test_unpublishedMiddayWordIsDeadAfterTheWindow() public {
         _seed(5);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -498,7 +498,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         answered, and the deterministic ending takes over once it passes.
     function test_refusedTerminalRequestStartsTheDeadWindow() public {
         _seed(30);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -532,7 +532,7 @@ contract MidDayStallCreditTest is StallCreditBase {
     ///         level's future pool exactly as it does with no earlier request.
     function test_turboAfterAnsweredMiddayActivatesNextTickets() public {
         _seed(0);
-        uint24 x = game.currentDayView() + 1;
+        uint24 x = game.currentDayView_g542950() + 1;
         _sealDay(x);
         _middayRequest();
         _answer();
@@ -573,13 +573,13 @@ contract MidDayStallCreditGas is StallCreditBase {
 
     function test_gas_middayCallbackSameDay() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         _fulfil(_middayRequest(), "GAS middayCallbackSameDay used/refund");
     }
 
     function test_gas_middayCallbackLate() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         uint256 id = _middayRequest();
         _warpDays(3);
         _fulfil(id, "GAS middayCallbackLate used/refund");
@@ -593,7 +593,7 @@ contract MidDayStallCreditGas is StallCreditBase {
 
     function test_gas_middayRequestFirst() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         _finishReadConsumers();
         _donorRequest();
         _log("GAS middayRequestFirst used/refund");
@@ -601,7 +601,7 @@ contract MidDayStallCreditGas is StallCreditBase {
 
     function test_gas_middayRequestAfterAnswer() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         _middayRequest();
         _answer();
         vm.warp(vm.getBlockTimestamp() + 1 hours); // a later request, not the same second's stamp
@@ -613,7 +613,7 @@ contract MidDayStallCreditGas is StallCreditBase {
     /// @dev The advance that sends the next day's daily request, after an answered mid-day request.
     function test_gas_dailyRequestAdvanceAfterAnsweredMidday() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         _middayRequest();
         _answer();
         _warpDays(1);
@@ -623,7 +623,7 @@ contract MidDayStallCreditGas is StallCreditBase {
     /// @dev The same advance with no mid-day request the day before.
     function test_gas_dailyRequestAdvancePlain() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         _warpDays(1);
         _measureRequestAdvance("GAS dailyRequestAdvancePlain used/refund");
     }
@@ -631,7 +631,7 @@ contract MidDayStallCreditGas is StallCreditBase {
     /// @dev The advance that sends the daily request after a mid-day stall recovered late.
     function test_gas_dailyRequestAdvanceAfterLateMidday() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         _middayRequest();
         _warpDays(3);
         _answer();
@@ -642,7 +642,7 @@ contract MidDayStallCreditGas is StallCreditBase {
     /// @dev The backfill advance that credits the stalled days after a late mid-day recovery.
     function test_gas_dailyApplyAfterLateMidday() public {
         _seed(5);
-        _sealDay(game.currentDayView() + 1);
+        _sealDay(game.currentDayView_g542950() + 1);
         _middayRequest();
         _warpDays(3);
         _answer();

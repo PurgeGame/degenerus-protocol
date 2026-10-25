@@ -76,11 +76,11 @@ contract CustomerFollowupGasTest is DeployProtocol {
         CustomerFollowupSeeder(address(game)).seed(PLAYER);
         (heroRoot, heroMetaSlot) = CustomerFollowupSeeder(address(game)).heroStorageSlots();
         vm.etch(address(game), code);
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(PLAYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
         vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
         _seedCrapsFixtureCursor(day);
@@ -136,7 +136,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
             readSeen[j] = wasRead;
         }
         bytes32 state;
-        uint24 day = uint24(game.currentDayView());
+        uint24 day = uint24(game.currentDayView_g542950());
         for (uint256 i; i < count; ++i) {
             Vm.StorageAccess memory a = unique[i];
             bytes32 value = vm.load(a.account, a.slot);

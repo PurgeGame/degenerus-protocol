@@ -188,7 +188,7 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
             _driveDay(d);
         }
         assertEq(_degenesisClosed(), 7, "fixture: seventh cohort closed");
-        uint256 startDay = game.currentDayView() + 1;
+        uint256 startDay = game.currentDayView_g542950() + 1;
         assertGe(block.timestamp, GameTimeLib.DEGENESIS_END_TS, "fixture: credit window closed");
 
         uint256 purchases;

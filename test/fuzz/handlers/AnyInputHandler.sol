@@ -602,7 +602,7 @@ contract AnyInputHandler is Test {
     function prog_buy(uint256 a, uint256 qty, uint256 lootboxAmt) external act(a) {
         _lastId = 77;
         ++calls[77];
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         qty = bound(qty, 400, 8000);
         lootboxAmt = bound(lootboxAmt, 0, 1 ether);
         if (lootboxAmt != 0 && lootboxAmt < 0.01 ether) lootboxAmt = 0.01 ether;
@@ -619,7 +619,7 @@ contract AnyInputHandler is Test {
     function prog_bigBuy(uint256 a, uint256 eth) external act(a) {
         _lastId = 78;
         ++calls[78];
-        (,,,, uint256 priceWei) = game.purchaseInfo();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
         eth = bound(eth, 1 ether, 100 ether);
         if (eth > currentActor.balance || priceWei == 0) return;
         uint256 qty = eth * 400 / priceWei;
@@ -817,7 +817,7 @@ contract AnyInputHandler is Test {
     }
 
     function gd_claimFoilMatch(uint256 a, uint256 pSeed, uint256 dSeed, uint256 iSeed) external act(a) {
-        uint256 day = uint256(game.currentDayView()) - (dSeed % 2);
+        uint256 day = uint256(game.currentDayView_g542950()) - (dSeed % 2);
         _call(94, address(game), 0, abi.encodeWithSignature("claimFoilMatch(uint32,uint256,uint256)", _id(pSeed), day, iSeed % 4));
     }
 

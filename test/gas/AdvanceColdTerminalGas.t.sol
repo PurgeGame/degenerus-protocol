@@ -162,7 +162,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, before, "the ending sends its own terminal request");
         assertFalse(game.gameOver(), "the payout waits for the terminal word");
-        assertEq(game.rngWordForDay(game.currentDayView() + 1), 0, "no word before the request is answered");
+        assertEq(game.rngWordForDay(game.currentDayView_g542950() + 1), 0, "no word before the request is answered");
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
             uint256 post = vm.snapshotState();
             assertTrue(vm.revertToState(requestSnapshot));
@@ -177,7 +177,7 @@ abstract contract ColdTerminalFixture is DeployProtocol, NativeGasExport {
 
     /// @dev Applying the terminal word records its logical cohort and reserved read index.
     function _applyTerminalWord() private {
-        uint24 day = game.currentDayView() + 1;
+        uint24 day = game.currentDayView_g542950() + 1;
         // Cooling newly created accounts during setUp can discard their deployment in Foundry's
         // persisted setup state. The recorded fixture starts its measured work in the test body;
         // only fresh-word fixtures need explicit cooling before this application measurement.

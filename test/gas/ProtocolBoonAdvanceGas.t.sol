@@ -77,7 +77,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
         }
         assertEq(awarded, 6, "all six awards committed without a player claim");
         DegenerusGameLens lens = new DegenerusGameLens();
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 7);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 7);
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -118,7 +118,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol, NativeGasExport {
     }
 
     function testInsufficientGasCannotDiscardOrSealAwards() public {
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         (bool ok,) = address(game).call{gas: 100_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
         // A low-gas call may return without progress or fail naturally; neither may
         // consume the day word or drop any owed boon.

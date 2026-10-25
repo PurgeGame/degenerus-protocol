@@ -62,7 +62,7 @@ contract GameHandler is Test {
         lootboxAmt = bound(lootboxAmt, 0, 2 ether);
 
         // Get current price
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * qty) / 400;
         uint256 totalCost = ticketCost + lootboxAmt;
 

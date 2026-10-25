@@ -46,12 +46,12 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(crapsBattle), vm.getDeployedCode("CrapsBattle.sol:CrapsBattle"));
         vm.warp(block.timestamp + 20 days);
         _seed(abi.encodeCall(BoundedPublicSeeder.seed, (PLAYER)));
-        _seedLogicalFixtureDay(game.currentDayView());
+        _seedLogicalFixtureDay(game.currentDayView_g542950());
         playerId = game.walletIdOf_g3120(PLAYER);
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 1000 ether);
         vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);
-        uint24 day = game.currentDayView();
+        uint24 day = game.currentDayView_g542950();
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
     }
@@ -196,17 +196,17 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
     }
     function test_C1_C4_ThirtyFutureDays() public {
         _measure("C1_C4_future30", address(crapsBattle), PLAYER, 0,
-            abi.encodeCall(CrapsBattle(address(crapsBattle)).buyFutureCrapsDays, (uint32(0), game.currentDayView() + 1, uint8(30), false, BOARD)));
+            abi.encodeCall(CrapsBattle(address(crapsBattle)).buyFutureCrapsDays, (uint32(0), game.currentDayView_g542950() + 1, uint8(30), false, BOARD)));
     }
     function _table() private view returns (JackpotBattle) { return JackpotBattle(address(crapsBattle)); }
     function test_C2_LockJackpotRound() public {
         _openDay();
         _measure("C2_lock", address(crapsBattle), address(game), 0,
-            abi.encodeCall(_table().lockJackpotBattle, (game.currentDayView() + 1, uint256(100 ether), uint24(24))));
+            abi.encodeCall(_table().lockJackpotBattle, (game.currentDayView_g542950() + 1, uint256(100 ether), uint24(24))));
     }
     function test_C2_PrepareJackpotRound() public {
         _openDay();
-        uint24 requestDay = game.currentDayView() + 1;
+        uint24 requestDay = game.currentDayView_g542950() + 1;
         vm.prank(address(game)); _table().lockJackpotBattle(requestDay, 100 ether, 24);
         _measure("C2_prepare", address(crapsBattle), address(game), 0,
             abi.encodeCall(_table().prepareJackpotBattle, (uint24(24), uint256(0xCAFE))));

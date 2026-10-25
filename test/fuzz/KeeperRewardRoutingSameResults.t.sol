@@ -608,7 +608,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @dev Buy a large current-level ticket backlog via the public mint API (enqueues at the write slot).
     function _buyManyTickets(address who, uint256 qty) internal {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_ || game.gameOver()) return;
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;

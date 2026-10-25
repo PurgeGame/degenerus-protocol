@@ -32,13 +32,13 @@ describe("Delayed logical rounds never backfill calendar gaps", function () {
       const [start, initial] = await clocks(game);
       await game.connect(alice).purchase(0, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) });
       await advanceToNextDay();
-      expect(await game.currentDayView()).to.equal(initial);
+      expect(await game.currentDayView_g542950()).to.equal(initial);
       const id = await request(game, mockVRF);
       const day = initial + 1n;
-      expect(await game.currentDayView()).to.equal(day);
+      expect(await game.currentDayView_g542950()).to.equal(day);
       expect(await coinflip.requestedDailyIdx()).to.equal(day);
       for (let i = 0; i < 8; ++i) await advanceToNextDay();
-      expect(await game.currentDayView()).to.equal(day);
+      expect(await game.currentDayView_g542950()).to.equal(day);
       const pool = await coinflip.recordPool();
       await mockVRF.fulfillRandomWords(id, 0xcafebabfn);
       await finish(game);
@@ -59,7 +59,7 @@ describe("Delayed logical rounds never backfill calendar gaps", function () {
       }
       const next = await request(game, mockVRF);
       expect(next).to.be.gt(id);
-      expect(await game.currentDayView()).to.equal(day + 1n);
+      expect(await game.currentDayView_g542950()).to.equal(day + 1n);
       await mockVRF.fulfillRandomWords(next, 0xbadc0fffn);
       await finish(game);
       expect(await game.rngWordForDay(day + 1n)).to.equal(0xbadc0fffn + (paidNudge ? 1n : 0n));
@@ -71,7 +71,7 @@ describe("Delayed logical rounds never backfill calendar gaps", function () {
         if (pending && !(await mockVRF.pendingRequests(pending))[2]) await mockVRF.fulfillRandomWords(pending, 999n);
         await game.mineFlip(ONE_UNIT, { gasLimit: 16_777_216 });
       }
-      expect(await game.currentDayView()).to.equal(day + 1n);
+      expect(await game.currentDayView_g542950()).to.equal(day + 1n);
       expect(await game.gameOver()).to.equal(false);
     });
   }

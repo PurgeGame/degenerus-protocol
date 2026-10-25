@@ -22,10 +22,10 @@ abstract contract LogicalDaysFixture is DegenesisDeployProtocol {
         revert("daily request did not commit");
     }
     function _finishLogical() internal {
-        uint24 requested = game.currentDayView();
+        uint24 requested = game.currentDayView_g542950();
         for (uint256 i; i < 500; ++i) {
             (bool complete,,) = game.dailySessionState();
-            if (complete || game.currentDayView() > requested) return;
+            if (complete || game.currentDayView_g542950() > requested) return;
             game.mineFlip(0);
         }
         revert("daily certificate not reached");

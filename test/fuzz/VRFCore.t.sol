@@ -744,7 +744,7 @@ contract VRFCore is DeployProtocol {
         game.mineFlip(0);
         uint48 requestTime = _readRngRequestTime();
         uint256 oldReqId = _readVrfRequestId();
-        uint24 requestDay = game.currentDayView();
+        uint24 requestDay = game.currentDayView_g542950();
 
         // 19h: not yet
         vm.warp(uint256(requestTime) + 19 hours);
@@ -777,7 +777,7 @@ contract VRFCore is DeployProtocol {
         assertTrue(game.rngWordForDay(requestDay) != 0, "Day completes on the retried request's word");
 
         // Next day starts with a fresh retry allowance
-        assertGt(game.currentDayView(), requestDay, "Clock is past the retried day");
+        assertGt(game.currentDayView_g542950(), requestDay, "Clock is past the retried day");
         assertTrue(game.rngLocked(), "Next day's daily request is issued");
         assertGt(_readVrfRequestId(), retryReqId, "Next day's request is fresh");
         assertFalse(_readRetrySpent(), "Fresh daily request re-arms the retry");

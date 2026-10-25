@@ -133,7 +133,7 @@ contract PoolFreezeGas is DeployProtocol {
         vm.deal(_ticketBuyer, 1_000 ether);
         vm.prank(_ticketBuyer);
         game.purchase{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        _buyDay = game.currentDayView();
+        _buyDay = game.currentDayView_g542950();
 
         address whale = makeAddr("whale");
         vm.deal(whale, 1_000_000 ether);
@@ -144,7 +144,7 @@ contract PoolFreezeGas is DeployProtocol {
                 try game.purchase{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             }
             _completeDay(_seed(30, d));
-            _endDay = game.currentDayView();
+            _endDay = game.currentDayView_g542950();
             (uint32 board, uint24 drawLevel) = _foilDraw(_endDay);
             bytes32 outer = bytes32(GameSlots.FOIL_RECORD + uint256(drawLevel & 3));
             uint256 first = uint256(vm.load(address(game), keccak256(abi.encode(_fid[0], outer))));

@@ -13,7 +13,7 @@ contract DailyGapNativeGasTest is LogicalDaysFixture {
             game.mineFlip{gas: 3_000_000}(0);
         }
         assertEq(game.rngWordForDay(2), word);
-        assertEq(game.currentDayView(), 2);
+        assertEq(game.currentDayView_g542950(), 2);
         assertEq(game.rngWordForDay(3), 0);
         emit log_named_uint("delayed_single_round_last_chunk", vm.lastCallGas().gasTotalUsed);
     }

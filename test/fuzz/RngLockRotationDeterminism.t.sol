@@ -265,7 +265,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///      rngWordCurrent. Identical inputs (same delivered word) must yield an
     ///      identical digest whether or not a rotation occurred mid-window.
     function _captureDailyVrfDigest() internal view returns (bytes32) {
-        uint32 today = game.currentDayView();
+        uint32 today = game.currentDayView_g542950();
         uint256 dayWord = game.rngWordForDay(uint24(today));
         uint256 rngWordCurrent = _readRngWordCurrent();
         return keccak256(abi.encode(today, dayWord, rngWordCurrent));

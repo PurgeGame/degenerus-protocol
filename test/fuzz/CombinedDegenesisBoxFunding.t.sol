@@ -24,7 +24,7 @@ contract CombinedDegenesisBoxFunding is DegenesisDeployProtocol {
             if (done) break;
             game.mineFlip(0);
         }
-        assertEq(game.currentDayView(), 2, "first Degenesis sale cohort");
+        assertEq(game.currentDayView_g542950(), 2, "first Degenesis sale cohort");
     }
 
     function _header(uint256 cohort) private view returns (uint256) {

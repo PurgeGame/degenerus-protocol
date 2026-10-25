@@ -14,7 +14,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @title AccountRuleBafSettle -- the BAF-level seal settles the vault's coinflips by ID
 /// @notice At an x0 level's last-purchase-day seal the advance calls
 ///         `coinflip.depositCoinflip(VAULT_WALLET_ID = 1, 0)`. Coinflip resolves ID 1 through
-///         `Game.resolveAccount_g502(1, GAME)`: unapproved, the zero-amount call is a gift that only
+///         `Game.resolveAccount_g7029(1, GAME)`: unapproved, the zero-amount call is a gift that only
 ///         settles the vault's own claims; approved (`operatorApprovals[1][GAME]`), it is an
 ///         authorized zero deposit. Either way the advance must not revert. The drive turbo-chains
 ///         from genesis to the level-10 latch day (the shape of TurboBafTicketFloor's drive).
@@ -41,7 +41,7 @@ contract AccountRuleBafSettle is DeployProtocol {
     }
 
     function test_BafSeal_SettlesVaultById_Unapproved() public {
-        (, , bool authorized) = game.resolveAccount_g502(1, address(game));
+        (, , bool authorized) = game.resolveAccount_g7029(1, address(game));
         assertFalse(authorized, "fixture: GAME is not an operator of the vault's account");
         _driveAndAssert();
     }
@@ -49,7 +49,7 @@ contract AccountRuleBafSettle is DeployProtocol {
     function test_BafSeal_SettlesVaultById_GameApprovedForVault() public {
         bytes32 slot = keccak256(abi.encode(address(game), keccak256(abi.encode(uint256(1), GameSlots.OPERATOR_APPROVALS))));
         vm.store(address(game), slot, bytes32(uint256(1)));
-        (address key, address payee, bool authorized) = game.resolveAccount_g502(1, address(game));
+        (address key, address payee, bool authorized) = game.resolveAccount_g7029(1, address(game));
         assertTrue(authorized, "fixture: operatorApprovals[1][GAME] set");
         assertEq(key, ContractAddresses.VAULT);
         assertEq(payee, ContractAddresses.VAULT);
@@ -61,12 +61,12 @@ contract AccountRuleBafSettle is DeployProtocol {
         vm.expectCall(
             address(coinflip), abi.encodeWithSignature("depositCoinflip(uint32,uint256)", uint32(1), uint256(0)), 1
         );
-        vm.expectCall(address(game), abi.encodeCall(game.resolveAccount_g502, (uint32(1), address(game))));
+        vm.expectCall(address(game), abi.encodeCall(game.resolveAccount_g7029, (uint32(1), address(game))));
         _driveToLevelTenLatchDay();
         emit log_named_uint("most mining calls in one driven day", maxDayCalls);
         assertLt(maxDayCalls, MAX_MINE_CALLS, "harness: every driven day drains before its cap");
         assertEq(vaultSettles, 1, "one zero-amount vault settle, at the level-10 seal");
-        (uint24 lvl, , bool lpd, , ) = game.purchaseInfo();
+        (uint24 lvl, , bool lpd, , ) = game.purchaseInfo_g1027();
         assertEq(lvl, 9);
         assertTrue(lpd, "the x0 seal ran");
     }
@@ -79,7 +79,7 @@ contract AccountRuleBafSettle is DeployProtocol {
         _settleToday();
         for (uint256 i = 0; i < 120; i++) {
             require(!game.gameOver(), "harness: gameOver before the level-10 latch");
-            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
+            (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo_g1027();
             if (lastPurchaseDay_ && lvl == 9) return;
             if (!game.jackpotPhase()) {
                 _seedNextPrizePool(_levelPrizePool(_level()) + 25 ether);
@@ -108,7 +108,7 @@ contract AccountRuleBafSettle is DeployProtocol {
         for (uint256 i = 0; i < MAX_MINE_CALLS; i++) {
             _fulfillPending();
             if (!_mine()) { calls = i; break; }
-            (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo();
+            (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo_g1027();
             if (lastPurchaseDay_ && lvl == 9 && (!locked || (_jackpotFlags() == 1 && _requestInFlight()))) {
                 calls = i + 1;
                 break;
@@ -154,7 +154,7 @@ contract AccountRuleBafSettle is DeployProtocol {
     }
 
     function _buyTickets() private {
-        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
+        (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo_g1027();
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);

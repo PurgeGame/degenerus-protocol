@@ -102,8 +102,8 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         vm.etch(address(game), type(JackpotMergeSeeder).runtimeCode);
         JackpotMergeSeeder(payable(address(game))).seed(phase, transition, last, holders);
         vm.etch(address(game), code);
-        _syncCoinflipFixtureDay(game.currentDayView());
-        _seedCrapsFixtureCursor(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
+        _seedCrapsFixtureCursor(game.currentDayView_g542950());
         vm.warp(start - 1 days);
         vm.prank(address(game)); crapsBattle.openBonusDay();
         uint24 day = crapsBattle.currentDayIndex();

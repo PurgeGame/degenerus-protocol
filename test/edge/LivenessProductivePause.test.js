@@ -55,9 +55,9 @@ describe("LivenessProductivePause", function () {
 
   it("elapsed calendar days alone never create thirty purchase rounds", async function () {
     const { game } = await loadFixture(deployFullProtocol);
-    const day = await game.currentDayView();
+    const day = await game.currentDayView_g542950();
     await advanceTime(13 * 86400);
-    expect(await game.currentDayView()).to.equal(day);
+    expect(await game.currentDayView_g542950()).to.equal(day);
     expect(await game.livenessTriggered()).to.equal(false);
     await advanceTime(86400);
     expect(await game.livenessTriggered()).to.equal(true);

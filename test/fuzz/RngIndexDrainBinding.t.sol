@@ -58,7 +58,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
 
     /// @dev Purchase tickets for buyer at current level.
     function _purchase(uint256 qty, uint256 lootboxWei) internal {
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * qty) / 400;
         uint256 total = ticketCost + lootboxWei;
         vm.prank(buyer);
@@ -246,7 +246,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         //    :1951 worded-index guard would revert if it tried to key at a worded slot.
         address buyerB = makeAddr("drainBindingBuyerB");
         vm.deal(buyerB, 100 ether);
-        (, , , , uint256 priceWei) = game.purchaseInfo();
+        (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyerB);
         game.purchase{value: ticketCost + 1 ether}(

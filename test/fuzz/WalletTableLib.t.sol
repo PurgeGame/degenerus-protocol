@@ -20,7 +20,7 @@ contract WalletTableSlotHarness is DegenerusGameStorage {
 
 /// @dev Minimal stand-in for the Game's `extsload`, etched at the Game address.
 contract WalletTableExtsloadHost {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g2807007(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }

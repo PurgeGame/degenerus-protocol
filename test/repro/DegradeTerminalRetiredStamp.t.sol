@@ -78,7 +78,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
     ///      payout runs on a later call.
     function _reachPayout() private {
         _fixture(abi.encodeCall(RetiredStampSeeder.seedEnding, (HOLDER)));
-        _syncCoinflipFixtureDay(game.currentDayView());
+        _syncCoinflipFixtureDay(game.currentDayView_g542950());
         vm.deal(address(game), 100 ether);
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
         game.mineFlip(0); // latches the cohort level; VRF alive, so the loan book settles first

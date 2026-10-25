@@ -313,13 +313,13 @@ describe("VRFIntegration", function () {
       ).to.not.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 
-    it("rngLocked state: purchaseInfo confirms lock is active", async function () {
+    it("rngLocked state: purchaseInfo_g1027 confirms lock is active", async function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
       await game.connect(deployer).mineFlip(0, { gasLimit: 16_777_216 });
 
-      const info = await game.purchaseInfo();
+      const info = await game.purchaseInfo_g1027();
       expect(info.rngLocked_).to.equal(true);
     });
   });

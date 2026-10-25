@@ -328,7 +328,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         assertEq(_buyDays(vm.getRecordedLogs()), 1 << 2, "stall-window orders join cohort 2");
 
         vm.warp(_dayStart(3) + 1 hours + 20 hours + 10 minutes);
-        assertEq(game.currentDayView(), 3, "still day 3");
+        assertEq(game.currentDayView_g542950(), 3, "still day 3");
         vm.prank(ContractAddresses.ADMIN);
         game.retryRng();
         uint256 retried = mockVRF.lastRequestId();
@@ -422,7 +422,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         game.mineFlip(0);
         _fulfillPending(0);
         _driveToSettle();
-        assertEq(game.currentDayView(), 4, "calendar delay admitted only one logical round");
+        assertEq(game.currentDayView_g542950(), 4, "calendar delay admitted only one logical round");
         _warpTo(7, 1 hours);
         _stepToRequest();
         game.mineFlip(0);
@@ -498,7 +498,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         }
         assertEq(mockVRF.lastRequestId(), req0 + 1, "mid-day request sent");
         assertFalse(game.rngLocked(), "a mid-day request holds no daily lock");
-        assertEq(game.currentDayView(), 2, "on Degenesis day 1");
+        assertEq(game.currentDayView_g542950(), 2, "on Degenesis day 1");
         _drive(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint256 priced,) = _pricedIn(logs);
@@ -506,7 +506,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         assertEq(_countSig(logs, SIG_RESOLVED), 0, "no order resolved");
         assertEq(_active(), 0, "no binding");
         assertEq(_word(), 0, "no copy");
-        assertEq(game.currentDayView(), 2, "still Degenesis day 1");
+        assertEq(game.currentDayView_g542950(), 2, "still Degenesis day 1");
 
         uint256 q = _refQ(1, _degPool());
         uint256 w3 = uint256(keccak256("rv-midday-then-daily"));
