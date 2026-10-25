@@ -599,6 +599,8 @@ contract V61SolvencyAfpayDegenesis is V61SolvencyAfpay {
     ///         the Vault budget is the part no balance word owns: the half-sum alone is short by exactly the
     ///         unsplit volume before the split and by exactly the budget after it.
     function testDegenesisObligationsCarryTheEquality() public {
+        // Degenesis day 1 is logical day 2, opened by the first daily request.
+        _driveToLogicalDay(2);
         for (uint256 mode; mode < 4; ++mode) solvencyHandler.buyDegenesis(1, 1 ether, 1 ether, mode);
         uint256 volume = solvencyHandler.ghost_degenesisVolume();
         assertGt(volume, 0, "fixture: a Degenesis box was bought");
@@ -608,14 +610,20 @@ contract V61SolvencyAfpayDegenesis is V61SolvencyAfpay {
         assertTrue(_identityHoldsOverUnion());
 
         solvencyHandler.warpDay();
-        solvencyHandler.advance(1, 7);
-        solvencyHandler.advance(1, 8);
+        _driveToLogicalDay(3);
         uint256 budget = _vaultBudget();
         assertGt(budget, 0, "the daily request split the cohort");
         assertEq(budget, volume / 4, "the Vault budget is a quarter of the split volume");
         assertEq(_degenesisObligations(), budget, "only the budget remains outside the balance words");
         assertTrue(_identityHoldsOverUnion());
         assertNotEq(game.claimablePoolView(), _sumUnionHalves() - _degenesisObligations(), "the half-sum alone no longer matches");
+    }
+
+    /// @dev The handler's own heartbeat (a ticket, mineFlip and VRF fulfilment per round) until the
+    ///      logical day reaches `day`. Wall time alone never opens a day.
+    function _driveToLogicalDay(uint24 day) internal {
+        for (uint256 i; i < 16 && game.currentDayView() < day; ++i) solvencyHandler.advance(1, 7 + i);
+        assertEq(game.currentDayView(), day, "fixture: the daily request opened the logical day");
     }
 
     function _degenesisNonVacuity() internal override {
