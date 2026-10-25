@@ -739,14 +739,14 @@ abstract contract DegenerusGameStorage {
     // Future Mint Awards
     // =========================================================================
 
-    /// @dev Packed pending accumulators for purchase revenue during prize pool freeze.
-    ///      [128:256] futurePending | [0:128] nextPending
+    /// @dev Packed pending accumulators for revenue credited during prize pool freeze.
+    ///      [255] POOL_PENDING_SENTINEL | [128:255] futurePending | [0:128] nextPending
     ///      Accumulated while prizePoolFrozen == true; applied atomically by _unfreezePool().
     ///
-    ///      SECURITY: Overwritten at freeze start (if not already frozen). An unfreeze folds it
-    ///      without clearing it, and `_getPendingPools` reads it as empty while unfrozen.
-    ///      Accumulators grow for the length of one lock window (request -> day seal);
-    ///      a jackpot day re-freezes at its own request.
+    ///      SECURITY: Credit-only: nothing debits the buffer. Every value bit is zero while
+    ///      unfrozen: the unfreeze folds the buffer into the live pools and leaves only the
+    ///      sentinel, so the first credit of the next freeze rewrites a nonzero slot. Game
+    ///      over zeroes it. Readers mask the sentinel off.
     uint256 internal prizePoolPendingPacked;
 
     /// @dev Queue of players with tickets (purchase/burn sources) per level.
@@ -1659,6 +1659,13 @@ abstract contract DegenerusGameStorage {
     ///      uint128 ~= 3.4e38 wei, far above any reachable pool.
     uint256 internal constant POOL_HALF_MAX = type(uint128).max;
 
+    /// @dev Top bit of the pending slot. It keeps the slot nonzero between freezes, so it is
+    ///      never pool value; the future half beneath it holds 127 bits.
+    uint256 internal constant POOL_PENDING_SENTINEL = uint256(1) << 255;
+
+    /// @dev Largest future value the pending slot holds below the sentinel (~1.7e38 wei).
+    uint256 internal constant POOL_FUTURE_MAX = type(uint128).max >> 1;
+
     /// @dev Writes both pool halves. Each half owns exactly half the slot, so the write
     ///      is a whole-word overwrite with nothing to preserve.
     function _setPrizePools(uint128 next, uint128 future) internal {
@@ -1677,21 +1684,20 @@ abstract contract DegenerusGameStorage {
 
     function _setPendingPools(uint128 next, uint128 future) internal {
         prizePoolPendingPacked =
+            POOL_PENDING_SENTINEL |
             (uint256(future) << POOL_FUTURE_SHIFT) |
             uint256(next);
     }
 
-    /// @dev Empty while unfrozen: an unfreeze folds the buffer into the live pools without
-    ///      clearing it, and the next freeze overwrites it whole.
+    /// @dev Reads (0, 0) while unfrozen: the unfreeze leaves only the sentinel behind.
     function _getPendingPools()
         internal
         view
         returns (uint128 next, uint128 future)
     {
-        if (!prizePoolFrozen) return (0, 0);
         uint256 packed = prizePoolPendingPacked;
         next = uint128(packed);
-        future = uint128(packed >> POOL_FUTURE_SHIFT);
+        future = uint128((packed >> POOL_FUTURE_SHIFT) & POOL_FUTURE_MAX);
     }
 
     /// @dev Add a combined prize contribution to the active accumulator in ONE RMW. The purchase
@@ -1699,7 +1705,8 @@ abstract contract DegenerusGameStorage {
     ///      ratios), sums the post-split totals, and lands both in a single packed slot — the
     ///      pending buffer while the pool is frozen, otherwise the live pools.
     ///
-    ///      SATURATES rather than reverting. uint128 (~3.4e38 wei) is far above any reachable value, so
+    ///      SATURATES rather than reverting. Both ceilings (2^128 - 1 next, 2^127 - 1 future below
+    ///      the pending sentinel) are far above any reachable value, so
     ///      neither half can reach the ceiling from real value — but the write sits on the
     ///      purchase hot path, and a revert there would brick the game outright rather than
     ///      degrade it. Clamping trades an impossible accounting error for guaranteed
@@ -1714,13 +1721,14 @@ abstract contract DegenerusGameStorage {
         // Masked and shifted operands keep both sums in uint256 — adding a uint128 half
         // to a uint128 addend would evaluate in uint128 and revert exactly where the
         // clamp is meant to catch it — so the clamp is the only ceiling either half
-        // needs, and neither can carry into the other.
+        // needs, and neither can carry into the other or into the pending sentinel, which
+        // carries through unchanged.
         uint256 next = (slot & POOL_HALF_MAX) + nextAdd;
-        uint256 future = (slot >> POOL_FUTURE_SHIFT) + futureAdd;
+        uint256 future = ((slot >> POOL_FUTURE_SHIFT) & POOL_FUTURE_MAX) + futureAdd;
         if (next > POOL_HALF_MAX) next = POOL_HALF_MAX;
-        if (future > POOL_HALF_MAX) future = POOL_HALF_MAX;
+        if (future > POOL_FUTURE_MAX) future = POOL_FUTURE_MAX;
 
-        uint256 packed = (future << POOL_FUTURE_SHIFT) | next;
+        uint256 packed = (slot & POOL_PENDING_SENTINEL) | (future << POOL_FUTURE_SHIFT) | next;
         if (frozen) {
             prizePoolPendingPacked = packed;
         } else {

@@ -54,6 +54,7 @@ INIT	_afkingEndpointDay	modules/GameFacade.sol	constructor sets the deploy day a
 INIT	dailyIdx	modules/GameFacade.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
 INIT	foilSlotRetained	modules/GameFacade.sol	Constructor retains the foil cursor word through later empty swaps.
 INIT	lastVrfProcessedTimestamp	modules/DegenerusGameGameOverModule.sol	wireVrf (deploy-only, called from the ADMIN constructor) seeds the timestamp; the deadman itself keys off dailyIdx
+INIT	prizePoolPendingPacked	modules/GameFacade.sol	constructor stores the empty buffer as its bit-255 sentinel so the first freeze credit rewrites a nonzero slot
 INIT	purchaseStartDay	modules/GameFacade.sol	constructor seeds the deploy day
 INIT	vrfCoordinator	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation; config, not game state
 INIT	vrfKeyHash	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
@@ -187,6 +188,7 @@ OWNER	phaseTransitionActive	modules/DegenerusGameAdvanceModule.sol	_endPhase set
 OWNER	prizePoolFrozen	modules/DegenerusGameAdvanceModule.sol	_freezePool/_unfreezePool own the freeze; unfreeze folds pending into live
 OWNER	prizePoolFrozen	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain clears the freeze after zeroing the live pools so _unlockRng's _unfreezePool cannot resurrect pending ETH; terminal
 OWNER	prizePoolFrozen	modules/DegenerusGameRngUtils.sol	_freezePool/_unfreezePool own the freeze; unfreeze folds pending into live
+OWNER	prizePoolPendingPacked	modules/DegenerusGameAdvanceModule.sol	_unfreezePool empties the folded buffer to its bit-255 sentinel
 OWNER	prizePoolPendingPacked	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain zeroes the pending buffer at terminal drain (its ETH is in `available`)
 OWNER	prizePoolsPacked	modules/DegenerusGameAdvanceModule.sol	_unfreezePool writes the folded live pools (saturating)
 OWNER	protocolBoonEntries	modules/GameDegeneretteBet.sol	Internalized component retains the reviewed writer role: Appends pre-request weighted protocol-bet entries with exact issuer/day-ring ownership.

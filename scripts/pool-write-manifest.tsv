@@ -49,23 +49,14 @@ DRAIN-ZERO	_setCurrentPrizePool	_handleGameOverDrain	modules/DegenerusGameGameOv
 POOL-TO-POOL	_setCurrentPrizePool	_runDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	daily ETH/lootbox budgets carved from the current pool (three call sites, one function)
 MUTATOR-DEF	_setCurrentPrizePool	_setCurrentPrizePool	storage/DegenerusGameStorage.sol	READ	canonical current setter definition
 POOL-TO-POOL	_setCurrentPrizePool	_startDailyEth	modules/DegenerusGameJackpotModule.sol	READ	daily ETH/lootbox budgets carved from the current pool (three call sites, one function)
-POOL-TO-POOL	_setFuturePrizePool	_flushPool	modules/DegenerusGameDegeneretteModule.sol	READ	unfrozen-path flush of the running future local after ETH-win debits (manual resolve and the mineFlip bet sweep)
-POOL-TO-POOL	_setFuturePrizePool	_freezePool	modules/DegenerusGameRngUtils.sol	READ	freeze seed: 1% of future moves to the pending-future buffer
-POOL-TO-POOL	_setFuturePrizePool	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	READ	The released amount credits the live future pool, paired with the claimablePool decrement
+POOL-TO-POOL	_setFuturePrizePool	_flushPool	modules/DegenerusGameDegeneretteModule.sol	READ	flush of the running future local after ETH-win debits (the mineFlip bet sweep and box ETH spins; every caller runs unfrozen)
+POOL-TO-POOL	_setFuturePrizePool	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	READ	The released amount credits the live future pool (ranking is RNG consumer stage 5, never frozen), paired with the claimablePool decrement
 MUTATOR-DEF	_setFuturePrizePool	_setFuturePrizePool	storage/DegenerusGameStorage.sol	READ	canonical future setter definition
-POOL-TO-POOL	_setFuturePrizePool	_localboxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush, unfrozen path
 VALUE-IN	_setPendingPools	_collectBetFunds	modules/GameDegeneretteBet.sol	READ	ETH bet lands in pending future during freeze; claimable/afking-funded shortfall leg pre-debited via _settleShortfall (relabel)
 VALUE-IN	_setPendingPools	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze (player route and the sDGNRS automatic purchase share the delivery)
-POOL-TO-POOL	_setPendingPools	_flushPool	modules/DegenerusGameDegeneretteModule.sol	READ	frozen-path flush of the running pending-future local after ETH-win debits (manual resolve only; the sweep holds its queue while the pool is frozen)
-POOL-TO-POOL	_setPendingPools	_freezePool	modules/DegenerusGameRngUtils.sol	READ	freeze seed target (pending future); the whole-word write opens the buffer at the seed
-POOL-TO-POOL	_setPendingPools	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	READ	The same release during a freeze credits pending future, paired with the claimablePool decrement
-POOL-TO-POOL	_setPendingPools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, freeze path
 MUTATOR-DEF	_setPendingPools	_setPendingPools	storage/DegenerusGameStorage.sol	READ	canonical pending-slot setter definition
 VALUE-IN	_setPendingPools	_buyFoilPack	modules/DegenerusGameFoilCore.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
-VALUE-IN	_setPendingPools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 VALUE-IN	_setPendingPools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
-POOL-TO-POOL	_setPendingPools	_localboxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as runDegeneretteWork)
-POOL-TO-POOL	_setPendingPools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds pending future during freeze
 MUTATOR-DEF	_setPrizePools	_addFuturePrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
 MUTATOR-DEF	_setPrizePools	_addNextPrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
 VALUE-IN	_setPrizePools	_collectBetFunds	modules/GameDegeneretteBet.sol	READ	ETH bet lands in future (same funding mix as the frozen path)
@@ -74,15 +65,15 @@ VALUE-IN	_setPrizePools	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	R
 DRAIN-ZERO	_setPrizePools	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools (next|future) zeroed in one packed setter at the game-over drain; value re-credited as claimable or distributed
 POOL-TO-POOL	_setPrizePools	payGoldenTicket	modules/DegenerusGameJackpotDrawModule.sol	READ	golden-ticket ETH rung: future debited (next passed through), re-counted as claimable in tandem
 POOL-TO-POOL	_setPrizePools	_priceEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	READ	day-1 early-bird budget: future funds the 3% budget, next backs the queued tickets - single net move on the packed slot; the leg's tickets are queued from runEarlyBirdTickets
-POOL-TO-POOL	_setPrizePools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, live path
+POOL-TO-POOL	_setPrizePools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit (subscriber work never runs under the daily lock, so always live)
 MUTATOR-DEF	_setPrizePools	_setFuturePrizePool	storage/DegenerusGameStorage.sol	READ	helper body delegates to the packed-slot setter
 MUTATOR-DEF	_setPrizePools	_setPrizePools	storage/DegenerusGameStorage.sol	READ	canonical packed-slot setter definition
 POOL-TO-POOL	_setPrizePools	_startDailyEth	modules/DegenerusGameJackpotModule.sol	READ	the purchase-phase drip merge (future debit + ticket-leg next credit + insurance skim debit) — one packed write
 POOL-TO-POOL	_setPrizePools	awardWhalePass_g5502	modules/DegenerusGameWhaleModule.sol	READ	exact full-pass cost from up to 25% of a jackpot-phase quadrant credits future; paired current debit includes returned spend; ticket-leg passes do not write pools
 VALUE-IN	_setPrizePools	_buyFoilPack	modules/DegenerusGameFoilCore.sol	READ	foil premium lands in live pools (75/25 split) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
-VALUE-IN	_setPrizePools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
+VALUE-IN	_setPrizePools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools (the purchase reverts under the daily lock)
 VALUE-IN	_setPrizePools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
-POOL-TO-POOL	_setPrizePools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds future (live path)
+POOL-TO-POOL	_setPrizePools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds future (redemption work is RNG consumer stage 1, never frozen)
 DECL	claimablePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 PAIRED-CREDIT	claimablePool	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	WRITE	aggregate + per-player in tandem; funded by the running pool debit in _distributePayout
 VALUE-OUT	claimablePool	_claimWinningsInternal	modules/GameActions.sol	WRITE	player withdrawal: aggregate falls as ETH leaves (CEI); per-player claimable zeroed in tandem
@@ -105,13 +96,15 @@ DECL	currentPrizePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted
 POOL-TO-POOL	currentPrizePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	consolidation: next merges into current, x00 keep-roll moves future->current
 MUTATOR-DEF	currentPrizePool	_setCurrentPrizePool	storage/DegenerusGameStorage.sol	WRITE	the raw write inside the canonical setter
 DECL	prizePoolPendingPacked	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
-MUTATOR-DEF	prizePoolPendingPacked	_addPrizeContribution	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the helper: frozen branch, one RMW carrying both pool halves
+POOL-TO-POOL	prizePoolPendingPacked	constructor	modules/GameFacade.sol	WRITE	deploy initializes the empty buffer to its bit-255 sentinel (no value)
+MUTATOR-DEF	prizePoolPendingPacked	_addPrizeContribution	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the helper: frozen branch, one RMW carrying both pool halves and the sentinel bit
 DRAIN-ZERO	prizePoolPendingPacked	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	pending buffer folded into the drained total and zeroed
-MUTATOR-DEF	prizePoolPendingPacked	_setPendingPools	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the canonical setter
+MUTATOR-DEF	prizePoolPendingPacked	_setPendingPools	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the canonical setter; ORs in the bit-255 sentinel, never value
 DECL	prizePoolsPacked	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 MUTATOR-DEF	prizePoolsPacked	_addPrizeContribution	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the helper: live branch, same single RMW
 MUTATOR-DEF	prizePoolsPacked	_setPrizePools	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the canonical setter
 POOL-TO-POOL	prizePoolsPacked	_unfreezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	pending accumulators fold into the live pools at unlock: each half adds into its own, saturating independently, one RMW
+POOL-TO-POOL	prizePoolPendingPacked	_unfreezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	the folded buffer is emptied to the bit-255 sentinel (no value), paired with the live-pool fold above
 DECL	yieldAccumulator	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 POOL-TO-POOL	yieldAccumulator	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	insurance skim in (from next), x00 half-dump out (to future) - both intra-set
 DRAIN-ZERO	yieldAccumulator	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	yield accumulator folded into the drained total and zeroed

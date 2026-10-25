@@ -579,15 +579,11 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         emit DecimatorRanked(lvl, round.champion, uint8(winners));
     }
 
-    /// @dev Move part of a sealed round's reservation back to future prizes (pending while frozen).
+    /// @dev Move part of a sealed round's reservation back to future prizes. Ranking is RNG
+    ///      consumer stage 5, which never runs frozen.
     function _releaseToFuture(uint256 amount) private {
         claimablePool -= uint128(amount);
-        if (prizePoolFrozen) {
-            (uint128 pendingNext, uint128 pendingFuture) = _getPendingPools();
-            _setPendingPools(pendingNext, pendingFuture + uint128(amount));
-        } else {
-            _setFuturePrizePool(_getFuturePrizePool() + amount);
-        }
+        _setFuturePrizePool(_getFuturePrizePool() + amount);
     }
 
     function _finish(DecBattleRound storage round) private {

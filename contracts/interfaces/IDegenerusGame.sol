@@ -614,6 +614,7 @@ interface IDegenerusGame {
     /// @param day Draw day of the claim.
     /// @param ticketIndex Ticket index 0..3 of the day's board.
     /// @custom:reverts E If `id` is unallocated.
+    /// @custom:reverts RngLocked While the daily RNG lock is held.
     function claimFoilMatch(uint32 id, uint256 day, uint256 ticketIndex) external;
 
     /// @notice Permissionlessly resolve a batch of foil match claims (parallel arrays).
@@ -623,6 +624,7 @@ interface IDegenerusGame {
     /// @param ids Pack owners.
     /// @param drawDays Draw days.
     /// @param ticketIndexes Ticket indexes 0..3.
+    /// @custom:reverts RngLocked While the daily RNG lock is held, before any tuple.
     function claimFoilMatchMany(uint32[] calldata ids, uint24[] calldata drawDays, uint8[] calldata ticketIndexes) external;
 
     /// @notice Claim a foil pack's gold for account `id`: a FLIP ladder from three golds up, or the

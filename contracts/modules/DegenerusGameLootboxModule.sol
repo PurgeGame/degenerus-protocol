@@ -683,14 +683,9 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         if (amount == 0) return;
         _setRedemptionReserve(_redemptionReserve() - amount);
         claimablePool -= uint128(amount);
-
-        if (prizePoolFrozen) {
-            (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(pNext, pFuture + uint128(amount));
-        } else {
-            (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(next, future + uint128(amount));
-        }
+        // Redemption work is RNG consumer stage 1, which never runs frozen.
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(next, future + uint128(amount));
 
         // One order: ~1 ETH boxes up to 20 ETH, then 20 equal larger boxes, each floored to
         // whole gwei. The leg is at least the 0.01 ETH lootbox floor, so every box keeps a

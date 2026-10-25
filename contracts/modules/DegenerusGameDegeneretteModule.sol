@@ -262,11 +262,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         address payee; // shared by the current owner's token payouts
         uint256 ethClaimable; // summed ETH claimable across all bets
         uint256 flipMint; // summed FLIP mint across all bets
-        bool poolFrozen; // prizePoolFrozen snapshot (loaded with the pool locals)
-        bool poolLoaded; // running pool locals initialized?
-        uint256 runningFuture; // unfrozen: running futurePrizePool
-        uint128 pendingNext; // frozen: running pending next pool
-        uint128 pendingFuture; // frozen: running pending future pool
+        bool poolLoaded; // running pool local initialized?
+        uint256 runningFuture; // running futurePrizePool
     }
 
     /// @dev Per-bet results kept together to bound stack use across the payout calls.
@@ -358,13 +355,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
 
     /// @dev Write the running prize-pool local back once, only if an ETH win loaded it.
     function _flushPool(ResolveAcc memory acc) private {
-        if (acc.poolLoaded) {
-            if (acc.poolFrozen) {
-                _setPendingPools(acc.pendingNext, acc.pendingFuture);
-            } else {
-                _setFuturePrizePool(acc.runningFuture);
-            }
-        }
+        if (acc.poolLoaded) _setFuturePrizePool(acc.runningFuture);
     }
 
     // -------------------------------------------------------------------------
@@ -597,10 +588,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     ///      naive 25% alternative which would drop to 0.7525×bet).
     ///
     ///      Pool cap (ETH_WIN_CAP_BPS = 10% of futurePool) takes PRECEDENCE over
-    ///      all three tiers in the unfrozen branch: if computed ethShare exceeds
-    ///      10% of pool, excess flips to lootbox and the PayoutCapped event is
-    ///      emitted. Frozen-pool branch retains its solvency-check posture
-    ///      (pending future debit with revert-on-insufficient).
+    ///      all three tiers: if computed ethShare exceeds 10% of pool, excess
+    ///      flips to lootbox and the PayoutCapped event is emitted.
     ///
     ///      CURRENCY_FLIP accumulates toward the coin mint (the per-bet survival
     ///      flip in _resolveBet then doubles or zeroes the bet's total
@@ -647,41 +636,26 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
             // read; subsequent spins decrement the running local in memory, so
             // each spin's cap/solvency sees the same shrinking pool storage would
             // have held — byte-identical to per-spin. Flushed once by runDegeneretteWork.
+            // Every caller runs unfrozen: bet and box resolution are RNG consumer stages,
+            // and foil claims revert under the daily lock.
             if (!acc.poolLoaded) {
                 acc.poolLoaded = true;
-                acc.poolFrozen = prizePoolFrozen;
-                if (acc.poolFrozen) {
-                    (acc.pendingNext, acc.pendingFuture) = _getPendingPools();
-                } else {
-                    acc.runningFuture = _getFuturePrizePool();
-                }
+                acc.runningFuture = _getFuturePrizePool();
             }
 
-            if (acc.poolFrozen) {
-                // Frozen path: route ETH share through the pending pool side-channel
-                // (matching the bet-placement pattern). The live futurePrizePool
-                // snapshot that advanceGame / runRewardJackpots operates on stays
-                // intact; the pending future accumulator (credited by purchases
-                // during freeze) is debited here with a revert-on-insufficient
-                // solvency check, against the running local.
-                if (uint256(acc.pendingFuture) < ethShare) revert Insolvent();
-                acc.pendingFuture -= uint128(ethShare);
-            } else {
-                // Unfrozen path: pool cap (ETH_WIN_CAP_BPS) takes PRECEDENCE over
-                // the 3-tier split. After capping,
-                // ethShare ≤ pool × 10% < pool, so no further solvency check.
-                uint256 pool = acc.runningFuture;
-                uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
-                if (ethShare > maxEth) {
-                    lootboxShare += ethShare - maxEth;
-                    ethShare = maxEth;
-                    emit PayoutCapped(playerId, ethShare, lootboxShare);
-                }
-                unchecked {
-                    pool -= ethShare;
-                }
-                acc.runningFuture = pool;
+            // Pool cap (ETH_WIN_CAP_BPS) takes PRECEDENCE over the 3-tier split.
+            // After capping, ethShare ≤ pool × 10% < pool, so no further solvency check.
+            uint256 pool = acc.runningFuture;
+            uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
+            if (ethShare > maxEth) {
+                lootboxShare += ethShare - maxEth;
+                ethShare = maxEth;
+                emit PayoutCapped(playerId, ethShare, lootboxShare);
             }
+            unchecked {
+                pool -= ethShare;
+            }
+            acc.runningFuture = pool;
 
             // Accumulate ETH claimable cross-bet (flushed once). The lootbox-share
             // is returned to the caller, summed per betId, and resolved once per bet.
@@ -1192,13 +1166,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
 
         // Flush THIS spin's pool/claimable BEFORE recirc so recirc reads fresh storage.
         if (acc.ethClaimable != 0) _addClaimableEth(playerId, acc.ethClaimable);
-        if (acc.poolLoaded) {
-            if (acc.poolFrozen) {
-                _setPendingPools(acc.pendingNext, acc.pendingFuture);
-            } else {
-                _setFuturePrizePool(acc.runningFuture);
-            }
-        }
+        _flushPool(acc);
 
         // One self-contained record: the reel + ETH gross + the claimable share. The
         // recirculated remainder (payout - ethShare) is itemized by the recirc box's own events.

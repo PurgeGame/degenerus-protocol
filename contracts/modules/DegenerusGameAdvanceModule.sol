@@ -991,15 +991,19 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     function _unfreezePool() internal {
         if (!prizePoolFrozen) return;
         uint256 pending = prizePoolPendingPacked;
-        uint256 live = prizePoolsPacked;
-        // Masked operands: both sums must evaluate in uint256, or the saturating fold
-        // would revert exactly where it is meant to clamp.
-        uint256 next = (live & POOL_HALF_MAX) + (pending & POOL_HALF_MAX);
-        uint256 future = (live >> POOL_FUTURE_SHIFT) + (pending >> POOL_FUTURE_SHIFT);
-        if (next > POOL_HALF_MAX) next = POOL_HALF_MAX;
-        if (future > POOL_HALF_MAX) future = POOL_HALF_MAX;
-        prizePoolsPacked = (future << POOL_FUTURE_SHIFT) | next;
-        // The folded buffer stays in place; unfrozen, it reads as empty.
+        // A freeze with no credits left only the sentinel: nothing to fold.
+        if (pending != POOL_PENDING_SENTINEL) {
+            uint256 live = prizePoolsPacked;
+            // Masked operands: both sums must evaluate in uint256, or the saturating fold
+            // would revert exactly where it is meant to clamp.
+            uint256 next = (live & POOL_HALF_MAX) + (pending & POOL_HALF_MAX);
+            uint256 future = (live >> POOL_FUTURE_SHIFT) + ((pending >> POOL_FUTURE_SHIFT) & POOL_FUTURE_MAX);
+            if (next > POOL_HALF_MAX) next = POOL_HALF_MAX;
+            if (future > POOL_HALF_MAX) future = POOL_HALF_MAX;
+            prizePoolsPacked = (future << POOL_FUTURE_SHIFT) | next;
+            // Empty the buffer but keep the slot nonzero for the next freeze's first credit.
+            prizePoolPendingPacked = POOL_PENDING_SENTINEL;
+        }
         prizePoolFrozen = false;
     }
 

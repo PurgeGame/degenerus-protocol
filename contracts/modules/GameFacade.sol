@@ -196,6 +196,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         _afkingEndpointDay = currentDay;
         _setLevelPrizePool(0, BOOTSTRAP_PRIZE_POOL);
         foilSlotRetained = true;
+        // The pending buffer starts empty but nonzero, as every unfreeze leaves it.
+        prizePoolPendingPacked = POOL_PENDING_SENTINEL;
         // Level 1 is the first level with tickets (every sink targets level + 1 or later).
         _markTicketGenerationStart(1);
         // Protocol wallets take IDs 1-3 before any public door can register a wallet.
@@ -644,7 +646,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      credits to the account, never the caller, and a tuple pays at most once (CEI marker),
     ///      so anyone may trigger it. The day's one board x four tickets give 4 independent
     ///      claimables per day. Claims are valid on the draw day and the following day,
-    ///      and close when terminal settlement triggers. The signature matches the module
+    ///      revert with RngLocked under the daily RNG lock, and close when terminal
+    ///      settlement triggers. The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding would cost size headroom for no change.
     function claimFoilMatch(
@@ -663,9 +666,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @dev Non-claimable tuples past index 0 are skipped, not reverted; each settled win
     ///      credits its own account. A non-claimable tuple AT index 0 reverts the whole call
     ///      (StaleBatch), so a second sender handed an already-swept list sees the failure
-    ///      in simulation instead of paying to walk it. Claims are valid on the draw day
-    ///      and the following day, and close when terminal settlement triggers. The
-    ///      signature matches the module function exactly, so the calldata forwards as-is.
+    ///      in simulation instead of paying to walk it; the daily RNG lock reverts it up
+    ///      front (RngLocked). Claims are valid on the draw day and the following day, and
+    ///      close when terminal settlement triggers. The signature matches the module
+    ///      function exactly, so the calldata forwards as-is.
     function claimFoilMatchMany(
         uint32[] calldata,
         uint24[] calldata,

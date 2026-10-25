@@ -937,19 +937,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         } else {
             nextShare = (totalPrice * 500) / 10_000;
         }
-        if (prizePoolFrozen) {
-            (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(
-                pNext + uint128(nextShare),
-                pFuture + uint128(totalPrice - nextShare)
-            );
-        } else {
-            (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(
-                next + uint128(nextShare),
-                future + uint128(totalPrice - nextShare)
-            );
-        }
+        // The purchase reverts under the daily lock, so the pools are never frozen here.
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(
+            next + uint128(nextShare),
+            future + uint128(totalPrice - nextShare)
+        );
 
         // Craps award rides every deity purchase: below level 10 the lootbox drops to 5%
         // and the buyer banks one HIGH-ROLLER pass credit; from level 10 the lootbox is

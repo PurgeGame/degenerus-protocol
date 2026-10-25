@@ -870,9 +870,10 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /// @dev Route a chunk's batched afking spend to the prize pools, mirroring the normal-buy
     ///      splits: lootbox ETH 90% future / 10% next (100% next in distress, matching
     ///      `_purchaseForWith`), ticket ETH 90% next / 10% future (matching `_recordMintPayment`). One
-    ///      pooled read+write per chunk; routes to the pending pools while the prize pool is
-    ///      frozen. The per-buy debit already moved the ETH out of the funding source, so this
-    ///      only credits the pools (the counterpart of that debit).
+    ///      pooled read+write per chunk, always to the live pools: subscriber work never runs
+    ///      under the daily lock, so the prize pool is never frozen here. The per-buy debit
+    ///      already moved the ETH out of the funding source, so this only credits the pools
+    ///      (the counterpart of that debit).
     function _routeAfkingPoolEth(uint256 boxEth, uint256 ticketEth) private {
         if (boxEth == 0 && ticketEth == 0) return;
         uint256 nextShare;
@@ -891,19 +892,11 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
             futureShare += tFuture;
             nextShare += ticketEth - tFuture;
         }
-        if (prizePoolFrozen) {
-            (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(
-                pNext + uint128(nextShare),
-                pFuture + uint128(futureShare)
-            );
-        } else {
-            (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(
-                next + uint128(nextShare),
-                future + uint128(futureShare)
-            );
-        }
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(
+            next + uint128(nextShare),
+            future + uint128(futureShare)
+        );
     }
 
     /*==================================================================

@@ -603,7 +603,8 @@ interface IDegenerusGameFoilPackModule {
     /// @dev The win credits to `player`, never the caller, and a tuple pays at most
     ///      once, so anyone may resolve any player's claim. Reverts if the tuple is not
     ///      a claimable win. Claims are valid on the draw day and the following day,
-    ///      and close when terminal settlement triggers.
+    ///      revert with RngLocked under the daily RNG lock, and close when terminal
+    ///      settlement triggers.
     ///      Raw msg.data target of Game.claimFoilMatch; WWXRP box-spin prizes go to the payee.
     /// @param id Pack owner the win credits to (0 = caller; otherwise allocated, else E).
     /// @param day The draw day to claim against.
@@ -630,9 +631,10 @@ interface IDegenerusGameFoilPackModule {
     /// @dev Non-claimable tuples past index 0 are skipped (not reverted); each settled
     ///      win credits its own player and the caller earns a small per-settled-claim
     ///      FLIP bounty during a live game. A non-claimable tuple AT index 0 reverts the
-    ///      whole call (StaleBatch), marking an already-swept list. The three arrays are
-    ///      parallel. Claims are valid on the draw day and the following day, and close
-    ///      when terminal settlement triggers.
+    ///      whole call (StaleBatch), marking an already-swept list; the daily RNG lock
+    ///      reverts it up front (RngLocked). The three arrays are parallel. Claims are
+    ///      valid on the draw day and the following day, and close when terminal
+    ///      settlement triggers.
     ///      Raw msg.data target of Game.claimFoilMatchMany; `ids[i] == 0` is the caller.
     /// @param ids Pack owners the wins credit to.
     /// @param drawDays Draw days to claim against.

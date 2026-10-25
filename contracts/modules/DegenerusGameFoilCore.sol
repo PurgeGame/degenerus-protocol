@@ -489,6 +489,8 @@ abstract contract DegenerusGameFoilCore is
     ///      from the day's sealed draw, not passed in. Reverts if the tuple is not a
     ///      claimable win (the batch variant skips instead). Matches expire after the
     ///      draw day and following day; terminal settlement also closes this entrance.
+    ///      Reverts with RngLocked while the daily RNG lock holds the pools frozen: an ETH
+    ///      tier pays from the live future pool, which the open day's jackpots still read.
     /// @param id Pack owner the win credits to (0 = caller, which must hold an ID; otherwise
     ///        allocated).
     /// @param day The draw day to claim against.
@@ -508,6 +510,7 @@ abstract contract DegenerusGameFoilCore is
         // them into the terminal cohort. The batch variant self-calls this entrypoint
         // under try/catch, so it inherits the gate and skips instead of reverting.
         if (_livenessTriggered()) revert GameOver();
+        if (rngLockedFlag) revert RngLocked();
         uint32 playerId = id == 0 ? _walletIdOf(msg.sender) : id;
         _requireAllocated(playerId);
         if (!_tryClaimFoilMatch(playerId, day, ticketIndex)) revert NoClaimableMatch();
@@ -579,10 +582,11 @@ abstract contract DegenerusGameFoilCore is
     /// @notice Permissionlessly resolve a batch of foil match claims.
     /// @dev Each claim runs as an external self-call wrapped in try/catch, so ANY single
     ///      claim revert — a non-claimable tuple (out of range, no draw, no record,
-    ///      ineligible day, already claimed, no match) OR a payout spin that reverts (e.g. an
-    ///      ETH tier too large for the frozen pool's pending buffer) — rolls back ONLY
-    ///      that claim (its marker, whale pass, and spin together) and the sweep moves
-    ///      on. One stale or unpayable tuple past the opener can never poison the batch.
+    ///      ineligible day, already claimed, no match) OR a payout spin that reverts —
+    ///      rolls back ONLY that claim (its marker, whale pass, and spin together) and the
+    ///      sweep moves on. One stale or unpayable tuple past the opener can never poison
+    ///      the batch. The daily RNG lock reverts the whole call up front with RngLocked,
+    ///      before any tuple, so a locked sweep never reads as a stale list.
     ///      The tuple at index 0 is the exception: a revert there reverts the whole call
     ///      with StaleBatch(), because an already-swept list fails there first and the
     ///      cheap revert is what a wallet's pre-flight simulation shows a second sender.
@@ -601,13 +605,14 @@ abstract contract DegenerusGameFoilCore is
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint256 n = ids.length;
         if (drawDays.length != n || ticketIndexes.length != n) revert LengthMismatch();
+        if (rngLockedFlag) revert RngLocked();
 
         for (uint256 i; i < n; ) {
             // External self-call: address(this) is GAME under delegatecall, so this
             // dispatches through the facade stub back into this module in the Game's
             // storage context. try/catch isolates each claim — a revert (non-claimable
-            // OR an unpayable payout spin, e.g. an ETH tier the frozen pool can't cover)
-            // rolls back ONLY that tuple's effects and the sweep continues.
+            // OR an unpayable payout spin) rolls back ONLY that tuple's effects and the
+            // sweep continues.
             uint32 id = ids[i];
             try
                 IDegenerusGameFoilPackModule(address(this)).claimFoilMatch(

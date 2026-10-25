@@ -65,15 +65,9 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         return finalWord;
     }
     /// @dev Move fresh contributions to the pending pool while a daily commitment is frozen.
+    ///      The buffer is already empty: the last unfreeze left only its sentinel.
     function _freezePool() internal {
-        if (!prizePoolFrozen) {
-            prizePoolFrozen = true;
-            uint256 futureBal = _getFuturePrizePool();
-            uint256 seed = futureBal / 100;
-            _setFuturePrizePool(futureBal - seed);
-            // The seed opens the pending buffer; buys route here until the unfreeze.
-            _setPendingPools(0, uint128(seed));
-        }
+        prizePoolFrozen = true;
     }
 
 
