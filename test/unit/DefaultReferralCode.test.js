@@ -178,7 +178,7 @@ describe("Default Referral Codes", function () {
       const code = defaultCodeFor(alice.address);
       await expect(
         affiliate.connect(alice).referPlayer(code)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "UnknownCode");
     });
 
     it("reverts on default code for address(0)", async function () {
@@ -186,7 +186,7 @@ describe("Default Referral Codes", function () {
       // defaultCodeFor(address(0)) == ZERO_BYTES32 => resolves to address(0) => invalid
       await expect(
         affiliate.connect(alice).referPlayer(ZERO_BYTES32)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "UnknownCode");
     });
 
     it("locks referral — cannot change after setting via default code", async function () {
@@ -196,7 +196,7 @@ describe("Default Referral Codes", function () {
       await affiliate.connect(bob).referPlayer(codeAlice);
       await expect(
         affiliate.connect(bob).referPlayer(codeCarol)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "AlreadyReferred");
     });
 
     it("emits ReferralUpdated with correct referrer for default code", async function () {
@@ -385,7 +385,7 @@ describe("Default Referral Codes", function () {
       const { affiliate, game, alice, bob, vault } = await loadFixture(deployFullProtocol);
       const code = "0x0000000000000000000000000000000000000000000000000000000000000001";
       await expect(affiliate.connect(alice).referPlayer(code))
-        .to.be.revertedWithCustomError(affiliate, "Insufficient");
+        .to.be.revertedWithCustomError(affiliate, "UnknownCode");
       expect(await affiliate.getReferrer(alice.address)).to.equal(await vault.getAddress());
 
       await payAffiliateAsGame(
@@ -401,7 +401,7 @@ describe("Default Referral Codes", function () {
       const fakeCode = toBytes32("NOTEXIST");
       await expect(
         affiliate.connect(alice).referPlayer(fakeCode)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
+      ).to.be.revertedWithCustomError(affiliate, "UnknownCode");
     });
 
     it("payAffiliate with unregistered high-byte code locks to VAULT", async function () {

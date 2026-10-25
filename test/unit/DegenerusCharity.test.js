@@ -253,12 +253,12 @@ describe("GNRUS (GNRUS)", function () {
       expect(await charity.balanceOf(recipient1.address)).to.equal(0n);
     });
 
-    it("burn reverts on underflow when amount exceeds balance", async function () {
+    it("burn reverts with InsufficientBalance when amount exceeds balance", async function () {
       const { charity, voter1 } = await loadFixture(deployCharityFixture);
       // voter1 has no GNRUS
       await expect(
         charity.connect(voter1).burn(eth("1"))
-      ).to.be.revertedWithPanic(0x11); // Solidity 0.8 underflow revert
+      ).to.be.revertedWithCustomError(charity, "InsufficientBalance");
     });
   });
 

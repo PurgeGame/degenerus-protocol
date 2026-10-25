@@ -169,22 +169,14 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       { value: priceWei }
     );
 
-    // Check if there is any stakeable ETH (ethBal > claimablePool)
+    // Staking is limited to ETH above the claimable pool plus the native VRF funding target, so
+    // give the game untracked ETH (yield) well past both and stake a slice of it.
     const gameAddr = await game.getAddress();
-    const ethBal = await hre.ethers.provider.getBalance(gameAddr);
-    const claimablePool = await game.claimablePoolView();
-
-    if (ethBal > claimablePool) {
-      // Stake a small portion (1 wei more than claimablePool gives minimum stakeable)
-      const stakeable = ethBal - claimablePool;
-      if (stakeable > 0n) {
-        const stakeAmount = stakeable / 2n; // Stake half the available ETH
-        if (stakeAmount > 0n) {
-          // deployer is vault owner (holds 100% DGVE); calls game.adminStakeEthForStEth directly
-          await ownerAction(game.connect(deployer), "adminStakeEthForStEth", [stakeAmount]);
-        }
-      }
-    }
+    await hre.network.provider.send("hardhat_setBalance", [gameAddr, "0x" + eth("10").toString(16)]);
+    const stBefore = await mockStETH.balanceOf(gameAddr);
+    // deployer is vault owner (holds 100% DGVE); calls game.adminStakeEthForStEth directly
+    await ownerAction(game.connect(deployer), "adminStakeEthForStEth", [eth("1")]);
+    expect(await mockStETH.balanceOf(gameAddr)).to.be.gt(stBefore);
 
     // After staking, ETH decreases but stETH increases — invariant still holds
     await assertSolvencyInvariant(game, mockStETH);
