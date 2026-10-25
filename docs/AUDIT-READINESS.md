@@ -1,6 +1,35 @@
-# Audit readiness — 2026-10-16
+# Audit readiness
 
-## DGVE owner governance — working-tree update, 2026-10-19
+## Current revision
+
+The current source is the revision identified by [the snapshot manifest](audit/snapshot.json).
+The primary audit and deployment target is the `eip170` profile (`contracts/profiles/eip170`,
+37 deployment entries, table in `deployments/eip170.json`); the `glamsterdam` profile
+(`contracts/profiles/glamsterdam`, 21 entries) is the maintained alternate. The profile is
+selected by `scripts/select-profile.js`. The build uses Solidity 0.8.38 via IR with the
+optimizer at 1000 runs and the Osaka EVM.
+
+Properties reviewed at this revision:
+
+- **RNG commitment.** Cohorts seal before a request. The callback accepts only the
+  coordinator, compares the low 64 bits of the request ID with the stored ID and records the raw
+  word; nudges (`reverseFlip`) change only the coinflip word. Every other consumer hashes a
+  unique `RngTags` domain with the raw word ([RNG domains](audit/RNG-DOMAINS.md)).
+- **Progress.** The miner entry `mineRun(uint32)` persists cursors, bounds atomic work and
+  reserves return gas. `dailyIdx` is the logical game day and advances at the daily VRF
+  request. The purchase timeout is 30 completed game days (level 0 included, counted from the
+  end of the Degenesis phase), and 14 days without a completed daily session end the game on
+  the deterministic dead-VRF path even if the coordinator still answers.
+- **VRF funding.** Requests are paid in native ETH from the coordinator subscription
+  (`DegenerusAdmin.donateVrf` forwards the donation and credits one quarter of it as mid-day
+  request credit); the coordinator can be replaced only through the emergency governance path.
+- **Backing and accounts.** As described in the sections below, with the storage positions of
+  the current layout (`scripts/layout/golden`).
+
+Test, gas, size and static-analysis results of the current revision: `[final battery]`. Figures
+in the dated sections below were measured at the revision each section names.
+
+## DGVE owner governance — after `audit-2026-10-16`, 2026-10-19
 
 The escrow executor, voting delegation, direct Vault gameplay, and bounded creator
 icon setup are newer than the frozen source below. The [owner-governance guide](OWNER_GOVERNANCE.md)
@@ -8,22 +37,22 @@ describes the authority changes, and [verification](VERIFICATION.md#dgve-owner-g
 records the current focused results and regression status. Historical freeze results
 do not certify these changes.
 
-## Degenesis sale — review scope (not in the frozen source below)
+## Degenesis sale — review scope (not in the `audit-2026-10-16` source below)
 
-The seven-day Degenesis sale, its module and the supporting changes are in the working tree
-after `audit-2026-10-16` and are not covered by that freeze. A later freeze supersedes the
-section below once it records a battery on this source.
+The seven-day Degenesis sale, its module and the supporting changes are in the current source
+and are not covered by the `audit-2026-10-16` freeze section below.
 
 New and changed surface:
 
-- `DegenerusGameDegenesisModule` (new delegatecall module, `GAME_DEGENESIS_MODULE`): the standalone
-  `purchaseDegenesisBox`, `prepareDegenesis` (split and pricing at the daily request), `runDegenesisWork`
-  (the `DegenesisSettle` miner stage), `splitDegenesis` (terminal), `topUpSdgnrsAfking` and
+- `DegenerusGameDegenesisModule` (delegatecall module, `GAME_DEGENESIS_MODULE`; in the `eip170` profile
+  it is hosted by the `DegenesisFoil` deployment): the standalone `purchaseDegenesisBox`,
+  `prepareDegenesis_g47` (split and pricing at the daily request), `runDegenesisWork_g1860`
+  (the `DegenesisSettle` miner stage), `splitDegenesis` (terminal), `topUpSdgnrsAfking_g318` and
   `spendDegenesis` (the Vault's restricted purchase). See [architecture](ARCHITECTURE.md#degenesis-sale).
-- Storage: slot 0 byte 27 `degenesisClosed`, slot 15 `degenesisVaultBudget`, slot 16 `degenesisCredit`,
-  slot 26 `degenesisActive`, appended `degenesisWord`, `degenesisDays` and `degenesisOrders`.
-  `Pool.Degenesis` is sDGNRS pool index 4 (10% of the initial supply).
-- Credit accrual at the Mint, Whale and FoilPack spend sites; credit is 25% of
+- Storage: slot 0 byte 27 `degenesisClosed`, slot 12 `degenesisVaultBudget`, slot 13 `degenesisCredit`,
+  slot 20 `degenesisActive`, appended `degenesisWord` (slot 66), `degenesisDays` (67) and
+  `degenesisOrders` (68). `Pool.Degenesis` is sDGNRS pool index 4 (10% of the initial supply).
+- Credit accrual at the Mint, Whale, foil and purchase spend sites; credit is 25% of
   qualifying ETH, claimable and prepaid spend while the requested logical day is below 9, and
   the Vault and sDGNRS earn none.
 - RNG: `degenesisWord` is copied in `_recordDailyRng`; new tags are listed in
@@ -37,8 +66,7 @@ New and changed surface:
   leave `claimablePool` before `gameOver` is set (`DegenesisFundsReleased`); unresolved orders are
   forfeited with the inventory burn.
 - Gas: `MineFlipGasBounds.DEGENESIS_*` constants; the `DegenesisSettle` stage admits per branch plus a
-  growing flush reserve. See the [gas review](MINEFLIP-GAS-REVIEW.md) and
-  [caller budgeting](CALLER-GAS-BUDGETING.md).
+  growing flush reserve. See [verification](VERIFICATION.md).
 
 Questions for review:
 
@@ -465,8 +493,9 @@ The passing closure run is
 
 ## Earlier campaign: security conclusions
 
-The source review and focused adversarial reviews found no confirmed ordinary-player
-exploit that rerolls a committed result, permanently bricks `mineFlip`, steals
+The source review and focused adversarial reviews of that campaign's base revision found no
+confirmed ordinary-player exploit that rerolls a committed result, permanently bricks the
+miner chain, steals
 backing, or obtains another account's authority. This is a bounded review conclusion,
 not a proof of absence. The additional broad campaigns below test that conclusion
 against the repository's complete configured selections. The detailed RNG/mineFlip
@@ -605,18 +634,22 @@ independent audit; detector severity alone is not evidence of an exploitable pat
 ## Trust boundaries and release constraints
 
 - **Unanswered VRF requests:** the vault owner may retry once after 20 hours;
-  governance can replace a stalled coordinator under its voting rules. Accepted
+  governance can replace a stalled coordinator under its voting rules (the owner path proposes
+  after a 44-hour stall, the community path after 7 days with 0.5% of circulating sDGNRS). A
+  request not published within 14 days ends the game on the deterministic path. Accepted
   on-chain answers cannot be replaced. These powers do not prove resistance to a
   privileged party selectively rejecting an answer known before on-chain acceptance.
-- **External asset availability:** required stETH transfers and VRF/LINK service
-  availability remain dependencies. Optional funding/individual redemption failure
+- **External asset availability:** required stETH transfers and VRF coordinator
+  availability, with its native-ETH subscription balance, remain dependencies. Optional funding/individual redemption failure
   isolation does not make every protocol-level transfer failure ignorable.
 - **Terminal treatment:** unfinished game entropy consumers have the ending treatment
   disclosed in [Known Issues](../KNOWN-ISSUES.md). Earned claims and paid terminal
   ticket obligations must retain their specified protections.
-- **Deployment headroom:** Game and Whale are close to EIP-170. Any source, compiler,
-  optimizer or address-pin change requires the production size and metadata gate
-  again; test deployments with relaxed limits are not deployment evidence.
+- **Deployment headroom:** the `eip170` profile exists because its deployments are sized
+  against the 24,576-byte EIP-170 limit. Any source, compiler, optimizer, profile or
+  address-pin change requires the production size and metadata gate again
+  (`scripts/check-deployment-sizes.js`); test deployments with relaxed limits are not
+  deployment evidence.
 - **Evidence scope:** mock-based tests, bounded invariant campaigns and arithmetic
   models do not prove the behavior of external services or every possible state.
   Halmos does not establish production gas-metered FSM liveness: its unconstrained
