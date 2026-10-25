@@ -76,8 +76,8 @@ library MineFlipGasBounds {
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;
     // Eight changed seats, a fresh seat word, cursor/release writes and return: <=209.8k.
     uint256 internal constant TICKET_TAIL = 260_000;
-    // Cold selection reads and arithmetic; no materialization writes.
-    uint256 internal constant TICKET_SELECT_MAX = 110_000;
+    // Cold selection reads and arithmetic; no materialization writes. Amsterdam, no reservoir: 150,198.
+    uint256 internal constant TICKET_SELECT_MAX = 165_000;
     // Cold marginal skip 15.1k plus two distinct cold reads (4.2k), with margin.
     uint256 internal constant TICKET_SEAT_MAX = 25_000;
     // Eight persisted seats re-read on resume: 45k; read-only allowance.
