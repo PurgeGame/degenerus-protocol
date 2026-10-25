@@ -1254,24 +1254,31 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
 
     /// @notice Chainlink VRF callback for random word fulfillment.
-    /// @dev Accepts exactly one matching coordinator response and stores the final session
-    ///      word; publication is a later miner action. A daily lock adds the frozen nudge
-    ///      count. Final values 0/1 leave the request pending for retry. Stale/duplicate
-    ///      fulfillments (wrong requestId or word already stored) are ignored, not reverted,
-    ///      so a late coordinator retry never bricks. Runs in the base contract so the
-    ///      Native-paid callback carries no delegatecall overhead.
+    /// @dev Accepts the coordinator's response to the active request and stores the final
+    ///      session word; publication is a later miner action. A daily lock adds the frozen
+    ///      nudge count. Final values 0/1 leave the request pending for retry. The coordinator
+    ///      fulfills each request once, so only a superseded request (retry or re-issue) can
+    ///      arrive late; its ID no longer matches and it is ignored, not reverted. Runs in the
+    ///      base contract so the Native-paid callback carries no delegatecall overhead.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
-        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
+        uint256 vrf;
+        // The coordinator and request ID share one slot.
+        assembly ("memory-safe") { vrf := sload(vrfCoordinator.slot) }
+        if (msg.sender != address(uint160(vrf))) revert OnlyCoordinator();
         uint16 flags;
         bool daily;
+        uint64 id;
+        uint256 word;
         assembly ("memory-safe") {
             let state := sload(rngFlagsAndNudges.slot)
             flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
             daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
+            id := shr(mul(vrfRequestId.offset, 8), vrf)
+            // The coordinator always sends the one requested word; no further decoding.
+            word := calldataload(randomWords.offset)
         }
-        if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
+        if (flags & (uint16(1) << 14) == 0 || uint64(requestId) != id) return;
 
-        uint256 word = randomWords[0];
         // Addition preserves the uniform distribution. The two reserved final values
         // leave this request waiting for its existing retry path (probability 2 / 2^256).
         if (daily) {

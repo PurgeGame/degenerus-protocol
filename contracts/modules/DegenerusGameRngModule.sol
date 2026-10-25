@@ -61,7 +61,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         rngWordCurrent = RNG_WORD_WAITING;
         _setRngRequestActive(false);
         uint256 id = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS, meter);
-        vrfRequestId = id;
+        vrfRequestId = uint64(id);
         _setRngRequestActive(true);
         emit Advance(STAGE_RNG_REQUESTED, level);
     }
@@ -73,7 +73,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         _setRngRequestActive(false);
         _spendRngRetry();
         uint256 id = _requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4));
-        vrfRequestId = id;
+        vrfRequestId = uint64(id);
         _setRngRequestActive(true);
         emit Advance(STAGE_RNG_REQUESTED, level);
     }
@@ -201,7 +201,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         rngRequestTime = uint48(block.timestamp);
         _rearmRngRetry();
         uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS, meter);
-        vrfRequestId = id;
+        vrfRequestId = uint64(id);
         _setRngRequestActive(true);
     }
 

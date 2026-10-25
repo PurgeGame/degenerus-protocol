@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Seed only the committed phase preconditions. Settlement and callbacks are production code.
 contract VaultBackstopHost is DegenerusGame {
@@ -81,14 +82,14 @@ contract VaultFlipBackstopTest is DeployProtocol {
             uint256 snapshot = vm.snapshotState();
             _seed(45, DAY - 45, mode);
             uint256 allowanceBefore = coin.vaultMintAllowance();
-            bytes32 packedBefore = vm.load(address(game), bytes32(uint256(5)));
+            bytes32 packedBefore = vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY));
             MineFlipGas.Result memory r = host.phase(9_000_000);
             assertTrue(r.progressed);
             assertFalse(r.done, "settlement is its own checkpoint");
             assertTrue(game.rngLocked(), "later phases retain the lock");
             assertEq(host.stamp(), DAY);
             uint256 stampMask = uint256(type(uint24).max) << 160;
-            assertEq(uint256(vm.load(address(game), bytes32(uint256(5)))) & ~stampMask,
+            assertEq(uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY))) & ~stampMask,
                 uint256(packedBefore) & ~stampMask, "packed RNG and loan fields preserved");
             (uint128 bank, uint24 cursor) = _position();
             assertEq(bank, 45 * 12_500);

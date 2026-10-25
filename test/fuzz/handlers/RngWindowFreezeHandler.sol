@@ -76,7 +76,6 @@ contract RngWindowFreezeHandler is Test {
 
     // Mid-day lootbox window fields (same 388-01-LAYOUT-KEY layout; slot-0 roots are the
     // StorageFoundation-canaried offsets).
-    uint256 private constant VRF_REQUEST_ID_SLOT = 4; // uint256 vrfRequestId
     uint256 private constant RNG_REQUEST_TIME_BYTE_OFF = 6; // rngRequestTime uint48 @ slot 0 bytes 6-11
     uint256 private constant RNG_REQUEST_TIME_MASK = 0xFFFFFFFFFFFF; // uint48
     uint256 private constant RNG_LOCKED_FLAG_BYTE_OFF = 19; // bool rngLockedFlag @ slot 0 byte 19
@@ -394,7 +393,7 @@ contract RngWindowFreezeHandler is Test {
     //   (7)  LR_MID_DAY flag            — slot 33 bits 224.. : routes the frozen ticket batch.
     //   (8)  ticketWriteSlot            — slot 0 byte 25 : the read/write buffer selector frozen
     //                                                      by the request-time swap.
-    //   (9)  vrfRequestId               — slot 4         : the fulfillment's request-match gate.
+    //   (9)  vrfRequestId               — coordinator slot: the fulfillment's request-match gate.
     //   (10) rngRequestTime             — slot 0 bytes 6-11 : the in-flight marker (a player
     //                                                      clear would permit an entropy reroll).
     //   (11) rngLockedFlag              — slot 0 byte 19 : the fulfillment branch selector (flip
@@ -723,7 +722,7 @@ contract RngWindowFreezeHandler is Test {
     }
 
     function _rngRequestDay() private view returns (uint24) {
-        return uint24(uint256(vm.load(address(game), bytes32(uint256(5)))));
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY))));
     }
 
     function _checkRequestDay(uint24 expected) private {
@@ -767,7 +766,7 @@ contract RngWindowFreezeHandler is Test {
     }
 
     function _vrfRequestId() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(VRF_REQUEST_ID_SLOT)));
+        return uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET));
     }
 
     function _lrMidDayFlag() internal view returns (uint256) {

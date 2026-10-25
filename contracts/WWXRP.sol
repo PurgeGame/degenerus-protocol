@@ -398,7 +398,7 @@ contract WWXRP {
     ///      mapping at the compiler-pinned Game root below. Its lane is 24 bits at bit 232 of the second word;
     ///      its low two bits are the tier (0 = no boon). Read-only, used to skip the consume
     ///      dispatch for a wallet holding no WWXRP boon; pinned against the Game layout.
-    uint256 internal constant GAME_BOON_PACKED_SLOT = 37;
+    uint256 internal constant GAME_BOON_PACKED_SLOT = 36;
     uint256 private constant GAME_WWXRP_LANE_SHIFT = 232;
     uint256 private constant GAME_LANE_TIER_MASK = 0x3;
 

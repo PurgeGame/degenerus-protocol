@@ -22,7 +22,6 @@ contract LootboxRngLifecycle is DeployProtocol {
     ///      StorageSlotPins).
     uint256 constant SLOT_PACKED_0 = GameSlots.RNG_REQUEST_TIME;
     uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
-    uint256 constant SLOT_VRF_REQUEST_ID = GameSlots.VRF_REQUEST_ID;
 
     /// @dev Seed domains (DegenerusGameLootboxModule): a queued entry's root is
     ///      hash4(QUEUED_ORDER_DOMAIN, word, buffer, position); box n seeds from
@@ -65,12 +64,12 @@ contract LootboxRngLifecycle is DeployProtocol {
         _finishReadConsumers();
     }
 
-    /// @dev Read vrfRequestId directly from storage slot 5.
+    /// @dev Read vrfRequestId directly from the coordinator slot.
     function _readVrfRequestId() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
+        return uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET));
     }
 
-    /// @dev Read rngWordCurrent directly from storage slot 4.
+    /// @dev Read rngWordCurrent directly from storage.
     function _readRngWordCurrent() internal view returns (uint256) {
         return RecyclingState.currentWord(address(game));
     }

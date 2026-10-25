@@ -38,6 +38,7 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_rngWordCurrent() external pure returns (uint256 s, uint256 o) { assembly { s := rngWordCurrent.slot o := rngWordCurrent.offset } }
     function s_vrfRequestId() external pure returns (uint256 s, uint256 o) { assembly { s := vrfRequestId.slot o := vrfRequestId.offset } }
     function s_rngRequestDay() external pure returns (uint256 s, uint256 o) { assembly { s := rngRequestDay.slot o := rngRequestDay.offset } }
+    function s_lastDailyRequestWallDay() external pure returns (uint256 s, uint256 o) { assembly { s := lastDailyRequestWallDay.slot o := lastDailyRequestWallDay.offset } }
     function s_traitBucketStale() external pure returns (uint256 s, uint256 o) { assembly { s := traitBucketStale.slot o := traitBucketStale.offset } }
     function s_decEntriesLevel() external pure returns (uint256 s, uint256 o) { assembly { s := decEntriesLevel.slot o := decEntriesLevel.offset } }
     function s_foilSlotRetained() external pure returns (uint256 s, uint256 o) { assembly { s := foilSlotRetained.slot o := foilSlotRetained.offset } }
@@ -176,6 +177,7 @@ contract CrapsSlotHarness is CrapsBattleStorage {
     function lootboxCrapsPins() external pure returns (uint256, uint256, uint256, uint256) {
         return (RNG_STATE_SLOT, LOOTBOX_RNG_WORD_SLOT, RNG_WORD_BY_DAY_SLOT, RNG_DAY_TAGS_SLOT);
     }
+    function dailyRequestWallDayPin() external pure returns (uint256) { return DAILY_REQUEST_WALL_DAY_SLOT; }
 }
 
 /// @dev Exposes WWXRP's internal Game boon-slot pin.
@@ -205,6 +207,9 @@ contract StorageSlotPinsTest is Test {
         (s,) = h.s_rngWordCurrent(); assertEq(lootboxWord, s, "LootboxCraps.LOOTBOX_RNG_WORD_SLOT");
         (s,) = h.s_rngWordByDay(); assertEq(wordByDay, s, "LootboxCraps.RNG_WORD_BY_DAY_SLOT");
         (s,) = h.s_rngDayTags(); assertEq(dayTags, s, "LootboxCraps.RNG_DAY_TAGS_SLOT");
+        (s, o) = h.s_lastDailyRequestWallDay();
+        assertEq(c.dailyRequestWallDayPin(), s, "LootboxCraps.DAILY_REQUEST_WALL_DAY_SLOT");
+        assertEq(o * 8, 216, "LootboxCraps wall-day shift");
 
         (s,) = h.s_boonPacked(); assertEq((new WwxrpSlotHarness()).boonPackedSlot(), s, "WWXRP.GAME_BOON_PACKED_SLOT");
 
@@ -295,8 +300,9 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_claimablePool(); assertEq(s, GameSlots.CLAIMABLE_POOL, "claimablePool.slot"); assertEq(o, GameSlots.CLAIMABLE_POOL_OFFSET, "claimablePool.offset");
         (s, o) = h.s_prizePoolsPacked(); assertEq(s, GameSlots.PRIZE_POOLS_PACKED, "prizePoolsPacked.slot"); assertEq(o, 0, "prizePoolsPacked.offset");
         (s, o) = h.s_rngWordCurrent(); assertEq(s, GameSlots.RNG_WORD_CURRENT, "rngWordCurrent.slot"); assertEq(o, 0, "rngWordCurrent.offset");
-        (s, o) = h.s_vrfRequestId(); assertEq(s, GameSlots.VRF_REQUEST_ID, "vrfRequestId.slot"); assertEq(o, 0, "vrfRequestId.offset");
+        (s, o) = h.s_vrfRequestId(); assertEq(s, GameSlots.VRF_REQUEST_ID, "vrfRequestId.slot"); assertEq(o, GameSlots.VRF_REQUEST_ID_OFFSET, "vrfRequestId.offset");
         (s, o) = h.s_rngRequestDay(); assertEq(s, GameSlots.RNG_REQUEST_DAY, "rngRequestDay.slot"); assertEq(o, 0, "rngRequestDay.offset");
+        (s, o) = h.s_lastDailyRequestWallDay(); assertEq(s, GameSlots.LAST_DAILY_REQUEST_WALL_DAY, "lastDailyRequestWallDay.slot"); assertEq(o, GameSlots.LAST_DAILY_REQUEST_WALL_DAY_OFFSET, "lastDailyRequestWallDay.offset");
         (s, o) = h.s_dailyComplete(); assertEq(s, GameSlots.DAILY_COMPLETE, "dailyComplete.slot"); assertEq(o, GameSlots.DAILY_COMPLETE_OFFSET, "dailyComplete.offset");
         (s, o) = h.s_lastVrfProcessedTimestamp(); assertEq(s, GameSlots.LAST_VRF_PROCESSED_TIMESTAMP, "lastVrfProcessedTimestamp.slot"); assertEq(o, GameSlots.LAST_VRF_PROCESSED_TIMESTAMP_OFFSET, "lastVrfProcessedTimestamp.offset");
         (s, o) = h.s_ticketBufferLevels(); assertEq(s, GameSlots.TICKET_BUFFER_LEVELS, "ticketBufferLevels.slot"); assertEq(o, GameSlots.TICKET_BUFFER_LEVELS_OFFSET, "ticketBufferLevels.offset");

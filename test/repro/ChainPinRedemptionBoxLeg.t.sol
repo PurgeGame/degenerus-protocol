@@ -160,9 +160,9 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
         uint256 s0 = uint256(vm.load(address(game), bytes32(0)));
         s0 = (s0 & ~(uint256(0xFFFFFF) << 96)) | (uint256(lvl) << 96);
         vm.store(address(game), bytes32(0), bytes32(s0));
-        uint256 s5 = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint256 s5 = uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY)));
         uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24) | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
-        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
+        vm.store(address(game), bytes32(GameSlots.RNG_REQUEST_DAY), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
         TicketQueueStorage.retireCompleted(address(game), lvl + 1);
     }
 

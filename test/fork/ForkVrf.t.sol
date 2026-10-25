@@ -149,7 +149,8 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(r.callbackGas, 150_000, "callback gas");
         assertEq(r.numWords, 1, "numWords");
         assertEq(r.extraArgs, abi.encodeWithSelector(EXTRA_ARGS_V1_TAG, true), "extraArgs = V1{nativePayment:true}");
-        assertEq(r.id, uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))), "the game stored the real id");
+        assertEq(uint64(r.id), _storedRequestId(), "the game stored the real id's low 64 bits");
+        assertEq(_pendingRequest(), r.id, "the stored bits identify the real request");
         assertTrue(coordinator.s_requestCommitments(r.id) != bytes32(0), "commitment recorded");
         assertTrue(coordinator.pendingRequestExists(subId), "pending on the subscription");
         // The request was accepted with a ZERO-NATIVE subscription: v2.5 bills at fulfilment, so

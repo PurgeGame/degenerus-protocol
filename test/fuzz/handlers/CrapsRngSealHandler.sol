@@ -76,7 +76,6 @@ contract CrapsRngSealHandler is Test {
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant LR_MID_DAY_SHIFT = 224;
     uint256 private constant LR_MID_DAY_MASK = 0xFF;
-    uint256 private constant VRF_REQUEST_ID_SLOT = 4;
     uint256 private constant DAILY_IDX_BYTE_OFF = 3;
     uint256 private constant RNG_REQUEST_TIME_BYTE_OFF = 6;
     uint256 private constant RNG_REQUEST_TIME_MASK = 0xFFFFFFFFFFFF;
@@ -1395,7 +1394,7 @@ contract CrapsRngSealHandler is Test {
                 (raw0 >> (RNG_REQUEST_TIME_BYTE_OFF * 8)) & RNG_REQUEST_TIME_MASK,
                 (raw0 >> (RNG_LOCKED_FLAG_BYTE_OFF * 8)) & 0xFF,
                 (raw0 >> (TICKET_WRITE_SLOT_BYTE_OFF * 8)) & 0xFF,
-                uint256(vm.load(address(game), bytes32(VRF_REQUEST_ID_SLOT))),
+                uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)),
                 (uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK
             )
         );

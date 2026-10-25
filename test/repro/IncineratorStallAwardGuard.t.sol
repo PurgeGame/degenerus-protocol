@@ -82,10 +82,10 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         vm.store(address(game), bytes32(SLOT_0), bytes32(s0));
         // A synthetic jump across 96 levels also jumps the retained inventory epochs.
         // Old bootstrap queues are outside this century fixture, not live L-2 work.
-        uint256 s5 = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint256 s5 = uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY)));
         uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24)
             | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
-        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
+        vm.store(address(game), bytes32(GameSlots.RNG_REQUEST_DAY), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
         // This teleport skips activation of every earlier bootstrap future cohort,
         // not just the two prepared inventory levels. A fresh 100-level whale pass
         // must be able to reuse those expired roots. Authenticate each logical level

@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title CoinflipCarryHindsight — a dormant auto-rebuy account gets no look-ahead on its carry
 /// @notice Every claim walk settles through flipsClaimableDay in one call: the 90-day claim
@@ -63,9 +64,9 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
         vm.store(address(game), bytes32(0),
             bytes32((gameWord & ~(uint256(0xffffff) << 24)) | (uint256(d) << 24)));
         // These fixtures directly settle daily outcomes; keep the independent progress clock current.
-        uint256 clocks = uint256(vm.load(address(game), bytes32(uint256(13))));
+        uint256 clocks = uint256(vm.load(address(game), bytes32(GameSlots.LAST_DAILY_COMPLETED_AT)));
         uint256 ts = (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621;
-        vm.store(address(game), bytes32(uint256(13)),
+        vm.store(address(game), bytes32(GameSlots.LAST_DAILY_COMPLETED_AT),
             bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (ts << 128)));
 
         vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);

@@ -46,7 +46,7 @@ contract SweepViewer is DegenerusGame {
         rngWordCurrent = RNG_WORD_WAITING;
         _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp);
-        vrfRequestId = requestId;
+        vrfRequestId = uint64(requestId);
         _setRngRequestActive(true);
     }
 

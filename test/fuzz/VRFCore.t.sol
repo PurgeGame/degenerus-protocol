@@ -21,10 +21,9 @@ contract VRFCore is DeployProtocol {
     ///      Verified via `forge inspect DegenerusGame storage-layout`.
     ///      Slot 0: packed timing/flags (see DegenerusGameStorage layout).
     ///      Slot 3: rngWordCurrent (uint256).
-    ///      Slot 4: vrfRequestId (uint256).
+    ///      vrfRequestId: low 64 bits of the request id, in the coordinator's slot.
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
-    uint256 constant SLOT_VRF_REQUEST_ID = 4;
 
     function setUp() public {
         _deployProtocol();
@@ -63,9 +62,9 @@ contract VRFCore is DeployProtocol {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Read vrfRequestId directly from storage slot 4.
+    /// @dev Read vrfRequestId directly from the coordinator's slot.
     function _readVrfRequestId() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
+        return uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET));
     }
 
     /// @dev Read LR_MID_DAY from lootboxRngPacked (slot 34, bits [224:232]).
@@ -212,8 +211,8 @@ contract VRFCore is DeployProtocol {
         game.mineFlip(0);
         uint256 realReqId = mockVRF.lastRequestId();
 
-        // Ensure staleId != realReqId to trigger the mismatch path
-        vm.assume(staleId != realReqId);
+        // The game matches the low 64 bits; the coordinator's other IDs differ there.
+        vm.assume(uint64(staleId) != uint64(realReqId));
 
         // Record state before
         uint256 wordBefore = _readRngWordCurrent();
@@ -225,25 +224,70 @@ contract VRFCore is DeployProtocol {
         assertEq(_readRngWordCurrent(), wordBefore, "Stale ID should not change state");
     }
 
-    /// @notice Callback silently returns on duplicate fulfillment (rngWordCurrent already set).
-    function test_callbackNeverReverts_duplicateFulfillment(uint256 randomWord) public {
-        vm.assume(randomWord > 1); // Ensure first fulfillment sets a nonzero word
-
-        // Trigger daily VRF request
+    /// @notice The coordinator answers a request once: it deletes the commitment before the
+    ///         callback, so a delivered word is never replaced by a second answer for its ID.
+    function test_coordinatorAnswersEachRequestOnce(uint256 randomWord) public {
+        vm.assume(randomWord > 1);
         game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
-
-        // First fulfillment
         mockVRF.fulfillRandomWords(reqId, randomWord);
-        uint256 storedAfterFirst = _readRngWordCurrent();
-        assertEq(storedAfterFirst, randomWord, "First fulfillment should store word");
+        assertEq(_readRngWordCurrent(), randomWord, "First fulfillment should store word");
+        vm.expectRevert("already fulfilled");
+        mockVRF.fulfillRandomWords(reqId, randomWord ^ 0xDEAD);
+        assertEq(_readRngWordCurrent(), randomWord, "the delivered word stands");
+    }
 
-        // Second fulfillment via raw call (same requestId) -- should silently return
-        // because rngWordCurrent != 0. Use a different word (XOR to avoid overflow).
-        uint256 differentWord = randomWord ^ 0xDEAD;
-        if (differentWord == 0) differentWord = 1;
-        mockVRF.fulfillRandomWordsRaw(reqId, address(game), differentWord);
-        assertEq(_readRngWordCurrent(), storedAfterFirst, "Duplicate should not change word");
+    /// @notice A superseded request answered late is ignored, even once its replacement has been
+    ///         consumed and a later request is waiting: an old answer never stands in for a new one.
+    function test_lateSupersededFulfillmentIgnored(uint256 lateWord) public {
+        vm.assume(lateWord > 1);
+        _completeDay(0xBEEF0001);
+        vm.warp(block.timestamp + 1 days);
+        game.mineFlip(0);
+        uint256 superseded = mockVRF.lastRequestId();
+        vm.warp(block.timestamp + 21 hours);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        uint256 replacement = mockVRF.lastRequestId();
+        assertTrue(replacement != superseded, "retry issued a new request");
+
+        mockVRF.fulfillRandomWordsRaw(superseded, address(game), lateWord);
+        assertEq(_readRngWordCurrent(), 0, "superseded answer ignored while the retry waits");
+        mockVRF.fulfillRandomWords(replacement, 0xBEEF0002);
+        _lastFulfilledReqId = replacement;
+        for (uint256 i = 0; i < 50 && game.rngLocked(); i++) game.mineFlip(0);
+        assertFalse(game.rngLocked(), "the replacement completed the day");
+
+        _finishReadConsumers();
+        for (uint256 i = 0; i < 40 && !game.rngLocked(); i++) {
+            try game.mineFlip(0) {} catch { vm.warp(block.timestamp + 12 hours); }
+        }
+        uint256 next = mockVRF.lastRequestId();
+        assertTrue(game.rngLocked() && next != replacement, "the next daily request waits");
+        mockVRF.fulfillRandomWordsRaw(superseded, address(game), lateWord);
+        assertEq(_readRngWordCurrent(), 0, "superseded answer never fills a later request");
+        mockVRF.fulfillRandomWords(next, 0xBEEF0003);
+        assertEq(_readRngWordCurrent(), 0xBEEF0003, "the live request still answers");
+    }
+
+    /// @notice A rotation onto the same coordinator re-issues the request there; the old request
+    ///         stays answerable by that coordinator but no longer matches.
+    function test_sameCoordinatorReissueIgnoresSupersededRequest(uint256 lateWord) public {
+        vm.assume(lateWord > 1);
+        _completeDay(0xBEEF0001);
+        vm.warp(block.timestamp + 1 days);
+        game.mineFlip(0);
+        uint256 superseded = mockVRF.lastRequestId();
+        uint256 newSubId = mockVRF.createSubscription();
+        mockVRF.addConsumer(newSubId, address(game));
+        vm.prank(address(admin));
+        game.updateVrfCoordinatorAndSub(address(mockVRF), newSubId, bytes32(uint256(1)), 300_000);
+        uint256 reissued = mockVRF.lastRequestId();
+        assertTrue(reissued != superseded, "re-issued on the same coordinator");
+
+        mockVRF.fulfillRandomWords(superseded, lateWord);
+        assertEq(_readRngWordCurrent(), 0, "superseded answer ignored");
+        mockVRF.fulfillRandomWords(reissued, 0xBEEF0002);
+        assertEq(_readRngWordCurrent(), 0xBEEF0002, "the re-issued request answers");
     }
 
     /// @notice Callback reverts when msg.sender is not the VRF coordinator.
@@ -314,7 +358,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Daily request: vrfRequestId set on request, cleared after full processing.
     function test_vrfRequestIdLifecycle_dailyFreshRequest() public {
         // Before any request
-        assertEq(_readVrfRequestId(), 1, "request ID initializes to a nonzero idle sentinel");
+        assertEq(_readVrfRequestId(), 0, "no request ID before the first request");
 
         // Trigger daily VRF request
         game.mineFlip(0);

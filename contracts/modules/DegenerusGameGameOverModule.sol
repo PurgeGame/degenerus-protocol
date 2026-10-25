@@ -455,7 +455,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             return false;
         }
         _swapRngBuffers();
-        vrfRequestId = id;
+        vrfRequestId = uint64(id);
         _setRngRequestActive(true);
         rngWordCurrent = RNG_WORD_WAITING;
         // Acceptance retains the separately committed timeout origin.
@@ -1167,8 +1167,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
             }
             // else: daily word already delivered and valid -> preserve it; no re-issue
-            // (a fresh callback would be rejected by the advance module's
-            // rngWordCurrent != RNG_WORD_WAITING fulfillment guard).
+            // (its request was fulfilled once and the new coordinator never issued it).
         }
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
@@ -1193,9 +1192,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
     /// @dev Submit a single-word VRF request on the current coordinator.
     /// @param confirmations Block confirmations for this request's gas lane.
-    /// @return id The Chainlink request ID.
-    function _requestVrfWord(uint16 confirmations) private returns (uint256 id) {
-        id = vrfCoordinator.requestRandomWords(
+    /// @return id The low 64 bits of the Chainlink request ID.
+    function _requestVrfWord(uint16 confirmations) private returns (uint64 id) {
+        id = uint64(vrfCoordinator.requestRandomWords(
             VRFRandomWordsRequest({
                 keyHash: vrfKeyHash,
                 subId: vrfSubscriptionId,
@@ -1204,7 +1203,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 numWords: 1,
                 extraArgs: VRF_NATIVE_EXTRA_ARGS
             })
-        );
+        ));
     }
 }
 

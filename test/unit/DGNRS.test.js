@@ -46,7 +46,7 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
 
 // Fund sDGNRS's Game claimable (wallet ID 2) in tandem with claimablePool and the Game's ETH.
 // Live redemption legs draw only from the Game, so no ETH is sent through sDGNRS.
-const BALANCES_PACKED_SLOT = 7n;
+const BALANCES_PACKED_SLOT = 6n;
 const CLAIMABLE_POOL_SLOT = 1n;
 async function fundGameClaimableForSdgnrs(gameAddr, _sdgnrsAddr, amount) {
   const word = (v) => hre.ethers.toBeHex(v, 32);

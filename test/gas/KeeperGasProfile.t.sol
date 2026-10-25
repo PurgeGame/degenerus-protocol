@@ -201,7 +201,7 @@ contract KeeperGasProfileTest is DeployProtocol {
     function _snapshotInventory(uint24 lvl) private {
         if (lvl >= 32) return;
         if (recycled) {
-            uint256 packed = uint256(game.extsload_g2807007(bytes32(uint256(5))));
+            uint256 packed = uint256(game.extsload_g2807007(bytes32(GameSlots.TICKET_BUFFER_LEVELS)));
             if (uint24(packed >> (80 + (lvl & 1) * 24)) != lvl) return;
         }
         uint256 base = recycled ? GameSlots.LVL_TRAIT_ENTRY + uint256(lvl & 1) * 256
@@ -227,7 +227,7 @@ contract KeeperGasProfileTest is DeployProtocol {
             vm.warp(vm.getBlockTimestamp() + 1 days);
             _drive(day);
             if (recycled) {
-                uint48 stamps = uint48(uint256(game.extsload_g2807007(bytes32(uint256(5)))) >> 80);
+                uint48 stamps = uint48(uint256(game.extsload_g2807007(bytes32(GameSlots.TICKET_BUFFER_LEVELS))) >> 80);
                 for (uint256 slot; slot < 2; ++slot) {
                     uint24 stamp = uint24(stamps >> (slot * 24));
                     if (lastStamp[slot] != 0 && stamp > lastStamp[slot]) ++retirements;

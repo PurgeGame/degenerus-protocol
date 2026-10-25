@@ -143,6 +143,8 @@ abstract contract ForkDeployProtocol is DeployProtocol {
     /// @dev The coordinator's s_consumers mapping slot, found on first use.
     uint256 private consumersSlot = type(uint256).max;
     uint256 internal fulfilments;
+    uint256 private nonceHintSub;
+    uint64 private nonceHint;
     uint256 internal cranks;
 
     address internal keeper = address(0xBEEF);
@@ -243,9 +245,27 @@ abstract contract ForkDeployProtocol is DeployProtocol {
     // ------------------------------------------------------------------ VRF
 
     /// @dev The game's outstanding request, if the REAL coordinator still holds its commitment.
-    function _pendingRequest() internal view returns (uint256 id) {
-        id = uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID)));
-        if (id != 0 && coordinator.s_requestCommitments(id) == bytes32(0)) id = 0;
+    ///      Game keeps the low 64 bits of the id; the full id is the coordinator's
+    ///      keccak(keyHash, keccak(keyHash, game, subId, nonce)) for one of the game's nonces.
+    function _pendingRequest() internal returns (uint256 id) {
+        uint64 stored = _storedRequestId();
+        if (stored == 0) return 0;
+        bytes32 keyHash = vm.load(address(game), bytes32(GameSlots.VRF_KEY_HASH));
+        uint256 subId = uint256(vm.load(address(game), bytes32(GameSlots.VRF_SUBSCRIPTION_ID)));
+        if (subId != nonceHintSub) (nonceHintSub, nonceHint) = (subId, 1);
+        // Nonces only grow, and the stored request is never older than the last one found.
+        for (uint64 nonce = nonceHint; nonce < nonceHint + 256; ++nonce) {
+            uint256 preSeed = uint256(keccak256(abi.encode(keyHash, address(game), subId, nonce)));
+            uint256 candidate = uint256(keccak256(abi.encode(keyHash, preSeed)));
+            if (uint64(candidate) == stored) {
+                nonceHint = nonce;
+                return coordinator.s_requestCommitments(candidate) == bytes32(0) ? 0 : candidate;
+            }
+        }
+    }
+
+    function _storedRequestId() internal view returns (uint64) {
+        return uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET));
     }
 
     function _commitmentSlotOf(uint256 requestId) internal returns (bytes32 slot) {

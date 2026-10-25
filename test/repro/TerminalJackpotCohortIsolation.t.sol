@@ -8,6 +8,7 @@ import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStor
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Etch-only storage overlay used to construct and inspect exact terminal states while every
 ///      measured advance still executes the production DegenerusGame runtime.
@@ -485,7 +486,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertGt(stamp, 1, "first attempt arms a real refusal timer");
         assertEq((state >> 254) & 1, 0, "failed request has no callback authority");
         assertEq((state >> 255) & 1, 0, "terminal session remains unpublished");
-        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(4)))), 1, "nonzero idle ID is retained");
+        assertEq(uint64(uint256(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 1, "the previous ID is retained");
         mockVRF.fulfillRandomWordsRaw(1, address(game), 42);
         assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
         for (uint256 i; i < 3; ++i) {

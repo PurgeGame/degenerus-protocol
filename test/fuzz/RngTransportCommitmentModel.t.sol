@@ -17,7 +17,7 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
         uint24 logicalDay, uint48 originalTime) external {
         vrfCoordinator = IVRFCoordinator(coordinator);
         vrfSubscriptionId = 1;
-        vrfRequestId = id;
+        vrfRequestId = uint64(id);
         rngLockedFlag = daily;
         dailyIdx = logicalDay;
         dailyComplete = !daily;
@@ -50,16 +50,21 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
     /// @dev Mirror of GameFacade.rawFulfillRandomWords (the callback lives in the facade,
     ///      not the module, so the LINK-paid call carries no delegatecall overhead).
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
-        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
+        uint256 vrf;
+        assembly ("memory-safe") { vrf := sload(vrfCoordinator.slot) }
+        if (msg.sender != address(uint160(vrf))) revert OnlyCoordinator();
         uint16 flags;
         bool daily;
+        uint64 id;
+        uint256 word;
         assembly ("memory-safe") {
             let state := sload(rngFlagsAndNudges.slot)
             flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
             daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
+            id := shr(mul(vrfRequestId.offset, 8), vrf)
+            word := calldataload(randomWords.offset)
         }
-        if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
-        uint256 word = randomWords[0];
+        if (flags & (uint16(1) << 14) == 0 || uint64(requestId) != id) return;
         if (daily) {
             unchecked { word += flags & 0xFF; }
         }
@@ -111,8 +116,8 @@ contract RngTransportCommitmentModelTest is Test {
         assertEq(game.commitment(), fixedInputs, "callback preserves frozen inputs");
         assertEq(game.visible(read), 0, "accepted is distinct from published");
         if (expected != 0) {
-            _deliver(address(coordinator), id, expected == 42 ? 43 : 42);
-            assertEq(_word(), expected, "duplicate cannot selectively replace entropy");
+            // The coordinator deletes a request's commitment before calling back, so it
+            // delivers each ID once; no repeat delivery is modeled.
             game.publishRng_g4514();
             assertEq(game.visible(read), expected, "publication makes exactly the committed buffer readable");
             assertEq(game.visible(write ? 1 : 0), 0, "future write buffer never sees this word");

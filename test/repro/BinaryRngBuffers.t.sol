@@ -134,7 +134,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         game.updateVrfCoordinatorAndSub(address(observer), 1, bytes32(uint256(1)), 300_000);
         vm.prank(buyer); game.mineFlip(0);
         assertFalse(game.rngComplete());
-        assertEq(uint256(game.extsload_g2807007(bytes32(uint256(4)))), 90001);
+        assertEq(uint64(uint256(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET)), 90001);
     }
     function test_CoordinatorFailureRollsBackSealAndCredit() public {
         _buy();

@@ -192,7 +192,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         _purchaseBelowThreshold();
         _grantCredit(donor, _expectedCharge() * 5);
         uint256 id = _mineRequest(donor);
-        bytes32 requestSlot = game.extsload_g2807007(bytes32(uint256(4)));
+        bytes32 requestSlot = game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID));
         uint256 requestTime = (uint256(game.extsload_g2807007(bytes32(0))) >> 48) & type(uint48).max;
         bytes32 packed = game.extsload_g2807007(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         vm.recordLogs();
@@ -205,7 +205,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         }
         assertEq(uint256(game.extsload_g2807007(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), uint256(packed),
             "callback writes no lootbox RNG state");
-        assertEq(game.extsload_g2807007(bytes32(uint256(4))), requestSlot, "callback retains request ID");
+        assertEq(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID)), requestSlot, "callback retains request ID");
         assertFalse(game.rngComplete(), "delivery alone cannot complete the session");
         assertTrue(game.advanceDue(), "the delivered cohort owes a keeper publication");
         assertTrue(game.isRngFulfilled());
@@ -222,7 +222,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         }
         assertEq(count, 1, "keeper publishes exactly once");
         assertFalse(game.isRngFulfilled(), "keeper retires callback authority");
-        assertEq(game.extsload_g2807007(bytes32(uint256(4))), requestSlot, "keeper retains nonzero request ID");
+        assertEq(game.extsload_g2807007(bytes32(GameSlots.VRF_REQUEST_ID)), requestSlot, "keeper retains nonzero request ID");
         assertEq((uint256(game.extsload_g2807007(bytes32(0))) >> 48) & type(uint48).max, requestTime, "keeper retains timestamp");
         mockVRF.fulfillRandomWordsRaw(id, address(game), 99);
         assertEq(RecyclingState.currentWord(address(game)), 42, "retained ID cannot authorize a duplicate");

@@ -90,9 +90,9 @@ contract WwxrpIncineratorTest is DeployProtocol {
     ///      purchase and keeper call after the jump. The century cohorts already queued are kept.
     function _jumpLevel(uint24 lvl) internal {
         _setLevel(lvl);
-        uint256 s5 = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint256 s5 = uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY)));
         uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24) | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
-        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
+        vm.store(address(game), bytes32(GameSlots.RNG_REQUEST_DAY), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
         uint24 ff = 1 << 22;
         uint256 kept100 = TicketQueueStorage.length(address(game), (lvl + 2) | ff);
         uint256 kept101 = TicketQueueStorage.length(address(game), (lvl + 3) | ff);

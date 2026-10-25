@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Uses the actual Game runtime and a fixed cold-storage callback fixture.
 ///      Constructor, coordinator bookkeeping and purchase setup are outside the measurement.
@@ -18,10 +19,10 @@ contract StackSpillCallbackGasTest is Test {
     function setUp() public {
         vm.etch(TARGET, vm.getDeployedCode("DegenerusGame.sol:DegenerusGame"));
         game = DegenerusGame(payable(TARGET));
-        vm.store(TARGET, bytes32(uint256(22)), bytes32(uint256(uint160(COORDINATOR))));
+        vm.store(TARGET, bytes32(GameSlots.VRF_COORDINATOR),
+            bytes32(uint256(uint160(COORDINATOR)) | (REQUEST << (8 * GameSlots.VRF_REQUEST_ID_OFFSET))));
         vm.store(TARGET, bytes32(0), bytes32(FLAGS));
-        vm.store(TARGET, bytes32(uint256(3)), bytes32(uint256(1)));
-        vm.store(TARGET, bytes32(uint256(4)), bytes32(REQUEST));
+        vm.store(TARGET, bytes32(GameSlots.RNG_WORD_CURRENT), bytes32(uint256(1)));
     }
 
     function _fulfill(uint256 request) private returns (uint256) {
@@ -41,13 +42,13 @@ contract StackSpillCallbackGasTest is Test {
 
     function test_FulfillmentGasPin() public {
         // Cold callback execution only; calldata intrinsic gas is outside this frame.
-        assertEq(_fulfill(REQUEST), 12_440, "callback execution gas changed");
+        assertEq(_fulfill(REQUEST), 10_283, "callback execution gas changed");
         assertEq(uint256(vm.load(TARGET, bytes32(uint256(3)))), WORD);
         assertEq(uint256(vm.load(TARGET, bytes32(0))), FLAGS);
     }
 
     function test_StaleRequestGasPin() public {
-        assertEq(_fulfill(REQUEST + 1), 7_325, "stale callback execution gas changed");
+        assertEq(_fulfill(REQUEST + 1), 5_214, "stale callback execution gas changed");
         assertEq(uint256(vm.load(TARGET, bytes32(uint256(3)))), 1);
         assertEq(uint256(vm.load(TARGET, bytes32(0))), FLAGS);
     }

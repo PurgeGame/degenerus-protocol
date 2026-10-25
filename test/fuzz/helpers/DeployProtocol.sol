@@ -405,18 +405,18 @@ abstract contract DeployProtocol is Test {
     /// @dev Header-only post-Degenesis fixture, with no synthetic results or seed emissions.
     ///      End-to-end bootstrap tests use DegenesisDeployProtocol and the actual request chain.
     function _seedLogicalFixtureDay(uint24 day) internal {
-        uint256 session = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint256 session = uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY)));
         uint256 wall = game.currentWallDayView();
         session = (session & ~((uint256(0xff) << 24) | (uint256(0xffffff) << 216))) | (uint256(1) << 24) | (wall << 216);
-        vm.store(address(game), bytes32(uint256(5)), bytes32(session));
-        uint256 clocks = uint256(vm.load(address(game), bytes32(uint256(13))));
-        vm.store(address(game), bytes32(uint256(13)), bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (vm.getBlockTimestamp() << 128)));
+        vm.store(address(game), bytes32(GameSlots.RNG_REQUEST_DAY), bytes32(session));
+        uint256 clocks = uint256(vm.load(address(game), bytes32(GameSlots.LAST_DAILY_COMPLETED_AT)));
+        vm.store(address(game), bytes32(GameSlots.LAST_DAILY_COMPLETED_AT), bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (vm.getBlockTimestamp() << 128)));
         uint256 header = uint256(vm.load(address(game), bytes32(0)));
         header = (header & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24);
         vm.store(address(game), bytes32(0), bytes32(header));
-        uint256 afking = uint256(vm.load(address(game), bytes32(uint256(40))));
+        uint256 afking = uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY)));
         afking = (afking & ~(uint256(0xffffff) << 216)) | (uint256(day) << 216);
-        vm.store(address(game), bytes32(uint256(40)), bytes32(afking));
+        vm.store(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY), bytes32(afking));
         _syncCoinflipFixtureDay(day);
     }
 

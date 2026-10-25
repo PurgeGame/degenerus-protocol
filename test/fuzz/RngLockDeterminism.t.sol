@@ -32,7 +32,6 @@ contract RngLockDeterminism is DeployProtocol {
     // ────────────────────────────────────────────────────────────────────
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
-    uint256 constant SLOT_VRF_REQUEST_ID = 4;
     // Via forge inspect (Stage B Game-storage packing shifted these down):
     // lootboxRngPacked = slot 34 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 35.
     uint256 constant SLOT_LOOTBOX_RNG_INDEX = GameSlots.LOOTBOX_RNG_PACKED;
@@ -111,7 +110,7 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     function _readVrfRequestId() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
+        return uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET));
     }
 
     function _readLootboxRngIndex() internal view returns (uint48) {

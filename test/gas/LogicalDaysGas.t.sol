@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {DegenesisDeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Identical benchmark source runs against the pre-migration and logical-day trees.
 contract LogicalDaysGasTest is DegenesisDeployProtocol {
@@ -116,7 +117,7 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
         game.mineFlip(0);
         vm.warp(block.timestamp + 1 hours);
         // Credit is an input to this purchase, independent of its funding transaction.
-        vm.store(address(game), keccak256(abi.encode(playerId, uint256(14))), bytes32(uint256(1 ether)));
+        vm.store(address(game), keccak256(abi.encode(playerId, GameSlots.DEGENESIS_CREDIT)), bytes32(uint256(1 ether)));
         vm.deal(player, 1 ether);
         emit log_named_uint("degenesis_purchase", this.measurePurchase());
     }
@@ -157,10 +158,10 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
         header &= ~((uint256(1) << 248) | (uint256(1) << 254) | (uint256(0xff) << 152));
         vm.store(address(game), bytes32(0), bytes32(header));
         vm.store(address(game), bytes32(uint256(3)), bytes32(uint256(777)));
-        uint256 session = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint256 session = uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY)));
         session = (session & ~uint256(0xffffffff)) | 2;
         session = (session & ~(uint256(0xffffff) << 216)) | (uint256(2) << 216);
-        vm.store(address(game), bytes32(uint256(5)), bytes32(session));
+        vm.store(address(game), bytes32(GameSlots.RNG_REQUEST_DAY), bytes32(session));
         vm.warp(block.timestamp + 1 days);
         emit log_named_uint("completion_certificate", this.measure(address(game), player, abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
         assertTrue(game.rngComplete());
@@ -181,8 +182,8 @@ contract LogicalDaysGasTest is DegenesisDeployProtocol {
         vm.store(address(game), bytes32(0), bytes32((header & ~(uint256(0xffffff) << 24)) | (uint256(day) << 24)));
         uint256 cf = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
         vm.store(address(coinflip), bytes32(uint256(4)), bytes32((cf & ~(uint256(0xffffff) << 176)) | (uint256(day) << 176)));
-        uint256 clocks = uint256(vm.load(address(game), bytes32(uint256(13))));
-        vm.store(address(game), bytes32(uint256(13)), bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (block.timestamp << 128)));
+        uint256 clocks = uint256(vm.load(address(game), bytes32(GameSlots.LAST_DAILY_COMPLETED_AT)));
+        vm.store(address(game), bytes32(GameSlots.LAST_DAILY_COMPLETED_AT), bytes32((clocks & ~(uint256(type(uint48).max) << 128)) | (block.timestamp << 128)));
         vm.prank(ContractAddresses.GAME);
         coinflip.processCoinflipPayouts(0, win ? 777 : 778, day);
     }

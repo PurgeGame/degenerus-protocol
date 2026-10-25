@@ -621,12 +621,6 @@ abstract contract DegenerusGameStorage {
         return stored == RNG_WORD_WAITING ? 0 : stored;
     }
 
-    /// @dev Retained last VRF request ID, initialized to nonzero idle sentinel 1.
-    ///      Callback authority requires the packed active bit as well as ID matching.
-    ///
-    ///      SECURITY: Request ID matching prevents replay attacks on RNG.
-    uint256 internal vrfRequestId = 1;
-
     /// @dev Logical day the request in flight belongs to, independent of transport/retry time;
     ///      zero for a mid-day request and on terminal entry until the terminal request.
     uint24 internal rngRequestDay;
@@ -3346,6 +3340,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Callback gas limit sent with every VRF request. Packs into the coordinator's
     ///      slot, so requests read both with one SLOAD. Rotated only with the coordinator.
     uint32 internal vrfCallbackGasLimit;
+
+    /// @dev Low 64 bits of the latest VRF request ID, in the coordinator's slot so the callback
+    ///      reads its caller check and ID with one SLOAD. Callback authority also requires the
+    ///      packed active bit. A superseded request (retry, re-issue) never matches again.
+    uint64 internal vrfRequestId;
 
     /// @dev VRF key hash identifying the oracle and gas lane.
     ///      Rotatable with coordinator; determines gas price tier.

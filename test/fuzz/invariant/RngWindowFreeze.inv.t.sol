@@ -38,7 +38,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///           (6)  _lootboxWord(N-1) — slot 34 payload     : the reserved landing leaf.
 ///           (7)  LR_MID_DAY flag            — slot 33 bits 224 : routes the frozen ticket batch.
 ///           (8)  ticketWriteSlot            — slot 0 byte 25   : the buffer selector frozen at request.
-///           (9)  vrfRequestId               — slot 4           : the fulfillment request-match gate.
+///           (9)  vrfRequestId               — coordinator slot : the fulfillment request-match gate.
 ///           (10) rngRequestTime             — slot 0 bytes 6-11: the in-flight marker (reroll guard).
 ///           (11) rngLockedFlag              — slot 0 byte 19   : the fulfillment branch selector.
 ///

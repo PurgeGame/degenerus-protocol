@@ -54,9 +54,11 @@ contract LootboxCraps is Craps {
     /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a mapping(uint24 => uint256) — the
     ///      protocol's recorded DAILY word, retained separately from the shared live payload. Pinned
     ///      against the frozen tree exactly like those two, and covered by the same drift gate.
-    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 589;
-    uint256 internal constant RNG_DAY_TAGS_SLOT = 26;
-    uint256 internal constant WALLET_IDS_SLOT = 62;
+    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 588;
+    uint256 internal constant RNG_DAY_TAGS_SLOT = 25;
+    uint256 internal constant WALLET_IDS_SLOT = 61;
+    /// @dev Slot of `lastDailyRequestWallDay` (bytes 27..29), pinned like the slots above.
+    uint256 internal constant DAILY_REQUEST_WALL_DAY_SLOT = 4;
 
     // ---------------------------------------------------------------------------------------
     // Reading the protocol
@@ -116,7 +118,7 @@ contract LootboxCraps is Craps {
     }
 
     function _scheduleResetPassed() internal view returns (bool) {
-        uint24 sent = uint24(_sload(5) >> 216);
+        uint24 sent = uint24(_sload(DAILY_REQUEST_WALL_DAY_SLOT) >> 216);
         uint24 wall = uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
         return wall > sent;
     }

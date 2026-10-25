@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract StorageReuseAtomicHost is DegenerusGame {
     function seed(uint24 day, bool terminal) external {
@@ -59,7 +60,7 @@ contract StorageReuseNativeAtomicTest is DeployProtocol, NativeGasExport {
         assertEq(uint24(uint256(vm.load(address(coinflip), bytes32(uint256(4))))), last);
         bytes32 vaultState = keccak256(abi.encode(uint256(1), uint256(2)));
         assertEq(uint24(uint256(vm.load(address(coinflip), vaultState)) >> 128), 0, "no Vault claim in RNG work");
-        assertEq(uint24(uint256(vm.load(address(game), bytes32(uint256(5)))) >> 160), 0, "no backstop stamp");
+        assertEq(uint24(uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_DAY))) >> 160), 0, "no backstop stamp");
         if (terminal) assertEq(game.rngWordForDay(21_000), 987654321, "terminal word actually applied");
     }
 

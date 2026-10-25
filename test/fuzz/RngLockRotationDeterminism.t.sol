@@ -61,7 +61,6 @@ contract RngLockRotationDeterminism is DeployProtocol {
     // ────────────────────────────────────────────────────────────────────
     uint256 private constant SLOT_PACKED_0 = 0;
     uint256 private constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
-    uint256 private constant SLOT_VRF_REQUEST_ID = 4;
     uint256 private constant SLOT_LOOTBOX_RNG_INDEX = GameSlots.LOOTBOX_RNG_PACKED;          // post Stage B Game pack: was 35
     uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = GameSlots.RNG_DAY_TAGS;  // post Stage B Game pack: was 36
 
@@ -159,7 +158,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     function _readVrfRequestId() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
+        return uint64(uint256(vm.load(address(game), bytes32(GameSlots.VRF_REQUEST_ID))) >> (8 * GameSlots.VRF_REQUEST_ID_OFFSET));
     }
 
     function _readLootboxRngIndex() internal view returns (uint48) {
