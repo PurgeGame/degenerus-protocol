@@ -134,7 +134,7 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
     /// @dev The record-bounty spin chain shares the bet's committed bet ID.
     function test_RecordSpinSeedUsesOnlyTheBetIdentity() public view {
         string memory src = vm.readFile("contracts/modules/DegenerusGameDegeneretteModule.sol");
-        assertTrue(_contains(src, "EntropyLib.hash3(RngTags.BET_RECORD, rngWord, betId)"));
+        assertTrue(_contains(src, "EntropyLib.hash3(RngTags.BET_RECORD, c.rngWord, c.betId)"));
         assertFalse(_contains(src, "uint160(player), betId"));
     }
 

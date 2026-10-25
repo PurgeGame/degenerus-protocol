@@ -2,24 +2,17 @@
 pragma solidity 0.8.38;
 import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
-import {Test} from "forge-std/Test.sol";
+import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IDegenerusCoin} from "../../contracts/interfaces/IDegenerusCoin.sol";
 
 /// @title RngNudge -- quote protection and whole-FLIP rounding tests
-contract RngNudge is Test {
-    DegenerusGame private game;
+contract RngNudge is DeployProtocol {
     address private alice;
     address private bob;
 
     function setUp() public {
-        vm.warp(
-            (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1) *
-                1 days +
-                82_620
-        );
-        game = new DegenerusGame();
+        _deployProtocol();
         alice = makeAddr("nudge-alice");
         bob = makeAddr("nudge-bob");
     }

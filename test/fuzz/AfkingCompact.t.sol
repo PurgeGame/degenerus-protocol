@@ -268,8 +268,10 @@ contract AfkingCompactTest is DeployProtocol {
             0
         )), 0), (bytes));
         game.depositAfkingFunding{value: 10 ether}(VAULT_ID);
+        // The protocol seats accrue from the bootstrap day, which the day-9 fixture already passed.
+        uint256 owedBefore = _info(VAULT_ID).owedFlip;
         _nextDay();
-        assertEq(_info(VAULT_ID).owedFlip, 100, "the Vault earns like any box member");
+        assertEq(_info(VAULT_ID).owedFlip - owedBefore, 100, "the Vault earns like any box member");
 
         uint256 before = _flip(VAULT_ID);
         vm.prank(VAULT_OP);
@@ -300,8 +302,10 @@ contract AfkingCompactTest is DeployProtocol {
 
     function test_SdgnrsUnfundedPausesSettlesAndAutoResumes() public {
         game.depositAfkingFunding{value: 10 ether}(SDGNRS_ID);
+        // The protocol seats accrue from the bootstrap day, which the day-9 fixture already passed.
+        uint256 owedBefore = _info(SDGNRS_ID).owedFlip;
         _nextDay();
-        assertEq(_info(SDGNRS_ID).owedFlip, 100);
+        assertEq(_info(SDGNRS_ID).owedFlip - owedBefore, 100, "one day earns one day's FLIP");
 
         _setBalances(SDGNRS_ID, 0, 1);
         uint256 before = _flip(SDGNRS_ID);

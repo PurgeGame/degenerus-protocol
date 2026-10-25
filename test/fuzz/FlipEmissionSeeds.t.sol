@@ -2,12 +2,12 @@
 pragma solidity 0.8.38;
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title FlipEmissionSeeds — initial FLIP emission as coinflip seed stakes
 /// @notice Proves the emission scheme end to end:
-///         1. SEEDS    — Coinflip's constructor opens the seed window for days 1-20:
+///         1. SEEDS    — Coinflip's constructor opens the seed window for rounds 2-21:
 ///                       200k of stake per day, each to VAULT and sDGNRS, held as the
 ///                       window rather than in stake lanes; nothing is minted up front
 ///                       (totalSupply and vaultMintAllowance both start at 0).
@@ -16,20 +16,23 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///                       daily resolution (uncirculated — no mint, no wallet balance),
 ///                       where redemptions read them.
 ///         3. LATCH    — sDGNRS auto-rebuy (0 take-profit) stays OFF through the whole
-///                       seed window and arms exactly when the final seeded day (20)
+///                       seed window and arms exactly when the final seeded round (21)
 ///                       settles; the latch is one-shot.
 ///         4. VAULT    — vault seed wins accumulate as claimable; a vault claim mints
 ///                       them into the VAULT mint allowance (the uncirculated leg).
 ///
 /// @dev Drives `processCoinflipPayouts` directly as the GAME (the AdvanceModule call
 ///      shape) so each day's win/loss is chosen via the word's bit 0.
-contract FlipEmissionSeeds is DeployProtocol {
+contract FlipEmissionSeeds is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant VAULT = ContractAddresses.VAULT;
     address internal constant SDGNRS = ContractAddresses.SDGNRS;
 
     uint256 internal constant SEED = 200_000;
     uint24 internal constant SEED_DAYS = 20;
+    /// @dev The window is rounds 2..21: the first stake targets requestedDailyIdx + 1 = 2.
+    uint24 internal constant FIRST_SEED_ROUND = 2;
+    uint24 internal constant LAST_SEED_ROUND = FIRST_SEED_ROUND + SEED_DAYS - 1;
 
     function setUp() public {
         _deployProtocol();
@@ -54,18 +57,18 @@ contract FlipEmissionSeeds is DeployProtocol {
     //                       1. SEEDS — placement
     // =====================================================================
 
-    function test_SeedStakesPlacedForDays1Through20_NothingMinted() public {
-        // The window is days 1..20 by construction; no stake lane is written.
-        for (uint24 d = 1; d <= SEED_DAYS + 1; ++d) {
+    function test_SeedStakesPlacedForRounds2Through21_NothingMinted() public {
+        // The window is rounds 2..21 by construction; no stake lane is written.
+        for (uint24 d = 1; d <= LAST_SEED_ROUND + 1; ++d) {
             assertEq(_stakeOf(d, VAULT), 0, "no vault lane written");
             assertEq(_stakeOf(d, SDGNRS), 0, "no sdgnrs lane written");
         }
-        // Wall day w stakes day w + 1: days 2..20 read the seed, day 21 does not.
-        for (uint24 w = 1; w <= SEED_DAYS; ++w) {
-            vm.warp((uint256(w - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
-            uint256 expected = w < SEED_DAYS ? SEED : 0;
-            assertEq(coinflip.coinflipAmount(VAULT), expected, "vault day seed = 200k through day 20");
-            assertEq(coinflip.coinflipAmount(SDGNRS), expected, "sdgnrs day seed = 200k through day 20");
+        // Requested round r stakes round r + 1: r = 1..20 read the seed, r = 21 does not.
+        for (uint24 r = 1; r <= LAST_SEED_ROUND; ++r) {
+            _setRequestedFixtureDay(r);
+            uint256 expected = r < LAST_SEED_ROUND ? SEED : 0;
+            assertEq(coinflip.coinflipAmount(VAULT), expected, "vault round seed = 200k through round 21");
+            assertEq(coinflip.coinflipAmount(SDGNRS), expected, "sdgnrs round seed = 200k through round 21");
         }
 
         // Nothing mints up front — the whole emission must survive its day's flip.
@@ -77,12 +80,12 @@ contract FlipEmissionSeeds is DeployProtocol {
     //          2 + 3. SURVIVAL mint-to-wallet + auto-rebuy LATCH
     // =====================================================================
 
-    function test_SdgnrsSeedWinsFoldIntoClaimable_LatchArmsAtDay20() public {
+    function test_SdgnrsSeedWinsFoldIntoClaimable_LatchArmsAtRound21() public {
         uint256 expectedClaimable;
 
-        for (uint24 d = 1; d <= SEED_DAYS; ++d) {
+        for (uint24 d = FIRST_SEED_ROUND; d <= LAST_SEED_ROUND; ++d) {
             // Alternate win/loss so both settle branches run inside the window.
-            bool win = (d % 2 == 1);
+            bool win = (d % 2 == 0);
             uint256 claimableBefore = coinflip.previewClaimCoinflips(SDGNRS);
             _resolveDay(d, win);
 
@@ -108,12 +111,12 @@ contract FlipEmissionSeeds is DeployProtocol {
             }
 
             (bool enabled, , , ) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
-            if (d < SEED_DAYS) {
+            if (d < LAST_SEED_ROUND) {
                 assertFalse(enabled, "auto-rebuy stays OFF through the seed window");
             }
         }
 
-        // The latch armed exactly when day 20 settled, with 0 take-profit.
+        // The latch armed exactly when round 21 settled, with 0 take-profit.
         (bool enabledAfter, uint256 stop, uint256 carry, ) =
             coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertTrue(enabledAfter, "auto-rebuy arms when the final seeded day settles");
@@ -133,29 +136,24 @@ contract FlipEmissionSeeds is DeployProtocol {
 
     function test_PostArmingWinsStayInFlips_NeverClaimed() public {
         // Burn through the seed window (all losses keep the wallet at 0 for clean deltas).
-        for (uint24 d = 1; d <= SEED_DAYS; ++d) {
+        for (uint24 d = FIRST_SEED_ROUND; d <= LAST_SEED_ROUND; ++d) {
             _resolveDay(d, false);
         }
         (bool enabled, , , ) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertTrue(enabled, "armed after the seed window");
         assertEq(coin.balanceOf(SDGNRS), 0, "all seeds died - wallet empty");
 
-        // Warp to day 20's wall clock so a flip credit targets day 21, then credit a
+        // Request round 21 so a flip credit targets round 22, then credit a
         // post-window stake as the GAME (the affiliate-drain shape).
-        vm.warp(
-            (uint256(SEED_DAYS - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
-                1 days +
-                82_620 +
-                1
-        );
+        _setRequestedFixtureDay(LAST_SEED_ROUND);
         uint256 credit = 100_000;
         vm.prank(GAME);
         coinflip.creditFlip_g317(2, credit);
 
-        // Day 21 WIN: the payout settles into the rolling carry (plus the flat
+        // Round 22 WIN: the payout settles into the rolling carry (plus the flat
         // recycle bonus on the roll) - nothing mints, nothing becomes claimable.
-        _resolveDay(SEED_DAYS + 1, true);
-        (uint16 r, ) = coinflip.getCoinflipDayResult(SEED_DAYS + 1);
+        _resolveDay(LAST_SEED_ROUND + 1, true);
+        (uint16 r, ) = coinflip.getCoinflipDayResult(LAST_SEED_ROUND + 1);
         uint256 payout = credit + (credit * uint256(r)) / 100;
         uint256 bonus = (payout * 75) / 10_000;
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
@@ -164,8 +162,8 @@ contract FlipEmissionSeeds is DeployProtocol {
         assertEq(coinflip.previewClaimCoinflips(SDGNRS), 0, "nothing claimable post-arming");
         assertEq(coin.totalSupply(), 0, "no FLIP entered existence");
 
-        // Day 22 LOSS: the whole carry gambles again and dies - rebuy forever.
-        _resolveDay(SEED_DAYS + 2, false);
+        // Round 23 LOSS: the whole carry gambles again and dies - rebuy forever.
+        _resolveDay(LAST_SEED_ROUND + 2, false);
         (, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertEq(carryAfter, 0, "loss wipes the rolling carry");
         assertEq(coin.balanceOf(SDGNRS), 0, "wallet untouched by the flip lifecycle");
@@ -173,17 +171,17 @@ contract FlipEmissionSeeds is DeployProtocol {
 
     function test_LatchIsOneShot_AndSurvivesEpochJump() public {
         // A jumped first epoch past the window (a >120-day-stall shape) still arms once.
-        _resolveDay(SEED_DAYS + 5, true);
+        _resolveDay(LAST_SEED_ROUND + 5, true);
         (bool enabled, , , ) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
-        assertTrue(enabled, "latch arms on any epoch >= 20");
+        assertTrue(enabled, "latch arms on any epoch >= 21");
 
         // A later resolution does not re-toggle or reset the rebuy state.
-        _resolveDay(SEED_DAYS + 6, false);
+        _resolveDay(LAST_SEED_ROUND + 6, false);
         (bool stillEnabled, uint256 stop, , uint24 startDay) =
             coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertTrue(stillEnabled, "latch is one-shot - stays armed");
         assertEq(stop, 0, "take-profit stays 0");
-        assertEq(startDay, SEED_DAYS + 5, "startDay anchored at the arming claim cursor");
+        assertEq(startDay, LAST_SEED_ROUND + 5, "startDay anchored at the arming claim cursor");
     }
 
     // =====================================================================
@@ -191,13 +189,13 @@ contract FlipEmissionSeeds is DeployProtocol {
     // =====================================================================
 
     function test_VaultSeedWinsClaimIntoMintAllowance() public {
-        // Resolve the first 5 seeded days: 3 wins, 2 losses.
-        for (uint24 d = 1; d <= 5; ++d) {
-            _resolveDay(d, d != 2 && d != 4);
+        // Resolve the first 5 seeded rounds (2..6): 3 wins, 2 losses.
+        for (uint24 d = 2; d <= 6; ++d) {
+            _resolveDay(d, d != 3 && d != 5);
         }
 
         uint256 expected;
-        for (uint24 d = 1; d <= 5; ++d) {
+        for (uint24 d = 2; d <= 6; ++d) {
             (uint16 r, bool won) = coinflip.getCoinflipDayResult(d);
             if (won) expected += SEED + (SEED * uint256(r)) / 100;
         }

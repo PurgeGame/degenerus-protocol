@@ -9,6 +9,7 @@ import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 /// @title WwxrpIncineratorTest -- Century BAF-incinerator draw.
 ///
@@ -277,8 +278,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
     // ==================== Driven e2e across the century transition ====================
 
     /// @dev Drive the real game from a forced level 98 across the 99 -> 100
-    ///      transition with every VRF word parity-forced. oddWords=false
-    ///      forces the BAF fire gate to fail (skip -> incinerator payout);
+    ///      transition with every VRF word steered. oddWords=false
+    ///      forces the BAF fire gate to fail with a losing flip (skip -> incinerator payout);
     ///      oddWords=true forces it to pass (BAF fires, entries die).
     /// @return entered True once the level-99 burns were made.
     function _driveCentury(bool oddWords) internal returns (bool entered) {
@@ -475,11 +476,18 @@ contract WwxrpIncineratorTest is DeployProtocol {
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
 
-        uint256 randomWord = uint256(
-            keccak256(abi.encode("incin_word", block.timestamp, game.level(), reqId))
-        );
-        randomWord = odd ? (randomWord | 1) : (randomWord & ~uint256(1));
-        if (randomWord == 0) randomWord = 2;
+        // The BAF fire gate is the tagged hash of the word (independent of the coinflip's bit 0).
+        // A fired BAF uses a winning flip; a skip uses a losing flip, so the armed day's draw book
+        // is lost and funds the incinerator award.
+        uint256 randomWord;
+        for (uint256 k; k < 256; ++k) {
+            randomWord = uint256(
+                keccak256(abi.encode("incin_word", block.timestamp, game.level(), reqId, k))
+            );
+            bool fires = (uint256(keccak256(abi.encode(RngTags.BAF_GATE, randomWord))) & 1) == 1;
+            bool wins = (randomWord & 1) == 1;
+            if (fires == odd && wins == odd) break;
+        }
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 }
