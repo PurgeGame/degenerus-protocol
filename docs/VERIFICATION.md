@@ -4,14 +4,14 @@ The storage-reuse implementation changes Coinflip to a 90-day retained-page ring
 player records and affiliate history to one word. The older 730-day measurements below describe
 the previous implementation; they do not certify this revision. See [storage reuse](STORAGE-REUSE.md)
 and `scripts/audit/storage-reuse/` for the current validation status. Native Glamsterdam
-evidence includes 59 successful simulated calls; see `GAS-CALIBRATION.md` for scope and limits.
-Phase 1 uses production build/size, layout, source-gate and focused-test checks for the
-authorized local commits: all pass, with 36 focused tests in campaign
-`20261020T051617.144095Z-ede4fbc6`. The full battery is deferred until after phase 2, before any push;
-partial broad runs are not a complete release result.
+evidence includes 59 successful simulated calls; see `scripts/audit/storage-reuse/GAS-CALIBRATION.md`
+for scope and limits.
+Phase 1 used production build/size, layout, source-gate and focused-test checks: all passed, with
+36 focused tests in campaign `20261020T051617.144095Z-ede4fbc6`. Results of the full battery on
+the revision under review: `[final battery]`. Partial broad runs are not a complete release result.
 
 The four ordered Phase 2 changes (boon/pass sentinels, sDGNRS queue counts, five-slot
-jackpot records) pass the production build/size check, root and nested layout checks,
+jackpot records) passed the production build/size check, root and nested layout checks,
 source gates, full Solidity typecheck and 164 distinct focused tests after fixture
 corrections. See `scripts/audit/storage-reuse-phase2/validation.json` for campaigns,
 source hashes and remaining release obligations. No Phase 2 native gas benchmark
@@ -23,7 +23,9 @@ local output directories or CI artifacts.
 
 [The current readiness review](AUDIT-READINESS.md) records the latest campaign.
 The dated implementation sections below are historical, scoped evidence; their
-pass counts do not certify later revisions.
+pass counts, sizes, gas figures, storage slot numbers and entry-point names do not
+certify later revisions, and where one differs from [the architecture](ARCHITECTURE.md)
+the architecture document governs.
 
 ### DGVE owner governance (2026-10-19)
 
@@ -107,7 +109,7 @@ until then this section lists what each check must show, not pass counts.
 | Engine | Degenesis days unlock randomness only; neither `lastPurchaseDay` latch fires before day 9, however late the day is cranked; the day-9 request latches the early turbo only above the level-1 target; craps windows and battle locks start on day 2; day 7's battle awards no seats; foil is unchanged |
 | Terminal | Both endings split every cohort and release the Vault budget and sDGNRS AFKing funding exactly once, before `gameOver`, with no loss of player claims; unresolved orders are forfeited |
 | Burn | The seventh close burns the remaining `Pool.Degenesis` balance exactly once, after every reservation is released, including an empty final day and a sale with no orders |
-| Gas | Per-branch admission and the flush reserve cover the measured worst case of each branch; see the [gas review](MINEFLIP-GAS-REVIEW.md). Results: `test/gas/DegenesisGas.t.sol` (27 suites, 30 tests) passes. Each forced branch, flush, tail, request step, word copy, day close and terminal addition is within its bound on Osaka and on the no-reservoir Glamsterdam total, and every checkpoint stays under 10M execution gas. |
+| Gas | Per-branch admission and the flush reserve cover the measured worst case of each branch; the bounds are the constants in `contracts/libraries/MineFlipGasBounds.sol`. `test/gas/DegenesisGas.t.sol` must show each forced branch, flush, tail, request step, word copy, day close and terminal addition within its bound on Osaka and on the no-reservoir Glamsterdam total, and every checkpoint under 10M execution gas. Suite and test counts: `[final battery]` |
 
 Suites (all under `test/fuzz/` unless noted): `DegenesisCohortMath`, `DegenesisSettlement`,
 `DegenesisSettlementInventory`, `DegenesisDayMapping`, `DegenesisClosingBurn`, `DegenesisWordBinding`,
@@ -117,10 +119,10 @@ Suites (all under `test/fuzz/` unless noted): `DegenesisCohortMath`, `DegenesisS
 Degenesis variants in `invariant/V61SolvencyAfpay.inv.t.sol` and `invariant/WalletIdTruth.inv.t.sol`,
 `test/craps/CrapsPasses.t.sol`, `test/craps/JackpotBattle.t.sol` and `test/gas/DegenesisGas.t.sol`.
 
-Structural gates cover the new module's selectors and delegatecall pairs, the layout goldens
-(slots 0, 15, 16, 26 and appended 83-85; CrapsBattle's `_firstWindowDay`), the storage slot pins and
-the source manifests. Runtime sizes are checked by the deployment-size gate; CrapsBattle, Game, the
-Advance and Whale modules are the tightest.
+Structural gates cover the new module's selectors and delegatecall pairs, the layout goldens in
+`scripts/layout/golden` (the Game's `degenesis*` fields and CrapsBattle's `_firstWindowDay`), the
+storage slot pins and the source manifests. Runtime sizes are checked by the deployment-size gate;
+the margins for this revision are `[final battery]`.
 
 ### Freeze battery (2026-10-16)
 
@@ -463,6 +465,21 @@ CI pins `nightly-c07d504b4ae67754584f4e05ff0c547a43c50f7b`, the build used by
 the audit campaign. Record the actual version when reproducing a run; use the
 same release for comparable gas and invariant evidence.
 
+Two deployment profiles exist. `eip170` is the default, the deployment target and the primary audit
+target: 37 deployment entries, checked against the 24,576-byte runtime and 49,152-byte initcode limits
+(`contracts/profiles/eip170/`, `deployments/eip170.json`). `glamsterdam` is the alternate: 21 entries
+checked against 65,536 / 131,072 bytes with `--schedule glamsterdam` (`contracts/profiles/glamsterdam/`,
+`deployments/glamsterdam.json`). The
+`PROFILE` environment variable selects the profile (unset means `eip170`). `node scripts/select-profile.js`
+regenerates the selected-profile sources (`contracts/profiles/Selected.sol`, `contracts/Coinflip.sol`),
+both `deployments/<profile>.json` files and the profile deploy scripts, then writes fixture address pins;
+`--no-pins` skips the pins and `--check` fails if a generated file is stale. The maintained Foundry and
+Hardhat runners honor `PROFILE` and restore the generated files they touched. To run the alternate
+profile, set `PROFILE=glamsterdam`; Hardhat additionally needs `CONSOLIDATION_CANDIDATE=true`
+(`allowUnlimitedContractSize` in `hardhat.config.js`), and Foundry needs `FOUNDRY_PROFILE=consolidation`
+so fixtures can embed the larger deployment code (see `scripts/consolidation/README.md`). The default
+profile needs neither.
+
 The Foundry runner rebuilds a coherent artifact set for each physical batch.
 Incremental artifacts from a different selection can otherwise disagree with the
 handler runtime embedded in a cached invariant test. Both runners fingerprint
@@ -504,14 +521,20 @@ FOUNDRY_OUT=forge-out-production FOUNDRY_CACHE_PATH=.foundry-cache-production \
   bash scripts/layout/storage_layout_oracle.sh
 python3 scripts/layout/check_recursive_layout.py --out forge-out-production \
   --report .audit-test-logs/recursive-layout.json
-make check-interfaces check-delegatecall check-raw-selectors check-rng-window \
-  check-rng-taint check-advance-calls check-unchecked check-write-owners \
-  check-pool-writes check-array-delete check-gasleft
-make test-assurance-tools
+node scripts/check-owner-actions.js forge-out-production
+node scripts/check-owner-governance-layout.js forge-out-production
+node scripts/check-vault-player-actions.js forge-out-production
+make CHECK_ARTIFACTS=forge-out-production check-interfaces check-delegatecall \
+  check-raw-selectors check-rng-window check-pool-writes check-array-delete \
+  check-advance-calls check-rng-taint check-rng-shape check-unchecked \
+  check-write-owners check-gasleft check-memory-guard check-recipient-calls
+make check-audit-snapshot test-assurance-tools
 ```
 
-The size gate checks deployment entries against the 24,576-byte runtime limit and
-rejects stale, missing or unlinked artifacts. Address pins affect compiled output;
+The size gate checks every deployment entry of the selected profile (plus the vault share
+tokens and the two lens contracts) against the runtime and initcode limits of its schedule
+(`eip170`, the default: 24,576 / 49,152 bytes; `--schedule glamsterdam`: 65,536 / 131,072),
+runs the memory-guard check, and rejects stale, missing or unlinked artifacts. Address pins affect compiled output;
 repeat deployment checks with the intended production pins. Keep production artifacts
 and their cache separate from test builds: a test runner may overwrite the default
 artifacts with fixture pins while an unrelated build cache still considers them current.
@@ -526,7 +549,9 @@ aids, not proofs of their annotations.
 The grouped runners bound compilation memory, reject empty or failed batches and
 record commands and inputs under the ignored `.audit-test-logs/` directory.
 `--list` prints the selected files; `--file` selects a focused source root. Foundry
-uses seven logical groups, while Hardhat defaults to one test file per process.
+uses eight logical groups (`integration-gas`, `repro-symbolic`, `census`, `fuzz-1` to `fuzz-4`,
+`invariants`) plus the `fork` group, which runs only when named; Hardhat defaults to one test file
+per process (`--max-files`).
 
 ```sh
 make test-foundry
@@ -545,7 +570,7 @@ FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
   --group integration-gas --max-files 5 --threads 1
 ```
 
-CI runs each of the seven Foundry groups in a separate job. The other six groups
+CI runs seven of the Foundry groups (all but `census` and `fork`) in separate jobs; the fork suite has its own job. The other six groups
 use isolation disabled, at most five roots per batch and one thread. The default fuzz campaign uses 1,000 runs; default
 invariants use 256 runs at depth 128, with per-suite overrides visible in source.
 `npm test` uses the maintained Hardhat runner, including all statistical files.
@@ -847,9 +872,8 @@ preserves the field binding and precedes the accumulated Coinflip credit call.
 The existing seat and flush-tail gas reservations are unchanged. These three
 changes add no storage fields and change no external signatures.
 
-The saved implementations in `test/helpers/reference/*BeforeFinalGas.sol` (archived with
-their differential tests in `degenerus-audit-archive/2026-10-04-customer-gas-ab-evidence/`;
-also committed on branch `opt/customer-gas-followups` at `72d5f2d6a`) capture
+The saved reference implementations (`*BeforeFinalGas.sol`, archived with their differential
+tests and not part of this tree) capture
 the combined main working tree immediately before these three changes, including
 the earlier packing, whole-token, affiliate and storage-reuse work. Their only
 reference adaptations are contract names and relative imports. Differential tests
@@ -901,27 +925,25 @@ boundaries, spin precision, affiliate identity and packed sibling preservation.
 The regression runs are `20261004T130218.838952Z-eec1bc2c` and
 `20261004T130943.073895Z-a08ea120`; the two final fixture reruns are in
 `20261004T131702.498811Z-5cee8b16`. Earlier failed fixture executions remain in the
-logs. The accepted per-root index is `.planning/final-gas-accepted-tests.json` in
-the validation checkout, with a copy under main's `.planning/final-gas-pass/`.
+logs. The accepted per-root index is kept with the local run evidence.
 
 The final combined build passes all eleven source/interface gates and the
 source-hash-validated size check for 37 deployment artifacts. Coinflip is 22,746
 runtime bytes (1,830 spare); CrapsBattle is 24,207 (369 spare). All 32 normalized
 golden layouts match, and the recursive comparison finds no mismatch across the
-16 delegate modules. The 51 assurance-tool unit tests also pass. The integration
-log is `.planning/final-gas-integration.log` in the validation checkout.
+16 delegate modules. The 51 assurance-tool unit tests also pass.
 
 The build uses the checked-in address pins (SHA-256
 `007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`). At the final
 comparison, all 95 Solidity contract sources and all eleven changed/new test and
 reference files match the validated checkout, including the restored address
 pins. Main remains at `764b4ab9c`, with the work uncommitted. The accepted-source
-hashes are retained in `.planning/final-gas-pass/source.sha256.json`; the release
+hashes are retained with the local run evidence; the release
 audit snapshot has not been refreshed or represented as a full audit pass.
 
 The accepted differential runs are `20261004T125853.687939Z-523aff2d` (Coinflip)
-and `20261004T130108.835329Z-3bcb07e1` (Craps), under
-`/home/zak/.cache/degenerus-final-gas-pass/.audit-test-logs/foundry/`.
+and `20261004T130108.835329Z-3bcb07e1` (Craps), under the local
+`.audit-test-logs/foundry/` of that run.
 Both pass nine primary cases plus six imported helper checks, including 1,000-run
 fuzz properties. All compilation/testing for this pass uses the fixed systemd
 job with an 8 GiB memory cap, zero swap and two-core CPU quota, serially with one
@@ -950,8 +972,7 @@ against the preserved fractional-precision resolver. Fixed fixtures assert that
 losing, positive sub-token and larger winning outcomes are all exercised. The
 paired FLIP spin comparisons retain the prior floor rule.
 
-Evidence is in `/home/zak/.cache/degenerus-wwxrp-minimum/`, with the accepted source
-hashes under main's `.planning/wwxrp-minimum/`. Work remains uncommitted on main.
+Evidence and the accepted source hashes are kept with the local run evidence.
 
 The combined build, all eleven source/interface gates, 37 deployment-size checks,
 32 golden layouts, recursive alignment of 16 delegate modules and 51 assurance
@@ -984,8 +1005,7 @@ source, and the recursive delegate-layout comparison reports no mismatch across
 assurance-tool tests pass; the complete 622-file Solidity source/test type check
 also passes.
 
-The build, layout and interface checks ran in the disposable checkout
-`/home/zak/.cache/purgegame-tmp/redemption-hardhat-ready-ztkhthk7`, with matching
+The build, layout and interface checks ran in a disposable checkout with matching
 contract-source hashes. Production build/size evidence is copied under
 `.audit-test-logs/redemption-ready/`. Hardhat's DGNRS and Coinflip suites pass all
 105 tests (`20261005T093914.162316Z-9bad1204`); the updated redemption seed model

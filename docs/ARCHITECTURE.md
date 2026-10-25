@@ -4,27 +4,31 @@
 
 | Component | Responsibility |
 | --- | --- |
-| `DegenerusGame` + 17 game modules | Purchases, ticket materialization, the miner engine and VRF, jackpots, lootboxes, side-games and terminal distribution. The seventeen delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, Degenesis, FoilPack, GameOver, Jackpot, JackpotDraw, Lootbox, Miner, Mint, Rng, Ticket and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
-| `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
-| `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
-| `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip` and `settleBattle` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleBattle`, which plays a seat's whole run (board, scatter, shooter boost and rotation) under the shared 600-roll between-shooter budget and 1,111-roll ceiling and also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
-| `JackpotBattle` | `JackpotBattle is CrapsBattleStorage`, deployed after `CrapsEngine` and reached only by `CrapsBattle`'s fallback delegatecall, so it runs in the table's storage: it locks the daily jackpot battle's field at the RNG request, draws and appends its awarded entries, seals the field and serves its views. The table's normal resolver settles and pays every seat |
+| `DegenerusGame` + 16 delegatecall components (`eip170`) | Purchases, ticket materialization, the miner engine and VRF, jackpots, lootboxes, side-games and terminal distribution. Under the primary `eip170` profile the Game (`Eip170Game` = `GameFacade` + `GameBoonActions`) delegatecalls sixteen deployments: Actions (also the Bingo route), Purchase, Mint, DegenesisFoil (Degenesis plus the foil user entries; also the Degenesis route), Advance, Jackpot, JackpotDraw, Whale, TicketFoil (Ticket plus the foil worker), Lootbox, Boon, Degenerette, Afking, Endgame (the GameOver module), Decimator and MinerRng (the `mineRun` entries plus Rng; also the Rng route). The `glamsterdam` alternate folds the same logic into a Game shell that hosts the purchase, miner, bingo and bet entries, plus Endgame, Daily, Pass and Box workers. Shared source lives in `contracts/modules/*`; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
+| `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot, Afking, Boon, Degenesis and Ticket; Jackpot to Whale for early-bird and quadrant pass awards, and to Decimator and Ticket; the foil entries to Degenerette, Jackpot and Mint; Degenesis to Boon, Mint and Whale; Afking to Degenesis and Whale; Degenerette and Whale to Lootbox; the miner engine to its workers); `make check-delegatecall` pins each selector/target pair |
+| `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip` (`CoinflipCore` through the selected profile): daily flip stakes, settled credits and the record pool; it holds no comp state. Under `eip170`, Quests and Affiliate are separate deployments (`Eip170Quests`, `Eip170Affiliate`); under `glamsterdam` the Coinflip deployment also hosts them |
+| `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle` (`CrapsBattleCore` through the selected profile; `CrapsBattleStorage is LootboxCraps, CrapsCustomTerms` and `LootboxCraps is Craps`) holds seat/field state and payouts; `CrapsEngine is Craps, CrapsCustomTerms` is a deployment ahead of the table (under `glamsterdam` the table hosts the engine) and exposes `settleSlip` and `settleBattle` as `public pure` and `settleBattleCompact_g439244` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls the compact wrapper, which runs `settleBattle` to play a seat's whole run (board, scatter, shooter boost and rotation) under the shared 600-roll between-shooter budget and 1,111-roll ceiling and returns the payment, scaled bankroll, battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder) and longest hand, so the comparator lives in the engine, not the table |
+| `JackpotBattle` | `JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions` (both on `CrapsBattleStorage`). Under `eip170` it is the `CRAPS_LIFECYCLE_MODULE` deployment (`Eip170JackpotBattle`), reached only through `CrapsBattle`'s lifecycle router, which delegatecalls it in the table's storage; under `glamsterdam` the table inherits it. It locks the daily jackpot battle's field at the RNG request, draws and appends its awarded entries, seals the field and serves its views. The table's normal resolver settles and pays every seat |
 | `DegenerusVault` | DGVE/DGVF share classes, vault-owned positions and comp distribution authority |
 | `sDGNRS` / `DGNRS` / `GNRUS` | Reserve backing, transferable wrapper and charity rights |
 | Affiliate, Quests, Jackpots | Referral rewards, activity state and jackpot support |
 | Parimutuel | Growth bets; Game seals each outcome through `recordGrowth` |
 | DeityPass, AFKingSubscriptionToken, RecordBounty, WWXRP | Pass/seat/record rights and auxiliary token rewards |
-| Admin | VRF/feed recovery governance and bounded liquidity operations |
-| `libraries/*`, `DegenerusTraitUtils` | Internal libraries inlined at compile time (ActivityCurve, BitPacking, Entropy, FlipRound, GameTime, JackpotBucket, PackedTicketSample, PriceLookup, SigFig, TraitUtils); in scope, not deployments |
+| Admin | VRF coordinator-swap recovery governance, native VRF funding (`donateVrf`, which forwards the whole payment to the coordinator subscription and credits the donor mid-day request credit in the Game) and bounded liquidity operations; plain ETH sent to it goes to the Vault |
+| `DegenerusOwnerGovernance`, `Icons32Data` | DGVE-escrow owner approval (below); the icon data store |
+| `libraries/*`, `DegenerusTraitUtils` | Internal libraries inlined at compile time (including ActivityCurve, BitPacking, BoundedCall, Entropy, FlipRound, GameTime, JackpotBucket, MineFlipGas, PackedTicketSample, PriceLookup, SigFig, TraitUtils); in scope, not deployments |
 
-`ContractAddresses.sol` pins every protocol contract plus the external endpoints: the VRF
-coordinator and key hash, the LINK token, the LINK/ETH feed, stETH, the ENS reverse registrar
-and the CREATOR address. The ENS registrar receives a best-effort raw `setName(string)` call
-from the constructors of Coinflip, DeityPass, Parimutuel, AFKingSubscriptionToken and
-RecordBounty, skipped when the pin is zero. The deployment order has 37 entries;
-the Vault also creates its two share tokens. `DegenerusGameLens` and `DeityBoonViewer`
+`ContractAddresses.sol` pins every protocol contract plus the external endpoints and build
+parameters: the VRF coordinator, the key hash, the lane's maximum gas price and native
+premium, stETH, the ENS reverse registrar, the CREATOR address and the deploy-day boundary.
+VRF requests are paid in native ETH from the coordinator subscription. The ENS registrar
+receives a best-effort raw `setName(string)` call from the constructors of the named
+protocol contracts, skipped when the pin is zero. The `eip170` deployment order
+(`deployments/eip170.json`) has 37 entries; the `glamsterdam` alternate
+(`deployments/glamsterdam.json`) has 21, with shared addresses aliasing hosted components.
+The Vault also creates its two share tokens. `DegenerusGameLens` and `DeityBoonViewer`
 are in scope but are not entries in that deployment sequence. Third-party renderers,
-Chainlink, LINK and stETH have distinct trust boundaries described in Security.
+the VRF coordinator and stETH have distinct trust boundaries described in Security.
 
 ## Main value flow
 
@@ -67,7 +71,7 @@ of up to 1,000 paid passes folds its 10% box leg to `min(quantity, 100)` boxes o
 4 ETH. Redemption, daily AFKing, direct and recirculated boxes never enter the queue and keep
 their wide amounts.
 
-An ending decided with VRF alive first settles every outstanding account loan, repaying at
+An ending decided at the purchase deadline first settles every outstanding account loan, repaying at
 the current manual-repayment price or seizing ([account loans](ACCOUNT-LOANS.md)), so a
 defaulted borrower's refunds and terminal awards accrue to its lender. Game-over processing
 reserves existing claims and applicable deity refunds, credits 2% of the remaining pool to the terminal level's top affiliate, and
@@ -75,9 +79,10 @@ sends the rest to the main terminal ticket jackpot. If no affiliate is ranked, t
 jackpot receives the entire pool.
 The affiliate winner is fixed when the terminal cohort is latched, before any terminal
 word exists; later score claims do not reopen the award. The terminal word is one the
-game-over path requests itself after liveness froze purchases, even when the deadman
-ends a game whose day is stuck in processing. If VRF is dead (a
-request whose word is not in use 14 days after it was sent) the ending is deterministic instead: deity refunds as
+game-over path requests itself after liveness froze purchases. If 14 days pass without a
+completed daily session, or a request's word is still not in use 14 days after it was sent,
+the ending is deterministic instead, even if VRF would still answer: no loan settlement and
+no terminal request, deity refunds as
 above, no affiliate share, and the rest split across every ticket of the terminal level,
 claimed through `claimDeadVrf`. The later final sweep handles unclaimed balances.
 Read the terminal paths separately from live-game withdrawal paths.
@@ -112,7 +117,7 @@ activity credit. Orders pack three to a slot (`degenesisOrders`: ID 32, units 38
 15 bits per lane); `degenesisDays[c]` holds the cohort's volume `V` in units, its order count and the
 split flag.
 
-**Cohort split and pricing.** `prepareDegenesis(day)` runs inside `prepareRequestBoundary`, before the
+**Cohort split and pricing.** `prepareDegenesis_g47(day)` runs inside `prepareRequestBoundary`, before the
 daily request, while `degenesisClosed < 7`. A cohort is sealed once its day index is below the
 request day. The split sends `V / 4` to the Vault budget (`degenesisVaultBudget`, inside
 `claimablePool`, excluded from Vault claimables), `V / 4` to sDGNRS AFKing funding, `V / 4` to
@@ -126,11 +131,11 @@ sum can exceed. Cohorts price strictly in order, so a settlement backlog delays 
 randomness and never lowers its rate.
 
 **Binding.** `_recordDailyRng` copies the bound day's word into `degenesisWord` when
-`degenesisClosed < 7 && boundDay == day`, on both the apply and gap-backfill paths. V, the pool
+`degenesisClosed < 7 && boundDay == day`. V, the pool
 balance and the orders are fixed before the request, so no outcome input changes afterwards.
 
 **Settlement.** `MinerAction.DegenesisSettle` is selected after `GrowthSettle` while `degenesisWord`
-is nonzero and the terminal bit is clear; it delegatecalls `runDegenesisWork(allowance)`. It is not
+is nonzero and the terminal bit is clear; it delegatecalls `runDegenesisWork_g1860(allowance)`. It is not
 an RNG consumer and never gates daily completion or requests. Each order's outcome is a pure function
 of the bound word and the frozen cohort, with seed `hash4(DEGENESIS_ORDER_DOMAIN, word, day << 32 |
 index, walletId)`: 50% FLIP-valued, 40% sDGNRS, 10% WWXRP, with an independent size roll.
@@ -153,7 +158,7 @@ purchase did not take. The selected allocated account receives the products and 
 without new DeGenesis credit or operator approval. Recipient 0 selects the Vault. The Vault
 ledger returns to its original balance; the actual cost leaves the restricted budget and
 `claimablePool` for the ordinary purchase pools.
-sDGNRS subscribes with AFKing funding first, and `topUpSdgnrsAfking()` tops its AFKing funding up to
+sDGNRS subscribes with AFKing funding first, and `topUpSdgnrsAfking_g318()` tops its AFKing funding up to
 10 ETH from claimable (above the 1-wei sentinel) before each once-per-level bulk whale attempt.
 
 **Daily engine and craps.** Before `MAIN_LAUNCH_DAY` the daily phase processes a Degenesis day by
@@ -173,13 +178,15 @@ orders are forfeited: `degenesisActive` clears with the terminal inventory burn.
 
 ## Purchase timing and pool acceleration
 
-Level 0 has a 250-day purchase deadline (`_DEPLOY_IDLE_TIMEOUT_DAYS`). Later levels have
-a 30-day purchase deadline: elapsed day 30 activates distress purchases, and game-over becomes eligible
-on day 31 if the target is still unmet. A funded last-purchase/jackpot phase can finish
-beyond that boundary. The deadline is read at the start of a caught-up day, so days a
-VRF stall or an unattended stretch skipped are credited to it on catch-up; a stall has
-14 days from its request before VRF counts as dead. The independent 30-day no-seal
-deadman and the 30-day post-game sweep keep their separate timing rules.
+Game days are logical: `dailyIdx` advances once, at an accepted daily VRF request, and a stall
+or unattended stretch neither skips nor backfills days. Every level, level 0 included, has a
+30-game-day purchase deadline measured from `purchaseStartDay` (`_PURCHASE_TIMEOUT_DAYS`);
+level 0's timer starts at the first post-Degenesis day (`MAIN_LAUNCH_DAY`). Reaching
+`purchaseStartDay + 30` activates distress purchases, and game-over becomes eligible once that
+day's session has completed and a later wall-clock reset day has begun, if the target is still
+unmet. A funded last-purchase/jackpot phase can finish beyond that boundary. The independent
+14-day no-completion deadman (`_vrfDeadmanFired`: no daily session completed in 14 days) and the
+30-day post-game sweep keep their separate timing rules.
 
 Ordinary purchase dailies budget 4% of the future pool, split 75% to ticket backing
 in the next pool, 23% to ETH prizes, and 2% to the insurance accumulator. These are
@@ -188,7 +195,7 @@ Unpaid ETH stays in the future pool; ticket conversion and winner caps are uncha
 Level 0 retains its existing FLIP-only daily path; it does not run this ETH drip.
 
 At the purchase-to-jackpot transition, the base next-to-future skim uses the elapsed
-purchase age directly. For levels after 0:
+purchase age in logical days directly. For levels after 0:
 
 | Purchase age | Base skim |
 | --- | --- |
@@ -235,11 +242,14 @@ operator and charge; the table's `CrapsBonusDonated` records the vault as donor.
 
 ## Ticket materialization
 
-`mineFlip` is the single engine entry: `DegenerusGame` delegates it to
-`DegenerusGameMinerModule`, which selects the next action from storage
+`mineRun` is the single engine entry. The miner engine (`GameMiner`) is hosted per profile:
+under `eip170` the Game delegates `mineRun` to the MinerRng deployment, under `glamsterdam`
+the Game contains it. It selects the next action from storage
 (`_nextMinerAction`) and runs the advance worker or drains existing read consumers
 before the next daily request can reuse their randomness storage. Workers run by
-delegatecall, preserving the original caller. Each chunk is admitted only while both
+delegatecall, preserving the original caller. When the mandatory first unit is a VRF
+request, `BoundedCall.admitFirst` reverts `InsufficientExecutionGas` unless gas covers
+the request minimum plus its tail. Each chunk is admitted only while both
 the remaining worker allowance and actual available gas cover its cold-path bound
 and complete call, checkpoint and return tail. A call can execute multiple admitted
 chunks; there is no fixed transaction gas ceiling. Standalone advancement is a miner
@@ -249,10 +259,9 @@ after one hour, 2.1x after two. A caller with a deity pass, or a lazy/whale pass
 the current level, earns double. A call that starts while the daily RNG lock is held earns
 double again.
 
-`Advance(18, lvl)` reports a fresh daily word applied with its jackpot field still
-pending. `Advance(19, lvl)` reports committed ticket progress waiting for the previous
-read consumers to finish before the next RNG request. These are distinct work stages;
-neither changes the game phase by itself.
+`Advance(18, lvl)` reports a fresh daily word applied (the daily phase stages follow it).
+`Advance(19, lvl)` reports a group of staged BAF awards drawn and paid. These are distinct
+work stages; neither changes the game phase by itself.
 
 `rngComplete` is cached in slot 0 bit 248. A fresh normal request clears it;
 consumer completion and the daily seal set it only after committed tickets, the
@@ -270,15 +279,24 @@ and Decimator settlement use the active session word. Pre-request AFKing stamps
 cannot open until their daily seal; every pending stamp blocks subsequent requests.
 Timed player claims retain their own required results independently.
 
-The VRF callback authenticates the active request, adds the frozen daily nudge
-count (0..255, stored in slot 0), and writes only the final word. Midday requests
-apply no daily nudge. A mid-day request is issued only by `mineFlip`: an empty queue never
-requests; pending work at or above the ETH threshold requests at no charge; pending work
-below it (FLIP-only included) requests only when the `mineFlip` caller's donated LINK
-credit covers the charge, which it then spends. A closed craps window waives both gates. Final values 0 and 1 are refused and remain retryable;
-1 is the nonzero waiting sentinel. Mandatory miner publication emits the applied
-word and performs nudge/request cleanup outside the LINK-funded callback. Request
-ID and timestamp retain nonzero idle values; the active flag controls authority.
+The VRF callback (`rawFulfillRandomWords`, in the Game itself) accepts only the coordinator and
+only the active request: the low 64 bits of the request ID must equal the stored `vrfRequestId`
+(packed into the coordinator slot; ID 0 and superseded IDs are ignored, and a fresh request whose
+ID has zero low 64 bits is refused). It stores the raw word and nothing else. Daily nudges
+(`reverseFlip`, count 0..255, stored in slot 0) move only the coinflip word: the daily apply
+adds the frozen count to the raw word for Coinflip, while the recorded daily word and every other
+consumer (lootbox and session words, jackpots, quests, craps, WWXRP, the terminal word) use the raw
+word. `DailyRngApplied(day, word, nudges)` records the apply. Midday requests apply no nudge. A
+mid-day request is issued only by `mineRun`: an empty queue never requests; pending work at or
+above the ETH threshold requests at no charge; pending work below it (FLIP-only included) requests
+only when the `mineRun` caller's donated native request credit (`middayRngCredit`) covers the
+charge, which it then spends. The charge is 300,000 x (max(basefee, 0.01 gwei) + 0.25 gwei) x 2
+wei per request. A mid-day request is also refused above the owner-set basefee ceiling (1x for
+lootbox work, 4x for a closed craps window) and, outside a craps window, below 1.5 times the
+subscription's minimum fulfillment balance. A closed craps window waives the pending-work and threshold gates. Raw
+values 0 and 1 are refused and remain retryable; 1 is the nonzero waiting sentinel. Mandatory
+miner publication emits the applied word and performs request cleanup outside the callback.
+Request ID and timestamp retain nonzero idle values; the active flag controls authority.
 Terminal advancement bypasses normal read completion and kills unfinished boxes,
 bets and Craps rather than retaining earlier session words. Paid ending tickets
 and already-earned claims follow the existing terminal distribution.
@@ -307,8 +325,10 @@ read every L+1 ticket queued before the last-purchase request.
 Unminted levels are drawn by wallet, one queue lane per wallet registration. Under the RNG
 lock, a player far-future append reverts when it is a new registration (it would add a
 lane); a top-up only raises an owed count and is allowed. Lootbox resolutions that run under the lock (Degenerette bets,
-sDGNRS redemption claims, foil claims) revert in those cases; the player
-can retry once the word lands.
+sDGNRS redemption claims) revert in those cases; the player
+can retry once the word lands. Foil claims revert `RngLocked` for the whole time the daily lock
+holds the pools frozen: an ETH tier pays from the live future pool. The pending-pool word keeps
+its top bit (255) as a sentinel between freezes and carries no seed.
 
 Daily board: every day rolls one winning board (four traits plus the day's hero), which
 the ETH, ticket and early-bird legs, the golden ticket and the foil claim all read. The
@@ -372,7 +392,7 @@ to one uniformly sampled paid high seat, excluding sDGNRS; empty eligible fields
 reserve forward. This award is Coinflip credit and creates no extra action, comps or passes. Warm-up
 and skipped days have no paid field; their award-only battle uses the day's otherwise unused
 remainder-seven slot, which the lapse sweep never walks. The worst settle call is bounded near
-8.6M gas and a full draw chunk measures up to 7.2M; see
+[final battery] gas and a full draw chunk measures up to [final battery]; see
 [the preferences and jackpot battle interface](CRAPS-PREFERENCES.md) and the
 `JackpotBattleStageGas`, `JackpotBattleDrawGas` and `JackpotBattleAwardsGas` tests.
 The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
@@ -439,8 +459,9 @@ level retired is consumed without writing traits into the newer buffer; its reco
 and tagged draw still support unexpired match/gold claims. Its old-level Bingo eligibility
 has expired at the same retirement boundary.
 
-`EntryOwnerRegistered` still identifies the level and zero-based owner index when a wallet
-joins a queue; a wallet uses the same global index across levels. The Lens exposes
+`EntriesQueued` (with its scaled and range variants) identifies the wallet ID and level when
+entries are queued, and `WalletRegistered` fires once per wallet ID; a wallet uses the same global
+index across levels. The Lens exposes
 `walletIdOf` and `walletOfId` for direct identity lookup. Pending balances are separate:
 near balances share one reusable word per wallet ID: even/odd levels each have
 read/write lanes and an absolute-level tag. A parity can be rebound only after
@@ -475,8 +496,8 @@ position. Signature-based `parseLog` cannot identify this event. Cross-level wal
 requires enumerating level keys; there is no wallet-only wildcard inside a composite topic.
 Named `TraitsGenerated` still covers per-entry and foil generation paths.
 
-`ticketGenerationStartBlock` at slot62 holds the latest window: the level in its low24 bits,
-then the inclusive first block above it. Read the slot directly with `extsload(bytes32(uint256(62)))`
+`ticketGenerationStartBlock` at slot 47 holds the latest window: the level in its low24 bits,
+then the inclusive first block above it. Read the slot directly with `extsload_g2807007(bytes32(uint256(47)))`
 and require the level tag to match. `TicketGenerationStarted(level, blockNumber)` preserves historical
 bounds. Deployment marks level1 (level0 never holds tickets); level L+1 is stamped at L's first fresh
 mid-day request after meeting its goal, or when L's last purchase day latches, whichever opens
@@ -489,7 +510,7 @@ The first fresh mid-day RNG request after a purchase level meets its goal activa
 level's future-ticket pool. A daily request activates it early only on a turbo transition,
 where the early-bird draw needs those tickets. Ordinary purchase dailies leave that pool
 unminted for their jackpots. Mid-day requests retain the normal
-LINK, basefee, pending-value and donation-credit rules. Retries keep their original cohort.
+native-balance, basefee, pending-value and donation-credit rules. Retries keep their original cohort.
 The queue freezes before its word is requested; advance calls then mint it in bounded
 batches. Later next-level purchases enter the ordinary write buffer for a subsequent word.
 A mid-day activation drains the future pool separately, leaving current-level queues for
@@ -573,9 +594,10 @@ a slot only after the old pack has generated and its level, gold window and both
 live match days no longer need it; a collision rejects the new purchase without
 blocking advancement. Historical records are reconstructed from events.
 Match randomness is fixed, but ETH caps, sDGNRS rewards, and recirculation use live
-payout state; old wins are not reserved ETH obligations. A VRF stall skips missed days on
-recovery and freezes auto-rebuy arming; a request whose word is not in use 14 days after it
-was sent ends the game deterministically. The NatSpec of `_livenessTriggered`,
+payout state; old wins are not reserved ETH obligations. A VRF stall leaves the logical day
+where it was (recovery backfills nothing) and freezes auto-rebuy arming; 14 days without a
+completed daily session, or a request whose word is not in use 14 days after it was sent, ends
+the game deterministically. The NatSpec of `_livenessTriggered`,
 `_vrfDead` and `_handleGameOverPath` states the implemented behavior.
 
 At the first AFKing stage of each level, sDGNRS attempts a whale-pass purchase of
