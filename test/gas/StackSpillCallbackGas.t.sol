@@ -42,13 +42,13 @@ contract StackSpillCallbackGasTest is Test {
 
     function test_FulfillmentGasPin() public {
         // Cold callback execution only; calldata intrinsic gas is outside this frame.
-        assertEq(_fulfill(REQUEST), 8_070, "callback execution gas changed");
+        assertEq(_fulfill(REQUEST), 8_158, "callback execution gas changed");
         assertEq(uint256(vm.load(TARGET, bytes32(uint256(3)))), WORD);
         assertEq(uint256(vm.load(TARGET, bytes32(0))), FLAGS);
     }
 
     function test_StaleRequestGasPin() public {
-        assertEq(_fulfill(REQUEST + 1), 3_048, "stale callback execution gas changed");
+        assertEq(_fulfill(REQUEST + 1), 3_136, "stale callback execution gas changed");
         assertEq(uint256(vm.load(TARGET, bytes32(uint256(3)))), 1);
         assertEq(uint256(vm.load(TARGET, bytes32(0))), FLAGS);
     }

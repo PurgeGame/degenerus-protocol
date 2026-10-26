@@ -203,6 +203,12 @@ contract FlipSupplyProbe is Test {
         (uint256 t0, uint256 v0) = _before();
         address actor = _gameActor(actorSeed);
         uint256 bal = coin.balanceOf(actor);
+        if (bal == 0 && actor != address(0)) {
+            // Players rarely hold FLIP at campaign depth; seed one holder so the burn leg is always exercised.
+            bal = bound(amt, 1, 1_000 ether);
+            vm.prank(ContractAddresses.GAME);
+            try coin.mintForGame_g152734(actor, bal) {} catch { bal = 0; }
+        }
         if (bal != 0) {
             amt = bound(amt, 1, bal);
             vm.prank(actor);

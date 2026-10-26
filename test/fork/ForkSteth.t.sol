@@ -109,12 +109,21 @@ contract ForkStethTest is ForkDeployProtocol {
         vm.deal(address(game), address(game).balance + amount);
     }
 
+    /// @dev The ETH the Game keeps for native VRF funding at the default 150k callback gas limit
+    ///      (the same product as the Game's VRF_NATIVE_TARGET).
+    function _vrfNativeTarget() private pure returns (uint256) {
+        uint256 premium = 100 + ContractAddresses.VRF_NATIVE_PREMIUM;
+        uint256 stress = 300_000 * 1 gwei * premium / 100;
+        uint256 lowWater = 2 * ContractAddresses.VRF_LANE_MAX_GAS_PRICE * 350_000 * premium / 100 + 5 * 12 * stress;
+        return lowWater + 2 * 400 * stress;
+    }
+
     /// @dev What the vault owner may stake right now (the game's own Insolvent guard).
     function _stakeable() private view returns (uint256) {
         uint256 settleable = game.claimableWinningsOf(ContractAddresses.VAULT)
-            + game.claimableWinningsOf(ContractAddresses.SDGNRS);
+            + game.claimableWinningsOf(ContractAddresses.SDGNRS) + game.redemptionReserve();
         uint256 pool = game.claimablePoolView();
-        uint256 reserve = pool > settleable ? pool - settleable : 0;
+        uint256 reserve = (pool > settleable ? pool - settleable : 0) + _vrfNativeTarget();
         uint256 bal = address(game).balance;
         return bal > reserve ? bal - reserve : 0;
     }
@@ -254,6 +263,8 @@ contract ForkStethTest is ForkDeployProtocol {
         _dgnrsFromVault(holder, dgnrs.balanceOf(ContractAddresses.VAULT) / 10);
 
         // Hold as much of the backing in stETH as the guard allows, then end the game.
+        // A backed Vault credit settles in stETH, so its ETH is stakeable: the game ends ETH-short for it.
+        _seedClaimable(game.walletIdOf_g3120(ContractAddresses.VAULT), 10 ether);
         if (_stakeable() != 0) _adminStake(_stakeable());
         _driveToGameOver();
         _assertSolvent("at game over");
@@ -261,7 +272,7 @@ contract ForkStethTest is ForkDeployProtocol {
         emit log_named_uint("game stETH at game over", lido.balanceOf(address(game)));
 
         // Claims: drain the game's ETH with the first claims so later ones need the stETH leg.
-        address[4] memory who = [driver, address(this), ContractAddresses.CREATOR, alice];
+        address[5] memory who = [driver, address(this), ContractAddresses.CREATOR, alice, ContractAddresses.VAULT];
         uint256 stethLegs;
         uint256 worst;
         for (uint256 i; i < who.length; ++i) {

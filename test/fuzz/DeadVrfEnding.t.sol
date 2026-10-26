@@ -669,7 +669,6 @@ contract DeadVrfEndingTest is DeployProtocol {
             0, 0, BoxOrderLib.boCustom(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertFalse(game.advanceDue(), "a creditless caller has no mid-day request below the threshold");
-        mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
         vm.fee(1 gwei); // a priced block, so the charge is nonzero
         vm.prank(ContractAddresses.ADMIN);
         game.creditMiddayRng(donor, 1 ether);

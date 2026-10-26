@@ -41,7 +41,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         assertFalse(game.advanceDue(), "real deployment reaches idle");
         assertFalse(game.boxesPending(), "no box can hide the empty-queue control");
         vm.fee(1 gwei);
-        charge = 300_000 * block.basefee * 2;
+        charge = 300_000 * (block.basefee + 0.25 gwei) * 2;
         assertGt(charge, 0);
         _grant(DONOR, charge * 3);
         // A zero-address donor cannot acquire an ID or own credit.

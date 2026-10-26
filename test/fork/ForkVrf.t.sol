@@ -163,8 +163,9 @@ contract ForkVrfTest is ForkDeployProtocol {
     ///         The next day issues a fresh request id from the same subscription.
     function test_fulfilledWordIsConsumedAndTheNextDayRequestsAgain() public {
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        uint24 day = game.currentDayView_g542950();
         Request memory r = _dailyRequest();
+        // The logical day advances when the daily request goes out; the word settles that day.
+        uint24 day = game.currentDayView_g542950();
         assertEq(game.rngWordForDay(day), 0, "no word before fulfilment");
 
         uint256[] memory words = new uint256[](1);
@@ -399,7 +400,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(admin.subscriptionId(), 0, "the sweep spent the handle");
         assertEq(address(game).balance, 0, "the sweep completed");
         assertTrue(coordinator.pendingRequestExists(subId), "the dead request is still pending");
-        (uint96 stranded,,, address owner,) = coordinator.getSubscription(subId);
+        (, uint96 stranded,, address owner,) = coordinator.getSubscription(subId);
         assertEq(stranded, 60 ether, "native ETH left on the coordinator");
         assertEq(owner, address(admin), "still owned by the Admin");
 

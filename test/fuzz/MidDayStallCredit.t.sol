@@ -211,7 +211,6 @@ abstract contract StallCreditBase is DeployProtocol {
         game.purchaseOrderFor{value: 0.01 ether}(
             0, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
         vm.prank(ContractAddresses.ADMIN);
         game.creditMiddayRng(donor, 1 ether);
         // Drain scheduled maintenance before asserting the request boundary.
