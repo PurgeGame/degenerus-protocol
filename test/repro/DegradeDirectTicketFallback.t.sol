@@ -59,7 +59,7 @@ contract DegradeDirectTicketFallbackTest is Test {
     uint256 private constant TICKETS = 96;
     // Independent assertion of the protocol limits: the direct round bound plus 65k per eight-winner
     // sampler group, the ticket tail and the 2k engine margin.
-    uint256 private constant EXPECTED_DIRECT_ROUND = 12_000_000;
+    uint256 private constant EXPECTED_DIRECT_ROUND = 3_000_000;
     uint256 private constant EXPECTED_DIRECT_GROUP = 65_000;
     uint256 private constant EXPECTED_TICKET_TAIL = 260_000;
     uint256 private constant ENGINE_MARGIN = 2_000;
@@ -111,7 +111,7 @@ contract DegradeDirectTicketFallbackTest is Test {
     ///      the rest of the draw is delivered by the queued path from the same cursor.
     function test_SnapDriftFallsBackAfterDirectGroups() public {
         h.seed(WORD, TICKETS);
-        // Admits one direct group (12M round bound + sampler groups + tail), not a second: the
+        // Admits one direct group (3M round bound + sampler groups + tail), not a second: the
         // first group's actual spend leaves less than another round bound.
         (MineFlipGas.Result memory first, uint256 direct, uint256 queued) = _step(ANY_ROUND_ALLOWANCE);
         assertFalse(first.done, "harness: the first call must leave work for the fallback");

@@ -94,7 +94,7 @@ contract QueuedJackpotHarness is QueuedJackpotReference, DirectTicketFixture {}
 
 contract DirectJackpotTicketsTest is Test {
     uint256 private constant FULL_WORK_ALLOWANCE = 16_000_000;
-    uint256 private constant PARTITIONED_WORK_ALLOWANCE = 13_500_000;
+    uint256 private constant PARTITIONED_WORK_ALLOWANCE = 4_500_000;
 
     bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 private constant BATCH = keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
@@ -403,13 +403,14 @@ contract DirectRoundGasTest is NativeGasExport {
         }
     }
 
-    function _repricedRound(uint256 seed, uint256 measured) private returns (uint256 glam) {
+    function _repricedRound(uint256 seed, uint256 measured) private returns (uint256 glam, uint256 exec) {
         uint256 snap = vm.snapshotState();
         vm.startStateDiffRecording();
         h.materialize(TARGET, _lanes(), ROUND_WINNERS, seed);
         VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(h));
         glam = r.glamsterdamExec + r.stateGas;
+        exec = r.glamsterdamExec;
         assertTrue(vm.revertToStateAndDelete(snap));
     }
 
@@ -446,8 +447,8 @@ contract DirectRoundGasTest is NativeGasExport {
         uint256 common = _round(COMMON_SEED);
         uint256 rare = _round(RARE_SEED);
         // Neither recording pass may warm the other seed's cold measurement.
-        uint256 commonGlam = _repricedRound(COMMON_SEED, common);
-        uint256 rareGlam = _repricedRound(RARE_SEED, rare);
+        (uint256 commonGlam, uint256 commonExec) = _repricedRound(COMMON_SEED, common);
+        (uint256 rareGlam, uint256 rareExec) = _repricedRound(RARE_SEED, rare);
         uint256 perRareGroup = (rare - common) / RARE_GROUPS;
         uint256 worst = common + MAX_RARE_GROUPS * perRareGroup;
         emit log_named_uint("direct round, 16 fresh common groups (realistic heavy)", common);
@@ -456,12 +457,17 @@ contract DirectRoundGasTest is NativeGasExport {
         emit log_named_uint("direct round, theoretical 8 rare groups", worst);
         uint256 glamWorst = commonGlam + MAX_RARE_GROUPS * ((rareGlam - commonGlam) / RARE_GROUPS);
         emit log_named_uint("direct round, theoretical 8 rare groups including Glamsterdam state", glamWorst);
-        if (glamWorst > worst) worst = glamWorst;
+        uint256 glamExecWorst = commonExec + MAX_RARE_GROUPS * ((rareExec - commonExec) / RARE_GROUPS);
+        emit log_named_uint("  of which Glamsterdam execution gas", glamExecWorst);
         uint256 declared = h.roundMax();
         emit log_named_uint("DIRECT_ROUND_GAS_MAX", declared);
-        assertLe(worst, declared, "the theoretical cold round fits its admission");
-        assertLe(declared, 2 * worst, "round admission stays within 2x across both schedules");
+        // Admission meters execution gas. Glamsterdam state gas comes from the reservoir the
+        // caller funds by sending gas above the execution cap.
+        assertLe(worst, declared, "the theoretical Osaka cold round fits its admission");
+        assertLe(glamExecWorst, declared, "the Glamsterdam execution share fits the same admission");
+        assertLe(declared, 2 * worst, "round admission stays within 2x of the Osaka worst");
         assertLe(worst, CHECKPOINT_TARGET_GAS, "direct materialization stays below the checkpoint target");
+        assertLe(glamWorst, CHECKPOINT_TARGET_GAS, "the Glamsterdam round stays below the checkpoint target");
         assertLe(declared + 4 * h.groupGas() + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE,
             NO_RESERVOIR_GAS_LIMIT, "state-inclusive admission and tails fit without a reservoir");
     }
