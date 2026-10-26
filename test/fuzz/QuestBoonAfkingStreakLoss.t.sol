@@ -54,13 +54,13 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // questPlayerState (DegenerusQuests slot 1) packed-field byte offsets
     // -------------------------------------------------------------------------
     /// @dev lastCompletedDay u24 off0, lastActiveDay u24 off3, lastSyncDay u24 off6, streak u16 off9,
-    ///      baseStreak u16 off11, afkingActive bool off13, ..., completionMask u8 off24, streakShield u8 off25,
-    ///      shieldCenturyHighWater u8 off26 (PlayerQuestState single-slot pack, DegenerusQuests.sol:288).
+    ///      baseStreak u16 off11, shieldCenturyHighWater u8 off13, ..., completionMask u8 off24, streakShield u8 off25,
+    ///      afkingSince u24 off26 (PlayerQuestState single-slot pack).
     uint256 private constant QUESTSTATE_SLOT = QaSlots.STATE;
     uint256 private constant OFF_QS_SYNCDAY = 6; // uint24 lastSyncDay
     uint256 private constant OFF_QS_STREAK = 9; // uint16 streak
     uint256 private constant OFF_QS_SHIELD = 25; // uint8 streakShield
-    uint256 private constant OFF_QS_HIGHWATER = 26; // uint8 shieldCenturyHighWater
+    uint256 private constant OFF_QS_HIGHWATER = 13; // uint8 shieldCenturyHighWater
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -215,7 +215,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     }
 
     function _afkingActiveOf(address who) internal view returns (bool) {
-        return _questField(who, 13, 8) != 0; // afkingActive bool off13
+        return _questField(who, 26, 24) != 0; // afkingSince u24 off26
     }
 
     /// @dev The manual quest streak `state.streak` (DegenerusQuests slot 1, off 9) read DIRECTLY -- the value

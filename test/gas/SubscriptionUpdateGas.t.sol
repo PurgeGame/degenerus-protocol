@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
 import {GameSlotKeys} from "../helpers/GameSlots.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @dev Run with FOUNDRY_ISOLATE=true for cold external-call gas. Each scenario reports the
 ///      subscribe call's execution gas and its storage reads and writes.
@@ -45,6 +46,14 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
     }
 
     function testGas_FreshRun() public { _measure("fresh", true, 1); }
+    /// @dev A fresh run on a day whose primary the player already completed by hand.
+    function testGas_FreshRunPrimaryDone() public {
+        (,,,, uint256 price) = game.purchaseInfo_g1027();
+        vm.deal(PLAYER, price);
+        vm.prank(PLAYER);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        _measure("fresh_primary_done", true, 1);
+    }
     function testGas_QuantityChange() public { _subscribe(1); _measure("quantity_change", true, 2); }
     function testGas_TicketToBox() public { _subscribe(1); _measure("ticket_to_box", false, 1); }
     function testGas_BoxToTicket() public {

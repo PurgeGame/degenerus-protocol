@@ -23,7 +23,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     // PlayerQuestState byte offsets.
     uint256 private constant OFF_LAST_SYNC = 6;
     uint256 private constant OFF_STREAK = 9;
-    uint256 private constant OFF_AFKING = 13;
+    uint256 private constant OFF_AFKING_SINCE = 26;
     uint256 private constant OFF_SHIELD = 25;
 
     uint8 private constant QT_MINT_ETH = 1;
@@ -458,14 +458,14 @@ contract QuestsWalletIdsTest is DeployProtocol {
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         assertEq(_onlyId(acc, address(game), quests.beginAfking.selector), id);
         _assertWritesUnder(writes, id);
-        assertEq(_field(id, OFF_AFKING, 8), 1, "afking flag under the sub ID");
+        assertGt(_field(id, OFF_AFKING_SINCE, 24), 0, "afking run under the sub ID");
 
         vm.startStateDiffRecording();
         vm.prank(p);
         game.subscribe(0, false, 0, 0);
         acc = vm.stopAndReturnStateDiff();
         assertEq(_onlyId(acc, address(game), quests.finalizeAfking.selector), id);
-        assertEq(_field(id, OFF_AFKING, 8), 0, "finalized under the sub ID");
+        assertEq(_field(id, OFF_AFKING_SINCE, 24), 0, "finalized under the sub ID");
     }
 
     // =====================================================================

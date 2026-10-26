@@ -177,7 +177,7 @@ contract GrowthFoilHotPathGasTest is GrowthFoilFixture {
     function test_Gas_FoilQuestOtherDaily() public { _daily(false); _begin(); _foil(0.5 ether); _end("foil_quest_other_daily", 0); }
     function test_Gas_FoilQuestAfking() public {
         bytes32 playerWord = keccak256(abi.encode(uint256(pid), QaSlots.STATE));
-        vm.store(address(quests), playerWord, bytes32(uint256(1) << 104));
+        vm.store(address(quests), playerWord, bytes32(uint256(type(uint24).max) << 208));
         _begin(); _foil(0.5 ether); _end("foil_quest_afking", 0);
     }
     function test_Gas_FoilPurchase() public {

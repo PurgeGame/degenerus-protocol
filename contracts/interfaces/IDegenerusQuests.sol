@@ -227,10 +227,11 @@ interface IDegenerusQuests {
     /// @param amount The number of shields to add (uint8-saturating)
     function awardQuestStreakShield(uint32 id, uint16 amount) external;
 
-    /// @notice Begins an afking run: snapshots the gap-synced streak and flips the afking flag
+    /// @notice Begins an afking run: snapshots the gap-synced streak and records the run's start day
     /// @dev GAME-only. While afking, the Game-side compute-on-read owns the player's streak and
-    ///      slot-0 completions are streak-neutral / reward-deferred; returns the synced streak
-    ///      so the caller bases the run's snapshot on it.
+    ///      slot-0 completions after the start day are streak-neutral / reward-deferred (the run
+    ///      credits from the next day, so a start-day completion credits as off a run); returns the
+    ///      synced streak so the caller bases the run's snapshot on it.
     /// @param id Wallet ID of the subscriber starting an afking run
     /// @param currentDay The caller's current logical game day; quest state pins to the newest rolled day
     /// @return streak The player's gap-synced streak at the start of the run

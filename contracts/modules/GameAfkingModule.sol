@@ -265,9 +265,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                 // written. The token makes no callback into the Game.
                 ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).consumeSeat(_payee(_walletElement(subId)), seatId);
             }
-            // Snapshot the player's (gap-synced) manual quest streak and flip the afking flag
-            // (slot-0 completions become streak-neutral / reward-deferred until finalize hands
-            // the streak back). The protocol seats start from 0.
+            // Snapshot the player's (gap-synced) manual quest streak and start the quest-side run
+            // (slot-0 completions after today become streak-neutral / reward-deferred until
+            // finalize hands the streak back). The protocol seats start from 0.
             uint256 snap = quests.beginAfking(subId, today);
             _insertMember(subId, _withSubCheckpoint(uint256(subId) | config, today, exemptSub ? 0 : snap), today);
         } else {

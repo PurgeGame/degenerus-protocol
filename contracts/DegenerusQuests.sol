@@ -239,6 +239,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Fixed reward for the random (slot 1) quest.
     uint256 private constant QUEST_RANDOM_REWARD = 100;
 
+    /// @dev The highest protocol-seat wallet ID (Vault 1, sDGNRS 2): their runs never take the
+    ///      start-day primary credit.
+    uint32 private constant SDGNRS_WALLET_ID = 2;
+
     /// @dev Milestone streak-shield grant: +1 shield each time the quest streak reaches a
     ///      new multiple of this interval (100, 200, …). shieldCenturyHighWater is a uint8
     ///      and saturates at century 255 (streak 25,500); past that bound it can refill
@@ -388,7 +392,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * | slot 1  | slot 0  |
      * +---------+---------+
      */
-    // All fields pack into a single 32-byte slot (27 bytes used). The per-slot day and
+    // All fields pack into a single 32-byte slot (29 bytes used). The per-slot day and
     // progress markers are flattened from fixed arrays — Solidity reserves a fresh slot
     // per fixed array, so arrays here would cost four extra slots. Daily progress
     // is held in a compact per-family unit (see `_progressUnit`) so it fits uint16.
@@ -398,14 +402,14 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 lastSyncDay;        // Day we last reset progress/completionMask
         uint16 streak;             // Running quest-completion streak (primary + secondary + level); uint16-capped, bounded downstream by the activity-score hard cap
         uint16 baseStreak;         // Snapshot of streak at start of day (for rewards)
-        bool afkingActive;         // While set (GAME-only, subscribe→finalize): slot-0 completions are streak-neutral and pay no immediate reward (the afking compute-on-read owns the primary); a secondary/level completion bumps the afking sub's streak base (recordAfkingSecondary_g3316) so the unified score reflects it
+        uint8 shieldCenturyHighWater; // Highest streak-century credited a milestone shield this run; re-arms down on a streak reset so a genuine re-climb re-earns, while preventing double-credit of a century already passed within the run
         uint24 lastProgressDay0;   // Slot 0: day when progress was recorded
         uint24 lastProgressDay1;   // Slot 1: day when progress was recorded
         uint16 progress0;          // Slot 0: accumulated progress in stored units (milli-ETH / whole-FLIP / ticket count)
         uint16 progress1;          // Slot 1: accumulated progress in stored units
-        uint8 completionMask;      // Bits 0-1: per-slot completion (deduped once-per-day; each completion credits the streak, except a slot-0 completion during an active afking run)
+        uint8 completionMask;      // Bits 0-1: per-slot completion (deduped once-per-day; each completion credits the streak, except a slot-0 completion on a later day of an active afking run)
         uint8 streakShield;        // Stackable quest-streak shields, consumed on missed days to preserve streak
-        uint8 shieldCenturyHighWater; // Highest streak-century credited a milestone shield this run; re-arms down on a streak reset so a genuine re-climb re-earns, while preventing double-credit of a century already passed within the run
+        uint24 afkingSince;        // Logical day the current afking run began (GAME-only, subscribe→finalize); 0 = not afking (runs begin on day 1 or later). While set, slot-0 completions are streak-neutral and pay no immediate reward (the run credits its days) except on the start day, which the run does not credit; a secondary/level completion bumps the afking sub's streak base (recordAfkingSecondary_g3316) so the unified score reflects it
     }
 
     // =========================================================================
@@ -643,7 +647,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // Route the bonus into the afking sub streak base, as the daily (+1) and level-quest
         // secondary completions already do, so it is reconciled into the earned streak and the
         // century shield is granted once off the reconciled value at finalize.
-        if (state.afkingActive) {
+        if (state.afkingSince != 0) {
             questGame.recordAfkingSecondary_g3316(id, amount);
             return;
         }
@@ -680,7 +684,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (currentDay == 0) return;
         // The primary/foil leg already synced this day. Neither its credit nor the
         // afking callbacks can roll quests or reset lastSyncDay.
-        if (state.afkingActive) {
+        if (state.afkingSince != 0) {
             questGame.floorAfkingStreakBase(id, FOIL_STREAK_FLOOR);
         }
         uint16 prev = state.streak;
@@ -742,17 +746,19 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Begins an afking run for a subscriber: snapshots the (gap-synced) streak and
-     *         flips the afking flag so subsequent slot-0 completions are streak-neutral.
+     *         records the run's start day so later slot-0 completions are streak-neutral.
      * @dev GAME-only. While afking, the Game-side run's derived streak owns the player's quest
      *      streak; the manual `state.streak` is dormant and is
      *      overwritten by `finalizeAfking` when the run ends. Returns the synced streak so the
      *      caller can base the run's snapshot on it.
      *
      *      Syncs day-reset state first (applying any pending gap-decay) so the snapshot is
-     *      honest, then sets `afkingActive`. Does not touch the slot-1 quest.
+     *      honest, then sets `afkingSince` to `currentDay`. The run credits from the next day,
+     *      so a primary completed on `currentDay` still credits like one off a run. Does not
+     *      touch the slot-1 quest.
      * @param id Wallet ID of the subscriber starting an afking run.
-     * @param currentDay The caller's current logical game day; synchronization is pinned to the
-     *        newest rolled quest day when one exists.
+     * @param currentDay The caller's current logical game day (1 or later); synchronization is
+     *        pinned to the newest rolled quest day when one exists.
      * @return streak The player's gap-synced streak at the start of the run.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
@@ -765,8 +771,13 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 questDay = _currentQuestDayFast(currentDay);
         uint24 syncDay = questDay == 0 ? currentDay : questDay;
         if (syncDay != 0) _questSyncState(state, id, syncDay);
-        streak = state.streak;
-        state.afkingActive = true;
+        // One read and one write of the packed word: `streak` (bits 72..87) out, `afkingSince`
+        // (bits 208..231) in.
+        uint256 word;
+        assembly ("memory-safe") { word := sload(state.slot) }
+        streak = uint16(word >> 72);
+        word = (word & ~(uint256(type(uint24).max) << 208)) | (uint256(currentDay) << 208);
+        assembly ("memory-safe") { sstore(state.slot, word) }
     }
 
     /**
@@ -782,7 +793,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      and before `currentDay` are misses; calendar stalls create none. A delivered
      *      anchor remains valid even when its quest rolls later.
      *      Anchors the manual system at that handback day and clears
-     *      `afkingActive`. A double-call is safe: the second finds `afkingActive` already false
+     *      `afkingSince`. A double-call is safe: the second finds `afkingSince` already 0
      *      and returns.
      * @param id Wallet ID of the subscriber whose run is ending.
      * @param earnedStreak The run's live streak at the reward endpoint, Game-computed.
@@ -798,7 +809,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 currentDay
     ) external questsContext onlyGame {
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
-        if (!state.afkingActive) return; // idempotent: already finalized / never afking
+        if (state.afkingSince == 0) return; // idempotent: already finalized / never afking
         uint24 lastValid = afkingCoveredDay;
         if (state.lastActiveDay > lastValid) lastValid = state.lastActiveDay;
         uint32 missedDays = _missedQuestDays(
@@ -812,7 +823,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         state.lastActiveDay = lastValid;
         state.lastCompletedDay = lastValid;
-        state.afkingActive = false;
+        state.afkingSince = 0;
         emit QuestStreakBonusAwarded(id, 0, finalStreak, lastValid);
     }
 
@@ -1227,7 +1238,7 @@ contract DegenerusQuests is IDegenerusQuests {
         );
         // This player word was already loaded by the handler. Forward its run flag so
         // score consumers need the Game-side Sub word only for an afking player.
-        afking = _questsStorage().questPlayerState[id].afkingActive;
+        afking = _questsStorage().questPlayerState[id].afkingSince != 0;
     }
 
     /**
@@ -1285,7 +1296,7 @@ contract DegenerusQuests is IDegenerusQuests {
             ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0
         );
         _foilStreakFloor(id, state, currentDay);
-        afking = state.afkingActive;
+        afking = state.afkingSince != 0;
     }
 
     /// @dev Shared purchase-path quest legs (mint ETH/FLIP + lootbox). Modifier-less core
@@ -1622,7 +1633,7 @@ contract DegenerusQuests is IDegenerusQuests {
     function effectiveBaseStreakAndAfking_g1521(uint32 id, uint24 day) external questsContext view returns (uint32 streak, bool afking) {
         PlayerQuestState memory state = _questsStorage().questPlayerState[id];
         streak = _effectiveBaseStreak(state, _currentQuestDayFast(day));
-        afking = state.afkingActive;
+        afking = state.afkingSince != 0;
     }
 
     /// @notice A player's held streak-shield stack and the highest streak-century
@@ -2120,7 +2131,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      while afking, where the run's funded auto-buy stands in for the primary, so the
     ///      player can complete the secondary without a manual ETH mint.
     function _secondaryLocked(PlayerQuestState storage state, uint8 slot) private view returns (bool) {
-        return slot == 1 && (state.completionMask & 1) == 0 && !state.afkingActive;
+        return slot == 1 && (state.completionMask & 1) == 0 && state.afkingSince == 0;
     }
 
     // -------------------------------------------------------------------------
@@ -2286,12 +2297,13 @@ contract DegenerusQuests is IDegenerusQuests {
      *      Streak Logic:
      *      - Each slot completion adds +1 (slots are deduped to once per day by completionMask)
      *      - Off a run both slots credit `state.streak`; while afking slot 0 is streak-neutral
-     *        and slot 1 bumps the afking sub's streak base via recordAfkingSecondary_g3316
+     *        and slot 1 bumps the afking sub's streak base via recordAfkingSecondary_g3316, as
+     *        does slot 0 on the run's start day (protocol seats excepted)
      *      - lastCompletedDay updates only on the primary (slot 0), keying the reset to it
      *
      *      Reward Calculation:
-     *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP off a run; while afking it pays 0 here
-     *        (the run's per-day settlement pays that reward)
+     *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP off a run and on a run's start day;
+     *        on a run's later days it pays 0 here (the run's per-day settlement pays that reward)
      *      - Slot 1 (random quest) pays a fixed 100 FLIP
      * @param id The completing wallet (event subject; streak and century-shield bookkeeping).
      * @param state Storage reference to player's quest state.
@@ -2323,7 +2335,8 @@ contract DegenerusQuests is IDegenerusQuests {
         // streak-neutral here, and the slot-0 reward is part of the run's per-day settlement
         // (paying it here too would double-credit). The
         // slot-1 (manual) quest stays fully accessible and pays its reward normally.
-        bool afking = state.afkingActive;
+        uint24 afkingSince = state.afkingSince;
+        bool afking = afkingSince != 0;
 
         // Mark slot as complete
         mask |= slotMask;
@@ -2348,8 +2361,12 @@ contract DegenerusQuests is IDegenerusQuests {
         // independently. Off a run, both credit the manual `state.streak`. While afking the
         // Game-side run owns the streak: the PRIMARY rides the run's elapsed days (slot 0 stays
         // streak-neutral here) and a SECONDARY the player completes bumps the run's streak via
-        // recordAfkingSecondary_g3316, so the run's unified score reflects it. lastCompletedDay tracks
-        // only the primary, keeping the missed-day reset keyed to it.
+        // recordAfkingSecondary_g3316, so the run's unified score reflects it. The run's start day
+        // is the exception for the primary: the run checkpoints on it and credits from the next
+        // day, so a primary completed that day bumps the run's streak and pays like one off a run.
+        // The protocol seats are excluded. lastCompletedDay tracks only the primary, keeping the
+        // missed-day reset keyed to it.
+        uint256 rewardShare = slot == 1 ? QUEST_RANDOM_REWARD : QUEST_SLOT0_REWARD;
         if (!afking) {
             if (newStreak < type(uint16).max) {
                 newStreak += 1;
@@ -2359,13 +2376,12 @@ contract DegenerusQuests is IDegenerusQuests {
             if (slot == 0) {
                 state.lastCompletedDay = questDay24;
             }
-        } else if (slot == 1) {
+        } else if (slot == 1 || (questDay24 == afkingSince && id > SDGNRS_WALLET_ID)) {
             questGame.recordAfkingSecondary_g3316(id, 1);
+        } else {
+            rewardShare = 0;
         }
 
-        uint256 rewardShare = slot == 1
-            ? QUEST_RANDOM_REWARD
-            : (afking ? 0 : QUEST_SLOT0_REWARD);
         emit QuestCompleted(
             id,
             quest.day,
@@ -2732,7 +2748,7 @@ contract DegenerusQuests is IDegenerusQuests {
             // bumps the Sub streak base by the same amount so the unified score reflects it. The
             // calling handler synced the player state for the current day before this runs.
             PlayerQuestState storage qs = _questsStorage().questPlayerState[id];
-            if (qs.afkingActive) {
+            if (qs.afkingSince != 0) {
                 questGame.recordAfkingSecondary_g3316(id, LEVEL_QUEST_STREAK_BONUS);
             } else {
                 uint32 bumped = uint32(qs.streak) + LEVEL_QUEST_STREAK_BONUS;
@@ -2784,7 +2800,7 @@ contract DegenerusQuests is IDegenerusQuests {
         id = playerId;
         earnsReward =
             _levelQuestEligible(lvl, mintData) ||
-            _questsStorage().questPlayerState[id].afkingActive;
+            _questsStorage().questPlayerState[id].afkingSince != 0;
         mayBet =
             earnsReward ||
             (mintData &
@@ -2828,7 +2844,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         if (
             !_levelQuestEligible(lvl, questGame.mintPackedOfId_g5372(id)) &&
-            !_questsStorage().questPlayerState[id].afkingActive
+            _questsStorage().questPlayerState[id].afkingSince == 0
         ) return 0;
 
         _questsStorage().levelQuestPlayerState[id] = packed | (uint256(1) << LQ_GROWTH_BET_BIT);
@@ -2842,7 +2858,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (questDay != 0) {
             PlayerQuestState storage qs = _questsStorage().questPlayerState[id];
             _questSyncState(qs, id, questDay);
-            if (qs.afkingActive) {
+            if (qs.afkingSince != 0) {
                 questGame.recordAfkingSecondary_g3316(id, GROWTH_QUEST_STREAK_BONUS);
             } else {
                 uint32 bumped = uint32(qs.streak) + GROWTH_QUEST_STREAK_BONUS;

@@ -13,7 +13,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         mintData = deity ? mintData | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT)
             : mintData & ~(uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
         vm.mockCall(address(game), abi.encodeWithSignature("mintPackedOfId_g5372(uint32)", pid), abi.encode(mintData));
-        vm.store(address(quests), keccak256(abi.encode(uint256(pid), QaSlots.STATE)), bytes32(uint256(afking ? 1 : 0) << 104));
+        vm.store(address(quests), keccak256(abi.encode(uint256(pid), QaSlots.STATE)), bytes32(uint256(afking ? type(uint24).max : 0) << 208));
         uint24 unitsLevel = uint24(mintData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT);
         bool activity = (unitsLevel == lvl || unitsLevel == lvl + 1) && uint16(mintData >> BitPackingLib.LEVEL_UNITS_SHIFT) >= 400;
         uint256 passType = (mintData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3;

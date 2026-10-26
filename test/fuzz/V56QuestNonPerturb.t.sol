@@ -36,7 +36,7 @@ import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 ///      (`handlePurchase_g23478`/`handleFlip_g217`/...). State is read through the `playerQuestStates` view (streak) and
 ///      direct `vm.load` of the single-slot PlayerQuestState (RE-DERIVED via `forge inspect
 ///      DegenerusQuests storageLayout`: `questPlayerState` root = slot 1; the struct packs into one
-///      256-bit word — lastActiveDay u24 byte-3, streak u16 byte-9, afkingActive bool byte-13).
+///      256-bit word — lastActiveDay u24 byte-3, streak u16 byte-9, afkingSince u24 byte-26).
 ///      Test-only: ZERO contracts/*.sol mutated.
 contract V56QuestNonPerturb is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -49,7 +49,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     // PlayerQuestState packed-field byte offsets within its single slot.
     uint256 private constant OFF_LAST_ACTIVE_DAY = 3;  // uint24 lastActiveDay (bytes 3..5)
     uint256 private constant OFF_STREAK = 9;           // uint16 streak        (bytes 9..10)
-    uint256 private constant OFF_AFKING_ACTIVE = 13;   // bool   afkingActive  (byte 13)
+    uint256 private constant OFF_AFKING_SINCE = 26;    // uint24 afkingSince   (bytes 26..28)
 
     // The shipped quest-type tags (DegenerusQuests private constants).
     uint8 private constant QT_MINT_ETH = 1;
@@ -404,7 +404,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     }
 
     function _afkingActiveOf(address who) internal view returns (bool) {
-        return uint8(_questStateWord(who) >> (OFF_AFKING_ACTIVE * 8)) != 0;
+        return uint24(_questStateWord(who) >> (OFF_AFKING_SINCE * 8)) != 0;
     }
 
     function _lastActiveDayOf(address who) internal view returns (uint24) {
