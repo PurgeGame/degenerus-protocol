@@ -94,7 +94,7 @@ contract QueuedJackpotHarness is QueuedJackpotReference, DirectTicketFixture {}
 
 contract DirectJackpotTicketsTest is Test {
     uint256 private constant FULL_WORK_ALLOWANCE = 16_000_000;
-    uint256 private constant PARTITIONED_WORK_ALLOWANCE = 4_500_000;
+    uint256 private constant PARTITIONED_WORK_ALLOWANCE = 6_000_000;
 
     bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 private constant BATCH = keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
@@ -461,10 +461,13 @@ contract DirectRoundGasTest is NativeGasExport {
         emit log_named_uint("  of which Glamsterdam execution gas", glamExecWorst);
         uint256 declared = h.roundMax();
         emit log_named_uint("DIRECT_ROUND_GAS_MAX", declared);
-        // Admission meters execution gas. Glamsterdam state gas comes from the reservoir the
-        // caller funds by sending gas above the execution cap.
+        emit log_named_uint("direct round, 16 fresh common groups including Glamsterdam state", commonGlam);
+        // Without a reservoir, state gas is paid from execution gas. The common round over a
+        // never-used buffer (fresh header and word per group) is admitted; rarer fresh-slot
+        // outliers up to glamWorst need a reservoir, a multiplier or a smaller call.
         assertLe(worst, declared, "the theoretical Osaka cold round fits its admission");
         assertLe(glamExecWorst, declared, "the Glamsterdam execution share fits the same admission");
+        assertLe(commonGlam, declared, "the fresh common round fits without a reservoir");
         assertLe(declared, 2 * worst, "round admission stays within 2x of the Osaka worst");
         assertLe(worst, CHECKPOINT_TARGET_GAS, "direct materialization stays below the checkpoint target");
         assertLe(glamWorst, CHECKPOINT_TARGET_GAS, "the Glamsterdam round stays below the checkpoint target");

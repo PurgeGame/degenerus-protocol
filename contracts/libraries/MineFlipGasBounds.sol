@@ -2,15 +2,17 @@
 pragma solidity 0.8.38;
 
 /// @notice Cold-path admission bounds for Osaka and Glamsterdam, including new-state gas.
-/// @dev No state reservoir is assumed. Bounds include the named operation; callers reserve
+/// @dev No state reservoir is assumed unless a constant says otherwise. Bounds include the named operation; callers reserve
 ///      checkpoint/return tails separately. Measured witnesses or conservative component
 ///      sums carry about 20% margin; fixed reserves are identified beside their constants.
 ///      Continuations use caller calibration; first mandatory progress bypasses estimates.
 ///      Revalidate after operation, compiler or gas-schedule changes.
 library MineFlipGasBounds {
-    // Fixed 32-winner direct-round geometry: Osaka cold worst 2.343M, with margin. Glamsterdam
-    // state gas is paid from the reservoir the caller funds; only execution gas is admitted here.
-    uint256 internal constant TICKET_DIRECT_ROUND_GAS_MAX = 3_000_000;
+    // Fixed 32-winner direct round. Osaka cold worst 2.320M. Glamsterdam: 1.989M execution worst
+    // plus 97,920 per new slot. Past a buffer's high-water mark a round writes at most 24 new
+    // words (3.58M); a common round over a never-used buffer, 32 new headers and words (3.627M).
+    // Rarer rounds, up to 80 new slots (9.823M), need a reservoir, a multiplier or a smaller call.
+    uint256 internal constant TICKET_DIRECT_ROUND_GAS_MAX = 4_500_000;
     // Eight packed winner draws, padding redraws, deity cache and batch event.
     uint256 internal constant TICKET_DIRECT_GROUP_GAS = 65_000;
     // Dispatch, decoding and checkpoint normalization; selection is admitted separately.
