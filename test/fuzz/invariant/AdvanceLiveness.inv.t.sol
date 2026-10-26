@@ -8,8 +8,9 @@ import {AdvanceLivenessHandler} from "../handlers/AdvanceLivenessHandler.sol";
 
 /// @title AdvanceLiveness — no "flag set, no work, every entry point reverts" state.
 ///
-/// @notice From ANY fuzzed state, with VRF cooperating and without moving time, a bounded
-///         number of mineFlip cranks must reach a sealed, idle day: terminal revert
+/// @notice From ANY fuzzed state, with VRF cooperating and without moving time, mineFlip
+///         calls capped at 15M execution gas, each writing engine state, within a per-daily-cycle
+///         call budget and at most two logical-day moves, must reach a sealed, idle day: terminal revert
 ///         NoWork (the engine idle signal), today's word recorded, rng unlocked, the mid-day latch clear, nothing
 ///         staged without a worker (ticketsFullyProcessed), advanceDue() consistent, and a
 ///         mid-day lootbox request not blocked by MidDayActive. A CRAPS-table probe request
@@ -53,7 +54,7 @@ contract AdvanceLiveness is DeployProtocol {
     }
 
     /// Keep the quick default campaign: each step runs a snapshot-isolated liveness check
-    /// (up to 250 cranks plus a craps-probe cycle), so 64 x 100 already takes minutes.
+    /// (a few hundred bounded cranks plus a craps-probe cycle), so 64 x 100 already takes minutes.
     /// Inline default settings override the inherited deep profile too; explicitly restore
     /// deep's full 1000 x 256 campaign here and verify the executed run/call totals.
     /// forge-config: default.invariant.runs = 64
@@ -177,6 +178,53 @@ contract AdvanceLiveness is DeployProtocol {
         assertGt(handler.ghost_probeRequests(), 0, "donor probe must issue a request");
     }
 
+    /// @dev The unshrunk 20-action campaign counterexample (the shrinker's one-call version did
+    ///      not reproduce). Its next-day check works through two daily cycles, which the former
+    ///      flat 250-call cutoff (one direct coin-ticket round per call, 280 calls) misread as
+    ///      nontermination. Typed calls make any handler revert fail the replay instead of
+    ///      passing silently.
+    function test_BackloggedTicketJackpotStillReachesIdle() public {
+        AdvanceLivenessHandler h = handler;
+        h.actFulfill();
+        h.actFulfill();
+        h.actBuyTickets(987973558385376108849394590885168956720493512112609995, 1935583008242558388719462530735388318471);
+        h.actMiddayRequest(9970, 900);
+        h.actSeedPool(1874555648000875330519283469014130688475938277111934308827207);
+        h.actMiddayRequest(30796461393168801175815566740, 340949541655144437384211277808400785192);
+        h.actNextDay(41299094766155748286151641988568637358933361195574772186612623152482089, 2625);
+        h.actFulfill();
+        h.actLastPurchaseDayMidday(838577680921497);
+        h.actWhalePass(2931);
+        h.actNextDay(59, 100000);
+        h.actFulfill();
+        h.actNextDay(12760, 70288520262548602561809328627061950964226901219486286149240540285536414457052);
+        h.actBuyTickets(238820929411270246290542585567, 1031759998269520168895688991388934435654640608096489774789269293622877549);
+        h.actStall(73274681686168728259960734043533118148390246983530491227646187673309033888016);
+        h.actWarpWithinDay(73274681686168728259960734043533118148390246983530491227646187673309033815728);
+        h.actStall(1329828);
+        h.actCrank(7249676749272314, 2656675073431816517);
+        h.actFulfill();
+        h.actFulfill();
+        if (h.ghost_violations() != 0) _logViolation(h.firstViolation());
+        assertEq(h.ghost_violations(), 0, "backlogged jackpot must reach idle");
+        assertEq(h.ghost_actions(), 20, "every replayed action ran");
+        assertEq(h.ghost_nextDayChecks(), 5, "every fourth action ran its next-day check");
+        assertEq(h.ghost_maxDayAdvances(), 1, "non-vacuity: that check spanned two daily cycles");
+        assertLe(h.ghost_maxCranksPerCycle(), h.MAX_CRANKS_PER_CYCLE());
+        console.log("backlog max cranks", h.ghost_maxCranks());
+        console.log("backlog max cranks per cycle", h.ghost_maxCranksPerCycle());
+    }
+
+    /// @dev Oracle self-check: a mineFlip that succeeds without writing engine state is flagged
+    ///      at once rather than consuming the cycle budget.
+    function test_OracleFlagsSuccessWithoutProgress() public {
+        vm.mockCall(address(game), abi.encodeWithSignature("mineRun(uint32)", uint32(0)), "");
+        handler.actFulfill();
+        assertEq(handler.ghost_violations(), 1);
+        assertEq(handler.firstViolation().code, handler.V_NO_PROGRESS());
+        assertEq(handler.firstViolation().cranks, 1);
+    }
+
     /// Deterministic replay of the biased scenario — a quick regression for the seed bug.
     function test_lastPurchaseDayMiddayScenario() public {
         for (uint256 s = 0; s < 6 && handler.ghost_violations() == 0; s++) {
@@ -193,7 +241,7 @@ contract AdvanceLiveness is DeployProtocol {
 
     function _logViolation(AdvanceLivenessHandler.Violation memory v) internal pure {
         console.log("=== LIVENESS VIOLATION ===");
-        console.log("code (1 noQuiesce,2 terminalRevert,3 latchStuck,4 notSealed,5 stagedNoWorker,6 advanceDueLies,7 requestBlocked)", uint256(v.code));
+        console.log("code (1 noQuiesce,2 terminalRevert,3 latchStuck,4 notSealed,5 stagedNoWorker,6 advanceDueLies,7 requestBlocked,8 noProgress)", uint256(v.code));
         console.log("phase (0 same-day,1 after CRAPS probe,2 next-day,3 next-day+probe)", uint256(v.phase));
         console.logBytes4(v.selector);
         console.log("cranks", uint256(v.cranks));

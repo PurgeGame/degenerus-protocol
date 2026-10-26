@@ -76,7 +76,17 @@ contract AdvanceLivenessHandler is Test {
     uint256 private constant MIDDAY_RNG_STALL_TIMEOUT = 4 hours;
     uint256 private constant DAILY_RNG_RETRY_TIMEOUT = 12 hours;
 
-    uint256 public constant MAX_CRANKS = 250;
+    // The harness allows 30 billion gas for long scenarios. Recovery must instead
+    // work through individually bounded mining calls, with room for transaction overhead.
+    uint256 public constant MAX_CRANK_GAS = 15_000_000;
+    // Calls allowed per daily cycle (dailyIdx value). Even if the direct coin-ticket lane
+    // admitted only one round per call, its ceiling is 16 winner groups x 25 rounds = 400;
+    // ticket-queue calls scale with the queued entries this handler can buy (~70 seen).
+    // This is a calibrated budget, not a proof.
+    uint256 public constant MAX_CRANKS_PER_CYCLE = 500;
+    // Without moving time the daily request gate allows one new logical day per wall day.
+    uint256 public constant MAX_DAY_ADVANCES = 2;
+    uint256 public constant MAX_CRANKS = MAX_CRANKS_PER_CYCLE * (MAX_DAY_ADVANCES + 1);
     uint256 public constant NEXT_DAY_CHECK_EVERY = 4;
 
     // ---- error selectors (AdvanceModule / Storage) ----
@@ -91,6 +101,8 @@ contract AdvanceLivenessHandler is Test {
     bytes4 private constant E_NOT_TIME_YET = bytes4(keccak256("NoWork()"));
     bytes4 private constant E_RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
     bytes4 private constant E_RNG_LOCKED = bytes4(keccak256("RngLocked()"));
+    // Test-local marker: the crank succeeded without writing engine storage.
+    bytes4 private constant E_NO_PROGRESS_MARK = bytes4(keccak256("LivenessNoProgress()"));
 
     // ---- violation codes ----
     uint8 public constant V_NONE = 0;
@@ -101,6 +113,7 @@ contract AdvanceLivenessHandler is Test {
     uint8 public constant V_STAGED_NO_WORKER = 5; // !ticketsFullyProcessed while idle and sealed
     uint8 public constant V_ADVANCE_DUE_LIES = 6; // advanceDue() true but mineFlip reverts
     uint8 public constant V_REQUEST_BLOCKED = 7; // the mid-day request worker blocked by a liveness gate
+    uint8 public constant V_NO_PROGRESS = 8; // a successful mineFlip wrote no engine storage
 
     struct Violation {
         uint8 code;
@@ -142,6 +155,8 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_probeOnLpdFrozenPool; // ... with the frozen next-level pool non-empty
     uint256 public ghost_skippedGameOver;
     uint256 public ghost_maxCranks;
+    uint256 public ghost_maxCranksPerCycle;
+    uint256 public ghost_maxDayAdvances;
     uint256 public ghost_lpdSeals; // lastPurchaseDay false -> true
     uint256 public ghost_turboSeals; // ... with JACKPOT_TURBO
     uint256 public ghost_normalSeals;
@@ -406,8 +421,9 @@ contract AdvanceLivenessHandler is Test {
         Violation memory v;
         uint256 probeFlags; // bit0 probe issued, bit1 on lpd non-turbo, bit2 frozen pool non-empty
         uint256 maxCr;
+        CycleStats memory cycles; // memory survives the snapshot revert below
         {
-            (bool quiet, bytes4 sel, uint256 cranks) = _crankToQuiescence();
+            (bool quiet, bytes4 sel, uint256 cranks) = _crankToQuiescence(cycles);
             maxCr = cranks;
             if (!game.gameOver()) v = _judge(quiet, sel, cranks, nextDay ? 2 : 0);
         }
@@ -454,7 +470,7 @@ contract AdvanceLivenessHandler is Test {
                     probeFlags |= 2;
                     if (ffNonEmpty) probeFlags |= 4;
                 }
-                (bool quiet, bytes4 sel, uint256 cranks) = _crankToQuiescence();
+                (bool quiet, bytes4 sel, uint256 cranks) = _crankToQuiescence(cycles);
                 if (cranks > maxCr) maxCr = cranks;
                 if (!game.gameOver()) v = _judge(quiet, sel, cranks, nextDay ? 3 : 1);
             }
@@ -463,6 +479,8 @@ contract AdvanceLivenessHandler is Test {
         vm.revertToStateAndDelete(snap);
 
         if (maxCr > ghost_maxCranks) ghost_maxCranks = maxCr;
+        if (cycles.maxPerCycle > ghost_maxCranksPerCycle) ghost_maxCranksPerCycle = cycles.maxPerCycle;
+        if (cycles.maxAdvances > ghost_maxDayAdvances) ghost_maxDayAdvances = cycles.maxAdvances;
         if (probeFlags & 1 != 0) ghost_probeRequests++;
         if (probeFlags & 2 != 0) ghost_probeOnLpd++;
         if (probeFlags & 4 != 0) ghost_probeOnLpdFrozenPool++;
@@ -474,22 +492,64 @@ contract AdvanceLivenessHandler is Test {
         }
     }
 
-    /// Fulfil + mineFlip until it reverts or MAX_CRANKS successes.
-    function _crankToQuiescence() internal returns (bool quiet, bytes4 sel, uint256 cranks) {
-        for (cranks = 0; cranks < MAX_CRANKS; cranks++) {
+    /// Fulfil + mineFlip in bounded calls until it reverts. Nontermination is judged per
+    /// daily cycle: more than MAX_CRANKS_PER_CYCLE calls without the logical day moving, or
+    /// more than MAX_DAY_ADVANCES day moves at a fixed time. Every successful call must write.
+    struct CycleStats {
+        uint256 maxPerCycle;
+        uint256 maxAdvances;
+    }
+
+    function _crankToQuiescence(CycleStats memory stats) internal returns (bool quiet, bytes4 sel, uint256 cranks) {
+        uint24 cycleDay = _dailyIdx();
+        uint256 cycleStart;
+        uint256 advances;
+        for (cranks = 0; ; cranks++) {
             if (game.gameOver()) return (true, bytes4(0), cranks);
             _fulfillPending();
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+            vm.record();
+            (bool ok, bytes memory ret) = address(game).call{gas: MAX_CRANK_GAS}(
+                abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             if (!ok) {
+                vm.stopRecord();
                 // One engine selects every action (60d31f775): its idle stop is NoWork().
                 return (true, _sel(ret), cranks);
             }
+            if (!_engineWrote()) return (false, E_NO_PROGRESS_MARK, cranks + 1);
+            uint24 day = _dailyIdx();
+            if (day != cycleDay) {
+                cycleDay = day;
+                cycleStart = cranks + 1;
+                if (++advances > stats.maxAdvances) stats.maxAdvances = advances;
+                if (advances > MAX_DAY_ADVANCES) return (false, bytes4(0), cranks + 1);
+            }
+            uint256 inCycle = cranks + 1 - cycleStart;
+            if (inCycle > stats.maxPerCycle) stats.maxPerCycle = inCycle;
+            if (inCycle > MAX_CRANKS_PER_CYCLE) return (false, bytes4(0), cranks + 1);
         }
-        return (false, bytes4(0), cranks);
+    }
+
+    /// Engine progress lands in Game storage or in a worker contract it dispatches to.
+    /// The recorded access lists are large; reuse their memory so hundreds of cranks stay linear.
+    function _engineWrote() internal returns (bool wrote) {
+        uint256 free;
+        assembly ("memory-safe") { free := mload(0x40) }
+        address[5] memory engine = [address(game), ContractAddresses.CRAPS, ContractAddresses.SDGNRS,
+            ContractAddresses.PARIMUTUEL, ContractAddresses.COINFLIP];
+        for (uint256 i; i < engine.length && !wrote; i++) {
+            (, bytes32[] memory writes) = vm.accesses(engine[i]);
+            wrote = writes.length != 0;
+        }
+        vm.stopRecord();
+        assembly ("memory-safe") { mstore(0x40, free) }
+    }
+
+    function _dailyIdx() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(SLOT0))) >> 24);
     }
 
     function _judge(bool quiet, bytes4 sel, uint256 cranks, uint8 phase) internal view returns (Violation memory v) {
-        if (!quiet) return _snapshot(V_NO_QUIESCENCE, sel, cranks, phase);
+        if (!quiet) return _snapshot(sel == E_NO_PROGRESS_MARK ? V_NO_PROGRESS : V_NO_QUIESCENCE, sel, cranks, phase);
         if (_midDayLatch() != 0) return _snapshot(V_LATCH_STUCK, sel, cranks, phase);
         if (sel != E_NOT_TIME_YET) return _snapshot(V_TERMINAL_REVERT, sel, cranks, phase);
         uint24 logicalDay = game.currentDayView_g542950();
