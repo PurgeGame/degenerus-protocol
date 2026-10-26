@@ -29,6 +29,8 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 ///         passthroughs onto internals; overrides NO production logic.
 /// @dev Test-only. NO contracts/*.sol logic is mutated; this harness lives under test/.
 contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
+    /// @dev The etched runtime starts with zeroed storage, not the constructor's completed-day flag.
+    function setDailyComplete(bool done) external { dailyComplete = done; }
     function setFoilRecord(
         uint24 lvl,
         address buyer,
@@ -283,6 +285,7 @@ contract GoldenTicketFoilPack is Test {
         vm.etch(ContractAddresses.GAME, address(impl).code);
         h = GoldenTicketFoilHarness(payable(ContractAddresses.GAME));
         buyerId = h.registerWallet(BUYER);
+        h.setDailyComplete(true);
 
         // The grand delegatecalls the real jackpot module in the Game's context.
         DegenerusGameJackpotModule jm = new DegenerusGameDailyModule();

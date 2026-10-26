@@ -103,6 +103,9 @@ contract WrapperPathHandler is Test {
         calls_unwrapTo++;
         address owner_ = ContractAddresses.VAULT;
         uint256 bal = dgnrs.balanceOf(owner_);
+        // The lifetime unwrap cap is 40B; a draw over the remaining room can never succeed.
+        uint256 room = 40_000_000_000 * 1e12 - dgnrs.totalUnwrapped();
+        if (room < bal) bal = room;
         if (bal < 1 ether) return;
         uint256 amt = bound(amtSeed, 1 ether, bal);
         address recipient = actors[bound(recipSeed, 0, actors.length - 1)];
