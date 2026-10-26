@@ -29,6 +29,7 @@ contract WwxrpRecyclingGameMock {
         return playerActivityScore[id];
     }
     function setLevel(uint24 value) external { level = value; }
+    function currentLvl() external view returns (uint24) { return level; }
     function extsload_g2807007(bytes32 slot) external view returns (bytes32) {
         if (slot == bytes32(0)) return bytes32(uint256(currentDayView_g542950) << 24);
         return bytes32(0);

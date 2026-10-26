@@ -20,6 +20,7 @@ contract MockGame {
     mapping(bytes32 => bytes32) public slots;
     mapping(address => uint256) public score;
     uint24 public level;
+    function currentLvl() external view returns (uint24) { return level; }
     mapping(address => uint256) private mintHistory;
     mapping(address => bool) private hasMintHistory;
     function setLevel(uint24 value) external { level = value; }
