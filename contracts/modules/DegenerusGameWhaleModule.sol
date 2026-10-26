@@ -430,7 +430,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             levelsToAdd = deltaFreeze;
         }
 
-        uint24 newLevelCount = levelCount + levelsToAdd;
+        uint24 newLevelCount = _satLevelCount(levelCount, levelsToAdd);
 
         // Update mint data
         uint256 data = prevData;

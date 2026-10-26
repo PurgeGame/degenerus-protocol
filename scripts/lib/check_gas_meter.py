@@ -28,6 +28,9 @@ REVIEWED = {
     # Pre-call admission of the mandatory first unit; never classifies a callee failure.
     ("libraries/BoundedCall.sol", "admitFirst"): [
         "if (meter.mustProgress && gasleft() < minimum + reserve) revert MineFlipGas.InsufficientExecutionGas();"],
+    # Pre-call admission of a trusted stETH balance read; never classifies a callee failure.
+    ("libraries/BoundedCall.sol", "stethBalanceOrZero"): [
+        "if (gasleft() < STETH_READ_MIN_GAS) revert MineFlipGas.InsufficientExecutionGas();"],
     ("modules/GameMiner.sol", "_mineFlip"): [
         "uint256 rewardStart = gasleft();",
         "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",

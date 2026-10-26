@@ -774,7 +774,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         claimablePool = 0;
 
         uint256 ethBal = address(this).balance;
-        uint256 stBal = steth.balanceOf(address(this));
+        // The sweep is one-shot: a read that starts short of gas must revert, never read as zero.
+        BoundedCall.admitFirst(meter, BoundedCall.STETH_READ_MIN_GAS, GasBounds.TERMINAL_SWEEP_AFTER_READ);
+        uint256 stBal = _boundedStethBalance(meter, GasBounds.TERMINAL_SWEEP_AFTER_READ);
         uint256 totalFunds = ethBal + stBal;
 
         emit FinalSwept(totalFunds);
@@ -1199,6 +1201,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 extraArgs: VRF_NATIVE_EXTRA_ARGS
             })
         ));
+        // A zero low-64 ID could never match a callback.
+        if (id == 0) revert ExternalRequestRefused();
     }
 }
 

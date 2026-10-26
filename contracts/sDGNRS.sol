@@ -33,6 +33,7 @@ import {IStETH} from "./interfaces/IStETH.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
+import {BoundedCall} from "./libraries/BoundedCall.sol";
 
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
 interface IDegenerusGamePlayer {
@@ -1365,7 +1366,7 @@ contract sDGNRS {
         if (withCustody) {
             custody = address(this).balance;
             gross += custody;
-            uint256 stethBalance = steth.balanceOf(address(this));
+            uint256 stethBalance = BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
             if (gross > type(uint96).max || stethBalance > type(uint96).max - gross) stethBalance = 0;
             custody += stethBalance;
             gross += stethBalance;

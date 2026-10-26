@@ -139,10 +139,10 @@ contract LogicalGameDaysTest is DegenesisDeployProtocol {
         _fixture(abi.encodeCall(LogicalDayHeaders.setPurchase, (uint24(38), uint24(9), true, nowTs)));
         vm.warp(uint256(nowTs) + 1 days);
         assertFalse(game.livenessTriggered(), "29 complete days");
-        _fixture(abi.encodeCall(LogicalDayHeaders.setPurchase, (uint24(39), uint24(9), false, uint48(block.timestamp))));
+        _fixture(abi.encodeCall(LogicalDayHeaders.setPurchase, (uint24(39), uint24(9), false, uint48(vm.getBlockTimestamp()))));
         vm.warp(uint256(nowTs) + 2 days);
         assertFalse(game.livenessTriggered(), "pending thirtieth day does not count");
-        _fixture(abi.encodeCall(LogicalDayHeaders.setPurchase, (uint24(39), uint24(9), true, uint48(block.timestamp))));
+        _fixture(abi.encodeCall(LogicalDayHeaders.setPurchase, (uint24(39), uint24(9), true, uint48(vm.getBlockTimestamp()))));
         assertFalse(game.livenessTriggered(), "late completion gets its own open window");
         vm.warp(uint256(nowTs) + 3 days);
         assertTrue(game.livenessTriggered(), "completed thirtieth day must end on next reset");

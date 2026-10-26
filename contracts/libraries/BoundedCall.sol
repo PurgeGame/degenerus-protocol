@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {MineFlipGas} from "./MineFlipGas.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
 
 /// @notice Return-data bounds and retryable gas admission for isolated dependencies.
 library BoundedCall {
@@ -68,6 +69,19 @@ library BoundedCall {
         bytes memory output;
         (ok, output) = staticcallRemaining(meter, target, minimum, reserve, input, 32);
         if (ok) word = abi.decode(output, (uint256));
+    }
+
+    /// @dev A working stETH balanceOf costs about 25k gas. Reads start only above this, so a zero
+    ///      read means a dead token, never a shortage of gas.
+    uint256 internal constant STETH_READ_MIN_GAS = 100_000;
+
+    /// @dev stETH balance for trusted holder exits: 0 unless the call succeeds with a full word,
+    ///      so a dead token never blocks an ETH-only payout. Forwards all gas, no cap; admission
+    ///      reverts before the call when gas is short.
+    function stethBalanceOrZero(address token, address account) internal view returns (uint256 balance) {
+        if (gasleft() < STETH_READ_MIN_GAS) revert MineFlipGas.InsufficientExecutionGas();
+        (bool ok, bytes memory output) = token.staticcall(abi.encodeWithSelector(IStETH.balanceOf.selector, account));
+        if (ok && output.length >= 32) balance = abi.decode(output, (uint256));
     }
 
     function callBoolRemaining(MineFlipGas.Meter memory meter, address target, uint256 minimum,

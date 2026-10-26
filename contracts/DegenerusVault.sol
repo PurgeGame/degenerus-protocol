@@ -34,6 +34,7 @@ import {WWXRP} from "./WWXRP.sol";
 import {AFKingSubscriptionToken} from "./AFKingSubscriptionToken.sol";
 import {DGNRS} from "./DGNRS.sol";
 import {VaultPlayerActions} from "./libraries/VaultPlayerActions.sol";
+import {BoundedCall} from "./libraries/BoundedCall.sol";
 
 /// @dev Minimal token calls used by foreign-token recovery.
 interface IERC20Sweep {
@@ -952,7 +953,7 @@ contract DegenerusVault {
     /// @dev Get this contract's stETH balance
     /// @return Current stETH balance of the vault
     function _stethBalance() private view returns (uint256) {
-        return steth.balanceOf(address(this));
+        return BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
     }
 
     /// @dev Send ETH to recipient using low-level call (supports contracts with custom receive logic)

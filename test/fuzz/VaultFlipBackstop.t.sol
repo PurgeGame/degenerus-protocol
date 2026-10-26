@@ -13,6 +13,7 @@ contract VaultBackstopHost is DegenerusGame {
     function seedPhase(uint24 day, uint24 stamp, uint8 mode) external {
         vaultFlipSettledDay = stamp;
         dailyIdx = day;
+        purchaseStartDay = day;
         dailyComplete = false;
         lastDailyCompletedAt = uint48(block.timestamp - 1 days);
         lastDailyRequestWallDay = _wallDay();

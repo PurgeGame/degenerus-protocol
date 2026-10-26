@@ -401,8 +401,8 @@ contract FLIP {
             uint128 amount128 = _toUint128(amount);
             unchecked {
                 _supply.totalSupply -= amount128;
-                _supply.vaultAllowance += amount128;
             }
+            _addVaultAllowance(amount128);
             emit Transfer(from, address(0), amount);
             emit VaultEscrowRecorded(from, amount);
             return;
@@ -425,6 +425,12 @@ contract FLIP {
         emit Transfer(from, to, amount);
     }
 
+    /// @dev Adds to the vault mint allowance, saturating at uint128 max.
+    function _addVaultAllowance(uint128 amount128) private {
+        uint256 sum = uint256(_supply.vaultAllowance) + amount128;
+        _supply.vaultAllowance = sum > type(uint128).max ? type(uint128).max : uint128(sum);
+    }
+
     /// @notice Internal mint helper - creates new tokens.
     /// @dev Increases totalSupply and recipient balance. Emits Transfer from address(0).
     /// @param to The recipient address (cannot be zero).
@@ -433,9 +439,7 @@ contract FLIP {
         if (to == address(0)) revert ZeroAddress();
         uint128 amount128 = _toUint128(amount);
         if (to == ContractAddresses.VAULT) {
-            unchecked {
-                _supply.vaultAllowance += amount128;
-            }
+            _addVaultAllowance(amount128);
             emit VaultEscrowRecorded(address(0), amount);
             return;
         }

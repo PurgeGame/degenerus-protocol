@@ -74,6 +74,9 @@ library MineFlipGasBounds {
     uint256 internal constant TERMINAL_FINAL_SWEEP = 2_200_000;
     // Sweep return reserve.
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;
+    // After the sweep's stETH read: the three payout legs and the VRF shutdown admission
+    // (1M floor + 250k reserve + 15,873 EIP-150 + 10k frame), with margin.
+    uint256 internal constant TERMINAL_SWEEP_AFTER_READ = 1_400_000;
     // Eight changed seats, a fresh seat word, cursor/release writes and return: <=209.8k.
     uint256 internal constant TICKET_TAIL = 260_000;
     // Cold selection reads and arithmetic; no materialization writes. Amsterdam, no reservoir: 150,198.
