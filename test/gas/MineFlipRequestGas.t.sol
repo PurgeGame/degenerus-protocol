@@ -199,7 +199,6 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         if (scenario == Scenario.RedeemCarry) backingMode = 1;
         vm.warp((uint256(DAY - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1 hours);
         vm.fee(1 gwei);
-        mockFeed.setPrice(0.004 ether);
         vm.etch(address(game), type(RequestGameSeeder).runtimeCode);
         host = RequestGameSeeder(payable(address(game)));
         host.seed(_daily(), _transition(), _certify());
