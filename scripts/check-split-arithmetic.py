@@ -19,9 +19,9 @@ BPS = 10_000
 MAX_POOL = 10**30
 # Any change requires reviewing both the integer model and Solidity carrier.
 SOURCE_PINS = {
-    "contracts/libraries/JackpotBucketLib.sol": "12e4725bec303028593b65962a601f310949bcf5bbf90e603fd44f848dd23834",
-    "test/halmos/NewProperties.t.sol": "57186404679df87a4ec4b300fa05dd4d05beb06d50baf9b6c37187b12c66c7f0",
-    "test/halmos/SolvencyArithmetic.t.sol": "735b5b3ff055ceca6f1266dbe597d44b6cda489d3e68e63ce68437301b4f3b61",
+    "contracts/libraries/JackpotBucketLib.sol": "bcc6a66c79043b85fb70a5c2abbb2fec0d6ab79216d141dc4b6dc0b820c8ef44",
+    "test/halmos/NewProperties.t.sol": "a67c594a7d4050a7906235ab2d42f2e2652f127d3ccf6c4f69e07df16331e533",
+    "test/halmos/SolvencyArithmetic.t.sol": "76a079692734ffc5a80d0aa8ee53417b06d9b66197f6c6f014517e609d64a170",
 }
 
 

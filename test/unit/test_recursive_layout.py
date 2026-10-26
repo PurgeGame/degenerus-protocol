@@ -28,7 +28,7 @@ class RecursiveLayoutTests(unittest.TestCase):
  def test_expected_modules_come_from_deployment_registry(self):
   with patch.dict(os.environ, PROFILE='eip170'):
    modules=set(module.expected_modules())
-   self.assertEqual(len(modules),17)
+   self.assertEqual(len(modules),16)
    self.assertTrue({'Eip170Purchase','Eip170Actions','Eip170TicketFoil'} <= modules)
   with patch.dict(os.environ, PROFILE='glamsterdam'):
    self.assertEqual(set(module.expected_modules()), {
