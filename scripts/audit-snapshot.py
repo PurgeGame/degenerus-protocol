@@ -58,6 +58,7 @@ def verification_files(build_inputs):
         "scripts/check-split-arithmetic.py", "scripts/test-split-arithmetic.py",
         "scripts/deep-invariant-matrix.py", "scripts/test-deep-invariant-matrix.py",
         "scripts/check-owner-actions.js", "scripts/check-owner-governance-layout.js",
+        "scripts/check-slither.py",
         "scripts/owner-governance.js", "scripts/lib/ownerProposal.js", "scripts/lib/ownerDirect.js",
         "scripts/audit/fixtures/CoinflipReuseReference.sol", "scripts/audit/fixtures/CoinflipRingPrototype.sol",
         "scripts/audit/model-coinflip-reuse.py", "scripts/audit/model-coinflip-reuse-lifetime.py",

@@ -4,6 +4,11 @@
 check-audit-snapshot:
 	@python3 scripts/audit-snapshot.py
 
+# Use fresh production artifacts emitted with --build-info; rejects partial analysis.
+.PHONY: check-slither
+check-slither:
+	@python3 scripts/check-slither.py $(if $(CHECK_ARTIFACTS),$(CHECK_ARTIFACTS),forge-out-slither)
+
 test-assurance-tools:
 	@python3 -m unittest discover -s test/unit -p 'test_*.py'
 	@python3 scripts/test-deep-invariant-matrix.py

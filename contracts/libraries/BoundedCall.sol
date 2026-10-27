@@ -71,15 +71,17 @@ library BoundedCall {
         if (ok) word = abi.decode(output, (uint256));
     }
 
-    /// @dev A working stETH balanceOf costs about 25k gas. Reads start only above this, so a zero
-    ///      read means a dead token, never a shortage of gas.
+    /// @dev Callee execution allowance for a working stETH balanceOf (normally about 25k gas).
+    ///      Admission must also cover cold-call overhead and EIP-150's retained caller gas.
     uint256 internal constant STETH_READ_MIN_GAS = 100_000;
 
     /// @dev stETH balance for trusted holder exits: 0 unless the call succeeds with a full word,
     ///      so a dead token never blocks an ETH-only payout. Forwards all gas, no cap; admission
     ///      reverts before the call when gas is short.
     function stethBalanceOrZero(address token, address account) internal view returns (uint256 balance) {
-        if (gasleft() < STETH_READ_MIN_GAS) revert MineFlipGas.InsufficientExecutionGas();
+        if (gasleft() < STETH_READ_MIN_GAS + CALL_OVERHEAD + (STETH_READ_MIN_GAS + 62) / 63) {
+            revert MineFlipGas.InsufficientExecutionGas();
+        }
         (bool ok, bytes memory output) = token.staticcall(abi.encodeWithSelector(IStETH.balanceOf.selector, account));
         if (ok && output.length >= 32) balance = abi.decode(output, (uint256));
     }

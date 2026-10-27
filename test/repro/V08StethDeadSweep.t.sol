@@ -331,6 +331,9 @@ contract V08StethDeadSweep is DeployProtocol {
 
         uint256 completed;
         for (uint256 g = 30_000; g <= 200_000; g += 2_000) {
+            // Each holder exit can be its transaction's first stETH access. A warm
+            // dependency hides the forwarding shortfall at the admission boundary.
+            vm.cool(ContractAddresses.STETH_TOKEN);
             (bool ok, bytes memory out) = address(h).staticcall{gas: g}(abi.encodeCall(h.read, ()));
             if (ok) {
                 assertEq(abi.decode(out, (uint256)), 7, "a started read returns the working balance");

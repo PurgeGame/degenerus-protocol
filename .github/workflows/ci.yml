@@ -1,7 +1,7 @@
 name: CI
 
-# Pre-launch hardening gate: build + size-ceiling + tests, plus non-blocking
-# static analysis (Slither + Aderyn). Keeps the regression net running on every
+# Pre-launch hardening gate: build + size-ceiling + tests + complete Slither parsing.
+# Analyzer findings need review; they do not themselves fail CI. Keeps the regression net running on every
 # change so nothing silently regresses before the C4A contest.
 
 on:
@@ -335,22 +335,53 @@ jobs:
           if-no-files-found: ignore
 
   slither:
-    name: Slither (static analysis, non-blocking)
+    name: Slither integrity and detector report
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
-      - name: Run Slither
-        uses: crytic/slither-action@v0.4.0
+      - run: python3 -m pip install slither-analyzer==0.11.5
+      - name: Add swap space for compiler and analysis
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 14G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=14336
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+      - name: Fresh production build with complete compiler inputs
+        run: forge build --skip test --build-info --force --out forge-out-slither --cache-path .foundry-cache-slither
+      - name: Require complete parsing and SlithIR
+        run: |
+          mkdir -p .audit-test-logs/slither
+          python3 scripts/check-slither.py forge-out-slither > .audit-test-logs/slither/integrity.json
+      - name: Detector report (findings require review)
+        continue-on-error: true
+        timeout-minutes: 40
+        run: |
+          slither . --compile-force-framework foundry --ignore-compile \
+            --foundry-out-directory forge-out-slither --fail-none \
+            --exclude-informational --exclude-optimization \
+            --json .audit-test-logs/slither/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          fail-on: none
-          slither-args: --exclude-informational --exclude-optimization
+          name: slither-evidence
+          path: .audit-test-logs/slither/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   aderyn:
     name: Aderyn (static analysis, non-blocking)

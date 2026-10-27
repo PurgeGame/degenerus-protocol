@@ -7,6 +7,7 @@ import { PROFILE, PROFILES } from './deploymentProfiles.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const PROFILE_FILES = [
   'contracts/profiles/Selected.sol', 'contracts/Coinflip.sol',
+  'contracts/DegenerusGame.sol', 'contracts/CrapsBattle.sol',
   'test/helpers/CoinflipStakeSetter.sol', 'test/fuzz/helpers/DeployProtocol.sol',
   'test/helpers/BoundedDeployProtocol.sol', 'test/fork/ForkDeployProtocol.sol',
   'test/helpers/ProfileModules.sol',
@@ -50,14 +51,24 @@ export function selectProfile({ check = false } = {}) {
     ['Game', 'Coinflip', 'Craps'].map(name =>
       `import {${prefix}${name} as Selected${name}} from "./${PROFILE}/${prefix}${name}.sol";\n`).join('') +
     `import {${prefix}${PROFILE === 'eip170' ? 'CrapsEngine' : 'Craps'} as SelectedCrapsEngine} from "./${PROFILE}/${prefix}${PROFILE === 'eip170' ? 'CrapsEngine' : 'Craps'}.sol";\n`);
+  // Name each base directly in its importing source. Re-exported import aliases
+  // compile in solc but Slither 0.11.5 cannot resolve them as inherited contracts.
+  write('contracts/DegenerusGame.sol', banner +
+    `import {${prefix}Game} from "./profiles/${PROFILE}/${prefix}Game.sol";\n` +
+    'import {IDegenerusVaultOwnerGame} from "./modules/GameFacade.sol";\n\n' +
+    `contract DegenerusGame is ${prefix}Game {}\n`);
+  write('contracts/CrapsBattle.sol', banner +
+    `import {${prefix}Craps} from "./profiles/${PROFILE}/${prefix}Craps.sol";\n` +
+    'import {ICrapsEngine, IFlipCoin, IVaultOwnership, IGameCraps, IHighRollerReserve, ICoinflipStake, IReadCohortLifecycle} from "./CrapsInterfaces.sol";\n\n' +
+    `contract CrapsBattle is ${prefix}Craps {}\n`);
   const ctor = PROFILE === 'glamsterdam'
     ? '    constructor(address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,\n' +
-      '        address[] memory players, bytes32[] memory refs) SelectedCoinflip(owners, codes, kicks, players, refs) {}\n'
+      `        address[] memory players, bytes32[] memory refs) ${prefix}Coinflip(owners, codes, kicks, players, refs) {}\n`
     : '';
   write('contracts/Coinflip.sol', banner +
-    'import {SelectedCoinflip} from "./profiles/Selected.sol";\n' +
+    `import {${prefix}Coinflip} from "./profiles/${PROFILE}/${prefix}Coinflip.sol";\n` +
     'import {IFLIP, IWWXRP, IDegenerusRecordBounty} from "./modules/CoinflipCore.sol";\n\n' +
-    'contract Coinflip is SelectedCoinflip {\n' + ctor + '}\n');
+    `contract Coinflip is ${prefix}Coinflip {\n` + ctor + '}\n');
   const setterFile = 'test/helpers/CoinflipStakeSetter.sol';
   const args = PROFILE === 'glamsterdam'
     ? 'new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)' : '';

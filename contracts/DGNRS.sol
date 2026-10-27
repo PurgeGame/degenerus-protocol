@@ -28,7 +28,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
 /// @notice Interface for sDGNRS contract methods used by DGNRS.
-interface IsDGNRS {
+interface IDGNRSReserve {
     /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Get token balance for an address.
@@ -40,7 +40,7 @@ interface IsDGNRS {
 }
 
 /// @dev Game interface for RNG lock (unwrap guard), game-over check (burn guard), and level (vesting).
-interface IDegenerusGame {
+interface IDGNRSGame {
     /// @notice Whether the daily RNG lock is active, as implemented by DegenerusGame.
     function rngLocked() external view returns (bool);
     /// @notice Whether the game has ended, as implemented by DegenerusGame.
@@ -145,9 +145,9 @@ contract DGNRS {
     /// @dev Lifetime ceiling on `unwrapTo`: 20% of the 200B DGNRS supply, 4% of sDGNRS's 1T.
     uint256 private constant UNWRAP_CAP = VAULT_TOTAL / 5;
 
-    IsDGNRS private constant staked = IsDGNRS(ContractAddresses.SDGNRS);
+    IDGNRSReserve private constant staked = IDGNRSReserve(ContractAddresses.SDGNRS);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-    IDegenerusGame private constant game = IDegenerusGame(ContractAddresses.GAME);
+    IDGNRSGame private constant game = IDGNRSGame(ContractAddresses.GAME);
 
     // =====================================================================
     //                          CONSTRUCTOR
