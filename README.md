@@ -5,8 +5,9 @@ Degenerette and a prize-pool growth parimutuel. ETH/stETH obligations and token 
 are accounted for separately. Contracts use fixed deployment addresses; game modules
 execute by delegatecall, while craps uses a separate stateless dice engine.
 
-**External audit: use tag `audit-2026-10-25` and start with [the audit handoff](docs/AUDIT.md).**
-The [freeze record](docs/audit/freeze.json) identifies the tested inputs, their hashes and verification limits.
+**External audit: start with [the audit handoff](docs/AUDIT.md) and verify the supplied snapshot hashes.**
+The [readiness record](docs/audit/freeze.json) identifies the candidate, tested inputs and
+remaining verification. This candidate has no final audit tag; historical tags identify older sources.
 
 | Document | Purpose |
 | --- | --- |
@@ -27,7 +28,7 @@ running tests that patch deployment constants.
 
 One source tree compiles to two deployment profiles. The profile is a compile-time choice
 (`PROFILE`, default `eip170`); no profile flag exists on chain. `node scripts/select-profile.js`
-regenerates the files that depend on it (`contracts/profiles/Selected.sol`, `contracts/Coinflip.sol`,
+regenerates the files that depend on it (`contracts/profiles/Selected.sol`, the Game, Coinflip and Craps facades,
 `deployments/<profile>.json` and the test helpers); `--check` verifies they are current.
 
 | Profile | Role | Deployment entries | Runtime / initcode limit |
@@ -142,16 +143,17 @@ group, gate and known limit.
 
 ### Results for this revision
 
-Counts come from the final battery and are recorded in [the freeze record](docs/audit/freeze.json).
+The [readiness record](docs/audit/freeze.json) separates the completed baseline battery
+from verification of the candidate's later changes. This is not a final freeze.
 
 | Check | Result |
 | --- | --- |
-| Foundry standard groups | `[final battery]` passed / failed / skipped |
-| Hardhat | `[final battery]` passed / failed |
-| Deep invariants (1000 runs x 256 depth) | `[final battery]` roots, passed / failed |
-| Halmos properties | `[final battery]` |
-| Mainnet fork suites | `[final battery]` |
-| Slither / Aderyn | `[final battery]` results / instances |
+| Baseline Foundry battery | 6,715 passing executions, 0 failures, 2 optional skips; imported suites can repeat |
+| Baseline Hardhat / Halmos | 1,557 tests / 68 properties passing |
+| Candidate regressions | 48 passing in each isolation mode, 42 jackpot tests, 6 mainnet-fork stETH tests |
+| Candidate structural gates | Both profiles pass; 111 assurance-tool and 6 matrix tests pass |
+| Deep invariants (1000 runs x 256 depth) | Full 60-partition campaign remains incomplete |
+| Candidate static analysis | Slither parsing and IR complete; full detectors unfinished. Aderyn completed with untriaged findings |
 
 ### Contract sizes (eip170 profile, runtime bytes)
 
@@ -160,13 +162,14 @@ the least spare room:
 
 | Entry | Runtime bytes | Spare bytes |
 | --- | --- | --- |
-| `[final build]` | `[final build]` | `[final build]` |
-| `[final build]` | `[final build]` | `[final build]` |
-| `[final build]` | `[final build]` | `[final build]` |
-| `[final build]` | `[final build]` | `[final build]` |
-| `[final build]` | `[final build]` | `[final build]` |
+| Eip170JackpotBattle | 24,324 | 252 |
+| Eip170TicketFoil | 24,307 | 269 |
+| CrapsBattle | 24,267 | 309 |
+| Eip170Purchase | 24,236 | 340 |
+| DegenerusGame | 23,916 | 660 |
 
-The full per-entry table is `local_verification.structural.sizes` in the freeze record.
+The readiness record identifies the size reports and their source evidence. The alternate
+Glamsterdam schedule passes with 69 bytes of minimum runtime headroom.
 
 [Terms](TERMS.md) are separate from the technical audit specification.
 

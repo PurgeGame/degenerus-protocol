@@ -3,13 +3,14 @@
 ## Subject
 
 Review the production Solidity files listed in [scope.txt](../scope.txt). This handoff describes a
-**frozen source revision at annotated tag `audit-2026-10-25`**.
+**candidate source snapshot, not a tagged final freeze**. Verify the supplied hashes below;
+do not substitute a historical audit tag for these inputs.
 The primary audit and deployment target is the `eip170` build profile
 (`contracts/profiles/eip170`); the `glamsterdam` profile (`contracts/profiles/glamsterdam`) is the
 maintained alternate. `scripts/select-profile.js` selects the profile, and the deployment tables are
 `deployments/eip170.json` and `deployments/glamsterdam.json`.
-[The freeze record](audit/freeze.json) identifies the tested input revisions and verification
-results. Exact SHA-256 hashes and the source base commit are recorded in
+[The readiness record](audit/freeze.json) identifies the tested input revisions, verification
+results and outstanding release checks. Exact SHA-256 hashes and the source base commit are recorded in
 [the snapshot manifest](audit/snapshot.json).
 
 From the repository root, verify the supplied source/build inputs before patching pins:

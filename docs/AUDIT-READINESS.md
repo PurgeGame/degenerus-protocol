@@ -26,7 +26,38 @@ Properties reviewed at this revision:
 - **Backing and accounts.** See [architecture](ARCHITECTURE.md), with the storage positions of
   the current layout (`scripts/layout/golden`).
 
-Test, gas, size and static-analysis results of the current revision: `[final battery]`.
+The [readiness record](audit/freeze.json) separates the completed baseline battery from
+verification of the candidate's later changes. It also records the
+unfinished deep invariant campaign and the absence of remote CI results for this candidate.
+This is not a tagged final freeze.
+
+### Verification available for reviewers
+
+| Evidence | Result | Revision covered |
+|---|---|---|
+| Full Foundry battery | 6,715 passing executions, 2 optional skips, 0 failures | Baseline before the later candidate changes; imported suites can repeat between batches |
+| Full Hardhat battery | 1,557 passing, 0 failures after the documented reruns | Baseline |
+| Halmos | 68 properties passing across 9 suites | Baseline; not a proof of gas-metered liveness |
+| Liveness, holder-exit and settlement regressions | 48 passing with isolation, 48 passing without isolation | Current candidate |
+| Jackpot checkpoint, ticket and gas regressions | 42 passing | Current candidate |
+| Mainnet-fork stETH regressions | 6 passing at block 26,193,851 | Current candidate |
+| Assurance-tool tests | 111 unit tests and 6 deep-matrix tests passing | Current candidate |
+| Production size, ABI coverage, storage and source gates | Both deployment profiles pass | Current candidate, with each profile's generated address pins |
+| Slither compiler integrity | Complete parsing and SlithIR for 459 contracts / 6,899 functions | Current candidate; detector dependency analysis is separate |
+| Aderyn | Completed; 12 High and 25 Low finding categories | Current candidate; raw findings remain untriaged |
+
+The baseline full battery, symbolic proofs
+and native replay are supporting evidence, not results for the final candidate. The current
+candidate has focused regression coverage; a complete rerun remains a release check.
+The EIP-170 deployment's smallest runtime margin is 252 bytes; the alternate Glamsterdam
+schedule's smallest margin is 69 bytes. These are measured build limits, not a claim that
+the alternate schedule is available on the target chain.
+
+Before a final release freeze, rerun the complete battery on the committed candidate,
+complete the 60-partition deep invariant campaign, finish the full Slither detector run
+and triage analyzer findings, and verify hosted CI for that same commit. Record the exact
+revision and evidence before creating a final audit tag. These outstanding checks do not
+prevent an auditor from reviewing this explicitly identified candidate.
 
 ## DGVE owner governance
 

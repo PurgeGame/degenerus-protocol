@@ -2,8 +2,8 @@
 
 The storage-reuse implementation changes Coinflip to a 90-day retained-page ring, BAF to two
 player records and affiliate history to one word. See [storage reuse](STORAGE-REUSE.md) for the
-layouts. Results of the full battery on the revision under review: `[final battery]`. Partial
-broad runs are not a complete release result.
+layouts. The [readiness record](audit/freeze.json) identifies the completed baseline battery,
+candidate checks, evidence and remaining work. Partial broad runs are not a complete release result.
 
 Run checks against the exact revision supplied for review. The repository contains
 source, tests and reproduction tooling; generated logs and analyzer reports stay in
@@ -96,7 +96,7 @@ until then this section lists what each check must show, not pass counts.
 | Engine | Degenesis days unlock randomness only; neither `lastPurchaseDay` latch fires before day 9, however late the day is cranked; the day-9 request latches the early turbo only above the level-1 target; craps windows and battle locks start on day 2; day 7's battle awards no seats; foil is unchanged |
 | Terminal | Both endings split every cohort and release the Vault budget and sDGNRS AFKing funding exactly once, before `gameOver`, with no loss of player claims; unresolved orders are forfeited |
 | Burn | The seventh close burns the remaining `Pool.Degenesis` balance exactly once, after every reservation is released, including an empty final day and a sale with no orders |
-| Gas | Per-branch admission and the flush reserve cover the measured worst case of each branch; the bounds are the constants in `contracts/libraries/MineFlipGasBounds.sol`. `test/gas/DegenesisGas.t.sol` must show each forced branch, flush, tail, request step, word copy, day close and terminal addition within its bound on Osaka and on the no-reservoir Glamsterdam total, and every checkpoint under 10M execution gas. Suite and test counts: `[final battery]` |
+| Gas | Per-branch admission and the flush reserve cover the measured worst case of each branch; the bounds are the constants in `contracts/libraries/MineFlipGasBounds.sol`. `test/gas/DegenesisGas.t.sol` must show each forced branch, flush, tail, request step, word copy, day close and terminal addition within its bound on Osaka and on the no-reservoir Glamsterdam total, and every checkpoint under 10M execution gas. The isolated integration/gas selection is recorded in [the readiness record](audit/freeze.json). |
 
 Suites (all under `test/fuzz/` unless noted): `DegenesisCohortMath`, `DegenesisSettlement`,
 `DegenesisSettlementInventory`, `DegenesisDayMapping`, `DegenesisClosingBurn`, `DegenesisWordBinding`,
@@ -109,7 +109,7 @@ Degenesis variants in `invariant/V61SolvencyAfpay.inv.t.sol` and `invariant/Wall
 Structural gates cover the new module's selectors and delegatecall pairs, the layout goldens in
 `scripts/layout/golden` (the Game's `degenesis*` fields and CrapsBattle's `_firstWindowDay`), the
 storage slot pins and the source manifests. Runtime sizes are checked by the deployment-size gate;
-the margins for this revision are `[final battery]`.
+the candidate's margins are recorded in [the readiness record](audit/freeze.json).
 
 ### Lootbox EV allowance at opening (2026-10-15)
 
@@ -394,14 +394,30 @@ Known verification limits:
 
 ## Static analysis
 
-Optional Slither and Aderyn jobs are configured in CI and are non-blocking.
-To run Slither against a fresh Hardhat build in a disposable checkout:
+CI requires Slither to parse the complete production source successfully. Detector findings
+are retained for review and do not themselves fail the job; parsing crashes, omitted IR and stale
+compiler inputs do fail it. Aderyn remains a non-blocking report. To reproduce Slither:
 
 ```sh
-pip install slither-analyzer==0.11.5
-npx hardhat compile
-slither . --compile-force-framework hardhat --ignore-compile
+python3 -m pip install slither-analyzer==0.11.5
+forge build --skip test --build-info --force --out forge-out-slither --cache-path .foundry-cache-slither
+python3 scripts/check-slither.py forge-out-slither
+slither . --compile-force-framework foundry --ignore-compile \
+  --foundry-out-directory forge-out-slither --fail-none \
+  --exclude-informational --exclude-optimization --json slither-report.json
 ```
+
+The check compares every compiler input with the current files, requires an AST for every
+scoped source and rejects partial Slither construction or IR errors. It generates SlithIR
+and storage layouts using the pinned 0.11.5 analysis hook, skipping only the expensive
+transitive dependency closure. The separate detector command computes that closure normally;
+CI retains it as a non-blocking report with a 40-minute limit. A timeout is incomplete
+detector coverage, not a clean report. Use a fresh output
+directory: old incremental build-info is deliberately rejected. Profile facades import their
+actual base contracts directly because Slither 0.11.5 cannot resolve the previous re-exported
+inheritance aliases. DGNRS's local game and reserve interfaces have unique names so they
+cannot shadow the full interfaces during analysis. Neither adjustment changes protocol logic;
+the candidate's bytecode, ABI and layout comparisons are recorded with its verification.
 
 CI pins Aderyn 0.6.8 through its npm distribution. The older crates.io 0.1.9
 release rejects `evm_version = "osaka"` before analyzing any source. Reproduce

@@ -1,828 +1,440 @@
 {
-  "schema_version": 3,
-  "status": "DRAFT: source frozen for external audit once every [pending] value below is filled from the final battery",
-  "audit_tag": "audit-2026-10-25",
-  "recorded_at_utc": "[pending]",
-  "production_source_commit": "11d827099a89f29e25ea7da261aa00bddc515264",
-  "battery_commit": "[pending]",
-  "final_test_inputs_commit": "[pending]",
-  "verified_commit": "[pending]",
-  "hosted_ci_commit": "[pending]",
+  "schema_version": 4,
+  "status": "audit candidate; locally verified changes, not a tagged final release freeze",
+  "audit_tag": null,
+  "recorded_at_utc": "2026-10-27T21:58:37.163361+00:00",
+  "candidate": {
+    "base_commit": "adba2b9d78b0ddea17a01ec6e482737074619be8",
+    "identity": "working-tree sources and assurance inputs authenticated by snapshot_files; base commit alone does not identify this candidate",
+    "changes": [
+      "Direct selected-base imports in the three generated facades and unique DGNRS local interface names for complete Slither analysis.",
+      "Holder-exit stETH read admission raised to 111588 gas to account for cold-call overhead and EIP-150 retention.",
+      "Cold-access regression, reviewed gas-read registry, required Slither IR integrity gate and seven integrity-gate unit tests.",
+      "Corrected audit handoff, verification record and source/assurance hashes."
+    ],
+    "full_battery_after_changes": "not rerun; focused verification is listed separately"
+  },
   "predecessor_freeze": {
     "tag": "audit-2026-10-16",
     "production_source_commit": "1375c3e315b3d2313dee094a7a54fa8bd994f684",
     "record": "docs/audit/freeze-audit-2026-10-16.json"
   },
-  "contract_changes_since_predecessor": "176 files changed, 20195 insertions(+), 18906 deletions(-); logical game days (the daily index is the game day, no calendar gap days, 30 game-day purchase window including level 0 after Degenesis, 14 days without a completed daily session ends the game on the dead-VRF path); P1-P8 consolidation; solc 0.8.38; split into the eip170 deployment profile (37 entries, primary target) and the glamsterdam alternate (21 entries); native ETH VRF funding with donateVrf (LINK token, price feed and feed governance removed); pending-pool freeze sentinel (bit 255) and foil-claim lock while rngLocked; packed 64-bit VRF request ID, raw-word callback and coinflip-only nudges; selector renames (purchaseOrderFor, mineRun, currentLvl, betDegenerette, decimatorActive, giveBoon, getGrowth, claimClaimable, purchaseDegenesisBox, clearDebtNow, playCoinflip, castBallot, enterDraw, throwCraps, playCraps); mid-day credit charge with a 0.25 gwei tip allowance",
-  "contracts_unchanged_after_production_commit": "[pending]",
-  "lane_commits": {
-    "battery_commit": "[pending]",
-    "fix_commit": "[pending]",
-    "verified_commit": "[pending]",
-    "relation": "[pending]"
-  },
   "snapshot_files": {
-    "snapshot.json": "5295b3641b1b5e70e77eee170242b703e291aa560d1d62dc76a1bf888a1de87a",
-    "source-sha256.txt": "5d3638e57141923bf77fc8c2d158555c01e88e9a13c311912682ca115a27dbf4",
-    "verification-sha256.txt": "3a63680eef39288ef87670108ffe87953a80a869f51da6091c739824a2c34f7a"
+    "snapshot.json": "df48deaa338c24771da7d4238e2f3e7289eec767da53ef1d0b9301e85c96c2f3",
+    "source-sha256.txt": "c21a264e476ff36cedb8c82ca1a2596f085bb7613bfc9c7109e6e2dded03b6cf",
+    "verification-sha256.txt": "2bf418009c31618493aabd9c82d80589ce7e43cc93d13fe7a54bfd82e1b55fda"
   },
-  "local_verification": {
-    "structural": {
-      "profile": "eip170",
-      "schedule": "eip170 (runtime 24,576 B, initcode 49,152 B)",
-      "result": "[pending]",
-      "sizes": {
-        "ICONS_32": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_ACTIONS_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_PURCHASE_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_MINT_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_FOILPACK_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_ADVANCE_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_JACKPOT_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_JACKPOT_DRAW_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_WHALE_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_TICKET_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_LOOTBOX_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_BOON_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_DEGENERETTE_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_AFKING_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_GAMEOVER_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_DECIMATOR_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_MINER_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "COIN": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "COINFLIP": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "QUESTS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "AFFILIATE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "JACKPOTS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "DEITY_PASS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "VAULT": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "SDGNRS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "DGNRS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "ADMIN": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GNRUS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "AFKING_SUB_TOKEN": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "PARIMUTUEL": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "RECORD_BOUNTY": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "CRAPS_ENGINE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "CRAPS_LIFECYCLE_MODULE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "CRAPS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "WWXRP": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "OWNER_GOVERNANCE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "DGVF": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "DGVE": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "GAME_LENS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        },
-        "CRAPS_LENS": {
-          "runtime_bytes": "[pending]",
-          "initcode_bytes": "[pending]",
-          "runtime_remaining": "[pending]",
-          "initcode_remaining": "[pending]"
-        }
+  "toolchain": {
+    "forge": "1.6.0-nightly c07d504b",
+    "solc": "0.8.38",
+    "optimizer_runs": 1000,
+    "via_ir": true,
+    "evm": "osaka",
+    "node": "24.22.1 locally; CI uses 20",
+    "python": "3.14.7 locally; CI uses 3.12",
+    "slither": "0.11.5",
+    "aderyn": "0.6.8",
+    "halmos_baseline": "0.3.3",
+    "geth_baseline": "1.17.7"
+  },
+  "baseline_battery": {
+    "battery_tree": "929426c2bb7667f669c123993e6774c7a6d1e569",
+    "production_source_commit": "0cd4a84b78ce0bb581234326c8e9bca9f73e40af",
+    "test_fix_commit": "42721dbe9d360b3f79b5d253a3a901cd0480924c",
+    "provenance": "Earlier completed battery recovered from raw runner evidence; this preparation rechecked 42 compiler-input manifests against candidate base HEAD, excluding fixture address pins: 162 production files, zero mismatches. It is not a full battery on the changed candidate.",
+    "source_validation": {
+      "base_commit": "adba2b9d78b0ddea17a01ec6e482737074619be8",
+      "manifests": 42,
+      "compared_production_files": 162,
+      "excluded_fixture_pin": "contracts/ContractAddresses.sol",
+      "mismatches": []
+    },
+    "foundry_by_group": {
+      "iso": {
+        "passed": 2187,
+        "failed": 0,
+        "skipped": 1
       },
-      "tightest": [
-        "[pending]"
-      ],
-      "layout_oracle": "[pending]",
-      "recursive_layout": "[pending]",
-      "source_drift_gates": "[pending]",
-      "profile_differential": "[pending]",
-      "assurance_tools_and_snapshot": "[pending]"
-    },
-    "structural_glamsterdam": {
-      "profile": "glamsterdam",
-      "schedule": "glamsterdam (runtime 65,536 B, initcode 131,072 B)",
-      "result": "[pending]",
-      "tightest": [
-        "[pending]"
-      ]
-    },
-    "foundry_standard": {
-      "foundry lane [pending]": [
-        {
-          "group": "repro-symbolic",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        },
-        {
-          "group": "fuzz-1",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        },
-        {
-          "group": "fuzz-2",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        },
-        {
-          "group": "fuzz-3",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        },
-        {
-          "group": "fuzz-4",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        },
-        {
-          "group": "integration-gas",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        },
-        {
-          "group": "invariants",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        },
-        {
-          "group": "census",
-          "ran_at": "[pending]",
-          "attempt": "[pending]",
-          "run_id": "[pending]",
-          "batches": "[pending]",
-          "source_files": "[pending]",
-          "suites": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "nonzero_exit_batches": "[pending]"
-        }
-      ]
-    },
-    "foundry_totals": {
-      "passed": "[pending]",
-      "failed": "[pending]",
-      "skipped": "[pending]",
-      "batches": "[pending]"
-    },
-    "foundry_first_attempt_incidents": [],
-    "hardhat": {
-      "ran_at": "[pending]",
-      "run_id": "[pending]",
-      "files": "[pending]",
-      "batches": "[pending]",
-      "passed": "[pending]",
-      "failed": "[pending]",
-      "pending": "[pending]",
-      "exit_codes_nonzero": "[pending]",
-      "source_drift": "[pending]"
-    },
-    "mainnet_fork": {
-      "ran_at": "[pending]",
-      "run_id": "[pending]",
-      "suites": "[pending]",
-      "passed": "[pending]",
-      "failed": "[pending]"
-    },
-    "deep_invariants_1000x256": {
-      "ran_at": "[pending]",
-      "root_count": 43,
-      "passed": "[pending]",
-      "roots": {
-        "AdvanceLiveness": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "AnyInputSafety": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "AnyInputSafetyDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "BoxEnqueue": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "BoxEnqueueDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "CoinSupply": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "CoinSupplyDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "Composition": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "CompositionDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "CrapsConservation": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "CrapsRealWiringConservation": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "CrapsRngSeal": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "DegeneretteBet": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "DegenesisLiveness": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "DegenesisRngFreeze": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "DegenesisSaleFlow": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "DegenesisSolvency": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "DegenesisTimelineVariants": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "EthSolvency": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "GameFSM": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "GameFSMDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "LoanAccounting": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "MultiLevel": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "MultiLevelDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "PoolConservation": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "PoolConservationDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "RedemptionInvariants": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "RngFreezeDegenesisTimeline": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "RngIndexDrainOrdering": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "RngWindowFreeze": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "SeatCap": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "SeatCapDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "StorageRecyclingModel": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "TicketQueue": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "TicketQueueDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "V61SolvencyAfpay": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "VRFPathDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "VRFPathInvariants": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "VaultShareMath": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "WalletIdTruth": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "WalletIdTruthDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "WhaleSybil": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        },
-        "WhaleSybilDegenesis": {
-          "worktree": "[pending]",
-          "passed": "[pending]",
-          "failed": "[pending]",
-          "skipped": "[pending]",
-          "exit_code": "[pending]",
-          "run_id": "[pending]"
-        }
+      "rep": {
+        "passed": 646,
+        "failed": 0,
+        "skipped": 0
+      },
+      "fuzz": {
+        "passed": 3457,
+        "failed": 0,
+        "skipped": 1
+      },
+      "inv": {
+        "passed": 389,
+        "failed": 0,
+        "skipped": 0
+      },
+      "fork": {
+        "passed": 36,
+        "failed": 0,
+        "skipped": 0
       }
     },
-    "halmos": {
-      "ran_at": "[pending]",
-      "properties": "[pending]",
-      "failed": "[pending]"
+    "foundry_total": {
+      "passed": 6715,
+      "failed": 0,
+      "skipped": 2
     },
-    "split_arithmetic": "[pending]",
-    "skipped_tests": "[pending]",
-    "test_changes_since_predecessor": "[pending]"
+    "hardhat": {
+      "files": 98,
+      "passed": 1557,
+      "failed": 0,
+      "skipped": 0
+    },
+    "halmos": {
+      "properties_passed": 68,
+      "suites": 9,
+      "failed": 0,
+      "timeouts_or_unknowns": 0
+    },
+    "native_replay": {
+      "calls_per_profile": 7819,
+      "profiles": [
+        "eip170",
+        "glamsterdam"
+      ],
+      "failures": 0,
+      "rules": "Osaka Geth"
+    },
+    "profile_differential": {
+      "scenarios_per_profile": 11,
+      "differences": 0
+    },
+    "skips": [
+      {
+        "test": "test_ExportRepricingFixtures",
+        "reason": "AFKING_REPRICING_STATE_DIR not configured; optional export"
+      },
+      {
+        "test": "testFuzz_FoilMatchesArchivedRuntime",
+        "reason": "CUSTOMER_GROWTH_FOIL_REFERENCE not configured; optional archived-runtime comparison"
+      }
+    ],
+    "superseded_attempts": [
+      "Initial fuzz batch pulled in isolation-only gas tests via an imported seeder; the helper was moved and the entire affected batch rerun successfully. The fix is merged into candidate base HEAD.",
+      "Initial Hardhat OwnerGovernance attempts hit 120-second timeouts under load; the file passed when rerun without competing jobs. Candidate base HEAD also increases the timeout."
+    ],
+    "evidence": [
+      "baseline-battery.json",
+      "baseline-source-check.json",
+      "baseline-evidence/SHA256SUMS.json"
+    ]
   },
-  "static_analysis_local_like_for_like": {
-    "slither": {
-      "version": "[pending]",
-      "args": "--exclude-informational --exclude-optimization",
-      "predecessor_results": "[pending]",
-      "this_results": "[pending]",
-      "note": "baseline: re-analyse audit-2026-10-16 in the same session (recorded there as 1,345 results); [pending]"
+  "candidate_verification": {
+    "structural_eip170": {
+      "result": "pass",
+      "deployment_rows": 41,
+      "limits_bytes": {
+        "runtime": 24576,
+        "initcode": 49152
+      },
+      "smallest_runtime_margins": [
+        {
+          "key": "CRAPS_LIFECYCLE_MODULE",
+          "contract": "Eip170JackpotBattle",
+          "runtime_bytes": 24324,
+          "initcode_bytes": 24350,
+          "constructor_arguments": [],
+          "runtime_remaining": 252,
+          "initcode_remaining": 24802
+        },
+        {
+          "key": "GAME_TICKET_MODULE",
+          "contract": "Eip170TicketFoil",
+          "runtime_bytes": 24307,
+          "initcode_bytes": 24493,
+          "constructor_arguments": [],
+          "runtime_remaining": 269,
+          "initcode_remaining": 24659
+        },
+        {
+          "key": "CRAPS",
+          "contract": "CrapsBattle",
+          "runtime_bytes": 24267,
+          "initcode_bytes": 24934,
+          "constructor_arguments": [],
+          "runtime_remaining": 309,
+          "initcode_remaining": 24218
+        },
+        {
+          "key": "GAME_PURCHASE_MODULE",
+          "contract": "Eip170Purchase",
+          "runtime_bytes": 24236,
+          "initcode_bytes": 24422,
+          "constructor_arguments": [],
+          "runtime_remaining": 340,
+          "initcode_remaining": 24730
+        }
+      ],
+      "checks": [
+        {
+          "check": "sizes",
+          "exit_code": 0
+        },
+        {
+          "check": "recursive",
+          "exit_code": 0
+        },
+        {
+          "check": "storage",
+          "exit_code": 0
+        },
+        {
+          "check": "owners",
+          "exit_code": 0
+        },
+        {
+          "check": "owner-layout",
+          "exit_code": 0
+        },
+        {
+          "check": "gates",
+          "exit_code": 0
+        },
+        {
+          "check": "generation",
+          "exit_code": 0
+        }
+      ],
+      "additional_checks": [
+        "Vault player-action surface",
+        "Phase 2 nested/peripheral layouts using the canonical compiler-only XaLayout probe"
+      ],
+      "evidence_prefix": "final-deployment"
+    },
+    "structural_glamsterdam": {
+      "result": "pass",
+      "deployment_rows": 25,
+      "limits_bytes": {
+        "runtime": 65536,
+        "initcode": 131072
+      },
+      "smallest_runtime_margins": [
+        {
+          "key": "GAME_MINT_MODULE",
+          "contract": "DegenerusGameEndgameModule",
+          "runtime_bytes": 65467,
+          "initcode_bytes": 65654,
+          "constructor_arguments": [],
+          "runtime_remaining": 69,
+          "initcode_remaining": 65418
+        },
+        {
+          "key": "GAME_ADVANCE_MODULE",
+          "contract": "DegenerusGameDailyModule",
+          "runtime_bytes": 65062,
+          "initcode_bytes": 65248,
+          "constructor_arguments": [],
+          "runtime_remaining": 474,
+          "initcode_remaining": 65824
+        },
+        {
+          "key": "GAME",
+          "contract": "DegenerusGame",
+          "runtime_bytes": 64594,
+          "initcode_bytes": 66184,
+          "constructor_arguments": [],
+          "runtime_remaining": 942,
+          "initcode_remaining": 64888
+        },
+        {
+          "key": "COINFLIP",
+          "contract": "Coinflip",
+          "runtime_bytes": 56511,
+          "initcode_bytes": 60190,
+          "constructor_arguments": [
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "runtime_remaining": 9025,
+          "initcode_remaining": 70882
+        }
+      ],
+      "checks": [
+        {
+          "check": "sizes",
+          "exit_code": 0
+        },
+        {
+          "check": "recursive",
+          "exit_code": 0
+        },
+        {
+          "check": "storage",
+          "exit_code": 0
+        },
+        {
+          "check": "owners",
+          "exit_code": 0
+        },
+        {
+          "check": "owner-layout",
+          "exit_code": 0
+        },
+        {
+          "check": "gates",
+          "exit_code": 0
+        },
+        {
+          "check": "generation",
+          "exit_code": 0
+        }
+      ],
+      "additional_checks": [
+        "Vault player-action surface",
+        "Phase 2 nested/peripheral layouts using the canonical compiler-only XaLayout probe"
+      ],
+      "evidence_prefix": "glamsterdam-deployment"
+    },
+    "focused_regressions": {
+      "per_mode_passed": 48,
+      "modes": [
+        "FOUNDRY_ISOLATE=true",
+        "FOUNDRY_ISOLATE=false"
+      ],
+      "failed": 0,
+      "evidence": [
+        "focused-corrected-isolate-true.log",
+        "focused-corrected-isolate-false.log"
+      ]
+    },
+    "jackpot_regressions": {
+      "passed": 42,
+      "failed": 0,
+      "isolation": true,
+      "evidence": "jackpot-driver.log"
+    },
+    "steth_mainnet_fork": {
+      "passed": 6,
+      "failed": 0,
+      "block": 26193851,
+      "isolation": true,
+      "rpc": "https://eth.drpc.org",
+      "evidence": "fork-driver.log"
+    },
+    "regression_source_check": {
+      "compared_files": 163,
+      "mismatches": [],
+      "excluded_fixture_pin": "contracts/ContractAddresses.sol"
+    },
+    "assurance_tools": {
+      "unit_tests": 111,
+      "deep_matrix_tests": 6,
+      "failed": 0,
+      "evidence": "final-assurance-tools.log"
+    },
+    "split_arithmetic": {
+      "checks": 24,
+      "sensitivity_tests": 4,
+      "failed": 0,
+      "evidence": [
+        "split-arithmetic.log",
+        "split-sensitivity.log"
+      ]
+    },
+    "deployment_configuration": {
+      "tests": 3,
+      "failed": 0,
+      "evidence": "deployment-config.log"
+    },
+    "analysis_compatibility_bytecode": {
+      "result": "pass before the separate gas-admission correction; ABI, runtime without metadata and creation code after compiler-metadata normalization matched for 40 unique eip170 and 24 unique glamsterdam deployment artifacts",
+      "qualification": "Glamsterdam equivalence comparison held eip170 address pins constant across both builds; deployment size and metadata gates were rerun separately using the correct Glamsterdam pins.",
+      "evidence": [
+        "bytecode-comparison.json",
+        "glamsterdam-tooling-bytecode-comparison.json"
+      ]
+    },
+    "final_primary_bytecode": {
+      "abi": "all 40 deployed artifact ABIs unchanged",
+      "runtime_changes": [
+        "DegenerusVault",
+        "GNRUS",
+        "sDGNRS",
+        "Eip170Jackpot"
+      ],
+      "qualification": "Eip170Jackpot compiler output changed from 22770 to 22718 bytes although its source did not change; 42 focused jackpot tests and recursive layout checks pass. Runtime equivalence is not claimed after the gas correction.",
+      "evidence": "final-bytecode-eip170.json"
+    },
+    "slither_ir_integrity": {
+      "result": "pass",
+      "build_info_files": 1,
+      "compiler_sources": 306,
+      "contracts": 459,
+      "functions": 6899,
+      "analysis": "complete parsing and SlithIR; detector dependency closure is a separate run",
+      "evidence": "final-slither-integrity.log"
+    },
+    "slither_full_detectors": {
+      "status": "not completed on this candidate",
+      "note": "A superseded run was stopped during expensive transitive dependency closure. The required CI integrity gate performs complete parsing and IR generation without that closure; the separate normal detector command retains it. A timeout is incomplete coverage, never a clean report.",
+      "evidence": "slither-integrity-interruption.txt"
     },
     "aderyn": {
-      "version": "[pending]",
-      "predecessor_instances": "[pending]",
-      "this_instances": "[pending]",
-      "new_categories": "[pending]",
-      "note": "baseline: re-analyse audit-2026-10-16 in the same session (recorded there as 2,979 instances); [pending]"
+      "status": "completed, raw findings require triage",
+      "high_categories": 12,
+      "low_categories": 25,
+      "nsloc": 32257,
+      "files": 176,
+      "evidence": [
+        "aderyn.log",
+        "aderyn-report.md"
+      ]
+    },
+    "verification_incidents": [
+      "The original stETH regression failed in isolated mode before the gas-admission correction; its trace is retained. Corrected tests pass in both execution modes.",
+      "The source gas-read gate rejected the changed statement until its reviewed pin was updated; the final complete source gate runs pass on both profiles.",
+      "An intermediate Glamsterdam build used --no-pins and retained eip170 address pins, causing an oversized Endgame artifact. Correct profile generation without --no-pins and a fresh build pass all deployment gates.",
+      "The Phase 2 layout checker requires the compiler-only XaLayout probe; it was compiled from the canonical builder and combined with fresh production layouts for both passing checks."
+    ]
+  },
+  "outstanding_release_checks": [
+    {
+      "check": "Full battery on the final committed candidate",
+      "status": "not run after the gas-admission change"
+    },
+    {
+      "check": "Deep invariants: 60 partitions, 1000 runs x depth 256",
+      "status": "not completed; zero completed partitions in the recovered baseline campaign",
+      "reason": "The first AdvanceLiveness partition exceeded 1.5 hours; use the existing partitioned CI workflow for the full campaign."
+    },
+    {
+      "check": "Full Slither detector analysis and analyzer finding triage",
+      "status": "unfinished; Aderyn raw report is available"
+    },
+    {
+      "check": "Hosted CI for the exact final candidate",
+      "status": "not verified; no candidate was pushed by this preparation"
+    },
+    {
+      "check": "Final release tag",
+      "status": "not created; audit-2026-10-25 does not identify this candidate"
     }
-  },
-  "hosted_ci": {
-    "run_id": "[pending]",
-    "url": "[pending]",
-    "commit": "[pending]",
-    "status": "[pending]",
-    "conclusion": "[pending]",
-    "jobs": "[pending]"
-  },
+  ],
   "evidence_archive": {
-    "path": "[pending]",
-    "sha256": "[pending]"
+    "path": ".audit-test-logs/readiness-2026-10-27-evidence.tar.gz",
+    "sha256": "36f1540a36b3064358cc37851c4e3f0ac304a1b7c8d13360bb738a2b3b3fd7d6",
+    "contents": "Selected raw baseline logs, candidate logs and reports, source identity manifests and candidate Solidity/tool changes; local archive, not uploaded",
+    "files": 719,
+    "bytes": 34158848
   },
+  "evidence_directory": ".audit-test-logs/readiness-2026-10-27",
   "limits": [
-    "Counts are runner executions; helper suites may repeat between batches.",
-    "Optional tests whose external inputs are not configured are skipped and listed in skipped_tests.",
-    "A Foundry group or Hardhat run that failed on a stale test is rerun in full and counted only from that rerun.",
-    "Analyser output is retained and triaged by delta, not presented as zero findings.",
-    "The eip170 profile is the deployment and primary audit target; the glamsterdam profile is the maintained alternate and is verified by its own size, layout and differential checks.",
-    "No audit approval, absence-of-bugs claim or deployment is implied."
+    "Foundry totals count runner executions, including imported suites repeated between batches.",
+    "The full baseline battery cannot be advertised as a full test pass for this changed candidate.",
+    "Compiler integrity is not detector completion; analyzer severity labels are not confirmed protocol vulnerabilities.",
+    "Generated address pins, compiler settings or any source change invalidate the corresponding build evidence.",
+    "The Glamsterdam size schedule is an alternate configuration, not a statement of target-chain support.",
+    "Tests and bounded proofs do not establish impossibility of a mining-chain halt. Required external stETH transfers and VRF availability remain documented dependencies.",
+    "No candidate was committed, pushed, tagged or deployed during this preparation."
   ]
 }
