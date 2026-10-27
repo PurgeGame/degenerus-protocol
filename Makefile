@@ -115,8 +115,8 @@ check-recipient-calls:
 test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-recipient-calls
 	@python3 scripts/test-foundry-groups.py $(ARGS)
 
-# Run the mainnet-fork suite (test/fork) against the REAL Lido stETH, LINK, Chainlink VRF v2.5
-# coordinator and LINK/ETH feed at the block pinned in test/fork/ForkPins.sol. The runner patches
+# Run the mainnet-fork suite (test/fork) against the REAL Lido stETH and Chainlink VRF v2.5
+# coordinator at the block pinned in test/fork/ForkPins.sol. The runner patches
 # ContractAddresses.sol with scripts/lib/patchForFork.js (same protocol addresses, real
 # dependencies) and restores it afterwards. Needs archive state at the pinned block: set
 # MAINNET_RPC_URL, or the keyless public endpoint below is used. Fork state is cached by Foundry

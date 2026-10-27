@@ -25,7 +25,7 @@ the Degenesis pool cannot pay it. Such an order pays nothing else.
 
 WWXRP has zero decimals: `amount` and both weights are whole tokens.
 
-`WWXRP.enter(amount)` consumes the player's live WWXRP boon once. It applies
+`WWXRP.enterDraw(id, amount)` consumes the player's live WWXRP boon once. It applies
 the bonus to the entry's activity-weighted burn amount. It first reads the
 player's WWXRP lane through the Game's read-only `extsload` and calls the Game's
 consume only when the lane holds a tier; an empty lane would consume nothing
@@ -52,7 +52,7 @@ and foil reward spins do not consume this boon or award whale passes.
 An application can consume the same boon for another WWXRP action through:
 
 ```solidity
-function consumeBoon(address player) external returns (uint16 boostBps);
+function consumeBoon(uint32 playerId) external returns (uint16 boostBps);
 ```
 
 The only permission is the existing trusted-minter registry: when the vault

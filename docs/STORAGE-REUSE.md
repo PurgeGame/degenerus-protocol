@@ -34,9 +34,9 @@ the **same block**, verify the deployed runtime/schema, and resolve addresses to
 | Coinflip ring | `page = day / 7`; `H(id, 0) + page % 15` |
 | Coinflip overflow | `H(page, H(id, 9))` |
 | Stake page | Seven uint32 amounts in bits 0–223; uint24 `page + 1` in 224–247; credit hint in 248–255 |
-| Game Vault stamp | Slot 5, byte offset 20, uint24; all prior fields and slot 6 remain fixed |
+| Game Vault stamp | Slot 4, byte offset 20, uint24; all prior fields and slot 5 remain fixed |
 | BAF player | `H(id, 0) + ((bracket / 10) & 1)`; uint168 total at bit 0, uint64 epoch at 168, uint24 bracket at 232 |
-| Affiliate earnings | `H(id, 1)`; layout below |
+| Affiliate earnings | `H(id, R + 1)`, where `R` is the affiliate's ERC-7201 namespace root (`AFFILIATE_STORAGE_ROOT`); layout below |
 
 For a stake read, accept the ring only if its full page tag matches. Otherwise read the absolute
 overflow and require the same full tag. A missing matching tag means zero. Decode the amount at
@@ -98,8 +98,7 @@ admission reserves are not reduced based on estimates alone. Required release ev
 whole-call native maxima, refund/warmth checks, batch envelopes, the 90-day Vault helper, deployment
 size checks, full repository suites and the independent accounting/codec comparisons.
 
-See `.planning/STORAGE-REUSE-PLAN.md` for the design invariants and implementation work packages,
-and `scripts/audit/storage-reuse/` for pinned baseline and verification evidence.
+See `scripts/audit/storage-reuse/` for pinned baseline and verification evidence.
 
 ## Phase 2: retained boons, passes and redemption queues; packed rounds
 
@@ -109,15 +108,15 @@ separately in `scripts/audit/storage-reuse-phase2/`. These remain new-deployment
 - Boon slot 1 retains bit 24 after awards, consumption and expiry. The public getter
   includes that bit; it conveys no live boon. All lane positions are unchanged and
   the box expiry gate ignores the sentinel. Slot 0 keeps its existing behavior.
-- The pass/preference word retains bit 117 after its first credit. Balances and
-  board encoding are unchanged. Bits 85..116 carry a wallet ID only in memory;
+- The pass/preference word retains bit 118 after its first credit. Balances and
+  board encoding are unchanged. Bits 86..117 carry a wallet ID only in memory;
   `_paidDoor` truncates that ID before constructing its separate fee/account word.
-- sDGNRS stores queue counts in slot 7, bytes 24..31, even parity first. Roots 9/10
-  now map word index to two packed 128-bit entries: `keccak256(abi.encode(index/2,
-  9+parity))`. Entries retain amount80/ID32/activity16. A finished batch resets only
+- sDGNRS stores queue counts in slot 6, bytes 24..31, even parity first. Roots 8/9
+  map word index to two packed 128-bit entries: `keccak256(abi.encode(index/2,
+  8+parity))`. Entries retain amount80/ID32/activity16. A finished batch resets only
   its count, retaining data for overwrite. Locators and cursors prevent stale claims;
   terminal manual claims still clear their lane. Other storage offsets are unchanged.
-- Jackpot rounds occupy five words at the existing mapping root 17. `drawWord` is
+- Jackpot rounds occupy five words each in the fixed `_jackpotRounds` array (CrapsBattle slot 271). `drawWord` is
   frozen during preparation; `started` becomes true only when the draw seals.
   The table and high-reserve draws use the identical frozen entropy after sealing.
   `jackpotBattleOf` returns the reordered/narrowed struct and an explicit `started`

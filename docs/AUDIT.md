@@ -3,7 +3,11 @@
 ## Subject
 
 Review the production Solidity files listed in [scope.txt](../scope.txt). This handoff describes a
-**frozen source revision at annotated tag `audit-2026-10-16`**.
+**frozen source revision at annotated tag `audit-2026-10-25`**.
+The primary audit and deployment target is the `eip170` build profile
+(`contracts/profiles/eip170`); the `glamsterdam` profile (`contracts/profiles/glamsterdam`) is the
+maintained alternate. `scripts/select-profile.js` selects the profile, and the deployment tables are
+`deployments/eip170.json` and `deployments/glamsterdam.json`.
 [The freeze record](audit/freeze.json) identifies the tested input revisions and verification
 results. Exact SHA-256 hashes and the source base commit are recorded in
 [the snapshot manifest](audit/snapshot.json).
@@ -26,15 +30,15 @@ results or a deployed instance.
 3. [Known issues](../KNOWN-ISSUES.md) and [economic disclosures](../ECONOMIC_DISCLOSURES.md).
 4. [RNG domains](audit/RNG-DOMAINS.md): seeds, intentional shared outcomes and retained exceptions.
 5. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
-6. [Current readiness review](AUDIT-READINESS.md): security conclusions, repaired
-   verification gaps, campaign results and remaining limits.
+6. [Current readiness review](AUDIT-READINESS.md): the properties reviewed at this
+   revision, the Degenesis review scope and the trust boundaries.
 
 ## Review priorities
 
 1. **RNG non-manipulability.** Players, operators and transaction ordering must not bias,
    select or reroll outcomes. Check commitment boundaries, mutable settlement inputs,
    entropy reuse and caller-controlled batching or gas.
-2. **mineFlip chain liveness.** No reachable state may leave the mineFlip chain (advance,
+2. **mineRun chain liveness.** No reachable state may leave the `mineRun` chain (advance,
    settlement and terminal processing) unable to complete. Gas is one way to break it,
    alongside reverts, external-call failures, stale or inconsistent cursors and worst-case
    state. Check cold accesses, finalization and every stage's failure paths; partial work
@@ -51,7 +55,9 @@ against the remaining worker allowance and actual available gas. The first manda
 checkpoint is not vetoed by that estimate, so conservative calibration cannot prevent
 progress. The gas floor always holds every ancestor's return tail: the first unit may run
 below it, and once that unit has progressed later units must fit above it again. Once the
-first unit fits in the supplied gas, `mineFlip` is designed not to revert for gas. Larger
+first unit fits in the supplied gas, `mineRun` is designed not to revert for gas; when the
+mandatory first unit is a VRF request, the supplied gas must cover the request minimum plus its
+tail, otherwise the call reverts `InsufficientExecutionGas` before the coordinator call. Larger
 supplied budgets may admit more chunks. Network transaction/block limits remain separate
 constraints. Caller gas may select a safe continuation checkpoint, never a committed game
 outcome.
@@ -64,7 +70,7 @@ justify adding prerequisites to ETH release.
 A High finding must demonstrate substantial impact that one actor can cause unilaterally
 without vault-owner privileges (the executor authorized by >50.1% of DGVE, initially held by CREATOR, and its comp
 delegates and battle creators), from a healthy live-game state: the game has not ended, VRF
-is functional, and `mineFlip(uint32)` is attempted on schedule.
+is functional, and `mineRun(uint32)` is attempted on schedule.
 The finding must not require an unrelated service outage, prolonged miner inactivity
 or a pre-existing unhealthy state.
 

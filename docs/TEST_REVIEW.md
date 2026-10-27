@@ -72,14 +72,15 @@ identified as such.
   Keep them visible as unresolved coverage, not as passing regressions.
 - Pure arithmetic/statistical models remain useful for distributions and bounds,
   but can drift from production. Pair protocol claims with a test calling the
-  implementation or a checked differential harness. `PrecisionBoundary`,
-  `RedemptionSplit` and some statistical suites belong in this category.
+  implementation or a checked differential harness. `PrecisionBoundary` and some
+  statistical suites belong in this category.
 - Source-text guards check structure, not runtime semantics. Tests that merely
   print gas measurements are benchmarks, not ceiling gates. Halmos `check_*`
   functions are not executed as proofs by ordinary Forge runs.
-- The five previously recorded Halmos timeouts and incomplete deep campaign in
-  [VERIFICATION.md](VERIFICATION.md) remain unresolved. This review runs the
-  default campaigns; it does not replace either job or remote CI.
+- Halmos solver timeouts and the status of the deep campaign are recorded under
+  the known verification limits in [VERIFICATION.md](VERIFICATION.md) and in
+  [AUDIT-READINESS.md](AUDIT-READINESS.md). This review runs the default
+  campaigns; it does not replace either job or remote CI.
 
 For new or changed tests, require a specific observable failure when the claimed
 behavior breaks. Assert the fixture reached the intended state before checking

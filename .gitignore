@@ -69,18 +69,11 @@ docs/abi/*
 !docs/audit/
 docs/audit/*
 !docs/audit/RNG-DOMAINS.md
-!docs/audit/RUN53-FINAL-CONTRACTS.md
 !docs/audit/snapshot.json
 !docs/audit/freeze.json
-!docs/audit/freeze-audit-2026-10-09.json
-!docs/audit/freeze-audit-2026-10-10.json
-!docs/audit/freeze-audit-2026-10-10b.json
-!docs/audit/freeze-audit-2026-10-12.json
-!docs/audit/freeze-audit-2026-10-13.json
+!docs/audit/freeze-audit-2026-10-16.json
 !docs/audit/source-sha256.txt
 !docs/audit/verification-sha256.txt
-!docs/audit/glamsterdam-calibration-2026-10-16.csv
-!docs/audit/glamsterdam-calibration-2026-10-16.json
 
 # ── Meta ────────────────────────────────────────────────────────────────
 !/README.md

@@ -16,7 +16,7 @@ Credits include existing quest/boon additions, the Decimator activity multiplier
 entry-day factor. The multiplier interpolates through 1x at score 0, 1.7049x at 235, 1.9x
 at 500, and 2x at 30,000. Each burn locks its own timing and multiplier. The day factor is
 0.9^d from the protocol-stamped opening day, using downward-rounded 18-decimal exponentiation.
-A credit rounding to zero reverts. Protocol days reset at 22:57 UTC. Credited stacks are
+A credit rounding to zero reverts. The protocol day is the logical game day, which advances at the daily VRF request (due after the 22:57 UTC reset). Credited stacks are
 whole FLIP, with no token multiplier.
 
 The automatic sDGNRS burn spends the smaller of settled backing and

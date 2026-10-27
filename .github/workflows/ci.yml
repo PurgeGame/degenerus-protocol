@@ -69,7 +69,7 @@ jobs:
       - name: Build production contracts
         run: forge build --skip test --threads 4 --out forge-out-production --cache-path .foundry-cache-production
 
-      - name: Contract size ceilings (EIP-170)
+      - name: Contract size ceilings (EIP-170, 24,576 runtime / 49,152 initcode)
         run: node scripts/check-deployment-sizes.js --schedule eip170 forge-out-production
 
       - name: Owner and Vault player action coverage
@@ -174,8 +174,8 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
 
-  # The protocol against the REAL mainnet dependencies (Lido stETH, LINK, Chainlink VRF v2.5
-  # coordinator, LINK/ETH feed) on a fork pinned at test/fork/ForkPins.sol's FORK_BLOCK. Not part
+  # The protocol against the REAL mainnet dependencies (Lido stETH and the Chainlink VRF v2.5
+  # coordinator) on a fork pinned at test/fork/ForkPins.sol's FORK_BLOCK. Not part
   # of the matrix above: those groups build with mock pins and no RPC; this one builds with the
   # fork patch (scripts/lib/patchForFork.js) and needs archive state at the pinned block.
   foundry-fork:
