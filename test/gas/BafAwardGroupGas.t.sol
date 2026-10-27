@@ -11,12 +11,8 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
-import {
-    BafPairDraw,
-    BafSchedule,
-    CenturyBafScores,
-    CenturyConsolidationSeeder
-} from "./AdvanceCenturyConsolidationGas.t.sol";
+import {BafPairDraw, BafSchedule, CenturyBafScores} from "./AdvanceCenturyConsolidationGas.t.sol";
+import {CenturyConsolidationSeeder} from "../helpers/CenturyConsolidationSeeder.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Production game facade plus a native runDailyPhase_g2582 seam. `seedBafStage` writes the state

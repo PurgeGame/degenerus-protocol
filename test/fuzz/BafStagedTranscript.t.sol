@@ -15,7 +15,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BafDrawSeed} from "../helpers/BafDrawSeed.sol";
 import {BafBoardSeed} from "../helpers/BafBoardSeed.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
-import {CenturyConsolidationSeeder} from "../gas/AdvanceCenturyConsolidationGas.t.sol";
+import {CenturyConsolidationSeeder} from "../helpers/CenturyConsolidationSeeder.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {CrapsSlots} from "../helpers/GameSlots.sol";
 

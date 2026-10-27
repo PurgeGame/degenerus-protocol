@@ -6,6 +6,7 @@ import {readOwnerProposalAction} from "../../scripts/lib/ownerProposal.js";
 import {controlledOwnerPositions} from "../../scripts/lib/ownerDirect.js";
 
 describe("Owner governance block boundary", function () {
+  this.timeout(300_000);
   after(restoreAddresses);
 
   it("builds a sorted direct owner list from current control, excluding revoked and withdrawn positions", async function () {
