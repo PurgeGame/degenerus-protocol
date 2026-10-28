@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
-import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -57,7 +56,6 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 20
     uint256 private constant SDGNRS_BONUS_OFFBYTES = GameSlots.SDGNRS_BONUS_LEVEL_OFFSET;
     uint256 private constant LEVEL_OFFBYTES = 12; // `level` uint24 @ slot 0, byte 12
-    uint256 private constant RNG_LOCKED_OFFBYTES = 19; // `rngLockedFlag` bool @ slot 0, byte 19
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint32 => uint256)
     uint256 private constant BOON_SLOT = GameSlots.BOON_PACKED; // mapping(uint32 => BoonPacked), slot0 first
     uint256 private constant BP_WHALE_DAY_SHIFT = 200;
@@ -346,28 +344,10 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     // RNG timing contract, exercised at the module entry itself
     // =====================================================================================
 
-    function test_DirectEntry_RngLocked_ReturnsZeroAndTouchesNothing() public {
-        uint24 day = game.currentDayView_g542950();
-        _setRngLocked(true);
-        _prepareDirectEntry(4, 1_000 ether);
-        uint256 before = _claimableOf(ContractAddresses.SDGNRS);
-        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs_g470(day);
-        assertEq(paid, 0, "locked: nothing");
-        assertEq(_claimableOf(ContractAddresses.SDGNRS), before, "locked: no debit");
-    }
-
-    function test_DirectEntry_CommittedWord_ReturnsZeroAndTouchesNothing() public {
-        uint24 day = game.currentDayView_g542950();
-        _prepareDirectEntry(4, 1_000 ether);
-        RecyclingState.seedDailyWord(address(game), uint24(day), uint256(0xC0FFEE));
-        _injectWhaleBoon(ContractAddresses.SDGNRS, day, 3);
-        uint256 before = _claimableOf(ContractAddresses.SDGNRS);
-        uint256 boon0 = uint256(vm.load(address(game), _boonSlot0(ContractAddresses.SDGNRS)));
-        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs_g470(day);
-        assertEq(paid, 0, "public word: nothing");
-        assertEq(_claimableOf(ContractAddresses.SDGNRS), before, "public word: no debit");
-        assertEq(uint256(vm.load(address(game), _boonSlot0(ContractAddresses.SDGNRS))), boon0, "public word: boon not consumed");
-    }
+    // The module does not re-check the lock or the process day's word: its only caller, the afking
+    // STAGE, returns before it while the lock is up or a request is out, and the process day
+    // (dailyIdx + 1) has no word before its own request. The direct-entry tests of those removed
+    // re-checks are deleted; the STAGE gate is covered by the level-stage tests above.
 
     function test_DirectEntry_Unlocked_Buys() public {
         uint24 day = game.currentDayView_g542950();
@@ -501,14 +481,6 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         s0 &= ~(uint256(0xFFFFFF) << (LEVEL_OFFBYTES * 8));
         s0 |= (uint256(lvl) & 0xFFFFFF) << (LEVEL_OFFBYTES * 8);
         vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
-    }
-
-    function _setRngLocked(bool on) internal {
-        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        s0 &= ~(uint256(0xFF) << (RNG_LOCKED_OFFBYTES * 8));
-        if (on) s0 |= uint256(1) << (RNG_LOCKED_OFFBYTES * 8);
-        vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
-        require(game.rngLocked() == on, "rngLocked slot mismatch"); // facade still live here
     }
 
     function _settleGame(uint256 vrfWord) internal {

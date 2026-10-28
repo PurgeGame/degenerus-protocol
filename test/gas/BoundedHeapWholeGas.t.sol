@@ -45,7 +45,7 @@ contract BoundedHeapWholeGasTest is Test {
                 emit log_named_uint("batch_reward_basis", result.rewardBasis);
                 emit log_named_uint("batch_cursor", host.roundOf(round).cursor);
             }
-            assertEq(host.roundOf(round).cursor, Sampling.field(word, round, 2000).count);
+            assertEq(host.roundOf(round).cursor, Sampling.field(word, 2000).count);
             assertEq(host.roundOf(round).winners, 200);
             assertEq(host.roundOf(round).paid, 200);
             sampled += host.roundOf(round).cursor;

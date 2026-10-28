@@ -9,7 +9,8 @@ library WalletTableLib {
     uint256 internal constant OWNERS_SLOT = 10;
     uint256 private constant OWNERS_BASE = uint256(keccak256(abi.encode(OWNERS_SLOT)));
 
-    /// @dev Ordinary accounts store an address; subaccounts store their ordinary owner's ID.
+    /// @dev Mirrors Game `_payee`: an element holds an address, or an owner ID in bits 160..191,
+    ///      with at most two links (child -> acquired main -> reserved protocol buyer).
     ///      Element zero and unallocated elements return zero.
     function ownerOf(uint32 id) internal view returns (address) {
         IDegenerusGame game = IDegenerusGame(ContractAddresses.GAME);

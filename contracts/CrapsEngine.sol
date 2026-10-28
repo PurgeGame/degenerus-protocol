@@ -8,7 +8,8 @@ import {Craps} from "./Craps.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {CrapsCustomTerms} from "./CrapsCustomTerms.sol";
 
-/// @notice Stateless engine component inherited by CrapsBattle.
+/// @notice Stateless engine component: inherited by CrapsBattle in the combined (Glamsterdam) profile,
+///         deployed separately in the default EIP-170 profile.
 /// @dev External entry points remain pure/view for independent STATICCALL consumers.
 contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @notice Validate and pack a custom table's immutable definition.
@@ -74,11 +75,13 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     ///      Every seat of a field throws the same dice. A paid entry salts its board scatter and
     ///      survival coin with the bet word's owner field. An awarded entry keys both to a 160-bit
     ///      hash of its own bet id rather than its wallet, so repeat awards to one wallet stay
-    ///      separate runs. Every field uses the shared 600-roll
-    ///      between-shooter budget and 1,111-roll absolute ceiling.
-    /// @dev Compact header: owner32, chips30, boon3, high6 (bit 71 unused), then the derived awarded bit.
+    ///      separate runs. Every field uses the shared 600-roll between-shooter budget and
+    ///      1,111-roll absolute ceiling.
+    ///
+    ///      Compact header: owner32, chips30, boon3, high6 (bit 71 unused), then the derived
+    ///      awarded bit.
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
-        uint256 goal, uint48 bound, uint256 field, uint256 word) public pure virtual returns (SlipResult memory r)
+        uint256 goal, uint48 bound, uint256 field, uint256 word) public pure returns (SlipResult memory r)
     {
         uint256 key = header >> 72 == 0
             ? uint32(header)
@@ -101,14 +104,14 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         r = _play(chips, chipFlip, EntropyLib.hash3(RngTags.CRAPS_BOARD, word, key),
             10 - placed, seed, bankroll * FLIP, goal * FLIP, key, boost);
         r.unitsPlayed = _rankOf(r);
-        // The existing final-award policy discards sub-FLIP dust before its hundreds roll.
-        // Retaining fractions above preserves affordability, goals and escalated payouts.
+        // Sub-FLIP dust is dropped before the hundreds rounding; the run above keeps fractions so
+        // affordability, goals and escalated payouts stay exact.
         r.bankrollOut /= FLIP;
         r.peakBankroll /= FLIP;
         uint256 paid = r.stop == SlipStop.Bust ? 0 : r.bankrollOut;
         r.bankrollIn = paid > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(paid, EntropyLib.hash3(RngTags.CRAPS_ROUND, word, betId))
-            : FlipRoundLib.floorWholeFlip(paid);
+            : paid;
     }
 
     /// @notice `settleBattle` reduced to the four words the table reads: the payment, the

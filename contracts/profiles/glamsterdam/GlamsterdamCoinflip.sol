@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {CoinflipCore, IFLIP, IWWXRP, IDegenerusRecordBounty} from "../../modules/CoinflipCore.sol";
+import {CoinflipCore} from "../../modules/CoinflipCore.sol";
 import {DegenerusQuests} from "../../DegenerusQuests.sol";
 import {DegenerusAffiliate} from "../../DegenerusAffiliate.sol";
 

@@ -3,7 +3,7 @@ pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 
-/// @dev Uncapped component boundary. Retained capped/rollback calls use their own frames.
+/// @dev Uncapped component boundary. Capped and rollback calls use their own frames.
 abstract contract GameComponentCall is DegenerusGameStorage {
     function _componentDelegate(address target, bytes memory payload) internal returns (bytes memory data) {
         bool ok;

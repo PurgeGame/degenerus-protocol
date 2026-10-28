@@ -26,6 +26,10 @@ interface ICrapsWalletIdView {
 ///         contract, which is what lets the assertions that grade them stay untouched.
 /// @dev Test-only. It is never deployed to a live chain, so its size is nobody's constraint.
 contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
+    function _appendBet(uint256 id, uint256 word) internal {
+        _appendBetOnDay(id, word, _betWriteDay(id));
+    }
+
 
     /// @dev Legacy score helper for harnesses. Production receives this score from the engine
     ///      in Settlement.rank and has no reason to compute it again.
@@ -105,7 +109,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
     function schedRound(uint256 bank) external pure returns (uint256) { return _schedRound(bank); }
     uint256 public constant SCHED_GOAL = _SCHED_GOAL;
     uint256 public constant DICE_RUN_RECORD_FLOOR = _DICE_RUN_RECORD_FLOOR;
-    bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;
+    bytes32 public constant CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
     uint256 public constant HIGH_MULT = CrapsPriceLib.HIGH_BASE;
     uint256 public constant HIGH_MULT_TAIL = CrapsPriceLib.HIGH_TAIL;
     uint256 public constant MAX_HIGH_MULT = _MAX_HIGH_MULT;
@@ -524,7 +528,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
     }
 
     function highBudgetOf(uint24 day) external view returns (uint256) {
-        return _loadHighBudget(day);
+        return (_loadBudget(day) >> 112) & _BUDGET_MASK;
     }
 
     function drawBudgetsFor(uint24 day) external view returns (uint256 mainBudget, uint256 highBudget) {
@@ -1190,7 +1194,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
             uint256 weight;
             if (packed != 0) {
                 weight = packed >> _BUDGET_W_SHIFT;
-                budget = high ? _loadHighBudget(day) : packed & _BUDGET_MASK;
+                budget = high ? ((_loadBudget(day) >> 112) & _BUDGET_MASK) : packed & _BUDGET_MASK;
             } else {
                 uint256 word = _dailyWordAt(day);
                 if (word == 0) return 0;

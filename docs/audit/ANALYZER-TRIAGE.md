@@ -2,12 +2,14 @@
 
 Reviewed dispositions for Slither and Aderyn output on the audit tree. Every Slither High and
 Medium detector and every Aderyn High category is covered below; Low, Informational and
-Optimization output is summarized by detector. **No instance is open** (see
-[Needs review](#needs-review)).
+Optimization output is summarized by detector. The project's disposition is that no instance
+is open; that disposition, its assumptions and the evidence it relies on are stated in
+[Project disposition](#project-disposition). It is the project's classification, not an
+independent verification, and it does not substitute for call-path review.
 
 | | |
 | --- | --- |
-| Tree | `main` at `76e8748ca`; `contracts/` unmodified |
+| Tree | `main` at `76e8748ca`; `contracts/` unmodified. File:line references are to that tree; the current scoped sources ([snapshot](snapshot.json)) include later contract changes, so lines may shift |
 | Compiler | solc 0.8.38, `viaIR`, EVM `osaka` (`hardhat.config.js`) |
 | Slither | 0.11.5, hardhat framework, all detectors and tiers: 293 contracts, 101 detectors, 5,678 results; no "Impossible to generate IR", "Function not found" or parse errors |
 | Aderyn | 0.6.8, 88 detectors: 176 files, 32,257 nSLOC, 12 High and 25 Low categories, 2,857 instances |
@@ -222,7 +224,7 @@ interface; ERC-721 `transferFrom` returns nothing.
   `sDGNRS.sol:1408`), and small counters and indices. Width truncations that cannot be reached, or
   could only misstate value, are accepted; a truncation that can make mining, a claim, a withdrawal
   or the terminal path revert or stall stays in scope. The widest user-controlled case is noted under
-  [Needs review](#needs-review).
+  [Project disposition](#project-disposition).
 - **H-12.** Assembly `return` ending external functions: the lifecycle forwarder
   (`modules/CrapsLifecycleRouter.sol:98`), `extsload` (`modules/CrapsBattleCore.sol:657`) and the
   `creditMiddayRng` result pass-through (`modules/GameFacade.sol:1218`).
@@ -289,9 +291,24 @@ These overlap the Slither classes above (L-5 with `divide-before-multiply`, L-19
 owner authority described in [Security](../../SECURITY.md). L-21 is token `transfer`/`approve`
 (stETH, DGVE, Vault token sweep) with the boolean result checked.
 
-## Needs review
+## Project disposition
 
-None. No Slither High or Medium instance and no Aderyn High instance needs a closer look.
+The project classifies every Slither High and Medium instance and every Aderyn High instance
+above as not requiring a code change. That classification rests on these assumptions:
+
+- the [trust model](#trust-model-used-for-reentrancy-and-send-classes): every called protocol
+  contract and module is a compile-time constant, and Lido stETH, the Chainlink VRF coordinator,
+  the ENS registrar and governance-approved targets behave as described in
+  [Security](../../SECURITY.md#external-dependencies-and-settlement);
+- the authority model in [Security](../../SECURITY.md#roles): owner-only and governance-only paths
+  are evaluated as trusted decisions within their stated powers;
+- the per-detector reasoning recorded above, including the source manifests (`check-*` gates) it
+  cites, which are review aids rather than proofs.
+
+Where a group's reasoning relies on a trusted-target label, an auditor should still check the
+call path, gas forwarding and failure behavior of the specific instance; the
+[Security](../../SECURITY.md#audit-boundaries) boundary states that a `view`, `pure` or
+trusted-address label alone does not establish safety.
 
 For completeness, the widest user-controlled narrowing in H-11: `_callTicketPurchase` charges
 `priceWei * quantity / 400` on the full `uint256` quantity, then queues `uint32(adjustedQuantity)`

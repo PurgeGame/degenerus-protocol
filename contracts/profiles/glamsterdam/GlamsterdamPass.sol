@@ -6,7 +6,7 @@ import {DegenerusGameTicketModule} from "../../modules/DegenerusGameTicketModule
 import {DegenerusGameFoilWorkerModule} from "../../modules/DegenerusGameFoilWorkerModule.sol";
 import {MineFlipGas} from "../../libraries/MineFlipGas.sol";
 
-/// @notice Pass purchases and ticket materialization in Game storage.
+/// @notice Pass purchases, ticket materialization and foil work in Game storage.
 contract GlamsterdamPass is DegenerusGameWhaleModule, DegenerusGameTicketModule, DegenerusGameFoilWorkerModule {
     function _ticketFoilWork(uint256 allowance) internal override returns (MineFlipGas.Result memory) {
         return _runFoilWork(allowance);

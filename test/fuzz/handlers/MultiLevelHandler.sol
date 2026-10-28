@@ -37,6 +37,16 @@ contract MultiLevelHandler is Test {
     uint256 public openingPurchases;
     uint256 public openingAdvances;
 
+    // Required activity belongs to each fuzz trace, after the opening snapshots.
+    // A failed prefix remains observable even when fail_on_revert is false.
+    bool public walkStarted;
+    bool public walkPrefixComplete;
+    bool public walkFailed;
+    bytes public walkFailure;
+    uint256 public walkPrefixPurchases;
+    uint256 public walkPrefixWork;
+    bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
+
     // Pool snapshots at level transitions
     uint256 public ghost_lastCurrentPool;
     uint256 public ghost_lastNextPool;
@@ -117,6 +127,92 @@ contract MultiLevelHandler is Test {
         }
         openingPurchases = ghost_successfulPurchases;
         openingAdvances = ghost_advances;
+    }
+
+    /// @notice One fuzzed step, preceded once by useful, fuzz-dependent activity.
+    /// @dev The prefix runs inside the first fuzz call, never in setUp. Afterwards all seven
+    ///      adversarial actions retain their original behavior, including unlimited time skips.
+    ///      Catch only the prefix's failure to preserve it for afterInvariant; never retry it.
+    function walk(uint256 actionSeed, uint256 actorSeed, uint256 quantitySeed, uint256 wordSeed) external {
+        if (!walkStarted) {
+            walkStarted = true;
+            try this.beginWalk(actorSeed, quantitySeed, wordSeed) {
+                walkPrefixComplete = true;
+            } catch (bytes memory reason) {
+                walkFailed = true;
+                walkFailure = reason;
+            }
+        }
+        if (!walkPrefixComplete) return;
+
+        uint256 action = actionSeed % 7;
+        if (action == 0) this.purchase(actorSeed, quantitySeed);
+        else if (action == 1) this.heavyPurchase(actorSeed, quantitySeed);
+        else if (action == 2) this.mineFlip(actorSeed);
+        else if (action == 3) this.fulfillVrf(wordSeed);
+        else if (action == 4) this.warpDay();
+        else if (action == 5) this.warpPastVrfTimeout();
+        else this.warpTime(quantitySeed);
+    }
+
+    /// @dev Separate frame lets walk retain the exact failure instead of having the fuzzer
+    ///      discard a reverting handler. All required calls use production entrypoints.
+    function beginWalk(uint256 actorSeed, uint256 quantitySeed, uint256 wordSeed) external {
+        require(msg.sender == address(this), "MultiLevel: prefix is self-only");
+        require(opened && !game.gameOver() && !game.livenessTriggered(), "MultiLevel: prefix requires a live opening");
+        uint256 start = actorSeed % actors.length;
+        for (uint256 i; i < 3; ++i) {
+            address buyer = actors[(start + i) % actors.length];
+            uint256 tickets = 1 + uint256(keccak256(abi.encode(quantitySeed, i))) % 2;
+            (, , , , uint256 priceWei) = game.purchaseInfo_g1027();
+            uint256 cost = priceWei * tickets;
+            uint256 levelBefore = game.currentLvl();
+            uint256 balanceBefore = buyer.balance;
+            uint256 mintBefore = game.mintPackedFor(buyer);
+            vm.prank(buyer);
+            game.purchaseOrderFor{value: cost}(
+                0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            );
+            require(buyer.balance + cost == balanceBefore, "MultiLevel: required purchase did not spend ETH");
+            require(game.mintPackedFor(buyer) != mintBefore, "MultiLevel: required purchase did not record activity");
+            ghost_totalDeposited += cost;
+            ++ghost_successfulPurchases;
+            ++walkPrefixPurchases;
+            _checkLevelTransition(levelBefore);
+        }
+
+        // A fresh day makes work due if the opening left an idle engine. Fulfil only the
+        // request already outstanding here; later fuzz actions receive no automatic help.
+        if (game.nextMinerAction() == 0) vm.warp(vm.getBlockTimestamp() + 1 days + 1);
+        uint256 reqId = vrf.lastRequestId();
+        if (reqId != 0) {
+            (, , bool fulfilled) = vrf.pendingRequests(reqId);
+            if (!fulfilled) {
+                // Required progress uses an admissible word. The unrestricted fulfillVrf
+                // action still exercises reserved words 0 and 1 later in the trace.
+                vrf.fulfillRandomWords(reqId, wordSeed < 2 ? wordSeed + 2 : wordSeed);
+                ++ghost_vrfFulfillments;
+            }
+        }
+        uint256 levelBefore = game.currentLvl();
+        address miner = actors[start];
+        vm.recordLogs();
+        vm.prank(miner);
+        game.mineRun(0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length == 2
+                && logs[i].topics[0] == MINER_WORK
+                && address(uint160(uint256(logs[i].topics[1]))) == miner) {
+                (, uint256 executionGas,) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                if (executionGas != 0) ++walkPrefixWork;
+            }
+        }
+        // Request refusal can return successfully without moving the engine. Its absence of
+        // MinerWork must fail required coverage, even though an ordinary handler may tolerate it.
+        require(walkPrefixWork == 1, "MultiLevel: prefix miner made no progress");
+        ++ghost_advances;
+        _checkLevelTransition(levelBefore);
     }
 
     /// @notice Heavy purchase to rapidly fill prize pool and trigger level transitions

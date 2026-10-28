@@ -48,7 +48,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         // _claimWinningsInternal has already debited claimablePool by the full payout, so sending
         // ETH while the stETH remainder is still held would let a reentrant distributeYieldSurplus
         // read that in-flight stETH as unreserved backing and over-distribute it. Mirrors the
-        // stETH-before-ETH ordering of _payoutWithEthFallback and the sDGNRS _payEth path.
+        // stETH-before-ETH ordering of _payoutWithEthFallback and sDGNRS _payGameOverValue.
         uint256 ethBal = address(this).balance;
         uint256 ethSend = amount <= ethBal ? amount : ethBal;
         uint256 remaining = amount - ethSend;
@@ -72,8 +72,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
     }
 
     /// @dev Queue deferred whale pass claims for large payouts. Credits the sub-half-pass
-    ///      remainder to claimableWinnings and returns it (mirrors _addClaimableEth): the
-    ///      caller folds it into its claimableDelta so the single claimablePool bump and the
+    ///      remainder to claimableWinnings and returns it: the caller folds it into its claimableDelta so the single claimablePool bump and the
     ///      source-pool debit both cover it exactly once, preserving the solvency identity.
     /// @param winner Wallet ID credited with whole half-passes and any sub-half-pass remainder.
     /// @param amount Payout amount in wei to convert into half-passes plus remainder.

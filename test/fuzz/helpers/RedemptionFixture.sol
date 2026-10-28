@@ -163,7 +163,7 @@ abstract contract RedemptionFixture is DeployProtocol {
 
     function _synthReward(uint256 word, uint32 id) internal pure returns (uint16) {
         uint256 synth = uint256(keccak256(abi.encode(uint256(86), word)));
-        return (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth, uint24(id)) : 0;
+        return (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth) : 0;
     }
 
     /// @dev sDGNRS's money: Game claimable (less 1 wei dust) + Game reserve − reserves, plus its

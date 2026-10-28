@@ -12,33 +12,29 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 /// @notice Computes the contract's ETH-denominated obligations and backing so solvency invariants
 ///         can assert `backing(game) >= obligations(game)` across automatic ETH-to-stETH staking.
 ///
-///         The set mirrors the contract's own canonical reservation calc in
-///         DegenerusGameJackpotModule.distributeYieldSurplus (the only on-chain place the protocol
-///         sums its own obligations). Two facts the naive `current + next + future + claimable + yield`
-///         sum gets wrong:
+///         The set mirrors the contract's own obligation sum, `DegenerusGameStorage._untrackedYield`
+///         (current + next + future + claimablePool + yieldAccumulator + the frozen purchase
+///         buffer). Two facts a naive `current + next + future + claimable + yield` sum gets wrong:
 ///
 ///         1. FREEZE-WINDOW PENDING BUFFER (must be INCLUDED). During the daily-RNG freeze window,
 ///            revenue credited to the pools routes to `prizePoolPendingPacked` (packed
 ///            `[sentinel:1 | future:127 | next:128]`). That buffer has NO external view, so the live
-///            pool views miss it while the ETH is in balance and owed. The contract counts it
-///            (`distributeYieldSurplus` adds `pNext + pFuture`), so the harness must too. Bit 255 is
-///            the slot's nonzero sentinel, never value. Reads 0 when not frozen (`_unfreezePool`
-///            folds the buffer and leaves only the sentinel).
+///            pool views miss it while the ETH is in balance and owed. `_untrackedYield` adds
+///            `pNext + pFuture`, so the helper does too. Bit 255 is the slot's nonzero sentinel,
+///            never value. Reads 0 when not frozen (`_unfreezePool` folds the buffer and leaves only
+///            the sentinel).
 ///
-///         2. DEAD POST-GAME-OVER LIVE POOLS (must be EXCLUDED). After the terminal drain
-///            (DegenerusGameGameOverModule.sol:78) the live pools are zeroed and `available =
-///            totalFunds - claimablePool` is distributed to claimants; the only remaining ETH
+///         2. DEAD POST-GAME-OVER LIVE POOLS (must be EXCLUDED). The terminal drain
+///            (`DegenerusGameGameOverModule._handleGameOverDrain`) zeroes the live pools and
+///            distributes `available = totalFunds - claimablePool`; the only remaining ETH
 ///            obligation is `claimablePool`. Any `futurePrizePool` residual after the drain is
 ///            whale-pass-conversion bookkeeping whose `claimWhalePass` reverts under
-///            `_livenessTriggered()` (DegenerusGameWhaleModule.sol) -- it awards only worthless
+///            `_livenessTriggered()` (`DegenerusGameWhaleModule.claimWhalePass`): it awards only
 ///            post-game tickets, never withdrawable ETH. Counting it double-counts a dead pool.
 ///
-///         This is a PRINCIPLED correction, NOT a weakening: `obligations()` still equals the exact
-///         set of ETH the contract is on the hook to pay out, so `backing(game) < obligations(game)` is a
-///         genuine insolvency signal. (The §1 post-game-over Degenerette resolve in
-///         323-SOLVENCY-FINDING.md pushed `claimablePool` itself above balance; that path is now
-///         contract-guarded at HEAD, and this helper keeps `claimablePool` in the post-GO set so any
-///         regression of that guard is still caught.)
+///         `obligations()` is exactly the set of ETH the contract is on the hook to pay out, so
+///         `backing(game) < obligations(game)` is a genuine insolvency signal. `claimablePool` stays in
+///         the post-game-over set, so a path that raises `claimablePool` above custody is caught.
 library SolvencyObligations {
     /// @dev Authoritative slot for `prizePoolPendingPacked` on DegenerusGame (GameSlots, pinned by
     ///      StorageSlotPins). Packed `[sentinel:1 | future:127 | next:128]`, matching _setPendingPools.
@@ -48,7 +44,7 @@ library SolvencyObligations {
     address internal constant VM_ADDRESS =
         address(uint160(uint256(keccak256("hevm cheat code"))));
 
-    /// @notice Game-held backing, matching distributeYieldSurplus's ETH + stETH calculation.
+    /// @notice Game-held backing, matching `_untrackedYield`'s ETH + stETH assets.
     /// @dev Pool obligations are ETH-denominated; automatic staking changes the custody asset
     ///      without reducing those obligations. Count only assets held by the Game itself.
     function backing(DegenerusGame game) internal view returns (uint256) {

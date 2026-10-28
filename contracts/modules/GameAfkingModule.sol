@@ -3,10 +3,8 @@ pragma solidity 0.8.38;
 
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {RngTags} from "../libraries/RngTags.sol";
-
 import {GameAfkingClaims} from "./GameAfkingClaims.sol";
 import {GameBoxInternals} from "./GameBoxInternals.sol";
-
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 /*
@@ -61,8 +59,9 @@ interface ISeatToken {
  * @dev DELEGATECALL CONTEXT: the module inherits `DegenerusGameStorage` (via
  *      `DegenerusGameMintStreakUtils`), so the subscriber set (`_subscribers` of packed
  *      85-bit lanes, `_subMeta` by wallet ID), the cursors (`_subCursor`/`_subOpenCursor`),
- *      the `subsFullyProcessed` STAGE drain-completion flag, the `afkingFunding` ledger,
- *      `claimablePool`, and the activity-score helpers are all in-context plain SLOADs/SSTOREs.
+ *      the `subsFullyProcessed` STAGE drain-completion flag, the prepaid afking half of
+ *      `balancesPacked`, `claimablePool`, and the activity-score helpers are all in-context
+ *      plain SLOADs/SSTOREs.
  *      The Game reaches these via its delegatecall dispatch stubs; a direct call to this
  *      module address would have the wrong `msg.sender` for any Game-context invariant.
  *
@@ -79,9 +78,8 @@ interface ISeatToken {
  *                   stETH; funded delivery retains strict CEI. The protocol-seat
  *                   pause keys on the un-spoofable pinned VAULT / SDGNRS wallet IDs.
  * @custom:invariant No error-swallowing valve on the funded delivery path: the funded
- *                   process buy is revert-free by construction; a class-B solvency
- *                   underflow FAILS LOUD (the `claimablePool -=` propagates, it is never
- *                   swallowed).
+ *                   process buy is revert-free by construction, and a solvency underflow
+ *                   in the checked `claimablePool -=` propagates.
  */
 abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakUtils, GameAfkingClaims
 {
@@ -112,9 +110,6 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     // authorized for the account.
     /// @dev subscribe(_, 0) cancel where the account has no subscription.
     error NotSubscribed();
-    /// @dev mineRun() found all router categories empty — the clean no-work signal
-    ///      (the unbounded-scan-free early-return on no pending work).
-    error NoWork();
 
     /*------------------------------------------------------------------
                               Events
@@ -148,22 +143,13 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /*------------------------------------------------------------------
                               Constants
     ------------------------------------------------------------------*/
-    /// @dev Afking-local ticket scaling multiplier. AFKING_TICKET_SCALE = 400 makes the
-    ///      cost formula unit-consistent: a ticket `amount = quantity * 400`
-    ///      entry-units, which the Game's mint recompute divides by `4 * 100`
-    ///      (the inherited Storage `QTY_SCALE = 100`), so `cost` stays
-    ///      `mintPrice * quantity` in both ticket and lootbox mode.
-    ///      ⚠ LOAD-BEARING dual constant: this 400 is
-    ///      NUMERICALLY EQUAL to the Game's `4 * QTY_SCALE` (= 4 × 100) but is a
-    ///      DISTINCT named constant — it must NOT be collapsed with the inherited
-    ///      `QTY_SCALE` (100). They play different roles (entry-unit multiplier
-    ///      vs the Game divisor base) that happen to compose to the same 400.
+    /// @dev Scaled entry units per whole ticket (4 entries x `QTY_SCALE` 100): a ticket-mode
+    ///      buy queues `quantity * 400` units, matching its `mintPrice * quantity` cost.
     uint256 internal constant AFKING_TICKET_SCALE = 400;
 
-    /// @dev Prize-pool routing splits for the batched afking buy, mirroring the canonical
-    ///      `DegenerusGameMintModule.LOOTBOX_SPLIT_FUTURE_BPS` (9000) and
-    ///      `DegenerusGame.PURCHASE_TO_FUTURE_BPS` (1000) — both private cross-contract. A
-    ///      lootbox spend routes 90% future / 10% next; a ticket spend the inverse.
+    /// @dev Prize-pool routing splits for the batched afking buy, equal to the private
+    ///      `GamePurchaseBox.BOX_SPLIT_FUTURE_BPS` (9000) and `GamePurchase.PURCHASE_TO_FUTURE_BPS`
+    ///      (1000). A lootbox spend routes 90% future / 10% next; a ticket spend the inverse.
     uint256 internal constant AFKING_LOOTBOX_FUTURE_BPS = 9000;
     uint256 internal constant AFKING_TICKET_FUTURE_BPS = 1000;
 
@@ -212,7 +198,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         if (_livenessTriggered()) revert GameOver();
 
         // Include the pre-first-miner-call window and post-unlock AFKing consumption.
-        // The old RNG completion flag remains true during preparation, so it is not a lock.
+        // The previous cycle's RNG completion flag remains true during preparation, so it is not
+        // a lock.
         if (rngLockedFlag || _afkingResetDay > dailyIdx
             || !dailyComplete || _dailyRequestDue() || _pendingBoxCount != 0) revert RngLocked();
 
@@ -265,7 +252,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                 // written. The token makes no callback into the Game.
                 ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).consumeSeat(_payee(_walletElement(subId)), seatId);
             }
-            // Snapshot the player's (gap-synced) manual quest streak and start the quest-side run
+            // Snapshot the player's (missed-day-synced) manual quest streak and start the quest-side run
             // (slot-0 completions after today become streak-neutral / reward-deferred until
             // finalize hands the streak back). The protocol seats start from 0.
             uint256 snap = quests.beginAfking(subId, today);
@@ -328,12 +315,13 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(one);
     }
 
-    /// @dev Keep the purchase's claimable/prepaid split: top up its prepaid residual only
-    ///      (the caller reaches it only while `funding < ethValue`). A refused token top-up uses the ordinary insufficient-funding policy.
-    ///      The outer minimum admits the inner calls and the receipt/credit tail;
-    ///      all gas beyond the caller's 300k tail reserve is forwarded, without a fixed cap.
-    ///      caller starvation fails admission before the atomic attempt. Protocol custody is never pulled: sDGNRS
-    ///      preapproves GAME for redemptions whose stETH backing must remain segregated.
+    /// @dev Keep the purchase's claimable/prepaid split: top up its prepaid residual only (the
+    ///      caller reaches it only while `funding < ethValue`). A refused top-up falls back to the
+    ///      ordinary insufficient-funding policy. The 1M outer minimum admits the inner calls and
+    ///      the receipt/credit tail; all gas beyond the caller's 300k tail reserve is forwarded,
+    ///      so caller starvation fails admission before the atomic attempt. Protocol custody is
+    ///      never pulled: sDGNRS preapproves GAME for redemptions whose stETH backing must remain
+    ///      segregated.
     /// @param subscriber The subscriber's wallet ID.
     function _tryFundAfkingSteth(
         uint32 subscriber,
@@ -455,24 +443,19 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                   The _resolveBuy slice builder
     ------------------------------------------------------------------*/
     /// @dev Per-member funding resolution for the process pass — quantity → cost → purchase
-    ///      mode + funding split, carrying the slice-builder validation invariants that make a
-    ///      funded buy revert-free BY CONSTRUCTION (the SOLE no-brick guarantor under the
-    ///      no-valve model):
-    ///        (1) quantity ≥ 1 (the lane stores quantity − 1) → never the Game's
-    ///            totalCost==0 / dust / TICKET_MIN reverts;
-    ///        (2) cost = mintPrice * quantity → the exact cost the Game recomputes;
-    ///        (3) cost ≥ mintPrice ≥ 0.01 ETH (the priceForLevel floor) → a lootbox amount
-    ///            always meets any min-spend floor; no skip/decline needed;
+    ///      mode + funding split, carrying the invariants that make a funded buy revert-free by
+    ///      construction:
+    ///        (1) quantity ≥ 1 (the lane stores quantity − 1), so the cost is never zero;
+    ///        (2) cost = mintPrice * quantity;
+    ///        (3) cost ≥ mintPrice ≥ 0.01 ETH (the priceForLevel floor), so a lootbox amount
+    ///            needs no skip or decline;
     ///        (4) 1-wei claimable sentinel → the claimable leg never takes the whole balance;
     ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost].
     ///      Claimable always pays first; the subscriber's prepaid afking ETH covers the rest.
-    ///      ⚠ Dual scale (LOAD-BEARING): the ticket entry-unit `amount`
-    ///      uses `AFKING_TICKET_SCALE = 400`; the Game's `/ (4 * 100)` recompute uses the
-    ///      inherited Storage `QTY_SCALE = 100` — the two constants are NOT collapsed.
     ///      The caller passes `claimable` as 0 once the game-over sweep has run (GO_SWEPT,
     ///      written only by that one-time sweep, so it is invariant within a tx).
     /// @param claimable The subscriber's claimable balance, sentinel included.
-    /// @return ethValue Prepaid portion debited from the subscriber's afkingFunding.
+    /// @return ethValue Prepaid portion debited from the subscriber's prepaid afking balance.
     /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
     /// @return isTicket True = buy `amount` ticket entry-units; false = buy an `amount`-wei lootbox.
     /// @return claimableUse Claimable portion of `cost`; cost == ethValue + claimableUse.
@@ -554,8 +537,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                 // in jackpot phase those differ, and currentLevel + 1 would silently zero a streak
                 // whose lastCompleted == level - 1.
                 ticketTargetLevel,
-                // currentLevel == storage `level` here (sole writer advanceGame, no in-window
-                // advance), so pass it directly and skip the 3-arg wrapper's redundant `level` SLOAD.
+                // currentLevel == storage `level` here (no level write runs during this pass), so
+                // pass it directly and skip a second `level` SLOAD.
                 currentLevel
             );
             uint256 code = _encodeSubScore(activityScore);
@@ -589,10 +572,10 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     }
 
     /// @notice Stop the AFKing runs a loan seizure hands to its lender: the seized account's own
-    ///         and, for a main, every smurf's. Reached only by AdvanceModule's `_seizeLoan`
+    ///         and, for a main, every smurf's. Reached only by GameOverModule's `seizeLoan`
     ///         delegatecall, after the ownership write.
     /// @dev Walks the main's append-only smurf list (`_smurfWords`, length = lifetime
-    ///      `SMURF_COUNT`). Each stopped run hands its streak back to Quests now and keeps its
+    ///      smurf count (`SMURF_COUNT_SHIFT`)). Each stopped run hands its streak back to Quests now and keeps its
     ///      lane, marked for removal: a box it already paid still opens in order, and the next
     ///      preparation pass removes it before buying. Until then its earned days stay
     ///      settleable.
@@ -620,9 +603,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     }
 
     /*------------------------------------------------------------------
-              The REQUIRED-PATH process STAGE (stamp + debit)
+                    Subscriber preparation (stamp + debit)
     ------------------------------------------------------------------*/
-
 
     /// @notice Prepare the pinned day's subscriptions, boxes first and tickets second.
     /// @dev The previous read cohort completes before this pass. Public subscription changes
@@ -635,9 +617,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /// @dev Funding: an ordinary member that cannot pay expires and forfeits what it has not
     ///      settled. A protocol seat that cannot pay is settled and paused instead (no purchase,
     ///      nothing earned), and resumes on the first day it can pay again.
-    /// @dev NO error-swallowing valve: a funded slice is revert-free by construction; the
-    ///      chunk-end `claimablePool -=` FAILS LOUD (class B, must propagate).
-    /// @notice Stage the pinned daily subscription cohort before its request is sealed.
+    /// @dev No error-swallowing valve: a funded slice is revert-free by construction, and the
+    ///      chunk-end checked `claimablePool -=` propagates any underflow.
     function runSubscriberWork_g6352(uint24 processDay, uint256 gasAllowance)
         external returns (MineFlipGas.Result memory)
     {
@@ -693,15 +674,13 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         // its claimable, capped at the route's 1,000. The latch stamps on the ATTEMPT, whatever
         // its outcome: a level whose first STAGE pass finds sDGNRS too poor for one group buys
         // nothing that level, and no later chunk/day this level tries again — one probe per
-        // level, never a per-day poll of the claimable. The module re-checks the RNG timing
-        // contract live (unlocked AND the process day's word uncommitted — the same two halves
-        // the STAGE gate keys on) and skips a terminal game, returning 0 for both, so this
-        // block never reverts the crank; those returns
-        // latch too (they are unreachable through this gate and cost the level its buy, not
-        // the crank its day). sDGNRS's ordinary daily box is untouched — the per-sub loop still
-        // stamps it. A real purchase's operation consumes first-progress permission; subsequent
-        // items use the remaining caller budget. The attempted-level latch makes even a no-buy
-        // probe resumable.
+        // level, never a per-day poll of the claimable. The gate above holds the RNG timing
+        // contract (unlocked, no request out, so the process day's word does not exist yet);
+        // the module skips a terminal game, returning 0, so this block never reverts the crank;
+        // that return latches too (it is unreachable through this gate and costs the level its
+        // buy, not the crank its day). sDGNRS's ordinary daily
+        // box is untouched — the per-sub loop still stamps it. A real purchase consumes
+        // first-progress permission; later items use the remaining caller budget.
         if (!c.swept && c.currentLevel > _sdgnrsBonusLevel) {
             if (!MineFlipGas.canRun(c.meter, SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS)) return result;
             _sdgnrsBonusLevel = c.currentLevel;
@@ -765,8 +744,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
             bool protocolSeat = element == VAULT_WALLET_ID || element == SDGNRS_WALLET_ID;
             // The Vault owner's pause buys nothing until the owner resumes it.
-            if (protocolSeat && element == VAULT_WALLET_ID
-                && _afkingProtocolFlags & AFK_VAULT_OWNER_PAUSED != 0) {
+            if (element == VAULT_WALLET_ID && _afkingProtocolFlags & AFK_VAULT_OWNER_PAUSED != 0) {
                 unchecked { ++c.cursor; ++c.processed; }
                 continue;
             }
@@ -803,7 +781,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
             if (protocolSeat) {
                 uint8 unfunded = element == VAULT_WALLET_ID ? AFK_VAULT_UNFUNDED : AFK_SDGNRS_UNFUNDED;
-                // Funded again: resume, with this pass's c.endpoint as its checkpoint day.
+                // Funded again: resume with checkpoint day c.resumeDay (the day before this pass),
+                // so it earns from this pass's day on.
                 if (_afkingProtocolFlags & unfunded != 0) {
                     lane = _resumeProtocolSeat(element, position + 1, unfunded, c.resumeDay);
                 }
@@ -869,7 +848,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
     /// @dev Route a chunk's batched afking spend to the prize pools, mirroring the normal-buy
     ///      splits: lootbox ETH 90% future / 10% next (100% next in distress, matching
-    ///      `_purchaseForWith`), ticket ETH 90% next / 10% future (matching `_recordMintPayment`). One
+    ///      `_beginBoxOrder`), ticket ETH 90% next / 10% future (matching `_recordMintPayment`). One
     ///      pooled read+write per chunk, always to the live pools: subscriber work never runs
     ///      under the daily lock, so the prize pool is never frozen here. The per-buy debit
     ///      already moved the ETH out of the funding source, so this only credits the pools
@@ -899,9 +878,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         );
     }
 
-    /*==================================================================
-        PART B — the post-RNG OPEN-PASS + the ROUTER
-    ==================================================================*/
+    /*------------------------------------------------------------------
+                        Post-RNG box opening
+    ------------------------------------------------------------------*/
 
     /// @dev Reverts with the delegatecall failure reason bytes. Canonical module tail
     ///      (cf. DegenerusGameDegeneretteModule / DecimatorModule) for the
@@ -913,12 +892,11 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         }
     }
 
-    /// @dev Materialize ONE subscriber's stamped afking box (the freeze-critical open).
-    ///      The box uses the published active session word and subscriber ID; the stamp
-    ///      day identifies the cohort, not the seed. The level reads live inside `resolveAfkingBox`. Each stamp opens
-    ///      exactly once because the opener walks the box section in order and its cursor
-    ///      only moves forward. `resolveAfkingBox` is the one freeze-correct seam (the public
-    ///      `resolveLootboxDirect` uses a different action tag).
+    /// @dev Materialize ONE subscriber's stamped afking box. The box uses the published active
+    ///      session word and subscriber ID; the stamp day identifies the cohort, not the seed.
+    ///      The level reads live inside `resolveAfkingBox`. Each stamp opens exactly once
+    ///      because the opener walks the box section in order and its cursor only moves
+    ///      forward. `resolveLootboxDirect` uses a different action tag.
     /// @param element The subscriber ID whose stamped box is materialized.
     /// @param amount The box spend in wei: the cohort's unit price times the member's quantity.
     /// @param day The cohort's stamp day.
@@ -927,8 +905,6 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     function _openAfkingBox(uint32 element, uint256 amount, uint24 day, uint256 word, uint16 score) private {
         _boxResolveAfkingBox(element, amount, day, word, score);
     }
-
-
 
     /// @notice Open stamped boxes belonging to the unlocked active session.
     function runAfkingWork_g8553(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
@@ -990,8 +966,6 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         MineFlipGas.finish(meter);
     }
 
-
-
     /// @notice Settle the active session's box entries in FIFO order, after AFKing.
     function runHumanBoxWork_g315(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
         return _runHumanBoxWork(gasAllowance);
@@ -1034,10 +1008,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         MineFlipGas.finish(meter);
     }
 
-    /// @dev In-context mint price (the bounty's ETH→FLIP conversion divisor). Mirrors
-    ///      the Game's `mintPrice` — the price for the active ticket level —
-    ///      read in-context so the bounty math needs no external/self call. Single use
-    ///      site (the bounty `unit`); never an open-time seed input (FREEZE-safe).
+    /// @dev Mint price at the active ticket level (the Game's `mintPrice`), read in-context:
+    ///      the subscriber pass's per-unit buy cost. Never an open-time seed input.
     function _mintPriceInContext() internal view returns (uint256) {
         return PriceLookupLib.priceForLevel(_activeTicketLevel());
     }
@@ -1045,7 +1017,6 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /*------------------------------------------------------------------
                               Daily subscriber draw
     ------------------------------------------------------------------*/
-
 
     /// @notice One member wins FLIP by the age of its run: 10 per day since its run started,
     ///         capped at 4,000. Reached only by AdvanceModule's delegatecall when a day's word

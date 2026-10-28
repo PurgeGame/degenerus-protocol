@@ -133,7 +133,7 @@ contract LegacyCrapsEngine is Craps, CrapsCustomTerms {
         uint256 paid = r.stop == SlipStop.Bust ? 0 : r.bankrollOut;
         r.bankrollIn = paid > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(paid, EntropyLib.hash3(RngTags.CRAPS_ROUND, word, betId))
-            : FlipRoundLib.floorWholeFlip(paid);
+            : paid;
     }
 
     function _play(

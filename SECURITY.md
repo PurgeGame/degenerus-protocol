@@ -29,7 +29,8 @@ borrowing across blocks. Proposals expire after seven days. See [DGVE owner appr
 - Grant comps and set delegate limits. Create custom battles, authorize creators, choose
   the vault's default craps board or disable future automatic seating, and amend its open slips.
 - Mint unlimited WWXRP for free to any nonzero recipient; register or revoke trusted
-  WWXRP minters/burners. Distribute AFKing seats within the token's tranche/lock rules;
+  WWXRP minters, each of which may mint or credit any amount, burn any holder's WWXRP and
+  consume any player's WWXRP boon ([WWXRP boons](docs/WWXRP-BOONS.md#future-ecosystem-applications)). Distribute AFKing seats within the token's tranche/lock rules;
   manage eligible vault seats and recover foreign tokens/NFTs. The foreign-token
   sweep excludes stETH backing. Share redemption still burns the relevant shares.
 - Set lootbox RNG threshold and midday basefee ceiling. Declare Thanos scaling at least
@@ -65,6 +66,16 @@ can replace the external VRF coordinator endpoint and the owner can change the c
 Chainlink VRF v2.5 supplies randomness. Requests are paid in native ETH from the
 subscription, which yield surplus, sDGNRS balances and `donateVrf` donations fund; there is no
 LINK token or price feed. Lido stETH supplies external asset accounting.
+
+A failed stETH balance read can be treated as zero. The Game's bounded read
+(`_boundedStethBalance`) returns zero for a failed or malformed response, so the one-shot final
+sweep can close while stETH remains at the Game, even if the read later recovers; the sweep
+reverts instead if the read starts short of gas. `test/repro/V08StethDeadSweep.t.sol::test_revertingSteth_sweepCompletesAndLeavesStethInPlace`
+asserts this with a mocked reverting `balanceOf`. This presupposes a failed external asset, which
+the dependency assumption above excludes; no contract change is planned for it, and it says
+nothing about the market value of a failed token. A way for an ordinary caller to induce this
+outcome with healthy supported stETH, including through gas selection, remains in scope.
+Distinguish this from a transfer failure, which reverts the sweep.
 
 ### VRF callback trust and request IDs
 

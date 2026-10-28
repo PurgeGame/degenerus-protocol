@@ -108,7 +108,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         /FlipRoundLib\.roundFlipToHundreds\(\s*paid\s*,\s*EntropyLib\.hash3\(\s*RngTags\.CRAPS_ROUND\s*,\s*word\s*,\s*betId\s*\)\s*\)/.test(body),
         "a seat's payment must go through the collapse keyed per bet id"
       ).to.equal(true);
-      expect(/FlipRoundLib\.floorWholeFlip\(\s*paid\s*\)/.test(body), "below the threshold the whole-FLIP floor applies").to.equal(true);
+      expect(/:\s*paid\s*;/.test(body), "at or below the threshold the whole-FLIP payment passes through unrounded").to.equal(true);
     });
   });
 
@@ -179,8 +179,8 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
           `site ${site.n} must collapse via \`FlipRoundLib.roundFlipToHundreds\``
         ).to.equal(true);
         expect(
-          /FlipRoundLib\.floorWholeFlip\(/.test(body),
-          `site ${site.n} must floor the sub-threshold branch via \`FlipRoundLib.floorWholeFlip\` — no award leaves a site with wei-scale residue`
+          /\)\s*:\s*(?:c\.totals\.totalPayout|flipOut|total)\s*;/.test(body),
+          `site ${site.n} must pass the sub-threshold award through unrounded (FLIP has 0 decimals)`
         ).to.equal(true);
         expect(
           new RegExp(

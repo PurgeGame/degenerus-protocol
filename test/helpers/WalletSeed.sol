@@ -24,7 +24,7 @@ abstract contract WalletSeed is DegenerusGameStorage {
         uint256 boxes = _subBoxCount;
         for (uint256 i; i < count; ++i) {
             uint256 position = i < boxes ? i : SUBSCRIBER_CAP - (i - boxes);
-            uint32 id = _subscriberAt(position);
+            uint32 id = uint32(_subLaneAt(position));
             _setSubMetaLane(id, 0);
             _setSubLaneAt(position, 0);
         }

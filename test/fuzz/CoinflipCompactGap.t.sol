@@ -5,7 +5,9 @@ import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @notice Former gap-packing regressions: only requested logical rounds can settle.
-///         Packed boundary, duplicate settlement and raw-bit independence remain covered.
+///         Packed boundary, raw-bit independence and the Game-only request hook remain covered.
+///         The Game requests days contiguously and applies each word once, so duplicate or
+///         out-of-order settlement inputs are unreachable and no longer tested.
 contract CoinflipCompactGapTest is DegenesisDeployProtocol {
     function setUp() public { _deployProtocol(); }
 
@@ -52,26 +54,10 @@ contract CoinflipCompactGapTest is DegenesisDeployProtocol {
         assertEq(untouched, 0);
     }
 
-    function test_DuplicateSettlementCannotPayOrFundTwice() public {
-        _request(2);
-        _settle(2, 777);
-        uint256 pool = coinflip.recordPool();
-        (uint16 reward, bool win) = coinflip.getCoinflipDayResult(2);
-        vm.recordLogs();
-        _settle(2, 888);
-        assertEq(vm.getRecordedLogs().length, 0);
-        assertEq(coinflip.recordPool(), pool);
-        (uint16 afterReward, bool afterWin) = coinflip.getCoinflipDayResult(2);
-        assertEq(afterReward, reward);
-        assertEq(afterWin, win);
-    }
-
-    function test_RequestHookIsSequentialAndGameOnly() public {
+    function test_RequestHookIsGameOnly() public {
         vm.expectRevert();
         coinflip.onDailyRequest(2);
-        _request(3);
         assertEq(coinflip.requestedDailyIdx(), 1);
-        _request(2);
         _request(2);
         assertEq(coinflip.requestedDailyIdx(), 2);
     }

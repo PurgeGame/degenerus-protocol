@@ -44,7 +44,7 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  *        cannot collide.
  *      - Kickback: 0-25% of reward returned to referred player (custom codes only)
  *      - Affiliate payouts + quest bonuses via affiliateCoinflip.creditFlip; kickback returned to caller
- *      - Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+)
+ *      - Fresh ETH rewards: 25% (credited levels 1-3), 20% (levels 4+)
  *      - Recycled ETH rewards: 5% (all levels)
  *      - Leaderboard: tracks top affiliate per level for a DGNRS pool reward at level transition
  *      - Identity: code owners, uplines, earnings, scores and the per-level leader are keyed by
@@ -69,12 +69,8 @@ interface IDegenerusQuestsAffiliate {
 
 /// @notice Interface for crediting FLIP stakes directly via the affiliateCoinflip contract.
 interface ICoinflipAffiliate {
-
-
     /// @notice Credit FLIP to a single wallet.
     function creditFlip_g317(uint32 id, uint256 amount) external;
-
-
 
     /// @notice Credit FLIP to two wallets (zero-ID and zero-amount legs are skipped).
     function creditFlipPair_g578(uint32 id1, uint256 amount1, uint32 id2, uint256 amount2) external;
@@ -105,19 +101,21 @@ interface IGameAfkingDrain {
 /**
  * @title DegenerusAffiliate
  * @notice Multi-tier affiliate referral system with leaderboard tracking.
- * @dev Central hub for all affiliate-related operations in the Degenerus ecosystem.
- *
- * INTEGRATION POINTS:
- * - DegenerusGame: Calls payAffiliate() for purchase flows
+ * @dev EIP-170 deploys this implementation separately; Glamsterdam inherits it
+ *      in Coinflip. Both use the same namespace and run the constructor once.
  */
-/// @dev EIP-170 deploys this implementation separately; Glamsterdam inherits it
-///      in Coinflip. Both use the same namespace and run the constructor once.
 contract DegenerusAffiliate {
     /// @custom:storage-location erc7201:degenerus.storage.affiliate.v1
     struct DegenerusAffiliateStorage {
+        // Custom code -> owner, kickback and upline cache; permanent once created.
         mapping(bytes32 => AffiliateCodeInfo) _affiliateCode;
+        // One word per affiliate (AffiliateEarningsLib): two capped exact scores, five bonus
+        // history inputs, the latest level and the 66-bit upline cache. Direct earnings only;
+        // the score cap never limits the actual commission, quest or AFKing payout.
         mapping(uint32 => uint256) affiliateCoinEarned;
+        // Referral word: 0 = unset, REF_CODE_LOCKED, DEFAULT_ID_TAG | owner ID, or a custom code.
         mapping(uint32 => bytes32) playerReferralCode;
+        // Per-level total and leader, four levels by `lvl & 3` (layout at TOTAL_SCORE_MASK).
         uint256[4] _levelScore;
     }
 
@@ -150,18 +148,9 @@ contract DegenerusAffiliate {
         bool locked
     );
     /// @notice Emitted when affiliate earnings are recorded for a level.
-    /// @dev The protocol's highest-volume event, so it carries only what nothing else does.
-    ///      Dropped as sibling-derivable within the receipt: `amount` (the delta of this
-    ///      affiliate's `newTotal` at this level), `sender` (the buyer on purchase paths, the
-    ///      affiliate itself on the claim path), `code` (the ReferralUpdated projection —
-    ///      `_setReferral` is the sole writer of playerReferralCode and always emits;
-    ///      a projection value of REF_CODE_LOCKED books here as AFFILIATE_CODE_VAULT), and
-    ///      `targetDay` (the CoinflipStakeUpdated sibling), and `isFreshEth` — which no
-    ///      consumer read and which could not mean what its name said: payAffiliateCombined
-    ///      pools four fresh and recycled legs into ONE emit, so it reported "fresh" for a
-    ///      recycled-only purchase. The fresh/recycled rate split still drives the payout
-    ///      (see `_scaleLeg`); it is simply not a fact this event can carry honestly.
-    ///      What remains rides ONE word rather than five 32-byte slots.
+    /// @dev The protocol's highest-volume event, so it carries only what sibling events in the
+    ///      receipt do not: the credit amount is the delta of `newTotal`, and the sender, code
+    ///      and target day come from the purchase/claim events and ReferralUpdated.
     ///      Packed layout (LSB -> MSB):
     ///      - [0..23]   level: the level this credit books against. Deliberately not a topic —
     ///                  nothing filters by it, and it is not always the current level (the
@@ -172,8 +161,6 @@ contract DegenerusAffiliate {
     ///                  instead; the recipient is the affiliateCoinflip credit in the same receipt,
     ///                  never this field. 232 bits is far above any reachable FLIP-scaled
     ///                  total, so the shift never truncates.
-    ///      Widths are load-bearing: no version field rides this word, so a width change must
-    ///      rename the event rather than shift bits under a live decoder.
     event AffiliateEarningsRecorded(uint32 indexed affiliateId, uint256 packed);
 
     /// @dev `AffiliateEarningsRecorded.packed` field offset.
@@ -191,7 +178,6 @@ contract DegenerusAffiliate {
 
     /// @notice Thrown when caller is not the game contract.
     error OnlyAuthorized();
-
 
     /// @notice Thrown when code creation is given a zero owner or a reserved-range code, or referral bootstrapping a zero player.
     error Zero();
@@ -260,8 +246,7 @@ contract DegenerusAffiliate {
     ///      [163:195) leader wallet ID, [232:256) exact level.
     uint256 private constant TOTAL_SCORE_MASK = type(uint128).max;
     uint256 private constant TOP_SHIFT = 128;
-    /// @dev Upline cache is 66 bits at offset 189 in the reusable earnings word.
-    uint256 private constant EARNINGS_PAYLOAD_MASK = (uint256(1) << 189) - 1;
+    /// @dev Upline cache validity bits, within the 66-bit cache at AffiliateEarningsLib.CACHE_SHIFT.
     uint256 private constant UPLINE1_VALID = uint256(1) << 64;
     uint256 private constant UPLINE2_VALID = uint256(1) << 65;
 
@@ -281,8 +266,8 @@ contract DegenerusAffiliate {
     uint256 private constant NO_REFERRER_REF = NO_REFERRER | VAULT_ID;
 
     /// @notice Sentinel value indicating a player's referral slot is permanently locked.
-    /// @dev Set when a player makes an invalid referral attempt (self-referral, unknown code)
-    ///      after the game has started. Prevents gaming by trying multiple codes.
+    /// @dev Set on a player's first paid action when no valid code is supplied (none, unknown
+    ///      or self-referral). Prevents gaming by trying multiple codes.
     bytes32 private constant REF_CODE_LOCKED = bytes32(uint256(1));
     bytes32 private constant AFFILIATE_CODE_VAULT = bytes32("VAULT");
     bytes32 private constant AFFILIATE_CODE_DGNRS = bytes32("DGNRS");
@@ -295,29 +280,9 @@ contract DegenerusAffiliate {
     IDegenerusGame internal constant game = IDegenerusGame(ContractAddresses.GAME);
     /// @notice Game-side afking accessor for the affiliate-base PULL drain + claim-time level (constant).
     /// @dev Same address as `game` (the GameAfkingModule runs in the Game's storage context via
-    ///      delegatecall); a distinct typed handle for the `drainAffiliateBases` / `level` calls the
-    ///      flat-7% deterministic-split PULL consumes.
+    ///      delegatecall); a distinct typed handle for the `drainAffiliateBases` / `currentLvl`
+    ///      calls the flat-7% deterministic-split PULL consumes.
     IGameAfkingDrain internal constant afkingDrain = IGameAfkingDrain(ContractAddresses.GAME);
-
-    // =====================================================================
-    //                        AFFILIATE STATE
-    // =====================================================================
-
-    /// @notice Mapping from custom affiliate code (bytes32) to ownership info.
-    /// @dev codes are permanent once created; owner cannot be changed.
-
-
-    /// @notice One retained word per affiliate: two capped exact scores, five bonus
-    ///      history inputs, a uint24 latest level and the permanent 66-bit upline cache.
-    ///      Direct earnings only; kickback does not reduce score, and the score cap
-    ///      never limits the actual commission, quest or AFKing payout.
-
-
-    /// @notice Player's referral word: 0 = not yet set, REF_CODE_LOCKED = permanently locked,
-    ///         bit32 + low32 owner ID = resolved default referral, otherwise a custom code.
-    /// @dev Private to prevent external manipulation; no public getter.
-
-
 
     /// @notice A code's owner address, wallet ID (0 for an unknown code) and kickback.
     /// @dev Default codes resolve to their own address with 0% kickback.
@@ -335,7 +300,7 @@ contract DegenerusAffiliate {
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
         ownerId = info.ownerId;
         kickback = info.kickback;
-        owner = ownerId == 0 ? address(0) : _ownerKey(code, ownerId);
+        owner = ownerId == 0 ? address(0) : _ownerKey(ownerId);
     }
 
     // =====================================================================
@@ -476,8 +441,8 @@ contract DegenerusAffiliate {
      * @return The referrer's address (the VAULT when the player has no real referrer).
      */
     function getReferrer(address player) external affiliateContext view returns (address) {
-        (uint32 id, bytes32 code) = _referrerView(game.walletIdOf_g3120(player));
-        return _ownerKey(code, id);
+        (uint32 id, ) = _referrerView(game.walletIdOf_g3120(player));
+        return _ownerKey(id);
     }
 
     /**
@@ -504,18 +469,17 @@ contract DegenerusAffiliate {
         view
         returns (uint32 affiliate, uint32 upline1, uint32 upline2)
     {
-        bytes32 code;
-        (affiliate, code) = _referrerView(game.walletIdOf_g3120(player));
+        (affiliate, ) = _referrerView(game.walletIdOf_g3120(player));
         if (affiliate == 0) return (0, 0, 0);
-        (upline1, code) = _referrerView(affiliate);
+        (upline1, ) = _referrerView(affiliate);
         if (upline1 == 0) return (affiliate, 0, 0);
         (upline2, ) = _referrerView(upline1);
     }
 
     /// @notice External owner of an account's referrer.
     function getReferrerById(uint32 playerId) external affiliateContext view returns (address) {
-        (uint32 id, bytes32 code) = _referrerView(playerId);
-        return _ownerKey(code, id);
+        (uint32 id, ) = _referrerView(playerId);
+        return _ownerKey(id);
     }
 
     /// @notice Referrer of an account without a wallet-table lookup.
@@ -569,7 +533,7 @@ contract DegenerusAffiliate {
      * @dev Core payout logic. Handles referral resolution, reward scaling,
      *      and multi-tier distribution.
      *
- * ACCESS: game only.
+     * ACCESS: game only.
      *
      * REWARD FLOW:
      * +--------------------------------------------------------------------+
@@ -594,9 +558,8 @@ contract DegenerusAffiliate {
      *
      * @param amount Base reward amount (0 decimals).
      * @param code Affiliate code provided with the transaction (may be bytes32(0)).
-
      * @param senderId The player's wallet ID (seeds the winner roll; the winner leg equal to it
-     *        is skipped). A zero `amount` rolls no winner, so it may be 0 then.
+     *        is skipped). Must be nonzero.
      * @param levelDay Leaderboard level (for join tracking and leaderboard) in the low 24 bits and the
      *        Game's current logical day in the next 24, passed on to the winner's quest hop; day 0 makes
      *        Quests read it.
@@ -665,22 +628,18 @@ contract DegenerusAffiliate {
         emit Affiliate(amount, routeCode, senderId);
     }
 
-
-
     /**
      * @notice Purchase-path affiliate settlement for all of a buy's legs in ONE call.
-     * @dev GAME-only. Folds the up-to-four per-leg payAffiliate calls (ticket fresh/recycled +
-     *      lootbox fresh/recycled) into a single frame: resolves the referral once, scales each leg
-     *      at its own rate (fresh/recycled bps, taper on the lootbox-fresh leg) so per-component
-     *      rounding matches the separate calls, pools the scaled total into ONE leaderboard write
+     * @dev GAME-only. Settles up to four legs (ticket fresh/recycled, lootbox fresh/recycled)
+     *      in one frame: resolves the referral once, scales each leg at its own rate
+     *      (fresh/recycled bps, taper on the lootbox-fresh leg) so per-component rounding matches
+     *      separate payAffiliate calls, pools the scaled total into ONE leaderboard write
      *      (all legs credit the same affiliate at the same level), then rolls ONE winner on the
      *      shared (day, senderId, code) entropy and credits the winner via ONE quest hop. The winner
      *      credit is RETURNED, not paid here, so the caller batches it with the buyer's credit into
-     *      one Coinflip write: `creditFlipPair(senderId, playerKickback, winnerId, winnerCredit)`.
+     *      one Coinflip write: `creditFlipPair_g578(senderId, playerKickback, winnerId, winnerCredit)`.
      *      The winner is rolled among stored owner and upline IDs, so nothing is decoded.
-     *      payAffiliate (foil path) is left unchanged.
      * @param code Referral code supplied with the buy (resolved + locked once).
-
      * @param senderId The buyer's wallet ID (seeds the winner roll).
      * @param levelDay Leaderboard level for all legs (ticket and lootbox both freeze at level + 1)
      *        in the low 24 bits and the Game's current logical day, passed on to the winner's
@@ -809,8 +768,9 @@ contract DegenerusAffiliate {
 
     /// @dev Resolve the buyer's referral, storing the supplied code (or the lock) on first use.
     ///      Returns the packed resolution (owner ID [0:32), kickback [32:40), no-referrer bit 40)
-    ///      and the canonical route code: the code as supplied (a default code is the owner's
-    ///      address), or AFFILIATE_CODE_VAULT for a buyer without a referrer.
+    ///      and the canonical route code: the supplied custom code, the tagged owner-ID word
+    ///      (DEFAULT_ID_TAG | ownerId) for a default code, or AFFILIATE_CODE_VAULT for a buyer
+    ///      without a referrer.
     function _resolveReferral(bytes32 code, uint32 senderId)
         private
         returns (uint256 ref, bytes32 routeCode)
@@ -925,11 +885,11 @@ contract DegenerusAffiliate {
         {
             uint256 cache = _routeCache(routeCode, earningsWord);
             uint32 u;
-            (u, cache) = _payoutUpline(routeCode, a, false, cache);
+            (u, cache) = _payoutUpline(a, false, cache);
             uplines = u;
-            (u, cache) = _payoutUpline(routeCode, a, true, cache);
+            (u, cache) = _payoutUpline(a, true, cache);
             uplines |= uint256(u) << 32;
-            earningsWord = (earningsWord & EARNINGS_PAYLOAD_MASK) | (cache << 189);
+            earningsWord = (earningsWord & AffiliateEarningsLib.PAYLOAD_MASK) | (cache << AffiliateEarningsLib.CACHE_SHIFT);
         }
 
         (uint256 sumB, uint256 skipU1, uint256 skipU2) = _drainSubs(subs, start, end, uplines);
@@ -944,10 +904,10 @@ contract DegenerusAffiliate {
         // The Game drain can call other contracts. Reload the score payload afterwards;
         // only immutable, already-validated cache fields may be merged from the old word.
         uint256 beforeWord = _affiliateStorage().affiliateCoinEarned[a];
-        earningsWord = beforeWord | (earningsWord & ~EARNINGS_PAYLOAD_MASK);
+        earningsWord = beforeWord | (earningsWord & ~AffiliateEarningsLib.PAYLOAD_MASK);
         _recordEarnings(lvl, a, sumB, earningsWord, beforeWord);
 
-        // Pay the (at most 3) recipients directly; each credit is a pure ledger add (recordAmount=0).
+        // Pay the (at most 3) recipients directly; each credit is a pure ledger add.
         _affiliateCreditFlipPair(a, sumB - u1Share - u2Share, uint32(uplines), u1Share);
         if (u2Share != 0) _affiliateCreditFlip(uint32(uplines >> 32), u2Share);
     }
@@ -1024,15 +984,13 @@ contract DegenerusAffiliate {
         return _readLevelScore(lvl) & TOTAL_SCORE_MASK;
     }
 
-
-
     /**
      * @notice Calculate the affiliate bonus points for a player.
      * @dev Sums the player's affiliate scores for the previous 5 levels, converting
      *      each level's FLIP-basis score to weighted referred ETH volume: score ×
      *      that level's ticket price / PRICE_COIN_UNIT, normalized by the 20% L4+
      *      fresh reward rate — so fresh referred ETH counts ~1:1 (recycled 0.25×,
-     *      levels 0-3 fresh 1.25×). Tiered rate on that volume: 4 points per ETH
+     *      levels 1-3 fresh 1.25×). Tiered rate on that volume: 4 points per ETH
      *      for the first 5 ETH (20 pts), then 1.5 points per ETH for the next
      *      20 ETH (30 pts). Cap: 50 at 25 ETH.
      *
@@ -1108,15 +1066,15 @@ contract DegenerusAffiliate {
         uint256 roll = entropy % 20;
         if (roll < 15) return (ownerId, word);
         uint256 cache = _routeCache(code, word);
-        (winner, cache) = _payoutUpline(code, ownerId, roll == 19, cache);
-        updatedWord = (word & EARNINGS_PAYLOAD_MASK) | (cache << 189);
+        (winner, cache) = _payoutUpline(ownerId, roll == 19, cache);
+        updatedWord = (word & AffiliateEarningsLib.PAYLOAD_MASK) | (cache << AffiliateEarningsLib.CACHE_SHIFT);
     }
 
     /// @dev Both caches belong to the same owner and contain only immutable IDs. A valid
     ///      field is identical in both copies; an invalid field is zero, so OR merges them.
     ///      Default codes have no code info, so they skip its read.
     function _routeCache(bytes32 code, uint256 word) private view returns (uint256 cache) {
-        cache = word >> 189;
+        cache = word >> AffiliateEarningsLib.CACHE_SHIFT;
         if (uint256(code) >= DEFAULT_WORD_END) {
             AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
             cache |= uint256(info.upline1) | (uint256(info.upline2) << 32)
@@ -1144,16 +1102,15 @@ contract DegenerusAffiliate {
     }
 
     /// @dev Resolve the external payout address only for an address convenience view.
-    function _ownerKey(bytes32, uint32 id) private view returns (address) {
+    function _ownerKey(uint32 id) private view returns (address) {
         if (id == VAULT_ID) return ContractAddresses.VAULT;
         return WalletTableLib.ownerOf(id);
     }
 
     /// @dev Cache immutable links resolved from ID-keyed referral records. The caller folds
     ///      cache fills into its existing earnings write or initial custom-code write.
-    /// @param code Canonical stored route: tagged ID or custom code.
     /// @param ownerId The owner's wallet ID.
-    function _payoutUpline(bytes32 code, uint32 ownerId, bool second, uint256 cache)
+    function _payoutUpline(uint32 ownerId, bool second, uint256 cache)
         private returns (uint32 recipient, uint256 updatedCache)
     {
         updatedCache = cache;
@@ -1161,12 +1118,11 @@ contract DegenerusAffiliate {
             return (uint32(cache >> 32), cache);
         }
         bool firstStable;
-        bytes32 hop;
         if (cache & UPLINE1_VALID != 0) {
             recipient = uint32(cache);
             firstStable = true;
         } else {
-            (recipient, hop, firstStable) = _referrerOf(ownerId);
+            (recipient, , firstStable) = _referrerOf(ownerId);
             if (firstStable) updatedCache |= uint256(recipient) | UPLINE1_VALID;
         }
         if (second) {
@@ -1194,7 +1150,7 @@ contract DegenerusAffiliate {
         // SECURITY: First-come-first-served; codes cannot be overwritten.
         if (info.ownerId != 0) revert CodeTaken();
         uint32 ownerId = game.registerWallet_g9539(owner, true);
-        (, uint256 cache) = _payoutUpline(code_, ownerId, true, 0);
+        (, uint256 cache) = _payoutUpline(ownerId, true, 0);
         uint8 flags = uint8(cache >> 64) << 1;
         _affiliateStorage()._affiliateCode[code_] = AffiliateCodeInfo({
             ownerId: ownerId,
@@ -1204,7 +1160,6 @@ contract DegenerusAffiliate {
             flags: flags
         });
         emit Affiliate(1, code_, ownerId); // 1 = code created
-
     }
 
     /// @dev Assign a bootstrap referral after every bootstrap code owner has an ID.
@@ -1219,27 +1174,13 @@ contract DegenerusAffiliate {
     }
 
     /**
-     * @notice Convert a raw amount to a uint96 score in base units.
-     * @dev Caps at uint96 max to prevent overflow/truncation errors.
-     *      uint96 max ≈ 7.9e28 whole FLIP.
-     * @param s Raw amount (0 decimals).
-     * @return Raw token amount (0 decimals) as uint96.
-     */
-    function _affiliateScore96(uint256 s) private pure returns (uint96) {
-        // SECURITY: Cap at max to prevent truncation errors.
-        if (s > type(uint96).max) {
-            return type(uint96).max;
-        }
-        return uint96(s);
-    }
-
-    /**
      * @notice Add an earning to the level total and take the lead if it beats the leader.
      * @dev One read-modify-write of the packed `_levelScore` word, which also holds the
      *      leader's score and ID. Ties keep the earlier leader. The total saturates at
      *      uint128 max (unreachable) so it never spills into the leader bits.
      * @param id The affiliate whose score is being checked.
-     * @param total The affiliate's new total earnings (raw, 0 decimals).
+     * @param total The affiliate's new total earnings (raw, 0 decimals; at most
+     *        AffiliateEarningsLib.LIVE_CAP, so it fits the 35-bit leader-score field).
      * @param added The amount added to the level total by this earning.
      * @param lvl The game level.
      */
@@ -1248,7 +1189,7 @@ contract DegenerusAffiliate {
         uint256 sum = (packed & TOTAL_SCORE_MASK) + added;
         if (sum > TOTAL_SCORE_MASK) sum = TOTAL_SCORE_MASK;
         uint256 lead = uint104(packed >> TOP_SHIFT);
-        uint96 score = _affiliateScore96(total);
+        uint96 score = uint96(total);
         if (score > (lead & ((uint256(1) << 35) - 1))) {
             lead = uint256(score) | (uint256(id) << 35);
             emit AffiliateTopUpdated(lvl, id, score);
@@ -1278,14 +1219,6 @@ contract DegenerusAffiliate {
         }
         return (amt * (BPS_DENOMINATOR - reductionBps)) / BPS_DENOMINATOR;
     }
-
-    /// @notice Per-level affiliate total packed with the leader.
-    /// @dev Bits [0:128): running sum, the exact denominator for score-proportional DGNRS
-    ///      claim distribution (saturating; unreachable). Bits [128:224): the leader's
-    ///      uint96-capped score. Bits [224:256): the leader's wallet ID. Every earning already
-    ///      rewrites this word, so tracking the lead reads and writes no other slot.
-
-
 
     function _affiliateQuestReward(uint32 id, uint256 amount, uint24 day) internal virtual returns (uint256) {
         return affiliateQuests.handleAffiliate_g2566281(id, amount, day);

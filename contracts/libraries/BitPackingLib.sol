@@ -94,9 +94,10 @@ library BitPackingLib {
     ///         account's FIRST pass PURCHASE (whale/lazy/deity), which is also
     ///         when the seat is minted to the account's payee; one free-tranche
     ///         seat per account, ever. Passes that are won (the whale-pass claim
-    ///         lane) or conferred (a deity buyer's affiliate) never set it. This
-    ///         bit is the sole once-per-account guard — the token caps the tranche
-    ///         at 1,000 but keeps no per-account record of its own.
+    ///         lane) or conferred (a deity buyer's affiliate) never set it; the
+    ///         Vault and sDGNRS genesis deities have it set at construction with
+    ///         no seat. This bit is the sole once-per-account guard — the token
+    ///         caps the tranche at 1,000 but keeps no per-account record of its own.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 146;
 
     /// @notice Subaccount flag (bit 147), set once by createSmurf on the ID-keyed mint word.
@@ -149,5 +150,4 @@ library BitPackingLib {
     ) internal pure returns (uint256) {
         return (data & ~(mask << shift)) | ((value & mask) << shift);
     }
-
 }

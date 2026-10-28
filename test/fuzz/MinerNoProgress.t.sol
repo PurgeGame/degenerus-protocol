@@ -128,6 +128,10 @@ contract MinerRefusingCoordinator {
 }
 
 contract MinerMaintenanceTable is CrapsBattle {
+    function _appendBet(uint256 id, uint256 word) internal {
+        _appendBetOnDay(id, word, _betWriteDay(id));
+    }
+
     function seedHead(uint24 day, uint8 remainder, uint32 entrants, bool opened) external {
         _minerSlot = uint64(uint256(day) * _BONUS_SLOTS_PER_DAY + remainder);
         if (opened) _storeBudget(day, 1);

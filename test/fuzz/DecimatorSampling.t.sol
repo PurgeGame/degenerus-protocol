@@ -14,10 +14,10 @@ contract DecimatorSamplingTest is Test {
     function _check(uint256 word, uint24 lvl, uint64 total) private view {
         uint16 count = Sampling.survivors(total);
         assertEq(count, Ref.count(total));
-        uint256 rotate = Sampling.rotation(word, lvl, total);
+        uint256 rotate = Sampling.rotation(word, total);
         uint256 previous;
         for (uint256 i; i < count; ++i) {
-            uint64 id = Sampling.sample(word, lvl, total, count, rotate, i);
+            uint64 id = Sampling.sample(word, total, count, rotate, i);
             assertGt(id, 0);
             assertLe(id, total);
             // Inverting rotation yields strictly increasing positions in disjoint strata:

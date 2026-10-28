@@ -26,7 +26,7 @@ pragma solidity 0.8.38;
 
 /// @title IDegenerusJackpots
 /// @notice Interface for the jackpot distribution contract.
-/// @dev Handles BAF (Big Ass Flip) jackpot calculations and payouts.
+/// @dev BAF (Big Ass Flip) score tracking, winner selection and skipped-bracket WWXRP consolation.
 interface IDegenerusJackpots {
     /// @dev A near-level round retains every sampled wallet ID, including score-check losers.
     struct BafRound {
@@ -86,13 +86,10 @@ interface IDegenerusJackpots {
 
     /// @notice Claim the WWXRP consolation of account `id` for a skipped BAF bracket.
     /// @dev Permissionless: anyone may execute; the score is keyed by the account's wallet ID and
-    ///      the WWXRP mints to the account's PAYEE. `id == 0` is the caller (ID from Game
-    ///      `walletIdOf_g3120(msg.sender)`, payee = caller). A nonzero `id` resolves its payee through
-    ///      Game `resolveAccount_g7029(id, msg.sender)`, ignoring `authorized`. VAULT's consolation
-    ///      escrows into its WWXRP mint allowance via the token's vault routing.
+    ///      the WWXRP is credited to that ID's WWXRP claimable balance. `id == 0` is the caller
+    ///      (ID from Game `walletIdOf_g3120(msg.sender)`).
     /// @param id Score owner (0 = caller).
     /// @param lvl Skipped bracket level to claim.
-    /// @custom:reverts E (Game) If `id` is unallocated.
     /// @custom:reverts NothingToClaim If the bracket is not skipped, or the score is stale, absent
     ///                 or already claimed (a caller with no ID holds no score).
     function claimBafConsolation(uint32 id, uint24 lvl) external;

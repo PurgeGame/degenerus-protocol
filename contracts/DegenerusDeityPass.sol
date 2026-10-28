@@ -28,9 +28,9 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
-/// @dev Icons32 data contract interface for SVG path data and symbol names.
+/// @dev Icons32 data contract interface for SVG icon fragments and symbol names.
 interface IIcons32 {
-    /// @notice Get the SVG path data for icon at index i.
+    /// @notice Get the SVG fragment for icon at index i.
     /// @param i Icon index (0-31 here — the range this contract's mint gate allows;
     ///        Icons32Data itself also accepts 32 for the affiliate badge).
     function data(uint256 i) external view returns (string memory);
@@ -123,9 +123,8 @@ contract DegenerusDeityPass {
     uint16 private constant ICON_VB = 512;
 
     /// @dev The three-ring badge radii on the ±50 card: one big badge with
-    ///      the ticket renderer's ring ratios (mid = 0.78 × outer, inner =
-    ///      0.62 × outer, integer-floored), sized to leave a 4-unit gutter
-    ///      inside the card stroke.
+    ///      ring ratios mid = 0.78 × outer and inner = 0.62 × outer (integer-floored),
+    ///      sized to leave a 4-unit gutter inside the card stroke.
     uint32 private constant RING_OUTER = 46;
     uint32 private constant RING_MID = 35;
     uint32 private constant RING_INNER = 28;
@@ -245,9 +244,7 @@ contract DegenerusDeityPass {
                 iconPath,
                 isCrypto
             );
-            if (ok && bytes(extSvg).length != 0) {
-                svg = extSvg;
-            }
+            if (ok) svg = extSvg;
         }
         if (bytes(svg).length == 0) {
             svg = _renderSvgInternal(
@@ -418,9 +415,9 @@ contract DegenerusDeityPass {
         return true;
     }
 
-    /// @dev Per-icon fit inside the inner circle — the original game's
-    ///      hand-calibrated table (750000 base × 95% default, per-icon
-    ///      adjustments), matched to the icon set in Icons32Data.
+    /// @dev Per-icon fit inside the inner circle: a hand-calibrated table
+    ///      (750000 base × 95% default, per-icon adjustments) matched to the
+    ///      icon set in Icons32Data.
     function _symbolFitScale(uint8 quadrant, uint8 symbolIdx) private pure returns (uint32) {
         uint32 f = 712_500; // 95% of the 750000 base fit
         if (quadrant == 1 && symbolIdx == 6) {
@@ -588,5 +585,4 @@ contract DegenerusDeityPass {
         _owners[tokenId] = to;
         emit Transfer(from, to, tokenId);
     }
-
 }

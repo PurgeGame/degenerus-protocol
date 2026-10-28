@@ -103,13 +103,13 @@ contract GNRUS {
     /// @notice Thrown when setCharity attempts to replace or remove a filled locked slot (0, 1, or 2)
     error SlotLocked();
 
-    /// @notice Thrown by vote() when the slot fails a state-based pre-condition.
+    /// @notice Thrown by castBallot() when the slot fails a state-based pre-condition.
     /// @dev Reason codes: REJECT_EMPTY_SLOT (0), REJECT_ALREADY_VOTED (1), REJECT_ZERO_WEIGHT (2)
     error VoteRejected(uint8 reason);
 
-    /// @notice Thrown by vote() when the targeted slot's current recipient equals the previous level's winner.
+    /// @notice Thrown by castBallot() when the targeted slot's current recipient equals the previous level's winner.
     /// @dev Prevents consecutive wins by the same recipient. Storage slot lastWinningRecipient is written
-    ///      by pickCharity() in the distribution-paid path and read here on every vote(). Skipped levels
+    ///      by pickCharity() in the distribution-paid path and read on every castBallot(). Skipped levels
     ///      do not advance the block — a skipped level retains the prior level's winner-block state.
     error PreviousWinnerNotVotable();
 
@@ -218,10 +218,9 @@ contract GNRUS {
 
     // ^ currentLevel (3) + finalized (1) + currentActiveBitmap (4) + pendingEditSet (4) + sweptAt (5) = 17 bytes, one slot, 15 free
 
-    /// @notice Whether a voter has already voted for a given (level, voter, slot) tuple
-    // Low 20 bits are votes; bits 20..43 authenticate the current level. One word is
-    // reused when a voter returns. Five ordinary wallet IDs share each storage word.
-    // Historical individual votes are indexed from Voted events.
+    /// @dev Per-voter slot votes, five ordinary wallet IDs per word (see `_voterLane`). In each
+    ///      lane the low 20 bits are votes and bits 20..43 the level they belong to.
+    ///      Historical individual votes are indexed from Voted events.
     mapping(uint32 => uint256) private _voterWord;
 
     /// @notice Whether the voter has voted on a slot of the current level.
@@ -238,11 +237,8 @@ contract GNRUS {
         return (_voterWord[id / 5] >> ((id % 5) * 48)) & type(uint48).max;
     }
 
-    /// @notice Current-level charity slate. Index = uint8 slot id (0..19). Address-only, no metadata.
-    /// @dev `private` — access is exposed only via the explicit `getCharity(uint8)` view (with its own bounds check), not an auto-generated array getter.
+    /// @notice Current-level charity slate. Index = uint8 slot id (0..19). Read through `getCharity`.
     address[20] private currentSlate;
-
-
 
     function slotApproveWeight(uint24 level, uint8 slot) public view returns (uint256) {
         if (slot >= 20) return 0;
@@ -250,7 +246,7 @@ contract GNRUS {
         return uint24(word >> 232) == level ? uint232(word) : 0;
     }
 
-    /// @notice Recipient that won the most recent paid level. Used by vote() to block consecutive wins.
+    /// @notice Recipient that won the most recent paid level. Used by castBallot() to block consecutive wins.
     /// @dev Written by pickCharity() ONLY when the level distributed (paid branch). Skipped levels leave
     ///      the value unchanged so the previous-winner block survives a skipped level. Initialized to
     ///      address(0) — no slot is blocked at deploy time.
@@ -378,17 +374,17 @@ contract GNRUS {
             amount = burnerBal; // sweep
         }
 
-        _redeemTo(burner, amount, burnerBal, supply, burner);
+        _redeemTo(burner, amount, burnerBal, supply);
     }
 
-    /// @dev Shared proportional-redemption core. Burns `amount` GNRUS from `account` and pays the
-    ///      proportional ETH + stETH share to `recipient`. Backing = on-hand ETH + stETH plus the
+    /// @dev Shared proportional-redemption core. Burns `amount` GNRUS from `account` and pays it the
+    ///      proportional ETH + stETH share. Backing = on-hand ETH + stETH plus the
     ///      game-side claimable (less the 1-wei sentinel); the game is drawn from only when on-hand
     ///      is short. CEI: supply/balance are updated and events emitted before any external value
     ///      transfer; the only pre-burn external call is game.claimClaimable, which cannot write GNRUS
     ///      balances, so `acctBal` (read by the caller) is still fresh at the burn. The explicit
     ///      balance check rejects over-burning before reading backing or computing a payout.
-    function _redeemTo(address account, uint256 amount, uint256 acctBal, uint256 supply, address recipient) private {
+    function _redeemTo(address account, uint256 amount, uint256 acctBal, uint256 supply) private {
         if (acctBal < amount) revert InsufficientBalance();
         uint256 ethBal = address(this).balance;
         uint256 stethBal = BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
@@ -415,10 +411,10 @@ contract GNRUS {
 
         // stETH transfer first (ERC20), ETH transfer last (raw call — CEI)
         if (stethOut != 0) {
-            if (!steth.transfer(recipient, stethOut)) revert TransferFailed();
+            if (!steth.transfer(account, stethOut)) revert TransferFailed();
         }
         if (ethOut != 0) {
-            (bool ok,) = recipient.call{value: ethOut}("");
+            (bool ok,) = account.call{value: ethOut}("");
             if (!ok) revert TransferFailed();
         }
     }
@@ -474,7 +470,7 @@ contract GNRUS {
         uint256 bal = balanceOf[holder];
         if (bal == 0) revert InsufficientBurn();
 
-        _redeemTo(holder, bal, bal, supply, holder);
+        _redeemTo(holder, bal, bal, supply);
     }
 
     /// @notice Sweep any ETH and stETH still held by GNRUS to the vault, after a long recovery delay.
@@ -516,19 +512,15 @@ contract GNRUS {
     /// @param slot Slot index in the current slate (0..19)
     /// @param recipient Charity recipient address; pass address(0) to remove
     function setCharity(uint8 slot, address recipient) external {
-        // 1. Vault-owner gate
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
-
-        // 2. InvalidSlot
         if (slot >= MAX_ACTIVE_SLOTS) revert InvalidSlot();
 
-        // 3. Locked-slot guard (BEFORE branch dispatch — slots 0/1/2 cannot be mutated through queue either)
+        // Locked-slot guard before the branch: slots 0/1/2 cannot be mutated through the queue either.
         address current = currentSlate[slot];
         if (slot < LOCKED_SLOTS && current != address(0)) revert SlotLocked();
 
         uint32 slotMask = uint32(1) << slot;
 
-        // 4. Branch dispatch
         if (current == address(0)) {
             // Instant-apply branch (or removal special case if recipient == 0)
             if (recipient == address(0)) {
@@ -667,18 +659,12 @@ contract GNRUS {
     ///      Balance and identity checks precede vote writes; registration calls the trusted Game registrar.
     /// @param slot The current-slate slot index (0..MAX_ACTIVE_SLOTS-1) to vote for
     function castBallot(uint8 slot) external {
-        // 1. Slot bounds check (cheapest — calldata read + compare; shares the InvalidSlot error)
         if (slot >= MAX_ACTIVE_SLOTS) revert InvalidSlot();
+        address recipient = currentSlate[slot];
+        if (recipient == address(0)) revert VoteRejected(REJECT_EMPTY_SLOT);
+        if (recipient == lastWinningRecipient) revert PreviousWinnerNotVotable();
 
-        // 2. Empty-slot rejection (one cold SLOAD)
-        if (currentSlate[slot] == address(0)) revert VoteRejected(REJECT_EMPTY_SLOT);
-
-        // 2b. Previous-winner rejection (one cold SLOAD on lastWinningRecipient; reuses the
-        //     currentSlate[slot] read from step 2 above — same storage-array slot, no intervening
-        //     write, so the optimizer collapses the duplicate SLOAD).
-        if (currentSlate[slot] == lastWinningRecipient) revert PreviousWinnerNotVotable();
-
-        // 3. Load the reusable word; a different level starts with an empty mask.
+        // Load the reusable word; a different level starts with an empty mask.
         uint24 level = currentLevel;
         address voter = msg.sender;
         uint32 voterId = IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter);
@@ -687,19 +673,15 @@ contract GNRUS {
         uint256 bit = uint256(1) << slot;
         if (word & bit != 0) revert VoteRejected(REJECT_ALREADY_VOTED);
 
-        // 4. Zero-weight rejection (cross-contract STATICCALL — fires LAST among rejection checks
-        //    so sad-path callers don't pay for the indirect call)
+        // The external balance read runs last among the rejection checks.
         uint256 weight = sdgnrs.balanceOf(voter) / 1e12;
         if (weight == 0) revert VoteRejected(REJECT_ZERO_WEIGHT);
 
-        // 5. State writes — hasVoted bit set, slotApproveWeight accumulator incremented
         // Ordinary-wallet registration only; subaccounts cannot reuse the owner's token weight.
         if (voterId == 0) voterId = IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(voter);
         uint256 shift = (voterId % 5) * 48;
         _voterWord[voterId / 5] = (_voterWord[voterId / 5] & ~(uint256(type(uint48).max) << shift)) | ((word | bit) << shift);
         _slotApproveWeight[slot] = (uint256(level) << 232) | (slotApproveWeight(level, slot) + weight);
-
-        // 6. Emit
         emit Voted(level, slot, voterId, weight);
     }
 
@@ -812,6 +794,7 @@ contract GNRUS {
 
     /// @notice Accept ETH from game claimClaimable and direct deposits
     receive() external payable {}
+
     /// @notice Pending edit queue. Recipient value at slot index; sentinel via `pendingEditSet` bitmap.
     /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no
     ///      pending edit. Values are NOT zeroed when a bit clears — every read is gated on the bit, so a
@@ -820,5 +803,4 @@ contract GNRUS {
 
     /// @dev One current-level weight per slot: weight232, exact level24.
     uint256[20] internal _slotApproveWeight;
-
 }

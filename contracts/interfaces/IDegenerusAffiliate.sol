@@ -25,22 +25,22 @@ pragma solidity 0.8.38;
  */
 
 /// @title IDegenerusAffiliate
-/// @notice Interface for the affiliate referral system (contract-to-contract calls only).
-/// @dev Implements 3-tier referral structure: Player -> Affiliate (75%) -> Upline1 (20%) -> Upline2 (5%).
+/// @notice Interface for the affiliate referral system.
+/// @dev 3-tier referral: purchases roll one winner among Affiliate (75%), Upline1 (20%) and
+///      Upline2 (5%); `claim` splits 75/20/5.
 ///      Code owners, uplines, earnings, scores and the per-level leader are keyed by uint32 wallet
 ///      ID; referral words are keyed by the player ID. Protocol owners are
 ///      the constant IDs VAULT 1 and SDGNRS 2. Wallet ID 0 means "no wallet".
 interface IDegenerusAffiliate {
     /// @notice Process affiliate rewards for a purchase or gameplay action.
     /// @dev Handles referral resolution, reward scaling, and multi-tier distribution.
-    ///      Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+).
+    ///      Fresh ETH rewards: 25% (credited levels 1-3), 20% (levels 4+).
     ///      Recycled ETH rewards: 5% (all levels).
     ///      Access restricted to GAME purchase paths. Credits the rolled winner itself by wallet
-    ///      ID (`creditFlip(winnerId, ...)`) and skips the leg whose winner ID equals `senderId`.
+    ///      ID (`creditFlip_g317(winnerId, ...)`) and skips the leg whose winner ID equals `senderId`.
     ///      `senderId` must be a registered ID; a zero `amount` only resolves the referral.
     /// @param amount Base reward amount (0 decimals).
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
-
     /// @param senderId The player's wallet ID (seeds the winner roll).
     /// @param levelDay Leaderboard level in the low 24 bits and the Game's logical day in the next 24 (day 0 = Quests reads it).
     /// @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
@@ -57,15 +57,12 @@ interface IDegenerusAffiliate {
 
     /// @notice Settle all of a buy's affiliate legs (ticket + lootbox, fresh + recycled) in ONE call.
     /// @dev GAME-only. Resolves the referral once, accrues each leg at its own scale (fresh/recycled
-    ///      bps, taper on the lootbox-fresh leg), rolls ONE winner on the shared (day, senderId, code)
+    ///      bps, taper on the lootbox-fresh leg), rolls ONE winner on the shared (wall day, senderId, code)
     ///      entropy, and RETURNS the winner credit instead of paying it so the caller batches the
     ///      winner + buyer credits into one Coinflip write:
-    ///      `creditFlipPair(senderId, playerKickback, winnerId, winnerCredit)`. The winner is
+    ///      `creditFlipPair_g578(senderId, playerKickback, winnerId, winnerCredit)`. The winner is
     ///      rolled among the stored owner and upline IDs, so nothing is decoded.
     /// @param code Referral code supplied with the buy (resolved + locked once).
-
-
-
     /// @param senderId The buyer's wallet ID (seeds the winner roll).
     /// @param levelDay Leaderboard level for all legs (ticket and lootbox both freeze at level + 1)
     ///        in the low 24 bits and the Game's current logical day, passed on to the winner's
@@ -103,7 +100,7 @@ interface IDegenerusAffiliate {
     /// @dev Permissionless. Consecutive subs sharing a direct affiliate `A` form one run, its chain
     ///      resolved once. Each sub settles atomically at the Game storage owner, which pays the sub
     ///      and returns its base; a run's total splits 75/20/5 (floored, remainder to A) and pays
-    ///      A / U1 / U2 directly via `creditFlip`; no-referrer subs split 50/50 VAULT/sDGNRS. Fixed
+    ///      A / U1 / U2 directly via `creditFlip_g317`; no-referrer subs split 50/50 VAULT/sDGNRS. Fixed
     ///      split (no roll, no seed). The leaderboard credits A once per run, at `currentLvl() + 1`.
     /// @param subs Afking subscribers to settle, in any order.
     function claim(uint32[] calldata subs) external;
@@ -121,12 +118,14 @@ interface IDegenerusAffiliate {
     /// @return score Their score in FLIP base units (0 decimals).
     function affiliateTop(uint24 lvl) external view returns (uint32 id, uint96 score);
 
-    /// @notice Exact score (capped at 2^35-1 FLIP) for the latest credited level or its predecessor.
+    /// @notice Exact score (capped at 2^35-1 FLIP) for the latest credited level or its
+    ///         predecessor, and the level's total score.
     /// @dev Direct affiliate earnings only (excludes uplines and quest bonuses).
     ///      Retired levels return zero; AffiliateEarningsRecorded supplies historical reporting.
     /// @param lvl The game level to query.
     /// @param id Wallet ID of the affiliate to query (0 returns 0).
     /// @return score The base affiliate score (0 decimals).
+    /// @return total The level's total affiliate score (0 decimals).
     function affiliateScoreAndTotal_g4013(uint24 lvl, uint32 id) external view returns (uint256 score, uint256 total);
 
     function affiliateScore(uint24 lvl, uint32 id) external view returns (uint256 score);
@@ -136,12 +135,10 @@ interface IDegenerusAffiliate {
     /// @return total The total affiliate score (0 decimals).
     function totalAffiliateScore(uint24 lvl) external view returns (uint256 total);
 
-
-
     /// @notice Calculate the affiliate bonus points for a player.
     /// @dev Sums the player's affiliate scores for the previous 5 levels, converted to
     ///      weighted referred ETH volume (score × level ticket price / PRICE_COIN_UNIT,
-    ///      normalized by the 20% L4+ fresh reward rate; fresh ≈ 1:1 (levels 0-3 fresh 1.25×),
+    ///      normalized by the 20% L4+ fresh reward rate; fresh ≈ 1:1 (levels 1-3 fresh 1.25×),
     ///      recycled 0.25×).
     ///      Awards 4 points per ETH for the first 5 ETH, 1.5 points per ETH for the next 20 ETH, capped at 50.
     ///      Callers hold the ID from the mint word they already read.
@@ -152,7 +149,7 @@ interface IDegenerusAffiliate {
 
     /// @notice Get the referrer address for a player.
     /// @dev Never returns address(0): resolves to the VAULT when the player has no valid
-    ///      referrer (code unset, locked, vault-coded, or its owner unresolvable). Chains are
+    ///      referrer (code unset, locked or vault-coded). Chains are
     ///      not acyclic (VAULT and SDGNRS refer each other; mutual player referrals are
     ///      allowed); payouts walk at most two upline hops from the direct referrer.
     /// @param player The player to look up.
@@ -161,10 +158,7 @@ interface IDegenerusAffiliate {
 
     /// @notice Get the referrer's wallet ID for a player (ID twin of getReferrer).
     /// @dev View; never allocates. Resolves exactly as getReferrer does: VAULT_WALLET_ID (1)
-    ///      when the player has no valid referrer (code unset, locked or vault-coded). Returns 0
-    ///      only when the resolved referrer has no wallet ID yet (a bootstrap-code owner whose
-    ///      deferred registration has not run); callers treat 0 as "no recipient"
-    ///      (`creditFlip(0, ...)` is a no-op).
+    ///      when the player has no valid referrer (code unset, locked or vault-coded).
     /// @param player The player to look up.
     /// @return The referrer's wallet ID.
     function getReferrerId(address player) external view returns (uint32);

@@ -17,7 +17,7 @@ contract BoundedHeapSeeder is DecimatorBattleHarness {
     function seedHeap(uint8 count, bool reject, bool rankOnly) external {
         DecBattleRound storage round = decBattleRounds[5];
         round.winners = count;
-        uint256 n = Sampling.field(_currentRngWord(), 5, round.count).count;
+        uint256 n = Sampling.field(_currentRngWord(), round.count).count;
         round.cursor = uint64(rankOnly ? n : n - 1);
         for (uint256 i; i < count; ++i) {
             uint256 score = reject ? uint256(type(uint192).max) - 200 + i : i + 1;

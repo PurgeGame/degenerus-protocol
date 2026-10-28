@@ -37,10 +37,8 @@ struct DecimatorJackpotTerms {
 }
 
 interface IDegenerusGameTicketModule {
-
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
         external returns (MineFlipGas.Result memory);
-
 
     function runTicketWork_g1150(uint24 anchor, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
 }
@@ -59,27 +57,21 @@ interface IDegenerusGameRngModule {
     error BelowThreshold();
     error GasTooHigh();
 
-
     function publishRng_g4514() external;
 
-
     function requestDailyRng_g8190(uint24 day) external;
-
 
     function requestMinerRng_g4954() external;
     function retryRng() external;
 }
 
 /// @title IDegenerusGameAdvanceModule
-/// @notice Interface for the game advancement module handling VRF and game progression
+/// @notice Interface for the daily advance module
 interface IDegenerusGameAdvanceModule {
     function stakeExcessEth(uint256 amount) external;
     function prepareRequestBoundary(uint24 day) external;
 
-
     function applyDailyWord_g1652() external;
-
-
 
     function runDailyPhase_g2582(uint256 allowance) external returns (MineFlipGas.Result memory);
     function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
@@ -118,7 +110,8 @@ interface IDegenerusGameGameOverModule {
         uint32 newCallbackGasLimit
     ) external;
 
-    /// @notice Claim deterministic-ending shares for account `id`'s terminal-level tickets.
+    /// @notice Claim deterministic-ending shares for account `id`'s terminal-level holdings
+    ///         (created tickets, queued entries, foil packs).
     /// @dev Raw msg.data target of Game.claimDeadVrf (identical selector). Permissionless;
     ///      credits the account by ID.
     /// @param id Owner of every referenced holding (0 = caller; otherwise allocated, else E).
@@ -126,8 +119,8 @@ interface IDegenerusGameGameOverModule {
     function claimDeadVrf(uint32 id, uint256[] calldata refs) external;
 }
 
-/// @title IDegenerusGameJackpotModule
-/// @notice Interface for managing various jackpot distributions
+/// @title IDegenerusGameJackpotDrawModule
+/// @notice Interface for jackpot draw payouts (golden ticket, FLIP draws, BAF)
 interface IDegenerusGameJackpotDrawModule {
     function payGoldenTicket(uint32 winner, uint24 lvl, uint8 route, uint8 golds, bool grand) external;
     function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) external;
@@ -135,17 +128,17 @@ interface IDegenerusGameJackpotDrawModule {
         external returns (MineFlipGas.Result memory);
     function runBafAwards(uint256 word, uint256 allowance, uint8[3] calldata traits)
         external returns (MineFlipGas.Result memory);
-    /// @notice Execute BAF jackpot distribution.
+    /// @notice Arm the BAF award stage at the x0 consolidation (self-call only); `runBafAwards`
+    ///         draws and pays the awards later.
     /// @param poolWei Total ETH pool for BAF.
     /// @param lvl Current level.
-    /// @param rngWord VRF entropy.
+    /// @param rngWord Unused.
     /// @return claimableDelta ETH reserved in claimablePool for the staged award schedule.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
     ) external returns (uint256 claimableDelta);
-
 }
 
 interface IDegenerusGameJackpotModule {
@@ -180,8 +173,7 @@ interface IDegenerusGameJackpotModule {
     function emitDailyWinningTraits(uint256 randWord) external;
 
     /// @notice Distribute yield surplus to stakeholders.
-    /// @param rngWord Unused — the surplus split is deterministic. Carried only to keep the
-    ///        delegatecall signature uniform with the other AdvanceModule entry points.
+    /// @param rngWord Unused; callers pass 0.
     function distributeYieldSurplus(uint256 rngWord) external;
 }
 
@@ -192,9 +184,8 @@ interface IDegenerusGameDecimatorModule {
         external returns (MineFlipGas.Result memory result, uint256 soloAmount);
     function runDecimatorWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
 
-
     /// @notice Record a Decimator burn for jackpot eligibility.
-    /// @param player Address of the player.
+    /// @param player Wallet ID of the burner (nonzero; supplied by FLIP).
     /// @param lvl Resolution level (current game level + 1).
     /// @param baseAmount Burn amount before multiplier.
     /// @param multBps Multiplier in basis points (10000 = 1x).
@@ -212,7 +203,8 @@ interface IDegenerusGameDecimatorModule {
     /// @param poolWei Total ETH prize pool for this level.
     /// @param lvl Level number being resolved.
     /// @param rngWord VRF-derived randomness seed.
-    /// @return returnAmountWei Amount to return (no entries or this round was already sealed).
+    /// @return returnAmountWei Pool handed back unsealed (no entries, already sealed, or the
+    ///         session cannot take the seal); 0 when sealed.
     function runDecimatorJackpot(
         uint256 poolWei,
         uint24 lvl,
@@ -223,20 +215,19 @@ interface IDegenerusGameDecimatorModule {
 /// @title IDegenerusGameWhaleModule
 /// @notice Interface for whale-tier purchases and premium passes
 interface IDegenerusGameWhaleModule {
-
     /// @notice Purchases a whale pass for the buyer
-    /// @param buyerId Address receiving the pass
+    /// @param buyerId Account receiving the pass (0 = caller)
     /// @param quantity Number of passes to purchase
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
     function purchaseWhalePass(uint32 buyerId, uint256 quantity, bytes32 affiliateCode) external payable;
 
     /// @notice Purchases a 10-level lazy pass for the buyer
-    /// @param buyerId Address receiving the pass
+    /// @param buyerId Account receiving the pass (0 = caller)
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
     function purchaseLazyPass(uint32 buyerId, bytes32 affiliateCode) external payable;
 
     /// @notice Purchases a deity pass for a specific symbol
-    /// @param buyerId Address receiving the deity pass
+    /// @param buyerId Account receiving the deity pass (0 = caller)
     /// @param symbolId Symbol index (0-31) to bind the pass to
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
     function purchaseDeityPass(
@@ -251,8 +242,6 @@ interface IDegenerusGameWhaleModule {
     /// @param id Account to claim for (0 = caller; otherwise allocated, else E).
     function claimWhalePass(uint32 id) external;
 
-
-
     /// @notice Awards early-bird or quadrant passes to one fresh recipient.
     /// @dev Nested delegatecall from JackpotModule against frozen GAME inventory: one
     ///      recipient from the bucket of `trait`, drawn with `randWord`. A ticket leg passes
@@ -266,24 +255,23 @@ interface IDegenerusGameWhaleModule {
         bool ticketLeg
     ) external returns (uint256 spent);
 
-    /// @notice Vault-funded recipient purchase, callable only in Game storage.
+    /// @notice Vault-funded recipient purchase: Game-storage delegatecall from spendDegenesis,
+    ///         VAULT caller only.
     function purchaseWhalePassForDegenesis(uint32 recipientId, uint256 quantity) external;
-
-
 
     /// @notice sDGNRS's once-per-level automatic whale purchase (afking process STAGE only).
     /// @dev Delegatecall-only, nested from GameAfkingModule.runSubscriberWork; no facade
     ///      stub forwards it. Buys the largest whole group of five paid passes whose quote fits
-    ///      a quarter of sDGNRS's claimable, or nothing (RNG lock / committed word / terminal /
-    ///      full lootbox entry / below one group — all a zero return, never a revert; the STAGE
-    ///      latches the level on the attempt either way).
-    /// @param processDay The STAGE's boundary-pinned process day.
+    ///      a quarter of sDGNRS's claimable, or nothing (terminal / below one group — a zero
+    ///      return, never a revert; the STAGE latches the level on the attempt either way). The
+    ///      STAGE calls it only with the RNG unlocked and no request out.
+    /// @param processDay The STAGE's boundary-pinned process day (unread by the module).
     /// @return paidPasses Paid passes bought (a multiple of five); 0 when nothing was bought.
     function purchaseWhalePassForSdgnrs_g470(uint24 processDay) external returns (uint256 paidPasses);
 }
 
 /// @title IDegenerusGameMintModule
-/// @notice Interface for minting operations and purchase processing
+/// @notice Explicit-value purchase adapter (Foil, Degenesis)
 interface IDegenerusGameMintModule {
     function purchaseWith(
         uint32 buyerId,
@@ -297,7 +285,7 @@ interface IDegenerusGameMintModule {
 }
 
 /// @title IDegenerusGameLootboxModule
-/// @notice Interface for opening lootboxes and managing boons
+/// @notice Interface for opening and crediting lootboxes
 interface IDegenerusGameLootboxModule {
     /// @notice Settle one queued box entry
     /// @param buffer Physical read buffer (0/1)
@@ -355,17 +343,15 @@ interface IDegenerusGameLootboxModule {
     /// @param amount Total direct-half value, drawn from the redemption reserve.
     function creditRedemptionDirect(uint32 id, uint256 amount) external;
 
-    /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
-    ///         frozen-day word.
-    /// @dev The LIVE-level twin of resolveLootboxDirect — the box rolls from the LIVE level
-    ///      and the EV-cap RMW is the single draw at open, with two deviations:
-    ///      the word is a caller-passed param (_recordedDailyWord(stamp day)) and the seed
-    ///      `day` is the FROZEN stamped process day. Called by the GameAfkingModule
-    ///      open-leg.
+    /// @notice Resolve an AfKing-subscription box at the LIVE level from the caller-passed
+    ///         active session word.
+    /// @dev The LIVE-level twin of resolveLootboxDirect. Seed = hash(BOX_AFKING, rngWord, id);
+    ///      no per-level EV allowance is read or drawn (the 1-8 daily unit cap bounds these
+    ///      boxes). Called by the GameAfkingModule open leg.
     /// @param id The reward account's wallet ID.
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend)
-    /// @param day The boundary-pinned process day stamped at process (frozen seed input)
-    /// @param rngWord The frozen stamp day's word _recordedDailyWord(day), passed by the caller
+    /// @param day The stamp's process day; unused by the resolution.
+    /// @param rngWord The active published session word, passed by the caller
     /// @param activityScore The stamped activity score in whole points (the frozen EV input)
     function resolveAfkingBox(
         uint32 id,
@@ -374,11 +360,10 @@ interface IDegenerusGameLootboxModule {
         uint256 rngWord,
         uint16 activityScore
     ) external;
-
 }
 
 /// @title IDegenerusGameBoonModule
-/// @notice Interface for boon consumption
+/// @notice Interface for boon draws, protocol deity setup and expiry maintenance
 interface IDegenerusGameBoonModule {
     /// @notice One-time creator-gated registration and ticket batch for both protocol deities.
     function initProtocolDeity() external;
@@ -396,7 +381,7 @@ interface IDegenerusGameBoonModule {
     /// @param boxCount Boxes rolled in this entry
     /// @param originalAmount One box's resolution amount, for the reward events
     /// @param currentLevel Open level (level + 1)
-    /// @param seed Player-mixed entry seed; box i draws off a (nonceBase + i)-tagged derivative
+    /// @param seed Entry seed; box i draws off a (nonceBase + i)-tagged derivative
     /// @param nonceBase Global box position of this batch's first box within its entry
     function rollBoxBoons(
         uint32 id,
@@ -408,18 +393,8 @@ interface IDegenerusGameBoonModule {
         uint256 nonceBase
     ) external payable;
 
-
-
     /// @notice Automatically award both protocol owners' three closed daily draws. Advance-only delegate target.
     function resolveProtocolBoonDraws(uint24 awardDay) external;
-
-
-
-
-
-
-
-
 
     /// @notice Clear all expired boons for a player
     /// @param id Wallet ID of the player (boon state key)
@@ -428,12 +403,9 @@ interface IDegenerusGameBoonModule {
 }
 
 /// @title IDegenerusGameDegeneretteModule
-/// @notice Interface for Degenerette betting mechanics (single-symbol selection)
+/// @notice Interface for Degenerette resolution work and lootbox spins
 interface IDegenerusGameDegeneretteModule {
-
-
     function runDegeneretteWork_g670(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-
 
     /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
     /// @param playerId The reward account's wallet ID.
@@ -500,9 +472,8 @@ interface IDegenerusGameBingoModule {
     /// @param slots Per-color positions in lvlTraitEntry[(level) & 1][traitId] the owner occupies.
     function claimBingo(uint32 id, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
-    /// @notice Claim DGNRS affiliate rewards for the current level. Implemented directly
-    ///         on Game; its internal body preserves the onlyGame / onlyFlipCreditors calls.
-    ///      Permissionless; DGNRS to the account's payee, FLIP bonus by ID.
+    /// @notice Claim DGNRS affiliate rewards for the current level.
+    /// @dev Permissionless; DGNRS to the account's payee, FLIP bonus by ID.
     /// @param id Affiliate account to claim for (0 = caller; otherwise allocated, else E).
     function claimAffiliateDgnrs(uint32 id) external;
 }
@@ -512,27 +483,20 @@ interface IDegenerusGameBingoModule {
 /// @dev The GameAfkingModule is a delegatecall module operating on the Game's storage
 ///      (the subscriber set / cursors / lanes live in
 ///      DegenerusGameStorage). This interface declares the mutating surface
-///      so the Game-hosted dispatch stubs and the AdvanceModule process STAGE call
+///      so the Game-hosted dispatch stubs and the miner engine's work stages
 ///      resolve against a real ABI. Every function runs IN the Game's storage context
-///      (delegatecall), so msg.sender is preserved end-to-end (the account gates and
-///      the bounty payee read the original caller).
+///      (delegatecall), so msg.sender is preserved end-to-end (the account gates read
+///      the original caller).
 interface IGameAfkingModule {
     /// @notice GAME-only atomic stETH fallback funding operation.
     function pullAfkingSteth(uint32 subId, address source, uint256 shortfall) external returns (uint256);
-
-
-
     function runSubscriberWork_g6352(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-
-
     function runAfkingWork_g8553(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-
-
     function runHumanBoxWork_g315(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-    /// @notice Loan-seizure only: cancel the seized account's AFKing run and, for a main,
-    ///         every smurf's (AdvanceModule `_seizeLoan` delegatecall target).
-    function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external;
 
+    /// @notice Loan-seizure only: cancel the seized account's AFKing run and, for a main,
+    ///         every smurf's (GameOverModule `seizeLoan` delegatecall target).
+    function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external;
 
     /// @notice The daily subscriber draw for `day` (AdvanceModule delegatecall target).
     function runSubDraw_g1232(uint24 day) external;
@@ -558,10 +522,6 @@ interface IGameAfkingModule {
     ///      non-member settles nothing and does not revert.
     function claimAfkingFlip(uint32[] calldata ids) external;
 
-
-
-
-
     /// @notice Permissionless paid cure: clear account `id`'s cashout/smite curse for 100 FLIP
     ///         burned from the caller's own wallet (0 = caller; otherwise allocated, else E).
     function decurse(uint32 id) external;
@@ -572,25 +532,23 @@ interface IGameAfkingModule {
     function smite(uint256 deityId, uint32 smiteeId) external;
 }
 
-/// @notice Foil generation and perpetual-ticket workers hosted by the pass bundle.
+/// @notice Foil generation and perpetual-ticket workers.
 interface IDegenerusGameFoilWorkerModule {
     function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory);
     /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
     function queuePerpetualTickets(uint24 targetLevel) external;
-
 }
 
 /// @title IDegenerusGameFoilPackModule
-/// @notice Interface for the foil pack buy + match claim.
-/// @dev The Game retains thin delegatecall dispatch stubs targeting these selectors;
-///      both bodies run in the Game's storage context (delegatecall), so the resolved
-///      player is passed explicitly and msg.value rides through the call.
+/// @notice Interface for the foil pack buy and claims.
+/// @dev The Game's thin delegatecall dispatch stubs target these selectors; the bodies run
+///      in the Game's storage context and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
-    /// @notice The foil branch of Game.purchase: an additive foil pack on top of optional ticket
+    /// @notice The foil branch of Game.purchaseOrderFor: an additive foil pack on top of optional ticket
     ///         and lootbox legs. Registers the buyer first (paid admission uses the whole quoted
     ///         spend), caps fresh ETH at the combined cost, credits any overpay to the payer's
     ///         afking, runs the ticket/lootbox leg through the mint module, then delivers the pack.
-    /// @param buyerId Player receiving every leg (already operator-resolved).
+    /// @param buyerId Account receiving every leg (0 = caller; account rule).
     function purchaseWithFoil(
         uint32 buyerId,
         uint256 entryQuantityScaled,
@@ -619,8 +577,7 @@ interface IDegenerusGameFoilPackModule {
     /// @dev A FLIP ladder on the pack's total gold count from three up, plus a kicker
     ///      for one all-gold ticket. Two all-gold tickets take the grand instead — pushed
     ///      automatically by the foil drain, so this call reverts for such a pack. The
-    ///      pack's lines are re-derived from the sealed word its buy froze
-    ///      against, so nothing about the gold is stored. The win credits to `player`,
+    ///      pack's lines are the ones the drain stored in its pack record. The win credits to `player`,
     ///      never the caller, and a pack pays at most once.
     ///      Raw msg.data target of Game.claimGoldenTicket; payouts go to the payee.
     /// @param id Pack owner the win credits to (0 = caller; otherwise allocated, else E).
@@ -629,8 +586,7 @@ interface IDegenerusGameFoilPackModule {
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
     /// @dev Non-claimable tuples past index 0 are skipped (not reverted); each settled
-    ///      win credits its own player and the caller earns a small per-settled-claim
-    ///      FLIP bounty during a live game. A non-claimable tuple AT index 0 reverts the
+    ///      win credits its own account; the caller is paid nothing. A non-claimable tuple AT index 0 reverts the
     ///      whole call (StaleBatch), marking an already-swept list; the daily RNG lock
     ///      reverts it up front (RngLocked). The three arrays are parallel. Claims are
     ///      valid on the draw day and the following day, and close when terminal
@@ -649,26 +605,18 @@ interface IDegenerusGameFoilPackModule {
 /// @title IDegenerusGameDegenesisModule
 /// @notice Degenesis sale: purchase, daily cohort preparation and the settlement stage
 interface IDegenerusGameDegenesisModule {
-
-
-    /// @notice Buy a credit-gated Degenesis box. Raw msg.data target of Game.purchaseDegenesisBox.
+    /// @notice Buy a credit-gated Degenesis box. Delegatecall target of Game.purchaseDegenesisBox.
     /// @param id Account receiving the order (0 = caller; account rule)
     /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the per-order bound
     function buyDegenesisBox_g1442(uint32 id, uint256 amount) external payable;
-
-
 
     /// @notice Split sealed cohorts and price the next one at a fresh daily request
     /// @param day The request day
     function prepareDegenesis_g47(uint24 day) external;
 
-
-
     /// @notice Settle the active Degenesis cohort's orders in order, then close the cohort
     /// @param gasAllowance Metered allowance from the miner engine
     function runDegenesisWork_g1860(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-
-
 
     /// @notice Top sDGNRS AFKing funding up to its target from claimable before the bulk whale attempt
     function topUpSdgnrsAfking_g318() external;
@@ -680,7 +628,7 @@ interface IDegenerusGameDegenesisModule {
     /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket)
-    /// @param boxOrder Packed lootbox order (zero with whale passes)
+    /// @param boxOrder Packed lootbox order (ignored with whale passes)
     /// @param maxCost Budget moved in for the purchase; the unspent part returns
     function spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
 }

@@ -35,5 +35,4 @@ abstract contract DegenerusGameJackpotDrawUtils is DegenerusGameStorage {
         uint256 word = redrawn ? _bucketWordAtUnchecked(lvl, trait, index) : cursor.word;
         winner = _bucketIdFromWord(word, index);
     }
-
 }

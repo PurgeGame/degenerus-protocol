@@ -15,7 +15,7 @@ import unittest
 
 RUNNER = Path(__file__).resolve().parents[2] / "scripts/test-foundry-groups.py"
 FAKE_TOOL = '''#!/usr/bin/env python3
-import json, os, signal, sys, time
+import json, os, signal, subprocess, sys, time
 from pathlib import Path
 if Path(sys.argv[0]).name == "node":
     if "--input-type=module" in sys.argv:
@@ -42,9 +42,14 @@ state.write_text(json.dumps(calls))
 mode = os.environ.get("FAKE_MODE", "pass")
 if mode == "kill_first" and len(calls) == 1:
     os.kill(os.getpid(), signal.SIGKILL)
-if mode == "sleep":
-    Path("ready").write_text(str(os.getpid()))
-    time.sleep(30)
+if mode in ("sleep", "orphan"):
+    grandchild = subprocess.Popen([sys.executable, "-c",
+        "import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); print('ready',flush=True); time.sleep(30)"],
+        stdout=subprocess.PIPE, text=True)
+    grandchild.stdout.readline()
+    Path("ready").write_text(json.dumps({"child": os.getpid(), "grandchild": grandchild.pid}))
+    if mode == "sleep":
+        time.sleep(30)
 if mode == "missing":
     print("compiler succeeded, but no tests ran")
 elif mode == "zero":
@@ -64,6 +69,8 @@ else:
     if mode == "dependency_drift":
         Path("lib/forge-std/Library.sol").write_text("changed dependency\\n")
     print("Ran 1 test suite in 0s: 2 tests passed, 0 failed, 0 skipped")
+if mode == "orphan":
+    raise SystemExit(int(os.environ.get("FAKE_EXIT", "0")))
 '''
 
 
@@ -104,6 +111,33 @@ class FoundryGroupsDriverTest(unittest.TestCase):
 
     def rows(self):
         return json.loads((self.root / ".audit-test-logs/foundry/summary.json").read_text())
+
+    def assert_normal_wrapper_cleanup(self, exit_code):
+        self.sources("gas", 1)
+        try:
+            result = self.run_driver(FAKE_MODE="orphan", FAKE_EXIT=str(exit_code))
+            self.assertEqual(result.returncode, 0 if exit_code == 0 else 1,
+                             result.stdout + result.stderr)
+            self.assertEqual(self.rows()[-1]["forge_exit_code"], exit_code)
+            ids = json.loads((self.root / "ready").read_text())
+            stat = Path(f'/proc/{ids["grandchild"]}/stat')
+            if stat.exists():
+                self.assertIn(stat.read_text().rsplit(')', 1)[1].split()[0], ("Z", "X"),
+                              "compiler still running after wrapper exited and pins restored")
+        finally:
+            # The pre-fix regression must not leave its deliberately leaked compiler alive.
+            ready = self.root / "ready"
+            if ready.exists():
+                try:
+                    os.killpg(json.loads(ready.read_text())["child"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def test_successful_wrapper_exit_stops_compiler_descendants(self):
+        self.assert_normal_wrapper_cleanup(0)
+
+    def test_failed_wrapper_exit_stops_compiler_descendants(self):
+        self.assert_normal_wrapper_cleanup(7)
 
     def test_generated_profile_files_restore_after_a_failed_batch(self):
         generated = self.root / 'contracts/Selected.sol'
@@ -154,6 +188,13 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         rows = self.rows()
         self.assertEqual([row["source_files"] for row in rows], [21, 7, 7, 7])
         self.assertNotEqual(rows[0]["run_id"], rows[1]["run_id"])
+
+    def test_paid_lifecycle_calibration_is_retained_in_run_evidence(self):
+        self.sources("gas", 1)
+        result = self.run_driver("--group", "integration-gas", NATIVE_PAID_MULTIPLIER="2500")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        run = self.root / ".audit-test-logs/foundry" / self.rows()[0]["run_id"] / "run.json"
+        self.assertEqual(json.loads(run.read_text())["environment"]["NATIVE_PAID_MULTIPLIER"], "2500")
 
     def test_symlinked_libraries_are_captured_and_drift_fails(self):
         self.sources("gas", 1)
@@ -318,12 +359,18 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.assertEqual(self.rows()[0]["group"], "runner")
         self.assertFalse((self.root / "calls.json").exists())
 
-    def test_sigterm_stops_active_tool_and_restores_pins(self):
+    def test_sigterm_stops_compiler_descendants_and_restores_pins(self):
         self.sources("gas", 1)
         process = subprocess.Popen([sys.executable, "scripts/test-foundry-groups.py", "--group", "integration-gas"],
                                    cwd=self.root, env={**self.env, "FAKE_MODE": "sleep"},
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         def cleanup():
+            ready = self.root / "ready"
+            if ready.exists():
+                try:
+                    os.killpg(json.loads(ready.read_text())["child"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             if process.poll() is None:
                 process.kill()
             process.communicate()
@@ -332,7 +379,7 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         while not (self.root / "ready").exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         self.assertTrue((self.root / "ready").exists(), "fake forge never started")
-        child_pid = int((self.root / "ready").read_text())
+        pids = json.loads((self.root / "ready").read_text())
         process.send_signal(signal.SIGTERM)
         process.communicate(timeout=5)
         self.assertNotEqual(process.returncode, 0)
@@ -340,8 +387,10 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.assertIn("SIGTERM", self.rows()[-1]["errors"][0])
         self.assertEqual(self.rows()[-1]["batch"], "integration-gas-01")
         self.assertIn("command", self.rows()[-1])
-        with self.assertRaises(ProcessLookupError):
-            os.kill(child_pid, 0)
+        for pid in pids.values():
+            status = Path(f"/proc/{pid}/status")
+            if status.exists():
+                self.assertRegex(status.read_text(), r"State:\s+Z")
 
     def test_list_reports_physical_batches_without_mutation(self):
         self.sources("gas", 41)

@@ -73,10 +73,6 @@ contract BoundedCallHarness {
         return BoundedCall.staticcallRemaining(MineFlipGas.fromCall(0), target, budget, 50_000, input, expected);
     }
 
-    function flag(address target, uint256 budget, bytes memory input) external returns (bool) {
-        return BoundedCall.callBoolRemaining(MineFlipGas.fromCall(0), target, budget, 50_000, input);
-    }
-
     function word(address target, uint256 budget, bytes memory input) external view returns (bool, uint256) {
         return BoundedCall.staticWordRemaining(MineFlipGas.fromCall(0), target, budget, 50_000, input);
     }
@@ -161,12 +157,6 @@ contract BoundedCallTest is Test {
             assertFalse(ok);
             assertEq(output.length, 0);
         }
-    }
-
-    function testBoolRejectsNonCanonicalAndAcceptsOne() public {
-        assertFalse(harness.flag(address(target), BUDGET, abi.encode(uint256(6))));
-        assertFalse(harness.flag(address(target), BUDGET, abi.encode(uint256(1))));
-        assertTrue(harness.flag(address(target), BUDGET, abi.encode(uint256(11))));
     }
 
     function testStaticWordFailureReadsZero() public {

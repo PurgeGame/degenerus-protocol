@@ -73,7 +73,6 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       expect(body("_runTicketWork")).to.include("_drainQueue(");
       expect(body("_drainQueue")).to.include("_solo(");
       expect(body("_drainQueue")).to.include("_roundPhase(");
-      expect(entropy).to.include("DEGENERUS_TICKET_REMAINDER_V2");
       expect(entropy).to.include("EntropyLib.hash3(RngTags.TICKET_REMAINDER, entropy, stream & ~(uint256(type(uint32).max) << ID_SHIFT))");
       expect(entropy).to.include("% 100 < fraction");
     });

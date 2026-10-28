@@ -35,7 +35,7 @@ struct QuestRequirements {
 
 /// @notice Information about a single quest
 struct QuestInfo {
-    /// @notice The day this quest is active (deploy-relative day index; Day 1 = deploy day)
+    /// @notice The Game logical day this quest is active (bootstrap = day 1)
     uint24 day;
     /// @notice The type of quest (mint, flip, affiliate, etc.)
     uint8 questType;
@@ -55,7 +55,7 @@ struct PlayerQuestView {
     bool[2] completed;
     /// @notice The last day the player completed the primary (slot 0) quest
     uint24 lastCompletedDay;
-    /// @notice The player's effective (gap/shield-decayed) base streak
+    /// @notice The player's effective (missed-day/shield-decayed) base streak
     uint32 baseStreak;
 }
 
@@ -63,8 +63,8 @@ struct PlayerQuestView {
 /// @notice Interface for the daily quest system that rewards players for game actions
 /// @dev Quests reset daily and track player progress across mint, flip, and other actions.
 ///      Every per-player quest record is keyed by the caller-supplied uint32 wallet ID; Quests
-///      has no player entry points and resolves no address except at a level-quest completion
-///      (eligibility reads the wallet's mint word through the wallet table). Wallet ID 0 means
+///      has no player entry points and resolves no address (level-quest eligibility reads the
+///      ID's mint word from the Game). Wallet ID 0 means
 ///      "no wallet". Callers always pass a nonzero ID they hold (Game modules, Coinflip's
 ///      forward word, FLIP after registration, Affiliate's stored IDs, Parimutuel's
 ///      `marketBetGates`). No handler reverts on any ID, and a view of an untouched ID
@@ -72,7 +72,7 @@ struct PlayerQuestView {
 interface IDegenerusQuests {
     /// @notice Rolls the daily quest for a given day using provided entropy.
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
-    /// @param day The deploy-relative day index to roll quests for (Day 1 = deploy day)
+    /// @param day The Game logical day to roll quests for
     /// @param entropy Random entropy used to determine the slot 1 quest type
     /// @param forceMintFlip Force slot 1 to MINT_FLIP (the first jackpot day, when the FLIP
     ///        redeem window is live); otherwise MINT_FLIP is excluded from the slot 1 roll.
@@ -90,10 +90,10 @@ interface IDegenerusQuests {
 
     /// @notice Records player flip activity and checks quest completion
     /// @dev Called by COINFLIP when a player stakes a coinflip (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE).
-    ///      The quest belongs to the FUNDER of the deposit (the depositor for self and operator
-    ///      deposits, the paying sender for a gift); Coinflip folds the returned reward into the
-    ///      staked player's deposit.
-    /// @param id Wallet ID of the funder whose quest progresses
+    ///      The quest belongs to the staked account for self and operator deposits and to the
+    ///      paying sender for a gift; Coinflip folds the returned reward into the staked
+    ///      account's deposit.
+    /// @param id Wallet ID whose quest progresses
     /// @param flipCredit The amount of flip credit used
     /// @param day The Game's current logical day, as the caller holds it
     /// @return reward The quest reward amount earned (0 if quest not completed)
@@ -106,8 +106,8 @@ interface IDegenerusQuests {
 
     /// @notice Records player decimator activity and checks quest completion
     /// @dev Called by FLIP when a player burns into the decimator (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE).
-    ///      FLIP obtains the burner's ID first (Game `playerActivityScoreCached`, then
-    ///      `registerWallet_g9539(caller, true)` on zero). Quests credits the reward itself by ID.
+    ///      FLIP obtains the burner's ID first (Game `walletIdOf_g3120`, then
+    ///      `registerWallet_g9539(key, true)` on zero). Quests credits the reward itself by ID.
     /// @param id Wallet ID of the burner
     /// @param burnAmount The amount of tokens burned in the decimator
     /// @return reward The quest reward amount earned (0 if quest not completed)
@@ -147,8 +147,7 @@ interface IDegenerusQuests {
     /// @notice Records player affiliate activity and checks quest completion
     /// @dev Called by AFFILIATE when an affiliate's earnings are credited (onlyCoin admits COIN,
     ///      COINFLIP, GAME and AFFILIATE). AFFILIATE passes the winning owner's or upline's
-    ///      stored ID (no decode); a level-quest completion resolves the wallet's address once
-    ///      through the wallet table. Affiliate credits the returned reward.
+    ///      stored ID (no decode). Affiliate credits the returned reward.
     /// @param id Wallet ID of the affiliate (code owner or upline) earning the reward
     /// @param amount The amount of affiliate rewards earned
     /// @param day The Game's current logical day, or 0 to read it from the Game
@@ -204,7 +203,8 @@ interface IDegenerusQuests {
     ) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed, bool afking);
 
     /// @notice Awards bonus streak days to a player
-    /// @dev GAME only. Directly increases the player's streak count.
+    /// @dev GAME only. Adds to the player's streak (to the afking run's streak base while
+    ///      afking); a zero amount or day is a no-op.
     /// @param id Wallet ID of the player to award bonus to
     /// @param amount The number of bonus streak days to award
     /// @param currentDay The caller's current logical game day; quest state pins to the newest rolled day
@@ -227,21 +227,21 @@ interface IDegenerusQuests {
     /// @param amount The number of shields to add (uint8-saturating)
     function awardQuestStreakShield(uint32 id, uint16 amount) external;
 
-    /// @notice Begins an afking run: snapshots the gap-synced streak and records the run's start day
+    /// @notice Begins an afking run: snapshots the synced streak and records the run's start day
     /// @dev GAME-only. While afking, the Game-side compute-on-read owns the player's streak and
     ///      slot-0 completions after the start day are streak-neutral / reward-deferred (the run
     ///      credits from the next day, so a start-day completion credits as off a run); returns the
     ///      synced streak so the caller bases the run's snapshot on it.
     /// @param id Wallet ID of the subscriber starting an afking run
     /// @param currentDay The caller's current logical game day; quest state pins to the newest rolled day
-    /// @return streak The player's gap-synced streak at the start of the run
+    /// @return streak The player's synced streak at the start of the run
     function beginAfking(uint32 id, uint24 currentDay) external returns (uint24 streak);
 
     /// @notice Ends an afking run: hands the afking-computed streak back to the manual system
     /// @dev GAME-only, called on every run-ending path before the run leaves the subscriber set.
     ///      Idempotent (a no-op unless the player is currently afking). Keeps the Game-computed
-    ///      earned streak when no rolled quest day lies strictly between the newest valid mint
-    ///      anchor and the current day; skipped stall days are never treated as playable misses.
+    ///      earned streak when no logical day lies strictly between the newest valid mint anchor
+    ///      and the current day, and hands back 0 otherwise.
     ///      Revert-free for any input (it runs on mineFlip sub-ending paths).
     /// @param id Wallet ID of the subscriber whose run is ending
     /// @param earnedStreak The run's live streak at the reward endpoint, Game-computed
@@ -253,7 +253,7 @@ interface IDegenerusQuests {
     /// @notice Returns the quest state for a specific player
     /// @dev Zero results for an untouched ID (including 0).
     /// @param id Wallet ID of the player to query
-    /// @return streak The player's raw stored streak (not gap/shield-decayed; use getPlayerQuestView / effectiveBaseStreak for the effective value)
+    /// @return streak The player's raw stored streak (not missed-day/shield-decayed; use getPlayerQuestView / effectiveBaseStreak for the effective value)
     /// @return lastCompletedDay The last day the player completed the primary (slot 0) quest
     /// @return progress The player's current progress on each of the two quests
     /// @return completed Whether the player has completed each of the two quests
@@ -276,10 +276,9 @@ interface IDegenerusQuests {
     /// @dev Called directly by PARIMUTUEL when a bet is placed, and gated on that identity.
     ///      Idempotence comes from PARIMUTUEL's one-bet-per-round gate, not this call itself —
     ///      the internal bit only short-circuits a repeat until level-quest progress rewrites
-    ///      the word within the same version epoch. The address is kept because eligibility
-    ///      reads `player`'s mint word on every rewarded bet; `id` keys the quest record and the
-    ///      credit and must be the ID `marketBetGates(player, lvl)` returned in the same
-    ///      transaction (PARIMUTUEL is trusted to pass that pair; `mayBet` implies it is nonzero).
+    ///      the word within the same version epoch. `id` keys the quest record, the eligibility
+    ///      mint-word read and the credit; it is the ID `marketBetGates(id, lvl)` returned in the
+    ///      same transaction (`mayBet` implies it is nonzero).
     /// @param id Wallet ID of the bettor (from `marketBetGates`).
     /// @param lvl The level the bet was placed on, which the caller already read from the
     ///        game in this same call — passing it through saves re-reading it.
@@ -291,20 +290,22 @@ interface IDegenerusQuests {
     /// @dev Read-only. earnsReward is recordGrowthBet's eligibility; mayBet is the weaker
     ///      lifetime bar — has this account ever bought anything. Mint statistics are keyed by
     ///      the supplied wallet ID. Paying doors register the account before updating its record.
+    /// @param playerId Wallet ID to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
     /// @return earnsReward True if the placement also earns the growth quest.
-    /// @return id The player's wallet ID (0 if unregistered; never allocates).
+    /// @return id `playerId`, echoed.
     function marketBetGates(uint32 playerId, uint24 lvl)
         external
         view
         returns (bool mayBet, bool earnsReward, uint32 id);
 
     /// @notice Returns a player's level quest state for frontend display.
-    /// @dev `eligible` resolves the wallet's address through the wallet table and reads its
-    ///      mint word. Zero results for an untouched ID (including 0).
+    /// @dev `eligible` reads the ID's mint word from the Game. Progress, completion and
+    ///      eligibility read zero/false for an untouched ID (including 0).
     /// @param id Wallet ID of the player to query.
-    /// @return questType The active level quest type (1-8, or 11 for the craps day-pass quest).
+    /// @return questType The active level quest type (1, 2, 3, 5, 6, 7, 8, or 11 for the craps
+    ///         day-pass quest).
     /// @return progress The player's accumulated progress.
     /// @return target The target value for completion.
     /// @return completed Whether the player has completed the quest this level.
@@ -315,7 +316,7 @@ interface IDegenerusQuests {
         returns (uint8 questType, uint128 progress, uint256 target, bool completed, bool eligible);
 
     /// @notice Returns the player's daily quest view, including the effective
-    ///         (gap/shield-decayed) base streak. A pure view — no mutation.
+    ///         (missed-day/shield-decayed) base streak. A pure view — no mutation.
     /// @dev Per-player fields are zero for an untouched ID (including 0).
     /// @param id Wallet ID of the player to query.
     /// @return viewData The player's quest view with the effective baseStreak.
@@ -337,5 +338,4 @@ interface IDegenerusQuests {
     /// @return streak The effective (decay-applied) reward streak.
     /// @return afking True while the player is mid afking-run.
     function effectiveBaseStreakAndAfking_g1521(uint32 id, uint24 day) external view returns (uint32 streak, bool afking);
-
 }

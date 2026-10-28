@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
-import {GameActions} from "../../modules/GameActions.sol";
 
-import {GameFacade, IDegenerusVaultOwnerGame} from "../../modules/GameFacade.sol";
+import {GameActions} from "../../modules/GameActions.sol";
+import {GameFacade} from "../../modules/GameFacade.sol";
 import {GamePurchase} from "../../modules/GamePurchase.sol";
 import {GameMiner} from "../../modules/GameMiner.sol";
 import {GameDegeneretteBet} from "../../modules/GameDegeneretteBet.sol";

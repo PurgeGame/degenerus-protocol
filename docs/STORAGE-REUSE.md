@@ -2,7 +2,10 @@
 
 Several per-account records keep their storage word after use, so later writes overwrite a
 nonzero slot instead of creating one. This page gives the behavior and the raw-read layouts.
-The layout goldens in `scripts/layout/golden/` pin every slot named here.
+The layout goldens in `scripts/layout/golden/` pin every slot named here. This page and the
+goldens describe the current source. The reviews under `scripts/audit/storage-reuse/` and
+`scripts/audit/storage-reuse-phase2/` are historical evidence for the revisions they name; their
+bit positions, slots and gas figures can differ from the current layout.
 
 ## Player behavior
 

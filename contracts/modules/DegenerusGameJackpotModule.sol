@@ -12,7 +12,6 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
-
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -38,11 +37,9 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol";
-import {IStETH} from "../interfaces/IStETH.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
-import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
@@ -70,8 +67,7 @@ import {IDegenerusGameWhaleModule, IDegenerusGameTicketModule, IDegenerusGameDec
  *      FUND ACCOUNTING:
  *      - ETH flows through `futurePrizePool` (unified reserve), `currentPrizePool`,
  *        `nextPrizePool`, `claimablePool`.
- *      - The remainder goes to the entropy-selected solo bucket.
- *      - `claimableWinnings` tracks per-player ETH; `claimablePool` is the aggregate liability.
+ *      - Per-wallet claimable ETH sums to `claimablePool`, the aggregate liability.
  *
  *      RANDOMNESS:
  *      - All entropy originates from VRF words passed by the parent contract.
@@ -98,10 +94,6 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     ///      so one field describes the whole distribution.
     event YieldSurplusDistributed(uint256 perRecipientShare);
 
-    /// @dev `JackpotWhalePassWin.source` values.
-    // Source 1 was the retired solo-only half-pass conversion.
-    // Sources 4 (early bird) and 5 (quadrant conversion) are emitted by WhaleModule.
-
     /// @dev Golden ticket armed: the main board rolled 4 gold colors and the solo bucket
     ///      winner awaits the next main-board draw. `quadrant`/`symbol` are the solo
     ///      bucket's official (post-hero) values — the target the resolve board must
@@ -114,28 +106,14 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     );
 
     // -------------------------------------------------------------------------
-    // External Contract References (compile-time constants)
+    // Constants — Golden Ticket
     // -------------------------------------------------------------------------
-
-    IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-
-    // -------------------------------------------------------------------------
-    // Constants — Timing & Thresholds
-    // -------------------------------------------------------------------------
-
-    /// @dev Small-lootbox threshold for the jackpot lootbox portion split.
-
-    /// @dev Golden-ticket consolation when the armed ticket's resolving main board shows 0 golds: 100 WWXRP.
 
     /// @dev Golden-ticket routes, stamped on GoldenTicketWin. BOARD is the armed
     ///      cross-day board resolution; FOIL is a foil pack holding two or more
     ///      all-gold tickets, which takes the grand outright.
     uint8 private constant GOLDEN_TICKET_ROUTE_BOARD = 0;
     uint8 private constant GOLDEN_TICKET_ROUTE_FOIL = 1;
-
-    /// @dev Sentinel traitId stamped on BAF jackpot payout events so indexers can
-    ///      distinguish BAF wins from trait-bucketed daily/coin wins. Sits above
-    ///      uint8.max (255) so it never collides with a real trait id.
 
     // -------------------------------------------------------------------------
     // Constants — Share Distribution (Basis Points)
@@ -153,18 +131,6 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     ///      Remaining 20% is assigned to the entropy-selected solo bucket.
     uint64 private constant DAILY_JACKPOT_SHARES_PACKED =
         uint64(2000) * 0x0001000100010001;
-
-    // -------------------------------------------------------------------------
-    // Constants — Entropy Salts
-    // -------------------------------------------------------------------------
-
-    bytes32 private constant HERO_SYMBOL_TAG = keccak256("degenerus.jackpot.hero-symbol");
-
-    /// @dev Domain separator for per-pull level sampling in level 1's trait-matched FLIP draw.
-
-    /// @dev Domain separator for rolling current-pool daily jackpot percentage.
-    bytes32 private constant DAILY_CURRENT_BPS_TAG =
-        keccak256("daily-current-bps");
 
     /// @dev Sentinel for _rollHeroSymbol's banQuadrant param: no quadrant banned.
     uint8 private constant _NO_QUADRANT_BAN = 0xFF;
@@ -201,7 +167,6 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     /// @dev Entries per whole ticket. Jackpot budgets are denominated in entries
     ///      (quarter-tickets), but awards are paid in whole tickets only.
     uint256 private constant ENTRIES_PER_TICKET = 4;
-
 
     uint256 private constant JACKPOT_SETUP_GAS = GasBounds.JACKPOT_SETUP_GAS;
     uint256 private constant JACKPOT_PLAN_GAS = GasBounds.JACKPOT_PLAN_GAS;
@@ -266,7 +231,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     ///      - The coin+tickets stage increments jackpotCounter on completion.
     ///
     ///      PURCHASE PHASE PATH (isJackpotPhase=false):
-    ///      - Triggered during purchase phase when burns occur.
+    ///      - Runs on purchase-phase days.
     ///      - Rolls winning traits (random + hero override) and runs trait-based jackpot.
     ///      - ETH winner targets double at each fourfold ETH budget step from [32, 16, 4, 1]
     ///        below 40 ETH to at most [1024, 512, 128, 1].
@@ -332,12 +297,12 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
             uint8 counter = jackpotCounter;
             finalDay = _isFinalJackpotDay(counter, jackpotFlags);
             uint256 current = _getCurrentPrizePool();
-            uint256 bps = finalDay ? 10_000 : _dailyCurrentPoolBps(counter, word);
+            uint256 bps = finalDay ? 10_000 : _dailyCurrentPoolBps(word);
             if (!finalDay && counter != 0) bps *= 2;
             budget = current * bps / 10_000;
             ticketBudget = budget / 5;
             budget -= ticketBudget;
-            (uint256 entries,) = _budgetToEntries(ticketBudget, lvl + 1);
+            uint256 entries = _budgetToEntries(ticketBudget, lvl + 1);
             _setCurrentPrizePool(current - ticketBudget);
             _addNextPrizePool(ticketBudget);
             dailyTicketBudgetsPacked = (entries << 8) | DAILY_TICKET_BUDGET_RETAINED;
@@ -354,7 +319,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
                 if (insurance != 0) yieldAccumulator += insurance;
             }
             if (ticketBudget != 0) {
-                (uint256 entries,) = _budgetToEntries(ticketBudget / 2, lvl);
+                uint256 entries = _budgetToEntries(ticketBudget / 2, lvl);
                 if (entries >= ENTRIES_PER_TICKET) dailyTicketBudgetsPacked = (entries << 208) | DAILY_TICKET_BUDGET_RETAINED;
             }
         }
@@ -534,13 +499,12 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     }
 
     /// @notice The ticket leg of the purchase-phase daily, from its own advance stage.
-    /// @dev Called by advanceGame after the pricing and battle advances, with
+    /// @dev Called by the daily advance after the pricing and battle stages, with
     ///      the same day's recorded word. The main board is the one the pricing stage rolled
     ///      and recorded in dailyFoilDraw for the committed request; its index stays fixed
-    ///      across every payout leg. The winner entropy is
-    ///      the value the single-tx form used, so the draw is unchanged by the split. Tickets
-    ///      queue at the purchase level, which the held lock keeps un-promoted between the two
-    ///      stages. Clears the field it consumes; the caller seals the day.
+    ///      across every payout leg. Tickets queue at the purchase level, which the held lock
+    ///      keeps un-promoted between the two stages. Clears the field it consumes; the caller
+    ///      seals the day.
     /// @param word VRF entropy (the day's recorded word).
     /// @param allowance Gas the call may spend before checkpointing.
     function runPurchaseDailyTickets(uint256 word, uint256 allowance)
@@ -550,8 +514,8 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     }
 
     /// @notice Phase 2 of the daily jackpot: the day's own ticket leg.
-    /// @dev Called by advanceGame when dailyJackpotCoinTicketsPending is true. The daily is a
-    ///      chain of advance txs so each stays under the per-tx gas cap: Phase 1 pays the ETH,
+    /// @dev Called by the daily advance when dailyJackpotCoinTicketsPending is true. The daily is
+    ///      a chain of advance stages so each checkpoint stays bounded: Phase 1 pays the ETH,
     ///      on day 1 the early-bird ticket leg runs from its own stage
     ///      (runEarlyBirdTickets), the jackpot battle runs from its own stage (runPurchaseJackpotBattle), and
     ///      this stage, the last, pays the main-board tickets. It advances the counter and the
@@ -577,7 +541,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
         if (totalBudget == 0) return 0;
-        (entries,) = _budgetToEntries(totalBudget, lvl);
+        entries = _budgetToEntries(totalBudget, lvl);
         _setPrizePools(
             nextBal + uint128(totalBudget),
             futureBal - uint128(totalBudget)
@@ -585,15 +549,15 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     }
 
     /// @notice The early-bird ticket leg of the day-1 daily jackpot, from its own advance stage.
-    /// @dev Called by advanceGame on the advance after runDailyJackpot priced it (the top field
-    ///      of dailyTicketBudgetsPacked), with the same day's word from rngGate, ahead of the
+    /// @dev Called by the daily advance after runDailyJackpot priced it (the top field
+    ///      of dailyTicketBudgetsPacked), with the same day's recorded word, ahead of the
     ///      coin+tickets stage. Phase 1 already moved the full 3% budget future -> next; this
     ///      distributes the latched entries through the shared ticket plan (`_ticketWorkPlan`).
     ///      Winners come from `lvlTraitEntry[(level + 1) & 1]` on the day's recorded main board,
     ///      across its three non-solo quadrants:
     ///      the solo quadrant is the one the ETH leg picked (from its own entropy,
-    ///      hash2(word, level)), and it carries only the solo ETH prize. Tickets queue at
-    ///      level + 1. No pool moves in this stage.
+    ///      hash3(JACKPOT_ALLOCATION, word, level)), and it carries only the solo ETH prize.
+    ///      Tickets queue at level + 1. No pool moves in this stage.
     ///      Clears its own field and leaves the rest of the packed budgets for the battle and
     ///      coin+tickets stages. The lock held since the request keeps every input frozen.
     /// @param word VRF entropy (the day's recorded word).
@@ -782,7 +746,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
             _creditClaimableLogged(VAULT_WALLET_ID, quarterShare);
             _creditClaimableLogged(SDGNRS_WALLET_ID, quarterShare);
             _creditClaimableLogged(GNRUS_WALLET_ID, quarterShare);
-            // _creditClaimable writes only balancesPacked, so the cached
+            // _creditClaimableLogged writes only balancesPacked, so the cached
             // claimablePool / yieldAccumulator values are still exact here.
             claimablePool = claimablePoolCached + uint128(quarterShare * 3);
             yieldAccumulator = yieldAccCached + quarterShare;
@@ -797,17 +761,13 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     // Internal Helpers — Ticket Budgeting
     // =========================================================================
 
-    /// @dev Converts an ETH budget to ticket units. Tickets cost ticketPrice/4.
+    /// @dev Converts an ETH budget to entries; an entry costs a quarter of the level's ticket
+    ///      price.
     function _budgetToEntries(
         uint256 budget,
         uint24 lvl
-    ) private pure returns (uint256 entries, uint256 unit) {
-        uint256 ticketPrice = PriceLookupLib.priceForLevel(lvl);
-        // `unit` (ticketPrice >> 2, a quarter-ticket) is the same value the jackpot-phase
-        // _processDailyEth derives from priceForLevel(lvl+1); returned so the caller can thread
-        // it in and skip the recompute.
-        unit = ticketPrice >> 2;
-        entries = (budget << 2) / ticketPrice;
+    ) private pure returns (uint256 entries) {
+        entries = (budget << 2) / PriceLookupLib.priceForLevel(lvl);
     }
 
     // =========================================================================
@@ -831,7 +791,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     // =========================================================================
 
     /// @dev Computes bucket winner counts for active trait buckets (including virtual deity entries).
-    ///      Also returns each trait's bucket length and deity address so the
+    ///      Also returns each trait's bucket length and deity wallet ID so the
     ///      distribution loop reuses them instead of re-reading storage.
     /// @param lvl Level whose trait entry queues are counted.
     /// @param traitIds Winning trait IDs for the 4 buckets.
@@ -926,7 +886,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     ///      A surviving gold six always assigns the solo pool to Dice. Otherwise,
     ///      when any winning trait has color==7 (gold tier), returns a uniformly-random
     ///      gold quadrant via bits 4+ of `entropy` (disjoint from the bucket-rotation
-    ///      low 2 bits at `entropy & 3`). Otherwise returns the existing rotation index
+    ///      low 2 bits at `entropy & 3`). Otherwise returns the rotation index
     ///      `uint8((3 - (entropy & 3)) & 3)` matching `JackpotBucketLib.soloBucketIndex`.
     /// @param traits The 4 winning trait IDs (each [QQ][CCC][SSS] packed: quadrant 2 bits,
     ///        color 3 bits, symbol 3 bits).
@@ -1057,7 +1017,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold
     ///         tickets — the second route into the same top rung the armed board pays.
     /// @dev Delegatecall-only entry, invoked by the foil drain
-    ///      (DegenerusGameFoilPackModule._pushFoilGrand, inside advanceGame as the pack's
+    ///      (DegenerusGameFoilCore._pushFoilGrand, inside the daily advance as the pack's
     ///      sixteen entries are filed) so both routes share ONE grand definition and can
     ///      never drift. Runs in the Game's storage context: the guard rejects a direct
     ///      call on the deployed module, and no facade stub exposes the selector, so the
@@ -1085,14 +1045,6 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     // Daily Jackpot ETH — Distribution
     // =========================================================================
 
-    /// @dev Pays ETH winners [pos, count) of one quadrant in fixed groups of `perWinner`.
-    ///      Winner `i` depends only on the frozen bucket, `seed` and `i`, and each group of
-    ///      eight reads one packed word, so a resumed quadrant redraws nothing. The first group
-    ///      also converts `passShare` when it is nonzero. The solo quadrant has one winner, so
-    ///      its golden-ticket arm still follows its only award.
-    /// @return next First unpaid position; `count` when the quadrant is finished.
-    /// @return paid ETH credited plus any pass cost, for this call only.
-    /// @return liability Claimable liability added in this call.
     struct EthAwardWork {
         uint24 lvl;
         uint8 q;
@@ -1105,6 +1057,14 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         uint256 pos;
     }
 
+    /// @dev Pays ETH winners [pos, count) of one quadrant, `perWinner` each, in fixed groups of
+    ///      ETH_AWARD_CHUNK. Winner `i` depends only on the frozen bucket, `seed` and `i`, and
+    ///      each group of eight reads one packed word, so a resumed quadrant redraws nothing. The
+    ///      first group also converts `passShare` when it is nonzero. The solo quadrant has one
+    ///      winner, so its golden-ticket arm follows its only award.
+    /// @return next First unpaid position; `count` when the quadrant is finished.
+    /// @return paid ETH credited plus any pass cost, for this call only.
+    /// @return liability Claimable liability added in this call.
     function _payEthQuadrant(
         uint24 lvl,
         uint8 q,
@@ -1289,7 +1249,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     ///      price, as up to COIN_DRAW_SHARES equal whole-unit shares to trait-matched ticket
     ///      holders in [minLevel, maxLevel], which must be minted levels.
     /// @param lvl Level keying the prize pool snapshot for the budget.
-    /// @param randWord VRF entropy for the board and winner selection.
+    /// @param randWord VRF entropy for winner selection (the board is the recorded one).
     /// @param minLevel Minimum target level for the coin distribution (inclusive).
     /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) public {
@@ -1337,15 +1297,12 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         uint24 currLevel
     ) private view returns (uint256) {
         uint256 priceWei = PriceLookupLib.priceForLevel(currLevel);
-        if (priceWei == 0) return 0;
         return (_levelPrizePool(lvl - 1) * PRICE_COIN_UNIT) / (priceWei * 400);
     }
 
     /// @dev Current-pool daily jackpot share for non-final days: random 6%-14%
-    ///      (avg 10%). The sole caller gates on !isFinalPhysicalDay; the final
-    ///      physical day assigns 100% directly without consulting this.
+    ///      (avg 10%). The sole caller skips it on the final day, which assigns 100%.
     function _dailyCurrentPoolBps(
-        uint8 counter,
         uint256 randWord
     ) private pure returns (uint16 bps) {
         uint16 range = DAILY_CURRENT_BPS_MAX - DAILY_CURRENT_BPS_MIN + 1;

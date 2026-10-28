@@ -87,7 +87,7 @@ interface IIcons32 {
 ///      vault mint. Transfers read nothing from the Game.
 interface ISeatGameViews {
     /// @notice Length of the Game's AFKing subscriber set (live subs, the two exempt protocol
-    ///         subs and tombstones awaiting reclaim), as implemented by DegenerusGame.
+    ///         subs and seized runs awaiting removal), as implemented by DegenerusGame.
     function subscriberSetLength() external view returns (uint256);
 }
 
@@ -225,8 +225,7 @@ contract AFKingSubscriptionToken {
       |                            CONSTANTS                                 |
       +======================================================================+*/
 
-    /// @notice Free-tranche size: first 1,000 claims by latched-eligible
-    ///         pass buyers
+    /// @notice Free-tranche size: the first 1,000 seats minted to pass buyers
     uint256 public constant FREE_TRANCHE = 1000;
 
     /// @notice A vault mint must leave live seats plus the game's subscriber-set
@@ -350,10 +349,8 @@ contract AFKingSubscriptionToken {
     ///      separate claim step. Won and conferred passes never reach here — the seat
     ///      is a perk of paying for a pass, not of receiving one. Traits are seeded
     ///      deterministically from (recipient, serial) and the holder may restyle them at
-    ///      any time via `setSeatTraits` — the
-    ///      art was always designed to be changeable, so nothing is lost by not choosing
-    ///      at mint. No entropy is read: the seed is cosmetic-only and never touches a VRF
-    ///      word, so this is outside the RNG-freeze surface entirely.
+    ///      any time via `setSeatTraits`. No entropy is read: the seed is cosmetic-only and
+    ///      never touches a VRF word, so this is outside the RNG-freeze surface entirely.
     ///
     ///      Silent no-op (never a revert) on an exhausted 1,000-seat tranche and on the
     ///      zero address, because this rides inside a purchase and must never brick one.
@@ -380,12 +377,12 @@ contract AFKingSubscriptionToken {
     /// @dev Mint one seat with deterministic default art seeded from (recipient, serial).
     ///      Cosmetic only — no VRF word is read, so this sits outside the RNG-freeze
     ///      surface entirely, and the holder may restyle at any time.
-    function _mintDefaultSeat(address to) private returns (uint256 tokenId) {
+    function _mintDefaultSeat(address to) private {
         uint256 seed = uint256(keccak256(abi.encode(to, nextSerial)));
         uint8 symbolId = uint8(seed & 31);
         uint24 bgRgb = uint24((seed >> 8) & 0xFFFFFF);
         uint24 trimRgb = uint24((seed >> 32) & 0xFFFFFF);
-        tokenId = _mintSeat(to, symbolId, bgRgb, trimRgb);
+        uint256 tokenId = _mintSeat(to, symbolId, bgRgb, trimRgb);
         emit SeatMinted(to, tokenId, symbolId, bgRgb, trimRgb);
     }
 
@@ -819,14 +816,14 @@ contract AFKingSubscriptionToken {
         return string(buf);
     }
 
+    /// @dev `nibble` is at most 15: every caller passes a byte shifted right by 4 or masked to 4 bits.
     function _hexChar(uint8 nibble) private pure returns (bytes1) {
-        uint8 v = nibble & 0x0F;
-        return bytes1(v + (v < 10 ? 48 : 87));
+        return bytes1(nibble + (nibble < 10 ? 48 : 87));
     }
 
-    /// @dev Per-icon fit inside the inner circle — the original game's
-    ///      hand-calibrated table (750000 base × 95% default, per-icon
-    ///      adjustments), matched to the icon set in Icons32Data.
+    /// @dev Per-icon fit inside the inner circle: a hand-calibrated table
+    ///      (750000 base × 95% default, per-icon adjustments), matched to the
+    ///      icon set in Icons32Data.
     function _symbolFitScale(uint8 quadrant, uint8 symbolIdx) private pure returns (uint32) {
         uint32 f = 712_500; // 95% of the 750000 base fit
         if (quadrant == 1 && symbolIdx == 6) {

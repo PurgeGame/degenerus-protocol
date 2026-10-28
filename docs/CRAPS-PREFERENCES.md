@@ -6,7 +6,7 @@ Each wallet has one preference across all levels. New comp tickets and the daily
 
 Future day tickets and window reservations can cover tomorrow through 30 days ahead. Every day in a paid or pass-funded batch must fit; an invalid day reverts the whole purchase. Automatic awards bank unused pass credits when they cannot reserve a day. Unspent pass credits do not expire.
 
-Scheduled day D can settle, or receive its unopened-day pass refund, through D+30. Starting D+31, remaining work is skipped without payment or refund, including unfinished jackpot fields. Payments already made stand. This deadline also applies after a prolonged RNG outage. Custom battles are not subject to this deadline.
+Scheduled day D can settle, or receive its unopened-day pass refund, through D+30. Starting D+31, remaining work is skipped without payment or refund, including unfinished jackpot fields. Payments already made stand. Each RNG word settles one non-empty scheduled window, so the deadline is reached only when mining sessions leave their requested craps words unconsumed for long enough. An RNG outage does not advance the logical day and adds no lag. Custom battles are not subject to this deadline.
 
 Scheduled bets, boards, cursors, reserve draws, high fields, day counters, budgets and jackpot rounds reuse 64 day banks. Each wallet's day-seat record packs four tagged days per word. Public bet IDs and events retain the actual day. A mismatched day reads empty; use events for overwritten history. Custom battles retain their full keys.
 
@@ -69,7 +69,7 @@ The jackpot battle is the day's sixth window (period 5, slot `day * 8 + 6`). It 
 - **Paid seats.** The public daily base fee is 6,000 / 8,000 / 10,000 FLIP with 25% / 50% / 25% odds. A direct entry or the jackpot component of a day ticket burns this fee, subject to newcomer pricing. The seat plays its chosen board; high extras use the same fee times the day's high multiple. Future commitments use the 8,000-FLIP expected fee.
 - **Awarded seats.** The Game draws these from the far-future ticket queues of the next 99 levels. Each award plays the wallet's saved preference, and a wallet drawn twice gets two separate seats. Battles for days before `GameTimeLib.MAIN_LAUNCH_DAY` (the Degenesis days) have an award target of zero and run with their paid field only.
 
-Warm-up and skipped days have no paid field. Their award-only battle uses the otherwise unused slot `day * 8 + 7`. `donate(false, 5, granules)` can add FLIP to the day's jackpot battle while `Game.rngLocked()` is false; donations join the pot in full.
+Warm-up and skipped days have no paid field. Their award-only battle uses the otherwise unused slot `day * 8 + 7`, which the lapse sweep never walks. `donate(false, 5, granules)` can add FLIP to the day's jackpot battle while `Game.rngLocked()` is false; donations join the pot in full.
 
 ### Lock and funding
 
@@ -137,9 +137,19 @@ These are nominal funding expectations. Engine limits and Coinflip's
 4,294,967,295-FLIP stake cap per wallet/day still apply; the credit event reports
 the amount actually accepted when several large awards reach the same wallet.
 
-Preference edits and entries freeze with the request. Fees, award targets,
-reserve funding, multipliers, and draw identities remain fixed across midnight,
-word retirement, retries, and resumed draw/settlement chunks.
+Preference edits and entries freeze with the request, which also latches the battle's
+pending bit. The RNG lock stays held, across midnight if necessary, until the field
+completes, so the paid field, preferences, queues and the committed word cannot change.
+Fees, award targets, reserve funding, multipliers, and draw identities remain fixed across
+midnight, word retirement, retries, and resumed draw/settlement chunks.
+
+Wallet-funded entries and cash upgrades charge 5% extra (newcomer pricing) unless the
+player minted this or last level (next-level purchase-phase mints also qualify), has at
+least three credited lifetime mint levels, or holds a deity pass. The latter two checks
+use the packed player record and skip the current-level call. Awarded passes and vault
+comps keep their funded entitlement without a newcomer charge. Craps does not read or
+store the aggregate activity score; equivalent entries receive the same dice, ranking and
+payouts.
 
 ### Draw and seal
 
@@ -155,7 +165,7 @@ Each paid seat has one base place in the Added-funded main pool; extra high unit
 receive a separate fee-only allocation under the same multiplier. With N base
 paid seats plus awarded seats:
 
-- each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP (at least 300, and capped at the engine's chip limit);
+- each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP (at least 300, at most 41,943,000, `JackpotBattle.sol` `maxBank`);
 - the rest of each unit's share is its bounty, in 100-FLIP granules, never above its bankroll;
 - rounding dust stays in the pot.
 
@@ -170,7 +180,7 @@ the action books.
 Every seat throws the same dice. Seats settle through the table's normal resolver in one order: paid window seats, then day tickets, then awarded seats.
 
 - An awarded seat keys its scatter and survival coin to a hash of its own bet id (`RngTags.CRAPS_AWARDED`) rather than to the wallet. Repeat awards to one wallet are therefore separate runs. The shooter-boost turn follows the seat's position in the field.
-- Each advance step settles seats while its metered gas allowance admits another complete seat. Settlement starts in the call after the seal; the sealing call settles nothing.
+- Each advance step settles seats while its metered gas allowance admits another complete seat, each admitted against `CRAPS_SEAT_GAS_MAX` (2,800,000); each draw chunk is admitted against `JACKPOT_BATTLE_DRAW` (4,700,000). Settlement starts in the call after the seal; the sealing call settles nothing.
 - Every run has the shared 600-roll between-shooter budget (1,111-roll ceiling), like every slip.
 
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat finalizes the field once:
@@ -182,10 +192,23 @@ Scoring, the pot, the high-roller lane and payment follow any scheduled battle. 
 - Nothing doubles the jackpot's progressive shares.
 - A separate field-wide 1-in-10 roll pays the high-roller reserve to one uniformly sampled paid high seat, excluding sDGNRS. If there is no eligible seat or the roll misses, the reserve carries forward. This Coinflip credit creates no extra action, comps or passes.
 
+### High-roller reserve
+
+`JackpotBattle.lockJackpotBattle` assigns 5% of gross, price-scaled, unrolled Added to a
+persistent reserve and leaves 95% for the main subsidy lottery. Award counts use the
+unscaled baseline and are fixed at lock. Neither hidden multiplier changes the reserve
+contribution. Once the field finalizes, any eligible high entry gives the event one 10%
+chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one
+equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass
+and comp entries consume their own funding and qualify. Paid entry/upgrade closure freezes
+the field before the settling RNG. The cold module samples already-resolved paid seats in
+bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve
+grants do not generate action, comps or another protocol multiplier.
+
 ### Advance stages
 
 1. The daily request locks the field.
-2. Stage 18 applies the fresh word (with its coinflip, quest, bonus-day and boon work) and runs no battle step.
+2. Stage 18 applies the fresh word (with its coinflip, quest, bonus-day and boon work) and runs no battle step or jackpot payout.
 3. Each later advance runs one battle step: stage 16 on jackpot days, 17 on purchase days. A step is a set of draw chunks (the last one may seal the field) or a settle batch.
 
 Once the field completes, the day continues with its usual stages. Miners should keep calling `mineRun(uint32)` while `advanceDue()` is true.
@@ -224,6 +247,8 @@ event JackpotHighCompsAccrued(uint64 indexed slot, uint256 fees, uint256 atRisk,
 
 `test/fuzz/JackpotMergeAdvance.t.sol` exercises admitted draw checkpoints and
 metered settlement, using 5M draw allowances and a 10.5M settlement envelope.
+`test/gas/JackpotBattleStageGas.t.sol`, `test/gas/JackpotBattleDrawGas.t.sol` and
+`test/gas/JackpotBattleAwardsGas.t.sol` cover the stage, draw-chunk and award bounds.
 It checks the declared draw bound, progress and completion. These fixture budgets
 are not protocol transaction ceilings: admission depends on each operation's
 cold-path bound, remaining worker allowance and available gas, including the

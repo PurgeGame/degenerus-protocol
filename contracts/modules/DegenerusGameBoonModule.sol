@@ -35,7 +35,6 @@ import {GamePurchaseBoon} from "./GamePurchaseBoon.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 
 /**
  * @title DegenerusGameBoonModule
@@ -45,7 +44,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
  *
  * @dev Rolls and delivers box-drawn boons (`rollBoxBoons`), lets a
  *      deity-pass holder issue a daily boon to another player (`_issueDeityBoon`), consumes
- *      coinflip, craps, WWXRP, and decimator boons, and separately clears expired
+ *      boons through the inherited GameBoonActions and GamePurchaseBoon helpers, and clears expired
  *      coinflip, lootbox, purchase, decimator, whale, deity-pass, and lazy-pass boons.
  *      Called via `delegatecall` from DegenerusGame -- all storage reads/writes
  *      operate on the game contract's storage.
@@ -133,8 +132,8 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (gameOver || awardDay <= 1 || awardDay != _gameDay()) return;
         uint256 menuWord = _recordedDailyWord(awardDay - 1);
-        // Warm read: rngGate wrote this slot earlier in the same transaction, so passing the
-        // word as calldata would cost more than reading it back.
+        // Warm read: the daily word apply recorded this slot earlier in the same transaction,
+        // so passing the word as calldata would cost more than reading it back.
         uint256 winnerWord = _recordedDailyWord(awardDay);
         if (winnerWord == 0) return;
         // Deployment day has no daily word. Draw its menu from the finalized
@@ -188,17 +187,11 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     uint24 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     // =========================================================================
-    // Boon Consumption Functions
-    // =========================================================================
-
-    // =========================================================================
-    // Boon Maintenance Functions (called via nested delegatecall from LootboxModule)
+    // Boon Maintenance
     // =========================================================================
 
     /// @notice Clear all expired boons for a player and report if any remain active.
-    /// @dev Called via nested delegatecall from LootboxModule during lootbox resolution.
-    ///      Payable: redemption-claim resolution carries the sDGNRS ETH leg as msg.value,
-    ///      which delegatecall keeps in flight through this nested dispatch.
+    /// @dev Called in Game context before a box-drawn or protocol-drawn boon is applied.
     ///      Loads both packed slots (2 SLOADs), checks all boon categories for deity
     ///      and time-based expiry, clears expired fields in memory, writes back only
     ///      changed slots (at most 2 SSTOREs).
@@ -415,7 +408,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     ///      The craps bankroll-payout family contributes the 912 of it: `200 x 3,000 + 40 x 6,000
     ///      + 8 x 9,000 = 912,000`, over the 1,000-FLIP ticket unit. Its top tier pays 15% of a
     ///      60,000-FLIP base — 9,000, not the 15,000 a 25% tier would — because the boon lifts
-    ///      EVERY window a ticket plays, and a whole-day ticket plays seven.
+    ///      EVERY window a ticket plays, and a whole-day ticket plays six.
     uint256 private constant BOON_FIXED_WEIGHTED_MAX = 1568 ether;
     uint256 private constant BOON_PRICE_WEIGHT = 4182;
     uint256 private constant BOON_LAZY_WEIGHT = 6;
@@ -442,7 +435,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     /// @param boxCount Boxes rolled in this entry.
     /// @param originalAmount One box's resolution amount, for the reward events.
     /// @param currentLevel Open level (level + 1), threaded from the resolver.
-    /// @param seed Player-mixed entry seed; box i draws off `hash2(seed, nonceBase + i)`.
+    /// @param seed Entry seed; box i draws off `hash3(BOX_BOON_LANE, seed, nonceBase + i)`.
     /// @param nonceBase Box position of this batch's first box within its entry.
     function rollBoxBoons(
         uint32 id,
@@ -514,7 +507,6 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         uint32 id,
         uint24 currentLevel
     ) private returns (uint256 expectedPerBoon, uint24 currentDay) {
-
         // Expiry cleanup runs ONCE for the entry, not once per box: it is a property of the
         // player's held boons, which no draw below changes in a way that would re-arm it.
         BoonPacked storage bp = boonPacked[id];
@@ -572,7 +564,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     ///      one filtered here: the recipient already holds a pass, or supply is capped, so no
     ///      future state makes the discount spendable. Decimator tiers are always delivered even
     ///      outside a burn window — a lootbox-sourced decimator boon carries NO time expiry
-    ///      (BoonModule: "no time expiry, only deity day"), so it simply waits for the next
+    ///      (checkAndClearExpiredBoon clears it only on a stale deity day), so it waits for the next
     ///      window; discarding it would destroy a bankable reward. Lazy boons bypass the
     ///      purchase level gate at consumption, so they carry no level condition; a deity
     ///      holder cannot buy a lazy pass at all, and that dead case is delivered anyway
@@ -610,13 +602,12 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     /// @dev Get the value for a lazy pass at a specific level.
     ///      Value equals the sum of per-level ticket prices across 10 levels.
     /// @param passLevel The lazy pass start level
-    /// @return The value in ETH (scaled by cost divisor)
+    /// @return The value in wei
     function _lazyPassPriceForLevel(
         uint24 passLevel
     ) internal pure returns (uint256) {
-        // Wrap uint24 at the type boundary exactly as the unchecked per-level sum does.
-        // Real game levels never approach it; keeping the fallback makes the optimization exact
-        // over the function's full input domain as well as every reachable state.
+        // Within nine levels of the uint24 boundary the per-level sum wraps the level, which
+        // the tables below do not model; sum it directly there.
         if (passLevel > type(uint24).max - 9) {
             uint256 wrappedTotal;
             for (uint24 i; i < 10; ) {
@@ -648,7 +639,6 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         }
         return ((table >> (byteIndex * 8)) & 0xFF) * 0.01 ether;
     }
-
 }
 
 interface IGenesisDeityPassMint {

@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {DegenerusGameFoilCore} from "./DegenerusGameFoilCore.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 abstract contract DegenerusGameFoilWorkerModule is DegenerusGameFoilCore {
     function queuePerpetualTickets(uint24 targetLevel) external {

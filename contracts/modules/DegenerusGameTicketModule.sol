@@ -21,12 +21,10 @@ import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol
 import {IDegenerusGameFoilWorkerModule} from "../interfaces/IDegenerusGameModules.sol";
 
 /// @notice Materializes a committed ticket/foil cohort under one immutable word.
-/// @dev Available transaction gas selects a
-///      safe checkpoint. Owner streams and complete seated rounds are independent
-///      of that partition. The miner dispatcher owns
+/// @dev Available transaction gas selects a safe checkpoint. Owner streams and complete seated
+///      rounds are independent of that partition. The miner dispatcher owns
 ///      admission/publication and must not replace the word before this work ends.
 contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDrawUtils {
-
     // Each bound includes cold writes. TAIL covers all cursor/seat persistence,
     // queue release, completion flags and the return after the last admitted item.
     uint256 internal constant TAIL = GasBounds.TICKET_TAIL;
@@ -40,15 +38,12 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
     uint256 internal constant FOIL_CALL_MAX = GasBounds.TICKET_FOIL_CALL_MAX;
     uint256 internal constant CALL_OVERHEAD = GasBounds.TICKET_CALL_OVERHEAD;
 
-    uint256 private constant DIRECT_TICKET_DOMAIN = uint256(keccak256("DEGENERUS_DIRECT_JACKPOT_TICKETS_V1"));
-    // Eight packed draws (3.4k each cold) with seven padding redraws (2.5k each), cached
-    // deity ID, batch award event and loop work: 52k. Trait writes have the round bound.
+    // Per group of eight: packed draws with padding redraws, cached deity ID, batch award
+    // event and loop work. Trait writes have the round bound.
     uint256 internal constant DIRECT_GROUP_GAS = GasBounds.TICKET_DIRECT_GROUP_GAS;
     // Admits each further 32-winner round; a call's first round needs no estimate. Keep the
     // canonical 32-winner sampler/shuffle geometry so transaction boundaries cannot change outcomes.
     uint256 internal constant DIRECT_ROUND_GAS_MAX = GasBounds.TICKET_DIRECT_ROUND_GAS_MAX;
-
-
 
     /// @dev Packed owners are wallet IDs, eight per word. Source index uint32.max denotes a
     ///      virtual deity occurrence (a source-index sentinel, not a wallet ID).
@@ -90,7 +85,7 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         // The direct lane needs a live target buffer and unscaled entries; otherwise the
         // queued path finishes the draw from the same cursor. Both
         // paths draw winner i of quadrant q from the same seed, so completed groups are not
-        // drawn again. A c.group whose rounds were only partly materialized is skipped: its
+        // drawn again. A group whose rounds were only partly materialized is skipped: its
         // winners keep the rounds they received and the rest stays as nextPrizePool backing.
         // Every input here is state, so caller gas never chooses the delivery mode.
         if (work.directTickets && (work.kind != 6 || plan.sourceLvl != work.lvl
@@ -340,8 +335,6 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         }
         (traits,) = _runQuadrant(st, levelSlot, seed, q);
     }
-
-
 
     function runTicketWork_g1150(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
         return _runTicketWork(anchor, allowance);
@@ -606,6 +599,7 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         if (data.length == 0) revert MineFlipGas.InsufficientExecutionGas();
         assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
+
     /// @dev Seats of the round drain, kept in queue order so a vacated seat is refilled by
     ///      the next entry and the seated set is always the first unexhausted entries from
     ///      the cursor — the property a budget-split resume rebuilds from storage alone.
@@ -631,10 +625,6 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
 
     uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
 
-    /// @dev Per-entry trait generation in the Game's storage context, called by the ticket worker.
-    ///      A versioned immutable identity seeds each aligned group of sixteen. The caller
-    ///      reserves generation plus the complete bucket flush, prepares the full level and
-    ///      validates ownerIdx. This writer makes no external calls.
     struct TraitRunWork {
         uint32[256] counts;
         uint8[256] touchedTraits;
@@ -645,6 +635,10 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         bool goldSixTaken;
     }
 
+    /// @dev Per-entry trait generation in the Game's storage context, called by the ticket worker.
+    ///      The entry's immutable stream identity seeds each aligned group of sixteen. The caller
+    ///      reserves generation plus the complete bucket flush, prepares the full level and
+    ///      validates ownerIdx. This writer makes no external calls.
     function _generateTraitRun(
         uint256 baseKey,
         uint32 startIndex,
@@ -652,11 +646,11 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         uint256 entropyWord,
         uint256 ownerIdx,
         bool goldSixTaken
-    ) private returns (uint256 writes) {
+    ) private {
         TraitRunWork memory c;
         c.goldSixTaken = goldSixTaken;
 
-        if (uint32(baseKey) != 0 || startIndex & 15 != 0) revert E();
+        if (startIndex & 15 != 0) revert E();
         c.endIndex = uint256(startIndex) + count;
         if (c.endIndex > uint256(type(uint32).max) + 1) revert E();
         c.i = startIndex;
@@ -707,10 +701,8 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         // Batch-write the packed lanes, one run per distinct trait.
         for (uint16 u; u < c.touchedLen; ) {
             uint8 traitId = c.touchedTraits[u];
-            uint32 occurrences = c.counts[traitId];
-            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, c.lvl);
+            _bucketAppendRun(levelSlot, traitId, ownerIdx, c.counts[traitId], c.lvl);
             unchecked {
-                writes += f * 3 + d;
                 ++u;
             }
         }
@@ -779,7 +771,6 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
     function _seatEntry(
         RoundSeats memory st,
         uint256 qi,
-
         uint24 lvl,
         uint256 entropy,
         uint80 snapDone,
@@ -943,5 +934,4 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
         uint256 p3 = offset + 3 < st.seated ? prefix | st.ownerIdx[offset + 3] : 0;
         emit EntryTraitsRevealed(p0, p1, p2, p3, uint144(uint128(traits)) | (uint144(uint16(mask)) << 128));
     }
-
 }

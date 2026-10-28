@@ -8,6 +8,4 @@ contract Eip170Game is GameFacade, GameBoonActions {
     function _gameConsumeActionBoon(uint32 id) internal override returns (uint16) {
         return _consumeActionBoon(id);
     }
-
-
 }

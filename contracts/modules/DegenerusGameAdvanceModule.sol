@@ -59,8 +59,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     IDegenerusJackpots private constant advanceJackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
     IWwxrpIncinerator private constant wwxrpIncinerator = IWwxrpIncinerator(ContractAddresses.WWXRP);
 
-
-    event LoanSeized(uint32 indexed accountId, uint32 indexed lenderId);
     event LoanRepaid(uint32 indexed accountId, address indexed payer, uint256 owed);
     event PoolSkimApplied(uint24 indexed lvl, uint256 take, uint256 insuranceSkim);
     event PoolsSettled(
@@ -107,15 +105,8 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     uint16 private constant OVERSHOOT_COEFF = 4000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MAX = 8000;
     uint16 private constant ADDITIVE_RANDOM_BPS = 1000;
-    bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
-    bytes32 private constant SKIM_BPS_TAG = keccak256("degenerus.skim.bps");
-    bytes32 private constant SKIM_VARIANCE_TAG = keccak256("degenerus.skim.variance");
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 50;
     uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 250;
-
-
-
-
 
     /// @notice Game-only daily setup, after publication and complete ticket materialization.
     function applyDailyWord_g1652() external {
@@ -132,7 +123,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         uint8 coinflipBonus = bonusDay ? (bonusLvl != 0 && bonusLvl % 10 == 0 ? 6 : 2) : 0;
         uint256 currentWord = _currentRngWord();
         if (currentWord == 0) revert RngNotReady();
-        // Normal daily RNG processing (request from current day)
         coinflip.processCoinflipPayouts(coinflipBonus, _applyDailyRng(day, currentWord), day);
         // Settlement paid any owed bonus. Preserve a newly armed turbo.
         if ((jackpotFlags & TURBO_BONUS_PENDING) != 0) jackpotFlags &= JACKPOT_TURBO;
@@ -157,14 +147,15 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             if (decDayOne) coin.autoDecimatorBurn(lvl + 1, _decAutomaticCap(lvl + 1));
 
             // The craps bonus day opens on the same crank that applied its word — the
-            // terms and the house's available backing have both settled. The WALL-day
-            // gate skips buffered historical days; the recorded-word guard makes
-            // this once per day. The opener's revert-freedom is pinned by the craps tests.
+            // terms and the house's available backing have both settled. The wall-day
+            // gate skips a day whose word lands after the next wall reset; the recorded-word
+            // guard makes this once per day.
             ICrapsBonusDay(ContractAddresses.CRAPS).openBonusDay();
 
             // The word is now finalized and yesterday's pools are closed.
-            // Six bounded draws share this existing daily RNG call; no player
-            // claim or additional advance step. Recorded-word retries skip it.
+            // Six bounded draws (three per protocol pool) share this daily RNG call; no
+            // player claim or additional advance step. A recorded word reverts this call
+            // above, so they run once per day.
             // Weight, day tag and award mask share one word. Skip the delegatecall
             // when both ring slots are stale, empty or already drawn.
             if (day > 1) {
@@ -183,8 +174,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
 
         emit Advance(STAGE_DAILY_WORD_APPLIED, lvl);
     }
-
-
 
     /// @notice One ordered daily phase. Every partial payout retains the daily lock.
     function runDailyPhase_g2582(uint256 allowance) external returns (MineFlipGas.Result memory result) {
@@ -408,7 +397,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     /// @dev A borrower whose own claimable plus AFKing funding covers what repaying would cost now
     ///      (the full term at its due level; the manual repayment price at a game over that comes
     ///      first) repays instead of defaulting: claimable first (keeping its 1-wei sentinel), then
-    ///      AFKing. An account already acquired by a lender defaults as before. Both legs sit
+    ///      AFKing. An account already acquired by a lender is seized. Both legs sit
     ///      inside claimablePool and move to the lender's claimable, so the pool is unchanged.
     function _autoRepayLoan(uint32 id, uint256 loan) private returns (bool) {
         uint256 element = _walletElement(id);
@@ -439,8 +428,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         if (!ok) _revertDelegate(data);
     }
 
-
-
     function _phaseAllowance(MineFlipGas.Meter memory meter) private view returns (uint256) {
         return MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL);
     }
@@ -457,9 +444,8 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             if (result.progressed) emit Advance(STAGE_TERMINAL_LOANS, level);
             return result;
         }
-        (bool handled, uint8 stage, bool progressed) = _handleGameOverPath(_gameDay(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL));
+        (uint8 stage, bool progressed) = _handleGameOverPath(_gameDay(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL));
         MineFlipGas.finish(meter);
-        if (!handled) revert E();
         result.progressed = progressed;
         if (progressed) emit Advance(stage, level);
     }
@@ -495,12 +481,10 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         }
         if (isTicketJackpotDay && (jackpotFlags & JACKPOT_TURBO) != 0) _activateNextTickets();
         uint24 lvl = level + 1;
-        uint48 lvlAndQuestDay = (uint48(day) << 24) | uint48(lvl);
         rngLockedFlag = true;
-        uint24 battleDay = uint24(lvlAndQuestDay >> 24);
-        if (battleDay != 0) {
+        {
             uint24 poolLevel = jackpotPhaseFlag && level != 0 ? level - 1 : level;
-            if (IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, _levelPrizePool(poolLevel), level)) {
+            if (IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(day, _levelPrizePool(poolLevel), level)) {
                 dailyTicketBudgetsPacked |= _JACKPOT_BATTLE_PENDING | DAILY_TICKET_BUDGET_RETAINED;
             }
         }
@@ -513,11 +497,10 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             _setDecDayOneActive(false);
         }
 
-        // Close the FLIP purchase window at the final jackpot day's RNG request — the boundary where
-        // new tickets begin routing to the next level (mirrors the route-to-level+1 step in the mint
-        // module). jackpotCounter + step catches the final daily jackpot; the isTicketJackpotDay
-        // (level-transition) request catches the single-day turbo jackpot, where jackpotPhaseFlag is
-        // not yet set here.
+        // Close the FLIP redemption window at the final jackpot day's RNG request — the boundary
+        // where new tickets begin routing to the next level. _isFinalJackpotDay catches the final
+        // daily jackpot; the isTicketJackpotDay (level-transition) request catches the single-day
+        // turbo jackpot, where jackpotPhaseFlag is not yet set here.
         // The redemption latch is opened lazily by the first FLIP redeem of a phase, so it
         // cannot gate the test itself: finalJackpotRequest must be decided on a cycle where
         // nobody redeemed. Only the clearing write stays behind the latch.
@@ -538,7 +521,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
                 _setLoansDuePending(true);
                 loanSeizeCursor = 0;
             }
-
 
             // Fold a reached thanos declaration into the active shift: from this
             // level onward every drain target resolves to the declared exponent via
@@ -575,7 +557,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         // Buy-a-foil-pack daily: rolled at the REQUEST, not at the word's fulfilment.
         // This request is the boundary where _activeTicketLevel starts routing to level + 1,
         // so from here a foil pack spends the one-per-cycle slot for the very cycle whose
-        // opening day carries this quest. The fulfilment roll rides the next advanceGame
+        // opening day carries this quest. The fulfilment roll rides the next daily word apply
         // (rawFulfillRandomWords only records the word), so leaving it there strands that
         // gap and hands the buyer a quest that can only revert FoilAlreadyBought.
         //
@@ -584,21 +566,20 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         // above so DECIMATOR-over-FOIL precedence matches the fulfilment roll on a turbo
         // x4/x99 level, where the final run is also the arming day. rollDailyQuest is
         // idempotent per day, so the fulfilment call no-ops on this day.
-        //
-        uint24 questDay = uint24(lvlAndQuestDay >> 24);
         if (finalJackpotRequest) {
-            quests.rollDailyQuest(questDay, 0, false, true, _decDayOneActive());
+            quests.rollDailyQuest(day, 0, false, true, _decDayOneActive());
         }
-
     }
-    function _handleGameOverPath(uint24 day, uint24 lvl, uint256 allowance) private returns (bool shouldReturn, uint8 stage, bool progressed) {
-        // The sole caller, runTerminalPhase, already authenticated terminal liveness.
+
+    function _handleGameOverPath(uint24 day, uint24 lvl, uint256 allowance) private returns (uint8 stage, bool progressed) {
+        // The sole caller, runTerminalPhase, already authenticated terminal liveness, so the
+        // module always handles the call (its shouldReturn flag is true on every such path).
         (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameGameOverModule.runGameOverAdvance.selector, day, lvl, allowance)
         );
         if (!ok) _revertDelegate(data);
         bool unlock;
-        (shouldReturn, stage, unlock, progressed) = abi.decode(data, (bool, uint8, bool, bool));
+        (, stage, unlock, progressed) = abi.decode(data, (bool, uint8, bool, bool));
         if (unlock) { _unlockRng(day, MineFlipGas.start(allowance)); progressed = true; }
     }
 
@@ -638,7 +619,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         // Segregate 2.5% of remaining affiliate pool for per-affiliate claims.
         // Scores at index lvl are frozen (new scores go to lvl + 1).
         uint256 levelAllocation = (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000;
-        _setLevelDgnrsAllocation(lvl, levelAllocation);
+        _setLevelDgnrsAllocation(levelAllocation);
         emit LevelDgnrsAllocated(lvl, levelAllocation);
     }
 
@@ -756,7 +737,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         uint24 prevMod10 = lvl % 10;
         uint24 prevMod100 = lvl % 100;
 
-
         // BAF Jackpot (every 10 levels) — only if the independent tagged BAF gate wins.
         // Arming returns the ETH term of the award schedule, a function
         // of the pool alone; that sum leaves futurePool and is reserved in claimablePool
@@ -813,11 +793,9 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
                 total = (seed % 4) + ((seed >> 16) % 4) + ((seed >> 32) % 4) + ((seed >> 48) % 4) + ((seed >> 64) % 4);
             }
             uint256 keepBps = 5000 + (total * 3000) / 15;
-            if (keepBps < 10_000) {
-                uint256 moveWei = p.future - (p.future * keepBps) / 10_000;
-                p.future -= moveWei;
-                p.current += moveWei;
-            }
+            uint256 moveWei = p.future - (p.future * keepBps) / 10_000;
+            p.future -= moveWei;
+            p.current += moveWei;
         }
 
         // --- Merge next → current ---
@@ -905,7 +883,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         _unlockRng(day, meter);
     }
 
-    function _activateNextTickets() private returns (bool activated) {
+    function _activateNextTickets() private {
         uint24 nextLvl = level + 2;
         if (
             !jackpotPhaseFlag && ticketsFullyProcessed && earlyTicketLevel < nextLvl
@@ -913,7 +891,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         ) {
             earlyTicketLevel = nextLvl;
             _markTicketGenerationStart(nextLvl);
-            return true;
         }
     }
 
@@ -932,7 +909,8 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             return uint16(bps > 10_000 ? 10_000 : bps);
         }
 
-        // Level 0 retains the seven-day offset and its original 30% / 13% / 30% curve.
+        // Level 0 (purchaseLevel 1): a seven-day offset, then 30% down to 13% and back to 30%
+        // over four weeks, then +0.14% per day.
         uint32 elapsed = purchaseAge > 7 ? purchaseAge - 7 : 0;
         if (elapsed <= 1) {
             bps = NEXT_TO_FUTURE_BPS_FAST;
@@ -1014,10 +992,10 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         _endRngSession();
         _unfreezePool();
         // The day-seal is the one chokepoint every completed game-day passes through (purchase
-        // daily, jackpot coin+tickets, phase transition). Emit the daily pool
-        // snapshot here, after
-        // _unfreezePool folds the pending accumulators back into the live pools, so the indexer
-        // mirrors the settled pools and observed backing; an unreadable stETH balance counts as zero.
+        // daily, Degenesis day, jackpot coin+tickets, phase transition). Emit the daily pool
+        // snapshot here, after _unfreezePool folds the pending accumulators back into the live
+        // pools, so the indexer mirrors the settled pools and observed backing; an unreadable
+        // stETH balance counts as zero.
         // Game-over also seals here but emits its own terminal snapshot in the drain, so skip it.
         if (!gameOver) {
             // One packed SLOAD for next|future (via-IR does not coalesce the two tuple getters).

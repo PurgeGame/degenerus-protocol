@@ -8,7 +8,6 @@ import {DegenerusVault} from "../DegenerusVault.sol";
 import {DegenerusAdmin} from "../DegenerusAdmin.sol";
 import {GameFacade} from "../modules/GameFacade.sol";
 import {WWXRP} from "../WWXRP.sol";
-import {CrapsBattle} from "../CrapsBattle.sol";
 import {GNRUS} from "../GNRUS.sol";
 import {Icons32Data} from "../Icons32Data.sol";
 import {DegenerusDeityPass} from "../DegenerusDeityPass.sol";

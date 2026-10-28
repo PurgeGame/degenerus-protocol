@@ -4,12 +4,11 @@ pragma solidity 0.8.38;
 import {Craps} from "./Craps.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
-/// @dev The one thing this needs from the live game. `DegenerusGame` exposes a raw-slot reader
-///      (DegenerusGame.sol:509) because the RNG lifecycle and shared word payload are
-///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
+/// @dev What this needs from the live game. `DegenerusGame` exposes a raw-slot reader because
+///      the RNG lifecycle and shared word payload are `internal` storage with no typed getter —
+///      the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
     function dailyScheduleOpen_g214() external view returns (bool);
-    function rngWordForDay(uint24 day) external view returns (uint256);
 
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
@@ -46,18 +45,17 @@ contract LootboxCraps is Craps {
     address internal constant _GAME = ContractAddresses.GAME;
 
     /// @dev Slot of the Game session flags: write selector252, terminal253, publication255.
-    ///      Hardcoded against the frozen contracts tree; `LootboxCraps.t.sol` re-derives both
-    ///      slots from the audited storage layout and fails if the protocol ever moves them.
+    ///      Hardcoded; `LootboxCraps.t.sol` re-derives this slot, the session word slot, the
+    ///      daily word slot and the day-tag slot from the compiled storage layout.
     uint256 internal constant RNG_STATE_SLOT = 0;
     /// @dev Shared full-width session word; the slot-0 read selector and publication authenticate it.
     uint256 internal constant LOOTBOX_RNG_WORD_SLOT = 3;
-    /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a mapping(uint24 => uint256) — the
-    ///      protocol's recorded DAILY word, retained separately from the shared live payload. Pinned
-    ///      against the frozen tree exactly like those two, and covered by the same drift gate.
+    /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a `uint256[2]` indexed by day parity — the
+    ///      protocol's recorded DAILY word, retained separately from the shared live payload.
     uint256 internal constant RNG_WORD_BY_DAY_SLOT = 588;
     uint256 internal constant RNG_DAY_TAGS_SLOT = 25;
     uint256 internal constant WALLET_IDS_SLOT = 61;
-    /// @dev Slot of `lastDailyRequestWallDay` (bytes 27..29), pinned like the slots above.
+    /// @dev Slot of `lastDailyRequestWallDay` (bytes 27..29), hardcoded like the slots above.
     uint256 internal constant DAILY_REQUEST_WALL_DAY_SLOT = 4;
 
     // ---------------------------------------------------------------------------------------
@@ -153,8 +151,7 @@ contract LootboxCraps is Craps {
     function _extsload(bytes32 slot) private view returns (bytes32 value) {
         bytes4 selector = IGameSlotReader.extsload_g2807007.selector;
         address game = _GAME;
-        // A zero GAME — the un-pinned placeholder this repo ships on `main` — has no code, so the
-        // call returns no data: every read fails closed until CRAPS is deployed against a pinned game.
+        // A GAME address without code returns no data, so every read fails closed.
         assembly ("memory-safe") {
             mstore(0, selector)
             mstore(4, slot)

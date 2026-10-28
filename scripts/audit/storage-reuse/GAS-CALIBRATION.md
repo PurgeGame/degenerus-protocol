@@ -1,5 +1,9 @@
 # Native Glamsterdam storage-reuse measurements
 
+> **Historical evidence.** This file records the storage-reuse implementation committed in `c4c1effe5` (2026-10-20; source baseline `fb2540c55`, Solidity 0.8.34; the current build uses 0.8.38). It is not a description of the current
+> source. Current layouts and behavior: [Storage reuse](../../../docs/STORAGE-REUSE.md) and
+> `scripts/layout/golden/`.
+
 Read-only `eth_simulateV1`, Sepolia PublicNode, no sent transactions. The primitive
 probe confirms a **97,920 gas difference between creating and overwriting a slot**.
 Solc 0.8.34, via IR, 1,000 optimizer runs, Osaka-targeted bytecode executed by the

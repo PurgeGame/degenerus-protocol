@@ -90,13 +90,13 @@ contract ChainPinProbe is DegenerusGameStorage {
         uint256 boxes = _subBoxCount;
         uint256 tickets = _subscribers.length - boxes;
         s.dense = true;
-        for (uint256 i; i < boxes; ++i) if (_subscriberAt(i) == 0) s.dense = false;
-        if (_subscriberAt(boxes) != 0) s.dense = false;
-        for (uint256 i; i < tickets; ++i) if (_subscriberAt(2000 - i) == 0) s.dense = false;
-        if (_subscriberAt(2000 - tickets) != 0) s.dense = false;
+        for (uint256 i; i < boxes; ++i) if (uint32(_subLaneAt(i)) == 0) s.dense = false;
+        if (uint32(_subLaneAt(boxes)) != 0) s.dense = false;
+        for (uint256 i; i < tickets; ++i) if (uint32(_subLaneAt(2000 - i)) == 0) s.dense = false;
+        if (uint32(_subLaneAt(2000 - tickets)) != 0) s.dense = false;
         uint8 flags = _afkingProtocolFlags;
         for (uint256 i = _subOpenCursor; i < boxes; ++i) {
-            uint32 e = _subscriberAt(i);
+            uint32 e = uint32(_subLaneAt(i));
             if (e == VAULT_WALLET_ID && flags & 1 == 0) continue;
             if (e == SDGNRS_WALLET_ID && flags & 2 == 0) continue;
             ++s.markers;

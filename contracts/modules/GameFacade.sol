@@ -2,15 +2,11 @@
 pragma solidity 0.8.38;
 import {GameActionInternals} from "./GameActionInternals.sol";
 import {GameRngNudge} from "./GameRngNudge.sol";
-
 import {GameEntryInternals} from "./GameEntryInternals.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {GameAfkingClaims} from "./GameAfkingClaims.sol";
-
 import {RngTags} from "../libraries/RngTags.sol";
-
 import {GameHooks} from "./GameHooks.sol";
-
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
 /*
@@ -42,14 +38,15 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
  * @notice Core game contract managing state machine, VRF integration, jackpots, and prize pools.
  *
  * @dev ARCHITECTURE:
- *      - Level-centered lifecycle; mineRun() is permissionless (caller tier gates only the miner bounty)
+ *      - Level-centered lifecycle; mineRun() is permissionless (only the miner bounty needs a wallet ID)
  *      - jackpotPhaseFlag selects the daily payout mode within a level: PURCHASE(false) / JACKPOT(true)
  *      - gameOver flag is terminal
  *      - Degenesis: seven daily cohorts from GameTimeLib.DEGENESIS_START_DAY, gated by purchase credit
  *      - Chainlink VRF for randomness with RNG lock to prevent manipulation
- *      - Delegatecall modules: advance, afking, bingo, boon, decimator, degenerette, foilpack,
- *        gameover, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
- *      - Prize pool flow: futurePrizePool (unified reserve) → nextPrizePool → currentPrizePool → claimableWinnings
+ *      - Delegatecall modules: actions, advance, afking, bingo, boon, decimator, degenerette,
+ *        degenesis, foilpack, gameover, jackpot, jackpot draw, lootbox, miner, mint, purchase,
+ *        rng, ticket, whale (must inherit DegenerusGameStorage)
+ *      - Prize pool flow: futurePrizePool (unified reserve) → nextPrizePool → currentPrizePool → claimable
  *
  * @dev CRITICAL INVARIANTS:
  *      - address(this).balance + steth.balanceOf(this) >= claimablePool
@@ -62,14 +59,12 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
  *      - RNG lock prevents state manipulation during VRF callback window
  *      - Access control via msg.sender checks
  *      - Delegatecall modules use constant addresses from ContractAddresses
- *      - 20h VRF retry timeout, 14-day gameover-RNG fallback, 30-day purchase inactivity guard
+ *      - 20h VRF retry timeout, 14-day hard-stall ending, 30-game-day purchase timeout
  */
 
-import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
-import {IDegenerusGameBoonModule, IDegenerusGameFoilPackModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameFoilPackModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
@@ -121,7 +116,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     /// @notice mineFlip could not admit any useful execution step with the supplied gas.
     error InsufficientExecutionGas();
-    /// @notice A nonzero gas-estimate multiplier must be at least 10,000 basis points.
+    /// @notice A nonzero gas-estimate multiplier must be at least 2,500 basis points.
     error InvalidGasMultiplier();
     /// @notice Thrown when a tunable parameter is set outside its permitted range.
     error OutOfBounds();
@@ -157,24 +152,11 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
-
-    /*+======================================================================+
-      |                           CONSTANTS                                  |
-      +======================================================================+
-      |  Game parameters and bit manipulation constants. All constants are   |
-      |  private to prevent external dependency on specific values.          |
-      +======================================================================+*/
-
-    /// @dev The sDGNRS leg of a record claim pays the claim's accrued pool share at
-    ///      this scale-down from the sDGNRS reward pool (0.01%-0.15% per claim).
-    uint256 private constant RECORD_SDGNRS_SCALE_DIV = 500;
-
-
     /*+======================================================================+
       |                          CONSTRUCTOR                                 |
       +======================================================================+
-      |  Initialize storage wiring and set up initial approvals.             |
-      |  The constructor wires together the entire game ecosystem.           |
+      |  Seed the day, pool and ticket state and register the protocol       |
+      |  wallets.                                                            |
       +======================================================================+*/
 
     /**
@@ -225,10 +207,6 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         if (!ok) _revertGameDelegate(data);
     }
 
-    /*+======================================================================+
-      |                           MODIFIERS                                  |
-      +======================================================================+*/
-
     /*+========================================================================================+
       |                    ADMIN VRF FUNCTIONS                                                 |
       +========================================================================================+
@@ -275,7 +253,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |                      AFKING DISPATCH STUBS                               |
       +==========================================================================+
       |  Thin delegatecall dispatch stubs into GAME_AFKING_MODULE (the AfKing    |
-      |  subscription logic), shaped exactly like claimBingo.                    |
+      |  subscription logic).                                                    |
       |  The afking subscriber set / cursors / lanes live in this Game's        |
       |  storage (DegenerusGameStorage), so the module MUST run in this          |
       |  contract's context — delegatecall preserves msg.sender, so the account  |
@@ -515,8 +493,6 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return !_livenessTriggered() && !_dailyRequestDue() && _recordedDailyWord(dailyIdx) != 0;
     }
 
-    /// @dev Shared by the vault-owner controls; preserve the same external check and error.
-
     /// @notice Update lootbox RNG request threshold (wei).
     /// @dev Access: vault owner only (DGVE governance executor).
     /// @custom:reverts OnlyVault If caller is not the vault owner.
@@ -681,11 +657,11 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         if (!ok) _revertGameDelegate(data);
     }
 
-    /// @notice Claim a foil pack's gold: a FLIP ladder from three golds up, or the
-    ///         golden-ticket grand when two whole tickets came out all gold.
-    /// @dev Signature: claimGoldenTicket(uint32 id, uint24 lvl) (0 = caller). The pack's four
-    ///      lines are re-derived inside the module from the sealed word its buy froze
-    ///      against, so nothing about the gold is stored and the drain stays untouched.
+    /// @notice Claim a foil pack's gold: a FLIP ladder from three golds up, plus a kicker when
+    ///         one whole ticket came out all gold. A pack with two all-gold tickets is not
+    ///         claimable here: the drain already pushed its grand.
+    /// @dev Signature: claimGoldenTicket(uint32 id, uint24 lvl) (0 = caller). The claim reads
+    ///      the pack's four lines from its stored record, without a daily RNG lookup.
     ///      The win credits to the account, never the caller, and a pack pays at most once
     ///      (CEI marker), so anyone may trigger it. The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is.
@@ -697,14 +673,14 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Purchase whale pass: boosts levelCount, queues 100 levels of ticket entries, includes lootbox.
-    /// @dev Available at any level. Can be purchased multiple times (1-100 per call).
+    /// @dev Available at any level. Can be purchased multiple times (1-1,000 per call).
     ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
     ///      Per pass x quantity: 20 entries/level for [passLevel..9]; the rest of the 100-level
     ///      span from passLevel = level+1 pays 2 x quantity half-passes as whole tickets
     ///      (4 entries = 1 whole ticket), strided so one pass earns a ticket every 2nd level.
     ///      Every 5 passes in one purchase award one more pass's entries; price, lootbox and
     ///      credits follow the paid quantity.
-    ///      Includes lootbox (10% of price, one box per pass bought).
+    ///      Includes lootbox (10% of price, split over one box per pass bought, at most 100 boxes).
     ///      Frozen stats don't increment until game reaches the frozen level.
     ///
     ///      Fund distribution - Level 0: 30% next / 70% future.
@@ -714,14 +690,14 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      level over 10-101, frozen until 101.
     ///      Example at level 51 (passLevel 52): no bonus levels, one whole ticket every 2nd level
     ///      over 52-151, frozen until 151.
-    ///        free-tranche seat go to its payee.
     function purchaseWhalePass(uint32, uint256, bytes32) external payable {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data);
         if (!ok) _revertGameDelegate(data);
     }
 
     /// @notice Purchase a 10-level lazy pass (direct in-game activation).
-    /// @dev Available at levels 0-2 or x9 (9, 19, 29...), or with a valid lazy pass boon.
+    /// @dev Available at levels 0-2, x9 (9, 19, 29...; not x99) and x0 (10, 20, 30...), or with a valid
+    ///      lazy pass boon. A century x00 qualifies only in its purchase phase.
     ///      Levels 0-2: flat 0.24 ETH. Levels 3+: sum of per-level ticket prices across 10-level window.
     function purchaseLazyPass(uint32, bytes32) external payable {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data);
@@ -795,7 +771,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         uint32 boonPacked = uint32(deityBoonPacked[deityId]);
         usedMask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         decimatorOpen = _decWindowOpen();
-        deityPassAvailable = _deityCount() < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
+        deityPassAvailable = _deityCount() < 32; // DEITY_PASS_MAX_TOTAL (see BoonModule)
         // The issuance day's menu is fixed by the preceding day's finalized word.
         // Manual gifts need this predecessor. Automatic protocol draws fall back
         // to the award-day word when no predecessor exists.
@@ -806,16 +782,6 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     function giveBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
         _gameIssueDeityBoon(deityId, recipientId, slot);
     }
-
-    /*+==========================================================================+
-      |                       TICKET QUEUEING                                    |
-      +==========================================================================+
-      |  Tickets are queued for batch processing rather than minted immediately. |
-      |  This prevents gas exhaustion from large purchases.                      |
-      +==========================================================================+*/
-
-    // Worker facades preserve explicit delegatecall frames in Game storage.
-    // Targets and bundle aliases come from the canonical deployment manifest.
 
     /*+========================================================================================+
       |                    DECIMATOR JACKPOT LOGIC                                             |
@@ -912,8 +878,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @notice Emitted when claimable ETH winnings are paid out.
     /// @param amount Total value paid — native ETH plus any stETH fallback (never the 1-wei sentinel).
     /// @param claimableAfter Raw claimable left after the claim (including the 1-wei sentinel). Not
-    ///        derivable from `amount`: claimWinnings(player, amount) is a partial cashout, so the
-    ///        residual is arbitrary pre-gameOver.
+    ///        derivable from `amount`: claimWinnings(id, amount) is a partial cashout, so the
+    ///        residual is arbitrary.
     event WinningsClaimed(
         uint32 indexed player,
         uint256 amount,
@@ -927,7 +893,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      Every account is created holding a 1-wei claimable sentinel outside claimablePool;
     ///      the claim never pays it, so later credits always write a nonzero slot.
     ///
-    ///      SECURITY: Reverts if balance ≤ 1 wei (nothing to claim).
+    ///      SECURITY: Reverts NothingToClaim when nothing is payable.
     ///      Debits account `id` and pays its payee; the caller must be authorized for it.
     function claimClaimable(uint32 id) external {
         _gameClaimWinnings(id);
@@ -945,18 +911,11 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         _gameClaimWinnings(id, amount);
     }
 
-    /// @dev Shared claim body: pull winnings (capped pre-gameOver by `maxClaim`) to the account's
-    ///      payee, then set the account's cashout curse in the same storage context.
-
-
     /// @notice Claim accrued ETH winnings with stETH-first payout.
     /// @dev Restricted to self-claims by the vault contract.
     function claimWinningsStethFirst() external {
         _gameClaimWinningsStethFirst();
     }
-
-    ///        claim also settles the whole afking half.
-
 
     /// @notice Fund account `id`'s prepaid afking ETH bucket (consumed by the AfKing auto-buy).
     /// @dev Permissionless (fund anyone). `id` is a third-party recipient: nonzero and allocated.
@@ -967,12 +926,11 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Withdraw prepaid afking ETH from account `id` (0 = caller) to its payee.
-    /// @dev Un-brickable strict CEI: the GO_SWEPT guard is LINE 1 (before any debit), so a
-    ///      post-final-sweep withdraw reverts cleanly instead of underflowing claimablePool
-    ///      (which the sweep zeroes). Both debits land BEFORE the .call, so a re-entrant second
-    ///      call re-reads the already-debited balance and reverts. Available always pre-sweep
-    ///      (mid-game, after cancel, post-gameOver). The claimablePool debit stays checked math.
-    /// @param amount ETH amount (wei) to withdraw from the account's afkingFunding bucket.
+    /// @dev Reverts AlreadySwept after the final sweep, before any debit (the sweep zeroes
+    ///      claimablePool). Both debits land before the payout, so a re-entrant call reads the
+    ///      debited balance. Available until the final sweep: mid-game, after a cancel and after
+    ///      game over. The claimablePool debit is checked math.
+    /// @param amount ETH amount (wei) to withdraw from the account's prepaid afking balance.
     function withdrawAfkingFunding(uint32 id, uint256 amount) external {
         _gameWithdrawAfkingFunding(id, amount);
     }
@@ -1049,7 +1007,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |                    LOOTBOX CLAIMS                                    |
       +======================================================================+*/
 
-    /// @notice Claim deferred whale pass rewards. `whalePassClaims` is fed in half-pass units by
+    /// @notice Claim deferred whale pass rewards. The account's half-pass count is fed by
     ///         large lootbox wins (>5 ETH), the solo jackpot bucket, golden tickets, the lootbox
     ///         whale-pass boon and foil tier 8.
     /// @dev Thin, PERMISSIONLESS delegatecall dispatch stub into the whale module — forwards
@@ -1101,21 +1059,6 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         if (!ok) _revertGameDelegate(data);
     }
 
-    /*+===============================================================================================+
-      |                    JACKPOT PAYOUT FUNCTIONS                                                   |
-      +===============================================================================================+
-      |  Functions for distributing jackpot winnings. Most jackpot logic                              |
-      |  lives in the ContractAddresses.GAME_JACKPOT_MODULE (via delegatecall).                       |
-      |                                                                                               |
-      |  Jackpot Types:                                                                               |
-      |  • Daily jackpot - Paid each day to the level's trait-entry holders (final day = full pool)       |
-      |  • BAF (Big Ass Flip) - At every x10 level, and only if that day's flip won: 10% of the       |
-      |    future pool, raised to 20% at level 50 and at every x00. A losing flip marks the           |
-      |    bracket skipped and leaves the pool in place; at x00 a share of the FLIP that day's         |
-      |    depositors lost is credited to one WWXRP burner drawn from the level-x99 incinerator entries. |
-      |  • Decimator - 10% of the future pool at x5 levels (excluding x95), 30% at every x00.         |
-      +===============================================================================================+*/
-
     /*+======================================================================+
       |                    ADMIN: REWARD VAULT & LIQUIDITY                   |
       +======================================================================+
@@ -1123,8 +1066,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  Used to optimize yield and maintain sufficient ETH for payouts.     |
       |                                                                      |
       |  SECURITY:                                                           |
-      |  • Admin-only access (VRF owner contract)                            |
-      |  • Cannot touch claimablePool reserve (protected for player claims)  |
+      |  • Swap: ADMIN only. Stake: vault owner only.                        |
+      |  • Staking keeps the ETH reserve that player claims need             |
       |  • Swaps are unit-for-unit in nominal terms (no fund extraction);    |
       |    economic parity depends on stETH trading at par, not checked here |
       +======================================================================+*/
@@ -1148,8 +1091,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     /// @notice Stake game-held ETH into stETH via Lido.
     /// @dev Access: vault owner only (DGVE governance executor).
-    ///      SECURITY: Must retain ETH to cover player claims, excluding vault/DGNRS
-    ///      claimable (those addresses accept stETH payouts natively).
+    ///      SECURITY: Keeps ETH for claimablePool less the Vault and sDGNRS claimable and the
+    ///      redemption reserve (all settleable in stETH), plus the VRF native funding target.
     /// @param amount ETH amount to stake.
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ZeroValue If amount is zero.
@@ -1165,9 +1108,9 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  Chainlink VRF V2.5 integration for provably fair randomness.        |
       |                                                                      |
       |  LIFECYCLE:                                                          |
-      |  1. mineRun() calls requestDailyRng() as its final normal action     |
+      |  1. mineRun() requests the daily word as its final normal action     |
       |  2. Chainlink calls rawFulfillRandomWords(); the word is stored      |
-      |  3. A later mineRun() calls publishRng() to publish the word         |
+      |  3. A later mineRun() publishes the word                             |
       |  4. After processing, _unlockRng() resets for next cycle             |
       |                                                                      |
       |  SECURITY:                                                           |
@@ -1226,8 +1169,9 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     error NudgeCapReached();
 
     /// @notice Pay the quoted FLIP cost to nudge the next daily coinflip word by +1.
-    /// @dev Cost scales +50% per queued nudge, rounds up to a whole FLIP, and resets after
-    ///      the queued nudges are applied. The caller-supplied quote prevents a transaction
+    /// @dev Cost starts at 100 FLIP and scales +50% per queued nudge, flooring to a whole FLIP
+    ///      at each step (100, 150, 225, 337, 505, ...); it resets after the queued nudges are
+    ///      applied. The caller-supplied quote prevents a transaction
     ///      from paying a higher price if another nudge lands first.
     ///      Only available while RNG is unlocked (before VRF request is in-flight).
     ///      MECHANISM: Adds 1 to the daily coinflip word for each nudge, reversing its win
@@ -1235,7 +1179,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      SECURITY: Players cannot predict the base word, only influence it.
     /// @custom:reverts RngLocked If RNG is currently locked (VRF request pending).
     /// @custom:reverts NudgeCostChanged If the live quote differs from expectedCost.
-    /// @custom:reverts E Once the liveness timeout has fired (see the gate below).
+    /// @custom:reverts E Once the liveness trigger has fired.
+    /// @custom:reverts NudgeCapReached Once 255 nudges are queued.
     function reverseFlip(uint256 expectedCost) external {
         _gameReverseFlip(expectedCost);
     }
@@ -1247,12 +1192,6 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         queued = _nudgeCount();
         cost = queued >= RNG_NUDGE_CAP ? 0 : _currentNudgeCost(queued);
     }
-
-    /// @dev Calculate nudge cost with compounding.
-    ///      Base cost is 100 FLIP. Each +50% step floors to a whole token:
-    ///      100, 150, 225, 337, 505, ... .
-    /// @return cost FLIP cost for the next nudge.
-
 
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Stores the raw word answering the open request; publication is a later miner
@@ -1279,20 +1218,6 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         if (word < 2) return;
         rngWordCurrent = word;
     }
-
-    /*+======================================================================+
-      |                    PAYMENT HELPERS                                   |
-      +======================================================================+
-      |  Internal functions for ETH/stETH payouts.                           |
-      |  Implements fallback logic when one asset is insufficient.           |
-      +======================================================================+*/
-
-    /// @dev Send stETH first, then ETH for remainder. Reached only from
-    ///      claimWinningsStethFirst, which is VAULT-gated — sDGNRS and players claim
-    ///      through the ETH-first path.
-    /// @param to Recipient address.
-    /// @param amount Total wei to send.
-
 
     /*+======================================================================+
       |                   VIEW: GAME STATUS & STATE                          |
@@ -1328,14 +1253,11 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     /// @notice Get queued future entry rewards owed for a level.
     /// @dev Sums every key space an entry for `lvl` can occupy: the committed read cohort, the
-    ///      accumulating write cohort, and the far-future space that buys land in while
-    ///      `lvl > _mintCeiling()`. Reading one space alone under-reports — the write key drops the
-    ///      committed cohort at every daily slot swap, and misses far-future buys entirely. The
-    ///      three keys are pairwise distinct (slot bit 23, far-future bit 22), so nothing is
-    ///      counted twice. No overflow guard on the sum: each lane is a uint32 entry count,
-    ///      and a combined total past 2^32 entries needs ~1.07 billion whole tickets at one
-    ///      level (4 entries each), the same economically unreachable scale the uint32
-    ///      caps were stripped at.
+    ///      accumulating write cohort, and the far-future space. Reading one space alone
+    ///      under-reports: the write key drops the committed cohort at every daily slot swap and
+    ///      misses far-future buys. The three keys are pairwise distinct (slot bit 23,
+    ///      far-future bit 22), so nothing is counted twice. The sum truncates to 32 bits; a total
+    ///      past 2^32 entries needs about 1.07 billion whole tickets at one level.
     /// @param lvl Target level for the queued entries.
     /// @param player Player address to query.
     /// @return The number of entries owed (fractional remainder resolves at batch time).
@@ -1343,10 +1265,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         uint24 lvl,
         address player
     ) external view returns (uint32) {
-        unchecked {
-            return
-                _entriesOwedTotal(lvl, _walletIdOf(player));
-        }
+        return _entriesOwedTotal(lvl, _walletIdOf(player));
     }
 
     /// @notice Pinned table mirrors the authoritative zero/nonzero pending transition.
@@ -1467,9 +1386,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Get the VRF random word recorded for a specific day.
-    /// @dev Days are indexed from deploy time (day 1 = deploy day).
+    /// @dev Logical game days (day 1 = bootstrap at deployment). Only the latest applied daily
+    ///      result day and the day before it are retained.
     /// @param day The day index to query.
-    /// @return The random word (0 if no word recorded for that day).
+    /// @return The random word (0 for any day not retained or not recorded).
     function rngWordForDay(uint24 day) external view returns (uint256) {
         return _retainedDailyWord(day);
     }
@@ -1677,7 +1597,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /*+======================================================================+
       |                  VIEW: ACTIVITY SCORE CALCULATION                    |
       +======================================================================+
-      |  Player activity score multiplier determines airdrop rewards.        |
+      |  The activity score feeds lootbox EV, Degenerette ROI and Decimator. |
       |                                                                      |
       |  Activity Score Components — all in WHOLE POINTS, not percentages.   |
       |  Reward curves over the score are nonlinear (see ActivityCurveLib).  |
@@ -1688,7 +1608,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  • Pass bonus (active only while frozen):                            |
       |    - lazy pass (10-level): +10 pts                                   |
       |    - whale pass (100-level): +40 pts                                 |
-      |  • Deity pass bonus: +80 pts (always active)                         |
+      |    - an active pass also floors streak at 50 and count at 25 pts     |
+      |  • Deity pass: full streak and count, plus +80 pts (always active)   |
       |  • Cashout/smite curse: -1 pt per curse point, floored at 0          |
       |                                                                      |
       +======================================================================+*/
@@ -1702,14 +1623,15 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      curve keeps rising past its knee and saturates at ACTIVITY_EFFECTIVE_CAP_POINTS (30,000).
     /// @param player The player address to calculate for.
     /// @return scorePoints Total activity score in whole points.
-    /// @return walletId The player's wallet ID (zero if unregistered), read beside the score so a
+    /// @return walletId The player's wallet ID (zero if unregistered), read beside the score so
     ///         address-based consumers can identify the account without a second lookup.
     function playerActivityScore(
         address player
     ) external view returns (uint256 scorePoints, uint32 walletId) {
         // Unified effective quest streak: a live afking sub reads the Sub-side compute-on-read
         // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
-        // streak, which zeroes a lapsed stale-high streak so it can't inflate
+        // streak, which (once the day's quest has rolled) zeroes a lapsed stale-high streak so it
+        // can't inflate
         // lootbox EV or sDGNRS claims.
         walletId = _walletIdOf(player);
         scorePoints = _playerActivityScore(walletId, _effectiveQuestStreak(walletId));
@@ -1790,7 +1712,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return mintPacked_[_walletIdOf(player)] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
     }
 
-    /// @notice A wallet's permanent ID (its wallet-table position), or zero if unregistered.
+    /// @notice A wallet's current gameplay account ID (its wallet-table position); zero before
+    ///         registration or after that account's sale.
     function walletIdOf_g3120(address player) external view returns (uint32) {
         return _walletIdOf(player);
     }
@@ -1803,10 +1726,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return mintPacked_[_walletIdOf(player)];
     }
 
-    /// @dev Mint word of an allocated wallet ID, resolved through the wallet table here so a
-    ///      caller holding only the ID needs one call (DegenerusQuests level-quest eligibility).
-    /// @param id Allocated wallet ID.
-    /// @return Raw packed uint256 from mintPacked_ for the ID's account key.
+    /// @dev Mint word of a wallet ID, so a caller holding only the ID needs one call
+    ///      (DegenerusQuests level-quest eligibility).
+    /// @param id Wallet ID.
+    /// @return Raw packed uint256 from mintPacked_[id].
     function mintPackedOfId_g5372(uint32 id) external view returns (uint256) {
         return mintPacked_[id];
     }
@@ -1814,8 +1737,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /*+======================================================================+
       |                    TRAIT TICKET SAMPLING                             |
       +======================================================================+
-      |  View function for sampling burn ticket holders from recent levels.  |
-      |  Used for scatter draws and promotional mechanics.                   |
+      |  Views sampling ticket holders for the BAF draws.                    |
       +======================================================================+*/
 
     /// @notice Sample up to 4 entries from a prepared BAF trait buffer.
@@ -1991,11 +1913,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         // Both near cohorts, so the count survives the daily slot swap: entries queued before
         // it sit under what is now the read key. The far-future space is included for the case
         // where a level's far-future buys have not yet been drained across the transition.
-        uint24 lvl = level;
-        unchecked {
-            tickets =
-                _entriesOwedTotal(lvl, _walletIdOf(player));
-        }
+        tickets = _entriesOwedTotal(level, _walletIdOf(player));
     }
 
     /*+======================================================================+

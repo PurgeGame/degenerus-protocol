@@ -32,7 +32,6 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
  */
 
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
-import {RECORD_KIND_SPIN} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
@@ -60,12 +59,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     DegenerusGamePayoutUtils,
     DegenerusGameMintStreakUtils, GameDegeneretteBet
 {
-    // -------------------------------------------------------------------------
-    // Errors
-    // -------------------------------------------------------------------------
-
-    // error E() — inherited from DegenerusGameStorage
-
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -104,7 +97,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     ///         roll (WWXRP / FLIP×3 / ETH) or a biggest-spin record bounty (FLIP×3) — the single
     ///         self-contained record of that outcome (placed bets report through
     ///         DegeneretteResolved instead). Every reel + every output reward is here or, for
-    ///         the ETH recirc, in the fresh box's own (now-emitted) events.
+    ///         the ETH recirc, in the fresh box's own events.
     /// @param playerId The reward account's wallet ID.
     /// @param betId Self-classifying id: bit 63 = synthetic-origin sentinel, bits 62-60 = spin type
     ///        (0=WWXRP, 1=FLIP, 2=ETH, 3=record bounty), bits 59-0 = seed entropy (unique per spin).
@@ -125,10 +118,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 payout,
         uint256 ethShare
     );
-
-    // -------------------------------------------------------------------------
-    // Internal Helpers
-    // -------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------
     // Constants
@@ -173,7 +162,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     // -------------------------------------------------------------------------
     //
     // An ETH bet above the entry floor is offered against the all-time
-    // biggest-bet record, which Coinflip owns alongside the other three
+    // biggest-bet record, which Coinflip owns alongside the other four
     // all-time records and the shared FLIP pool they pay from. The unit is the
     // bet's TOTAL ETH (the whole transaction's wager). Beating the mark by a
     // fifth claims the category's accrued pool share; any larger bet ratchets the
@@ -185,13 +174,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     // to. Placement always binds to the unrevealed write buffer, so the claim
     // is armed against an unknown word by construction — the same freeze the bet's
     // own spins rest on.
-
-    // -------------------------------------------------------------------------
-    // Quick Play Constants
-    // -------------------------------------------------------------------------
-
-    /// @dev Salt for quick play ticket generation.
-    bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
 
     // Shared ETH/FLIP score table in centi-x, gross of stake; neutral EV includes the
     // result-wild multiplier (1 + W/4). Derived and checked by
@@ -213,11 +195,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     uint16 private constant WWXRP_ROI_MAX_BPS = 13_000;
     uint256 private constant WWXRP_RIG_DENOMINATOR = 20;
 
-    uint256 private constant PLAYER_TICKET_TAG = 0x446567656e506c61796572; // DegenPlayer
-    uint256 private constant HERO_PICK_TAG = 0x446567656e4865726f; // DegenHero
-    uint256 private constant RESULT_TICKET_TAG = 0x446567656e526573756c74; // DegenResult
-    uint256 private constant WWXRP_DRAW_TAG = 0x575758525044726177; // WWXRPDraw
-    uint256 private constant WWXRP_RIG_SALT = 0x52494721; // RIG!
     uint8 private constant RANDOM_HERO = 32; // internal award spins only
 
     // -------------------------------------------------------------------------
@@ -228,7 +205,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     // owner wallet ID [0..31] | symbol [32..36] | spinCount [37..41] | currency [42] |
     // record flag [43] | activity score [44..59] | boosted stake units [60..123].
     // The bet id is the queue position + 1, so the index and id need no bits.
-    //
 
     // Whole bets remain atomic; only admission bounds depend on spin count.
     uint256 private constant BET_ETH_BASE_GAS = GasBounds.DEGENERETTE_ETH_BASE_GAS;
@@ -248,14 +224,12 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
 
     /// @dev Cross-bet payout accumulator threaded through the resolve paths → _resolveBet
     ///      → _distributePayout. Per-currency payouts are summed per owner and flushed when
-    ///      the next bet belongs to someone else or the call ends (additive, so byte-identical
-    ///      to the per-spin writes). The prize-pool decrement runs
-    ///      against a running local that mirrors the live storage value spin-by-spin:
-    ///      read once at first ETH win, decremented in memory per spin (so each
-    ///      spin's ETH_WIN_CAP_BPS cap sees the same shrinking pool it would have
-    ///      read from storage today), written back once at flush. Lootbox-share is
-    ///      NOT accumulated here — it is summed PER betId and resolved once per bet
-    ///      inside _resolveBet (resolution-batch-invariant).
+    ///      the next bet belongs to someone else or the call ends (additive, so the result
+    ///      equals per-spin writes). The prize-pool decrement runs against a running local:
+    ///      read once at the first ETH win, decremented in memory per spin (so each spin's
+    ///      ETH_WIN_CAP_BPS cap sees the shrinking pool), written back once at flush.
+    ///      Lootbox-share is NOT accumulated here — it is summed PER betId and resolved once
+    ///      per bet inside _resolveBetWork (resolution-batch-invariant).
     struct ResolveAcc {
         uint32 ownerId; // whose payouts ethClaimable / flipMint currently hold
         uint256 ownerElement; // loaded only by a referral lookup or token payout
@@ -273,8 +247,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 affiliateBoxShare;
         uint32 firstResultTraits;
     }
-
-
 
     /// @notice Consume the active session's FIFO bet queue after human boxes finish.
     function runDegeneretteWork_g670(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
@@ -362,11 +334,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     // Internal Bet Logic
     // -------------------------------------------------------------------------
 
-    /// @dev Resolves one queued bet covered by the caller's active cursor: decodes the
-    ///      word and materializes its spins against the index word. Per-currency payouts
-    ///      accumulate into `acc` per owner (flushed by the caller or at the next owner);
-    ///      lootbox-share is summed across this bet's spins and resolved ONCE here (one box
-    ///      per bet). Every spin is recorded in the bet's single DegeneretteResolved event.
     struct ResolvedBet {
         uint256 bet;
         uint32 index;
@@ -384,6 +351,11 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint128 amountPerSpin;
     }
 
+    /// @dev Resolves one queued bet covered by the caller's active cursor: decodes the
+    ///      bet word and materializes its spins against the index word. Per-currency payouts
+    ///      accumulate into `acc` per owner (flushed by the caller or at the next owner);
+    ///      lootbox-share is summed across this bet's spins and resolved ONCE (one box per
+    ///      bet). Every spin is recorded in the bet's single DegeneretteResolved event.
     function _resolveBet(
         uint256 bet,
         uint32 index,
@@ -421,7 +393,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         c.spins = new bytes(uint256(c.spinCount) * 5);
 
         for (uint8 spinIdx; spinIdx < c.spinCount; ) {
-            SpinResult memory spin = _rollBetSpin(c.rngWord, c.index, c.symbol, spinIdx, c.currency);
+            SpinResult memory spin = _rollBetSpin(c.rngWord, c.symbol, spinIdx, c.currency);
             if (spinIdx == 0) c.totals.firstResultTraits = spin.resultTraits;
             uint8 s = spin.score;
             uint256 payout = _degenerettePayout(spin, c.currency, c.amountPerSpin, c.activityScore);
@@ -476,9 +448,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
 
         // FLIP survival flip: every FLIP payout must survive one fair coinflip before
         // it mints — the bet's whole payout double-or-nothings on a single bet-keyed flip
-        // (EV-neutral: x2 at 50/50). A dedicated domain binds owner and bet id.
-        // Both identities are committed before the VRF word lands, so the outcome
-        // is fixed at fulfillment;
+        // (EV-neutral: x2 at 50/50). A dedicated domain binds the bet id, which is
+        // committed before the VRF word lands, so the outcome is fixed at fulfillment;
         // a losing bet pays zero whether resolved or abandoned, so selective resolution
         // earns nothing. The accumulator holds exactly this bet's payout once (added per
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
@@ -509,7 +480,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
                     c.totals.totalPayout,
                     EntropyLib.hash3(RngTags.BET_ROUND, c.rngWord, c.betId)
                 )
-                : FlipRoundLib.floorWholeFlip(c.totals.totalPayout);
+                : c.totals.totalPayout;
             if (rounded > c.totals.totalPayout) {
                 c.acc.flipMint += rounded - c.totals.totalPayout;
             } else if (rounded < c.totals.totalPayout) {
@@ -524,7 +495,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         if (c.totals.betLootboxShare > 0) {
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
-            _resolveLootboxDirect(
+            _boxResolveLootboxDirect(
                 c.playerId,
                 c.totals.betLootboxShare,
                 EntropyLib.hash3(RngTags.BET_BOX, c.rngWord, c.betId),
@@ -631,13 +602,10 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
                 lootboxShare = payout - ethShare;
             }
 
-            // Load the running prize-pool local on the first ETH win. The first
-            // read mirrors the live storage value the per-spin path would have
-            // read; subsequent spins decrement the running local in memory, so
-            // each spin's cap/solvency sees the same shrinking pool storage would
-            // have held — byte-identical to per-spin. Flushed once by runDegeneretteWork.
-            // Every caller runs unfrozen: bet and box resolution are RNG consumer stages,
-            // and foil claims revert under the daily lock.
+            // Load the running prize-pool local on the first ETH win; later spins decrement
+            // it in memory, so each spin's cap sees the shrinking pool. The owner of `acc`
+            // flushes it once. Every caller runs unfrozen: bet and box resolution are RNG
+            // consumer stages, and foil claims revert under the daily lock.
             if (!acc.poolLoaded) {
                 acc.poolLoaded = true;
                 acc.runningFuture = _getFuturePrizePool();
@@ -663,7 +631,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
             unchecked {
                 acc.ethClaimable += ethShare;
             }
-        } else if (currency == CURRENCY_FLIP) {
+        } else {
             unchecked {
                 acc.flipMint += payout;
             }
@@ -671,7 +639,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     }
 
     /// @dev Manual ETH/FLIP reel and player ticket, with the same shared round seeds.
-    function _rollBetSpin(uint256 rngWord, uint32 index, uint8 symbol, uint8 spinIdx, uint8 currency)
+    function _rollBetSpin(uint256 rngWord, uint8 symbol, uint8 spinIdx, uint8 currency)
         private
         pure
         returns (SpinResult memory)
@@ -680,19 +648,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         // only spin position separates its successive outcomes.
         uint256 resultSeed = EntropyLib.hash3(RngTags.BET_HOUSE, rngWord, spinIdx);
         // All bettors choosing this symbol share the same prefix of player tickets.
-        // The house sequence above is shared across symbols.
         uint256 spinSeed = EntropyLib.hash4(RngTags.BET_PLAYER, rngWord, symbol, spinIdx);
         return _rollSpin(spinSeed, resultSeed, symbol, currency);
-    }
-
-    /// @dev Resolve a purchased bet's combined win box against the shared per-level EV allowance.
-    function _resolveLootboxDirect(
-        uint32 id,
-        uint256 amount,
-        uint256 rngWord,
-        uint16 activityScore
-    ) private {
-        _boxResolveLootboxDirect(id, amount, rngWord, activityScore);
     }
 
     // -------------------------------------------------------------------------
@@ -929,18 +886,11 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     // box-origin sentinel, bits 62-60 = spin type, bits 59-0 = seed entropy.
 
     uint256 private constant BOX_FLIP_SPINS = 3;
-    uint256 private constant BOX_SURVIVAL_TAG = 0x537572766976616c; // "Survival"
-    uint256 private constant BOX_RECIRC_TAG = 0x5265636972; // "Recir"
-    /// @dev Domain-separation tag for the 100-FLIP award collapse. Mixed with the immutable
-    ///      per-award key (the betId, the box seed) so the roll is fixed at VRF fulfillment
-    ///      and cannot be steered by how a settle batch is composed.
-    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
-    uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
 
     // Box-spin BoxSpin.betId header. Bit 63 is a box-origin sentinel (real bet ids are queue
     // positions + 1, so they never reach it); bits 62-60 carry the spin type; bits 59-0 are seed entropy
     // (a unique per-box-spin id). The off-chain UI reads `betId >> 63` (is-box-spin) and
-    // `(betId >> 60) & 7` (type) off the event's data field (only `player` is indexed).
+    // `(betId >> 60) & 7` (type) off the event's data field (only `playerId` is indexed).
     uint256 private constant BOX_BETID_SENTINEL = uint256(1) << 63;
     uint8 private constant BOX_SPIN_TYPE_WWXRP = 0;
     uint8 private constant BOX_SPIN_TYPE_FLIP = 1;
@@ -948,9 +898,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     /// @dev Not a box roll: a biggest-spin record bounty spun as FLIP off the bet that
     ///      won it. Shares the BoxSpin record so the reels stay itemized one way.
     uint8 private constant BOX_SPIN_TYPE_RECORD = 3;
-    /// @dev Domain-separation tag for the record bounty's spin seed, keyed under the
-    ///      resolving bet's own word so the outcome is fixed at VRF fulfillment.
-    uint256 private constant RECORD_SPIN_TAG = 0x5265636f7264; // "Record"
     // BoxSpin.packedSpins layout: spin i occupies bits [i*72 .. i*72+71] as
     // [playerTraits:32 | resultTraits:32 | score:8]; bits 216-223 = spin count; bit 224 = survived.
     uint256 private constant BOX_SPIN_COUNT_SHIFT = 216;
@@ -973,7 +920,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
                 (uint256(spin.score) << 64)) << (i * 72);
     }
 
-    /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll (replaces the flat mint).
+    /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll.
     /// @dev Uses the 5% reel rig, shared table and 70–130% activity target before token rounding.
     ///      Stake is in 10^18 sub-units per WWXRP. The final payout converts to whole
     ///      WWXRP with a minimum of one for a positive sub-token win; a loss stays zero.
@@ -1023,7 +970,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     /// @dev Stake uses 10^18 sub-units per FLIP. The split drops at most two sub-units;
     ///      spin payouts retain this precision until their sum completes the double-or-
     ///      nothings on one fair flip (EV-neutral) and is returned for the box entry's FLIP
-    ///      lane (credited via coinflip.creditFlip at flush). No pool / ETH / recirc touch, so
+    ///      lane (credited through coinflip at flush). No pool / ETH / recirc touch, so
     ///      this is solvency-safe on every box path including recirc.
     function resolveFlipSpinsFromBox(
         uint32 playerId,
@@ -1066,7 +1013,6 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint8 symbol,
         uint8 spinType
     ) private returns (uint256 minted) {
-        if (totalStake == 0) return 0;
         uint256 perSpinAmount = totalStake / BOX_FLIP_SPINS;
         if (perSpinAmount == 0 || perSpinAmount > type(uint128).max) return 0;
         uint128 perSpin = uint128(perSpinAmount);
@@ -1084,14 +1030,14 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
             }
         }
 
-        // Survival flip on the summed payout (the seed bit never otherwise consumed by the spins).
+        // Survival flip on the summed payout, on its own tagged hash of the seed.
         bool survived = total != 0 &&
             (EntropyLib.hash2(RngTags.SPIN_SURVIVAL, seed) & 1 == 1);
         total = survived ? total * 2 : 0;
         total /= TOKEN_MATH_SCALE;
         // Collapse the surviving mint onto a whole 100-FLIP multiple, EV-preserving, above
         // the threshold; a minimum box stakes about 13 FLIP at the milestone price, so
-        // smaller spins keep the whole-FLIP floor rather than round to nothing. The box seed
+        // smaller spins are paid unrounded rather than round to nothing. The box seed
         // is immutable per box and keyed here under its own tag, distinct from the survival
         // draw.
         total = total > FlipRoundLib.FLIP_ROUND_THRESHOLD
@@ -1099,7 +1045,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
                 total,
                 EntropyLib.hash2(RngTags.SPIN_ROUND, seed)
             )
-            : FlipRoundLib.floorWholeFlip(total);
+            : total;
         // The box caller sums this into the entry's FLIP lane; the record-bounty caller adds it
         // to the owner's batched FLIP mint.
         minted = total;

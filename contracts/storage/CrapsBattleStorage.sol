@@ -10,7 +10,6 @@ import {Craps} from "../Craps.sol";
 import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {LootboxCraps} from "../LootboxCraps.sol";
 import {CrapsCustomTerms} from "../CrapsCustomTerms.sol";
-import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {CrapsPreferenceLib} from "../libraries/CrapsPreferenceLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 
@@ -25,12 +24,9 @@ interface IGameCrapsWorkStage {
 
 /// @dev Shared layout for the table and its pinned jackpot lifecycle delegate.
 abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
-    /// @notice A custom battle was opened on terms it may not have. ONE error for the whole
-    ///         definition — round, bankroll depth, goal band, bounty ceiling and granule field,
-    ///         close time and high-roller multiple — rather than one per field.
-    ///         `createBattle` is creator-gated and rare, so per-field granularity bought a caller
-    ///         very little and cost the table bytecode it does not have; the terms are documented
-    ///         on the function and every bound is a public constant.
+    /// @notice A custom battle's terms are out of bounds: round, bankroll depth, goal band,
+    ///         bounty ceiling and granule field, close time or high-roller multiple. One error
+    ///         covers the whole definition.
     error BadBattleTerms();
     /// @notice No such bet.
     error NoSuchBet();
@@ -49,10 +45,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     error BonusStillRunning();
     /// @notice One seat per player in a seeded window — the entry is already taken.
     error AlreadyInBonus();
-    /// @notice A donation would not fit the seed field, or there is nothing to donate to. Only a
-    ///         donation is ever refused for this: a seed that overflows would run straight through
-    ///         the real-entrant bit and the tier above it, and the day's opener forfeits the
-    ///         excess instead of reverting.
+    /// @notice A donation would carry the battle's seed past its 31-bit field.
     error SeedAboveMax();
 
     /// @notice A board's packed word sets bits outside the ten three-bit legs, or names more
@@ -68,17 +61,17 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice Opening a custom battle takes the vault owner's grant. Joining one does not.
     error NotBattleCreator();
 
-    /// @notice Only the DGVE governance executor may change battle-creator permissions.
+    /// @notice The caller is not the DGVE governance executor (`setBattleCreator`) or not the
+    ///         vault (`vaultComp`).
     error NotVaultOwner();
 
-    /// @notice Only the pinned game may open the bonus day. It rides the daily advance, which is
-    ///         the crank that applies the very word the day's terms are drawn from.
+    /// @notice The caller is not the pinned game, or not this table on a self-only hook.
     error OnlyGame();
 
     /// @notice The slot does not identify a custom battle or a valid bonus window.
     error NoSuchBattle();
 
-    /// @notice A reservation run asked for no days at all.
+    /// @notice A pass or day count of zero.
     error BadPassCount();
 
     error InsufficientPassCredits();
@@ -119,13 +112,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         and holds only a warm-up or skipped day's detached jackpot battle.
     uint256 internal constant _BONUS_SLOTS_PER_DAY = 8;
 
-    /// @notice THE SCHEDULED FORMAT, and the whole of it. Every protocol-scheduled Dice Run runs
-    ///         a bankroll two and a half rounds deep (the round is two fifths of it) and chases
-    ///         FIVE times that bankroll. The shallower depth shortens the average run at roughly
-    ///         unchanged return. A high-water run ranks on how far it got rather than how fast it
-    ///         arrived, so drawing another target only creates another set of downstream rules
-    ///         without changing the product. A CUSTOM battle still names its own depth and target
-    ///         — these are the schedule's, never a test of eligibility.
+    /// @notice The scheduled format: every protocol-scheduled Dice Run runs a bankroll two and a
+    ///         half rounds deep (the round is two fifths of it) and chases FIVE times that
+    ///         bankroll. A custom battle names its own depth and target.
     uint256 internal constant _SCHED_GOAL = 5;
 
     /// @dev The scheduled round for `bank`: exact for every tier bankroll and every jackpot
@@ -137,16 +126,13 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice THE DICE RUN RECORD FLOOR, in score basis points: a 100x high point against the
     ///         run's own starting bankroll. Below it a scheduled winner never reads the shared
     ///         BIGGEST mark at all.
-    /// @dev The one figure in this format the product discussion described rather than named. It
-    ///      is a single constant and a single test vector on purpose, so moving it is cheap.
     uint256 internal constant _DICE_RUN_RECORD_FLOOR = 1_000_000;
 
     /// @notice THE LINEAR RATE A DAY'S BUDGET IS DRAWN AT, in basis points of ACTION.
     ///
-    ///         Twelve percent of the bankroll the table's seats put up, and NOTHING is halved
-    ///         downstream: what the two lanes offer between them is exactly this rate on exactly
-    ///         the action they booked. It is a RATE ON THE HANDLE and not an estimate of burn —
-    ///         the table does not measure what it kept, and this figure has never claimed to.
+    ///         Twelve percent of the bankroll the table's seats put up: what the two lanes draw
+    ///         between them is exactly this rate on the action they booked. It is a rate on the
+    ///         handle, not an estimate of burn; the table does not measure what it kept.
     ///
     ///         WHY TWELVE. Measured post-boost on 30 confirmed boards at five million paired runs a
     ///         board, the weakest scheduled board leaves the table 16.1% of the bankroll it
@@ -167,7 +153,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///
     ///         A field deeper than it settles over as many calls as it needs, carried by the
     ///         slot's cursor. It also bounds the credit flush that follows the last admitted
-    ///         seat: SEAT + SETTLE_TAIL + 32 x CREDIT = 6.33M including fresh-state gas.
+    ///         seat: SEAT + SETTLE_TAIL + 32 x CREDIT = 8.12M including fresh-state gas.
     uint64 internal constant _RESOLVE_MAX_SEATS = 32;
 
     // Safety bounds admit indivisible work; actual consumed gas, never these bounds, is charged.
@@ -197,18 +183,11 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         top of the linear rate, so a table nobody has played still has something to offer
     ///         and a busy one is not paid the base INSTEAD of its action.
     ///
-    ///         It is deliberately emissionary at low turnout and pays for itself at high: at the
-    ///         conservative 16% the engine takes and the ~15,600 FLIP of action an ordinary daily
-    ///         ticket puts through, each ticket leaves about 624 FLIP behind, so the day nets to
-    ///         zero somewhere around eighty tickets and prints below that. That is an EXPECTATION,
-    ///         not a cap — the ladder pays a window up to a hundred times its share, and the
-    ///         window it is drawn from lags a week.
-    ///
     ///         HALF OF IT NEVER REACHES A WINDOW. What a day raises — this base and its rate on
     ///         the week's action together — is split down the middle by `_splitMainBudget`: one
-    ///         half is the ladder the day's seven windows share, the other is banked in the
-    ///         progressive. So the figure here is the day's WHOLE main allocation, not what the
-    ///         ladder gets.
+    ///         half is the ladder the day's five ordinary windows share, the other is banked in
+    ///         the progressive. So the figure here is the day's WHOLE main allocation, not what
+    ///         the ladder gets.
     uint256 internal constant _BASE_MAIN_BUDGET = 50_000;
 
     /// @notice The top of the boost ladder. EVERY window is the same lottery: it advertises
@@ -291,16 +270,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _HIGH_MAIN_NUM = 2;
     uint256 internal constant _HIGH_MAIN_DEN = 5;
 
-    uint256 internal constant SCHEDULE_TAG = 0x43726170735363686564756c65; // "CrapsSchedule"
-    uint256 internal constant TIE_TAG = 0x4372617073546965; // "CrapsTie"
     /// @dev Domain tag for a battle's match key.
     uint256 internal constant BATTLE_TAG = 0x4372617073426174746c65; // "CrapsBattle"
-    /// @dev Domain tag for the boost multiplier roll, so it cannot collide with any other draw off
-    ///      the same word.
-    uint256 internal constant BOOST_TAG = 0x426f6f7374; // "Boost"
-    /// @dev Domain tag for the daily high-roller draw, so the one word a day commits can carry
-    ///      this and the board scatter and the boost rung without any two seeing the same bits.
-    uint256 internal constant HIGH_TAG = 0x48696768526f6c6c6572; // "HighRoller"
 
     // One compact slip, used directly by storage, settlement and views:
     //   bits  0..31  owner wallet ID
@@ -320,8 +291,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BET_CHIPS_MASK = 0x3FFFFFFF;
     /// @dev The entry multiple MINUS ONE, carried on `CrapsSlipPlaced` alone and never stored: a
     ///      seat's scale is derived from its high flag at settlement, not read back from the word.
-    ///      The byte rides above the bet id on the event rather than in the two-bit gap under it —
-    ///      the id ends at 159 and a byte does not fit in two bits.
     uint256 internal constant _EV_MULT_SHIFT = 160;
 
     /// @dev Bits 62..64: the craps boon riding this slip, ONE-HOT — 1 = 5%, 2 = 10%, 4 = 15%,
@@ -330,21 +299,17 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      A one-hot tier rather than a two-bit index because an invalid word must fail CLOSED:
     ///      3, 5, 6 and 7 are unreachable through the trusted writer and pay nothing if a value
     ///      ever reached storage another way, where a two-bit field would silently mean something.
-    ///
-    ///      A day-wide entry is ONE slip — the whole day or a single
-    ///      window — so no slip carries a set to be locked as one, and nothing stamps a span.
     uint256 internal constant _BET_BOON_SHIFT = 62;
     uint256 internal constant _BET_BOON_MASK = 7;
 
     /// @dev A seat took the high-roller lane. Stored as a FLAG rather than inferred from the
-    ///      multiple: a custom battle may legally set `H` to a figure an ordinary seat could once
-    ///      have named, so eligibility has to be a thing the entry recorded, not a thing a later
-    ///      reader re-derives from an argument.
+    ///      multiple, so eligibility is what the entry recorded, not what a later reader
+    ///      re-derives.
     ///
     ///      A WINDOW-LOCAL slip stores exactly this one bit. A DAY ticket stores SIX — bit
     ///      `65 + p` for period `p` — so one ticket can be high in the windows it chose and
-    ///      ordinary in the rest. A whole-day high entry sets all six, which is what keeps it
-    ///      byte-for-byte the seat it always was; `_highOn` is the one reader of either shape.
+    ///      ordinary in the rest. A whole-day high entry sets all six; `_highOn` is the one
+    ///      reader of either shape.
     uint256 internal constant _BET_HIGH_BIT = 1 << 65;
     uint256 internal constant _BET_HIGH_SHIFT = 65;
     uint256 internal constant _BET_DAYHIGH_MASK = 0x3F << 65;
@@ -376,7 +341,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _HF_HOTTEST_SHIFT = 170;
     uint256 internal constant _HF_HOTTEST_MASK = (1 << 19) - 1;
 
-    /// @dev A day's ticket word holds EIGHT counts in ONE slot: the total in the low 32 bits and
+    /// @dev A day's ticket word holds SEVEN counts in ONE slot: the total in the low 32 bits and
     ///      one high-roller count PER PERIOD above it, 32 bits each — period `p`'s at bits
     ///      `32(p + 1)`. Per period because an upgrade buys the lane one window at a time; still
     ///      one slot, so selling a day ticket writes one word and arming still folds the total
@@ -391,7 +356,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _DAY_HIGH_SHIFT = 112;
 
     /// @dev A day's budget word holds main112, high112, routine weight8 and exact day24. The
-    ///      weight is a pure function of the day's word, but recomputing it means six keccaks,
+    ///      weight is a pure function of the day's word, but recomputing it means five keccaks,
     ///      and every settle reads a window's share — so it is summed once, when the day opens,
     ///      and rides home beside the figure it divides.
     uint256 internal constant _BUDGET_MASK = (1 << 112) - 1;
@@ -409,7 +374,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     //   bits 169..200  the SEAT holding it
     //   bits 201..218  battle stake granules (echo, for views)
     //   bits 219..249  seed granules
-    //   bits 250..251  scheduled tier; bit 252 high tail; bit 255 terms frozen
+    //   bits 250..251  scheduled tier; bit 252 high tail; bit 253 period skipped at open;
+    //   bit 255 terms frozen
     //
     // No roll slice: nothing ranks or qualifies on rolls — the progressive reads the winner's
     // HIGH POINT, which the composite already carries — and the composite needs the width: a
@@ -436,15 +402,14 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BG_SEED_SHIFT = 219;
     uint256 internal constant _BG_SEED_MASK = 0x7FFFFFFF;
 
-    /// @dev Resolved seat payment and action totals, returned as one memory pointer to keep the
-    ///      batch resolver within the compiler's stack limit. This adds no persistent storage.
+    /// @dev One field's terms in memory: scheduled windows and custom battles share this shape.
     struct Window {
         bytes32 key;
         uint128 bankroll;
         uint128 goal;
         /// @dev The ten-chip round this window plays — what the match key is built on.
         uint256 played;
-        /// @dev The maximum seven chips an entrant may place; the dice scatter the complement.
+        /// @dev The FLIP value of the seven chips an entrant may place; the dice scatter the rest.
         uint256 postedStake;
         uint256 stakeUnits;
         uint256 terms;
@@ -467,6 +432,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint256 highExtra;
     }
 
+    /// @dev Resolved seat payment and action totals, returned as one memory pointer to keep the
+    ///      batch resolver within the compiler's stack limit.
     struct SeatResult {
         uint32 id;
         uint256 paid;
@@ -476,30 +443,29 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     /// @dev One settlement's whole account, carried between the engine and the paying/preview
     ///      paths as a single memory pointer — the resolver is sensitive to stack pressure.
-    ///      Its layout deliberately matches `Craps.SlipResult`: `paid` reuses the dead
-    ///      `bankrollIn` word, `won` aliases `bankrollOut`, and `unitsPlayed` keeps the otherwise
-    ///      fifth word as the merit `rank`. `_settlementOf` can therefore reuse the engine result
-    ///      directly instead of allocating and copying a second struct for every seat.
+    ///      Its layout deliberately matches `Craps.SlipResult`: `paid` is the `bankrollIn` word,
+    ///      `won` aliases `bankrollOut`, and the fifth word (`unitsPlayed`) carries the merit
+    ///      `rank`. `_settlementOf` can therefore reuse the engine result directly instead of
+    ///      allocating and copying a second struct for every seat. The table reads `paid`, `won`,
+    ///      `rank` and `hottestHand`; the other words keep the layout and are zero under the
+    ///      compact engine call.
     struct Settlement {
-        /// @dev What is actually credited. A bust pays ZERO: whatever it was still holding is
-        ///      deleted, not returned to the player and not moved into anyone else's pot.
+        /// @dev The base run's rounded payment, before scaling. A bust pays ZERO: whatever it
+        ///      was still holding is deleted, not returned to the player and not moved into
+        ///      anyone else's pot.
         uint256 paid;
-        /// @dev The RAW bankroll the table returned, unscaled and unrounded, a busted run's
-        ///      remainder included. It is what the scoreboard ranks on and what `CrapsBetSettled`
-        ///      reports; it is deliberately NOT what a bust is paid.
+        /// @dev The base run's ending bankroll in whole FLIP, unrounded, a busted run's remainder
+        ///      included. `CrapsBetSettled` reports it scaled; it is deliberately NOT what a bust
+        ///      is paid.
         uint256 won;
-        /// @dev THE HIGH POINT, raw and unscaled: the largest bankroll this run held at a
-        ///      completed-shooter boundary. A scheduled goal RANKS on it and the records read it;
-        ///      it is never what the run is paid. A bust's peak breaks ties among busts with
-        ///      the same hand count and survival state, but never qualifies it for records.
+        /// @dev The high point, raw and unscaled: the largest bankroll this run held at a
+        ///      completed-shooter boundary. The ranking reads it through `rank`.
         uint256 peak;
         uint256 handsPlayed;
-        /// @dev THE MERIT COMPOSITE (`Craps._rankOf`): the fifth word, where
-        ///      `SlipResult` carries escalated units, which the table never reads.
-        ///      `CrapsEngine.settleBattle` returns the composite here instead.
+        /// @dev THE MERIT COMPOSITE (`Craps._rankOf`): the fifth word, where `SlipResult`
+        ///      carries escalated units. `CrapsEngine.settleBattle` returns the composite here.
         uint256 rank;
-        /// @dev Dice rolls across the run. It ranks NOTHING and qualifies nothing — the
-        ///      progressive reads the high point now — and survives only as telemetry.
+        /// @dev Dice rolls across the run. It ranks and qualifies nothing.
         uint256 totalRolls;
         Craps.SlipStop stop;
         uint256 hottestHand;
@@ -526,19 +492,17 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         return slot < _CUSTOM_SLOT_BASE && slot / _BONUS_SLOTS_PER_DAY + _SETTLEMENT_DAYS < today;
     }
 
-    /// @dev Windows open from Degenesis day 2 (or the day after a later deployment, which
-    ///      `day > today` already covers).
+    /// @dev Windows open from Degenesis day 2; `day > today` also excludes today and earlier.
     function _reservableDay(uint24 day) internal view returns (bool) {
         uint256 today = _currentDayIndex();
         return _scheduledAdmissionsOpen() && day > today && day > GameTimeLib.DEGENESIS_START_DAY && day <= today + _RESERVATION_DAYS
             && _dailyWordAt(day) == 0;
     }
 
-    /// @dev Three 72-bit lanes per word. Position zero remains reserved.
+    /// @dev Three 72-bit lanes per word: seats 1..3 share word one, and word zero is never used.
     function _betStorageKey(uint256 id) internal pure returns (uint256) {
         uint256 slot = id >> 64;
         uint256 seat = uint64(id);
-        if (seat == 0) return slot < _CUSTOM_SLOT_BASE ? (slot & 511) << 64 : slot << 64;
         return ((slot < _CUSTOM_SLOT_BASE ? slot & 511 : slot) << 64) | (1 + (seat - 1) / 3);
     }
 
@@ -572,13 +536,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     }
 
     /// @dev Dense appends start each physical word afresh, zeroing its unwritten tail lanes.
-    ///      Older untouched words keep their old day tag, so readers need no separate count load.
-    function _appendBet(uint256 id, uint256 word) internal {
-        if (uint64(id) == 0) revert NoSuchBet();
-        _writeBetLane(id, word, _betWriteDay(id), (uint256(uint64(id)) - 1) % 3 == 0);
-    }
-
-    /// @dev The caller checked the shared slot's write day once before its append loop.
+    ///      Untouched words keep their earlier day tag, so readers need no separate count load.
+    ///      The caller supplies the slot's already-checked write day.
     function _appendBetOnDay(uint256 id, uint256 word, uint256 day) internal {
         if (uint64(id) == 0) revert NoSuchBet();
         _writeBetLane(id, word, day, (uint256(uint64(id)) - 1) % 3 == 0);
@@ -637,7 +596,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      Multi-entry custom battles permit separately funded repeat entries.
     mapping(bytes32 => mapping(uint32 => bool)) internal _bonusSeated;
 
-    /// @dev Opened bonus day plus one; zero means no day has been opened yet.
+    /// @dev Last opened bonus day plus one. The constructor seeds it with the first window day,
+    ///      marking every earlier day consumed.
     uint256 internal _bonus;
 
     /// @dev Index48, settlement cursor64, reserve draw112 and exact scheduled day24.
@@ -729,16 +689,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      finished; dead days are refunded in kind; nothing is stranded either way.
     uint64 internal _minerSlot;
 
-    /// @dev What a future day costs bought outright, per day. FIXED constants, deliberately not
-    ///      derived from the pass denominations or from each other: the pass is a lootbox award
-    ///      priced at the expectation, while retail prices include the chosen premium or
-    ///      discount. Tying the two together would move one every time the other was retuned.
-    ///
-    ///      Retail prices are 25,000 normal and 500,000 high: about 0.70% above the scheduled
-    ///      mean normal entry cost and 4.09% below its 21x high equivalent. These margins are
-    ///      consequences of the schedule, not fields; neither is booked as bankroll action.
-    ///      Passes commit before opening RNG, so this is a comparison to the expected cost,
-    ///      not a guaranteed discount or premium against every realized day's terms.
     /// @dev Paid-craps burn encoding: the low byte holds flags and bits 8..255 hold
     ///      the bounded whole-FLIP amount. Callers supply the action constants below.
     uint256 internal constant _CRAPS_FLAG_JOIN = 0x1;
@@ -750,8 +700,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      doors never set it.
     uint256 internal constant _CRAPS_FLAG_COMP = 0x10;
 
-    /// @dev The five things the vault can comp, as the kind byte of a `vaultComp` code, and
-    ///      where the code's other fields sit above the recipient's address.
+    /// @dev The six things the vault can comp, as the kind byte of a `vaultComp` code, and
+    ///      where the code's other fields sit above the recipient's wallet ID.
     uint256 internal constant _COMP_WINDOW = 0;
     uint256 internal constant _COMP_DAY = 1;
     uint256 internal constant _COMP_FUTURE_DAYS = 2;
@@ -769,6 +719,14 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      paying, and small enough that the field it banks into is nowhere near its ceiling.
     uint256 internal constant _SEED_PASSES = 20;
 
+    /// @dev What a future day costs bought outright, per day. Fixed constants, not derived from
+    ///      the pass denominations: the pass is a lootbox award priced at the expectation, while
+    ///      retail prices carry a premium or discount.
+    ///
+    ///      Retail prices are 25,000 normal and 500,000 high: about 0.70% above the scheduled
+    ///      mean normal entry cost and 4.09% below its 21x high equivalent. Neither is booked as
+    ///      bankroll action. Passes commit before opening RNG, so this is a comparison to the
+    ///      expected cost, not a guaranteed discount or premium against every realized day.
     uint256 internal constant _NORMAL_FUTURE_DAY_PRICE = CrapsPriceLib.NORMAL_RETAIL;
     uint256 internal constant _HIGH_FUTURE_DAY_PRICE = CrapsPriceLib.HIGH_RETAIL;
 
@@ -804,7 +762,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev `CrapsProtocolAwardSplit.source` values, frozen — carried to `_splitAward` in the
     ///      TOP BYTE of the award argument. An award is whole FLIP and nowhere near 2^248, so the
     ///      byte is always free, and packing the tag keeps the argument opaque enough that the
-    ///      optimizer shares ONE copy of the split instead of specializing four.
+    ///      optimizer shares ONE copy of the split instead of specializing one per source.
     uint256 internal constant _SPLIT_SRC_MAIN = uint256(1) << 248;
     uint256 internal constant _SPLIT_SRC_HIGH_CONTESTED = uint256(2) << 248;
     uint256 internal constant _SPLIT_SRC_HIGH_SOLE = uint256(3) << 248;
@@ -822,11 +780,11 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///              contract never disagree about where a chip went.
     ///            - bits 32..159 the bet id, itself `(slot << 64) | seat`.
     ///            - bits 160..167 the entry multiple MINUS ONE, so 0 reads as one copy of the run.
-    ///            - bits 190..205 are unused.
     ///            - bits 206..208 the one-hot boon.
     ///            - bit 217 the high flag on a window seat; bits 217..222 a day ticket's per-period
-    ///              high mask, bit `217 + p` for period `p`, so a
-    ///              banked high pass seated at one copy of the run still reads as high.
+    ///              high mask, bit `217 + p` for period `p`, so a banked high pass seated at one
+    ///              copy of the run still reads as high.
+    ///            - every other bit is zero.
     ///
     ///            The slot is the only term the slip carries: everything it PLAYS by — bankroll,
     ///            target, bounty, bar, the round — belongs to that slot, so an indexer reads those
@@ -850,11 +808,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     /// @notice A wager settled.
     /// @dev Deliberately thin. The whole run — every roll, every leg, the stop — is a pure
-    ///      function of the table's word, the slot, the chips and the owner's wallet ID, all of which an
-    ///      indexer already has from `CrapsSlipPlaced` and `CrapsBonusArmed`. Only the two
-    ///      figures a client would otherwise have to run the engine for are carried, and the
-    ///      dice are not: shipping a roll log cost the allocation, a byte write per roll and the
-    ///      log data, for information anyone can replay for nothing.
+    ///      function of the table's word, the slot, the chips and the owner's wallet ID, all of
+    ///      which an indexer already has from `CrapsSlipPlaced` and `CrapsBonusArmed`. Only the
+    ///      two figures a client would otherwise have to run the engine for are carried.
     /// @param won  What the table returned to this bet, before the award rounding.
     /// @param paid Coinflip stake actually credited, after the rounding.
     event CrapsBetSettled(uint256 indexed betId, uint32 indexed playerId, uint256 won, uint256 paid);
@@ -904,8 +860,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev The one thing about the lane a reader cannot derive: both budgets are functions of
     ///      SEVEN prior days of split action, so reconstructing them means replaying a week of
     ///      settlement exactly. They are fixed here and never move again, so they are stated once.
-    ///      `mainBoostBudget` is the LADDER half the day's seven windows share; its other half is
-    ///      in `CrapsProgressiveFunded`, and the two sum to the raw allocation.
+    ///      `mainBoostBudget` is the LADDER half the day's five ordinary windows share; its other
+    ///      half is in `CrapsProgressiveFunded`, and the two sum to the raw allocation.
     ///      `multiplier` is derivable from the day's word and is carried for the same reason a
     ///      slip carries its own id — so a reader never has to re-run a draw to label a log.
     event CrapsHighRollerDayOpened(
@@ -963,7 +919,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         exact FLIP value of the passes banked. The `CrapsPassesCredited` log emitted
     ///         immediately before this one carries their denomination and count — correlate the
     ///         two by position; nothing is restated. Emitted only where at least one pass banked.
-    /// @param source 1 main ladder, 2 contested high lane, 3 sole high rider, 4 progressive.
+    /// @param source 1 main ladder, 2 contested high lane, 3 sole high rider, 4 progressive,
+    ///        5 longest shared hand.
     event CrapsProtocolAwardSplit(
         bytes32 indexed battleKey,
         uint32 indexed playerId,
@@ -1003,7 +960,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice A finalized scheduled battle cleared a high-point cutoff and drew on the
     ///         progressive.
     /// @dev NO SEPARATE DRAW DECIDES THIS. The winner is the one the ordinary comparator already
-    ///      named, and the qualification is that winner's HIGH POINT against its window's target.
+    ///      named, and the qualification is that winner's HIGH POINT over its starting bankroll,
+    ///      against the 25x / 120x cutoffs.
     ///      A Bust never qualifies however far it ran, and a custom battle never reaches here.
     /// @param rare True for the rare rung, false for the common one. Never both.
     /// @param poolBps The rung applied, in basis points of the live pool: 500 common, 1,000 rare.
@@ -1076,18 +1034,15 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         bool resolved;
         bool won;
     }
-    /// @dev Economic reserve plus one; zero position in either FIFO is stored as one.
+    /// @dev Economic reserve plus one.
     uint256 internal _highRollerReserve;
+    /// @dev Read position of each RNG-slot FIFO plus one.
     uint64[2] internal _rngSlotCursor;
     uint256 internal constant _HIGH_RESERVE_DIVISOR = 20; // 5% of unrolled gross Added
     uint256 internal constant _HIGH_RESERVE_CHANCE = 10; // one field-wide chance in ten
-    uint256 internal constant HIGH_RESERVE_DRAW_TAG = uint256(keccak256("CrapsHighReserveDraw"));
-    uint256 internal constant HIGH_RESERVE_WINNER_TAG = uint256(keccak256("CrapsHighReserveWinner"));
     uint256 internal constant _JACKPOT_BANKROLL_UNIT = 300;
     uint256 internal constant _JACKPOT_PRICE = CrapsPriceLib.JACKPOT_FEE;
     uint256 internal constant _AWARD_UNITS_SHIFT = 72;
-    uint256 internal constant JACKPOT_MULT_TAG = 0x436f696e447261774d756c7469706c696572;
-    uint256 internal constant JACKPOT_SUBSIDY_TAG = uint256(keccak256("CrapsJackpotSubsidy"));
 
     event JackpotBattleLocked(uint64 indexed slot, uint24 requestDay, uint256 added, uint256 paidEntries);
     event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntries, uint256 drawnUnits, uint256 word);
@@ -1183,10 +1138,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         _storeDayWord(_boostBudget, day, value);
     }
 
-    function _loadHighBudget(uint256 day) internal view returns (uint256) {
-        return (_loadBudget(day) >> 112) & _BUDGET_MASK;
-    }
-
     function _loadHighDraw(uint64 slot) internal view returns (HighRollerDraw memory draw) {
         uint256 word = _loadSlotState(slot) >> 112;
         draw.nominee = uint32(word);
@@ -1261,8 +1212,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      the pass target, floored to whole passes, and every wei the flooring, the high cap or
     ///      a saturated lane refuses simply stays liquid — the caller subtracts only `banked`, so
     ///      `liquid + banked == gross` exactly, by construction, and nothing here can delete
-    ///      value. The denomination is the lootbox's own switch: a budget strictly above twenty
-    ///      normal units pays HIGH, at most thirty of them, and one award never mixes lanes.
+    ///      value. The denomination is the lootbox's own switch: a budget strictly above
+    ///      twenty-two normal units pays HIGH, at most thirty of them, and one award never mixes
+    ///      lanes.
     ///      DETERMINISTIC on purpose — the winner is receiving FLIP in this same transaction, so
     ///      fractional dust rides home as change and no coin is tossed.
     /// @param key The window/battle the award belongs to.
@@ -1306,9 +1258,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      boost never enter. One packed write per settle batch, never one per seat.
     uint256[64] internal _dayStaked;
 
-    /// @dev A day's bonus budget in whole FLIP, fixed when the day opens and shared by its seven
-    ///      windows. Stored rather than recomputed so a window armed days later still pays what
-    ///      its own day advertised.
+    /// @dev A day's bonus budget in whole FLIP, fixed when the day opens and shared by its five
+    ///      ordinary windows. Stored rather than recomputed so a window armed days later still
+    ///      pays what its own day advertised.
     uint256[64] internal _boostBudget;
 
     /// @dev Exact day plus initialized-period flags authenticate the full-width scoreboards.
@@ -1321,8 +1273,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev The holder's day-ticket seat in bits 0..31, scheduled window membership in
     ///      bits 33..38, and the exact day at bits 40..63 of each lane. Four lanes share
     ///      a word keyed by (day & 63) >> 2; _loadDaySeat authenticates the selected lane.
-    ///      Keyed by wallet ID. Day-ticket gates ask NONZERO — one ticket per wallet per day, and a bar on any single window of that
-    ///      day, since the ticket already sits in all of them — but storing the seat is what lets
+    ///      Keyed by wallet ID. Day-ticket gates ask NONZERO — one ticket per wallet per day, and
+    ///      a bar on any single window of that day, since the ticket already sits in all of
+    ///      them — but storing the seat is what lets
     ///      an upgrade name the account's own ticket as `(daySlot << 64) | seat` without a walk.
     ///      Nothing here records how the seat was PAID for: a bought, pass-funded and prepaid
     ///      seat are indistinguishable, which is the point.

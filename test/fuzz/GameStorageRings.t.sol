@@ -20,8 +20,8 @@ contract GameRingsHarness is DegenerusGameStorage {
     function idAt(uint24 lvl, uint8 trait, uint256 index) external view returns (uint32) { return _bucketIdAtUnchecked(lvl, trait, index); }
     function pool(uint24 lvl, uint128 amount) external { _setLevelPrizePool(lvl, amount); }
     function pool(uint24 lvl) external view returns (uint256) { return _levelPrizePool(lvl); }
-    function allocate(uint24 lvl, uint128 amount) external { _setLevelDgnrsAllocation(lvl, amount); level = lvl; }
-    function claim(uint24 lvl, uint96 amount) external { _addLevelDgnrsClaimed(lvl, amount); }
+    function allocate(uint24 lvl, uint128 amount) external { _setLevelDgnrsAllocation(amount); level = lvl; }
+    function claim(uint24 lvl, uint96 amount) external { _addLevelDgnrsClaimed(amount); }
     function allocation(uint24 lvl) external view returns (uint256, uint256) { return _getLevelDgnrs(lvl); }
     function mark(uint24 lvl) external { _markTicketGenerationStart(lvl); }
     function start(uint24 lvl) external view returns (uint256) {

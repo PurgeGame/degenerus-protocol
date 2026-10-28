@@ -1,10 +1,13 @@
 # Randomness inputs and domain separation
 
-Every VRF-derived value is `EntropyLib.hashN(RngTags.X, ...)`: Keccak-256 over 32-byte ABI
-words (`hash1`..`hash4`), with the numeric domain constant first. The 113 domains are defined
-once in [`contracts/libraries/RngTags.sol`](../../contracts/libraries/RngTags.sol) (values 1–115;
-58 and 68 are unassigned). The single exception is the coinflip win bit, bit 0 of the coin word
-([below](#coin-word-and-nudges)).
+Every hash that derives a value from VRF entropy is `EntropyLib.hashN(RngTags.X, ...)`:
+Keccak-256 over 32-byte ABI words (`hash1`..`hash4`), with the numeric domain constant first. The
+113 domains are defined once in [`contracts/libraries/RngTags.sol`](../../contracts/libraries/RngTags.sol)
+(values 1–115; 58 and 68 are unassigned). A tagged hash takes either the raw word or a seed
+already derived from it: the payout seed stored with each [foil pack](#foil-packs) and the
+direct-award round seed feed later tagged hashes, and the uint64 LCG inside each sixteen-entry
+[ticket group](#ticket-generation) expands a tagged seed without further hashing. The only use of
+a raw word bit is the coinflip win bit, bit 0 of the coin word ([below](#coin-word-and-nudges)).
 
 The trust boundary is request → fulfillment → consumption. Hashing supplies domain separation,
 not fresh entropy and not protection for inputs chosen after a word is known; the commitment
@@ -375,3 +378,5 @@ establish statistical independence.
   events and seated reveals.
 - `scripts/check-rng-shape.py`, `scripts/check-rng-taint.sh`, `scripts/check-rng-window.sh`: the
   source registry gates.
+- Request, callback, retry, re-issue, nudge and deadline assertions:
+  [Properties](../PROPERTIES.md#rng) and [Properties: ending](../PROPERTIES.md#terminal-ordering-and-deadlines).

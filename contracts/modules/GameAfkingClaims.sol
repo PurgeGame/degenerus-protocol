@@ -1,18 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {GameBoxInternals} from "./GameBoxInternals.sol";
-import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
-import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
-import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {IDegenerusGameWhaleModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
-import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
-import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-import {BoundedCall} from "../libraries/BoundedCall.sol";
-import {IStETH} from "../interfaces/IStETH.sol";
 
 /// @dev Shared internal implementation in Game storage.
 abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
@@ -24,9 +15,9 @@ abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
     /// @notice Emitted when settlement pays a sub its own elapsed reward (whole FLIP).
     event AfkingFlipClaimed(uint32 indexed player, uint256 owed);
 
-    /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
-    ///      (a internal constant not visible cross-contract). Every credited day earns it
-    ///      (whole FLIP). Only values the FLIP mint, off the solvency path.
+    /// @dev Slot-0 quest completion reward, equal to `DegenerusQuests.QUEST_SLOT0_REWARD`
+    ///      (private there). Every credited day earns it (whole FLIP). Only values the FLIP
+    ///      mint, off the solvency path.
     uint256 internal constant QUEST_SLOT0_REWARD = 100;
 
     /// @dev Ticket-mode buyer bonus per ticket per day: 10% of the ticket's 1,000-FLIP value.
@@ -60,7 +51,7 @@ abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
             base = elapsed * AFFILIATE_BASE_PER_UNIT * quantity;
         }
         emit AfkingFlipClaimed(id, owed);
-        coinflip.creditFlip_g317(id, owed); // whole → base units
+        coinflip.creditFlip_g317(id, owed); // whole FLIP
         emit AffiliateBaseDrained(id, base);
     }
 
@@ -102,12 +93,10 @@ abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
         return position1 != 0 && lane & SUB_REMOVAL_BIT == 0;
     }
 
-    /// @notice Cashout-curse SET (delegatecall target from the Game's claimClaimable): a stale
-    ///         ghost-cashout adds a saturating +2 stack. Cheapest-first bails skip the SSTORE
-    ///         for infra addresses (protects the sDGNRS redemption-snapshot score), gameOver, a
-    ///         non-stale claimant, deity holders, active lazy/whale-pass holders, an
-    ///         already-capped counter, and an active afker. Net: +2 only on a stale
-    ///         cashout by a non-exempt, below-cap player.
+    /// @dev Cashout curse: a stale cashout adds a saturating +2 stack. Cheapest-first bails
+    ///      skip the SSTORE for the protocol accounts (protects the sDGNRS redemption-snapshot
+    ///      score), game over, a claimant that bought within 5 days, deity holders, active
+    ///      lazy/whale-pass holders, an already-capped counter, and a live AFKing member.
     function _maybeCurse(uint32 player) internal {
         if (
             player == VAULT_WALLET_ID ||
@@ -119,7 +108,7 @@ abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
         uint24 lastEthDay = uint24(
             (packed >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_24
         );
-        if (lastEthDay + 5 > _currentMintDay()) return; // claimed within the 5-day window
+        if (lastEthDay + 5 > _currentMintDay()) return; // bought within the 5-day window
         if ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0) return;
         uint24 frozenUntilLevel = uint24(
             (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24

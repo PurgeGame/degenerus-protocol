@@ -3,7 +3,8 @@ pragma solidity 0.8.38;
 
 /// @dev One ID-keyed pass-credit word holds normal passes [0:31], high passes [32:63],
 ///      compact board [64:84] and initialized bit [85]. Door helpers carry an ID in memory
-///      in bits 86..117; it is never persisted. Bit 118 retains the storage word. PASS_SLOT is pinned against compiled storage.
+///      in bits 86..117; it is never persisted. Bit 118 keeps a credited word nonzero.
+///      PASS_SLOT is pinned against compiled storage.
 library CrapsPreferenceLib {
     uint256 internal constant PASS_SLOT = 9;
     uint256 internal constant SHIFT = 64;
@@ -12,7 +13,8 @@ library CrapsPreferenceLib {
     uint256 internal constant ID_SHIFT = 86;
     uint256 internal constant RETAINED = 1 << 118;
 
-    /// @dev Compress an ALREADY VALIDATED canonical board (three bits per leg) to nine two-bit lanes and a three-bit Don't Pass lane.
+    /// @dev Compress an ALREADY VALIDATED canonical board (three bits per leg) to nine two-bit
+    ///      lanes and a three-bit Don't Pass lane.
     function compress(uint256 chips) internal pure returns (uint256 compact) {
         compact = ((chips >> 27) & 7) << 18;
         chips &= 0x7FFFFFF;

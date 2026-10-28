@@ -28,8 +28,8 @@ pragma solidity 0.8.38;
  * @title ActivityCurveLib
  * @notice Pure activity-score reward curves shared across the Degenerus contracts.
  * @dev All functions are internal and pure, so the compiler inlines them with no
- *      runtime call boundary. Shared curves price battle chips, WWXRP rewards,
- *      manual century mints and foil boosts.
+ *      runtime call boundary. Shared curves price boon-draw weights, battle chips,
+ *      WWXRP rewards, manual century mints and foil boosts.
  *
  *      Value-curve shape: a steep early ramp to vA at the seg-A knee K, a shallow middle
  *      leg to vB at ACTIVITY_SEG_B_KNEE_POINTS, then a long near-flat crawl to MAX at
@@ -52,25 +52,24 @@ library ActivityCurveLib {
     // Shared segment knees
     // -------------------------------------------------------------------------
 
-    /// @dev Score where the shallow middle leg ends; each curve delivers its own fraction of the gain here (~98% decimator/century, 87.5% foil).
+    /// @dev Score where the shallow middle leg ends; each curve delivers its own fraction of the gain here (~98% WWXRP/century, 90% battle, 87.5% foil).
     uint256 internal constant ACTIVITY_SEG_B_KNEE_POINTS = 500;
 
     /// @dev Score where every curve reaches MAX and saturates flat beyond.
     uint256 internal constant ACTIVITY_EFFECTIVE_CAP_POINTS = 30_000;
 
     // -------------------------------------------------------------------------
-    // Legacy activity curve retained by WWXRP (bps; 10000 = 1x)
+    // WWXRP activity curve (bps; 10000 = 1x)
     // -------------------------------------------------------------------------
 
-    uint256 internal constant MULT_MIN_BPS = 10_000; // 1.0x at score 0 (no-boost gate)
+    uint256 internal constant MULT_MIN_BPS = 10_000; // 1.0x at score 0
     uint256 internal constant MULT_K_POINTS = 235; // seg-A knee
     uint256 internal constant MULT_VA_BPS = 17_049; // ~1.705x at K (90% of gain)
     uint256 internal constant MULT_VB_BPS = 17_676; // ~1.768x at the seg-B knee (98%)
     uint256 internal constant MULT_MAX_BPS = 17_833; // 1.7833x at the effective cap
 
-    /// @notice Original activity multiplier retained for WWXRP reward scaling.
+    /// @notice Activity multiplier for WWXRP reward scaling.
     function decMultBps(uint256 score) internal pure returns (uint256) {
-        if (score == 0) return MULT_MIN_BPS;
         if (score <= MULT_K_POINTS) {
             return
                 MULT_MIN_BPS +
@@ -83,8 +82,7 @@ library ActivityCurveLib {
                 ((score - MULT_K_POINTS) * (MULT_VB_BPS - MULT_VA_BPS)) /
                 (ACTIVITY_SEG_B_KNEE_POINTS - MULT_K_POINTS);
         }
-        // Cap moved below the two segment checks: low scores (the common case) skip this
-        // comparison; the disjoint [K<SegB<CAP] partition keeps every region bit-identical.
+        // The cap check follows the segment checks so low scores skip it; the regions are disjoint.
         if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return MULT_MAX_BPS;
         return
             MULT_VB_BPS +
@@ -92,8 +90,8 @@ library ActivityCurveLib {
             (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
-    /// @notice Battle-only degen multiplier: keep the early knee, reach 1.9x at 500,
-    ///         then 2x at 30,000. WWXRP retains decMultBps above.
+    /// @notice Battle-only degen multiplier: the WWXRP curve's early knee, 1.9x at 500,
+    ///         then 2x at 30,000.
     function decBattleMultBps(uint256 score) internal pure returns (uint256) {
         if (score <= MULT_K_POINTS) return MULT_MIN_BPS + score * (MULT_VA_BPS - MULT_MIN_BPS) / MULT_K_POINTS;
         if (score <= ACTIVITY_SEG_B_KNEE_POINTS) {
@@ -126,8 +124,7 @@ library ActivityCurveLib {
                 ((score - CENTURY_K_POINTS) * (CENTURY_VB_BPS - CENTURY_VA_BPS)) /
                 (ACTIVITY_SEG_B_KNEE_POINTS - CENTURY_K_POINTS);
         }
-        // Cap moved below the segment checks (see decMultBps); score 0 still resolves via the
-        // first segment ((0*VA)/K == 0), so the zero/cap endpoints are preserved.
+        // Cap check after the segments (see decMultBps); score 0 resolves in the first segment.
         if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return CENTURY_MAX_BPS;
         return
             CENTURY_VB_BPS +
@@ -151,9 +148,8 @@ library ActivityCurveLib {
     /// @dev Steep early ramp MIN->VA over [0, K], shallow middle VA->VB over
     ///      [K, ACTIVITY_SEG_B_KNEE_POINTS], long near-flat crawl VB->MAX over
     ///      [ACTIVITY_SEG_B_KNEE_POINTS, ACTIVITY_EFFECTIVE_CAP_POINTS], flat at MAX
-    ///      beyond. The two endpoint guards make 0 and the cap exact (no interp rounding).
+    ///      beyond.
     function foilBoostBps(uint256 score) internal pure returns (uint256) {
-        if (score == 0) return FOIL_MIN_BPS;
         if (score <= FOIL_K_POINTS) {
             return
                 FOIL_MIN_BPS +
@@ -166,12 +162,11 @@ library ActivityCurveLib {
                 ((score - FOIL_K_POINTS) * (FOIL_VB_BPS - FOIL_VA_BPS)) /
                 (ACTIVITY_SEG_B_KNEE_POINTS - FOIL_K_POINTS);
         }
-        // Cap moved below the two segment checks (see decMultBps); endpoints preserved.
+        // Cap check after the segments (see decMultBps).
         if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return FOIL_MAX_BPS;
         return
             FOIL_VB_BPS +
             ((score - ACTIVITY_SEG_B_KNEE_POINTS) * (FOIL_MAX_BPS - FOIL_VB_BPS)) /
             (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
     }
-
 }

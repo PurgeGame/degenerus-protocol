@@ -194,7 +194,7 @@ contract DeityPassCustomizationRenderer is IDeityPassRendererV1 {
         if (msg.sender != address(pass)) revert OnlyPass();
         (Colors memory colors, Geometry memory geometry,) =
             _effectiveStyle(tokenId, outlineColor, backgroundColor, nonCryptoSymbolColor);
-        // Preserve the legacy gold Dice 6 template from COLLECTION defaults.
+        // The gold Dice 6 template follows the COLLECTION defaults only.
         // Holder overrides do not couple the five independent color pickers.
         bool goldDice6 = tokenId == 29 && _isGoldHex(outlineColor) && _isGoldHex(nonCryptoSymbolColor);
         return _renderSvg(iconPath, quadrant, symbolIdx, isCrypto, colors, geometry, goldDice6);
@@ -309,9 +309,9 @@ contract DeityPassCustomizationRenderer is IDeityPassRendererV1 {
         return true;
     }
 
-    /// @dev Per-icon fit inside the inner circle — the original game's
-    ///      hand-calibrated table (750000 base × 95% default, per-icon
-    ///      adjustments), matched to the icon set in Icons32Data.
+    /// @dev Per-icon fit inside the inner circle: a hand-calibrated table
+    ///      (750000 base × 95% default, per-icon adjustments) matched to the
+    ///      icon set in Icons32Data.
     function _symbolFitScale(uint8 quadrant, uint8 symbolIdx) private pure returns (uint32) {
         uint32 f = 712_500; // 95% of the 750000 base fit
         if (quadrant == 1 && symbolIdx == 6) {

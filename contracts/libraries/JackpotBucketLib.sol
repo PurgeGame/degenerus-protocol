@@ -32,10 +32,9 @@ import {EntropyLib} from "./EntropyLib.sol";
  * @title JackpotBucketLib
  * @notice Pure helper functions for jackpot bucket sizing and share calculations.
  * @dev All functions are internal and pure, so they get inlined by the compiler
- *      with no runtime call boundary. Extracted from DegenerusGameJackpotModule to reduce bytecode.
+ *      with no runtime call boundary.
  */
 library JackpotBucketLib {
-    bytes32 internal constant TRAIT_BOARD_TAG = keccak256("degenerus.jackpot.trait-board");
     // -------------------------------------------------------------------------
     // Constants — Jackpot Bucket Scaling
     // -------------------------------------------------------------------------
@@ -181,7 +180,7 @@ library JackpotBucketLib {
         order[3] = solo;
     }
 
-    /// @dev Return bucket order (largest count first; ties keep lower index).
+    /// @dev The largest bucket first (lowest index on ties), then the others in index order.
     function bucketOrderLargestFirst(uint16[4] memory counts) internal pure returns (uint8[4] memory order) {
         unchecked {
             uint8 largestIdx;

@@ -5,7 +5,7 @@ import {RngTags} from "./RngTags.sol";
 
 import {EntropyLib} from "./EntropyLib.sol";
 
-/// @notice Versioned identities for deterministic ticket streams and replay.
+/// @notice Identities for deterministic ticket streams and replay.
 library TicketEntropy {
     uint8 internal constant ORDINARY_ZERO = 0x20;
     uint8 internal constant ORDINARY_ONE = 0x21;
@@ -15,7 +15,6 @@ library TicketEntropy {
     uint256 internal constant GOLD_SIX_TAKEN = uint256(1) << 255;
     /// @dev Bit position of the owner's wallet ID in a stream identity (ticket and foil).
     uint256 internal constant ID_SHIFT = 32;
-    uint256 private constant ROTATION_DOMAIN = uint256(keccak256("DEGENERUS_TICKET_ROTATION_V1"));
 
     /// @dev The committed queue length and word remain frozen across every checkpoint.
     function queueStart(uint24 queueKey, uint256 total, uint256 entropy) internal pure returns (uint256) {
@@ -26,7 +25,6 @@ library TicketEntropy {
         physical = logical + start;
         if (physical >= total) physical -= total;
     }
-    uint256 private constant REMAINDER_DOMAIN = uint256(keccak256("DEGENERUS_TICKET_REMAINDER_V2"));
 
     /// @dev Stream identity: domain in bits 248..255, level 224..247, physical queue index
     ///      192..223, the owner's wallet ID 32..63. Bits 64..191 are zero and bits 0..31 are

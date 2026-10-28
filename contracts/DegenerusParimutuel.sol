@@ -273,9 +273,9 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     // =========================================================================
 
     /// @notice Gas-adaptive settlement; a winner or sealed-round advance is resumable.
-    /// @dev Credits remain aggregated in memory. Every admitted winner reserves its
-    /// complete cold credit including fresh state. Flushes contain at most 32 recipients
-    /// and reuse the existing canonical cursor and winner order.
+    /// @dev Credits aggregate in memory. Every admitted winner reserves its complete cold
+    ///      credit including fresh state. Each flush holds at most GROWTH_CREDIT_BATCH_SIZE
+    ///      recipients, in cursor (winner) order.
     function runGrowthWork(uint256 budget) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         MineFlipGas.Meter memory meter = MineFlipGas.start(budget);
@@ -417,9 +417,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     }
 
     /// @dev The participation-quest reward for a bet placed on jackpot-phase day
-    ///      `phaseDay`: 150 FLIP across the first day (counter 0 or 1), then 37 FLIP
-    ///      after the second draw (counter 2). This preserves the three-day schedule's
-    ///      reward amounts while counting actual draws. The final draw closes betting.
+    ///      `phaseDay`: 150 FLIP through counter 1, then 37 FLIP from counter 2.
+    ///      The final draw closes betting.
     function _questReward(uint8 phaseDay) private pure returns (uint256) {
         uint256 step = phaseDay <= 1 ? 0 : 2;
         return QUEST_BASE >> step;

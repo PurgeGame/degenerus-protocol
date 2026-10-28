@@ -11,7 +11,7 @@ contract AfkingIdSetHarness is DegenerusGameBoxModule {
         _insertMember(id, uint256(id) | (tickets ? SUB_TICKETS_BIT : 0), 7);
     }
     function remove(uint256 position1) external {
-        uint32 id = _subscriberAt(position1 - 1);
+        uint32 id = uint32(_subLaneAt(position1 - 1));
         _removeFromSet(position1);
         _setSubMetaLane(id, 0);
     }

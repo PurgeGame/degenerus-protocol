@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {GameComponentCall} from "./GameComponentCall.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {IGameActionModule, IGameClaimAll, IGameClaimAmount} from "../interfaces/IGameActionModule.sol";
 
 /// @dev Each hook is called only by its matching facade entry. Forwarding the original
 ///      calldata preserves that entry's selector, value and any gas-budget trailer.

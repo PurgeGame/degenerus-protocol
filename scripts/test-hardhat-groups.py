@@ -13,10 +13,35 @@ import re
 import signal
 import subprocess
 import sys
+import time
 import uuid
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def wait_for_process_group_exit(group):
+    """On Linux, wait for killed compiler descendants before restoring their inputs."""
+    proc = Path('/proc')
+    if not proc.is_dir():
+        return  # Other Unix platforms still receive the process-group SIGKILL.
+    while True:
+        live = False
+        for entry in proc.iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+            except (FileNotFoundError, ProcessLookupError, PermissionError):
+                continue
+            if int(fields[2]) == group and fields[0] not in ('Z', 'X'):
+                live = True
+                break
+        if not live:
+            return
+        time.sleep(0.02)
+
+
 PIN = Path("contracts/ContractAddresses.sol")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 TOTAL = re.compile(r"^\s*(\d+) (passing|failing|pending)\b", re.MULTILINE)
@@ -216,6 +241,7 @@ def run_child(command, **kwargs):
             os.killpg(child.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        wait_for_process_group_exit(child.pid)
         return code
     except BaseException:
         handlers = {sig: signal.signal(sig, signal.SIG_IGN) for sig in (signal.SIGTERM, signal.SIGINT)}
@@ -234,6 +260,7 @@ def run_child(command, **kwargs):
                 os.killpg(child.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            wait_for_process_group_exit(child.pid)
         finally:
             for sig, handler in handlers.items():
                 signal.signal(sig, handler)

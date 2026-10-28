@@ -14,6 +14,7 @@ test-assurance-tools:
 	@python3 scripts/test-deep-invariant-matrix.py
 	@python3 scripts/test-gas-meter.py
 	@python3 scripts/test-rng-window-extract.py
+	@python3 scripts/audit/mutate-storage-reuse.py --check-anchors
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching

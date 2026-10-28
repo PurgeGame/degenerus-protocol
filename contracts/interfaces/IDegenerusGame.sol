@@ -53,8 +53,8 @@ enum MintPaymentKind {
 ///      - Value paid out (ETH, stETH, FLIP, WWXRP, DGNRS, sDGNRS, seat and deity NFTs) goes to the
 ///        account's PAYEE: the caller for `id == 0`, the key of an ordinary wallet, or the owner's
 ///        key for a smurf. Tokens pulled or burned from a player's wallet come from the payee.
-///      - Third-party recipients (deity-boon recipient, AFKing deposit beneficiary, AFKing
-///        funding source) are IDs that must already exist: 0 or an unallocated ID reverts `E`.
+///      - Third-party recipients (deity-boon recipient, AFKing deposit beneficiary) are IDs
+///        that must already exist: 0 or an unallocated ID reverts `E`.
 interface IDegenerusGame {
     /// @notice Execute ordered game work. Zero selects the 10,000-bps default estimate factor.
     function mineRun(uint32 gasMultiplierBps) external;
@@ -66,8 +66,9 @@ interface IDegenerusGame {
     /// @notice Sweep up to 32 owned subaccounts into their current main accounts.
     /// @dev Permissionless only for sDGNRS-owned accounts; otherwise each source requires its
     ///      payee or approved operator. Moves claimable ETH internally (retaining 1 wei), and
-    ///      settled FLIP to the payee. Acquired accounts also surrender prepaid AFKing and,
-    ///      once caught up and unfrozen, coinflip carry. Ordinary smurfs keep live AFKing
+    ///      settled FLIP to the payee. Acquired accounts (and, after game over, every swept
+    ///      account) also surrender prepaid AFKing; acquired accounts, once caught up and
+    ///      unfrozen, also surrender coinflip carry. Ordinary smurfs keep live AFKing
     ///      funding and auto-rebuy; moving their ETH applies their normal cashout curse.
     ///      Repeat for later awards or a coinflip backlog. Does not resolve unclaimed prizes.
     function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
@@ -117,7 +118,7 @@ interface IDegenerusGame {
     ///      3. Permanently refer the smurf through the current main ID with zero kickback.
     ///      4. Buy exactly one whole ticket (400 scaled units, no boxes) for the smurf at the
     ///         current price. The owner pays: fresh `msg.value` first, then the owner's claimable
-    ///         and AFKing balances as `payKind` allows, exactly as `purchase` spends a buyer's.
+    ///         and AFKing balances as `payKind` allows, exactly as `purchaseOrderFor` spends a buyer's.
     ///         Fresh ETH above the price credits the owner's AFKing balance. The ticket, mint
     ///         history and quest progress belong to the smurf.
     ///      Past PAID_ADMISSION_WALLETS the allocation is admitted only when the ticket price is
@@ -125,9 +126,10 @@ interface IDegenerusGame {
     /// @param affiliateCode Referral code applied to the owner if its referral is unset.
     /// @param payKind How the owner funds the ticket (DirectEth, Claimable or Combined).
     /// @return smurfId The new account's wallet ID.
-    /// @custom:reverts E If the caller has no ordinary main or paid admission refuses allocation.
+    /// @custom:reverts E If the caller has no ordinary main, has an open loan, or paid admission
+    ///                 refuses allocation.
     /// @custom:reverts SmurfCreationLimitReached If all base-plus-score creation slots are consumed.
-    /// @custom:reverts (purchase) Every applicable revert of a one-ticket `purchase` by the owner (
+    /// @custom:reverts (purchaseOrderFor) Every applicable revert of a one-ticket purchase by the owner (
     ///                 liveness/game over, insufficient payment).
     function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
         external payable returns (uint32 smurfId);
@@ -138,7 +140,8 @@ interface IDegenerusGame {
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
     function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
 
-    /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
+    /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFKing, 3 boxes, 4 Degenerette,
+    ///         5 Decimator, 6 Craps, 7 drained.
     function rngConsumerStage_g379() external view returns (uint8);
 
     /// @notice Get the current jackpot level.
@@ -153,12 +156,14 @@ interface IDegenerusGame {
     function gameOver() external view returns (bool);
 
     /// @notice Whether the liveness-timeout game-over trigger is currently active.
-    /// @dev Purchase phase: true after 30 completed purchase rounds (level-0 baseline is day 9; 30
-    ///      after) unless a pre-deadline VRF request is still inside its 14-day grace.
-    ///      Jackpot / last-purchase: true only once no day has sealed for 30 days.
+    /// @dev Any phase: true once 14 days pass without a completed day, or an unpublished VRF
+    ///      request is 14 days old. Purchase phase: also true once the level's purchase phase has
+    ///      run 30 game days without meeting the prize target (and the wall day has rolled past
+    ///      the last completed day).
     function livenessTriggered() external view returns (bool);
 
-    /// @notice Check if the final fund forfeiture has executed (all funds forfeited).
+    /// @notice Whether the final sweep has executed (unclaimed player balances forfeited, the rest
+    ///         paid to the Vault, sDGNRS and GNRUS).
     function isFinalSwept() external view returns (bool);
 
     /// @notice Get the current mint price in wei.
@@ -300,7 +305,7 @@ interface IDegenerusGame {
     function entriesOwedView(uint24 lvl, address player) external view returns (uint32);
 
     /// @notice Record a Decimator burn for jackpot eligibility.
-    /// @param player Address of the player.
+    /// @param player Wallet ID of the burner (nonzero).
     /// @param lvl Resolution level (current game level + 1).
     /// @param baseAmount Burn amount before multiplier.
     /// @param multBps Multiplier in basis points (10000 = 1x).
@@ -318,18 +323,20 @@ interface IDegenerusGame {
     /// @param poolWei Total ETH prize pool for this level.
     /// @param lvl Level number being resolved.
     /// @param rngWord VRF-derived randomness seed.
-    /// @return returnAmountWei Amount to return (no entries or this round was already sealed).
+    /// @return returnAmountWei Pool handed back unsealed (no entries, already sealed, or the
+    ///         session cannot take the seal); 0 when sealed.
     function runDecimatorJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
-    /// @notice Execute BAF jackpot via JackpotModule delegatecall.
+    /// @notice Arm the staged BAF award stage (JackpotDrawModule, self-call only); awards are
+    ///         drawn and paid later.
     /// @param poolWei Total ETH prize pool for BAF.
     /// @param lvl Level number being resolved.
-    /// @param rngWord VRF-derived randomness seed.
-    /// @return claimableDelta ETH moved to claimable.
+    /// @param rngWord Unused.
+    /// @return claimableDelta ETH reserved in claimablePool for the award schedule.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
@@ -417,8 +424,9 @@ interface IDegenerusGame {
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket).
     /// @param boxOrder Packed lootbox order (ignored with whale passes).
     /// @param maxCost Budget made available to the purchase.
-    /// @custom:reverts E If the caller is not the Vault, the budget is short, or the purchase
-    ///         costs more than `maxCost`.
+    /// @custom:reverts E If the caller is not the Vault, the budget is short, or the recipient is
+    ///                 unallocated.
+    /// @custom:reverts DegenesisMaxCostExceeded If the purchase costs more than `maxCost`.
     function spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
 
     /// @notice Spendable Degenesis credit accrued by a player.
@@ -472,10 +480,10 @@ interface IDegenerusGame {
         external view returns (uint32[] memory entries);
 
     /// @notice Sample two BAF rounds' worth of unminted future-level candidates.
-    /// @dev Four packs (independent level in [fromLevel, toLevel] + one random eight-lane queue
-    ///      word), two distinct lanes each: slots 0..3 feed one round and 4..7 the next, so
-    ///      each round's candidates come from four different packs. Unfilled slots are
-    ///      0. Call during BAF with unminted levels only (above current+1). Returns the
+    /// @dev Four packs (independent level in [fromLevel, toLevel], empty levels skipped, at most
+    ///      12 attempts), each a uniform queue lane plus a distinct lane among the next seven:
+    ///      slots 0..3 feed one round and 4..7 the next, so each round's candidates come from
+    ///      four different packs. Unfilled slots are 0. Call during BAF with unminted levels only (above current+1). Returns the
     ///      wallet IDs the queue lanes already store (no wallet-table decode).
     /// @param entropy Random entropy for sampling (typically from VRF).
     /// @param fromLevel Lowest candidate level (inclusive).
@@ -490,7 +498,7 @@ interface IDegenerusGame {
     ///      existing deity's main equals the buyer's main (a scan of at most 32 deity IDs). The
     ///      buying account keeps HAS_DEITY_PASS and every deity behaviour (perpetual tickets, boons
     ///      issued as that deity, refunds by its ID); the soulbound pass NFT, the buyer's DGNRS
-    ///      reward and the free-tranche seat go to the payee. Funding and refunds as `purchase`.
+    ///      reward and the free-tranche seat go to the payee. Funding and refunds as `purchaseOrderFor`.
     /// @param id Account buying the pass (0 = caller).
     /// @param symbolId Symbol to claim (0-31).
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
@@ -506,7 +514,7 @@ interface IDegenerusGame {
 
     /// @notice Purchase a 10-level lazy pass (direct in-game activation) for account `id`.
     /// @dev Authorized (account rule). The pass is the account's; the free-tranche seat (one per
-    ///      account for life) mints to the payee. Funding and refunds as `purchase`.
+    ///      account for life) mints to the payee. Funding and refunds as `purchaseOrderFor`.
     /// @param id Account receiving the pass (0 = caller).
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
     /// @custom:reverts NotApproved If the caller may not act for `id`.
@@ -515,9 +523,9 @@ interface IDegenerusGame {
 
     /// @notice Purchase whale passes for account `id`.
     /// @dev Authorized (account rule). Passes, entries and lootboxes are the account's; the buyer
-    ///      DGNRS reward and the free-tranche seat go to the payee. Funding and refunds as `purchase`.
+    ///      DGNRS reward and the free-tranche seat go to the payee. Funding and refunds as `purchaseOrderFor`.
     /// @param id Account receiving the passes (0 = caller).
-    /// @param quantity Number of passes to purchase (1-100).
+    /// @param quantity Number of passes to purchase (1-1,000).
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
     /// @custom:reverts NotApproved If the caller may not act for `id`.
     /// @custom:reverts E If `id` is unallocated.
@@ -553,7 +561,8 @@ interface IDegenerusGame {
     ///        (10..2,000,000 units); quantity 1-100; every bit at or above 30 zero.
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
-    /// @param foil True to additively buy one foil pack (10x price) in the same tx; the
+    /// @param foil True to additively buy one foil pack (10x the ticket price, scaled by the
+    ///        level's snap exponent) in the same tx; the
     ///        foil leg is one-per-cycle and adds to, never replaces, the ticket/lootbox legs.
     /// @custom:reverts NotApproved If the caller may not act for `id`.
     /// @custom:reverts E If `id` is unallocated.
@@ -580,8 +589,8 @@ interface IDegenerusGame {
     ) external;
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @dev One reward per player per level, claimable until the next level starts; dispatches
-    ///      to the bingo module. Permissionless: any caller may settle any account's claim. The
+    /// @dev One reward per account per level, claimable until a later same-parity level takes
+    ///      over that level's ticket buffer. Permissionless: any caller may settle any account's claim. The
     ///      FLIP leg credits the account by ID; the DGNRS leg goes to the account's payee.
     /// @param id Bingo owner to claim for (0 = caller; otherwise allocated).
     /// @param level The level to claim on (uint24 storage-key width).
@@ -596,8 +605,8 @@ interface IDegenerusGame {
     /// @param id Owner of every referenced holding (0 = caller; otherwise allocated).
     /// @param refs Holdings to claim; the top byte of each is its kind: 0 a created ticket
     ///        (trait at bits 64..71, occurrence index at bits 0..63), 1 queued entries (stable owner ID
-    ///        at bits 0..31, uint24 queue-domain key at bits 32..55), any other an undrained foil pack (resolve day at
-    ///        bits 64..87, index into that day's bucket at bits 0..63).
+    ///        at bits 0..31, uint24 queue-domain key at bits 32..55), any other an undrained foil pack (physical foil
+    ///        cohort 0 or 1 at bits 64..87, index into that cohort's queue at bits 0..63).
     /// @custom:reverts E If `id` is unallocated (or 0 for a caller with no ID).
     function claimDeadVrf(uint32 id, uint256[] calldata refs) external;
 
@@ -627,8 +636,8 @@ interface IDegenerusGame {
     /// @custom:reverts RngLocked While the daily RNG lock is held, before any tuple.
     function claimFoilMatchMany(uint32[] calldata ids, uint24[] calldata drawDays, uint8[] calldata ticketIndexes) external;
 
-    /// @notice Claim a foil pack's gold for account `id`: a FLIP ladder from three golds up, or the
-    ///         golden-ticket grand when two whole tickets came out all gold.
+    /// @notice Claim a foil pack's gold FLIP ladder for account `id`, from three golds up (a pack
+    ///         with two all-gold tickets takes the grand at the drain and is not claimable here).
     /// @dev Permissionless; credits the account by ID, payouts to the account's payee. A pack pays
     ///      at most once.
     /// @param id Pack owner (0 = caller; otherwise allocated).
@@ -639,7 +648,7 @@ interface IDegenerusGame {
     /// @notice Claim account `id`'s accrued ETH winnings in full.
     /// @dev Authorized (account rule). Debits the account's claimable (and after game over its
     ///      whole AFKing balance) and pays the account's payee, ETH first with a stETH fallback,
-    ///      then applies the cashout curse to the account. Leaves the 1-wei sentinel.
+    ///      then may apply the cashout curse (non-exempt accounts). Leaves the 1-wei sentinel.
     /// @param id Account to claim for (0 = caller).
     /// @custom:reverts NotApproved If the caller may not act for `id`.
     /// @custom:reverts E If `id` is unallocated.
@@ -661,6 +670,7 @@ interface IDegenerusGame {
     /// @dev Permissionless (fund anyone). `id` is a third-party recipient: it must already exist
     ///      and 0 is not the caller. Credits the ledger by ID (claimablePool in tandem).
     /// @param id Beneficiary account (nonzero, allocated).
+    /// @custom:reverts GameOver After game over.
     /// @custom:reverts E If `id == 0` or `id` is unallocated.
     function depositAfkingFunding(uint32 id) external payable;
 
@@ -686,15 +696,16 @@ interface IDegenerusGame {
     function getDailyHeroWinner(uint24 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
 
     // -------------------------------------------------------------------------
-    // Raw-forwarded dispatch stubs
+    // Dispatch stubs and inline entries
     //
-    // The Game-side implementations of these functions forward msg.data to their
-    // module unchanged (signature-identical selectors), so their parameters are
-    // unnamed at the implementation site. These declarations carry the canonical
-    // named-parameter NatSpec for the Game's external ABI.
+    // Some Game-side implementations below forward msg.data to their module unchanged
+    // (signature-identical selectors), so their parameters are unnamed at the
+    // implementation site; the rest run inline in Game. These declarations carry the
+    // canonical named-parameter NatSpec for the Game's external ABI.
     // -------------------------------------------------------------------------
 
-    /// @notice Configure the Chainlink VRF coordinator and subscription (one-shot wire).
+    /// @notice Configure the Chainlink VRF coordinator and subscription (ADMIN only, called from
+    ///         the Admin constructor).
     /// @param coordinator_ Address of the VRF coordinator contract.
     /// @param subId Chainlink VRF subscription ID.
     /// @param keyHash_ Key hash for the VRF request.
@@ -709,7 +720,8 @@ interface IDegenerusGame {
         uint32 newCallbackGasLimit) external;
 
     /// @notice VRF callback to receive random words.
-    /// @dev Coordinator-gated in the module body (delegatecall preserves msg.sender).
+    /// @dev Coordinator-gated in Game itself (no delegatecall). A request ID other than the open
+    ///      request's is ignored; a word of 0 or 1 leaves the request pending.
     /// @param requestId The ID of the VRF request being fulfilled.
     /// @param randomWords Array of random words returned by VRF.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external;
@@ -751,8 +763,8 @@ interface IDegenerusGame {
     /// @notice Length of the AFKing subscriber set: live subscriptions, the two exempt protocol
     ///         subscriptions (VAULT, SDGNRS) and seized runs awaiting the in-pass removal.
     /// @dev The seat token's capped vault mint reads it: `liveSeats + n + subscriberSetLength()`
-    ///      may not exceed 2,000. Every non-exempt entry burned a seat, so the set never exceeds
-    ///      2,000 and needs no runtime cap.
+    ///      may not exceed 2,000. Every non-exempt entry burned a seat, so the set stays within
+    ///      2,000.
     function subscriberSetLength() external view returns (uint256);
 
     /// @notice GAME-only atomic stETH pull; caller catches any failed funding attempt.
@@ -831,10 +843,12 @@ interface IDegenerusGame {
     /// @param amount Total direct-half value, drawn from the redemption reserve.
     function creditRedemptionDirect(uint32 id, uint256 amount) external;
 
-    /// @notice Claim the caller's winnings, preferring stETH over native ETH.
+    /// @notice Vault-only: claim the Vault's winnings, paying stETH first and native ETH for the rest.
+    /// @custom:reverts OnlyVault If the caller is not the Vault.
     function claimWinningsStethFirst() external;
 
-    /// @notice Spend FLIP to influence the next daily result, at the expected cost.
+    /// @notice Burn the quoted FLIP cost to nudge the next daily coinflip word by +1.
+    /// @custom:reverts NudgeCostChanged If `expectedCost` differs from the live quote.
     function reverseFlip(uint256 expectedCost) external;
 
     /// @notice Raw claimable balance, including its 1-wei sentinel.

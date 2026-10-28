@@ -34,10 +34,10 @@ pragma solidity 0.8.38;
  *      - Mint/burn interface for game contract, coinflip contract, and vault
  *      - Coinflip integration: claims via Coinflip.sol for transfer shortfall coverage
  *      - Decimator burns: Burn-to-participate for decimator jackpot eligibility
- *      - Quest integration: Daily quest rolls, streak tracking, slot rewards
+ *      - Quest integration: decimator burns and craps actions report quest progress
  *      - Vault escrow: virtual FLIP reserve, minted only on ContractAddresses.VAULT withdrawal
- *      - Emission: no direct seeds — Coinflip stakes 200k/day for 20 days each to VAULT
- *        and sDGNRS at deploy, so all FLIP survives a coinflip before minting
+ *      - Emission: no direct seeds — Coinflip seeds 200k/day for 20 days each to VAULT
+ *        and sDGNRS as flip stake, so all FLIP survives a coinflip before minting
  *
  * @dev CRITICAL INVARIANTS:
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
@@ -65,7 +65,7 @@ interface ICoinflip {
     function consumeFlipBacking(address player, uint256 amount) external returns (uint256 consumed);
     /// @notice Preview claimable + auto-rebuy carry coinflip backing (view).
     function previewFlipBacking(address player) external view returns (uint256);
-    /// @notice Route de-circulated FLIP into sDGNRS's redemption backing (claimable).
+    /// @notice Stake de-circulated FLIP as sDGNRS's redemption backing (its next flip).
     function creditSdgnrsBacking(uint256 amount) external;
 }
 
@@ -73,9 +73,8 @@ contract FLIP {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
-      |  Lightweight ERC20 events plus gameplay signals for off-chain        |
-      |  indexers/clients. Events are the primary mechanism for UIs to       |
-      |  track coinflip results, quest completions, and bounty state.        |
+      |  ERC20 events plus vault-escrow, decimator and craps-comp signals    |
+      |  for off-chain indexers and clients.                                 |
       +======================================================================+*/
 
     /// @notice Standard ERC20 transfer event.
@@ -92,8 +91,8 @@ contract FLIP {
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /// @notice Emitted when a player burns FLIP during a decimator window.
-    /// @param player The key of the account the entry belongs to.
-    /// @param amountBurned The amount burned (0 decimals).
+    /// @param player The wallet ID the entry belongs to.
+    /// @param amountBurned The amount burned, including any consumed coinflip winnings (0 decimals).
     /// @param entryId The wallet's accumulated battle entry id.
     event DecimatorBurn(uint32 indexed player, uint256 amountBurned, uint64 entryId);
 
@@ -135,10 +134,10 @@ contract FLIP {
     error InsufficientBalance();
     error InsufficientAllowance();
 
-    /// @notice Deposit/burn amount is below the minimum threshold (1,000 FLIP).
+    /// @notice Decimator burn amount is below DECIMATOR_MIN (2,000 FLIP).
     error AmountLTMin();
 
-    /// @notice Zero address not allowed for transfers, mints, or wiring.
+    /// @notice Zero address not allowed for transfers, mints, or burns.
     error ZeroAddress();
 
     /// @notice Decimator burn attempted outside an active decimator window.
@@ -162,9 +161,10 @@ contract FLIP {
       |  | Slot | Variable                    | Type                       | |
       |  +------+-----------------------------+----------------------------+ |
       |  |  0   | _supply (total/vault)       | uint128 + uint128          | |
-      |  |  1   | _tombstoneFlooded + _crapsCompAllowance | bool + uint128 | |
-      |  |  2   | balanceOf                  | mapping(address => uint256)| |
-      |  |  3   | allowance                  | mapping(addr => mapping)   | |
+      |  |  1   | _tombstoneFlooded +         | bool + uint128             | |
+      |  |      | _crapsCompAllowance         |                            | |
+      |  |  2   | balanceOf                   | mapping(address => uint256)| |
+      |  |  3   | allowance                   | mapping(addr => mapping)   | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
@@ -207,7 +207,7 @@ contract FLIP {
     ///         out of `vaultMintTo`'s reach — that the table feeds at two percent of every
     ///         completed battle's eligible bankroll and a comp burn spends. Opens on the converted
     ///         lifetime pass allowance: two hundred normal day passes at their pass value. Packed
-    ///         beside the tombstone latch, so it moves no slot.
+    ///         beside the tombstone latch.
     uint128 private _crapsCompAllowance = uint128(200 * CrapsPriceLib.NORMAL_VALUE);
 
     /// @notice Token balance for each address.
@@ -219,25 +219,17 @@ contract FLIP {
     mapping(address => mapping(address => uint256)) public allowance;
 
     /*+======================================================================+
-      |                         DATA TYPES                                   |
-      +======================================================================+
-      |  Packed structs for gas-efficient storage. Each struct fits within   |
-      |  a single 32-byte slot where possible.                               |
-      +======================================================================+*/
-
-    /*+======================================================================+
       |                    WIRED CONTRACTS & MODULE STATE                    |
       +======================================================================+
       |  All external dependencies are compile-time constants sourced from   |
       |  ContractAddresses. No storage slots are consumed for wiring, and    |
       |  the references cannot be updated post-deploy.                       |
       |                                                                      |
-      |  CONSTANT REFERENCES:                                                |
-      |  • GAME, QUESTS, AFFILIATE                                           |
-      |  • VAULT, ADMIN, COINFLIP                                            |
+      |  CONSTANT REFERENCES: GAME, QUESTS, COINFLIP                         |
       +======================================================================+*/
 
-    /// @notice The main game contract; provides RNG-lock state, level, decimator windows, operator-approval checks, and activity-score/boon bookkeeping.
+    /// @notice The main game contract; provides level, decimator window, account resolution, wallet
+    ///         IDs, activity score, boons and decimator entries.
     IDegenerusGame internal constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
 
     /// @notice The quest module handling daily quests and streak tracking.
@@ -269,9 +261,6 @@ contract FLIP {
 
     /// @notice Total spendable FLIP at the current time (balance + claimable coinflips).
     /// @dev For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
-    ///      Known: conservatively underreports during RNG lock since previewClaimCoinflips
-    ///      may exclude in-flight coinflip results; claims still succeed so the gap is
-    ///      transient and acceptable for UI purposes.
     /// @param player The address to query.
     /// @return spendable Total spendable amount right now.
     function balanceOfWithClaimable(address player) external view returns (uint256 spendable) {
@@ -283,8 +272,6 @@ contract FLIP {
             spendable += coinflip.previewClaimCoinflips(player);
         }
     }
-
-
 
     /// @notice Total circulating supply (excludes ContractAddresses.VAULT allowance).
     function totalSupply() external view returns (uint256) {
@@ -420,7 +407,6 @@ contract FLIP {
             return;
         }
 
-        // Overflow is theoretically possible but would require ~2^256 total supply
         balanceOf[to] += amount;
         emit Transfer(from, to, amount);
     }
@@ -432,7 +418,9 @@ contract FLIP {
     }
 
     /// @notice Internal mint helper - creates new tokens.
-    /// @dev Increases totalSupply and recipient balance. Emits Transfer from address(0).
+    /// @dev Increases totalSupply and recipient balance, emitting Transfer from address(0). A VAULT mint
+    ///      adds to its virtual mint allowance instead (VaultEscrowRecorded); an sDGNRS mint stakes as
+    ///      coinflip backing. Neither enters totalSupply.
     /// @param to The recipient address (cannot be zero).
     /// @param amount The amount to mint (0 decimals).
     function _mint(address to, uint256 amount) internal {
@@ -444,10 +432,9 @@ contract FLIP {
             return;
         }
         if (to == ContractAddresses.SDGNRS) {
-            // sDGNRS holds no circulating FLIP; a mint routed here (box-spin wins on
-            // its self-subscription) never enters supply — it stakes onto tomorrow's
-            // coinflip as redemption backing. Mirrors the _transfer intercept with
-            // zero supply mutation (nothing was circulating).
+            // sDGNRS holds no circulating FLIP; a mint routed here never enters supply —
+            // it stakes onto the next coinflip round as redemption backing. Mirrors the
+            // _transfer intercept with zero supply mutation (nothing was circulating).
             coinflip.creditSdgnrsBacking(amount);
             return;
         }
@@ -457,7 +444,8 @@ contract FLIP {
     }
 
     /// @notice Internal burn helper - destroys tokens.
-    /// @dev Decreases totalSupply and sender balance. Emits Transfer to address(0).
+    /// @dev Decreases totalSupply and sender balance, emitting Transfer to address(0). A VAULT burn spends
+    ///      its virtual mint allowance instead (VaultAllowanceSpent) and leaves totalSupply untouched.
     ///      Ordering in burnCoin_g27673/burnCoinForCraps_g292454/decimatorBurn: the trusted coinflip shortfall
     ///      consumption runs first, then this burn, then any boon/quest/game accounting calls.
     /// @param from The address to burn from (cannot be zero).
@@ -465,8 +453,7 @@ contract FLIP {
     function _burn(address from, uint256 amount) internal {
         if (from == address(0)) revert ZeroAddress();
         // A purchase funded entirely from unminted coinflip winnings has no
-        // wallet/supply leg. Keep the existing zero-amount event without loading
-        // and rewriting either unchanged storage word.
+        // wallet/supply leg: emit the zero-amount event without touching storage.
         if (amount == 0) {
             if (from == ContractAddresses.VAULT) emit VaultAllowanceSpent(from, 0);
             else emit Transfer(from, address(0), 0);
@@ -507,7 +494,7 @@ contract FLIP {
         _burn(from, amount);
     }
 
-    /// @notice Mint FLIP to a player (coinflip claims, degenerette wins, craps wins).
+    /// @notice Mint FLIP to a player (coinflip claims and GAME payouts).
     /// @dev Only callable by COINFLIP or GAME.
     /// @param to The player's address to mint to.
     /// @param amount The amount of FLIP to mint (0 decimals).
@@ -521,9 +508,8 @@ contract FLIP {
         _mint(to, amount);
     }
 
-    /// @dev Ungated: consumeCoinflipsForBurn reaches claimableStored only — settled days the
-    ///      pending word cannot reprice — never the auto-rebuy carry. claimCoinflips pays the
-    ///      same bank with no gate at all, so blocking here bought a purchase failure, not safety.
+    /// @dev Ungated by the RNG lock: consumeCoinflipsForBurn reaches claimableStored only —
+    ///      settled days the pending word cannot reprice — never the auto-rebuy carry.
     function _consumeCoinflipShortfall(address player, uint256 amount) private returns (uint256 consumed) {
         if (amount == 0) return 0;
         uint256 balance = balanceOf[player];
@@ -727,8 +713,6 @@ contract FLIP {
         emit CrapsCompsAccrued(amount, lane);
     }
 
-
-
     /*+======================================================================+
       |                          DECIMATOR                                   |
       +======================================================================+
@@ -738,11 +722,13 @@ contract FLIP {
 
     /// @notice Enter sDGNRS once per window, limited by the previous original-field average.
     /// @dev GAME calls this on the opening day's advance, after coinflip settlement and
-    ///      before the craps seat. Uses the existing claimable -> carry consume path;
+    ///      before the craps seat. Uses the claimable -> carry consume path;
     ///      the caller has settled the backing even while the game RNG lock is up.
     ///      An empty/dust bankroll skips the window without blocking the advance.
-    ///      The opening-day RNG path calls this at most once (a stalled or late-consumed
-    ///      arming word skips the day, like the quest force); no separate FLIP latch is needed.
+    ///      The opening-day RNG path calls this at most once: the arming day's word is applied
+    ///      once (a recorded word reverts the apply) and the next daily request clears the
+    ///      latch, and a game that ends before that word applies never calls it. No separate
+    ///      FLIP latch is needed.
     /// @param lvl Resolution level for the opening window (current game level + 1).
     /// @param cap Whole-FLIP spending cap computed by Game from the previous sealed round.
     /// @return amount FLIP backing consumed, or zero when skipped.
@@ -769,7 +755,7 @@ contract FLIP {
     ///      the quest, boon, activity multiplier and entry are the account's.
     ///      Quest and boon bonuses add chips before the degen and entry-day multipliers.
     /// @param id Account the entry belongs to (0 = caller).
-    /// @param amount Amount (0 decimals) to burn; must satisfy MIN (2,000 FLIP).
+    /// @param amount Amount (0 decimals) to burn; at least DECIMATOR_MIN (2,000 FLIP).
     /// @param chips The entry's board as a normal battle entry takes it (zero to seven named
     ///        chips, the dice scattering the rest); each burn sets it, so the last one counts.
     function decimatorBurn(uint32 id, uint256 amount, uint32 chips) external {
@@ -796,10 +782,10 @@ contract FLIP {
     }
 
     /// @dev Shared quest, activity, boon and battle-chip accounting after the funding leg is burned.
-    ///      `key` is the account; `id` its wallet ID, or 0 for a self burn: the burn pays, so the
-    ///      burner's ID then comes from the Game's registration hook first (an existing wallet gets
-    ///      its ID back with no write). The quest and the boon run by ID, and the Game's own entry
-    ///      write finds the ID already in place. The activity score is read after the quest, so a
+    ///      `key` is the account; `id` its wallet ID, or 0 for a self burn (and the automatic
+    ///      sDGNRS entry): the ID is then read, and registered on first contact since the burn
+    ///      pays. The quest and the boon run by ID, and the Game's own entry write finds the ID
+    ///      already in place. The activity score is read after the quest, so a
     ///      quest this burn completes counts toward its multiplier.
     function _recordDecimatorBurn(address key, uint32 id, uint256 amount, uint24 lvl, uint32 chips) private {
         if (id == 0) id = degenerusGame.walletIdOf_g3120(key);
@@ -825,5 +811,4 @@ contract FLIP {
 
         emit DecimatorBurn(id, amount, entryId);
     }
-
 }

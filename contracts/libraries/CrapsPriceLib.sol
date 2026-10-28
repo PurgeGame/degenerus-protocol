@@ -18,8 +18,8 @@ library CrapsPriceLib {
     uint256 internal constant JACKPOT_AWARD_VALUE = 10_000;
 
     // Tier means (bankroll + mean bounty): 900, 2,800 and 7,000 FLIP.
-    uint256 internal constant BOOKEND_EV = (20 * 900 + 30 * 2_800 + 50 * 7_000) * 1 / 100;
-    uint256 internal constant ROUTINE_EV = (55 * 900 + 25 * 2_800 + 20 * 7_000) * 1 / 100;
+    uint256 internal constant BOOKEND_EV = (20 * 900 + 30 * 2_800 + 50 * 7_000) / 100;
+    uint256 internal constant ROUTINE_EV = (55 * 900 + 25 * 2_800 + 20 * 7_000) / 100;
     uint256 internal constant DAY_EV = 2 * BOOKEND_EV + 3 * ROUTINE_EV + JACKPOT_FEE;
     uint256 internal constant HIGH_BASE = 10;
     uint256 internal constant HIGH_TAIL = 100;

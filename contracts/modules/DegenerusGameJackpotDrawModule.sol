@@ -134,21 +134,16 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     uint8 private constant WHALE_PASS_SRC_AWARD_TICKETS = 3;
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
     uint16 private constant BAF_TRAIT_SENTINEL = 420;
-    uint256 private constant BAF_TICKET_TAG = 0x4261665469636b6574;
     uint256 private constant BAF_ROUNDS = 48;
     /// @dev Scatter rounds double at each fourfold step of the BAF pool above this anchor.
     uint256 private constant BAF_ROUNDS_ANCHOR = 125 ether;
     uint256 private constant BAF_ROUNDS_MAX_MULTIPLIER = 32;
-
-
 
     /// @notice Every sampled near-level spot, including zero-score candidates and score-check losers.
     /// @dev Array order identifies each spot; wallet IDs may repeat. Empty arrays mean empty buckets.
     event BafCandidates(uint24 indexed level, uint24 indexed day, uint16 indexed round,
         uint24 sourceLevel, uint8 traitId, uint32[] candidates);
 
-    bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");
-    bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
     uint256 private constant JACKPOT_BATTLE_ENTRANTS = JackpotBattleFieldLib.MAX_CHUNK;
     uint256 private constant COIN_DRAW_SHARES = 50;
 
@@ -165,13 +160,6 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         return _runPurchaseJackpotBattle(lvl, word, allowance);
     }
 
-    /// @dev Awards a FLIP draw over trait-matched ticket holders across [minLevel, maxLevel]:
-    ///      up to COIN_DRAW_SHARES winners, one equal whole-unit share each. Each pull samples
-    ///      its own random level via keccak256(randomWord, FLIP_LEVEL_TAG, i) and rotates trait
-    ///      deterministically via i % 4. Empty (lvl', trait_i) buckets skip, and neither an
-    ///      unfilled share nor the sub-share remainder is minted, so no share can be short.
-    ///      Per-trait deity addresses are cached at loop entry. Each (level, trait) owns an
-    ///      independent eight-lane cursor.
     struct CoinAwardWork {
         uint32[] players;
         uint256[] amounts;
@@ -181,6 +169,13 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         uint256 paid;
     }
 
+    /// @dev Awards a FLIP draw over trait-matched ticket holders across [minLevel, maxLevel]:
+    ///      up to COIN_DRAW_SHARES winners, one equal whole-unit share each. Each pull samples
+    ///      its own random level via hash3(FLIP_LEVEL, randomWord, i) and rotates trait
+    ///      deterministically via i % 4. Empty (lvl', trait_i) buckets skip, and neither an
+    ///      unfilled share nor the sub-share remainder is minted, so no share can be short.
+    ///      Per-trait deity wallet IDs are cached at loop entry. Each (level, trait) owns an
+    ///      independent eight-lane cursor.
     function _awardDailyCoinToTraitWinners(
         uint24 minLevel,
         uint24 maxLevel,
@@ -239,8 +234,8 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         }
     }
 
-    /// @dev Keep the existing independent level draw for each pull. Only repeated draws
-    ///      from the same (level, trait) consume further lanes of its cached random word.
+    /// @dev Each pull draws its own level. Only repeated draws from the same (level, trait)
+    ///      consume further lanes of that pair's cursor.
     function _drawCoinEntry(
         uint24 minLevel,
         uint24 range,
@@ -264,11 +259,11 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
 
     /// @dev The daily jackpot battle over unminted future levels, played as one closed craps battle,
     ///      one bounded group per checkpoint. While the field is open a call draws groups of up to
-    ///      JACKPOT_BATTLE_ENTRANTS awarded entries (see _collectJackpotChunkWithLevels), reads their saved
-    ///      boards in one batch and appends them while another group fits; the chunk that reaches the award target, or finds
-    ///      no eligible level, seals the field. Settlement starts in its own subsequent call;
-    ///      its available execution gas never stacks on top of field construction. The latch
-    ///      clears once the field completes.
+    ///      JACKPOT_BATTLE_ENTRANTS awarded entries (see _collectJackpotChunkWithLevels), reads
+    ///      their saved boards in one batch and appends them while another group fits; the chunk
+    ///      that reaches the award target, or finds no eligible level, seals the field. Settlement
+    ///      starts in its own subsequent call; its available execution gas never stacks on top of
+    ///      field construction. The pending latch clears once the battle completes.
     function _runPurchaseJackpotBattle(uint24 lvl, uint256 rngWord, uint256 allowance)
         private returns (MineFlipGas.Result memory result)
     {
@@ -326,7 +321,7 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
 
     /// @dev A visit walks one level once, starting at a random queue position and wrapping.
     ///      Levels are drawn WITH replacement, so later visits can award the same wallets again.
-    ///      Memory only; the continuation fits in JackpotRound.drawCursor without new storage.
+    ///      Memory only; the continuation is persisted in the battle round's drawCursor.
     struct JackpotDrawWalk {
         uint256 ordinal;
         uint256 offset;
@@ -485,20 +480,6 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     ///      `work.paid` tracks the reserved ETH not yet credited; the last group returns what no
     ///      candidate took to the pending future pool, closes the bracket and retires the work
     ///      record. The game-over latch releases the reservation instead.
-    struct BafAwardWork {
-        uint256 word;
-        uint8[3] traits;
-        MineFlipGas.Meter meter;
-        uint256 n;
-        uint256 i;
-        uint24 lvl;
-        uint256 pool;
-        uint256 rounds;
-        uint24 floorLvl;
-        uint256 credited;
-        uint32[4] drawn;
-    }
-
     function runBafAwards(uint256 word, uint256 allowance, uint8[3] memory traits)
         public returns (MineFlipGas.Result memory result)
     {
@@ -574,7 +555,7 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     }
 
     /// @dev BAF_ROUNDS below 4 anchors, doubled at each fourfold step of `pool` from there (96 at
-    ///      500 ETH, 192 at 2,000, ... 1,536 at 128,000). Always a multiple of 8.
+    ///      500 ETH, 192 at 2,000, ... 1,536 at 128,000). Always 48 times a power of two.
     function _bafRounds(uint256 pool) private pure returns (uint256 rounds) {
         rounds = BAF_ROUNDS;
         for (
@@ -634,11 +615,9 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
             credited = ethPortion;
             emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, ethPortion, 0);
             if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
-                uint256 cd;
-                (, cd) = _awardJackpotTickets(
+                credited += _awardJackpotTickets(
                     winner, lootboxPortion, floorLvl, EntropyLib.hash3(RngTags.BAF_TICKET, word, i)
                 );
-                credited += cd;
             } else {
                 credited += _queueWhalePassClaimCore(winner, lootboxPortion);
                 emit JackpotWhalePassWin(winner, lootboxPortion / HALF_WHALE_PASS_PRICE, WHALE_PASS_SRC_BAF_DIRECT);
@@ -648,7 +627,7 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
             credited = amount;
             emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, amount, 0);
         } else {
-            (, credited) = _awardJackpotTickets(
+            credited = _awardJackpotTickets(
                 winner, amount, floorLvl, EntropyLib.hash3(RngTags.BAF_TICKET, word, i)
             );
         }
@@ -660,6 +639,20 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         claimablePool -= uint128(amount);
         (uint128 pendingNext, uint128 pendingFuture) = _getPendingPools();
         _setPendingPools(pendingNext, pendingFuture + uint128(amount));
+    }
+
+    struct BafAwardWork {
+        uint256 word;
+        uint8[3] traits;
+        MineFlipGas.Meter meter;
+        uint256 n;
+        uint256 i;
+        uint24 lvl;
+        uint256 pool;
+        uint256 rounds;
+        uint24 floorLvl;
+        uint256 credited;
+        uint32[4] drawn;
     }
 
     /**
@@ -675,16 +668,15 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
      * @param amount ETH amount for ticket conversion.
      * @param minTargetLevel Minimum target level for tickets.
      * @param entropy RNG state.
-     * @return newEntropy Updated entropy state.
-     * @return claimableDelta Wei credited to claimableWinnings on the whale-pass remainder leg
-     *         (0 on the ticket-roll legs), folded by the caller into futurePool→claimablePool.
+     * @return claimableDelta Wei credited to claimable on the whale-pass remainder leg
+     *         (0 on the ticket-roll legs), folded by the caller into its credited total.
      */
     function _awardJackpotTickets(
         uint32 winner,
         uint256 amount,
         uint24 minTargetLevel,
         uint256 entropy
-    ) private returns (uint256 newEntropy, uint256 claimableDelta) {
+    ) private returns (uint256 claimableDelta) {
         // Large amounts (> 5 ETH): defer to whale pass claim system
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
             claimableDelta = _queueWhalePassClaimCore(winner, amount);
@@ -693,12 +685,13 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
                 amount / HALF_WHALE_PASS_PRICE,
                 WHALE_PASS_SRC_AWARD_TICKETS
             );
-            return (entropy, claimableDelta);
+            return claimableDelta;
         }
 
         // Very small amounts (<= 0.5 ETH): single roll
         if (amount <= SMALL_LOOTBOX_THRESHOLD) {
-            return (_jackpotTicketRoll(winner, amount, minTargetLevel, entropy), 0);
+            _jackpotTicketRoll(winner, amount, minTargetLevel, entropy);
+            return 0;
         }
 
         // Medium amounts (0.5-5 ETH): split in half, 2 rolls
@@ -714,14 +707,12 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
 
         // Second roll (with remainder if amount was odd)
         uint256 secondAmount = amount - halfAmount;
-        entropy = _jackpotTicketRoll(
+        _jackpotTicketRoll(
             winner,
             secondAmount,
             minTargetLevel,
             entropy
         );
-
-        return (entropy, 0);
     }
 
     /**
@@ -740,9 +731,9 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
      *      The round-up slice is a 32-bit window of a word whose full-width residues
      *      drive the path roll; with keccak diffusion the correlation between the two
      *      is negligible.
-     * @param winner Address to receive tickets.
+     * @param winner Wallet ID to receive tickets.
      * @param amount ETH amount for this roll.
-     * @param minTargetLevel Minimum target level (usually current level during SETUP phase).
+     * @param minTargetLevel Minimum target level.
      * @param entropy RNG state.
      * @return Updated entropy state.
      */

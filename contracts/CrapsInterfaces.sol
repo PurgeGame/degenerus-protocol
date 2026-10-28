@@ -32,7 +32,8 @@ interface IFlipCoin {
     ///      account's nonzero wallet ID, obtained by the table before the bet body, which keys
     ///      the craps boon lane and the craps quest. A comp burn ignores `id`.
     function burnCoinForCraps_g292454(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 boonMask);
-    /// @dev Feed the craps comp lane: two percent of a completed field's eligible bankroll.
+    /// @dev Feed the craps comp lane: a field's bankroll share, jackpot fee comps and refunded
+    ///      comp-funded reservations.
     function creditCrapsComps_g37225(uint256 amount) external;
 }
 
@@ -54,7 +55,7 @@ interface IGameCraps {
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. Player doors require `authorized`;
-    ///         `vaultComp` uses only the key.
+    ///         `vaultComp` uses only the payee.
     function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
     function currentLvl() external view returns (uint24);
@@ -75,13 +76,10 @@ interface ICoinflipStake {
     /// @notice Coinflip's batched credit of `amounts` FLIP stake to wallets `ids` (zero IDs and
     ///         zero amounts are skipped).
     function creditFlipBatch(uint32[] calldata ids, uint256[] calldata amounts) external;
-    /// @notice Arm THE BIGGEST DICE RUN — the fifth category of the shared BIGGEST record.
-    /// @dev CRAPS only, and this kind only: the generic `armRecord` door is the GAME's and
-    ///      carries the four existing kinds' 20%-improvement claim rule, which is not this one's.
-    ///      Coinflip credits the claim itself, so a finalization makes ONE call and the player
-    ///      takes ONE credit.
-    ///      The claim is credited by wallet ID; the sDGNRS leg and the trophy go to the payee
-    ///      Game's `payRecordSdgnrs` returns. Bets hold nonzero IDs, so the table never passes 0.
+    /// @notice Arm THE BIGGEST DICE RUN category of the shared BIGGEST record.
+    /// @dev CRAPS only; the generic `armRecord` door is the GAME's. Coinflip credits the claim
+    ///      itself, by wallet ID, so a finalization makes ONE call and the player takes ONE
+    ///      credit. Bets hold nonzero IDs, so the table never passes 0.
     /// @param id The run owner's wallet ID, credited with the claim.
     /// @param candidate The winner's high point over its starting bankroll, in basis points.
     /// @dev DECLARED WITHOUT ITS RETURN, deliberately. `Coinflip` returns the FLIP it claimed and

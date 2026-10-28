@@ -1,5 +1,9 @@
 # Credit callers and admission accounting
 
+> **Historical evidence.** This file records the storage-reuse implementation committed in `c4c1effe5` (2026-10-20; source baseline `fb2540c55`). It is not a description of the current
+> source. Current layouts and behavior: [Storage reuse](../../../docs/STORAGE-REUSE.md) and
+> `scripts/layout/golden/`.
+
 `credit-callers.tsv` inventories 35 direct production `creditFlip`, `creditFlipPair`
 and `creditFlipBatch` call sites. `JackpotBattle._creditFlip` is a shared adapter;
 its callers include ordinary and daily battle settlement. Coinflip's own deposit,

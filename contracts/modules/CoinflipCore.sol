@@ -45,7 +45,7 @@ import {RngTags} from "../libraries/RngTags.sol";
  * @dev INTERACTIONS:
  *      - Burns FLIP from players on deposit (via FLIP.burnForCoinflip)
  *      - Mints FLIP to players on claim (via FLIP.mintForGame_g152734)
- *      - Receives quest flip credits from game contract
+ *      - Receives flip credits from the game, quests and the other authorized creditors
  *      - Processes RNG results for payout calculations
  */
 
@@ -54,7 +54,6 @@ import {RECORD_KIND_FLIP, RECORD_KIND_SPIN, RECORD_KIND_LUCKBOX, RECORD_KIND_DIC
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 
 /// @notice Interface for FLIP contract methods used by Coinflip.
@@ -77,22 +76,20 @@ interface IDegenerusRecordBounty {
     function recordSet(uint8 kind, address to, uint256 value, uint24 day) external;
 }
 
-
 abstract contract CoinflipCore {
     modifier coinflipContext() {
         if (address(this) != ContractAddresses.COINFLIP) revert DegenerusQuests.DegenerusQuestsForeignContext();
         _;
     }
-    IDegenerusGame internal constant coinflipGame = IDegenerusGame(ContractAddresses.GAME);
+
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+*/
 
     /// @notice Emitted when a coinflip deposit is credited to the player's pending stake.
     /// @param player The depositor credited.
-    /// @param creditedFlip The deposit principal actually funded, in whole FLIP: the requested amount
-    ///        floored to whole FLIP (the quest and recycling bonuses that join the stake are not
-    ///        included); 0 on a zero-amount deposit.
+    /// @param creditedFlip The deposit principal (the quest, recycling and boon bonuses that join
+    ///        the stake are not included); 0 on a zero-amount deposit.
     event CoinflipDeposit(uint32 indexed player, uint256 creditedFlip);
     /// @notice Emitted when a player's coinflip auto-rebuy is turned on or off.
     /// @param player The player whose auto-rebuy state changed.
@@ -118,7 +115,7 @@ abstract contract CoinflipCore {
     ///         accepted: stakes are stored in whole FLIP and capped per wallet and day
     ///         (STAKE_LANE_MAX), so component events (QuestCompleted, BigRecordUpdated,
     ///         CoinflipDeposit) describe nominal awards while this one reports what the lane
-    ///         actually took after rounding and capping. The VAULT and sDGNRS seed stake is not
+    ///         actually took after capping. The VAULT and sDGNRS seed stake is not
     ///         stored and never appears here: SeedWindowArmed carries it.
     /// @param id The wallet ID receiving stake credit.
     /// @param day The target flip day being credited.
@@ -160,7 +157,7 @@ abstract contract CoinflipCore {
     /// @param day The armed flip day.
     /// @param id The depositor's wallet ID, paid if the winner roll lands in the interval.
     /// @param index The entry's index in the day's book.
-    /// @param weight This deposit's weight: the whole-FLIP floor of its raw principal.
+    /// @param weight This deposit's weight: its raw principal (whole FLIP).
     /// @param cumulativeWeight The entry's cumulative endpoint (exclusive).
     event BafDrawEntered(
         uint24 indexed day,
@@ -179,8 +176,8 @@ abstract contract CoinflipCore {
     /// @param paid FLIP credited for the claim — the category's accrued share of the
     ///        record pool — 0 on a bare ratchet (kinds 0-3: the candidate did not clear
     ///        the mark by a fifth) or when the share of the pool computes to zero. A
-    ///        nominal figure: the stake it joins is whole FLIP, so CoinflipStakeUpdated
-    ///        reports the accepted amount.
+    ///        nominal figure: CoinflipStakeUpdated reports what the capped stake lane
+    ///        accepted.
     /// @param sdgnrsPaid sDGNRS paid for the claim from the reward pool (the same
     ///        accrued share at 1/500 scale), 0 on a bare ratchet or an empty pool.
     event BigRecordUpdated(
@@ -254,18 +251,16 @@ abstract contract CoinflipCore {
     // Constants
     uint256 private constant MIN = 100;
     /// @dev Stake lanes store whole FLIP: at most STAKE_LANE_MAX tokens per
-    ///      player per day. Eight 32-bit lanes pack one storage word.
+    ///      player per day. Seven 32-bit day lanes, a 24-bit page tag and an 8-bit overflow
+    ///      hint pack one storage word.
     uint256 private constant STAKE_LANE_MAX = type(uint32).max;
     uint256 private constant COINFLIP_LOSS_WWXRP_REWARD = 1;
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant RECYCLE_BONUS_BPS = 75;
-    /// @dev Daily drip into the shared record pool, applied at settlement. Adding the
-    ///      dice-run category adds no drip and no take rate: it is a fifth way to claim
-    ///      from the pool this line funds, not a fifth pool.
-
+    /// @dev Daily drip into the shared record pool, applied at settlement.
     uint256 private constant RECORD_POOL_DAILY_FLIP = 2_000;
-    /// @dev A record claim must clear the standing mark by mark/5 (a fifth) — for the
-    ///      four ORIGINAL kinds. The dice run claims on any strict improvement.
+    /// @dev A record claim must clear the standing mark by mark/5 (a fifth) — for kinds
+    ///      0-3. The dice run claims on any strict improvement.
     uint256 private constant RECORD_BEAT_DIV = 5;
     /// @dev Claim share of the pool: a 5% floor, +0.5% per day the record's own
     ///      category has gone unclaimed, capped at 75% (reached 140 days after a
@@ -285,8 +280,6 @@ abstract contract CoinflipCore {
     ///      table gates it at the call site too, so a field that never got near a
     ///      record does not pay for the call.
     uint256 private constant BIGGEST_DICE_RUN_MIN = 1_000_000;
-    /// @dev Domain tag for the BAF weighted-draw winner roll.
-    bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
     uint16 private constant COIN_CLAIM_DAYS = 90;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
     /// @dev Initial-emission seed stakes: 200k FLIP per day for rounds 2-21, each to
@@ -296,12 +289,11 @@ abstract contract CoinflipCore {
     /// @dev The Game's constant wallet IDs for the two seed recipients.
     uint32 private constant VAULT_WALLET_ID = 1;
     uint32 private constant SDGNRS_WALLET_ID = 2;
-    IDegenerusQuests internal constant questModule =
-        IDegenerusQuests(ContractAddresses.QUESTS);
 
-    // Player coinflip state: two slots. Slot A holds the claim bank, cursor, auto-rebuy
-    // flags; slot B holds the take-profit stop and rolling carry. Unlimited stores stop1
-    // with its own flag, retaining word B when carry empties. The mapping key is the ID.
+    // Player coinflip state, keyed by wallet ID: two slots. Slot A holds the claim bank,
+    // cursor, auto-rebuy start day and flags; slot B holds the take-profit stop and rolling
+    // carry. Unlimited stores stop 1 with its own flag, so word B stays nonzero when the
+    // carry empties.
     struct PlayerCoinflipState {
         uint128 claimableStored;
         uint24 lastClaim;
@@ -313,13 +305,13 @@ abstract contract CoinflipCore {
         uint128 autoRebuyCarry;
     }
 
-    // R90: seven uint32 amounts, uint24 absolute page+1 and uint8 overflow hint.
-    // Fifteen lazily allocated words per ID; live collisions use the absolute overflow
-    // root appended at slot 9. Claims never clear stake words. Slot 0 stays the stake root.
+    // Stake page word: seven uint32 day amounts (bits 0..223), uint24 absolute page + 1
+    // (bits 224..247) and a uint8 overflow hint (bits 248..255). Fifteen lazily allocated
+    // ring words per ID; a live collision spills to coinflipStakeOverflow. Claims never
+    // clear stake words.
     mapping(uint32 => uint256[15]) internal coinflipStakeRing;
     mapping(uint24 => uint256) internal coinflipDayResultPacked;
     mapping(uint32 => PlayerCoinflipState) internal playerState;
-
 
     // All-time record pool: ONE FLIP pool shared by the five biggest-* records
     // (flip deposit, degenerette spin, lootbox deposit, ticket buy, dice run).
@@ -327,14 +319,14 @@ abstract contract CoinflipCore {
     // original kinds claim an accruing share of it (RECORD_SHARE_*) when a record
     // is beaten by a fifth; the dice run claims on any strict improvement above
     // its own floor, with same-day repeats priced at the 5% floor of the already-
-    // reduced pool (see armDiceRunRecord). The game-armed marks sit at the end of
-    // the storage section so every prior slot keeps its index.
+    // reduced pool (see armDiceRunRecord).
     /// @notice Shared FLIP pool the biggest-* all-time records draw their claim payouts from.
     uint128 public recordPool = 10_000;
     /// @notice The all-time biggest single flip deposit, in whole FLIP.
     uint128 public biggestFlipEver;
 
-    // RNG state + the five per-category record claim clocks (all pack into one slot)
+    // Resolved-day cursor, seed latch, the five record claim clocks, the BAF draw day and
+    // the requested-day mirror pack into one slot (read whole by _flipDays).
     uint24 internal flipsClaimableDay = 1;
     /// @dev One-shot latch: sDGNRS perpetual auto-rebuy arms once the final seeded day settles.
     bool internal sdgnrsAutoRebuyArmed;
@@ -362,24 +354,21 @@ abstract contract CoinflipCore {
     // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
     // purchase day stakes it): every direct self-funded deposit staking that day
     // appends a cumulative interval weighted by its raw FLIP principal, and the
-    // BAF top-flipper slice pays ONE winner drawn over those intervals. Declared
-    // here so the record marks below keep their slot indexes.
+    // BAF top-flipper slice pays ONE winner drawn over those intervals.
     /// @dev Per-day draw header:
     ///      bits [0..95]   total weight (whole FLIP; the last cumulative endpoint)
     ///      bits [96..127] entry count
     mapping(uint24 => uint256) internal bafDrawHeader;
 
-    /// @dev The game-armed all-time records (appended so every prior slot keeps its
-    ///      index; the flip mark packs with recordPool above). biggestSpinEver and
-    ///      biggestLuckboxEver are ETH wei; biggestBuyEver is whole tickets.
+    /// @notice The all-time biggest degenerette spin, in ETH wei.
     uint128 public biggestSpinEver;
     /// @notice The all-time biggest lootbox deposit, in ETH wei.
     uint128 public biggestLuckboxEver;
     /// @notice The all-time biggest ticket buy, in whole tickets.
     uint128 public biggestBuyEver;
     /// @dev THE BIGGEST DICE RUN, in score basis points: the winning scheduled craps
-    ///      run's high point over its own starting bankroll, 10,000 = 1x. Packed into
-    ///      biggestBuyEver's free half, so it moves no slot.
+    ///      run's high point over its own starting bankroll, 10,000 = 1x. Packs with
+    ///      biggestBuyEver.
     uint128 public biggestDiceRunEver;
 
     /// @dev Two 128-bit intervals per word, with each lane containing:
@@ -390,7 +379,7 @@ abstract contract CoinflipCore {
     ///      100 FLIP, so every weight is at least 100.
     mapping(uint256 => uint256) internal bafDrawEntry;
 
-    /// @dev Absolute page overflow; appended at slot 9 so every prior root/offset stays fixed.
+    /// @dev Stake pages keyed by absolute page, for a page whose ring word holds another live page.
     mapping(uint32 => mapping(uint24 => uint256)) internal coinflipStakeOverflow;
 
     /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for rounds 2-21,
@@ -400,7 +389,7 @@ abstract contract CoinflipCore {
     ///         Nothing mints up front — each day's seed only becomes claimable FLIP if it
     ///         survives that day's flip.
     constructor() {
-        // Record clocks start at deploy, so each category's FIRST claim draws the
+        // Record clocks start at day 1, so each category's FIRST claim draws the
         // share accrued since launch (the 5% floor plus 0.5% per untouched day,
         // ceiling 75%) — a dormant category grows until its bounty justifies its
         // entry floor.
@@ -436,16 +425,15 @@ abstract contract CoinflipCore {
     }
 
     /// @notice Restricts access to authorized flip creditors.
-    /// @dev Allowed callers: GAME (delegatecall modules — incl. the afking router's
-    ///      in-context creditFlip bounty, which pays AS the GAME, not a separate miner contract),
-    ///      QUESTS (level quest rewards), AFFILIATE, SDGNRS (redemption win-credit at settlement:
-    ///      the escrowed slice was already removed from sDGNRS's backing at batch close via
-    ///      withdrawRedeemedFlip, so the settlement mint to the redeemer is FLIP-neutral),
-    ///      WWXRP (daily-draw prizes: a fixed, RNG-verified stake credited to the
-    ///      recorded winner), PARIMUTUEL (growth-market payouts from the game-driven
+    /// @dev Allowed callers: GAME (and its delegatecall modules, incl. the afking router's
+    ///      in-context creditFlip bounty), QUESTS (quest rewards), AFFILIATE, SDGNRS
+    ///      (redemption win-credit at settlement: the escrowed slice was already removed from
+    ///      sDGNRS's backing at batch close via withdrawRedeemedFlip, so the settlement mint to
+    ///      the redeemer is FLIP-neutral), WWXRP (daily-draw and incinerator prizes credited to
+    ///      the recorded winner), PARIMUTUEL (growth-market payouts from the game-driven
     ///      settlement stage — re-mints of stakes the market burned at placement),
-    ///      and CRAPS (theo rakeback: a fixed slice of a settled bet's expected loss,
-    ///      comped as next-day stake).
+    ///      and CRAPS (seat run winnings and battle and progressive awards, credited as
+    ///      next-day stake).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -460,9 +448,10 @@ abstract contract CoinflipCore {
         _;
     }
 
-    /// @dev Restricts access to FLIP, which uses this both to claim/consume a player's
-    ///      unclaimed coinflip winnings (covering transfer and burn shortfalls) and to
-    ///      route de-circulated FLIP into sDGNRS's coinflip-claimable backing.
+    /// @dev Restricts access to FLIP, which uses this to claim/consume a player's unclaimed
+    ///      coinflip winnings (covering transfer and burn shortfalls), to consume sDGNRS's
+    ///      backing for the automatic Decimator, and to stake de-circulated FLIP as sDGNRS's
+    ///      backing.
     modifier onlyFLIP() {
         if (msg.sender != ContractAddresses.COIN) revert OnlyFLIP();
         _;
@@ -483,15 +472,13 @@ abstract contract CoinflipCore {
     ///      Only the account's own hand (the caller is the payee: a self deposit or a smurf's
     ///      owner) makes a direct deposit, which can set the flip record, enter the BAF draw and
     ///      spend the account's coinflip boon.
-    ///      The principal is floored to whole FLIP before funding; the remainder stays with the
-    ///      funder. Reverts StakeAboveDailyCap if the stake, with its bonuses, would exceed
+    ///      Reverts StakeAboveDailyCap if the stake, with its bonuses, would exceed
     ///      STAKE_LANE_MAX whole FLIP on the target day.
     ///      The stake is keyed by wallet ID. A paid self deposit registers the caller on first
     ///      contact; a nonzero `id` is allocated (Game `resolveAccount` reverts otherwise), and a
     ///      gift's paying funder registers for its quest.
     /// @param id The account receiving the stake (0 = caller).
-    /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims);
-    ///        floored to whole FLIP.
+    /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims).
     function playCoinflip(uint32 id, uint256 amount) external coinflipContext {
         (address key, address payee, bool authorized) = _resolve(id);
         _depositCoinflip(key, payee, id, amount, !authorized);
@@ -509,14 +496,12 @@ abstract contract CoinflipCore {
         uint256 amount,
         bool gift
     ) private {
+        // A paid self deposit allocates (nonzero or Game `E`); a resolved account is already
+        // allocated. Only a zero-amount self settle can leave the ID zero: nothing to settle.
         id = _walletId(key, id, amount != 0);
         if (id == 0) return;
         PlayerCoinflipState storage state = playerState[id];
         if (amount != 0 && amount < MIN) revert AmountLTMin();
-        // A paid self deposit allocates (nonzero or Game `E`); a resolved account is already
-        // allocated. Only a zero-amount self settle can leave the ID zero: nothing to settle.
-        // Stake lanes hold whole FLIP: fund, burn, score and record the floored principal
-        // only, so the funder keeps the fraction the lane could not take.
         // Deposits flow through every RNG lock. A deposit on day N stakes day
         // N+1, and the word that resolves day N+1 is not requested until day
         // N+1 — so every stake write (and every BAF draw interval, which keys
@@ -525,7 +510,6 @@ abstract contract CoinflipCore {
         // in-window auto-claim records its credit to the NEXT bracket
         // (claim-time routing off the promoted level) — state the pending draw
         // never reads.
-
         uint256 cachedDays = _flipDays();
         uint256 mintable = _claimCoinflipsInternal(id, state, uint24(cachedDays));
         uint128 storedBefore = state.claimableStored;
@@ -604,7 +588,7 @@ abstract contract CoinflipCore {
         // Direct deposits (the caller is the payee) can set the flip record and enter the BAF
         // weighted draw; operator deposits and gifts cannot. Every manual route reverts past the
         // daily cap.
-        _addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true, cachedDays);
+        _addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, cachedDays);
         emit CoinflipDeposit(id, amount);
     }
 
@@ -694,14 +678,13 @@ abstract contract CoinflipCore {
     /// @dev Called by FLIP when a transfer or an intercepted mint lands on
     ///      ContractAddresses.SDGNRS: FLIP keeps the amount out of circulating supply and
     ///      routes it here, so sDGNRS never holds a wallet balance and its FLIP stays
-    ///      uncirculated. Day-keyed like every deposit — the credit becomes TOMORROW's
+    ///      uncirculated. Day-keyed like every deposit — the credit becomes the next round's
     ///      stake, whose word cannot exist yet (the same structural freeze-safety all
     ///      player deposits have). Direct stake write, off the leaderboard/flip record like
-    ///      the seed program. A win settles through the sDGNRS payout branch into
-    ///      the rolling carry; claimableStored stays the genesis seed reserve burns
-    ///      drain first. FLIP has already removed the whole amount from supply; the lane
-    ///      takes its whole-FLIP floor and saturates at the daily cap, so this never reverts
-    ///      a transfer.
+    ///      the seed program. Once auto-rebuy is armed a win settles into the rolling carry;
+    ///      claimableStored stays the genesis seed reserve burns drain first. FLIP has already
+    ///      removed the whole amount from supply; the lane saturates at the daily cap, so this
+    ///      never reverts a transfer.
     /// @param amount FLIP (whole tokens) staked onto sDGNRS's next flip.
     function creditSdgnrsBacking(uint256 amount) external coinflipContext onlyFLIP {
         if (amount == 0) return;
@@ -797,7 +780,6 @@ abstract contract CoinflipCore {
         PlayerCoinflipState storage state,
         uint256 latest
     ) private returns (uint256 mintable) {
-        IDegenerusGame coinflipGame = degenerusGame;
         FlipClaimTotals memory totals;
         if (id != 0) state.initialized = true;
         totals.start = state.lastClaim;
@@ -831,9 +813,7 @@ abstract contract CoinflipCore {
         }
         if (totals.start < minClaimableDay) {
             totals.start = minClaimableDay;
-            if (rebuyActive && carry != 0) {
-                carry = 0;
-            }
+            carry = 0;
         }
 
         // Widen the loop cursor so the final supported uint24 day cannot wrap to zero.
@@ -864,8 +844,8 @@ abstract contract CoinflipCore {
             uint16 rewardPercent = uint8(cachedResults >> ((cursor & 31) * 8));
             bool win = rewardPercent >= 50;
 
-            // Skip unresolved days (gaps from testnet day-advance or missed resolution)
-            if (rewardPercent == 0 && !win) {
+            // Skip a day with no stored result. Only bootstrap day 1 has none.
+            if (rewardPercent == 0) {
                 unchecked { ++cursor; --remaining; }
                 continue;
             }
@@ -875,18 +855,15 @@ abstract contract CoinflipCore {
                 cachedStakes = _flipStakePage(stakeKey, id);
                 totals.cachedStakeKey = stakeKey;
             }
-            uint256 storedStake = uint32(cachedStakes >> ((cursor % 7) * 32));
-            uint256 stake = storedStake;
+            uint256 stake = uint32(cachedStakes >> ((cursor % 7) * 32));
             if (seeded) {
                 stake += _seedStake(uint24(cursor));
             }
-            if (rebuyActive && carry != 0) {
-                stake += carry;
-            }
+            stake += carry;
 
             if (stake != 0) {
                 if (win) {
-                    // Winnings = principal + (principal * rewardPercent%) where rewardPercent already in percent (not bps).
+                    // Winnings = principal + principal * rewardPercent / 100.
                     uint256 payout = stake +
                         (stake * uint256(rewardPercent)) /
                         100;
@@ -939,10 +916,9 @@ abstract contract CoinflipCore {
         // sDGNRS gets no BAF score: skip the recordBafFlip call entirely for it (the
         // daily coinflip resolution auto-claims sDGNRS through this walk).
         if (totals.winningBafCredit != 0 && id != SDGNRS_WALLET_ID) {
-            (uint24 cachedLevel, , , , ) = coinflipGame.purchaseInfo_g1027();
-            // purchaseInfo_g1027.lvl is the ACTUAL game level (one snapshot, no separate
-            // currentLvl() read); the bracket keys on the real level, not the routed buy
-            // level (which diverges on the final jackpot day).
+            (uint24 cachedLevel, , , , ) = degenerusGame.purchaseInfo_g1027();
+            // purchaseInfo_g1027.lvl is the actual game level; the bracket keys on it, not the
+            // routed buy level (which diverges on the final jackpot day).
             //
             // Recording is unconditional — even inside a resolving BAF window. The
             // bracket below is _bafBracketLevel(level + 1), which during an x0 window
@@ -979,43 +955,29 @@ abstract contract CoinflipCore {
       |                    STAKE MANAGEMENT                                  |
       +======================================================================+*/
 
-    /// @dev Add daily flip stake for wallet `id`. recordAmount is the raw principal of a
-    ///      direct self-funded deposit (zero for every credit path): it alone can arm
-    ///      the flip record and it alone carries BAF draw weight. `manual` marks the
-    ///      deposit routes (self, operator, gift): they revert StakeAboveDailyCap when the
-    ///      stake with its bonuses would pass the lane's whole-FLIP cap, so the caller's
-    ///      funding, quest and record mutations roll back with it. Credit routes saturate
-    ///      instead, so a recipient at the cap can never brick a batch payout or the crank.
-    function _addDailyFlip(
-        uint32 id,
-        uint256 coinflipDeposit,
-        uint256 recordAmount,
-        bool manual
-    ) private {
-        _addDailyFlip(id, coinflipDeposit, recordAmount, manual, _flipDays());
-    }
-
     /// @dev Packed requested/resolved/draw days. The pinned deposit callees cannot advance
     ///      a daily request or arm a BAF draw, so these fields remain exact across the deposit.
     function _flipDays() private view returns (uint256 cachedDays) {
         assembly ("memory-safe") { cachedDays := sload(requestedDailyIdx.slot) }
     }
 
+    /// @dev Add a manual deposit's stake for wallet `id` (self, operator or gift route).
+    ///      recordAmount is the raw principal of a direct deposit (the caller is the payee) and
+    ///      zero for operator deposits and gifts: it alone consumes the coinflip boon, can arm the
+    ///      flip record and carries BAF draw weight. Reverts StakeAboveDailyCap when the stake with
+    ///      its bonuses would pass the lane's whole-FLIP cap, so the caller's funding, quest and
+    ///      record mutations roll back with it.
     function _addDailyFlip(
         uint32 id,
         uint256 coinflipDeposit,
         uint256 recordAmount,
-        bool manual,
         uint256 cachedDays
     ) private {
         if (recordAmount != 0) {
-            // Manual deposits only: check and consume coinflip boon (5%/10%/25% boost on max 100k FLIP deposit)
-            // Max bonuses: 5% = 5k, 10% = 10k, 25% = 25k. The game handle is read HERE rather than
-            // at the top of the frame: every credit path passes recordAmount 0, and only this
-            // branch consults the game, so a credit must not pay for the storage read.
+            // Coinflip boon: 5%/10%/25% boost on at most 100k FLIP of the deposit.
             uint16 boonBps = degenerusGame.consumeCoinflipBoon_g2902(id);
             if (boonBps > 0) {
-                uint256 maxDeposit = 100_000; // Cap at 100k FLIP for boost calc
+                uint256 maxDeposit = 100_000;
                 uint256 cappedDeposit = coinflipDeposit > maxDeposit
                     ? maxDeposit
                     : coinflipDeposit;
@@ -1024,14 +986,12 @@ abstract contract CoinflipCore {
             }
         }
 
-        // Flip record: judged on the raw direct-deposit amount (recordAmount — zero for
-        // every credit path, so credits and record claims can never re-arm), not bonuses
-        // or existing stake. The entry-floor gate keeps the record SLOAD off ordinary
-        // deposits. No RNG-lock gate: the claim is fixed by pool state alone and rides
-        // this deposit's own coin toss, so there is nothing to arm against a known word.
-        // Armed AFTER the boon boost (a claim never earns the boon) and BEFORE the stake
-        // read below, so the claim joins this deposit in one write and the read still
-        // follows every external call this frame makes.
+        // Flip record: judged on the raw direct-deposit amount, not bonuses or existing stake.
+        // The entry-floor gate keeps the record SLOAD off ordinary deposits. No RNG-lock gate:
+        // the claim is fixed by pool state alone and rides this deposit's own coin toss, so
+        // there is nothing to arm against a known word. Armed AFTER the boon boost (a claim
+        // never earns the boon) and BEFORE the stake read below, so the claim joins this
+        // deposit in one write and the read still follows every external call this frame makes.
         if (recordAmount >= BIGGEST_FLIP_MIN && recordAmount > biggestFlipEver) {
             coinflipDeposit += _armBigRecord(
                 RECORD_KIND_FLIP,
@@ -1040,35 +1000,29 @@ abstract contract CoinflipCore {
             );
         }
 
-        // Determine which future day this stake applies to (always the next window).
+        // The stake applies to the next unknown round.
         uint24 targetDay = uint24(cachedDays >> 176) + 1;
         bool drawEntry = recordAmount != 0 && targetDay == uint24(cachedDays >> 128);
 
-        // Principal, already floored bonuses and claims are summed in whole FLIP;
-        // the lane event reports the accepted delta and total.
-        _addFlipStake(id, targetDay, coinflipDeposit, manual);
-        // BAF weighted draw: on the armed day (an x0 level's last purchase day
-        // stakes it), every direct self-funded deposit appends an interval
-        // weighted by its raw principal (recordAmount) — never bonuses, boon
-        // boosts, record claims, or credits, so free stake carries no draw
-        // weight. Ordinary days pay one warm read: bafDrawDay shares the packed
-        // slot the deposit's claim walk already loaded. Credit paths (quests,
-        // gifts, operator deposits, sDGNRS backing) skip even that —
-        // their recordAmount is zero and the compare short-circuits.
+        _addFlipStake(id, targetDay, coinflipDeposit, true);
+        // BAF weighted draw: on the armed day (an x0 level's last purchase day stakes it),
+        // every direct deposit appends an interval weighted by its raw principal
+        // (recordAmount), never bonuses, boon boosts or record claims, so free stake carries
+        // no draw weight.
         if (drawEntry) {
             _appendBafDrawEntry(targetDay, id, recordAmount);
         }
     }
 
     /// @dev Add `amount` whole FLIP to `day`'s lane for wallet `id`, saturating at the cap, and emit
-    ///      the accepted delta and total. Every stake-writing route funnels through here.
+    ///      the accepted delta and total. Used by every credit route.
     function _addFlipStake(uint32 id, uint24 day, uint256 amount) private returns (uint256) {
         return _addFlipStake(id, day, amount, false);
     }
 
-    /// @dev `revertAtCap` variant for manual deposits: the whole-FLIP total may not pass
-    ///      STAKE_LANE_MAX. The prior lane is read fresh here, after every external call the
-    ///      caller made.
+    /// @dev Every stake write funnels through here. With `revertAtCap` (manual deposits) the
+    ///      whole-FLIP total may not pass STAKE_LANE_MAX. The prior lane is read fresh here,
+    ///      after every external call the caller made.
     function _addFlipStake(
         uint32 id,
         uint24 day,
@@ -1137,7 +1091,9 @@ abstract contract CoinflipCore {
         uint32 id,
         uint256 amount
     ) private {
-        uint96 weight = _score96(amount);
+        // Fits: `amount` is a direct deposit's principal, and the stake that carried it passed
+        // the uint32 lane cap check (revertAtCap) before this append.
+        uint96 weight = uint96(amount);
         uint256 header = bafDrawHeader[day];
         uint256 newTotal = (header & type(uint96).max) + weight;
         uint32 index = uint32(header >> 96);
@@ -1157,9 +1113,8 @@ abstract contract CoinflipCore {
     ///      the caller folds the claim into that credit rather than taking a second
     ///      stake write. Every other larger candidate ratchets the mark alone, raising
     ///      the bar while the share keeps accruing. The first mark a record ever takes
-    ///      has no bar to clear and draws the share accrued since deploy (the
-    ///      constructor starts every category clock at the deploy day). Marks never
-    ///      reset.
+    ///      has no bar to clear and draws the share accrued since day 1 (the
+    ///      constructor starts every category clock there). Marks never reset.
     ///
     ///      Callers gate their record's entry floor, so a mark is always 0 or at or
     ///      above that floor — a sub-floor candidate could not have beaten it anyway.
@@ -1267,12 +1222,10 @@ abstract contract CoinflipCore {
 
     /// @notice Arm THE BIGGEST DICE RUN with `candidate`, the winning scheduled craps
     ///         run's high point over its own starting bankroll in score basis points.
-    /// @dev CRAPS ONLY, and this kind only. It is deliberately NOT the generic
-    ///      `armRecord` door: that one is the GAME's and carries the four existing
-    ///      kinds' rule that a claim must beat the standing mark by a fifth, which is
-    ///      not this kind's rule and must not become it. Nothing here funds the pool,
-    ///      adds a drip, or changes a take rate — the dice run is a fifth way to CLAIM
-    ///      from a pool that already exists.
+    /// @dev CRAPS ONLY, and this kind only. It is not the generic `armRecord` door: that
+    ///      one is the GAME's and carries kinds 0-3's rule that a claim must beat the
+    ///      standing mark by a fifth, which is not this kind's rule. Nothing here funds the
+    ///      pool: the dice run is a fifth way to claim from the shared record pool.
     ///
     ///      THE CLAIM RULE. Every strict improvement at or above the floor ratchets the
     ///      mark, moves the trophy, and claims the accruing share — 5% plus half a point
@@ -1320,7 +1273,7 @@ abstract contract CoinflipCore {
         uint128 paid = uint128((uint256(pool) * shareBps) / 10_000);
         if (paid != 0) {
             recordPool = pool - paid;
-            _addDailyFlip(id, paid, 0, false);
+            _addFlipStake(id, today + 1, paid);
         }
         // The sDGNRS leg rides the same accrued share at 1/500 scale, exactly as the
         // other four kinds' does. A record is a record: the dice run claims from the
@@ -1553,39 +1506,33 @@ abstract contract CoinflipCore {
       +======================================================================+*/
 
     /// @notice Advance once at the Game's atomic fresh daily request boundary.
-    /// @dev Duplicate or out-of-order internal calls are non-reverting no-ops.
+    /// @dev The Game calls this only from its daily request, with the day it just stored as
+    ///      `dailyIdx`; that request requires `day == dailyIdx + 1`, so `day` is always
+    ///      `requestedDailyIdx + 1`.
     function onDailyRequest(uint24 day) external onlyDegenerusGameContract {
-        if (uint256(day) != uint256(requestedDailyIdx) + 1) return;
         requestedDailyIdx = day;
     }
 
-
     /// @notice Process coinflip payout for a day (called by game contract).
-    /// @param bonus Reward-percent bonus for this day, precomputed by the caller from frozen state:
-    ///        0 = normal day, 2 = bonus day (a level-0 day, the second day of a level's jackpot
-    ///        phase, or the first purchase day after a turbo collapse), 6 = the same on an x0
-    ///        BAF level (10, 20, 30, …).
+    /// @dev The reward percent comes from FlipRoundLib.coinflipRewardPercent. `bonus` is
+    ///      precomputed by the caller from frozen protocol state (not a player-flippable flag),
+    ///      sized so a recycling player nets ~99.9% / ~101.9% RTP after the recycle bonus
+    ///      compounds.
+    /// @param bonus Reward-percent bonus for this day: 0 = normal day, 2 = bonus day (a level-0
+    ///        day, the second day of a level's jackpot phase, or the first purchase day after a
+    ///        turbo collapse), 6 = the same on an x0 BAF level (10, 20, 30, …).
     /// @param rngWord VRF-derived random word for determining win/loss and bonus.
-    /// @param epoch The day index being resolved.
+    /// @param epoch The day index being resolved: the Game applies each requested day's word
+    ///        once, in order, so `epoch` is always `flipsClaimableDay + 1`.
     function processCoinflipPayouts(
         uint8 bonus,
         uint256 rngWord,
         uint24 epoch
     ) external coinflipContext onlyDegenerusGameContract {
-        if (epoch <= flipsClaimableDay) return;
-        uint16 rewardPercent = _coinflipReward(bonus, rngWord, epoch);
+        uint16 rewardPercent = FlipRoundLib.coinflipRewardPercent(bonus, rngWord);
         bool win = (rngWord & 1) == 1;
         _storeDayResult(epoch, rewardPercent, win);
         _settleCoinflipDay(epoch, rewardPercent, win);
-    }
-
-    /// @dev Tagged reward derivation for normally resolved days. `bonus` is precomputed by the
-    ///      caller from frozen protocol state (not a player-flippable flag): 0 on a normal day,
-    ///      +2 on a bonus day (a level-0 day, the second day of a level's jackpot phase, or the
-    ///      first purchase day after a turbo collapse), +6 on an x0 BAF-level bonus day. Sized so
-    ///      a recycling player nets ~99.9% / ~101.9% RTP after the recycle bonus compounds.
-    function _coinflipReward(uint8 bonus, uint256 rngWord, uint24 epoch) private pure returns (uint16) {
-        return FlipRoundLib.coinflipRewardPercent(bonus, rngWord, epoch);
     }
 
     function _settleCoinflipDay(uint24 epoch, uint16 rewardPercent, bool win) private {
@@ -1604,8 +1551,8 @@ abstract contract CoinflipCore {
 
         emit CoinflipDayResolved(epoch, win, rewardPercent, newPool);
 
-        // Keep sDGNRS's flip cursor current (BAF is skipped for sDGNRS, so both paths
-        // stay off the rngLocked guard). sDGNRS never mints FLIP to a wallet balance:
+        // Keep sDGNRS's flip cursor current (the walk skips BAF scoring for sDGNRS).
+        // sDGNRS never mints FLIP to a wallet balance:
         // its FLIP stays uncirculated as coinflip backing and is read by redemptions and
         // auto-decimator as claimableStored + carry. During the seed window each settled win
         // folds into claimableStored — the genesis seed reserve burns drain first;
@@ -1649,14 +1596,12 @@ abstract contract CoinflipCore {
       |                    FLIP CREDITING                                    |
       +======================================================================+*/
 
-
-
     /// @notice Credit flip to wallet `id` through the authorized protocol/game creditor lane.
     /// @dev Keyed by wallet ID alone: writes the ID-keyed stake lane without reading the
     ///      claim state on an ordinary matching-page append. Reuse first checks the
-    ///      resolved frontier and reads the claim cursor only if needed. The credit floors to whole FLIP on its own (two sub-FLIP
-    ///      credits add nothing) and saturates at the daily cap; CoinflipStakeUpdated reports the
-    ///      accepted amount. A zero ID or amount is a no-op.
+    ///      resolved frontier and reads the claim cursor only if needed. The credit saturates at
+    ///      the daily cap; CoinflipStakeUpdated reports the accepted amount. A zero ID or amount
+    ///      is a no-op.
     /// @param id The wallet ID receiving the flip credit (0 = no wallet: skipped).
     /// @param amount Amount of FLIP-denominated flip stake to credit.
     function creditFlip_g317(
@@ -1668,7 +1613,7 @@ abstract contract CoinflipCore {
 
     function _creditFlip(uint32 id, uint256 amount) internal {
         if (id == 0 || amount == 0) return;
-        _addDailyFlip(id, amount, 0, false);
+        _addFlipStake(id, _targetFlipDay(), amount);
     }
 
     /// @notice Credit flips to multiple wallets (called by GAME jackpot modules, the craps
@@ -1693,8 +1638,6 @@ abstract contract CoinflipCore {
         }
     }
 
-
-
     /// @notice Credit flips to exactly two wallets (called by the GAME purchase path).
     /// @dev Fixed-arity variant of creditFlipBatch for the purchase hot path — spares the
     ///      caller the two array allocations and the dynamic ABI encode. Zero-ID and
@@ -1709,11 +1652,12 @@ abstract contract CoinflipCore {
         uint32 id2,
         uint256 amount2
     ) external coinflipContext onlyFlipCreditors {
+        uint24 day = _targetFlipDay();
         if (id1 != 0 && amount1 != 0) {
-            _addDailyFlip(id1, amount1, 0, false);
+            _addFlipStake(id1, day, amount1);
         }
         if (id2 != 0 && amount2 != 0) {
-            _addDailyFlip(id2, amount2, 0, false);
+            _addFlipStake(id2, day, amount2);
         }
     }
 
@@ -1758,7 +1702,8 @@ abstract contract CoinflipCore {
         uint256 remainder = base - removed;
         if (remainder == 0) return removed;
 
-        // Decrement the rolling auto-rebuy carry for the rest (post-day-20 steady state).
+        // Decrement the rolling auto-rebuy carry for the rest (the steady state once auto-rebuy
+        // is armed after the seed window).
         PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
         uint256 carry = state.autoRebuyCarry;
         if (remainder > carry) remainder = carry;
@@ -1851,10 +1796,9 @@ abstract contract CoinflipCore {
     ///         deposits as a wallet ID, or 0 when the day recorded no entries (the BAF
     ///         slice then refunds its 5% share to the pool).
     /// @dev Winner probability = a player's recorded principal / the day's total,
-    ///      by cumulative-interval measure. The roll is domain-separated from the
-    ///      BAF transition word (fixed tag, this contract, the armed day), so it
-    ///      perturbs no other consumer of that word. Winner = the entry with the
-    ///      smallest cumulative endpoint strictly above the roll, by binary search.
+    ///      by cumulative-interval measure. The roll is hash2(RngTags.BAF_HEAD, rngWord),
+    ///      a tag no other consumer of the transition word uses. Winner = the entry with
+    ///      the smallest cumulative endpoint strictly above the roll, by binary search.
     /// @param rngWord The BAF transition VRF word.
     /// @return winnerId The drawn depositor's wallet ID, or 0 if the armed day recorded no entries.
     function bafDrawWinner(uint256 rngWord) external coinflipContext view returns (uint32 winnerId) {
@@ -1871,13 +1815,13 @@ abstract contract CoinflipCore {
         uint32 hi = uint32(header >> 96) - 1;
         while (lo < hi) {
             uint32 mid = lo + (hi - lo) / 2;
-            if ((_bafDrawEntry(day, mid) & type(uint96).max) > roll) {
+            if ((_bafDrawLane(mid) & type(uint96).max) > roll) {
                 hi = mid;
             } else {
                 lo = mid + 1;
             }
         }
-        winnerId = uint32(_bafDrawEntry(day, lo) >> 96);
+        winnerId = uint32(_bafDrawLane(lo) >> 96);
     }
 
     /// @notice The armed BAF draw day and its book totals.
@@ -1892,9 +1836,15 @@ abstract contract CoinflipCore {
         entryCount = uint32(header >> 96);
     }
 
-    /// @dev Two cumulative-weight/account intervals share each physical word.
+    /// @dev Entry `index` of the armed day's book, or 0 when `day` is not the armed day or the
+    ///      index is past its count.
     function _bafDrawEntry(uint24 day, uint32 index) private view returns (uint256) {
         if (day != bafDrawDay || index >= uint32(bafDrawHeader[day] >> 96)) return 0;
+        return _bafDrawLane(index);
+    }
+
+    /// @dev Raw lane `index`: two cumulative-weight/account intervals share each word.
+    function _bafDrawLane(uint32 index) private view returns (uint256) {
         return uint128(bafDrawEntry[index >> 1] >> ((index & 1) * 128));
     }
 
@@ -1953,9 +1903,7 @@ abstract contract CoinflipCore {
         }
         if (startDay < minClaimableDay) {
             startDay = minClaimableDay;
-            if (rebuyActive && carry != 0) {
-                carry = 0;
-            }
+            carry = 0;
         }
 
         uint16 remaining = COIN_CLAIM_DAYS;
@@ -1968,9 +1916,8 @@ abstract contract CoinflipCore {
         uint256 cachedStakes;
         while (remaining != 0 && cursor <= latestDay) {
             (uint16 rewardPercent, bool win) = _dayResult(uint24(cursor));
-            // Skip unresolved days (both fields zero) instead of breaking,
-            // to handle gaps from testnet day-advance or missed resolution.
-            if (rewardPercent == 0 && !win) {
+            // Skip a day with no stored result. Only bootstrap day 1 has none.
+            if (rewardPercent == 0) {
                 unchecked { ++cursor; --remaining; }
                 continue;
             }
@@ -1984,13 +1931,11 @@ abstract contract CoinflipCore {
             if (seeded) {
                 stake += _seedStake(uint24(cursor));
             }
-            if (rebuyActive && carry != 0) {
-                stake += carry;
-            }
+            stake += carry;
 
             if (stake != 0) {
                 if (win) {
-                    // Payout = principal + (principal * rewardPercent%)
+                    // Payout = principal + principal * rewardPercent / 100.
                     uint256 payout = stake +
                         (stake * uint256(rewardPercent)) /
                         100;
@@ -2058,8 +2003,8 @@ abstract contract CoinflipCore {
     /// @dev Day result for `day` (32 days/slot, 8-bit lanes). 3-state byte:
     ///      0 = unresolved, 1 = resolved loss, 50..156 = resolved win at that reward%.
     ///      win is derived (byte >= 50, since every win stores reward >= 50); losing
-    ///      days don't retain the (functionally unused) reward%. Resolution detection
-    ///      stays `rewardPercent != 0` — a resolved loss reads back as 1, not 0.
+    ///      days do not retain the reward%. Resolution detection is `rewardPercent != 0`:
+    ///      a resolved loss reads back as 1, not 0.
     function _dayResult(uint24 day) internal view returns (uint16 rewardPercent, bool win) {
         uint8 b = uint8(coinflipDayResultPacked[day >> 5] >> ((day & 31) * 8));
         rewardPercent = b;
@@ -2076,9 +2021,8 @@ abstract contract CoinflipCore {
         coinflipDayResultPacked[key] = w;
     }
 
-    /// @dev Calculate recycling bonus for daily flip deposits (flat 0.75%).
-    ///      Base is the recycled amount (the re-bet or auto-rebuy carry being deposited).
-    ///      Bonus feeds into creditedFlip, not back into claimableStored (no feedback loop).
+    /// @dev Recycling bonus (flat 0.75%) on a recycled amount: the winnings a deposit re-bets,
+    ///      or the auto-rebuy carry as it rolls. It joins the stake, never claimableStored.
     ///      Each call floors its bonus to whole FLIP. Splitting a recycle may therefore
     ///      reduce its total bonus; amounts below 134 FLIP receive no recycling bonus.
     function _recyclingBonus(
@@ -2114,15 +2058,6 @@ abstract contract CoinflipCore {
             reward
         );
         return reward;
-    }
-
-    /// @dev Convert stake to uint96 score (whole tokens).
-    function _score96(uint256 s) private pure returns (uint96) {
-        uint256 wholeTokens = s;
-        if (wholeTokens > type(uint96).max) {
-            wholeTokens = type(uint96).max;
-        }
-        return uint96(wholeTokens);
     }
 
     /// @dev Round level up to next BAF bracket (multiple of 10).

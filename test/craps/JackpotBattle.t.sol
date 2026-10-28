@@ -32,6 +32,7 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 contract BattleRef is Craps {
     uint256 internal constant DICE_TAG = 0x436f696e4472617744696365; // "CoinDrawDice"
     uint256 internal constant COIN_DRAW_SCATTER_TAG = 0x436f696e4472617753636174746572; // "CoinDrawScatter"
+    uint256 internal constant ROTATING_SHOOTER_TAG = 0x526f746174696e6753686f6f746572; // "RotatingShooter"
 
     /// @dev The scheduled row for a board the dice threw whole: 15% of shooters, +32% profit.
     uint256 internal constant BOOST_ROW = 12 | (30 << 8);

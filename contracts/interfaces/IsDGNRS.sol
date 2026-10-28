@@ -27,8 +27,8 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
  */
 
 /// @title IsDGNRS
-/// @notice Interface for the sDGNRS token contract (contract-to-contract calls, plus the two
-///         ID-taking redemption-claim doors)
+/// @notice Interface for the sDGNRS token contract (Game, wrapper and miner calls, plus the
+///         player burn and redemption-claim doors)
 /// @dev sDGNRS uses 12 decimals and is backed by ETH, stETH, and FLIP reserves with pool-based distribution
 interface IsDGNRS {
     /// @notice Game-only liquidation forfeiture: burn the seller's full balance without payout.
@@ -76,19 +76,24 @@ interface IsDGNRS {
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (0 during active game)
     /// @return stethOut stETH received (0 during active game)
-    /// @return flipOut FLIP received (0 during active game)
+    /// @return flipOut Always 0
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 
-    /// @notice Claim account `id`'s resolved gambling-burn redemption in batch `batchId`.
+    /// @notice Claim account `id`'s gambling-burn redemption in batch `batchId` once the game is
+    ///         over (live batches settle through the miner).
     /// @dev Authorized: `id == 0` is the caller (ID from Game.walletIdOf); a nonzero
     ///      `id` needs Game `resolveAccount_g7029(id, msg.sender).authorized` (the account's key, a
-    ///      smurf's owner, or an approved operator). The direct half credits the account's Game
-    ///      claimable by ID and the lootbox half resolves for the account; after game over the
-    ///      terminal ETH/stETH (including an open-batch unwind) pays the account's PAYEE.
+    ///      smurf's owner, or an approved operator), except an acquired account, which anyone may
+    ///      claim. Pays the account's PAYEE directly in ETH/stETH: the rolled share of a resolved
+    ///      batch, or the game-over value for the batch still open at game over. No lootbox or
+    ///      FLIP leg.
     /// @param id Claimant account (0 = caller).
     /// @param batchId Redemption batch to claim.
+    /// @custom:reverts NotResolved If a closed batch has no roll.
+    /// @custom:reverts NotGameOver If the game is not over.
     /// @custom:reverts Unauthorized If the caller may not act for `id`.
     /// @custom:reverts E (Game) If `id` is unallocated.
+    /// @custom:reverts NoClaim If the account has no entry in the batch.
     function claimRedemption(uint32 id, uint32 batchId) external;
 
     /// @notice Transfer sDGNRS from the wrapper to a recipient (DGNRS wrapper only)
@@ -101,16 +106,14 @@ interface IsDGNRS {
     /// @return Token balance of the account
     function balanceOf(address account) external view returns (uint256);
 
-
     /// @notice Get the total supply of sDGNRS tokens
     /// @return Total number of sDGNRS tokens in circulation
     function totalSupply() external view returns (uint256);
 
     /// @notice Get the FLIP reserve backing sDGNRS
-    /// @dev Includes claimable coinflip backing
+    /// @dev Claimable coinflip backing plus the auto-rebuy carry
     /// @return Amount of FLIP in reserves
     function flipReserve() external view returns (uint256);
-
 
     /// @notice Preview the output from burning sDGNRS tokens
     /// @dev Proportional share of current reserves, net of the redemption reservation. The value
@@ -118,7 +121,7 @@ interface IsDGNRS {
     ///      reported as one wei-denominated figure.
     /// @param amount Amount of sDGNRS to simulate burning
     /// @return ethOut Total value that would be returned, in wei (paid as ETH and/or stETH)
-    /// @return flipOut Amount of FLIP that would be minted
+    /// @return flipOut FLIP that would be received (0 after game over)
     function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut);
 
     /// @notice Total ETH value reserved for closed gambling-burn batches.

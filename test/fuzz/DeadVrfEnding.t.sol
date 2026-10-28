@@ -87,8 +87,8 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
     }
 }
 
-/// @notice The trigger's three causes: a request unanswered for 14 days (VRF dead), 30 days
-///         without a sealed day, and the purchase deadline — which fires only once the game
+/// @notice The trigger's three causes: a request unanswered for 14 days (VRF dead), 14 days
+///         without a completed day, and the purchase deadline — which fires only once the game
 ///         has caught up, so a stall across it has the whole 14-day window to recover.
 contract DeadVrfLivenessTest is Test {
     DeadVrfLivenessHarness private h;

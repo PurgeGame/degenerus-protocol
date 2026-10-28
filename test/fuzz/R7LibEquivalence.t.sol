@@ -13,7 +13,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 ///         fuzz; both bodies depend only on `< 5` / `< 10` and `targetLevel % 100`,
 ///         so these cover every equivalence class).
 ///
-///      2. EntropyLib.hash1/hash2 (LIBS-03/04): each migrated call-site shape must
+///      2. EntropyLib.hash2 (LIBS-03/04): each migrated call-site shape must
 ///         hash the byte-identical preimage as the abi.encode/encodePacked idiom it
 ///         replaces — any divergence would change RNG-derived values.
 contract R7LibEquivalence is Test {
@@ -128,10 +128,5 @@ contract R7LibEquivalence is Test {
             EntropyLib.hash4(word, uint256(uint160(player)), size, nonce),
             uint256(keccak256(abi.encode(word, player, size, nonce)))
         );
-    }
-
-    /// @dev LIBS-04 reseed shape: abi.encode of a single uint256 is one raw word.
-    function testFuzz_hash1_singleWord(uint256 x) public pure {
-        assertEq(EntropyLib.hash1(x), uint256(keccak256(abi.encode(x))));
     }
 }

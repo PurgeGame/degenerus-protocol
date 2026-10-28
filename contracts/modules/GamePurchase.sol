@@ -117,15 +117,15 @@ abstract contract GamePurchase is
     ///      purchase tx's msg.value (a combined purchase splits one msg.value across legs).
     ///      Payment modes:
     ///      - DirectEth: fresh ETH first (overage ignored); afking covers any shortfall; claimable skipped
-    ///      - Claimable: deduct from claimableWinnings (ethForLeg must be 0)
-    ///      - Combined: ETH first, then claimable for remainder
+    ///      - Claimable: claimable winnings (ethForLeg must be 0)
+    ///      - Combined: ETH first (at most the cost), then claimable for remainder
     ///      Afking covers any remaining shortfall on every mode.
     ///
-    ///      SECURITY: Validates minimum payment amounts; overage is ignored for accounting.
-    ///      Splits the prize contribution into its next/future shares and RETURNS them so the
-    ///      caller can fold the ticket and lootbox legs into one prize-pool RMW.
+    ///      SECURITY: Overage is ignored for accounting. Splits the prize contribution into its
+    ///      next/future shares and RETURNS them so the caller can fold the ticket and lootbox
+    ///      legs into one prize-pool RMW.
     ///
-    /// @param player The player address to record mint for.
+    /// @param player Wallet ID to record the mint for.
     /// @param costWei Total cost in wei for this mint.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
@@ -155,15 +155,15 @@ abstract contract GamePurchase is
     ///      Handles three payment modes with strict validation:
     ///
     ///      DirectEth: fresh ETH first (overage ignored); afking covers any shortfall; claimable skipped
-    ///      Claimable: ethForLeg must be 0, deduct from claimableWinnings
-    ///      Combined: ETH first (any amount ≤ cost), then claimable for rest
+    ///      Claimable: ethForLeg must be 0; claimable, then afking
+    ///      Combined: ETH first (any amount ≤ cost), then claimable, then afking
     ///
     ///      SECURITY: Never draws the account's unbacked 1-wei claimable sentinel.
     ///      The per-player claimable/afking balances are debited here; the matching claimablePool
     ///      decrement is deferred to the caller (returned as claimableDraw) so a combined buy folds
     ///      both legs into one pool RMW.
     ///
-    /// @param player Player whose claimable balance to check/deduct.
+    /// @param player Wallet ID whose claimable balance to check/deduct.
     /// @param amount Total cost in wei to cover.
     /// @param payKind Payment method enum.
     /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
@@ -401,11 +401,9 @@ abstract contract GamePurchase is
                     ticket
                 );
 
-            // The buyer registered when the FLIP leg priced the purchase.
-
             // MINT_FLIP quest leg only (no ETH spend, no lootbox): skips activity
             // score, affiliate, and non-mint quests. The returned reward is a FLIP
-            // flip stake, awarded via creditFlip — the full coin cost was already
+            // flip stake, awarded via creditFlip_g317 — the full coin cost was already
             // burned inside _callTicketPurchase.
             {
                 uint256 nextLevelPrice = PriceLookupLib.priceForLevel(
@@ -441,7 +439,7 @@ abstract contract GamePurchase is
         uint256 packed = balancesPacked[wid];
         if (amount > (packed >> 128)) revert Insolvent();
         // Guard proved amount <= high half, so `amount << 128` subtracts only from the afking
-        // half (no borrow into claimable) — byte-identical to _debitAfking's checked store.
+        // half (no borrow into claimable).
         balancesPacked[wid] = packed - (amount << 128);
         claimablePool -= uint128(amount); // tandem release (checked math)
         emit AfkingWithdrew(wid, amount);
@@ -479,10 +477,10 @@ abstract contract GamePurchase is
             if (family > LOAN_MAX_SMURFS + 1) revert E();
         }
         uint24 lvl = level;
-        if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(_activeTicketLevel()) + LOAN_HORIZON_LEVELS) revert E();
+        uint24 buyLevel = _activeTicketLevel();
+        if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(buyLevel) + LOAN_HORIZON_LEVELS) revert E();
         (, uint256 principal) = _quoteLoan(id, dueLevel);
         if (amount < principal) principal = amount;
-        uint24 buyLevel = _activeTicketLevel();
         uint256 price = PriceLookupLib.priceForLevel(buyLevel);
         uint256 ticketWei = _loanTicketWei(principal, _gameDay(), purchaseStartDay, price,
             jackpotPhaseFlag);
@@ -540,14 +538,14 @@ abstract contract GamePurchase is
 
     /// @dev sDGNRS pays from claimable; Vault uses claimable above its sentinel, then its own
     ///      prepaid reserve.
-    function _debitLender(uint32 buyer, uint256 amount) private {
-        uint256 available = _claimableOf(buyer);
+    function _debitLender(uint32 lender, uint256 amount) private {
+        uint256 available = _claimableOf(lender);
         uint256 usable = available > 1 ? available - 1 : 0;
         uint256 fromClaim = amount < usable ? amount : usable;
-        if (buyer != VAULT_WALLET_ID) fromClaim = amount;
-        _debitClaimableAndAfking(buyer, fromClaim, amount - fromClaim);
-        if (fromClaim != 0) emit ClaimableSpent(buyer, fromClaim, available - fromClaim, MintPaymentKind.Internal, amount);
-        if (amount > fromClaim) emit AfkingSpent(buyer, amount - fromClaim);
+        if (lender != VAULT_WALLET_ID) fromClaim = amount;
+        _debitClaimableAndAfking(lender, fromClaim, amount - fromClaim);
+        if (fromClaim != 0) emit ClaimableSpent(lender, fromClaim, available - fromClaim, MintPaymentKind.Internal, amount);
+        if (amount > fromClaim) emit AfkingSpent(lender, amount - fromClaim);
     }
 
     event AccountSwept(uint32 indexed accountId, uint32 indexed mainId, uint256 ethValue, uint256 flipAmount);
@@ -618,7 +616,7 @@ abstract contract GamePurchase is
             buyerId
         );
         // The ordinary leg's cost is the quote above: same input, same active level.
-        if (boxWord != 0) _appendBoxOrder( boxWord, cost - quote.ticketCost);
+        if (boxWord != 0) _appendBoxOrder(boxWord, cost - quote.ticketCost);
     }
 
     /// @dev Phase flag, level, whole-ticket price at the active purchase level, and the
@@ -659,7 +657,7 @@ abstract contract GamePurchase is
             quote,
             payerId
         );
-        if (boxWord != 0) _appendBoxOrder( boxWord, _boxQuote(boxOrder));
+        if (boxWord != 0) _appendBoxOrder(boxWord, _boxQuote(boxOrder));
     }
 
     // ---- Box-order legs ----
@@ -672,19 +670,11 @@ abstract contract GamePurchase is
     }
 
     /// @dev Append a purchase's completed entry and announce its ordinary leg.
-    function _appendBoxOrder(uint256 word, uint256 ordinaryCost)
-        private
-        returns (uint48 index, uint32 position)
-    {
-        (index, position) = _appendBoxEntry(word, ordinaryCost);
+    function _appendBoxOrder(uint256 word, uint256 ordinaryCost) private {
+        (uint48 index, uint32 position) = _appendBoxEntry(word, ordinaryCost);
         if (ordinaryCost != 0) emit LootBoxBuy(uint32(word), index, position, ordinaryCost);
     }
 
-    /// @dev Core purchase body. `quote` is the caller's same-frame _purchaseCostInputs snapshot
-    ///      (no external call sits between
-    ///      that read and this frame, so the values cannot have changed). `payerId` is the
-    ///      ledger the claimable/AFKing legs debit: the buyer's own (0 = the buyer), or a smurf's
-    ///      owner on its creation ticket.
     struct PurchaseWork {
         uint256 lootboxFreshEth;
         uint256 lootboxClaimableUsed;
@@ -694,6 +684,10 @@ abstract contract GamePurchase is
         uint256 totalCost;
     }
 
+    /// @dev Core purchase body. `quote` is the caller's same-frame _purchaseCostInputs snapshot
+    ///      (no external call sits between that read and this frame, so the values cannot have
+    ///      changed). `payerId` is the ledger the claimable/AFKing legs debit: the buyer's own
+    ///      (0 = the buyer), or a smurf's owner on its creation ticket.
     function _purchaseForWithCached(
         uint32 buyerId,
         uint256 entryQuantityScaled,
@@ -735,8 +729,6 @@ abstract contract GamePurchase is
         // Builds this purchase's entry in flight before the payment split, which needs its
         // cost. The caller appends the finished word once; every effect here unwinds with the
         // rest of the purchase if anything below reverts.
-
-
         if (boxOrder != 0) {
             uint256 lbCredit;
             (c.lootBoxAmount, c.lbShares, lbCredit, boxWord) = _beginBoxOrder(buyerId, boxOrder);
@@ -757,13 +749,10 @@ abstract contract GamePurchase is
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
         // explicit-value ticket-buy slice for Foil purchases and smurf creation).
         uint256 remainingEth = ethValue;
-        c.lootboxFreshEth = 0;
-        c.lootboxClaimableUsed = 0;
-        // Lootbox-leg claimable + afking drawn here; folded with the ticket leg's draw into one
-        // claimablePool decrement below.
-        c.lootboxPoolDraw = 0;
+        // Lootbox-leg claimable + afking drawn here (c.lootboxPoolDraw); folded with the ticket
+        // leg's draw into one claimablePool decrement below.
         if (c.lootBoxAmount != 0) {
-            // Lootbox payment uses msg.value first; afking covers any shortfall, and
+            // Lootbox payment uses fresh ETH first; afking covers any shortfall, and
             // claimable too unless the buyer insisted on DirectEth.
             if (remainingEth >= c.lootBoxAmount) {
                 c.lootboxFreshEth = c.lootBoxAmount;
@@ -981,20 +970,10 @@ abstract contract GamePurchase is
         _accrueDegenesisCredit(buyerId, cost);
     }
 
-    /// @dev Bubble up revert reason from delegatecall failure.
-    ///      Uses assembly to preserve original error data. A failure with no data (out of gas)
-    ///      re-raises as EmptyRevert, the marker the game-over drain treats as a starved call.
-    /// @param reason The error bytes from failed delegatecall.
-    function _revertDelegate(bytes memory reason) internal pure {
-        if (reason.length == 0) revert EmptyRevert();
-        assembly ("memory-safe") {
-            revert(add(32, reason), mload(reason))
-        }
-    }
-
     /// @dev Execute ticket purchase: payment, boost and affiliate basis. The FLIP caller derives
     ///      its quest units directly from the requested quantity.
-    ///      x00 century bonus and ticket queuing are handled by _purchaseFor after score computation.
+    ///      The x00 century bonus and ticket queuing are left to the caller (after the score read
+    ///      in _purchaseForWithCached).
     ///      `payerId` is the ledger an ETH leg's claimable/AFKing draw debits; zero selects the
     ///      FLIP leg (burned from the buyer's payee), which has no ledger payer.
     /// @param ticket Payment shares and affiliate funding totals filled in place.
@@ -1010,7 +989,6 @@ abstract contract GamePurchase is
         private
         returns (uint32 adjustedQty32, uint24 targetLevel)
     {
-        if (quantity == 0) revert E();
         // Liveness is gated by both callers (_purchaseForWithCached / _redeemFlipFor)
         // before any state is touched, so it is not re-evaluated here.
         // Only the day before a standard phase's final draw earns the affiliate bonus.
@@ -1022,6 +1000,7 @@ abstract contract GamePurchase is
         targetLevel = _activeTicketLevel();
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
+        // Also rejects a zero quantity.
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
         // A dust ticket leg that cannot survive the routed level's snap divide fails closed instead
         // of charging full price for zero entries. The drain divides the accumulated
@@ -1044,9 +1023,7 @@ abstract contract GamePurchase is
                 uint256 cappedValue = costWei > LOOTBOX_BOOST_MAX_VALUE
                     ? LOOTBOX_BOOST_MAX_VALUE
                     : costWei;
-                uint256 cappedQty = priceWei == 0
-                    ? 0
-                    : ((cappedValue * 4 * QTY_SCALE) / priceWei);
+                uint256 cappedQty = (cappedValue * 4 * QTY_SCALE) / priceWei;
                 adjustedQuantity += (cappedQty * boostBps) / 10_000;
             }
         }
@@ -1091,7 +1068,7 @@ abstract contract GamePurchase is
                 freshFlip = targetLevel <= 3 ? (freshFlip * 7) / 5 : (freshFlip * 3) / 2;
             }
 
-            // Affiliate is settled ONCE for the whole buy by the caller (payAffiliateCombined),
+            // Affiliate is settled ONCE for the whole buy by the caller (payAffiliateCombined_g3742656),
             // which needs this leg's fresh + recycled FLIP components. Fresh = the fresh-rate
             // basis (afking-drawn principal counts as fresh, already folded into freshFlip);
             // recycled = the claimable portion (costWei - freshEth) at the recycled rate. The
@@ -1118,13 +1095,12 @@ abstract contract GamePurchase is
         coin.burnCoin_g27673(payer, amount);
     }
 
-    /// @dev Convert ETH-denominated spend to FLIP base units at current ticket price.
+    /// @dev Convert ETH-denominated spend to FLIP base units at current ticket price. Every
+    ///      caller passes a nonzero amount and a `PriceLookupLib.priceForLevel` price (never 0).
     function _ethToFlipValue(
         uint256 amountWei,
         uint256 priceWei
     ) private pure returns (uint256) {
-        if (amountWei == 0 || priceWei == 0) return 0;
         return (amountWei * PRICE_COIN_UNIT) / priceWei;
     }
-
 }

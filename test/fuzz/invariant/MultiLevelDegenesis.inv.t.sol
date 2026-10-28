@@ -27,7 +27,7 @@ contract MultiLevelDegenesisTurbo is MultiLevelInvariant, DegenesisWeekOpening {
         mlHandler = new MultiLevelHandler(game, mockVRF, 15);
         mlHandler.scriptedOpening();
         assertGe(game.currentLvl(), mlHandler.OPENING_LEVEL(), "MultiLevel: the scripted opening must reach its level");
-        targetContract(address(mlHandler));
+        _targetWalk();
     }
 
     /// @notice The opening counts only the levels it raised: from the level the Degenesis week left.

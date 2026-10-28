@@ -9,10 +9,10 @@ import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 ///         Enables direct empirical verification of:
 ///           - EV-neutrality of the collapse: `E[rounded] ≈ floorWholeFlip(amount)`
 ///             (exact under an ideal uniform mod-100 draw; the uint32 % 100 bias is ~2e-8)
-///           - Boundary cases at remainders {0, 1, 37, 50, 99} whole FLIP and at the
-///             sub-1-FLIP dust that the collapse discards unconditionally
+///           - Boundary cases at remainders {0, 1, 37, 50, 99} whole FLIP, and the
+///             zero-dust decomposition (FLIP has 0 decimals, so no sub-token residue exists)
 ///           - The `> FLIP_ROUND_THRESHOLD` gate: at or below 1,000 FLIP the award is
-///             floored to whole FLIP, so small wins never round to nothing
+///             paid unchanged, so small wins never round to nothing
 /// @dev    The arithmetic mirrored here is the EXACT library the production sites call —
 ///         this tester delegates rather than re-implementing, so no drift is possible in
 ///         the primitive itself. The threshold gate IS re-implemented (production inlines
@@ -24,7 +24,7 @@ contract FlipRoundBernoulliTester {
         FlipRoundLib.FLIP_ROUND_THRESHOLD;
 
     /// @notice The bare primitive, ungated.
-    /// @param amount Raw award, wei-scaled (1 FLIP = 1 ether).
+    /// @param amount Raw award in whole FLIP (FLIP has 0 decimals).
     /// @param entropy Word derived from a committed VRF word plus immutable award data.
     /// @return rounded `amount` collapsed onto a multiple of `FLIP_ROUND_UNIT`.
     function roundFlipToHundreds(uint256 amount, uint256 entropy)
@@ -39,9 +39,9 @@ contract FlipRoundBernoulliTester {
     /// @dev Instruction-sequence parity with the production gate:
     ///        amount = amount > FlipRoundLib.FLIP_ROUND_THRESHOLD
     ///            ? FlipRoundLib.roundFlipToHundreds(amount, entropy)
-    ///            : FlipRoundLib.floorWholeFlip(amount);
+    ///            : amount;
     /// @return paid The amount the site credits: collapsed onto a 100-FLIP multiple above
-    ///              the threshold, floored to whole FLIP at or below it.
+    ///              the threshold, unchanged at or below it.
     function roundGated(uint256 amount, uint256 entropy)
         external
         pure
@@ -49,23 +49,24 @@ contract FlipRoundBernoulliTester {
     {
         paid = amount > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(amount, entropy)
-            : FlipRoundLib.floorWholeFlip(amount);
+            : amount;
     }
 
-    /// @notice The sub-threshold half of the policy, exposed on its own.
-    /// @return floored `amount` truncated to a whole FLIP.
+    /// @notice The sub-threshold half of the policy, exposed on its own (FLIP has 0
+    ///         decimals, so the amount passes through unchanged).
+    /// @return floored `amount`, unchanged.
     function floorWholeFlip(uint256 amount)
         external
         pure
         returns (uint256 floored)
     {
-        floored = FlipRoundLib.floorWholeFlip(amount);
+        floored = amount;
     }
 
     /// @notice Decompose an award the way the primitive does, for boundary assertions.
     /// @return hundreds Whole 100-FLIP units in `amount`.
     /// @return remFlip The 0..99 whole-FLIP remainder the round-up probability keys on.
-    /// @return dustWei The sub-1-FLIP residue the collapse discards unconditionally.
+    /// @return dustWei Always zero: whole-FLIP amounts leave no sub-token residue.
     function decompose(uint256 amount)
         external
         pure

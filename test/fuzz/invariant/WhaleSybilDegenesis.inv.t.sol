@@ -21,7 +21,7 @@ contract WhaleSybilDegenesis is WhaleSybilInvariant, DegenesisWeekOpening {
         _deployProtocol();
         _degenesisWeek(true);
         wsHandler = new WhaleSybilHandler(game, mockVRF, 3, 20);
-        targetContract(address(wsHandler));
+        _targetWalk();
     }
 
     function test_degenesisWeekHappened() public view {

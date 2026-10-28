@@ -88,26 +88,6 @@ interface IVRFCoordinatorV2_5Owner {
 
     /// @notice Add native ETH to the subscription.
     function fundSubscriptionWithNative(uint256 subId) external payable;
-
-    /// @notice Get subscription details.
-    /// @param subId Subscription ID to query.
-    /// @return balance Legacy billing word (unused).
-    /// @return nativeBalance Native token balance.
-    /// @return reqCount Total fulfilled request count.
-    /// @return owner Subscription owner address.
-    /// @return consumers List of consumer contract addresses.
-    function getSubscription(
-        uint256 subId
-    )
-        external
-        view
-        returns (
-            uint96 balance,
-            uint96 nativeBalance,
-            uint64 reqCount,
-            address owner,
-            address[] memory consumers
-        );
 }
 
 /// @dev Game contract admin interface (VRF + liquidity).
@@ -117,9 +97,6 @@ interface IDegenerusGameAdmin {
 
     /// @notice Timestamp of the last successfully processed VRF fulfillment.
     function lastVrfProcessed() external view returns (uint48);
-
-    /// @notice Whether the game is in jackpot resolution phase.
-    function jackpotPhase() external view returns (bool);
 
     /// @notice Whether the game has ended.
     function gameOver() external view returns (bool);
@@ -153,7 +130,6 @@ interface IDegenerusGameAdmin {
         address recipient,
         uint256 amount
     ) external payable;
-
 }
 
 /// @dev Game interface for minting mid-day RNG credit to native ETH donors.
@@ -175,8 +151,6 @@ interface IDegenerusVaultOwner {
 
 /// @dev sDGNRS interface for governance voting weight and voting supply.
 interface IsDGNRSVotes {
-    /// @notice The total sDGNRS supply, as implemented by sDGNRS.
-    function totalSupply() external view returns (uint256);
     /// @notice An address's sDGNRS balance, as implemented by sDGNRS.
     function balanceOf(address account) external view returns (uint256);
     /// @notice The circulating sDGNRS eligible to vote, as implemented by sDGNRS.
@@ -197,7 +171,7 @@ contract DegenerusAdmin {
     enum ProposalPath { Admin, Community }
     enum ProposalState { Active, Executed, Killed }
 
-    /// @dev Packed into 3 storage slots (down from 7).
+    /// @dev Packed into 3 storage slots.
     ///      Weights and snapshot stored as whole tokens (raw / 1e12). Max 1T = fits uint40 (1.1T max).
     ///      createdAt as uint40 = max year ~36,847.
     ///      Slot 1: proposer(4) + createdAt(5) + votingSnapshot(5) + path(1) + state(1)
@@ -236,8 +210,7 @@ contract DegenerusAdmin {
     error NotWired();
     /// @notice Thrown when a native ETH donation arrives with no VRF subscription wired.
     error NoSubscription();
-    /// @notice Thrown when a swap, donation, or native ETH forward amount is zero, or the forward
-    ///         itself fails.
+    /// @notice Thrown when a swap or donation amount is zero.
     error InvalidAmount();
     /// @notice Thrown when a recovery call names the live coordinator/subscription pair
     ///         instead of a retired one.
@@ -253,7 +226,7 @@ contract DegenerusAdmin {
     /// @notice Thrown when a community-path proposer's voting sDGNRS stake is below the
     ///         required minimum.
     error InsufficientStake();
-    /// @notice Thrown when the proposer (or, on the admin path, the vault) already has an
+    /// @notice Thrown when the proposer (on the admin path, the owner executor) already has an
     ///         active proposal.
     error AlreadyHasActiveProposal();
 
@@ -279,8 +252,8 @@ contract DegenerusAdmin {
     /// @param to Address the coordinator refunds any remaining subscription balance to.
     event SubscriptionCancelled(uint256 indexed subId, address indexed to);
 
-    /// @notice Emitted when a retired subscription's native ETH is routed onward. A failed forward
-    ///         reverts the call, so the event never reports zero.
+    /// @notice Emitted when a retired subscription is cancelled and its native ETH routed onward.
+    ///         A refused cancellation or a failed forward reverts the call.
     /// @param subId The retired subscription the native ETH was recovered from.
     /// @param to Where the recovered native ETH was routed: the live subscription while the game
     ///        runs, the vault after game over.
@@ -293,8 +266,8 @@ contract DegenerusAdmin {
     /// @notice Emitted when the VRF subscription is cancelled and its native ETH swept at game over.
     /// @param subId The subscription cancelled.
     /// @param to The vault address the swept native ETH is sent to.
-    /// @param sweptAmount native ETH balance forwarded (0 if there was nothing to sweep or the
-    ///        forward failed).
+    /// @param sweptAmount native ETH the Vault received (0 if there was nothing to sweep or the
+    ///        coordinator refused the cancellation).
     event SubscriptionShutdown(
         uint256 indexed subId,
         address indexed to,
@@ -420,7 +393,7 @@ contract DegenerusAdmin {
         return IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(msg.sender);
     }
 
-    /// @notice Tracks each address's current active proposal ID (0 = none).
+    /// @dev Active proposal per proposer wallet ID; key 1 is the owner path (0 = none).
     mapping(uint32 => uint256) private _activeProposalId;
 
     function activeProposalId(address proposer) external view returns (uint256) {
@@ -548,7 +521,8 @@ contract DegenerusAdmin {
 
     /// @notice Propose an emergency VRF coordinator swap.
     /// @dev Two paths:
-    ///      - Admin path: DGVE governance executor, requires 20h+ VRF stall
+    ///      - Admin path: DGVE governance executor, requires 44h since the last processed daily word
+    ///        (20h past the normal daily wait)
     ///      - Community path: 0.5%+ voting sDGNRS, requires 7d+ VRF stall
     /// @param newCoordinator Address of the proposed VRF coordinator.
     /// @param newKeyHash Key hash for the proposed coordinator.
@@ -572,7 +546,7 @@ contract DegenerusAdmin {
         uint256 existing = _activeProposalId[proposerId];
         if (existing >= validFromId && existing != 0) {
             Proposal storage ep = proposals[existing];
-            if (_isActiveProposal(ep.state, ep.createdAt, PROPOSAL_LIFETIME)) {
+            if (_isActiveProposal(ep.state, ep.createdAt)) {
                 revert AlreadyHasActiveProposal();
             }
         }
@@ -597,7 +571,6 @@ contract DegenerusAdmin {
         p.proposer = proposerId;
         p.createdAt = uint40(block.timestamp);
         p.path = path;
-        // p.state = ProposalState.Active (default 0)
         p.coordinator = newCoordinator;
         p.keyHash = newKeyHash;
         p.callbackGasLimit = newCallbackGasLimit;
@@ -622,7 +595,7 @@ contract DegenerusAdmin {
         // A prior executed swap advances validFromId, invalidating every earlier proposal in O(1);
         // such superseded proposals keep state == Active but can no longer vote or execute.
         if (proposalId < validFromId) revert ProposalNotActive();
-        _requireActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME);
+        _requireActiveProposal(p.state, createdAt);
 
         // Invalidate (KILL) the proposal if VRF is healthy NOW, or if any VRF word was fulfilled
         // AFTER this proposal was created (lastVrf > createdAt). A proposal exists only to swap a
@@ -691,7 +664,7 @@ contract DegenerusAdmin {
         Proposal storage p = proposals[proposalId];
         uint40 createdAt = p.createdAt;
         if (proposalId < validFromId) return false;
-        if (!_isActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME)) return false;
+        if (!_isActiveProposal(p.state, createdAt)) return false;
 
         // Stall check + recovery-spanning invalidation (mirrors vote(): a fulfillment after
         // creation means a recovery occurred, so the proposal is dead).
@@ -744,25 +717,17 @@ contract DegenerusAdmin {
 
     /// @dev Validate a proposal is active and not expired.
     ///      Reverts ProposalNotActive or ProposalExpired.
-    function _requireActiveProposal(
-        ProposalState state,
-        uint40 createdAt,
-        uint256 lifetime
-    ) private view {
+    function _requireActiveProposal(ProposalState state, uint40 createdAt) private view {
         if (state != ProposalState.Active || createdAt == 0)
             revert ProposalNotActive();
-        if (block.timestamp - uint256(createdAt) >= lifetime)
+        if (block.timestamp - uint256(createdAt) >= PROPOSAL_LIFETIME)
             revert ProposalExpired();
     }
 
     /// @dev Check if a proposal is active and not expired (view, no revert).
-    function _isActiveProposal(
-        ProposalState state,
-        uint40 createdAt,
-        uint256 lifetime
-    ) private view returns (bool) {
+    function _isActiveProposal(ProposalState state, uint40 createdAt) private view returns (bool) {
         if (state != ProposalState.Active || createdAt == 0) return false;
-        if (block.timestamp - uint256(createdAt) >= lifetime) return false;
+        if (block.timestamp - uint256(createdAt) >= PROPOSAL_LIFETIME) return false;
         return true;
     }
 
@@ -821,7 +786,6 @@ contract DegenerusAdmin {
             if (cancelled) emit SubscriptionCancelled(oldSub, address(this));
         }
 
-        // 2. Create new subscription on proposed coordinator
         coordinator = newCoordinator;
         uint256 newSubId = IVRFCoordinatorV2_5Owner(newCoordinator)
             .createSubscription();
@@ -830,7 +794,6 @@ contract DegenerusAdmin {
         emit CoordinatorUpdated(newCoordinator, newSubId);
         emit SubscriptionCreated(newSubId);
 
-        // 3. Add Game as consumer
         IVRFCoordinatorV2_5Owner(newCoordinator).addConsumer(
             newSubId,
             ContractAddresses.GAME
@@ -841,7 +804,6 @@ contract DegenerusAdmin {
         uint256 bal = address(this).balance;
         if (bal != 0) IVRFCoordinatorV2_5Owner(newCoordinator).fundSubscriptionWithNative{value: bal}(newSubId);
 
-        // 4. Push new config to Game
         gameAdmin.updateVrfCoordinatorAndSub(
             newCoordinator,
             newSubId,

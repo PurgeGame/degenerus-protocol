@@ -13,6 +13,12 @@ maintained alternate. `scripts/select-profile.js` selects the profile, and the d
 results and outstanding release checks. Exact SHA-256 hashes and the source base commit are recorded in
 [the snapshot manifest](audit/snapshot.json).
 
+Read the [preparation findings](AUDIT-READINESS.md#preparation-review--2026-10-28)
+alongside the scope: they record dependency advisories and outstanding verification evidence.
+The project's disposition of a failed stETH balance read is in
+[Security](../SECURITY.md#external-dependencies-and-settlement). The specific external-failure
+disposition does not exclude caller-induced loss with healthy supported dependencies.
+
 From the repository root, verify the supplied source/build inputs before patching pins:
 
 ```sh
@@ -24,21 +30,34 @@ Any source change requires refreshed hashes and appropriately scoped verificatio
 including their known limitations. The snapshot identifies source inputs, not test
 results or a deployed instance.
 
+Include `native-evidence-2026-10-28.tar.gz` with the repository handoff. The readiness
+record gives its checksum and size; the archive contains the retained native recorder,
+capture inputs, runtime artifacts, results and reproduction guide. It is deliberately
+kept outside Git, so a clone alone does not include it. Its assembly verified provenance
+and hashes without rerunning the historical native replay.
+
 ## Read in this order
 
-1. [Architecture](ARCHITECTURE.md): modules, funding and settlement boundaries.
-2. [Security](../SECURITY.md): who can do what, which dependencies are trusted, VRF
-   configuration and the audit boundaries.
-3. [Economic disclosures](../ECONOMIC_DISCLOSURES.md): game rules, allocations and economic rights.
-4. [Known issues](../KNOWN-ISSUES.md): accepted implementation limitations.
-5. [RNG domains](audit/RNG-DOMAINS.md): seeds, intentional shared outcomes and retained exceptions.
-6. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
-7. [Current readiness review](AUDIT-READINESS.md): the properties reviewed at this
-   revision, the Degenesis review scope and the trust boundaries.
+1. This handoff, [scope.txt](../scope.txt) and [out_of_scope.txt](../out_of_scope.txt), the
+   hash check above, and the current-revision and handoff sections of the
+   [readiness review](AUDIT-READINESS.md).
+2. [Token units](TOKEN-UNITS.md), then [Security](../SECURITY.md) (authorities, trusted
+   dependencies, VRF callback trust, audit boundaries) and [Known issues](../KNOWN-ISSUES.md).
+3. [Architecture](ARCHITECTURE.md): contract boundaries, value flow, miner action order,
+   commitment and settlement boundaries, the ending and invariants.
+4. [Accounting](ACCOUNTING.md): custody, obligation equations and reservations by phase.
+5. [Properties](PROPERTIES.md): critical properties, implementation symbols and test assertions.
+6. [Owner governance](OWNER_GOVERNANCE.md).
+7. [RNG domains](audit/RNG-DOMAINS.md): request/callback/publication, words and their consumers,
+   intended sharing and mutable payout inputs.
+8. [Verification](VERIFICATION.md): setup, evidence limits and the focused suites for the area
+   under review.
+9. [Economic disclosures](../ECONOMIC_DISCLOSURES.md) and the mechanism references, alongside the
+   corresponding contracts.
 
-Mechanism references (token units, DGVE owner approval, loans, Craps, Decimator,
-Degenerette, deity passes, WWXRP boons, Vault actions, storage reuse) are indexed in
-[the documentation index](README.md).
+Mechanism references ([Architecture details](ARCHITECTURE-DETAILS.md), loans, Craps, Decimator,
+Degenerette, deity passes, WWXRP boons, Vault actions, storage reuse) and historical evidence are
+indexed in [the documentation index](README.md).
 
 ## Review priorities
 
@@ -61,13 +80,16 @@ is a prerequisite for the High-severity criteria below, not an exclusion of acto
 
 Gas admission is caller-calibrated. Optional continuations reserve the next chunk's
 estimated cost and complete call/return/flush envelope, scaled by the caller's multiplier,
-against the remaining worker allowance and actual available gas. The first mandatory
-checkpoint is not vetoed by that estimate, so conservative calibration cannot prevent
-progress. The gas floor always holds every ancestor's return tail: the first unit may run
-below it, and once that unit has progressed later units must fit above it again. Once the
-first unit fits in the supplied gas, `mineRun` is designed not to revert for gas; when the
-mandatory first unit is a VRF request, the supplied gas must cover the request minimum plus its
-tail, otherwise the call reverts `InsufficientExecutionGas` before the coordinator call. Larger
+against the remaining worker allowance and actual available gas. The first eligible unit
+is exempt from the chunk estimate; nested call admission still applies after the worker
+marks progress. This distinction matters in subscriber preparation: excessive calibration
+can make nested funding revert `InsufficientExecutionGas` before any stETH call, even
+within the first outer subscriber unit. Retained-state checks at the transaction cap show
+that these failed attempts commit no protocol changes and a different caller using normal
+calibration can continue. A valid multiplier argument therefore does not guarantee progress
+at every supplied gas budget. The gas floor holds ancestor return tails; later admitted
+units must fit above it. When the first unit is a VRF request, the supplied gas must cover
+the request minimum plus its tail, otherwise the call reverts before the coordinator call. Larger
 supplied budgets may admit more chunks. Network transaction/block limits remain separate
 constraints. Caller gas may select a safe continuation checkpoint, never a committed game
 outcome.

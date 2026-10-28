@@ -45,10 +45,13 @@
 # Publish the auditor's reference set; keep planning and generated reports local.
 docs/*
 !docs/README.md
-!docs/ACCOUNT-LIQUIDATION.md
+!docs/ACCOUNT-LOANS.md
 !docs/AUDIT.md
 !docs/AUDIT-READINESS.md
 !docs/ARCHITECTURE.md
+!docs/ARCHITECTURE-DETAILS.md
+!docs/ACCOUNTING.md
+!docs/PROPERTIES.md
 !docs/STORAGE-REUSE.md
 !docs/VERIFICATION.md
 !docs/TEST_REVIEW.md

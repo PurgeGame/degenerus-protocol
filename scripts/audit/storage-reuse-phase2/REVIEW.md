@@ -1,5 +1,9 @@
 # Phase 2 storage review
 
+> **Historical evidence.** This file records storage-reuse phase 2, committed in `eaf98da75` (2026-10-20; baseline `c4c1effe5`, audit identity `dfe5fb03f`). Its bit positions and slot references are those of that revision: the current pass-credit word uses initialized bit 85, memory-only ID bits 86–117 and retained bit 118 (`CrapsPreferenceLib`). It is not a description of the current
+> source. Current layouts and behavior: [Storage reuse](../../../docs/STORAGE-REUSE.md) and
+> `scripts/layout/golden/`.
+
 Baseline: Phase 1 feature `c4c1effe5`, audit identity `dfe5fb03f`. Scope follows the
 requested order: boon slot 1, pass credits, sDGNRS counts, five-slot jackpot rounds.
 No deployment, migration or push is performed. Full release battery remains due.

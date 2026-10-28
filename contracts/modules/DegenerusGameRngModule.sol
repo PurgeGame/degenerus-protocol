@@ -24,8 +24,6 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
     uint48 private constant RNG_RETRY_TIMEOUT = 20 hours;
 
-
-
     /// @notice Publish accepted entropy before any read consumer, including tickets.
     function publishRng_g4514() external {
         if (address(this) != ContractAddresses.GAME || !_rngRequestActive() || _rngSessionPublished()
@@ -33,8 +31,6 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         _finalizeLootboxRng(_currentRngWord());
         if (!rngLockedFlag) _endRngSession();
     }
-
-
 
     /// @notice Final normal action: prepare, seal and request a fresh daily commitment.
     function requestDailyRng_g8190(uint24 day) external {
@@ -73,8 +69,6 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         _setRngRequest(_requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4)));
         emit Advance(STAGE_RNG_REQUESTED, level);
     }
-
-
 
     /// @notice The mid-day request, reached only through mineRun (msg.sender is the miner).
     ///         The caller's donated credit pays the threshold gate when pending work sits
@@ -256,5 +250,4 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         _swapRngBuffers();
         _closeRedemptionBatch();
     }
-
 }

@@ -120,7 +120,8 @@ library ContractAddresses {
     // pipeline overwrites it with the real prediction.
     address internal constant CRAPS =
         address(0xE194aA6b80fFd71989dd196c7f84fa624b8d7D5d);
-    // The dice engine is hosted by CrapsBattle. This alias consumes no deployment nonce.
+    // Dice engine: hosted by CrapsBattle in the combined (Glamsterdam) profile, where this alias
+    // consumes no deployment nonce; a separate deployment in the default EIP-170 profile.
     address internal constant CRAPS_ENGINE =
         address(0x6AFc743aa4E9D98D0F53Ff111996E9817d79D301);
     // Jackpot lifecycle entries share the CrapsBattle host and storage; no separate deployment.

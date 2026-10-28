@@ -237,7 +237,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
                 / (H_DEN * (H_K + volume) * PriceLookupLib.priceForLevel(1));
             out = out > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(out, uint256(keccak256(abi.encode(uint256(55), seed))))
-                : FlipRoundLib.floorWholeFlip(out);
+                : out;
             if (out == 0) {
                 wwxrpOut = true;
             } else if (uint256(keccak256(abi.encode(uint256(53), seed))) & 1 == 1) {
@@ -1070,6 +1070,10 @@ contract DegenesisBattleGameSeed is DegenerusGameStorage, WalletSeed {
 }
 
 contract DegenesisBattleTableSeed is CrapsBattleStorage {
+    function _appendBet(uint256 id, uint256 word) internal {
+        _appendBetOnDay(id, word, _betWriteDay(id));
+    }
+
     /// @dev A normal paid daily field: 50 own seats, 50 day tickets and 25 high seats, so every
     ///      nonempty seal accounting branch runs; `paid` false leaves the field empty.
     function seedPaidField(uint24 day, bool paid) external {

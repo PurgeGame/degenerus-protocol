@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {GameBingo} from "./GameBingo.sol";
 

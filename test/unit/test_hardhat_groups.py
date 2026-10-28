@@ -1,6 +1,7 @@
 """Driver controls with fake Hardhat; exercise the real Node preload, without solc."""
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,9 +12,13 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 
 RUNNER = Path(__file__).resolve().parents[2] / "scripts/test-hardhat-groups.py"
+SPEC = importlib.util.spec_from_file_location("hardhat_groups_runner", RUNNER)
+runner = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(runner)
 FAKE_NPX = '''#!/usr/bin/env python3
 import os,sys
 if "--version" in sys.argv:
@@ -56,6 +61,14 @@ async function main() {
   fs.writeFileSync("ready", JSON.stringify({child:process.pid, grandchild:grandchild.pid}));
   setInterval(()=>{},1000); return;
  }
+ if (mode === "orphan") {
+  fs.rmSync("compiler-ready", {force:true});
+  const grandchild = cp.spawn(process.execPath, ["-e",
+   'process.on("SIGTERM",()=>{});require("node:fs").writeFileSync("compiler-ready","ready");setInterval(()=>{},1000)'],
+   {stdio:"ignore"});
+  while (!fs.existsSync("compiler-ready")) await new Promise(resolve=>setTimeout(resolve,10));
+  fs.writeFileSync("ready", JSON.stringify({child:process.pid, grandchild:grandchild.pid}));
+ }
  if (mode === "kill_first" && calls.length === 1) process.kill(process.pid,"SIGKILL");
  if (mode === "drift") fs.writeFileSync("contracts/Game.sol", "changed\n");
  if (mode === "add_source") fs.writeFileSync("contracts/Unexpected.sol", "unexpected\n");
@@ -70,6 +83,7 @@ async function main() {
  else if (mode === "ambiguous") console.log("  2 passing (1ms)\n  3 passing (1ms)");
  else console.log("\u001b[32m  2 passing (1ms)\u001b[0m\n  1 pending");
  if (mode === "exit_fail") process.exitCode=7;
+ if (mode === "orphan") process.exit(Number(process.env.FAKE_EXIT || "0"));
 }
 main().catch(error=>{console.error(error);process.exitCode=12;});
 '''
@@ -118,6 +132,44 @@ class HardhatGroupsDriverTest(unittest.TestCase):
 
     def rows(self, log_dir=None):
         return json.loads(((log_dir or self.root / ".audit-test-logs/hardhat") / "summary.json").read_text())
+
+    def test_normal_wrapper_exit_stops_compiler_descendants(self):
+        self.sources("first", 1)
+        for exit_code in (0, 7):
+            with self.subTest(exit_code=exit_code):
+                try:
+                    result = self.run_driver(FAKE_MODE="orphan", FAKE_EXIT=str(exit_code))
+                    self.assertEqual(result.returncode, 0 if exit_code == 0 else 1,
+                                     result.stdout + result.stderr)
+                    ids = json.loads((self.root / "ready").read_text())
+                    stat = Path(f'/proc/{ids["grandchild"]}/stat')
+                    if stat.exists():
+                        self.assertIn(stat.read_text().rsplit(')', 1)[1].split()[0], ("Z", "X"))
+                finally:
+                    ready = self.root / "ready"
+                    if ready.exists():
+                        try:
+                            os.killpg(json.loads(ready.read_text())["child"], signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+
+    def test_normal_wrapper_return_waits_for_group_exit_after_kill(self):
+        # SIGKILL delivery is asynchronous. Model a compiler that stays live until
+        # the wait completes, so removing that wait fails deterministically.
+        for exit_code in (0, 7):
+            with self.subTest(exit_code=exit_code):
+                child = mock.Mock(pid=123456)
+                child.wait.return_value = exit_code
+                group_running = [True]
+                with mock.patch.object(runner.subprocess, "Popen", return_value=child), \
+                     mock.patch.object(runner.os, "killpg") as kill:
+                    def wait_for_exit(group):
+                        self.assertEqual(group, child.pid)
+                        kill.assert_called_once_with(child.pid, signal.SIGKILL)
+                        group_running[0] = False
+                    with mock.patch.object(runner, "wait_for_process_group_exit", side_effect=wait_for_exit):
+                        self.assertEqual(runner.run_child(["fake-wrapper"]), exit_code)
+                self.assertFalse(group_running[0], "returned before compiler exit was established")
 
     def test_generated_profile_files_restore_after_a_failed_batch(self):
         generated = self.root / 'contracts/Selected.sol'

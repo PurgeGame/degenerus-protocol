@@ -115,11 +115,12 @@ interface IDGNRS {
  * ARCHITECTURE:
  * - Receives ETH deposits from game distributions
  * - Receives stETH deposits from game distributions
- * - Accrues FLIP backing via manual transfers and coinflip claimables (withdrawn on burn)
+ * - Accrues FLIP backing on Coinflip (FLIP sent or minted to sDGNRS is staked); a batch close escrows its share
  * - Pre-minted supply split into DGNRS wrapper allocation + reward pools
  * - Game distributes sDGNRS to players by drawing down pools
  * - Completed centuries recycle a random 25-75% of their supply burns into the four ongoing pools
- * - Users burn sDGNRS to claim proportional ETH + stETH + FLIP
+ * - Live burns join a redemption batch (ETH, lootbox and contingent FLIP); after game over a
+ *   burn pays proportional ETH + stETH
  */
 contract sDGNRS {
     // =====================================================================
@@ -128,8 +129,6 @@ contract sDGNRS {
 
     /// @notice Thrown when caller is not authorized for the operation
     error Unauthorized();
-    /// @notice The game-over trigger reads true but the game is not over yet: retry once it is.
-    error EndingPending();
 
     /// @notice Thrown when amount exceeds available balance or allowance
     error Insufficient();
@@ -158,7 +157,7 @@ contract sDGNRS {
     ///         game is over.
     error NotGameOver();
 
-    /// @notice Thrown when a gambling burn amount is below the 1-whole-sDGNRS minimum (1e12 raw).
+    /// @notice Thrown when a gambling burn's live value is below MIN_REDEMPTION_VALUE.
     error BurnTooSmall();
 
     /// @notice Thrown when a gambling burn's beneficiary has no Game wallet ID (a burn never
@@ -187,7 +186,7 @@ contract sDGNRS {
     /// @param from Address that deposited
     /// @param ethAmount ETH deposited
     /// @param stethAmount stETH deposited
-    /// @param flipAmount FLIP amount (always 0; FLIP arrives via manual transfers or coinflip claims)
+    /// @param flipAmount FLIP amount (always 0; FLIP backing accrues on Coinflip)
     event Deposit(address indexed from, uint256 ethAmount, uint256 stethAmount, uint256 flipAmount);
 
     /// @notice Emitted when sDGNRS is transferred from a reward pool
@@ -263,11 +262,10 @@ contract sDGNRS {
 
     /// @notice Total supply of sDGNRS tokens. A gambling burn leaves supply at the burn; until its
     ///         batch closes, prices and shares use supply plus economic escrow as the holder base.
-    /// @dev Narrowed to uint128 (<= INITIAL_SUPPLY 1e24 << uint128 max 3.4e38; century refills
-    ///      never exceed the previous post-refill supply) and co-located with the redemption reserve
-    ///      and the open batch id so the compiler packs all three into slot 0 (128+96+32 = 256
-    ///      bits). Each access is an independent masked SLOAD/SSTORE. The public `totalSupply()` /
-    ///      `pendingRedemptionEthValue()` getters preserve the original ABI.
+    /// @dev uint128 (<= INITIAL_SUPPLY 1e24 << uint128 max 3.4e38; century refills never exceed
+    ///      the previous post-refill supply), packed with the redemption reserve and the open batch
+    ///      id into slot 0 (128+96+32 = 256 bits). Each access is an independent masked
+    ///      SLOAD/SSTORE.
     uint128 private _totalSupply;
 
     /// @dev Total reserved redemption ETH value across closed batches and their unpaid claims: a
@@ -488,8 +486,8 @@ contract sDGNRS {
         emit RedemptionResolved(id, roll, flipReward);
     }
 
-    /// @dev Roll in [MIN_ROLL, MAX_ROLL] = [21, 175], 155 values with mean exactly 98, from bits
-    ///      above the word's lowest byte (bit 0 is the daily coinflip).
+    /// @dev Roll in [MIN_ROLL, MAX_ROLL] = [21, 175], 155 values with mean exactly 98, from the
+    ///      word hashed under REDEMPTION_AMOUNT (independent of raw bit 0, the daily coinflip).
     function _rollFromWord(uint256 word) private pure returns (uint16) {
         return uint16((EntropyLib.hash2(RngTags.REDEMPTION_AMOUNT, word) % (MAX_ROLL - MIN_ROLL + 1)) + MIN_ROLL);
     }
@@ -528,7 +526,7 @@ contract sDGNRS {
             // coinflip day with no bonus; a win pays through creditFlip, whose stake then rides
             // the real flip.
             uint256 synth = uint256(EntropyLib.hash2(RngTags.REDEMPTION_FLIP, word));
-            uint16 flipReward = (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth, uint24(id)) : 0;
+            uint16 flipReward = (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth) : 0;
             reserveLeft = _resolveBatch(id, batch, _rollFromWord(word), flipReward);
             result.progressed = true;
             MineFlipGas.markProgress(meter);
@@ -568,7 +566,7 @@ contract sDGNRS {
             // A live claim calls only protocol contracts and has no failure branch.
             _claimRedemptionFor(entry, address(0), id, false, word);
         }
-        if (cursor != initialCursor) { result.progressed = true; MineFlipGas.markProgress(meter); }
+        if (cursor != initialCursor) result.progressed = true;
         result.done = cursor == total;
         if (result.done) {
             _finishRedemptionSettlement(id, reserveLeft);
@@ -593,8 +591,8 @@ contract sDGNRS {
     /// @notice Holder base (supply plus the open batch's escrow) immediately after the last century
     ///         refill (initial supply before the first).
     /// @dev All intervening reductions of the holder base are burns; a live gambling burn counts
-    ///      once its batch closes. Appended with the century/closure markers
-    ///      in one slot, preserving the existing redemption layout and adding no per-burn writes.
+    ///      once its batch closes. Packed with the century/closure markers in one slot; no per-burn
+    ///      writes.
     uint128 public centurySupplyCheckpoint;
 
     /// @notice Last completed century recycled, starting at 1 for the level-100 transition close.
@@ -638,9 +636,6 @@ contract sDGNRS {
     //                          CONSTANTS
     // =====================================================================
 
-    /// @dev Domain for the per-century refill percentage; the completed level keys each draw.
-    bytes32 private constant CENTURY_REFILL_TAG = keccak256("sdgnrs.century.refill");
-
     /// @notice Initial supply (1 trillion tokens)
     uint256 private constant INITIAL_SUPPLY = 1_000_000_000_000 * 1e12;
 
@@ -673,9 +668,6 @@ contract sDGNRS {
 
     /// @dev Minimum live redemption value at admission; no fixed token-count floor.
     uint256 public constant MIN_REDEMPTION_VALUE = 0.01 ether;
-
-    /// @dev Domain for a batch's synthetic flip; batch id and word key each draw.
-    bytes32 private constant SYNTH_FLIP_TAG = keccak256("sdgnrs.redemption.synthetic-flip");
 
     uint256 private constant BATCH_PLAYER_ID_SHIFT = 80;
     uint256 private constant BATCH_PLAYER_SCORE_SHIFT = 112;
@@ -847,14 +839,13 @@ contract sDGNRS {
         return poolBalances[_poolIndex(pool)];
     }
 
-    /// @notice Total supply of sDGNRS tokens (ERC20). ABI-preserving view over the packed slot-0 field.
+    /// @notice Total supply of sDGNRS tokens (ERC20).
     function totalSupply() external view returns (uint256) {
         return _totalSupply;
     }
 
     /// @notice Total redemption value reserved for closed batches and their unpaid claims (wei):
     ///         paid from the Game's redemption reserve live, from custody after game over.
-    /// @dev ABI-preserving view over the packed slot-0 field (cross-contract + harness readers).
     function pendingRedemptionEthValue() external view returns (uint256) {
         return _pendingRedemptionEthValue;
     }
@@ -980,7 +971,7 @@ contract sDGNRS {
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
-    /// @return flipOut FLIP received (deterministic path only)
+    /// @return flipOut Always 0
     /// @custom:reverts BurnsBlockedDuringLiveness If liveness fired but gameOver has not yet latched.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         if (game.gameOver()) {
@@ -992,13 +983,14 @@ contract sDGNRS {
         return (0, 0, 0);
     }
 
-    /// @notice Burn wrapped DGNRS (held in the DGNRS contract) to claim proportional backing assets
-    /// @dev Burns the DGNRS wrapper tokens, then burns the corresponding sDGNRS backing held by the DGNRS contract.
+    /// @notice Burn wrapped DGNRS (held by the caller) to claim proportional backing assets
+    /// @dev Burns the caller's DGNRS wrapper tokens, then burns the corresponding sDGNRS backing
+    ///      held by the DGNRS contract.
     ///      Post-gameOver: deterministic payout. During game: joins the open redemption batch.
     /// @param amount Amount of sDGNRS-equivalent to burn (from DGNRS wrapper balance)
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
-    /// @return flipOut FLIP received (deterministic path only)
+    /// @return flipOut Always 0
     /// @custom:reverts BurnsBlockedDuringLiveness If liveness fired but gameOver has not yet latched.
     function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         // burnForSdgnrs makes no external calls, so gameOver cannot change
@@ -1400,7 +1392,6 @@ contract sDGNRS {
     /// @param to Recipient address
     /// @param amount Amount to mint
     function _mint(address to, uint256 amount) private {
-        if (to == address(0)) revert ZeroAddress();
         uint256 supplyAfter = uint256(_totalSupply) + amount;
         // Only genesis allocations and century refills mint. Genesis totals INITIAL_SUPPLY;
         // a refill adds at most 75% of (checkpoint - holder base), so supply stays <= checkpoint <= 1e24.

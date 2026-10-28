@@ -44,7 +44,7 @@ contract CreditsGameExt is DegenerusGame {
     function x_ffKey(uint24 lvl) external pure returns (uint24) { return _tqFarFutureKey(lvl); }
     function x_setLevel(uint24 lvl) external { level = lvl; }
     function x_setPools(uint128 next, uint128 fut) external { _setPrizePools(next, fut); }
-    function x_setLevelDgnrs(uint24 lvl, uint256 allocation) external { _setLevelDgnrsAllocation(lvl, allocation); }
+    function x_setLevelDgnrs(uint24 lvl, uint256 allocation) external { _setLevelDgnrsAllocation(allocation); }
     function x_setFoilRecord(uint24 lvl, uint32 id, uint256 w) external { foilRecord[lvl & 3][id] = w; }
     function x_setFoilDraw(uint24 day, uint256 w) external { dailyFoilDraw[day & 1] = w; }
 

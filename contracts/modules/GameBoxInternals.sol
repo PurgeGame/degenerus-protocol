@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-/// @dev Shared resolver signatures for Game-storage box components.
 import {GameComponentCall} from "./GameComponentCall.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IDegenerusGameLootboxModule, IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
 
+/// @dev Shared resolver signatures for Game-storage box components.
 abstract contract GameBoxInternals is GameComponentCall {
     error RngNotReady();
 

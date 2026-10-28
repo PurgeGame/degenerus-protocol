@@ -30,7 +30,6 @@ import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {IDegenerusGameTicketModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDeityPassSeize} from "../interfaces/ILiquidation.sol";
@@ -45,9 +44,6 @@ import {
 
 /// @dev Minimal stETH interface (ERC20 subset)
 interface IStETH {
-    /// @notice stETH balance of an account.
-    /// @param account Address to query balance of.
-    function balanceOf(address account) external view returns (uint256);
     /// @notice Transfer stETH to a recipient.
     /// @param to Recipient address.
     /// @param amount Transfer amount in wei.
@@ -230,7 +226,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @notice A deterministic-ending claim credited `amount` to `player`'s claimable winnings.
     event DeadVrfClaimed(uint32 indexed player, uint256 amount);
 
-    // error E() — inherited from DegenerusGameStorage
     error RngNotReady();
 
     // Memory-only accounting shared by terminal checkpoints; no persistent progress marker.
@@ -244,8 +239,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     uint256 private constant DEAD_REF_QUEUED = 1;
 
     /// @dev Handles the game-over trigger and post-game sweep. Returns (shouldReturn, stage, unlock,
-    ///      progressed); unlock is true only after normal payout. shouldReturn asks Advance to emit
-    ///      `stage` and exit.
+    ///      progressed); unlock is true only after normal payout. shouldReturn is false only when
+    ///      no ending applies, which the Advance caller has already excluded.
     ///      Stages used:
     ///         STAGE_GAMEOVER -- a step of the ending, the payout, or the final sweep
     ///         STAGE_TICKETS_WORKING -- a drain or tally batch; the caller retries
@@ -414,7 +409,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             // Request the terminal word, or apply it once it has landed. Either way this
             // transaction ends here, so applying the one terminal cohort never shares
             // a transaction with a drain batch.
-            _applyTerminalRng(uint48(block.timestamp), day, lvl, meter, work);
+            _applyTerminalRng(meter, work);
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -436,9 +431,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      arms the request day and time and asks in the same call, so the 14-day dead-VRF
     ///      clock starts when VRF is first asked; a coordinator refusal leaves them armed and
     ///      records the refusal.
-    function _requestTerminalRng(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool requested) {
-        if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0 || _rngRequestActive()) revert E();
-        if (!MineFlipGas.canRun(meter, GasBounds.RNG_TERMINAL_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
+    function _requestTerminalRng(MineFlipGas.Meter memory meter, TerminalWork memory work) private {
+        if (!MineFlipGas.canRun(meter, GasBounds.RNG_TERMINAL_REQUEST, GasBounds.TERMINAL_TAIL)) return;
         if (rngRequestDay == 0) {
             rngRequestDay = dailyIdx + 1;
             rngRequestTime = uint48(block.timestamp);
@@ -453,7 +447,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (!ok) {
             if (work.progressed) MineFlipGas.markProgress(meter);
             work.refusal = abi.encodeWithSelector(ExternalRequestRefused.selector);
-            return false;
+            return;
         }
         _swapRngBuffers();
         _setRngRequest(id);
@@ -462,7 +456,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         rngLockedFlag = true;
         _setDecDayOneActive(false);
         if (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) _setTicketRedemptionOpen(false);
-        requested = true;
         work.progressed = true;
         MineFlipGas.markProgress(meter);
     }
@@ -483,13 +476,11 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) != 0;
     }
 
-    function _applyTerminalRng(uint48, uint24 day, uint24 lvl, MineFlipGas.Meter memory meter, TerminalWork memory work) private {
-        if (_terminalWordApplied()) return;
+    function _applyTerminalRng(MineFlipGas.Meter memory meter, TerminalWork memory work) private {
         uint256 currentWord = _currentRngWord();
         if (_rngRequestActive() && currentWord != 0) {
             if (!MineFlipGas.canRun(meter, GasBounds.DAILY_APPLY, GasBounds.TERMINAL_TAIL)) return;
-            day = rngRequestDay;
-            _applyDailyRng(day, currentWord);
+            _applyDailyRng(rngRequestDay, currentWord);
             // A settling sDGNRS redemption batch whose live settlement never started resolves at
             // a flat 100: every ending pays it at 100, never from a word.
             dgnrs.resolveTerminalRedemptions();
@@ -498,7 +489,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             MineFlipGas.markProgress(meter);
             return;
         }
-        if (!_rngRequestActive()) _requestTerminalRng(day, meter, work);
+        if (!_rngRequestActive()) _requestTerminalRng(meter, work);
     }
 
     /// @dev One terminal drain batch: TICKET_SLOT_BIT on the anchor asks the worker for its
@@ -548,10 +539,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///
     ///      The normal ending needs the terminal word. With distributable funds and no word it
     ///      latches the deterministic ending instead, which reads no word.
-    /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
     function _handleGameOverDrain(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return true;
-        if (gameOver) return _resumeTerminalPayout(day, meter, work);
+        if (gameOver) return _resumeTerminalPayout(meter, work);
         // At most 32 deity refunds, terminal burns and accounting, with no draw
         // admitted until the remaining allowance is measured after this setup.
         if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_SETUP + GasBounds.DEGENESIS_TERMINAL_GAS, GasBounds.TERMINAL_TAIL)) {
@@ -627,8 +617,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             }
             if (totalRefunded != 0) {
                 claimablePool += uint128(totalRefunded); // Safe: totalRefunded bounded by preRefundAvailable which fits uint128
-                // The per-owner credits above carry no domain event. One aggregate marker
-                // names the refund total separately from the affiliate and ticket awards.
+                // The per-owner credits above carry no domain event; one aggregate event
+                // carries the refund total.
                 emit DeityPassRefundsSettled(totalRefunded);
             }
         }
@@ -657,8 +647,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Flood FLIP's VAULT mint allowance as a one-shot worthless-token tombstone
         flip.tombstoneAtGameOver();
 
-        // next|future share one slot; zero both in a single SSTORE (no read needed). currentPrizePool
-        // is a separate slot, still zeroed below.
+        // next|future share one slot: zero both in a single SSTORE. currentPrizePool is its own slot.
         _setPrizePools(0, 0);
         _setCurrentPrizePool(0);
         yieldAccumulator = 0;
@@ -675,7 +664,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             0,
             0,
             claimablePool,
-            totalFunds, // ETH + stETH unchanged since line 82 (burns/tombstone move no ETH/stETH)
+            totalFunds, // unchanged since read above: the burns and tombstone move no ETH or stETH
             0, // yieldAccumulator was just zeroed above
             day
         );
@@ -690,11 +679,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         emit GameOverDrained(lvl, available, claimablePool);
 
-        // remaining tracks unallocated funds.
         uint256 remaining = available;
 
-        // The winner was latched with the terminal cohort level before the terminal word
-        // existed (_handleGameOverPath); credit it here once.
+        // The terminal ticket level, latched (LR_GO_LVL) on the ending's first entry.
         uint24 terminalLevel = _gameOverTicketLevel(lvl);
 
         // Deterministic ending: no draw. Fix the pot and the total weight
@@ -710,17 +697,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _finishTerminalPayout();
             return true;
         }
-        // All remaining ETH goes to the final ticket cohort (Final-day distribution).
-        // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game).
-        // Pay from the SAME phase-correct level the AdvanceModule terminal drain materialized:
-        // current `lvl` in jackpot phase and in the locked last-purchase transition (where level was
-        // already promoted), otherwise purchase-phase `lvl + 1`. Any leftover from empty trait
-        // buckets stays in the contract until _handleFinalSweep (30 days later) folds it into the
-        // three-way split to vault / sDGNRS / GNRUS.
+        // All remaining funds go to the terminal ticket cohort, paid from the same latched level
+        // the terminal drain materialized: current `lvl` in jackpot phase and in the locked
+        // last-purchase transition (where level was already promoted), otherwise purchase-phase
+        // `lvl + 1`. Any leftover from empty trait buckets stays in the contract until
+        // _handleFinalSweep (30 days later) folds it into the three-way split to vault / sDGNRS / GNRUS.
         // Pin the pot before returning even if this call has too little allowance
         // left to roll a first quadrant. 255 denotes priced but not yet initialized.
         _startJackpotWork(uint128(remaining), 0, terminalLevel, 3, 255, false, false);
-        return _resumeTerminalPayout(day, meter, work);
+        return _resumeTerminalPayout(meter, work);
     }
 
     function _endgameSplitDegenesis() internal virtual {
@@ -732,7 +717,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         }
     }
 
-    function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
+    function _resumeTerminalPayout(MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
         uint256 allowance = MineFlipGas.child(meter, 100_000);
         (MineFlipGas.Result memory result,) = IDegenerusGame(address(this)).runTerminalJackpotWork(
             jackpotWork.budget, jackpotWork.lvl, _lootboxWord(_rngReadBuffer()), allowance
@@ -758,9 +743,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      Also shuts down the VRF subscription and sweeps native ETH to vault.
     /// @custom:reverts TransferFailed When ETH or stETH transfer fails
     function _handleFinalSweep(MineFlipGas.Meter memory meter) private {
-        if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) return;
         uint256 goTime = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
-        if (goTime == 0) return; // Game not over yet
+        if (goTime == 0) return; // payout not finished
         if (block.timestamp < goTime + 30 days) return; // Too early
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return; // Already swept
 
@@ -829,7 +813,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /*+========================================================================================+
       |                    DETERMINISTIC (VRF-DEAD) ENDING                                     |
       +========================================================================================+
-      |  When a VRF request goes unanswered for 14 days the game ends with no entropy at all.  |
+      |  A hard stall (14 days with no day completed, or a request unanswered) ends the game   |
+      |  with no entropy at all.                                                               |
       |  Every ticket of the terminal level shares the pot: an uncreated one (queued, or in an |
       |  undrained foil pack, its traits never rolled) takes the average; the created ones     |
       |  share the rest equally per non-empty trait bucket, then equally within each bucket.   |
@@ -1167,10 +1152,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             vrfRequestId = _requestVrfWord(locked ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS);
         }
 
-        // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
-        // with irreversible FLIP burns before or during the stall. They carry over
-        // and apply to the first post-swap coinflip word via _applyDailyRng. Resetting
-        // would steal user value (burned FLIP for zero effect).
+        // The nudge count is not reset here. Nudges were bought with irreversible FLIP
+        // burns before or during the stall; they carry over to the first post-swap daily
+        // word via _applyDailyRng.
 
         emit VrfCoordinatorUpdated(current, newCoordinator);
     }

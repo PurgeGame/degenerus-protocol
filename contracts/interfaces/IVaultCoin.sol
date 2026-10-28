@@ -25,8 +25,7 @@ pragma solidity 0.8.38;
  */
 
 /// @notice Interface for tokens with vault mint allowance (FLIP).
-/// @dev Used by DegenerusVault and game modules for minting tokens
-///      from vault escrow without requiring token transfers.
+/// @dev Used by DegenerusVault to mint from its virtual allowance without token transfers.
 interface IVaultCoin {
     /// @notice Mint tokens to recipient from vault's allowance.
     /// @param to Recipient address.

@@ -32,8 +32,6 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 
 import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
-import {IStETH} from "../interfaces/IStETH.sol";
-
 
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {GamePurchaseBox} from "./GamePurchaseBox.sol";
@@ -47,7 +45,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 /// @notice Interface for minting WWXRP prize tokens
 interface IWWXRP {
     /// @notice Mint prize tokens to a recipient
-    /// @param to The address to receive the prize
+    /// @param to The recipient's wallet ID
     /// @param amount The amount of tokens to mint
     function creditPrize(uint32 to, uint256 amount) external;
 }
@@ -55,10 +53,6 @@ interface IWWXRP {
 /// @notice The craps table's day-pass door. Called ONCE per lootbox entry that rolled any pass,
 ///         never once per box, and it never reverts on an unavailable day.
 interface ICrapsPassDelivery {
-    /// @notice Bank a rolled pass award as day-pass credits for wallet `id`, revert-free
-    ///         (CrapsBattle, game-only; the Game passes the nonzero ID it holds).
-    function creditPasses(uint32 id, uint32 normal, uint32 high) external;
-
     /// @notice Seat a rolled pass award for wallet `id` on tomorrow when available, banking the
     ///         rest as credit (CrapsBattle, game/vault-only; revert-free; the Game passes the
     ///         nonzero ID it holds).
@@ -76,15 +70,8 @@ interface ICrapsPassDelivery {
  * ## Functions
  *
  * - Box opening (resolveHumanBoxOrder, resolveAfkingBox, resolveLootboxDirect, resolveRedemptionLootbox)
- * - Deity-boon event declarations shared with DegenerusGameBoonModule (giveBoon lives there)
  */
 abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBox {
-    // =========================================================================
-    // Errors
-    // =========================================================================
-
-    // error E() — inherited from DegenerusGameStorage
-
     // =========================================================================
     // Events
     // =========================================================================
@@ -97,7 +84,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @param amount The ETH amount of the lootbox (in wei)
     /// @param futureLevel The target level for future tickets
     /// @param futureTickets The pre-Bernoulli scaled (× QTY_SCALE) future ticket count
-    /// @param flip The total FLIP tokens awarded (in wei)
+    /// @param flip The total FLIP tokens awarded (whole FLIP)
     /// @param roundedUp True iff the Bernoulli round-up incremented the awarded
     ///        whole-ticket count by 1
     event LootBoxOpened(
@@ -109,7 +96,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         uint256 flip,
         bool roundedUp
     );
-
 
     /// @notice Aggregated DGNRS settlement for an opened entry's contiguous reward batch.
     /// @dev An ETH-spin boundary may split one entry into multiple batches because that spin can
@@ -124,16 +110,12 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///         credit instead. Emitted once per entry, never once per box.
     event LootBoxCrapsPasses(uint32 indexed id, uint32 normal, uint32 highRoller, uint24 day);
 
-
     // =========================================================================
     // External Contract References
     // =========================================================================
 
     /// @notice Reference to the WWXRP token contract
     IWWXRP internal constant wwxrp = IWWXRP(ContractAddresses.WWXRP);
-
-    /// @notice Reference to the stETH token (redemption-direct stETH-remainder pull)
-    IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
     // =========================================================================
     // Constants
@@ -142,11 +124,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     // Lootbox roll constants
     /// @dev Base ticket budget in BPS of the roll's MAIN amount — the box amount after the
     ///      boon budget (10%, capped at 1 ETH) is carved off in `_resolveLootboxCommon` — for
-    ///      ONE ticket outcome, before the variance tiers (~0.941x mean) and the EV-neutral
-    ///      near/far distance weighting: ~185% of the main amount per ticket outcome, so a
-    ///      neutral 1 ETH box (0.9 ETH main) carries ~1.67 ETH of ticket face on a ticket
-    ///      roll. Ticket outcomes are 40% of direct-box rolls and 45% of recirculated-box
-    ///      rolls (roll 19 pays tickets there instead of the ETH spin).
+    ///      ONE ticket outcome (196.78%), before the variance tiers (~0.941x mean) and the
+    ///      EV-neutral near/far distance weighting. After the variance mean that is ~185% of the
+    ///      main amount per ticket outcome, so a neutral 1 ETH box (0.9 ETH main) carries
+    ///      ~1.67 ETH of ticket face on a ticket roll. Ticket outcomes are 40% of direct-box rolls
+    ///      and 45% of recirculated-box rolls (roll 19 pays tickets there instead of the ETH spin).
     uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 19_678;
     /// @dev Budget weighting by target-level distance, applied to the ticket roll budget.
     ///      Far-future ticket rolls (20% of ticket rolls) capture 30% of the aggregate
@@ -192,27 +174,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///      the wei amount times this rate is a 1e18-scaled intermediate that `_boxWwxrpStake`
     ///      divides down to whole tokens (the token then applies its own game mint scale).
     uint256 private constant LOOTBOX_WWXRP_PER_ETH = 500;
-    /// @dev Domain-separation tags mixed (via hash2) into the box seed to derive each
-    ///      Degenerette-spin sub-seed. Counter-tagged off the primary chunk, so the spins
-    ///      consume no primary-chunk bits and never collide with the box's own draws.
-    uint256 private constant BOX_WWXRP_SPIN_TAG = 0x57777872705370696e; // "WwxrpSpin"
-    uint256 private constant BOX_FLIP_SPIN_TAG = 0x4275726e69655370696e; // "BurnieSpin"
-    uint256 private constant BOX_ETH_SPIN_TAG = 0x4574685370696e; // "EthSpin"
-    // Draw identities, never financial inputs. Separate entry, boon and AFKing streams
-    // explicitly instead of relying on a box amount to make their preimages differ. A redemption
-    // order rolls through the entry stream on its own player-mixed word with a tagged index.
-    uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e; // "BoxOpen"
-    uint256 private constant BOX_BOON_TAG = 0x426f78426f6f6e; // "BoxBoon"
-    uint256 private constant AFKING_BOX_TAG = 0x41666b696e67426f78; // "AfkingBox"
-    /// @dev Domain-separation tag for the 100-FLIP award collapse. Keyed off the box/roll
-    ///      seed rather than a spare bit-slice, so the bit budgets documented above stay
-    ///      accurate and the roll is fixed at VRF fulfillment.
-    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
-    /// @dev Extractors for the pass lane. Domain-separated so the fractional pass, the fallback
-    ///      spin and every other draw off the same box read independent bits of one VRF word —
-    ///      these are EXTRACTORS from committed entropy, never a source of their own.
-    uint256 private constant BOX_PASS_ROUND_TAG = 0x50617373526f756e64; // "PassRound"
-    uint256 private constant BOX_PASS_SPIN_TAG = 0x506173735370696e; // "PassSpin"
     /// @dev Base BPS for low FLIP path (43.88%)
     uint16 private constant LOOTBOX_LARGE_FLIP_LOW_BASE_BPS = 4388;
     /// @dev Step increase in BPS for low FLIP path (3.60% per step)
@@ -229,13 +190,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
 
     /// @dev Distress-mode ticket bonus in basis points (25%).
     uint16 private constant DISTRESS_TICKET_BONUS_BPS = 2500;
-
-    // Boon categories — players may hold one boon per category simultaneously.
-    // Within a category, upgrade semantics apply (higher tier replaces lower).
-
-    // Deity boon constants
-
-    // Deity boon weights (used for weighted random selection)
 
     // =========================================================================
     // Lootbox Opening Functions
@@ -275,7 +229,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     }
 
     // =========================================================================
-    // Box purchase entries (delegatecalled from the Mint, Whale and Afking modules)
+    // Box purchase entries (pass bundles, delegatecalled from the Whale module)
     // =========================================================================
     //
     // Every purchase builds one complete entry word and appends it once to the write buffer.
@@ -287,7 +241,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
     uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 1 ether;
 
-    /// @notice Emitted when a box entry is appended. Same topic as the Game / Whale / Afking
+    /// @notice Emitted when a box entry is appended. Same topic as the GamePurchase and Whale
     ///         declarations — one box-buy event across every path.
     /// @param index Physical write buffer (0/1) the entry joined.
     /// @param position The entry's zero-based position in that buffer.
@@ -361,7 +315,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         bool dgnrsPoolLoaded;
         // One bit per non-zero ticket lane. The counters stay unpacked for cheap per-roll
         // updates; bit-scanning makes the final flush proportional to distinct winning levels
-        // while preserving the old ascending-level event/write order.
+        // and keeps it in ascending-level event/write order.
         uint64 ticketTouched;
         uint32[51] tickets;
         // Craps day passes this entry rolled, by denomination. Accumulated across the batch and
@@ -383,7 +337,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///      spread of locals: the box loop threads all of it, and a wide parameter list here is
     ///      enough to exceed the Yul stack limit.
     struct BoxRoll {
-        uint32 id; // the entry's wallet ID: the owner input of every seed
+        uint32 id; // the entry's wallet ID
         uint48 index; // event tag: the entry reference or the redemption batch tag
         uint256 rootWord; // committed per-entry root every box seed derives from
         uint24 currentLevel;
@@ -423,11 +377,10 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         _flushBoxAcc(c.id, c.acc, c.currentLevel);
     }
 
-
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
     ///      entry sweep (daily afking boxes, degenerette auto-resolve, ETH-spin recirc).
     ///      Identical draw to the entry path's per-order call;
-    ///      `seed` is the box's own account-specific resolution seed, drawn at nonce 0.
+    ///      `seed` is the box's own resolution seed, drawn at nonce 0.
     function _rollSingleBoxBoons(uint32 id, uint256 amount, uint24 currentLevel, uint256 seed) private {
         _boxRollBoxBoons(id, _lootboxBoonBudget(amount), 1, amount, currentLevel, seed, 0);
     }
@@ -514,8 +467,9 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         acc.tickets[offset] = lane > laneCap ? uint32(laneCap) : uint32(lane);
     }
 
-    /// @dev Roll `count` boxes of `size` wei each, then draw their boons as one batch. Every box takes its own seed — the nonce is its position in the order —
-    ///      so two boxes of one order draw independently (their outcomes may still coincide).
+    /// @dev Roll `count` boxes of `size` wei each, then draw their boons as one batch. Every box
+    ///      takes its own seed — the nonce is its position in the order — so two boxes of one
+    ///      order draw independently (their outcomes may still coincide).
     function _rollBoxes(BoxRoll memory c, uint256 count, uint256 size) private {
         if (count == 0 || size == 0) return;
         uint256 scaled;
@@ -536,9 +490,9 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
             uint256 distressEth = (boosted * c.distressBps) / 10_000;
 
             for (uint256 i; i < count; ++i) {
-                // Seed = the entry's committed root (fixed before the buffer's word is requested,
-                // unknowable at buy) + wallet ID + domain + this box's position in the order.
-                // Size only prices the award; the nonce already distinguishes every box.
+                // Seed = domain + the entry's committed root (fixed before the buffer's word is
+                // requested, unknowable at buy) + this box's position in the order. Size only
+                // prices the award; the nonce already distinguishes every box.
                 uint256 seed = EntropyLib.hash3(RngTags.BOX_OPEN, c.rootWord, ++c.nonce);
                 _resolveLootboxCommon(
                     c.id,
@@ -560,9 +514,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         _boxRollBoxBoons(c.id, _lootboxBoonBudget(scaled), count, scaled, c.currentLevel, c.boonSeed, 0);
     }
 
-    /// @dev Domain of a queued entry's root: hash3(BOX_ORDER, word, position).
-    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572; // "QueuedOrder"
-
     /// @dev Event-tag bit of a queued entry: QUEUED_ENTRY_TAG | position << 1 | buffer. It keeps
     ///      every queued tag apart from the single-box resolvers' 0 and from redemption batches.
     uint48 private constant QUEUED_ENTRY_TAG = uint48(1) << 46;
@@ -570,10 +521,10 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @notice Settle one queued entry atomically.
     /// @dev The AFKing box worker owns queue order and stores the
     ///      advanced cursor before this call, so an entry settles at most once. The entry's
-    ///      root binds the cohort word to the entry's buffer and position, both fixed when the
-    ///      purchase appended it, before that buffer's word was requested; every box and boon
-    ///      seed then mixes the stored wallet ID. Token recipients are decoded only when a
-    ///      payout transfers tokens.
+    ///      root hashes the buffer's session word with the entry's position under BOX_ORDER;
+    ///      the position is fixed at append, before that word is requested. Every box and boon
+    ///      seed derives from that root. Token recipients are decoded only when a payout
+    ///      transfers tokens.
     /// @param buffer Physical read buffer (0/1).
     /// @param position The entry's zero-based position in that buffer.
     /// @param entry The stored 85-bit entry (LB_* layout).
@@ -626,7 +577,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
 
     function _localboxResolveLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
         internal
-
     {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
@@ -634,18 +584,18 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         if (amount == 0) return;
 
         uint24 currentLevel = level + 1;
-        // Freeze-safe seed: only the committed rngWord — which the caller domain-separates per
-        // resolution (Degenerette mixes the immutable betId) — and the owner's permanent wallet
-        // ID, committed with that bet, feed it. No live, post-word-reveal input enters the seed,
-        // so neither claim timing nor a futurePrizePool nudge can re-roll the outcome. No live
-        // day is read here either — boon expiry uses the boon path's own currentDay.
+        // Freeze-safe seed: only the committed rngWord, which the caller domain-separates per
+        // resolution (Degenerette mixes the immutable betId), feeds it. No live,
+        // post-word-reveal input enters the seed, so neither claim timing nor a
+        // futurePrizePool nudge can re-roll the outcome. No live day is read here either —
+        // boon expiry uses the boon path's own currentDay.
         uint256 seed = EntropyLib.hash2(RngTags.BOX_DIRECT, rngWord);
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps);
 
-        // allowEthSpin=false: this is the recirc entry, called inside runDegeneretteWork's deferred
+        // allowEthSpin=false: this is the recirc entry, called inside runDegeneretteWork_g670's deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
         // 19 awards tickets instead. Every box itemizes its contents, so this path emits the
         // `LootBoxOpened` summary unconditionally (gated only by the spin suppression downstream).
@@ -663,8 +613,8 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         _rollSingleBoxBoons(id, scaledAmount, currentLevel, seed);
     }
 
-    /// @dev Tag bit on a redemption order's index: the batch id rides below it, and a real
-    ///      lootbox buffer index is 0 or 1, so the two never collide in seeds or events.
+    /// @dev Tag bit on a redemption order's event index: the batch id rides below it, apart
+    ///      from QUEUED_ENTRY_TAG entries and the single-box resolvers' 0.
     uint48 private constant REDEMPTION_INDEX_TAG = uint48(1) << 47;
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
@@ -717,50 +667,27 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         _creditClaimableLogged(id, amount);
     }
 
-    /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
-    ///         frozen-day word.
-    /// @dev The afking open route: the LIVE-LEVEL twin of `resolveLootboxDirect` — identical
-    ///      resolution shape (derive the seed, roll the target level from the LIVE level, apply
-    ///      the frozen EV multiplier, then `_resolveLootboxCommon`) — with three AFKing-specific
-    ///      twists (vs a queued entry):
+    /// @notice Resolve an AFKing-subscription box at the LIVE level from a caller-passed session
+    ///         word.
+    /// @dev Same resolution shape as `resolveLootboxDirect` (derive the seed, roll the target
+    ///      level from the LIVE level, apply the frozen EV multiplier, then
+    ///      `_resolveLootboxCommon`), with three differences:
     ///
-    ///        1. the RNG `rngWord` is a CALLER-PASSED param (the GameAfkingModule open-leg
-    ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
-    ///        2. the seed uses that committed word and subscriber ID. Exactly one stamped
-    ///           open per subscriber consumes a session word, so the stamp day adds no
-    ///           discriminator and the live clock never enters the seed; and
+    ///        1. `rngWord` is passed by the GameAfkingModule open leg (`_runAfkingWork`), which
+    ///           gates on the active published word and a sealed stamp day, so a zero word never
+    ///           reaches this function;
+    ///        2. the seed is hash3(BOX_AFKING, rngWord, id). Exactly one stamped open per
+    ///           subscriber consumes a session word, so the stamp day adds no discriminator; no
+    ///           live clock or `block.*` value enters the seed; and
     ///        3. the per-level EV allowance is neither read nor drawn: the subscription's 1-8
     ///           unit daily cap bounds these boxes instead.
     ///
-    ///      The live-level handling matches `resolveLootboxDirect`: `currentLevel = level +
-    ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE
-    ///      level (NO stored baseLevel floor — auto-open removes the id's ability to time
-    ///      the level, so the level freeze is unnecessary). The seed carries ZERO `block.*`
-    ///      entropy.
-    ///
-    ///      Boons OFF for afking boxes ⇒ `amount` IS the spend exactly (there is no
-    ///      boosted-amount freeze field — the stamped `amount` is the unboosted box value).
-    ///      The boon/pass ROLL inside `_resolveLootboxCommon` still runs on every ETH-lootbox
-    ///      path (gated by real game-state, identical to the auto-resolve callers); the
-    ///      boons-off rule governs the AMOUNT field, not the roll.
-    ///
-    ///      Tail flags match the queued box open for outcome parity (an afking box must be
-    ///      identical to a normal box in every way that matters): it emits the `LootBoxOpened`
-    ///      summary like any box open, and `payColdBustConsolation = true` (a
-    ///      bust pays the same WWXRP consolation a human box does). The ONE intentional
-    ///      exception is the distress bonus — `distressEth = 0` / `totalPackedEth = 0`: the
-    ///      human value is frozen at buy in the order's distress fraction, which the
-    ///      stamp-only afking box never writes. Deliberately omitted as a mega-niche
-    ///      end-game feature (active only the final day before game-over, by which point
-    ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
-    ///      GameAfkingModule open leg `_runAfkingWork`) gates on the active published word and a sealed stamp day,
-    ///      so a zero word never reaches this function. The AFKing open leg passes the active
-    ///      session word to this resolver;
-    ///      `resolveLootboxDirect` reads no day at all and takes the committed word its caller
-    ///      passes — the Degenerette's betId-mixed word).
-    /// @param id Box owner (resolved by the GameAfkingModule open-leg from the sub).
-    /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
-    /// @param day The boundary-pinned process day retained in the call ABI and emitted entry tag.
+    ///      `amount` is the unboosted stamped spend. Tail flags match a queued box (the cold-bust
+    ///      WWXRP consolation pays and the ETH spin is allowed) except the distress bonus, which
+    ///      the stamp-only box never records.
+    /// @param id Box owner (resolved by the GameAfkingModule open leg from the subscription).
+    /// @param amount The stamped spend in wei.
+    /// @param day The stamp's process day; neither the seed nor the event uses it.
     /// @param rngWord The active published session word, retained until all pending boxes finish.
     /// @param activityScore The stamped activity score in whole points (the FROZEN EV input).
     function resolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
@@ -804,10 +731,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     }
 
     // =========================================================================
-    // Deity Boon Functions
-    // =========================================================================
-
-    // =========================================================================
     // Internal Helper Functions
     // =========================================================================
 
@@ -844,8 +767,8 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         }
     }
 
-    /// @dev Common lootbox resolution logic shared by ETH and FLIP lootboxes.
-    ///      Handles whale pass jackpots, lazy pass awards, ticket/FLIP rolls, and boons.
+    /// @dev Common box resolution: carves the boon budget off `amount` and settles the box's
+    ///      single reward roll on the rest. The caller runs the boon draw.
     /// @param id Wallet ID receiving rewards
     /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`). Used purely as the
     ///        `lootboxIndex` identifier on the `LootBoxOpened` emit; auto-resolve
@@ -902,10 +825,8 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         uint256 boonBudget = _lootboxBoonBudget(amount);
         uint256 mainAmount = amount - boonBudget;
 
-        // One box, one roll, at the box's own size. The old split-into-two threshold is gone:
-        // a medium that resolved as two smalls was the thing the count model exists to stop.
-        // A target >= base + 5 is a far-future roll (near offsets are 0-4), which weights the
-        // ticket budget up.
+        // One box, one roll, at the box's own size. A target >= base + 5 is a far-future roll
+        // (near offsets are 0-4), which weights the ticket budget up.
         _settleLootboxRoll(
             id,
             index,
@@ -979,12 +900,12 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
 
         // Collapsed onto a whole 100-FLIP multiple, EV-preserving, above the threshold where
         // the granule is a small slice of the award; a minimum box at the milestone price
-        // pays about 18 FLIP, so smaller awards keep the whole-FLIP floor rather than round
+        // pays about 18 FLIP, so smaller awards are paid unrounded rather than round
         // to nothing. The roll keys on a domain-separated hash of this roll's own seed,
         // consuming none of the primary chunk's documented bit windows.
         uint256 flipAmount = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(RngTags.BOX_ROUND, rollSeed))
-            : FlipRoundLib.floorWholeFlip(flipOut);
+            : flipOut;
 
         bool roundedUp;
         if (scaledWholeTickets != 0) {
@@ -1040,7 +961,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///      Degenerette module; their sub-seeds are hash2-tagged off `seed` (no primary-
     ///      chunk bits consumed). The ETH-spin only fires on directly-opened boxes
     ///      (`allowEthSpin`); on recirc boxes roll 19 awards tickets instead, which keeps
-    ///      every box resolved inside a bet resolution (the sweep's `runDegeneretteWork`, the
+    ///      every box resolved inside a bet resolution (the sweep's `runDegeneretteWork_g670`, the
     ///      ETH-pool memory-accumulator context) free of an ETH-pool
     ///      read-modify-write.
     /// @param id Wallet ID receiving the reward
@@ -1052,7 +973,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @param activityScore Frozen whole-point activity score threaded from the box commitment;
     ///        scales the spin ROI / EV exactly as a regular bet's snapshot does.
     /// @param allowEthSpin When false (recirc boxes), roll 19 awards tickets instead of an
-    ///        ETH spin — no ETH-pool RMW can race a deferred `runDegeneretteWork` pool flush.
+    ///        ETH spin — no ETH-pool RMW can race a deferred `runDegeneretteWork_g670` pool flush.
     /// @param currentLevel Open level (`level + 1`), the FLIP legs' price basis.
     /// @param acc Running reward accumulator: caches the DGNRS pool read (priced net of DGNRS
     ///        already pending), is flushed/invalidated around an ETH spin, and receives the
@@ -1068,8 +989,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///        - pathRoll: bits[40..55]     via uint16(seed >> 40) % 20  (bias 0.02%)
     ///        - DGNRS tier sub-call slice: bits[56..79] (consumed by _lootboxDgnrsReward)
     ///        - large-FLIP varianceRoll: bits[80..95]   via uint16(seed >> 80) % 20  (bias 0.02%)
-    ///      Spin sub-seeds use hash2-tagged chunks (BOX_*_SPIN_TAG), counter-tagged and
-    ///      collision-free vs the primary chunk, so they consume no additional primary bits.
+    ///      Spin sub-seeds are hash2(RngTags.BOX_*_SPIN, seed), so they consume no primary bits.
     function _resolveLootboxRoll(
         uint32 id,
         uint256 amount,
@@ -1247,7 +1167,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         return _boxWwxrpSpinStake(amount) / TOKEN_MATH_SCALE;
     }
 
-    /// @dev Virtual spin stake retains fractional tokens; the one-token minimum is unchanged.
+    /// @dev Virtual spin stake: retains fractional tokens, with a one-token minimum.
     function _boxWwxrpSpinStake(uint256 amount) private pure returns (uint256 stake) {
         stake = amount * LOOTBOX_WWXRP_PER_ETH;
         if (stake < LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE) stake = LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE;
@@ -1348,9 +1268,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         pure
         returns (uint256)
     {
-        uint256 span = windowHigh - windowLow - 1;
-        if (span == 0) return bpsLow;
-        return bpsLow + ((roll - windowLow) * (bpsHigh - bpsLow)) / span;
+        return bpsLow + ((roll - windowLow) * (bpsHigh - bpsLow)) / (windowHigh - windowLow - 1);
     }
 
     /// @dev Calculate DGNRS reward amount from the lootbox pool.
@@ -1378,7 +1296,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
             ppm = LOOTBOX_DGNRS_POOL_MEGA_PPM;
         }
 
-        if (poolBalance == 0 || ppm == 0) return 0;
+        if (poolBalance == 0) return 0;
         // Three significant figures. The pool clamp is applied
         // AFTER the collapse, so a clamped award is the pool balance exactly rather than a
         // figure the pool cannot cover.

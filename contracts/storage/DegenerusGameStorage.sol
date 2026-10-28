@@ -48,7 +48,6 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 interface IGameMinerMaintenance {
-
     function minerMaintenancePending_g11976() external view returns (bool);
 }
 
@@ -60,20 +59,9 @@ interface IGameMinerMaintenance {
  * @dev ARCHITECTURE OVERVIEW
  * -----------------------------------------------------------------------------
  * This contract defines the canonical storage layout for the Degenerus game ecosystem.
- * It is inherited by:
- *   - DegenerusGame (main contract, holds actual state)
- *   - DegenerusGameAdvanceModule (delegatecall module)
- *   - DegenerusGameJackpotModule (delegatecall module)
- *   - DegenerusGameMintModule (delegatecall module)
- *   - DegenerusGameLootboxModule (delegatecall module)
- *   - DegenerusGameWhaleModule (delegatecall module)
- *   - DegenerusGameBoonModule (delegatecall module)
- *   - DegenerusGameDecimatorModule (delegatecall module)
- *   - DegenerusGameDegeneretteModule (delegatecall module)
- *   - DegenerusGameGameOverModule (delegatecall module)
- *   - GameBingo (inherited Game entry points)
- *   - GameAfkingModule (delegatecall module)
- *   - DegenerusGameFoilPackModule (delegatecall module)
+ * DegenerusGame (which holds the state) and every Game delegatecall module inherit it,
+ * directly or through shared module bases; the deploy profile under contracts/profiles
+ * composes them. DegenerusGameLens inherits the same layout.
  *
  * DELEGATECALL PATTERN:
  * When DegenerusGame calls `module.delegatecall(...)`, the module's code executes
@@ -129,21 +117,20 @@ interface IGameMinerMaintenance {
  * SECURITY CONSIDERATIONS
  * -----------------------------------------------------------------------------
  * 1. SLOT STABILITY: Never reorder, remove, or change types of existing variables.
- *    Append-only additions are safe for non-upgradeable contracts.
  *
  * 2. DELEGATECALL SAFETY: All modules inherit this exact layout. If a module
  *    declared its own storage variables, they would occupy the same slots as
  *    game data, causing catastrophic corruption.
  *
- * 3. ACCESS CONTROL: Most state is `internal`; `level`, `gameOver`, and `boonPacked` are `public`
+ * 3. ACCESS CONTROL: Most state is `internal`; `gameOver` and `boonPacked` are `public`
  *    (auto-getters). Other external reads go through explicit getters in DegenerusGame.
  *
  * 4. INITIALIZATION: Default values are set inline. For critical variables:
  *    - purchaseStartDay = logical day 9 at level 0, excluding the seven Degenesis cohorts
  *    - jackpotPhaseFlag = false (purchase phase)
- *    - decimatorFlags = 0 (window opens at level 4 jackpot phase start)
+ *    - decimatorFlags = 0 (window closed, no loans due)
  *    - levelPrizePool[level] is the per-level ratchet target; levelPrizePool[0] is set to
- *      BOOTSTRAP_PRIZE_POOL (50 ether) in the constructor (also the zero-fallback in the view)
+ *      BOOTSTRAP_PRIZE_POOL (50 ether) in the Game constructor (also the zero-fallback in the view)
  *
  * 5. OVERFLOW PROTECTION: Solidity 0.8+ provides automatic overflow checks.
  *    `unchecked` blocks in modules are intentional optimizations for safe ops.
@@ -226,10 +213,9 @@ abstract contract DegenerusGameStorage {
     ///      never divides the same balance twice.
     uint80 internal constant SNAP_DONE_BIT = uint80(1) << 40;
 
-    /// @dev Owner-registry position of a queued entry, stored plus one in the owed word's
-    ///      bits 48..79; every sink stamps it on the first push, so an owed word with a
-    ///      balance always carries one. A foil pack carries its position in the foilQueue
-    ///      word the same way.
+    /// @dev Wallet ID of a queued entry's owner, stored in the owed word's bits 48..79;
+    ///      every sink stamps it on the first push, so an owed word with a balance always
+    ///      carries one. A foil pack's foilQueue word carries its buyer's ID too.
     uint256 internal constant OWNER_IDX_SHIFT = 48;
     uint80 internal constant OWNER_IDX_MASK = uint80(type(uint32).max) << 48;
 
@@ -247,12 +233,8 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
 
     /// @dev Bootstrap value for prize pool target at level 1 (before any level completes).
-    ///      levelPrizePool[0] is initialized to this value conceptually.
+    ///      The Game constructor writes it to levelPrizePool[0].
     uint256 internal constant BOOTSTRAP_PRIZE_POOL = 50 ether;
-
-    /// @dev Current-pool daily jackpot percentage is rolled in JackpotModule.
-    ///      Three-day phases pay 6%-14% on day one, 12%-28% on day two, then the remainder.
-    ///      Turbo pays 100% of the currentPrizePool in its sole physical day.
 
     /// @dev Bit mask for ticket queue double-buffer key encoding.
     ///      Set bit 23 of the uint24 level key to distinguish write/read slots.
@@ -266,9 +248,6 @@ abstract contract DegenerusGameStorage {
     ///      Three key spaces: Slot0 [0x000000-0x3FFFFF], FF [0x400000-0x7FFFFF],
     ///      Slot1 [0x800000-0xBFFFFF]. Disjoint for all lvl < 2^22.
     uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
-
-    /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
-
 
     /// @dev Final purchase/rescue day after level 0; game-over is eligible the following day.
     uint24 internal constant _PURCHASE_TIMEOUT_DAYS = 30;
@@ -287,7 +266,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Gas-minimal revert signal. Matches codebase convention (DegenerusGame, modules).
     error E();
 
-    /// @dev Reverts when a permissionless far-future ticket write is attempted during VRF commitment window.
+    /// @dev Thrown when an action is refused while the daily RNG lock holds.
     error RngLocked();
 
     // Shared named reverts (inherited by every Game module). Each carries no data — the name
@@ -321,7 +300,6 @@ abstract contract DegenerusGameStorage {
     error TransferFailed();
     /// @notice Thrown when a balance or pool draw would underflow its backing.
     error Insolvent();
-    /// @notice Thrown when an internal invariant is violated.
     /// @notice Thrown when a required address argument is the zero address.
     error ZeroAddress();
     /// @notice Thrown when a required value argument is zero.
@@ -375,7 +353,7 @@ abstract contract DegenerusGameStorage {
     ///      false = purchase phase
     ///      true  = jackpot phase
     ///
-    ///      SECURITY: Phase transitions are guarded by advanceGame flow.
+    ///      Only the daily advance changes it.
     bool internal jackpotPhaseFlag;
 
     // =========================================================================
@@ -439,8 +417,8 @@ abstract contract DegenerusGameStorage {
     bool public gameOver;
 
     /// @dev True when daily jackpot ETH phase completed but coin+tickets phase pending.
-    ///      Splits the daily jackpot into multiple advanceGame calls so each stays under the
-    ///      per-tx gas cap. Cleared after the ticket distribution.
+    ///      Splits the daily jackpot into separate advance stages so each checkpoint stays
+    ///      bounded. Cleared after the ticket distribution.
     bool internal dailyJackpotCoinTicketsPending;
 
     /// @dev Packed jackpot state: bit 0 selects turbo (one day instead of three);
@@ -451,7 +429,7 @@ abstract contract DegenerusGameStorage {
     uint8 internal jackpotFlags;
 
     /// @dev True when the read slot has been fully drained (all tickets processed).
-    ///      Gate for RNG requests and jackpot logic in advanceGame daily path.
+    ///      Gates RNG requests and jackpot logic in the daily advance.
     ///
     ///      SECURITY: Must be set to true before any jackpot/phase logic executes.
     ///      Reset to false on every queue slot swap.
@@ -481,14 +459,10 @@ abstract contract DegenerusGameStorage {
     ///      slot 0 (LootboxCraps reads this slot's top bits).
     uint8 internal degenesisClosed;
 
-    /// @dev Afking process-STAGE drain-completion flag — the subscriber-drain sibling
-    ///      of `ticketsFullyProcessed`. False while the STAGE is stamping the funded
-    ///      subscriber set this day; set true once the set is fully drained; flipped back
-    ///      to false forward-looking at the start of the next day (the advance's
-    ///      `_afkingResetDay != day` gate), so it always reflects "afking done for the
-    ///      current day". Packed into slot 0 alongside `level` / `rngLockedFlag` /
-    ///      `ticketsFullyProcessed`, which the advance-path STAGE already SLOADs, so it
-    ///      costs no additional cold slot access on that path.
+    /// @dev Subscriber-preparation drain-completion flag, the subscriber sibling of
+    ///      `ticketsFullyProcessed`. Cleared when the miner pins the next preparation day
+    ///      (`_afkingResetDay`); set once that day's funded subscriber set is fully processed.
+    ///      Packed into slot 0 beside the flags the miner already reads.
     bool internal subsFullyProcessed;
 
     /// @dev True only after every box entry in the sealed read buffer has settled. Fresh
@@ -496,7 +470,7 @@ abstract contract DegenerusGameStorage {
     ///      RNG flags that `_rngConsumerStage` and `_swapRngBuffers` already read and write.
     bool internal humanReadComplete = true;
 
-    /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (0..65535); bit8 marks RNG
+    /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (at most RNG_NUDGE_CAP); bit8 marks RNG
     ///      complete, bit9 the FLIP redemption window, bit10 the request's spent retry; bit11
     ///      marks unpaid parimutuel growth winners, bit12 selects write, bit13 marks terminal;
     ///      bits14/15 identify an active request / published session. All setters preserve
@@ -617,7 +591,7 @@ abstract contract DegenerusGameStorage {
     ///      Direct reads of this variable will get corrupted data.
     uint256 internal prizePoolsPacked;
 
-    /// @dev Nonzero waiting sentinel; accepted session words are always greater than1.
+    /// @dev Nonzero waiting sentinel; accepted session words are always greater than 1.
     ///      _currentRngWord() reports the waiting sentinel as absence to consumers.
     uint256 internal constant RNG_WORD_WAITING = 1;
     /// @dev Nonzero waiting payload avoids a fresh SSTORE in the billed callback.
@@ -793,11 +767,8 @@ abstract contract DegenerusGameStorage {
     ///      supplies the forward lookup for ordinary wallets only.
     uint256[] internal wallets;
 
-    /// @dev Cursor for ticket queue processing (dual-purpose).
-    ///      - SETUP phase: tracks near-future level progress (1-4), reset to 0 when done.
-    ///      - PURCHASE phase: tracks mint batch progress through ticketQueue.
-    ///      - JACKPOT phase: tracks jackpot batch progress through ticketQueue.
-    ///      Phases are mutually exclusive, so cursor is reused safely.
+    /// @dev Scan frontier of the ticket drain in the queue named by ticketLevel (see
+    ///      ticketSeats); zero between drains.
     uint32 internal ticketCursor;
 
     /// @dev Current level being processed in ticket queue operations.
@@ -904,13 +875,13 @@ abstract contract DegenerusGameStorage {
     );
 
     /// @dev Whale pass awarded in place of an ETH, lootbox or early-bird ticket payout — otherwise the
-    ///      wallet-table half-pass increment is silent. Declared once here for JackpotModule and WhaleModule,
+    ///      wallet-table half-pass increment is silent. Declared once here for JackpotDrawModule and WhaleModule,
     ///      which both emit it through GAME's delegatecall. `halfPassCount` is in half-pass claim units.
     ///      The award is a bare half-pass counter binding to no level: claimWhalePass sets the target
     ///      from the level standing at claim time and reports it on WhalePassClaimed. The paying level
     ///      is not carried here either — every emit site sits in a receipt that already stamps it.
-    ///      `source`: 2 BAF direct, 3 award tickets (JackpotModule), 4 early bird, 5 quadrant
-    ///      conversion (WhaleModule); 1 (the solo-only half-pass conversion) is retired.
+    ///      `source`: 2 BAF direct, 3 award tickets (JackpotDrawModule), 4 early bird, 5 quadrant
+    ///      conversion (WhaleModule).
     event JackpotWhalePassWin(
         uint32 indexed walletId,
         uint256 halfPassCount,
@@ -1021,7 +992,7 @@ abstract contract DegenerusGameStorage {
     ///      The locked last-purchase transition is the one semantic exception: the RNG request has
     ///      already promoted `level`, so the purchase cohort committed before that request now sits
     ///      at `lvl`, while later write-buffer purchases target `lvl + 1`. Shared by the game-over
-    ///      ticket DRAIN (AdvanceModule) and terminal-jackpot READ (GameOverModule), keeping the
+    ///      drains and terminal-jackpot read (GameOverModule, foil worker), keeping the
     ///      materialized trait bucket and payout bucket identical in every terminal state.
     ///      The terminal path latches the answer on its first entry and every later read
     ///      returns the latch. That is what lets the terminal sequence hold the RNG lock:
@@ -1286,7 +1257,6 @@ abstract contract DegenerusGameStorage {
         ok = ok && uint64(id) != 0;
     }
 
-
     /// @dev The mid-day request's own refusal gates, read before selecting it: an optional
     ///      request that would certainly be refused is not work. Daily, read, maintenance and
     ///      liveness gates already hold on the path that reaches this check. A pending
@@ -1435,8 +1405,8 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Snap exponent for a target level's drain: the pending declaration for
     ///      levels at or past snapLevel, the active snapShift below it. One warm
-    ///      SLOAD (shares the ticketCursor slot) plus two compares. Shared by the
-    ///      ticket drains (MintModule) and the foil buy gate (FoilPackModule).
+    ///      SLOAD (shares the ticketCursor slot) plus two compares. Shared by the ticket,
+    ///      foil and terminal drains and the purchase path.
     function _snapShiftFor(uint24 targetLvl) internal view returns (uint8) {
         uint24 pl = snapLevel;
         if (pl != 0 && targetLvl >= pl) return snapPendingShift;
@@ -1575,7 +1545,7 @@ abstract contract DegenerusGameStorage {
                 }
                 uint256 offset = (position & 7) << 5;
                 uint256 lane;
-                // Preserve the production cycle check before using a recycled lane.
+                // Authenticate the queue cycle before using a recycled lane.
                 assembly ("memory-safe") {
                     mstore(0, or(add(position, 1), 0x400000))
                     mstore(32, ticketQueue.slot)
@@ -1590,7 +1560,7 @@ abstract contract DegenerusGameStorage {
                     _tqAppend(_tqFarFutureKey(lvl), id);
                     lane = 0;
                 }
-                // Like the current credit sink, a top-up clears the snap marker.
+                // As in _queueEntries, a top-up clears the snap marker.
                 uint256 nextLane = 0x80000000
                     | _saturateFarFutureOwed((lane & 0x3fffffff) + uint256(entriesPerLevel));
                 cachedWord = (cachedWord & ~(uint256(0xffffffff) << offset)) | (nextLane << offset);
@@ -1762,7 +1732,8 @@ abstract contract DegenerusGameStorage {
 
     /// @dev With createSmurf, the only writer of a wallet's identity. Returns the existing ID or allocates the
     ///      next table position, publishing both directions (the table element and walletIds)
-    ///      and seeding the claimable sentinel in the same call. Existing mint history is returned; new registration does not write it.
+    ///      and seeding the claimable sentinel in the same call. Existing mint history is returned;
+    ///      a new account has none, so `word` stays zero.
     ///      Callers register before anything else in the transaction loads `owner`'s mint word.
     ///      `quotedSpend` is the ETH-equivalent total the paying call charges (zero for the
     ///      external hook); it is read only when a new wallet would be admitted at or above
@@ -1782,8 +1753,6 @@ abstract contract DegenerusGameStorage {
         // Unbacked claimable sentinel, outside claimablePool and never paid out: every later
         // credit to the account is a nonzero write.
         balancesPacked[id] = 1;
-        // A new account has no mint history; registration does not write a statistics word.
-        word = 0;
         emit WalletRegistered(id, owner);
     }
 
@@ -2108,7 +2077,7 @@ abstract contract DegenerusGameStorage {
     // Packed Trait Buckets
     // =========================================================================
 
-    /// @dev Load the eight owner indices in the packed word containing occurrence `base`.
+    /// @dev Load the eight wallet-ID lanes in the packed word containing occurrence `base`.
     function _bucketWordAtUnchecked(uint24 lvl, uint8 trait, uint256 base) internal view returns (uint256 word) {
         uint256 elem = _traitBufferBase(lvl) + trait;
         assembly ("memory-safe") {
@@ -2292,7 +2261,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Append a nonzero wallet ID. The length counts lanes, like a
-    ///      trait bucket. A mask replaces stale lanes after release or swap-pop; lane zero
+    ///      trait bucket. A mask replaces stale lanes after queue release; lane zero
     ///      starts a whole word so the fresh tail has no inherited upper lanes.
     function _tqAppend(uint24 key, uint32 ownerPos) internal {
         if (ownerPos == 0) revert E();
@@ -2468,10 +2437,10 @@ abstract contract DegenerusGameStorage {
     ///      claimable first (only when `allowClaimable`) then prepaid afking. Tier 1 draws
     ///      claimable down to the STRICT 1-wei sentinel; tier 2 drains afking toward 0 (no
     ///      sentinel). The two tiers' draws pair a single aggregate `claimablePool` debit so
-    ///      the solvency total stays exact, and an afking draw emits AfkingSpent. Reverts E()
-    ///      when the two tiers together cannot cover the shortfall. Single sink so the sentinel
-    ///      + the aggregate debit cannot drift across the ETH-in paths that accept claimable/
-    ///      afking shortfall.
+    ///      the solvency total stays exact, and an afking draw emits AfkingSpent. Reverts
+    ///      Insolvent() when the two tiers together cannot cover the shortfall. Single sink so
+    ///      the sentinel + the aggregate debit cannot drift across the ETH-in paths that accept
+    ///      claimable/afking shortfall.
     /// @param id Wallet whose claimable/afking balances cover the shortfall.
     /// @param shortfall Wei still owed after the buyer's direct payment.
     /// @param allowClaimable True to draw claimable balance first; false skips tier 1 entirely.
@@ -2530,7 +2499,7 @@ abstract contract DegenerusGameStorage {
 
     // =========================================================================
     // Balance accessors — claimable / afking, the canonical readers/writers of the
-    // shared per-wallet slot. claimableWinnings and afkingFunding are folded into
+    // shared per-wallet slot. Claimable winnings and afking funding share
     // one word per wallet ID; the few direct packed operations (shortfall settlement,
     // combined debits, the claim paths) reproduce this same layout. claimablePool
     // pairing is kept at the call sites (the solvency total is maintained in
@@ -2603,8 +2572,8 @@ abstract contract DegenerusGameStorage {
     /// @dev Debit claimable (low half) and afking (high half) in ONE load + store. Each half is
     ///      guarded explicitly BEFORE the combined subtraction: a low-half borrow is invisible to
     ///      0.8's full-word check, and an oversized afking amount would silently truncate in the
-    ///      unchecked-by-construction `<< 128` — the guards close both. Reverts match the
-    ///      sequential _debitClaimable + _debitAfking exactly.
+    ///      unchecked-by-construction `<< 128` — the guards close both. Either shortfall reverts
+    ///      Insolvent(); standalone _debitAfking fails an afking shortfall with an arithmetic panic.
     function _debitClaimableAndAfking(
         uint32 id,
         uint256 claimableAmount,
@@ -2641,8 +2610,7 @@ abstract contract DegenerusGameStorage {
     ///
     ///      This is the ONLY afking credit: the per-wallet half, the claimablePool half and the
     ///      log move together or not at all. No bare credit primitive exists — an unpaired
-    ///      credit raises obligations without the pool backing them (the SOLVENCY-01 break) and
-    ///      touches no identifier the pool-write gate tracks. The debit twin stands alone only
+    ///      credit would raise obligations without the pool backing them. The debit twin stands alone only
     ///      because the afking delivery pairs its pool debit itself (one combined afking +
     ///      claimable RMW per delivery); credit always pairs in place here.
     ///
@@ -2861,10 +2829,6 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Degenerette Bet Queue
-    // =========================================================================
-
-    // =========================================================================
     // Operator Approvals
     // =========================================================================
 
@@ -2872,7 +2836,7 @@ abstract contract DegenerusGameStorage {
     mapping(uint32 => mapping(address => bool)) internal operatorApprovals;
 
     // =========================================================================
-    // Affiliate DGNRS Claims
+    // Level Prize Pool Ring and Claim Words
     // =========================================================================
 
     function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
@@ -2921,11 +2885,11 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev The level bump replaces both accounting halves before assigning the new level.
-    function _setLevelDgnrsAllocation(uint24, uint256 allocation) internal {
+    function _setLevelDgnrsAllocation(uint256 allocation) internal {
         levelDgnrsPacked = uint128(allocation) | (uint256(1) << 255);
     }
 
-    function _addLevelDgnrsClaimed(uint24, uint256 add) internal {
+    function _addLevelDgnrsClaimed(uint256 add) internal {
         uint256 word = levelDgnrsPacked;
         uint256 claimed = ((word >> 128) & DGNRS_CLAIMED_MASK) + add;
         levelDgnrsPacked = uint128(word) | (claimed << 128) | (uint256(1) << 255);
@@ -3068,7 +3032,7 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted on every pass activation (purchase AND award paths — this event
     ///         does not imply that the player bought the pass or received an AFKing seat).
     ///         It is the authoritative pass signal; the shared internals below and the whale
-    ///         purchase's inline stats write all emit it). Carries the post-merge
+    ///         purchase's inline stats write all emit it. Carries the post-merge
     ///         freeze end so stacked/overlapping passes need no span heuristics,
     ///         plus the absolute post-write mintPacked_ word (the activation also
     ///         moves levelCount / passType / front-loaded streak).
@@ -3093,11 +3057,12 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Activates a 10-level pass for a registered player. Shared logic for lazy pass purchases
-    ///      and awards. Updates mintPacked_ (levelCount +10, frozenUntilLevel, passType, lastLevel,
-    ///      day) and queues tickets for the 10-level range under the wallet ID the word carries.
-    /// @param player Address receiving the pass activation.
+    ///      and awards. Updates mintPacked_ (levelCount + min(10, freeze extension), saturating;
+    ///      frozenUntilLevel, passType, lastLevel, day) and queues tickets for the 10-level range
+    ///      under the wallet ID the word carries.
+    /// @param player Wallet ID receiving the pass activation.
     /// @param ticketStartLevel First level of the 10-level range.
-    /// @param entriesPerLevel Number of tickets to queue per level.
+    /// @param entriesPerLevel Entries to queue per level (4 entries = 1 whole ticket).
     function _activate10LevelPass(
         uint32 player,
         uint24 ticketStartLevel,
@@ -3190,13 +3155,12 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Apply whale pass stats (levelCount/freeze/passType/lastLevel/day) without queueing tickets.
-    /// @param player Registered address receiving the whale pass stats.
+    /// @param player Wallet ID receiving the whale pass stats.
     /// @param ticketStartLevel First level of the 100-level range for whale pass tickets.
-    /// @return id The player's wallet ID, read from the same word.
     function _applyWhalePassStats(
         uint32 player,
         uint24 ticketStartLevel
-    ) internal returns (uint32 id) {
+    ) internal {
         uint256 prevData = mintPacked_[player];
 
         uint24 frozenUntilLevel = uint24(
@@ -3266,10 +3230,9 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
         emit PassActivated(player, true, ticketStartLevel, newFrozenLevel, data);
-        id = player;
     }
 
-    /// @dev Returns the current day index.
+    /// @dev Current logical game day (dailyIdx).
     function _gameDay() internal view returns (uint24) {
         return dailyIdx;
     }
@@ -3324,12 +3287,12 @@ abstract contract DegenerusGameStorage {
             if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0) return true;
             if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) return false;
         }
-        // Dead unless the word is already in use: a word delivered after the timeout, or
-        // left unpublished past it, is never applied, so the ending depends only on time.
-        return !_rngSessionPublished();
+        // Unpublished here (checked above): a word delivered after the timeout, or left
+        // unpublished past it, is never applied, so the ending depends only on time.
+        return true;
     }
 
-    /// @dev Returns the day index for a specific timestamp.
+    /// @dev Current wall-clock day index.
     function _wallDay() internal view returns (uint24) {
         return GameTimeLib.currentDayIndex();
     }
@@ -3402,9 +3365,9 @@ abstract contract DegenerusGameStorage {
     //   [bits 232:239]  gameOverDeadLatched      uint8    (bool flag, 8 bits)
     //   [bits 240:247]  gameOverDrainLevelLatch  uint8    (0=unset, 1=lvl, 2=lvl+1)
     //   [bit 248]       gameOverTerminalRequested bool
-    //   [bit 249]       unused (publication now lives in slot0)
+    //   [bit 249]       unused
     //   [bits 250:251]  crapsRngPending           bool per physical buffer
-    //   [bits 252:255]  reserved
+    //   [bits 252:255]  unused
 
     /// @dev Packed lootbox RNG state. See layout comment above.
     ///      Initialized with lootboxRngThreshold=1 ether (scaled=1000),
@@ -3553,7 +3516,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev EV multiplier from a raw activity score (whole points).
-    ///      Unchanged low anchor 90%→100% (0 to 60 points), then a steep ramp to vA
+    ///      Low anchor 90%→100% (0 to 60 points), then a steep ramp to vA
     ///      (139.5%) at the 400-point knee, a shallow leg to vB (143.9%) at the seg-B
     ///      knee, and a near-flat crawl to 145% at the effective cap.
     /// @param score The activity score in whole points
@@ -3597,8 +3560,9 @@ abstract contract DegenerusGameStorage {
                 ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
-    /// @dev RNG words keyed by lootbox RNG index.
-    uint256 internal rngDayTags; // Absolute-day tags for the two reusable daily RNG slots.
+    /// @dev Absolute-day tags for the two reusable daily RNG slots: uint24 lanes at bits 0 and 24,
+    ///      indexed by day parity.
+    uint256 internal rngDayTags;
 
     // =========================================================================
     // Deity Boon Tracking
@@ -3636,8 +3600,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Per-player lootbox EV-multiplier benefit used, two level-stamped windows in
     ///      one slot. All box routes draw at settlement against their live opening level;
-    ///      deposits leave the allowance untouched. Retain the two-window storage layout.
-    ///      Each window: used (72 bits) + level
+    ///      deposits leave the allowance untouched. Each window: used (72 bits) + level
     ///      stamp (24 bits). `used` is the cumulative bonus spend, clamped to
     ///      LOOTBOX_EV_ZERO_ETH = 4e19 < 2^72 at every write. A non-matching stamp reads as 0
     ///      (a fresh allowance).
@@ -3712,12 +3675,10 @@ abstract contract DegenerusGameStorage {
         uint24 next;
     }
 
-    /// @dev Four mapping roots replace the four retired bucket-system roots without moving
-    ///      unrelated storage. Two entries share key (id - 1) >> 1, IDs starting
-    ///      at one. Each 128-bit lane packs wallet ID32, board30 and stack66, low to high.
-    ///      Resolution and lens readers consume this same compact lane directly.
-    ///      A wallet's slot, reused
-    ///      window after window, holds its latest entry's level (bits 64..87) and id (0..63).
+    /// @dev decBattleEntries: two entries share key (id - 1) >> 1, IDs starting at one. Each
+    ///      128-bit lane packs wallet ID32, board30 and stack66, low to high; resolution and
+    ///      lens readers consume this compact lane directly. decBattlePlayers: a wallet's slot,
+    ///      reused window after window, holds its latest entry's level (bits 64..87) and id (0..63).
     mapping(uint256 => uint256) internal decBattleEntries;
     mapping(uint24 => DecBattleRound) internal decBattleRounds;
     mapping(uint32 => uint256) internal decBattlePlayers;
@@ -3771,10 +3732,10 @@ abstract contract DegenerusGameStorage {
     // Segregated Yield Accumulator
     // =========================================================================
 
-    /// @dev Segregated stETH yield accumulator.
-    ///      Collects 23% of yield surplus each level transition (one of four 23% shares).
-    ///      x00 milestones: 50% to currentPrizePool, 50% retained as terminal insurance.
-    ///      INVARIANT: counted as obligation in yield surplus calculation.
+    /// @dev Segregated reserve: 23% of each yield-surplus distribution, the level-transition
+    ///      insurance skim, the purchase-phase daily insurance slice and a quarter of split
+    ///      Degenesis volume. Each x00 transition moves 40% into the future pool; the rest is
+    ///      terminal insurance. INVARIANT: counted as an obligation in the yield-surplus calculation.
     uint256 internal yieldAccumulator;
 
     // =========================================================================
@@ -3828,8 +3789,6 @@ abstract contract DegenerusGameStorage {
         uint16 scoreSnapshot;
     }
 
-    bytes32 internal constant PROTOCOL_BOON_WINNER_TAG = keccak256("degenerus.protocol.boon.winner");
-
     // =========================================================================
     // Boon Packed Storage
     // =========================================================================
@@ -3872,7 +3831,7 @@ abstract contract DegenerusGameStorage {
     ///
     /// The craps, ETH/FLIP degenerette and WWXRP lanes share ONE 24-bit encoding:
     ///   [0-1]  tier    0=none, else 1..3 — the family decodes the size
-    ///   [2]    isDeity deity-granted boons die at the end of their game day (22:57 UTC reset)
+    ///   [2]    isDeity deity-granted boons die when the logical game day (dailyIdx) advances
     ///   [3-23] day     low 21 bits of the award day (lootbox-rolled boons live
     ///                  BOON_LANE_EXPIRY_DAYS past it; comparisons run on
     ///                  masked values, wrapping after ~5,700 years)
@@ -3950,7 +3909,7 @@ abstract contract DegenerusGameStorage {
     ///      day's word and moves; the pass is committed before the word lands, and that is what
     ///      makes a fixed expected-value unit the honest way to price it.
     ///
-    ///      ⚠ Tied to the preset table. Any edit to the scheduled bankroll or bounty distribution
+    ///      Tied to the preset table. Any edit to the scheduled bankroll or bounty distribution
     ///      must recompute the expectation, re-round to the nearest 100, and update CrapsPriceLib.
     ///      test/craps/CrapsPricing.t.sol exhausts the tier/bounty cycle to verify the mean.
     uint256 internal constant NORMAL_DAY_PASS_VALUE = CrapsPriceLib.NORMAL_VALUE;
@@ -4043,7 +4002,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Is this packed lane's boon live on `currentDay`? A deity-granted boon
-    ///      dies at the end of its game day (22:57 UTC reset); a lootbox-rolled one lives
+    ///      dies when the logical game day advances; a lootbox-rolled one lives
     ///      BOON_LANE_EXPIRY_DAYS past its stamp (a day-0 stamp is exempt from
     ///      the stamp rule, mirroring the sibling families). Day fields are 21-bit, so
     ///      both sides compare masked.
@@ -4127,8 +4086,8 @@ abstract contract DegenerusGameStorage {
     // The subscriber set lives on the shared base so the process/open passes
     // operate on it in-context (plain SLOADs), with the per-sub box stamp read
     // back from the same record at open. The systemwide afking ETH total is
-    // already carried inside `claimablePool` via the `afkingFunding` ledger
-    // (declared above); no separate aggregate is introduced.
+    // carried inside `claimablePool` via the afking half of `balancesPacked`;
+    // there is no separate aggregate.
 
     /// @notice AfKing subscriber record: one 85-bit lane in the two-ended set `_subscribers`,
     ///         three lanes per word (position `p` is lane `p % 3` of word `p / 3`).
@@ -4304,12 +4263,10 @@ abstract contract DegenerusGameStorage {
     /// @dev Monotonic physical box position, reset once before each daily preparation.
     uint16 internal _subOpenCursor;
 
-    /// @dev The day the process STAGE was last reset for. When the advance first enters
-    ///      a new `day` with the lock down and `_recordedDailyWord(day)` still uncommitted
-    ///      (`_afkingResetDay != day`), it resets `subsFullyProcessed` + the
-    ///      `_subCursor` and `_subOpenCursor` ONCE, before that day's STAGE drains — a forward-looking reset
-    ///      (at the start of the new day, not trailing after the prior day completes),
-    ///      firing exactly once per day regardless of which RNG path runs.
+    /// @dev Logical day the subscriber preparation is pinned to (dailyIdx + 1). When a daily
+    ///      request is due and `_afkingResetDay <= dailyIdx`, the miner pins it and resets
+    ///      `subsFullyProcessed`, `_subCursor` and `_subOpenCursor` once; the pin survives
+    ///      midnight and partial batches, and the daily request requires it.
     uint24 internal _afkingResetDay;
 
     // =========================================================================
@@ -4324,12 +4281,13 @@ abstract contract DegenerusGameStorage {
     uint32 internal boxReadCount;
 
     /// @dev Once-per-level latch for sDGNRS's automatic whale purchase: the level at which the
-    ///      process STAGE already bought (DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs,
+    ///      process STAGE already bought (DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs_g470,
     ///      up to a quarter of sDGNRS's claimable in whole groups of five passes). The STAGE
     ///      attempts the purchase once at its start (before the per-sub loop) while
     ///      `level > _sdgnrsBonusLevel` and stamps the level here on the ATTEMPT, bought or not —
     ///      one probe per level, so a too-poor first day buys nothing that level and no later
-    ///      chunk/tx this level tries again. Level 0 is excluded (the latch starts at 0). Packs into the cursor slot (loaded for `_subCursor` every STAGE), so its
+    ///      chunk/tx this level tries again. Level 0 is excluded (the latch starts at 0).
+    ///      Packs into the cursor slot (loaded for `_subCursor` every STAGE), so its
     ///      read/write is warm; a uint24 holds the full level range (matches `level`).
     uint24 internal _sdgnrsBonusLevel;
 
@@ -4386,8 +4344,7 @@ abstract contract DegenerusGameStorage {
     ///      Each lane caps at ten and remains nonzero after its first gift.
     mapping(uint32 => uint128) internal deityRecipientBoonCount;
 
-    /// @dev 75/25 next/future split for the foil leg (forked from the 90/10
-    ///      ticket split's PURCHASE_TO_FUTURE_BPS = 1000).
+    /// @dev 75/25 next/future split for the foil leg.
     uint16 internal constant FOIL_TO_FUTURE_BPS = 2500;
 
     /// @dev A foil pack resolves a fixed 16 boosted entries (4 tickets x 4
@@ -4417,25 +4374,11 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant _FOIL_DRAW_SEED_SHIFT = 88;
     uint256 internal constant _FOIL_DRAW_SEEDED = uint256(1) << 216;
     uint256 internal constant _FOIL_DRAW_DAY_SHIFT = 217;
-    bytes32 internal constant FOIL_PAYOUT_SEED_TAG = keccak256("foil-payout-seed");
 
-    /// @dev Domain-separated seed for the drain-side match-line roll, so the foil
-    ///      tuples derive from a keccak lane disjoint from the normal-ticket LCG
-    ///      seeds and the daily winning-set derivation.
-    bytes32 internal constant FOIL_SEED_TAG = keccak256("foil-seed");
-
-    /// @dev Claim-side entropy lanes off the retained daily word — distinct keccak
-    ///      domains from each other. FOIL_CCY_TAG rolls the
-    ///      40/40/20 currency split; FOIL_SPIN_TAG seeds the Degenerette box-spin the
-    ///      tier magnitude is staked into.
-    bytes32 internal constant FOIL_CCY_TAG = keccak256("foil-currency");
-    bytes32 internal constant FOIL_SPIN_TAG = keccak256("foil-spin");
-
-    /// @dev A player's foil record; resolveDay now means first eligible draw day.
-    ///      Pending records have day zero; generated lines are stored, never re-derived.
     /// @dev A player's foil record for a cycle level (one SLOAD): the frozen boost
-    ///      and the first eligible draw day pinned at materialization. The boost/activity
-    ///      fields make a pending purchase present even while its day is zero.
+    ///      and the first eligible draw day pinned at materialization. Pending records have
+    ///      day zero; the boost/activity fields make them present. Generated lines are stored,
+    ///      never re-derived.
     function _foilRecordFor(uint32 id, uint256 lvl)
         internal
         view
@@ -4539,8 +4482,7 @@ abstract contract DegenerusGameStorage {
         foilMatchClaimed[id] = (packed & ~(uint256(type(uint32).max) << shift)) | (lane << shift);
     }
 
-    /// @dev Seal the board and payout entropy together. The explicit flag admits a zero
-    ///      truncated seed while rejecting old records that never stored payout entropy.
+    /// @dev Seal the board and payout entropy together, tagged with the exact day.
     function _packFoilDraw(uint32 mainSet, uint24 lvl, uint24 day, uint256 rngWord)
         internal pure returns (uint256)
     {
@@ -4571,8 +4513,7 @@ abstract contract DegenerusGameStorage {
         lvl = uint24((packed >> _FOIL_DRAW_LEVEL_SHIFT) & _FOIL_DRAW_LEVEL_MASK);
     }
 
-    /// @dev Golden-ticket cross-day state, one packed slot (appended so every
-    ///      prior slot keeps its index). Armed on a 4-gold main board (jackpot
+    /// @dev Golden-ticket cross-day state, one packed slot. Armed on a 4-gold main board (jackpot
     ///      phase); resolved by the next main-board draw. Written and read only by
     ///      the advance-driven jackpot draw (JackpotModule) off the sealed word —
     ///      no player entrypoint touches it.
@@ -4596,8 +4537,8 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Achieved prize pool of every completed century level (x00) — the pre-skim
     ///      nextPrizePool recorded at each x00 purchase→jackpot transition — in completion
-    ///      order, so century N sits at index N-1 (appended so every prior slot keeps its
-    ///      index). levelPrizePool[x00] cannot serve as this history: _endPhase overwrites
+    ///      order, so century N sits at index N-1. levelPrizePool[x00] cannot serve as this
+    ///      history: _endPhase overwrites
     ///      it with 40% of futurePool as the reachable x01 ratchet base, so the achieved value
     ///      survives only here.
     ///
@@ -4675,7 +4616,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal decBattleQueue;
 
     /// @dev Bit t identifies a trait header initialized for ticketBufferLevels[parity].
-    ///      Cleared only on successful buffer takeover; owner index zero remains valid.
+    ///      Invalidated only on successful buffer takeover (traitBucketStale).
     uint256[2] internal traitBucketLive;
 
     /// @dev ticketPending[id] holds even A/B then odd A/B in bits0..167.
@@ -4763,10 +4704,6 @@ abstract contract DegenerusGameStorage {
         return (_subscriberWordAt(position) >> ((position % 3) * SUB_LANE_BITS)) & SUB_LANE_MASK;
     }
 
-    function _subscriberAt(uint256 position) internal view returns (uint32) {
-        return uint32(_subLaneAt(position));
-    }
-
     /// @dev Preserve the word's other two lanes, including across the empty section gap.
     function _setSubLaneAt(uint256 position, uint256 lane) internal {
         uint256 shift = (position % 3) * SUB_LANE_BITS;
@@ -4784,7 +4721,7 @@ abstract contract DegenerusGameStorage {
         assembly ("memory-safe") { sstore(_subscribers.slot, count) }
     }
 
-    function _lootboxReadComplete() internal view virtual returns (bool) {
+    function _lootboxReadComplete() internal view returns (bool) {
         return _rngComplete();
     }
 
@@ -4836,7 +4773,8 @@ abstract contract DegenerusGameStorage {
     }
 
     function _tryCompleteRng() internal {
-        if (_rngComplete() || rngLockedFlag || _rngRequestActive() || !_rngSessionPublished()) return;
+        // _rngConsumersComplete also requires a published session.
+        if (_rngComplete() || rngLockedFlag || _rngRequestActive()) return;
         if (_rngConsumersComplete()) _certifyRngComplete();
     }
     uint256 internal constant LR_CRAPS_PENDING_SHIFT = 250;
@@ -4974,7 +4912,6 @@ abstract contract DegenerusGameStorage {
         uint8 quadrant;
         bool finalDay;
         // Main daily only: completed whole-ticket rounds for the current batch.
-        // These fields fit in the existing second word of JackpotWork.
         uint32 directTicketRound;
         bool directTickets;
     }
@@ -5045,11 +4982,11 @@ abstract contract DegenerusGameStorage {
     error AfkingStethPullFailed();
     /// @dev Forward identity lookup for address-boundary authorization and ERC20 integration.
     ///      Mint statistics are stored separately by ID; only ordinary-wallet registration writes this.
-    // Low 32 bits: current gameplay account. High 32: immutable wallet identity.
+    ///      Low 32 bits: current gameplay account. High 32: immutable wallet identity.
     mapping(address => uint64) internal walletIds;
 
     /// @dev Smurf IDs by owning main ID, eight packed uint32 lanes per word (lane `i & 7` of word
-    ///      `i >> 3`). Append-only at `createSmurf`; the main's lifetime `SMURF_COUNT` in
+    ///      `i >> 3`). Append-only at `createSmurf`; the main's lifetime smurf count (`SMURF_COUNT_SHIFT`) in
     ///      `mintPacked_` is the list length. A main's loan seizure walks it to stop the family's AFKing.
     mapping(uint32 => mapping(uint256 => uint256)) internal _smurfWords;
 
@@ -5058,7 +4995,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Open loan by account ID; zero means none. Packed: principal wei (bits 0-95),
-    ///      lender wallet ID (96-103), level at borrowing (104-127), due level (128-151),
+    ///      lender wallet ID (96-103; Vault or sDGNRS), level at borrowing (104-127), due level (128-151),
     ///      index in `_loansDue[due]` (152-183), subscriptions its seizure may cancel (184-191).
     mapping(uint32 => uint256) internal _loans;
     /// @dev Account IDs due at each level, eight packed uint32 lanes per word.

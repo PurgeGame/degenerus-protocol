@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {EntropyLib} from "../libraries/EntropyLib.sol";
-import {RngTags} from "../libraries/RngTags.sol";
-
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @dev Daily and terminal entropy share recording and nudge rules.
-///      This base declares no storage; both delegate modules inline the same helpers.
+///      This base declares no storage; the Advance, Rng and GameOver modules inline the same helpers.
 abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     /// @notice Recorded daily word and the nudges added to it for the coinflip alone.
     event DailyRngApplied(uint24 day, uint256 word, uint256 nudges);
@@ -55,7 +52,7 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     /// @dev Record the raw word and clear its frozen nudge receipt. Nudges move only the
     ///      coinflip: the returned coin word is the raw word plus the frozen count, so each
     ///      nudge reverses the coin's win bit. A recorded day word is never 0 ("no word") or
-    ///      1 (rngGate's "request sent" return); the callback refuses both.
+    ///      1 (RNG_WORD_WAITING); the callback refuses both.
     function _applyDailyRng(uint24 day, uint256 word) internal returns (uint256 coinWord) {
         uint256 nudges = _nudgeCount();
         unchecked { coinWord = word + nudges; }
@@ -64,11 +61,10 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit DailyRngApplied(day, word, nudges);
     }
-    /// @dev Move fresh contributions to the pending pool while a daily commitment is frozen.
+
+    /// @dev Route fresh contributions to the pending pool while a daily commitment is frozen.
     ///      The buffer is already empty: the last unfreeze left only its sentinel.
     function _freezePool() internal {
         prizePoolFrozen = true;
     }
-
-
 }

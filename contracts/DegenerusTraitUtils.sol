@@ -172,9 +172,9 @@ library DegenerusTraitUtils {
     }
 
     /*+======================================================================+
-      |                      TRAIT PACKING                                   |
+      |                      DEGENERETTE LANE PACKING                        |
       +======================================================================+
-      |  Packs 4 traits into 32-bit value for efficient storage.             |
+      |  Packs four Degenerette lanes into one 32-bit value.                 |
       +======================================================================+*/
 
     /// @notice Four ordinary Degenerette lanes: uniform symbols and uniform colors, no wilds.

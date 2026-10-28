@@ -58,7 +58,7 @@ interface IVRFCoordinator {
 
     /// @notice Retrieves subscription details
     /// @param subId The subscription ID to query
-    /// @return balance The legacy billing balance (unused)
+    /// @return balance The LINK balance (unused here)
     /// @return nativeBalance The native token balance of the subscription
     /// @return reqCount The number of requests made by this subscription
     /// @return owner The owner address of the subscription

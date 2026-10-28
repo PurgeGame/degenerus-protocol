@@ -33,8 +33,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Audit snapshot identity and assurance runner tests
-        run: make check-audit-snapshot test-assurance-tools
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Audit snapshot identity
+        run: make check-audit-snapshot
 
       # via-IR + optimizer_runs=1000 over the full protocol peaks above the ~7GB
       # hosted-runner RAM, so forge build was being OOM-killed (exit 143) mid-compile.
@@ -69,6 +73,11 @@ jobs:
       - name: Build production contracts
         run: forge build --skip test --threads 4 --out forge-out-production --cache-path .foundry-cache-production
 
+      # The recipient-call gate self-tests need the pinned solc binary, installed
+      # in ~/.svm by the production build above; Foundry alone does not install it.
+      - name: Assurance runner and source-gate tests
+        run: make test-assurance-tools
+
       - name: Contract size ceilings (EIP-170, 24,576 runtime / 49,152 initcode)
         run: node scripts/check-deployment-sizes.js --schedule eip170 forge-out-production
 
@@ -97,6 +106,22 @@ jobs:
       - name: Source-drift gates
         run: make CHECK_ARTIFACTS=forge-out-production check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-memory-guard check-recipient-calls
 
+      # Cross-profile storage identity. Regenerates the glamsterdam profile files, builds the
+      # production contracts only (contracts/; the test helpers target the default profile), then
+      # runs both layout gates on that build. The recursive check's --baseline compares every
+      # contract layout the two builds share (DegenerusGame, every Game and Craps delegate,
+      # Coinflip and the standalone state contracts) with the eip170 build above and fails on
+      # any difference. Last in the job: the working tree stays on glamsterdam afterwards.
+      - name: Glamsterdam profile layout identity
+        env:
+          PROFILE: glamsterdam
+        run: |
+          node scripts/select-profile.js
+          node scripts/select-profile.js --check
+          forge build contracts --skip test --threads 4 --out forge-out-glamsterdam --cache-path .foundry-cache-glamsterdam
+          CHECK_ARTIFACTS=forge-out-glamsterdam bash scripts/layout/storage_layout_oracle.sh
+          python3 scripts/layout/check_recursive_layout.py --out forge-out-glamsterdam --baseline forge-out-production --report .audit-test-logs/foundry/recursive-layout-glamsterdam.json
+
       - name: Preserve structural evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -116,7 +141,7 @@ jobs:
       # invariant campaigns do not wait behind unrelated fuzz compilations.
       max-parallel: 7
       matrix:
-        group: [repro-symbolic, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants, integration-gas]
+        group: [repro-symbolic, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants-1, invariants-2, invariants-3, integration-gas]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -247,16 +272,20 @@ jobs:
           if [ "$selected" = "$MAINNET_RPC_URL" ]; then echo "Using the MAINNET_RPC_URL secret"; else echo "Using $selected"; fi
           export MAINNET_RPC_URL="$selected"
           mkdir -p .audit-test-logs/foundry
-          # The budget measurements read cold-call frame gas, which needs one isolated transaction
-          # per top-level call; the other fork suites keep the non-isolated runner.
-          isolated=test/fork/ForkGlamsterdamBudgets.t.sol
+          # Budget and subscriber-admission probes require cold isolated calls;
+          # the remaining fork suites keep the non-isolated runner.
           plain=()
           for file in test/fork/*.t.sol; do
-            [ "$file" = "$isolated" ] || plain+=(--file "$file")
+            case "$file" in
+              test/fork/ForkGlamsterdamBudgets.t.sol|test/fork/SubscriberAdmissionRecoveryFork.t.sol) ;;
+              *) plain+=(--file "$file") ;;
+            esac
           done
           status=0
           FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py "${plain[@]}" --threads 2 || status=1
-          FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --file "$isolated" --threads 2 || status=1
+          FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
+            --file test/fork/ForkGlamsterdamBudgets.t.sol \
+            --file test/fork/SubscriberAdmissionRecoveryFork.t.sol --threads 2 || status=1
           exit $status
       # The runner redacts each finished batch, but a cancelled or timed-out run can leave a raw
       # log behind, and uploaded artifacts are not secret-masked: scrub every file before upload.
@@ -337,7 +366,7 @@ jobs:
   slither:
     name: Slither integrity and detector report
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
         with:
@@ -369,7 +398,7 @@ jobs:
           python3 scripts/check-slither.py forge-out-slither > .audit-test-logs/slither/integrity.json
       - name: Detector report (findings require review)
         continue-on-error: true
-        timeout-minutes: 40
+        timeout-minutes: 200
         run: |
           slither . --compile-force-framework foundry --ignore-compile \
             --foundry-out-directory forge-out-slither --fail-none \
@@ -480,6 +509,56 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write("partitions=" + partitions + "\n")
           PYTHON
+
+  deep-lifecycles:
+    name: Deep lifecycle / ${{ matrix.label }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: mature-composition
+            file: test/repro/MatureComposition.t.sol
+            profile: deep
+            isolate: 'false'
+            multiplier: '10000'
+          - label: paid-minimum
+            file: test/gas/NativePaidLifecycle.t.sol
+            profile: default
+            isolate: 'true'
+            multiplier: '2500'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
+      - run: npm ci
+      - name: Verify composed or minimum-calibration lifecycle
+        env:
+          LIFECYCLE_FILE: ${{ matrix.file }}
+          FOUNDRY_PROFILE: ${{ matrix.profile }}
+          FOUNDRY_ISOLATE: ${{ matrix.isolate }}
+          NATIVE_PAID_MULTIPLIER: ${{ matrix.multiplier }}
+          FOUNDRY_FUZZ_SEED: ${{ github.run_id }}
+        run: python3 scripts/test-foundry-groups.py --file "$LIFECYCLE_FILE" --threads 1
+      - name: Preserve lifecycle evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-lifecycle-${{ matrix.label }}-evidence
+          path: .audit-test-logs/foundry/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   deep-invariants:
     name: Deep ${{ matrix.file }} / ${{ matrix.label }}

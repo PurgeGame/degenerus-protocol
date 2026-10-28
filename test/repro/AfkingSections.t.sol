@@ -25,7 +25,7 @@ contract AfkingSectionsHarness is DegenerusGameBoxModule, WalletSeed {
         _setSubMetaLane(id, 0);
     }
     function book() external view returns (uint256, uint256) { return (_subscribers.length, _subBoxCount); }
-    function at(uint256 p) external view returns (uint32) { return _subscriberAt(p); }
+    function at(uint256 p) external view returns (uint32) { return uint32(_subLaneAt(p)); }
     function position(uint32 id) external view returns (uint256) { return _subPosition1(id); }
     function owner(uint32 id) external view returns (address) { return _walletKey(id); }
     function setGate(uint8 mode) external {

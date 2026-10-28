@@ -86,30 +86,6 @@ library BoundedCall {
         if (ok && output.length >= 32) balance = abi.decode(output, (uint256));
     }
 
-    function callBoolRemaining(MineFlipGas.Meter memory meter, address target, uint256 minimum,
-        uint256 reserve, bytes memory input) internal returns (bool)
-    {
-        (bool ok, bytes memory output) = callRemaining(meter, target, minimum, reserve, input, 32);
-        return ok && abi.decode(output, (uint256)) == 1;
-    }
-
-    /// @dev Immediately after a failed call to immutable protocol code only.
-    /// Preserve its gas refusal instead of applying an external-dependency policy.
-    /// External token/coordinator errors never reach this helper unwrapped.
-    function rethrowTrustedGasFailure() internal pure {
-        bytes4 reason;
-        uint256 size;
-        assembly ("memory-safe") {
-            size := returndatasize()
-            if eq(size, 4) { returndatacopy(0, 0, 4) reason := mload(0) }
-        }
-        if (size == 0) revert MineFlipGas.InsufficientExecutionGas();
-        if (reason == MineFlipGas.InsufficientExecutionGas.selector
-            || reason == MineFlipGas.WorkGasBound.selector || reason == MineFlipGas.EmptyRevert.selector) {
-            assembly ("memory-safe") { returndatacopy(0, 0, 4) revert(0, 4) }
-        }
-    }
-
     function _remaining(MineFlipGas.Meter memory meter, uint256 minimum, uint256 reserve, uint256 overhead)
         private view returns (uint256 available)
     {

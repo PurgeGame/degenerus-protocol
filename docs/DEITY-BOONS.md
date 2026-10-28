@@ -8,10 +8,9 @@ entry payment or player claim is required.
 
 - VAULT is the WWXRP deity: symbol/token ID **0**.
 - sDGNRS is the ETH deity: symbol/token ID **6**.
-- After all contracts are deployed, the creator calls `game.initProtocolDeity()`
-  once, at level 0, to register both real soulbound deity NFTs and their initial
-  tickets. The deployment script sends this transaction after all CREATEs, so every
-  predicted address holds. The Vault and sDGNRS constructors start their own
+- After all contracts are deployed (all CREATEs, so every predicted address holds), the
+  creator calls `game.initProtocolDeity()` once, at level 0, to register both soulbound deity
+  NFTs and their initial tickets. The Vault and sDGNRS constructors start their own
   subscriptions.
 - **32 total passes: two genesis grants and 30 paid passes.** Genesis grants have
   no paid-price refund basis and do not advance the public price curve.
@@ -30,38 +29,8 @@ Deity-pass discount boons and the payment waterfall apply as for any purchase.
 Public symbols 0 and 6 are reserved even before the genesis grants exist
 (`purchaseDeityPass` reverts `SymbolTaken`).
 
-| Paid purchase | Total passes after purchase | Base price (ETH) |
-|---:|---:|---:|
-| 1 | 3 | 24 |
-| 2 | 4 | 25 |
-| 3 | 5 | 27 |
-| 4 | 6 | 30 |
-| 5 | 7 | 34 |
-| 6 | 8 | 39 |
-| 7 | 9 | 45 |
-| 8 | 10 | 52 |
-| 9 | 11 | 60 |
-| 10 | 12 | 69 |
-| 11 | 13 | 79 |
-| 12 | 14 | 90 |
-| 13 | 15 | 102 |
-| 14 | 16 | 115 |
-| 15 | 17 | 129 |
-| 16 | 18 | 144 |
-| 17 | 19 | 160 |
-| 18 | 20 | 177 |
-| 19 | 21 | 195 |
-| 20 | 22 | 214 |
-| 21 | 23 | 234 |
-| 22 | 24 | 255 |
-| 23 | 25 | 277 |
-| 24 | 26 | 300 |
-| 25 | 27 | 600 |
-| 26 | 28 | 1,200 |
-| 27 | 29 | 2,400 |
-| 28 | 30 | 4,800 |
-| 29 | 31 | 9,600 |
-| 30 | 32 | 19,200 |
+Base prices for paid purchases 1, 2, 10, 23, 24, 25 and 30 (total passes 3, 4, 12, 25, 26, 27
+and 32) are 24, 25, 69, 277, 300, 600 and 19,200 ETH.
 
 ## Perpetual coverage and affiliate awards
 
@@ -71,12 +40,10 @@ extends the far-future queue to `level+100`, maintaining rolling 100-level
 coverage. These are real queue entries, available to the far-future
 jackpot samplers.
 
-The genesis batch walks the 100 levels once. Per level, both new queue positions
-share one packed append, and the queue length updates once. Each fresh
-owner/owed record is written once. Existing entries and fractional remainders are
-added to without duplicating queue positions. `initProtocolDeity` reverts `E()`
-unless the caller is the creator and `level == 0`; a repeat call reverts
-`AlreadyOwnsDeityPass`. There is no separate initialization flag.
+The genesis batch walks the 100 levels once, appending both new queue positions per level in
+one packed append; existing entries and fractional remainders are added to without duplicating
+queue positions. `initProtocolDeity` reverts `E()` unless the caller is the creator and
+`level == 0`; a repeat call reverts `AlreadyOwnsDeityPass` (there is no separate flag).
 
 The buyer's perpetual range and the affiliate's whale-pass award are
 **additive**. The affiliate award is 20 entries (five whole tickets) per level
@@ -84,14 +51,12 @@ in the level-1–9 bonus window, then one whole ticket every other level for the
 remainder of the 100-level grant. Existing tickets belonging to either person
 remain intact. Each address is appended only once to a given queue cohort.
 
-The deity registry is a plain owner list. The advance runs the renewal exactly once
-per transition (`phaseTransitionActive` is cleared in the same step), so every owner
-is extended unconditionally; a jackpot-phase purchase grants 99 levels so its range
-stops short of the transition target. Fresh owners are stored with their completed
-owed record in one write. At renewal, up to eight new queue positions are
-accumulated into a packed word and appended with one queue-length update per group
-of eight. Existing queue tails, owed balances, and fractional remainders are
-preserved. Far-future owed balances saturate at 2^30 - 1 instead of reverting.
+The deity registry is a plain owner list. The advance runs the renewal exactly once per
+transition (`phaseTransitionActive` is cleared in the same step), so every owner is extended
+unconditionally; a jackpot-phase purchase grants 99 levels so its range stops short of the
+transition target. Renewal appends new queue positions in packed groups of eight and preserves
+existing queue tails, owed balances and fractional remainders. Far-future owed balances saturate
+at 2^30 - 1 instead of reverting.
 
 | Bucket color | Virtual entries for the symbol's deity |
 |---|---|
@@ -154,15 +119,15 @@ Manual gifts also allow several boons to the same recipient on the same day. Eac
 deity still has three daily slots and may give at most ten boons to any one
 recipient over the game's lifetime. A deity account cannot gift itself.
 
-- The boon menu is the deity menu, `hash4(DEITY_MENU, rngWordByDay[D],
-  (issuerId << 24) | (D+1), slot)`, mapped through the boon weight table with the
-  decimator and deity-pass bands excluded (`_deityBoonForSlot`). If that word is missing (notably deployment day),
-  the automatic draw uses `rngWordByDay[D+1]` for its menu instead. That fallback
-  menu becomes known at settlement; winners use a separate hash domain.
-- Each winner roll is `hash4(PROTOCOL_BOON_WINNER, rngWordByDay[D+1], issuerId, slot)`
-  modulo the pool's total weight; the word is day-specific, so the participation day
-  is not hashed separately. Participation closes before that word is
-  requested. There are no empty-bucket draws or prize-pool qualification gates.
+- The boon menu is the deity menu, `hash4(DEITY_MENU, word(D), (issuerId << 24) | (D+1),
+  slot)`, where `word(d)` is the recorded daily word for game day `d` (`_recordedDailyWord`),
+  mapped through the boon weight table with the decimator and deity-pass bands excluded
+  (`_deityBoonForSlot`). If `word(D)` is missing (deployment day), the menu uses `word(D+1)`
+  instead, so that menu becomes known only at settlement; winners use a separate hash domain.
+- Each winner roll is `hash4(PROTOCOL_BOON_WINNER, word(D+1), issuerId, slot)` modulo the
+  pool's total weight; the word is day-specific, so the participation day is not hashed
+  separately. Participation closes before that word is requested. There are no empty-bucket
+  draws or prize-pool qualification gates.
 - Every qualifying bet appends a cumulative-weight interval. Winner lookup is a binary
   search with at most 32 reads because the entry count is `uint32`.
 - Days with both pools populated issue all six awards inside the daily word
@@ -181,12 +146,11 @@ whale-pass award adds two half passes to the recipient's pending claim. These
 collisions never invoke the manual recipient-limit reverts and
 never cause a reroll or extra recipient selection.
 
-Awards are only issued on their designated next game day. A missed day does
-not later grant permanent activity/shield/pass benefits. Pools are held for two
-days (see below), so a day's pool stays inspectable through its draw day; older
-pools are recoverable from the events. A missing predecessor word uses the
-award-day menu fallback; empty, expired, or already processed work does not block
-advance. After game over no fresh boons are issued.
+Awards are issued only while the logical game day equals the award day (`awardDay ==
+_gameDay()`); a pool whose award day passes undrawn grants nothing later. Pools are held in a
+two-day ring (below), so a day's pool stays inspectable through its draw day; older pools are
+recoverable from events. Empty, expired or already processed work does not block advance. After
+game over no fresh boons are issued.
 
 Manual issuance by VAULT or sDGNRS is rejected, including requests through an
 approved operator. Public paid deities retain their ordinary manual-gift rules.
@@ -203,26 +167,18 @@ and 836 (pinned by `test/fuzz/StorageSlotPins.t.sol`).
 | Pool | `uint112 totalWageredWei`, `uint64 totalWeight`, `uint32 entryCount`, `uint8 awardedMask`, `uint24 day` | 240 |
 | Entry | `uint32 playerId`, `uint64 cumulativeWeight`, `uint16 scoreSnapshot` | 112 |
 
-Pools and entries are two-slot rings keyed `[issuer][day & 1]`, so a day reuses the
-slots written two days earlier instead of fresh zero slots (about 17k gas less per
-entry once the ring is warm). This is safe because day D's pool is written only
-while the game day is D and drawn only while the game day is D + 1 (the draw
-returns unless its award day is today); by the time day D + 2 writes the same
-slots, day D has been drawn or can never be. The pool's `day` tag names the wager
-day the slot holds: the first entry of a new day resets the pool, and a draw or a
-lens read for a day the slot is not tagged with sees an empty pool, so an older
-day's pool (for example one whose draw day passed during a VRF stall) can never be
-drawn on a later day's words. Entries at or past the pool's `entryCount` are
-leftovers from an older day and are never read.
+Pools and entries are two-slot rings keyed `[issuer][day & 1]` over logical game days. Day D's
+pool is written only while the game day is D and drawn only while it is D + 1, so by the time day
+D + 2 writes the same slots, day D has been drawn or never can be. The pool's `day` tag names the
+wager day it holds: the first entry of a new day resets the pool, and a draw or lens read for an
+untagged day sees an empty pool, so an older day's pool can never be drawn on a later day's words.
+Entries at or past `entryCount` are leftovers from an older day and are never read.
 
-Each record fits one slot. Entry count and cumulative weight use checked
-arithmetic, and an individual weight must fit `uint64` before casting. With a
-minimum multiplier of 800, the cumulative weight bound also bounds paid ETH below
-`uint112`, even including less than `1e14` wei of dust per entry and up to
-`uint32.max` entries. Qualifying bets add one packed pool write and one packed
-entry write to the ordinary placement path. Entry needs no separate transaction
-or module delegatecall. Draws cache the issuer/day entry mapping before searching
-the three winner intervals.
+Each record fits one slot. Entry count and cumulative weight use checked arithmetic, and an
+individual weight must fit `uint64` before casting. With a minimum multiplier of 800, the
+cumulative weight bound also bounds paid ETH below `uint112`, even with under `1e14` wei of dust
+per entry and up to `uint32.max` entries. A qualifying bet adds one packed pool write and one
+packed entry write to ordinary placement.
 
 `DegenerusGameLens` exposes `deityOwnerAt`, `deityPassSalesCount`,
 `protocolBoonPool`, `protocolBoonEntryAt`, `protocolBoonQuote`, and

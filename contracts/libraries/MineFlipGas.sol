@@ -39,9 +39,9 @@ library MineFlipGas {
         return multiplierBps;
     }
 
-    /// @dev ABI transport in the existing worker budget word: low 192 bits are the
+    /// @dev ABI transport in the worker budget word: low 192 bits are the
     /// reserve-adjusted gas allowance, bits 192..223 calibration, bit 224 first-progress permission.
-    /// Bit 255 distinguishes context from legacy uncalibrated worker allowances.
+    /// Bit 255 distinguishes a context word from a raw (uncalibrated) allowance.
     /// Never pass this encoded word as a CALL gas operand or subtract from it.
     function budget(uint256 allowance, uint32 multiplierBps, bool mustProgress) internal pure returns (uint256) {
         if (multiplierBps == 0) return allowance;

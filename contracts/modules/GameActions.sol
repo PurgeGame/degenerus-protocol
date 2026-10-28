@@ -15,6 +15,7 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
     IStETH private constant actionSteth = IStETH(ContractAddresses.STETH_TOKEN);
     IDegenerusVaultOwnerGame private constant actionVault = IDegenerusVaultOwnerGame(ContractAddresses.VAULT);
     uint256 private constant RECORD_SDGNRS_SCALE_DIV = 500;
+
     function _claimWinningsWithCurse(uint32 id, uint256 maxClaim) private {
         address payee;
         (id, payee) = _resolveAccountPayee(id);
@@ -25,15 +26,14 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
     function _claimWinningsInternal(uint32 id, address payee, bool stethFirst, uint256 maxClaim) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         if (gameOver && id == SDGNRS_WALLET_ID) _releaseRedemptionReserve();
-        // One packed load: claimable is the low half, afking the high half. The read reuse
-        // below and the debit both ride this single SLOAD (no external call intervenes). An
-        // address with no wallet ID reads the always-empty ID-0 word and reverts below.
+        // One packed load: claimable is the low half, afking the high half; the debit below
+        // reuses it (no external call intervenes). An address with no wallet ID reads the
+        // always-empty ID-0 word and reverts below.
         uint256 packed = balancesPacked[id];
         uint256 amount = uint128(packed);
-        // Post-gameOver the claim ALSO pays the caller's prepaid
-        // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
-        // stays its own bucket (spent by afking auto-buys / reclaimed via withdrawAfkingFunding).
-        // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
+        // After game over the claim also pays the account's prepaid afking ETH. Before it,
+        // that half is spent by afking buys or withdrawn through withdrawAfkingFunding; both
+        // paths debit the same half.
         uint256 afking = gameOver ? (packed >> 128) : 0;
         uint256 claimDebit;
         unchecked {
@@ -50,10 +50,8 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
             payout = claimDebit + afking;
         }
         if (payout == 0) revert NothingToClaim();
-        // Debit both halves in one store from the load above. _debitClaimableAndAfking's two
-        // Insolvent guards are provably dead here: claimDebit <= amount-1 < uint128(packed), and
-        // afking is packed>>128 (or 0) — neither half can borrow, so the subtraction is
-        // byte-identical to the helper's (which stays for its other callers).
+        // Debit both halves in one store from the load above. Neither half can borrow:
+        // claimDebit <= amount - 1 < uint128(packed), and afking is packed >> 128 (or 0).
         balancesPacked[id] = packed - claimDebit - (afking << 128);
         claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
         emit GameFacade.WinningsClaimed(id, payout, uint128(amount - claimDebit));
@@ -64,9 +62,9 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         }
     }
 
+    /// @dev stETH first, then ETH for the remainder. Reached only from the Vault-gated
+    ///      claimWinningsStethFirst.
     function _payoutWithEthFallback(address to, uint256 amount) private {
-        if (amount == 0) return;
-
         uint256 stBal = actionSteth.balanceOf(address(this));
         uint256 stSend = amount <= stBal ? amount : stBal;
         _transferSteth(to, stSend);
@@ -82,23 +80,23 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
 
     function _actionDrainAffiliateBases(uint256 ids, uint256 uplines) internal returns (uint256, uint256, uint256) {
         return _drainAffiliateBases(ids, uplines);
-        }
+    }
 
     function _actionRegisterWallet_g9539(address owner, bool allocate) internal returns (uint32 id) {
         return _registerWallet(owner, allocate);
-        }
+    }
 
     function _actionRegisterWalletIdentity(address owner) internal returns (uint32 id) {
         return _registerWalletIdentity(owner);
-        }
+    }
 
-    function _actionRecordAfkingSecondary(uint32 id, uint16 amount) internal  {
+    function _actionRecordAfkingSecondary(uint32 id, uint16 amount) internal {
         _recordAfkingSecondary(id, amount);
-        }
+    }
 
-    function _actionFloorAfkingStreakBase(uint32 id, uint16 floor) internal  {
+    function _actionFloorAfkingStreakBase(uint32 id, uint16 floor) internal {
         _floorAfkingStreakBase(id, floor);
-        }
+    }
 
     function _actionPayRecordSdgnrs(
         uint32 id,
@@ -110,9 +108,9 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         uint256 payout = (dgnrs.poolBalance(IsDGNRS.Pool.Reward) * shareBps) /
             (10_000 * RECORD_SDGNRS_SCALE_DIV);
         if (payout != 0) paid = dgnrs.transferFromPool_g106128(IsDGNRS.Pool.Reward, payee, payout);
-        }
+    }
 
-    function _actionSetOperatorApproval(uint32 id, address operator, bool approved) internal  {
+    function _actionSetOperatorApproval(uint32 id, address operator, bool approved) internal {
         if (operator == address(0)) revert ZeroAddress();
         if (id == 0) {
             id = _requireWalletId(msg.sender);
@@ -122,9 +120,9 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         }
         operatorApprovals[id][operator] = approved;
         emit GameFacade.OperatorApproval(id, operator, approved);
-        }
+    }
 
-    function _actionSetLootboxRngThreshold(uint256 newThreshold) internal  {
+    function _actionSetLootboxRngThreshold(uint256 newThreshold) internal {
         if (!actionVault.isVaultOwner(msg.sender)) revert OnlyVault();
         if (newThreshold == 0) revert ZeroValue();
         uint256 prev = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
@@ -134,39 +132,39 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         }
         _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, _packEthToMilliEth(newThreshold));
         emit GameFacade.LootboxRngThresholdUpdated(prev, newThreshold);
-        }
+    }
 
-    function _actionSetMiddayMaxBasefee(uint256 newGwei) internal  {
+    function _actionSetMiddayMaxBasefee(uint256 newGwei) internal {
         if (!actionVault.isVaultOwner(msg.sender)) revert OnlyVault();
         if (newGwei > MIDDAY_MAX_BASEFEE_GWEI_CAP) revert GameFacade.OutOfBounds();
         uint256 prev = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
         _lrWrite(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK, newGwei);
         emit MiddayMaxBasefeeUpdated(prev, newGwei);
-        }
+    }
 
-    function _actionClaimWinnings(uint32 id) internal  {
+    function _actionClaimWinnings(uint32 id) internal {
         _claimWinningsWithCurse(id, type(uint256).max);
-        }
+    }
 
-    function _actionClaimWinnings(uint32 id, uint256 amount) internal  {
+    function _actionClaimWinnings(uint32 id, uint256 amount) internal {
         _claimWinningsWithCurse(id, amount);
-        }
+    }
 
-    function _actionClaimWinningsStethFirst() internal  {
+    function _actionClaimWinningsStethFirst() internal {
         if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
         _claimWinningsInternal(VAULT_WALLET_ID, msg.sender, true, type(uint256).max);
-        }
+    }
 
-    function _actionDepositAfkingFunding(uint32 id) internal  {
+    function _actionDepositAfkingFunding(uint32 id) internal {
         if (gameOver) revert GameOver();
         _requireAllocated(id);
         _creditAfkingValue(id, msg.value);
-        }
+    }
 
     function _actionAdminSwapEthForStEth(
         address recipient,
         uint256 amount
-    ) internal  {
+    ) internal {
         if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
         if (recipient == address(0)) revert ZeroAddress();
         if (amount == 0 || msg.value != amount) revert GameFacade.ValueMismatch();
@@ -175,9 +173,9 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         if (stBal < amount) revert Insolvent();
         if (!actionSteth.transfer(recipient, amount)) revert TransferFailed();
         emit AdminSwapEthForStEth(recipient, amount);
-        }
+    }
 
-    function _actionAdminStakeEthForStEth(uint256 amount) internal  {
+    function _actionAdminStakeEthForStEth(uint256 amount) internal {
         if (!actionVault.isVaultOwner(msg.sender)) revert OnlyVault();
         if (amount == 0) revert ZeroValue();
 
@@ -201,9 +199,9 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
             revert TransferFailed();
         }
         emit AdminStakeEthForStEth(amount);
-        }
+    }
 
-    function _actionReverseFlip(uint256 expectedCost) internal  {
+    function _actionReverseFlip(uint256 expectedCost) internal {
         if (rngLockedFlag) revert RngLocked();
         // A nudge adds one to the next daily coinflip word, reversing its win bit. Past the
         // liveness trigger no daily coinflip resolves, so a nudge bought here would only burn FLIP.
@@ -217,5 +215,5 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
         // The 255 cap fits the low byte; the packed setter preserves neighboring flags.
         _setNudgeCount(newCount);
         emit GameFacade.ReverseFlip(msg.sender, newCount, cost);
-        }
+    }
 }

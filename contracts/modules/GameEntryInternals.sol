@@ -68,6 +68,7 @@ abstract contract GameEntryInternals is GameComponentCall {
     function _gameIssueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) internal virtual {
         _componentDelegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSelector(IGameBoonActionsModule.giveBoon.selector, deityId, recipientId, slot));
     }
+
     function _gameRaiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) internal virtual {
         _componentDelegate(ContractAddresses.GAME_ACTIONS_MODULE, abi.encodeWithSelector(IGameActionModule.raiseSmurfBaseAllowance.selector, mainId, newBase));
     }

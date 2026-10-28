@@ -38,15 +38,14 @@ library FlipRoundLib {
     uint256 internal constant FLIP_ROUND_UNIT = 100;
     uint256 internal constant FLIP_ROUND_THRESHOLD = 1_000;
 
-    bytes32 private constant REWARD_PERCENT_TAG = keccak256("degenerus.coinflip.reward-percent");
     uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
 
     /// @dev Reward percentage paid on a winning flip: principal + principal * percent / 100.
     ///      ~5% each for 50 or 150, otherwise [78, 115], plus `bonus`. The tagged seed keeps
     ///      the size independent of the word's other draws. Coinflip days and the sDGNRS
-    ///      redemption flip share this mapping; `epoch` keys the draw.
-    function coinflipRewardPercent(uint8 bonus, uint256 rngWord, uint24 epoch)
+    ///      redemption flip share this mapping; the draw depends only on `rngWord`.
+    function coinflipRewardPercent(uint8 bonus, uint256 rngWord)
         internal pure returns (uint16 rewardPercent)
     {
         uint256 seedWord = uint256(EntropyLib.hash2(RngTags.FLIP_REWARD, rngWord));
@@ -64,7 +63,7 @@ library FlipRoundLib {
         }
     }
 
-    /// @dev The 32-bit entropy window retains the existing negligible modulo bias.
+    /// @dev `uint32(entropy) % 100` carries a negligible modulo bias.
     function roundFlipToHundreds(uint256 amount, uint256 entropy) internal pure returns (uint256) {
         uint256 hundreds = amount / FLIP_ROUND_UNIT;
         uint256 remFlip = amount % FLIP_ROUND_UNIT;
@@ -72,10 +71,5 @@ library FlipRoundLib {
             unchecked { ++hundreds; }
         }
         return hundreds * FLIP_ROUND_UNIT;
-    }
-
-    /// @dev Compatibility helper: raw FLIP amounts are already whole tokens.
-    function floorWholeFlip(uint256 amount) internal pure returns (uint256) {
-        return amount;
     }
 }

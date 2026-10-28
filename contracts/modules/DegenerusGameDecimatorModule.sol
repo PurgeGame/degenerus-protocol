@@ -39,7 +39,6 @@ import {Craps} from "../Craps.sol";
 import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDecimatorBoardPreference {
-
     function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
 }
 
@@ -64,11 +63,6 @@ interface IDecimatorCrapsEngine {
 contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     // Pure engine amounts retain fractional simulation precision independently of FLIP decimals.
     uint256 private constant SCALE = 3000 * 1e18;
-    bytes32 private constant DICE_TAG = keccak256("decimator.battle.dice.v1");
-    bytes32 private constant BOARD_TAG = keccak256("decimator.battle.board.v1");
-    bytes32 private constant TIE_TAG = keccak256("decimator.battle.tie.v1");
-    bytes32 private constant GEN_PLAYER_TAG = keccak256("decimator.battle.generated.player.v1");
-    bytes32 private constant GEN_DRAW_TAG = keccak256("decimator.battle.generated.recipient.v1");
 
     // Admission bounds cover one indivisible run/rank/payment, not a debited currency.
     // Actual elapsed gas determines how much allowance remains after each operation.
@@ -232,13 +226,13 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             MineFlipGas.markProgress(meter);
             ++result.rewardBasis;
         }
-        Sampling.Field memory field = Sampling.field(terms.word, lvl, uint256(round.count) + plan.generatedEntries);
+        Sampling.Field memory field = Sampling.field(terms.word, uint256(round.count) + plan.generatedEntries);
         if (plan.generatedEntries == 0) field.count = 0;
         // Each entry commits before reusing temporary ABI/engine memory.
         uint256 free;
         assembly ("memory-safe") { free := mload(0x40) }
         while (plan.cursor < field.count) {
-            uint64 id = Sampling.sample(terms.word, lvl, field, plan.cursor);
+            uint64 id = Sampling.sample(terms.word, field, plan.cursor);
             bool generated = id > round.count;
             if (!MineFlipGas.canRun(meter, generated ? GasBounds.DECIMATOR_GENERATED_GAS_MAX
                 : GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX, WORK_TAIL_GAS)) break;
@@ -332,7 +326,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             uint160(uint256(EntropyLib.hash3(RngTags.DECIMATOR_GENERATED, word, id)))
         );
         uint256 score = uint256(round.totalCreditedStack) * run.peakBankroll / round.count;
-        (uint256 winners, bool retained) = _insert(lvl, word, round.capacity, round.winners, (score << 64) | id);
+        (uint256 winners, bool retained) = _insert(word, round.capacity, round.winners, (score << 64) | id);
         round.winners = uint8(winners);
         if (retained) decGeneratedOwners[ordinal] = owner;
         emit DecimatorGenerated(lvl, id, owner, q, chips, run.peakBankroll, score);
@@ -353,7 +347,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         DecJackpotPlan storage plan = decJackpotPlans[lvl];
         if (round.phase == 1) {
             uint64 cursor = round.cursor;
-            Sampling.Field memory field = Sampling.field(word, lvl, uint256(round.count) + plan.generatedEntries);
+            Sampling.Field memory field = Sampling.field(word, uint256(round.count) + plan.generatedEntries);
             if (cursor < field.count) {
                 uint256 capacity = round.capacity;
                 uint256 winners = round.winners;
@@ -362,7 +356,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 uint256 free;
                 assembly ("memory-safe") { free := mload(0x40) }
                 while (cursor < field.count) {
-                    uint64 id = Sampling.sample(word, lvl, field, cursor);
+                    uint64 id = Sampling.sample(word, field, cursor);
                     bool original = id <= round.count;
                     if (!MineFlipGas.canRun(meter, original ? RUN_GAS_MAX
                         : GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX, WORK_TAIL_GAS)) break;
@@ -472,7 +466,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         );
         emit DecimatorRun(lvl, id, run.peakBankroll);
         uint256 score = (entry >> STACK_SHIFT) * run.peakBankroll;
-        (uint256 retained,) = _insert(lvl, word, capacity, winners, (score << 64) | id);
+        (uint256 retained,) = _insert(word, capacity, winners, (score << 64) | id);
         return retained;
     }
 
@@ -498,7 +492,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     /// @dev Min heap: the weakest retained eligible entry is at the root. At most 200 nodes. A
     ///      filling insert takes the next position; the first round ever to reach it pays for
     ///      fresh slots, every later round reuses them.
-    function _insert(uint24 lvl, uint256 word, uint256 capacity, uint256 size, uint256 node)
+    function _insert(uint256 word, uint256 capacity, uint256 size, uint256 node)
         private
         returns (uint256, bool)
     {
@@ -511,24 +505,24 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             while (pos != 0) {
                 uint256 parent = (pos - 1) / 2;
                 uint256 p = heap[parent];
-                if (!_less(word, lvl, node, p)) break;
+                if (!_less(word, node, p)) break;
                 heap[pos] = p;
                 pos = parent;
             }
         } else {
-            if (!_less(word, lvl, heap[0], node)) return (size, false);
+            if (!_less(word, heap[0], node)) return (size, false);
             while (true) {
                 uint256 child = pos * 2 + 1;
                 if (child >= size) break;
                 uint256 c = heap[child];
                 if (child + 1 < size) {
                     uint256 d = heap[child + 1];
-                    if (_less(word, lvl, d, c)) {
+                    if (_less(word, d, c)) {
                         ++child;
                         c = d;
                     }
                 }
-                if (!_less(word, lvl, c, node)) break;
+                if (!_less(word, c, node)) break;
                 heap[pos] = c;
                 pos = child;
             }
@@ -538,12 +532,12 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     }
 
     /// @dev Score order (the bits above the id), then the random tiebreak, then the entry id.
-    function _less(uint256 word, uint24 lvl, uint256 a, uint256 b) private pure returns (bool) {
+    function _less(uint256 word, uint256 a, uint256 b) private pure returns (bool) {
         if (a >> 64 != b >> 64) return a >> 64 < b >> 64;
-        return _tieKey(word, lvl, uint64(a)) < _tieKey(word, lvl, uint64(b));
+        return _tieKey(word, uint64(a)) < _tieKey(word, uint64(b));
     }
 
-    function _tieKey(uint256 word, uint24 lvl, uint64 id) private pure returns (uint256) {
+    function _tieKey(uint256 word, uint64 id) private pure returns (uint256) {
         return (uint256(EntropyLib.hash3(RngTags.DECIMATOR_TIE, word, id)) & ~uint256(type(uint64).max)) | id;
     }
 
@@ -562,7 +556,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint256 bestNode = heap[i];
         for (++i; i < winners; ++i) {
             uint256 node = heap[i];
-            if (_less(word, lvl, bestNode, node)) {
+            if (_less(word, bestNode, node)) {
                 best = i;
                 bestNode = node;
             }
@@ -592,5 +586,4 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         decBattleQueue = next == 0 ? 0 : (decBattleQueue & (uint256(type(uint24).max) << 24)) | next;
         _tryCompleteRng();
     }
-
 }

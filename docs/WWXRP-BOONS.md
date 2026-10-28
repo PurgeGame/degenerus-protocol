@@ -57,13 +57,18 @@ An application can consume the same boon for another WWXRP action through:
 function consumeBoon(uint32 playerId) external returns (uint16 boostBps);
 ```
 
-The only permission is the trusted-minter registry: when the vault
-owner calls `WWXRP.setTrustedMinter(application, true)`, the application may
-also consume WWXRP boons, and revoking it removes that right as well. There is
-no per-player approval. A trusted minter can already mint any amount and burn
-any balance through `burnForGame`, so spending a player's boon gives it no new
-power. The hook reaches only the WWXRP boon lane, never the ETH, FLIP,
-coinflip or craps lanes.
+The only permission is the trusted-minter registry (`WWXRP.setTrustedMinter`, vault owner;
+revoking removes every power below). There is no per-player approval. A trusted address holds
+three separate powers:
+
+- **Mint or credit** any amount to any recipient (`mintPrize`, `creditPrize`; unscaled by
+  `gameMintScale`).
+- **Burn** any holder's tokens (`burnForGame`) or spend any account's claimable WWXRP then its
+  payee's tokens (`burnForAccount`).
+- **Consume another player's WWXRP boon** (`consumeBoon`), which removes that player's bonus on
+  their own next draw entry.
+
+The boon hook reaches only the WWXRP boon lane, never the ETH, FLIP, coinflip or craps lanes.
 
 The application receives 0, 400, 800 or 1200 BPS and applies that value to its
 own action in the same transaction. Consumption clears the boon once; it does

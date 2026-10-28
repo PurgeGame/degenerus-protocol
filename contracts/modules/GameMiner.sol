@@ -2,13 +2,11 @@
 pragma solidity 0.8.38;
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
-
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
-
 import {IDegenerusGameAdvanceModule, IDegenerusGameRngModule, IDegenerusGameTicketModule,
     IDegenerusGameDegeneretteModule, IDegenerusGameDecimatorModule, IGameAfkingModule,
     IDegenerusGameDegenesisModule, IDegenerusGameMinerModule} from "../interfaces/IDegenerusGameModules.sol";
@@ -38,13 +36,14 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
         return uint8(_nextMinerAction(msg.sender));
     }
 
-    /// @dev Permissionless cache refresh, executed against Game storage only. Returns the
-    ///      wallet ID beside the score (0 for an unregistered wallet; never allocated here).
+    /// @dev Activity score of `id`, refreshing its cached affiliate bonus; Game storage only.
     function _minerActivityById(uint32 id) internal returns (uint256) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         return _playerActivityScoreCached(id, _effectiveQuestStreak(id));
     }
 
+    /// @dev As `_minerActivityById` for `player`'s wallet ID, returned beside the score (0 for
+    ///      an unregistered wallet; never allocated here).
     function _minerActivity(address player) internal returns (uint256 score, uint32 id) {
         if (address(this) != ContractAddresses.GAME) revert E();
         id = _walletIdOf(player);
@@ -286,8 +285,8 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
             if (rate > cap) rate = cap;
             uint256 numerator = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * multiplierBps;
             uint256 denominator = rewardPrice * 10_000;
-            // Legacy raw reward was floor(numerator * 1e18 / denominator). Preserve its
-            // zero cutoff without multiplying, then pay whole FLIP with the existing minimum.
+            // Pay only when floor(numerator * 1e18 / denominator) is nonzero, tested without
+            // the multiply; then pay whole FLIP with a 1-FLIP minimum.
             if (numerator >= (denominator - 1) / 1e18 + 1) {
                 reward = numerator / denominator;
                 if (reward == 0) reward = 1;

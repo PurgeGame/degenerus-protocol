@@ -8,8 +8,6 @@ import {EntropyLib} from "./EntropyLib.sol";
 /// @notice Gold Dice 6 is the unique natural entry at each level.
 library GoldSixLib {
     uint8 internal constant TRAIT = 253;
-    uint256 private constant REPLACEMENT_TAG = uint256(keccak256("GOLD_SIX_REPLACEMENT_V1"));
-    uint256 private constant DAILY_TAG = uint256(keccak256("GOLD_SIX_DAILY_V1"));
 
     /// @dev All seven other gold dice, with equal weight apart from negligible modulo bias.
     function replacement(uint256 seed) internal pure returns (uint8) {

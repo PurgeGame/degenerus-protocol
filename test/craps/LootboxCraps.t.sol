@@ -58,7 +58,7 @@ contract LootboxCrapsHarness is CrapsSeedViews {
 
     /// @dev The reader surface production keeps internal, restated for the suite. See
     ///      `test/craps/CrapsViews.sol` for why the shipped contract no longer carries it.
-    bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;
+    bytes32 public constant CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
 
     function currentIndex() external view returns (uint48) {
         return _writeBuffer();

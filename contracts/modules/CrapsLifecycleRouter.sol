@@ -87,7 +87,7 @@ abstract contract CrapsLifecycleRouter is CrapsLifecycleViews {
         _delegateLifecycle();
     }
 
-    function _delegateLifecycle() internal virtual {
+    function _delegateLifecycle() internal {
         address target = ContractAddresses.CRAPS_LIFECYCLE_MODULE;
         assembly ("memory-safe") {
             let data := mload(0x40)

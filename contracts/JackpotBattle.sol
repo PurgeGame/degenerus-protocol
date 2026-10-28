@@ -9,7 +9,6 @@ import {RngTags} from "./libraries/RngTags.sol";
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {Craps} from "./Craps.sol";
 import {ICoinflipStake, ICrapsEngine, IFlipCoin, IGameCraps} from "./CrapsInterfaces.sol";
-import {CrapsBattleStorage} from "./storage/CrapsBattleStorage.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
 import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
@@ -23,10 +22,6 @@ interface IGameCrapsPending {
     function setCrapsRngPending_g1406(uint48 index, bool pending) external;
 }
 
-interface IFlipCrapsComps {
-    function creditCrapsComps_g37225(uint256 amount) external;
-}
-
 /// @notice Lifecycle component inherited by CrapsBattle in the table storage context.
 contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
     error BadJackpotField();
@@ -34,10 +29,10 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
     error CustomSlotsFull();
     error NothingToSeed();
     error ZeroDonation();
-    /// @dev The Game's FLIP-per-price unit: `price / _PRICE_COIN_UNIT` FLIP buys one ticket.
+    /// @dev Whole FLIP per level ticket price of ETH, the Game's `PRICE_COIN_UNIT`.
     uint256 private constant _PRICE_COIN_UNIT = 1000;
     /// @dev Conservative whole-run loss budget, using the same 12% calibration as the ordinary
-    ///      action subsidy. Separate constants keep future boost tuning from changing high comps.
+    ///      action subsidy.
     uint256 private constant _HIGH_LOSS_BPS = 1200;
     uint256 private constant _HIGH_COMP_SHARE_BPS = 8000;
     event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, uint32 indexed playerId, uint256 units, uint32 chips);
@@ -170,9 +165,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         }
     }
 
-    /// @dev Scheduled fields use the slot itself; custom fields commit to their exact terms.
-
-
     /// @notice Drain the committed read FIFO within `allowance`.
     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
@@ -288,8 +280,8 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             uint256 high = (tickets >> (_DT_HIGH_SHIFT * _BONUS_PERIODS_PER_DAY)) & _MASK32;
             if (high != 0) _storeHighField(key, _loadHighField(key) + (high));
         }
-        // An opened battle already holds its advertised fee. Only detached award-only
-        // rounds need neutral terms; OR-ing the old constant into a drawn fee corrupts it.
+        // An opened battle already holds its drawn fee; only a detached award-only round takes
+        // the neutral fee.
         uint256 entryPrice = detached ? _JACKPOT_PRICE : ((g >> _BG_STAKE_SHIFT) & _BSTAKE_MAX) * _BATTLE_STAKE_UNIT;
         if (detached) g |= (entryPrice / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT;
         _storeBattle(key, g);
@@ -305,8 +297,9 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         uint256 highMult = detached ? 1 : (g >> _BG_TERM_TIER_SHIFT & _BG_TERM_HIGH_TAIL != 0
             ? CrapsPriceLib.HIGH_TAIL : CrapsPriceLib.HIGH_BASE);
         uint256 paidUnits = paidCount + uint32(_loadHighField(key)) * (highMult - 1);
-        // Replace every packed word, including padding. Old entropy is hidden until preparation.
-        // The pre-start bankroll sentinel retains word 2 even when no paid seat exists.
+        // Replace words 1..4, including padding. Word 0 keeps the recycled slot's previous draw
+        // word, which readers ignore until preparation overwrites it. The pre-start bankroll
+        // sentinel keeps word 2 nonzero even when no paid seat exists.
         assembly ("memory-safe") {
             sstore(add(r.slot, 1), added)
             sstore(add(r.slot, 2), or(shl(128, paidUnits), shl(192, 1)))
@@ -355,8 +348,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         r.drawCursor = _ROUND_PREPARED;
         emit JackpotSubsidyRolled(_activeJackpotSlot, uint32(subsidyBps), mainAdded);
     }
-
-
 
     /// @notice Collect at most `JackpotBattleFieldLib.MAX_CHUNK` units; the final chunk freezes terms
     ///         and enables paid settlement.
@@ -484,7 +475,7 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             }
             emit HighRollerReserveDrawn(slot, c.draw.eligible, c.draw.won ? c.draw.nominee : 0, amount, _highRollerReserve - 1);
         }
-        // Effects precede the existing Coinflip credit call. Awards never feed action or comps,
+        // Effects precede the Coinflip credit call. Awards never feed action or comps,
         // never receive a pool multiplier, and never convert to additional pass grants.
         _storeHighDraw(slot, c.draw);
         if (amount != 0) _creditFlip(c.draw.nominee, amount);
@@ -513,11 +504,9 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         uint256 highComps = lossBudget * _HIGH_COMP_SHARE_BPS / _BPS_DENOMINATOR;
         uint256 earned = staked / 50;
         earned += highComps;
-        if (earned != 0) IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps_g37225(earned);
+        if (earned != 0) _creditComps(earned);
         if (highFees != 0) emit JackpotHighCompsAccrued(slot, highFees, atRisk, lossBudget, highComps);
     }
-
-
 
     function convertNormalToHigh(uint32 id, uint32 highCount) external {
         if (highCount == 0) revert BadPassCount();
@@ -567,8 +556,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         return id;
     }
 
-
-
     /// @dev Self-only finalization executes atomically inside the last seat.
     function finalizeBattle_g3665(Window calldata w, uint256 board, uint256 word) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
@@ -582,14 +569,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         }
     }
 
-
-
-
-
-
-
-
-
     function _creditComps(uint256 amount) private {
         IFlipCoin(ContractAddresses.COIN).creditCrapsComps_g37225(amount);
     }
@@ -597,24 +576,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
     function _creditFlip(uint32 id, uint256 amount) private {
         ICoinflipStake(ContractAddresses.COINFLIP).creditFlip_g317(id, amount);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     function _payout(Window memory w, uint256 g, uint256 word) private {
         unchecked {
@@ -625,18 +586,14 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             uint256 boost = _jackpotRoundBoost(_jackpotBoostUnits(w, word));
             bool scheduled = slot < _CUSTOM_SLOT_BASE;
             uint256 best = (g >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
-            (Craps.SlipStop stop,, uint256 peakFlip, uint256 endFlip) = _jackpotDecodeBest(best);
+            (Craps.SlipStop stop, uint256 peakFlip, uint256 endFlip) = _jackpotDecodeBest(best);
             // THE SCORE, drawn once here and reused by everything downstream that reads a high
             // point: the finalization log, the progressive's rung and the record's candidate.
             // BOTH SIDES IN WHOLE FLIP — every scheduled bankroll is a whole-FLIP multiple of 300
             // and the scoreboard floors the peak the same way, so every cutoff on the schedule
             // lands on an exact figure and the flooring can only discard sub-FLIP dust.
             uint256 score = (peakFlip * _BPS_DENOMINATOR) / (uint256(w.bankroll));
-            // DONATED GRANULES AND THE WINNING SEAT, read once each: both the finalization log and
-            // the payment below want them, and a battle word is one warm slot either way.
-            // The pot this field pays out, seed and boost included. Every finished field carries
-            // the whole pot: a window nobody else wanted is still a race, and what is on it is what
-            // its main-pool prize recipients share.
+            // The logged pot is the whole pot the field pays out, donations and boost included.
             emit CrapsBattleFinalized(
                 w.key,
                 stop,
@@ -673,9 +630,8 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             uint64 seat = uint64(uint32(g >> _BG_WINNER_SHIFT));
             uint256 winnerId = _jackpotSeatId(slot, seat, ownN, dayBase, dayN);
             uint256 winnerWord = _loadBet(winnerId);
-            // The boost: this table's own pick from the band the window advertised, plus anything
-            // donated on top of it. Nothing about either was stored.
-            // Donations pay in full and bypass protocol-bonus rounding.
+            // Donations sit in the scoreboard's seed field and pay in full, outside the
+            // protocol-bonus rounding.
             uint256 donated = (g >> _BG_SEED_SHIFT) & _BG_SEED_MASK;
             // The bounties and the house money, and NOTHING else. What the field busted away is
             // deleted where it busted.
@@ -717,12 +673,10 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             // `peakFlip` decodes as zero for a bust in either product, so the goal gate needs no
             // restating.
             //
-            // THE BIGGEST DICE RUN is the FIFTH category of the record `Coinflip` already owns,
-            // not a pool of its own: nothing here funds a record pool, adds craps action, or
-            // touches the four existing kinds. A 100x high point has necessarily crossed the
-            // scheduled target, so the floor does the whole eligibility test. Below it NOTHING is
-            // called — a field that never got near a record does not pay for a cross-contract
-            // read to be told so — and `Coinflip` logs the claim it makes.
+            // THE BIGGEST DICE RUN is a category of the record `Coinflip` owns, not a pool of its
+            // own: nothing here funds a record pool or adds craps action. A 100x high point has
+            // necessarily crossed the scheduled target, so the floor does the whole eligibility
+            // test. Below it NOTHING is called, and `Coinflip` logs the claim it makes.
             if (scheduled) {
                 _jackpotPayProgressive(w, peakFlip, score, winnerId, winnerWord);
                 _recordDiceRun(uint32(winnerWord), score);
@@ -730,27 +684,17 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         }
     }
 
-
-
     function _recordDiceRun(uint32 winner, uint256 score) private {
         if (score >= _DICE_RUN_RECORD_FLOOR) {
             ICoinflipStake(ContractAddresses.COINFLIP).armDiceRunRecord(winner, score);
         }
     }
 
-
-
-
-
-
-
-
-
     function _jackpotArmSlot(uint64 slot, Window memory w, uint48 index) internal {
         unchecked {
             _setSlotIndex(slot, index + 1);
             // The day field joins the window HERE rather than at the ticket sale, so selling a day
-            // ticket never touches seven scoreboards. Both counts are already frozen — tickets
+            // ticket never touches six scoreboards. Both counts are already frozen — tickets
             // stop when the day's first window stops taking bets, and THIS period's high count
             // stops moving at this window's own entry close, before anything can be shut.
             // One read carries all the counts; the window folds in the total and the high count
@@ -770,14 +714,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         emit CrapsBonusArmed(w.key, uint48(slot), index);
     }
 
-
-
-
-
-
-
-
-
     function _keepScheduled(uint256 allowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint8 stage = _readCrapsStage();
@@ -790,7 +726,10 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         uint64 cur = _minerSlot;
         uint24 today = _currentDayIndex(gameState);
         if (_scheduledExpired(cur, today)) {
-            // Bounded catch-up after a long outage. No expired seat is read or refunded.
+            // Bounded catch-up when the cursor falls more than 30 logical days behind. Each
+            // word settles one non-empty window, so this runs when sessions leave their
+            // requested craps words unconsumed; an RNG outage moves no logical day and adds no
+            // lag. No expired seat is read or refunded.
             emit CrapsScheduledExpired(cur);
             cur = uint64((uint256(today) - _SETTLEMENT_DAYS) * _BONUS_SLOTS_PER_DAY);
         }
@@ -855,8 +794,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         return (done == n, moved);
     }
 
-
-
     function _sweepLapsedDay(uint64 daySlot_, uint24 day, MineFlipGas.Meter memory meter)
         private returns (bool doneAll, bool moved)
     {
@@ -887,12 +824,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         emit CrapsDayLapsed(day, uint32(_loadDayTickets(daySlot_)));
         return (true, moved);
     }
-
-
-
-
-
-
 
     function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != _GAME) revert OnlyGame();

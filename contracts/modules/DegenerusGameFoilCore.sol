@@ -47,8 +47,13 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
+interface IFoilWwxrp {
+    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
+    function creditPrize(uint32 to, uint256 amount) external;
+}
+
 /**
- * @title DegenerusGameFoilPackModule
+ * @title DegenerusGameFoilCore
  * @author Burnie Degenerus
  * @notice Delegate-called module for the foil pack: a 10x-priced four-ticket SKU
  *         whose boost multiplier and activity score freeze at buy (the match lines resolve later), a
@@ -62,11 +67,6 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *      re-derives the winning set — it reads the tagged dailyFoilDraw slot, which the
  *      jackpot sealed, so the foil numbers equal the jackpot's.
  */
-interface IFoilWwxrp {
-    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
-    function creditPrize(uint32 to, uint256 amount) external;
-}
-
 abstract contract DegenerusGameFoilCore is
     DegenerusGamePayoutUtils,
     DegenerusGameMintStreakUtils
@@ -114,7 +114,6 @@ abstract contract DegenerusGameFoilCore is
     // Errors
     // -------------------------------------------------------------------------
 
-    // error E() — inherited from DegenerusGameStorage
     /// @notice Thrown when the buyer already holds a foil pack for this cycle level.
     error FoilAlreadyBought();
     /// @notice The reusable slot still holds a pending pack or unexpired claim rights.
@@ -129,10 +128,6 @@ abstract contract DegenerusGameFoilCore is
     ///         it holds under three golds, it is already claimed, or it holds two or more
     ///         all-gold tickets (the grand route, paid by the drain, never the pull).
     error NoGoldenTicket();
-
-    // -------------------------------------------------------------------------
-    // External Contract References (compile-time constants)
-    // -------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------
     // Constants
@@ -209,7 +204,7 @@ abstract contract DegenerusGameFoilCore is
     /// @param day The draw day claimed against.
     /// @param ticketIndex Which of the pack's four tickets matched the board (0-3).
     /// @param tier The matched score T (4..8): the graded symbol/color axis match; T=8
-    ///        is the moonshot (all four full doubles). Field name retained for the indexer.
+    ///        is the moonshot (all four full doubles).
     /// @param faces The face count paid for the score.
     event FoilMatchClaimed(
         uint32 indexed id,
@@ -292,12 +287,11 @@ abstract contract DegenerusGameFoilCore is
 
     /// @dev Deliver one foil pack (four tickets) for the active cycle as the foil leg of an
     ///      additive ticket/lootbox/foil purchase. This handles the ENTIRE foil leg so a foil
-    ///      pack counts exactly like a ticket purchase: its own payment (75/25 pool), the
+    ///      pack counts exactly like a ticket purchase: its own payment (75/25 next/future), the
     ///      25|20/5 affiliate, the ten price-equivalent mint units, the daily MINT_ETH primary +
     ///      level quest, the mint streak, the recycle bonus, the boost freeze, the queue push,
     ///      and the foil secondary quest.
-    /// @param buyerId Player receiving the pack (already operator-resolved and registered).
-    /// @param buyerId The buyer's wallet ID.
+    /// @param buyerId Wallet ID receiving the pack (already resolved and registered).
     /// @param ethSent Fresh ETH the purchase path carved for the foil leg.
     /// @param affiliateCode Affiliate/referral code for the foil leg.
     /// @param payKind Payment method (DirectEth forbids drawing claimable; prepaid afking
@@ -320,7 +314,6 @@ abstract contract DegenerusGameFoilCore is
         uint24 lvl = _activeTicketLevel();
         if (_foilBoughtThisLevel(buyerId, lvl)) revert FoilAlreadyBought();
         if (!_foilRecordReusable(foilRecord[lvl & 3][buyerId])) revert FoilRecordBusy();
-
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
         // for the foil leg covers it first (overpay ignored); any shortfall runs the
@@ -348,9 +341,8 @@ abstract contract DegenerusGameFoilCore is
             );
         }
 
-        // Pool fork: 25% future / 75% next (inverse of the 90/10 ticket split), applied to
-        // the foil cost specifically (the ticket/lootbox legs keep their own splits). The
-        // frozen/unfrozen routing branch is reused verbatim; only the bps differ.
+        // Pool fork: 25% future / 75% next (tickets send 10% to future), applied to the foil
+        // cost only (the ticket/lootbox legs keep their own splits).
         uint256 futureShare = (cost * FOIL_TO_FUTURE_BPS) / 10_000;
         uint256 nextShare = cost - futureShare;
         if (prizePoolFrozen) {
@@ -481,7 +473,7 @@ abstract contract DegenerusGameFoilCore is
     // =========================================================================
 
     /// @notice Claim a foil ticket's match against a day's draw (permissionless).
-    /// @dev Delegatecall-only (see buyFoilPack). Anyone may resolve any account's
+    /// @dev Delegatecall-only. Anyone may resolve any account's
     ///      claim — all value credits to account `id` (the pack owner; token prizes to its
     ///      payee), never the caller,
     ///      and the double-claim marker is set before any payout, so a tuple pays at
@@ -518,7 +510,7 @@ abstract contract DegenerusGameFoilCore is
 
     /// @notice Claim a foil pack's gold: the ladder on its total gold count, plus a
     ///         kicker when one whole ticket came out all gold.
-    /// @dev Delegatecall-only (see buyFoilPack). The pack's four lines are the ones the
+    /// @dev Delegatecall-only. The pack's four lines are the ones the
     ///      drain filed into the jackpot buckets and stored in the pack record. Gold
     ///      claims use those lines without any daily RNG lookup. They remain available
     ///      on the generation day and the following day; the grand still pays in the drain.
@@ -546,12 +538,8 @@ abstract contract DegenerusGameFoilCore is
 
         uint32 id = accountId == 0 ? _walletIdOf(msg.sender) : accountId;
         _requireAllocated(id);
-        (bool present, , , ) = _foilRecordFor(
-            id,
-            lvl
-        );
-        if (!present) revert NoGoldenTicket();
 
+        // An absent record (zero word) fails the ready bit too.
         uint256 record = _foilRecordWord(id, lvl);
         if (record & _FOIL_READY == 0 || !_foilGoldClaimOpen(uint24(record >> _FOIL_GENERATED_DAY_SHIFT))) {
             revert NoGoldenTicket();
@@ -709,7 +697,7 @@ abstract contract DegenerusGameFoilCore is
 
         emit FoilMatchClaimed(id, uint24(day), ticketIndex, tier, faces);
 
-        _payFoilTier(id, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT));
+        _payFoilTier(id, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT));
         return true;
     }
 
@@ -766,7 +754,6 @@ abstract contract DegenerusGameFoilCore is
     ///      Claims can follow purchases by many draws; no live snap read changes them.
     function _payFoilTier(
         uint32 id,
-        uint256 day,
         uint256 ticketIndex,
         uint24 L,
         uint32 sel,
@@ -788,12 +775,8 @@ abstract contract DegenerusGameFoilCore is
             EntropyLib.hash3(RngTags.FOIL_SPIN, entropy, ticketIndex)
         );
 
-        // activityScore is the buyer's score frozen at buy (passed in), not a live read:
-        // the spin RNG and activity-based RTP are fixed. Realized ETH/recirculation
-        // still depends on the live pool; an unclaimed match is not reserved ETH.
-        // Only a symbol carries into the award spin; all colors are rerolled,
-        // so the foil's boosted color mix cannot change the spin EV.
-
+        // Realized ETH/recirculation depends on the live pool; an unclaimed match is not
+        // reserved ETH.
         uint8 quadrant = uint8(seed % (DEGENERETTE_HERO_COUNT / 8));
         uint8 symbol = uint8((sel >> (quadrant * 8)) & 7) | (quadrant << 3);
         if (c < 40) {
@@ -832,7 +815,7 @@ abstract contract DegenerusGameFoilCore is
 
     /// @dev Delegatecall one of the Degenerette box-spin resolvers in the Game's
     ///      storage context. The three resolvers share an (id, stake, activityScore,
-    ///      seed, symbol) shape, so one helper covers every currency. Only the chosen hero symbol reaches the spin resolver.
+    ///      seed, symbol) shape, so one helper covers every currency.
     function _foilSpin(
         bytes4 selector,
         uint32 id,
@@ -900,29 +883,6 @@ abstract contract DegenerusGameFoilCore is
         MineFlipGas.finish(meter);
     }
 
-    /// @dev Generate and store the four boosted lines from the committed read word,
-    ///      then file their sixteen traits into the pack's eligible level. The first
-    ///      eligible draw is pinned for the cohort; each pack's gold deadline starts
-    ///      on its actual materialization day. Terminal work only files the payout level.
-    ///
-    ///      Counts the pack's gold on the way past. The lines are already in memory and
-    ///      already unpacked below, so reading how much gold they hold is opcode work on
-    ///      data this function has in hand — a fraction of a percent of the sixteen
-    ///      entry writes it is here to do. Only the grand acts on it: the ladder and its
-    ///      kicker stay a pull, off this budgeted path.
-    /// @param packedLvlBuyer Packed queue entry: cycle level (bits 160..183) and the buyer's
-    ///        wallet ID (192..223); bits 0..159 are zero.
-    /// @param entropy Committed normal cohort word driving the four boosted lines.
-    /// @param terminal Whether liveness has triggered; suppresses the grand push, so the
-    ///        terminal drain never carves a pool the terminal jackpot is settling from.
-    /// @param counts Shared scratch: per-trait occurrence counter for this level, re-zeroed
-    ///        before return.
-    /// @param touchedTraits Shared scratch: trait IDs touched this call, for the batch write.
-    /// @return grandPaid True when this pack pushed the grand, so the caller can charge
-    ///         its writes against the batch budget.
-    /// @return units Four fixed bookkeeping units plus three per zero-valued slot write
-    ///         and one per nonzero slot write. Includes bitmap initialization, the header
-    ///         and completed data words; stale headers are priced before resetting their value.
     struct FoilBuyerWork {
         uint32 buyerId;
         uint24 lvl;
@@ -930,19 +890,35 @@ abstract contract DegenerusGameFoilCore is
         uint32[4] lines;
     }
 
+    /// @dev Generate and store the four boosted lines from the committed read word,
+    ///      then file their sixteen traits into the pack's eligible level. The first
+    ///      eligible draw is pinned for the cohort; each pack's gold deadline starts
+    ///      on its actual materialization day. Terminal work only files the payout level.
+    ///
+    ///      Counts the pack's gold on the way past, from the lines already in memory. Only
+    ///      the grand acts on it: the ladder and its kicker stay a pull, off this budgeted path.
+    /// @param packedLvlBuyer Packed queue entry: cycle level (bits 160..183) and the buyer's
+    ///        wallet ID (192..223); bits 0..159 are zero.
+    /// @param entropy Committed normal cohort word driving the four boosted lines.
+    /// @param terminal Whether the ending has latched (game over, or the terminal level or
+    ///        dead ending recorded); suppresses the grand push, so the terminal drain never
+    ///        carves a pool the terminal jackpot is settling from.
+    /// @param counts Shared scratch: per-trait occurrence counter for this level, re-zeroed
+    ///        before return.
+    /// @param touchedTraits Shared scratch: trait IDs touched this call, for the batch write.
     function _resolveFoilBuyer(
         uint256 packedLvlBuyer,
         uint256 entropy,
         bool terminal,
         uint32[256] memory counts,
         uint8[16] memory touchedTraits
-    ) private returns (bool grandPaid, uint32 units) {
+    ) private {
         FoilBuyerWork memory c;
         c.buyerId = uint32(packedLvlBuyer >> 192);
         c.lvl = uint24(packedLvlBuyer >> 160);
         // Only the terminal payout level needs generated traits after the ending latches.
         // Consuming unrelated packs must not reassign the frozen terminal payout buffer.
-        if (terminal && c.lvl != _gameOverTicketLevel(level)) return (false, 3);
+        if (terminal && c.lvl != _gameOverTicketLevel(level)) return;
         // Retired levels have no live inventory to authenticate an unclaimed slot.
         // Their delayed claim records redirect every gold six, preserving uniqueness.
         c.retired = _ticketLevelRetired(c.lvl);
@@ -960,8 +936,7 @@ abstract contract DegenerusGameFoilCore is
         for (uint256 i; i < 4; ++i) record |= uint256(c.lines[i]) << (_FOIL_LINES_SHIFT + i * 32);
         foilRecord[c.lvl & 3][c.buyerId] = record;
         }
-        units = 4; // record, cursor and stored c.lines
-        // Tomorrow's word can land after a turbo transition c.retired this pack's
+        // Tomorrow's word can land after a turbo transition retired this pack's
         // inventory. Claims still use its retained record and daily word; never
         // reassign a newer buffer or let this old generation queue block progress.
         if (!c.retired) {
@@ -988,9 +963,8 @@ abstract contract DegenerusGameFoilCore is
                 uint8 traitId = touchedTraits[u];
                 uint32 occurrences = counts[traitId];
                 counts[traitId] = 0;
-                (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, c.lvl);
+                _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, c.lvl);
                 unchecked {
-                    units += uint32(f * 3 + d);
                     ++u;
                 }
             }
@@ -998,7 +972,6 @@ abstract contract DegenerusGameFoilCore is
             uint256 baseKey = (uint256(TicketEntropy.FOIL) << 248) | (uint256(c.lvl) << 224) |
                 (uint256(c.buyerId) << TicketEntropy.ID_SHIFT);
             emit TraitsGenerated(c.buyerId, baseKey, FOIL_PACK_ENTRIES);
-
         }
 
         // Two or more all-gold tickets: push the grand now rather than wait to be
@@ -1007,19 +980,15 @@ abstract contract DegenerusGameFoilCore is
         // the grand and still plays the board it paid for.
         if (!terminal) {
             (uint8 golds, uint8 allGold) = _packGold(c.lines);
-            if (allGold >= 2) {
-                _pushFoilGrand(c.buyerId, c.lvl, golds, allGold);
-                grandPaid = true;
-            }
+            if (allGold >= 2) _pushFoilGrand(c.buyerId, c.lvl, golds, allGold);
         }
     }
 
     /// @dev Read a pack's gold two ways in one pass over the four lines the drain
     ///      filed: the total gold quadrants (the ladder's rung) and how many whole
     ///      tickets came out all gold (the kicker and the grand). Each quadrant byte is
-    ///      [QQ][CCC][SSS], so the color is bits 5-3 and gold is color 7. Pure and
-    ///      re-derivable — the claim recomputes the same lines the drain filed, so
-    ///      nothing about the pack's gold has to be stored.
+    ///      [QQ][CCC][SSS], so the color is bits 5-3 and gold is color 7. The claim reads
+    ///      the lines stored in the pack record, so the gold count itself is never stored.
     /// @param lines The pack's four four-quadrant lines.
     /// @return golds Total gold quadrants across the pack (0..16).
     /// @return allGoldTickets How many of the four lines are all gold (0..4).
@@ -1068,12 +1037,6 @@ abstract contract DegenerusGameFoilCore is
     ///      Neither leg carries the snap exponent (see _payFoilTier: no foil payout
     ///      does), and neither reads a pool — so nothing here is sized off state a
     ///      pending draw is about to move, and the claim needs no RNG-lock guard.
-    ///
-    ///      Internal, not private, so a test exposer can drive one rung at a time:
-    ///      every (golds, allGold) shape is reachable in production, but each needs its
-    ///      own brute-forced (buyer, entropy) vector to reach through the live claim.
-    ///      No production contract derives from this module, so the reachable surface is
-    ///      unchanged.
     /// @param id The buyer's wallet ID (the FLIP credit key).
     /// @param lvl The pack's cycle level.
     /// @param golds The pack's total gold quadrants (3..7, or 8+ scattered across at
@@ -1098,19 +1061,13 @@ abstract contract DegenerusGameFoilCore is
     ///      neither arms nor consumes the armed board slot: a pending arm still resolves
     ///      on its own next draw.
     ///
-    ///      NO RNG-lock guard, deliberately. This runs inside advanceGame, which is a
-    ///      deterministic protocol function with no player discretion, and the drain
-    ///      strictly precedes the draw it feeds — the readiness gate holds rngGate until
-    ///      _foilDrainPending clears, so the futurePrizePool debit always lands before
-    ///      any pool math that reads it. That is exactly how the armed board route's own
-    ///      grand already settles from runDailyJackpot. Nothing is double-committed: the
-    ///      later draw simply reads the pool this call left behind.
-    ///
-    ///      Internal, not private, only so a test exposer can drive it: a pack reaches
-    ///      two all-gold tickets once in 7.1 billion, far past what a search over
-    ///      buyer/entropy can construct. Same precedent as the jackpot module's
-    ///      _pickSoloQuadrant, and no production contract derives from this module, so
-    ///      the reachable surface is unchanged.
+    ///      NO RNG-lock guard, deliberately. This runs inside the miner's foil drain, a
+    ///      deterministic protocol step with no player discretion, and the drain strictly
+    ///      precedes the draw it feeds: ticket work does not report done while
+    ///      _foilDrainPending holds, so the futurePrizePool debit always lands before any
+    ///      pool math that reads it. The armed board route's own grand settles the same way
+    ///      from the daily jackpot. Nothing is double-committed: the later draw reads the
+    ///      pool this call left behind.
     /// @param id The pack buyer's wallet ID, which the grand credits and the event identifies.
     /// @param lvl The pack's cycle level.
     /// @param golds The pack's total gold quadrants — 8 to 16 (at least two all-gold tickets,
@@ -1143,5 +1100,4 @@ abstract contract DegenerusGameFoilCore is
         // flipCredit 0: the grand's own legs are stamped by GoldenTicketWin.
         emit GoldenTicketFoil(id, lvl, golds, allGold, 0);
     }
-
 }

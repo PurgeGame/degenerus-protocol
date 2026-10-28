@@ -101,6 +101,10 @@ contract BattleConstructionDrawProbe is DegenerusGameJackpotDrawModule {
 }
 
 contract BattleConstructionTableSeed is CrapsBattleStorage {
+    function _appendBet(uint256 id, uint256 word) internal {
+        _appendBetOnDay(id, word, _betWriteDay(id));
+    }
+
     /// @dev A normal (not detached) paid daily field. Counts affect seal arithmetic, never
     /// append iteration. Own/day/high seats make every nonempty seal accounting branch live.
     function seedPaidField(uint24 day) external {

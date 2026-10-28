@@ -39,6 +39,7 @@ import {RngTags} from "./libraries/RngTags.sol";
  * @dev FEATURES:
  *      - Standard ERC20 functionality (transfer, approve, etc.)
  *      - mintPrize(): Authorized minters can award WWXRP prizes
+ *      - creditPrize()/withdraw(): unminted per-account prizes, minted on withdrawal
  *      - vaultMintTo(): Vault or its current owner can mint any amount for free
  *      - Trusted minters: the DGVE governance executor may register or
  *        revoke any address as a minter/burner alongside the pinned game
@@ -46,14 +47,14 @@ import {RngTags} from "./libraries/RngTags.sol";
  *        deliberate and total: WWXRP is the protocol's inflationary side coin
  *        and the vault is its sovereign; nothing here bounds what a trusted
  *        address may mint or burn.
- *      - enter()/claim(): daily burn draw for a fixed FLIP prize
- *      - Century BAF incinerator: a level-x99 enter() burn also bets on the
+ *      - enterDraw()/claim(): daily burn draw for a fixed FLIP prize
+ *      - Century BAF incinerator: a level-x99 enterDraw() burn also bets on the
  *        upcoming x00 BAF skipping — when the BAF gate skips, one
- *        burn-weighted winner is credited game-side with a share of the FLIP
- *        that day's direct depositors burned and lost (flip credit, not ETH)
+ *        burn-weighted winner is credited a share of the FLIP the armed BAF
+ *        day's direct depositors staked and lost (flip credit, not ETH)
  *
  * @dev DAILY DRAW (per participation day d):
- *      - A player burns at least 25 WWXRP via enter() for an account it may
+ *      - A player burns at least 25 WWXRP via enterDraw() for an account it may
  *        act for; the entry belongs to that account and the burn comes from
  *        the account's payee.
  *      - Every entrant maps to exactly one of 10 buckets for day d:
@@ -80,13 +81,14 @@ import {RngTags} from "./libraries/RngTags.sol";
  *        transaction. claim(day, entryIndex) recomputes the outcome from the
  *        immutable word and verifies the supplied entry's cumulative interval
  *        in O(1) storage reads. Claiming is permissionless but always credits
- *        the prize to the player recorded in the winning entry. Claims are open
- *        on d+1 and d+2 only. Three tagged storage banks recycle expired daily
- *        headers and entries; historical getters return zero after overwrite.
+ *        the prize to the player recorded in the winning entry. A claim for day d
+ *        is open while the latest applied daily result is day d+1 or d+2. Three
+ *        tagged storage banks recycle daily headers and entries (day d+3 reuses
+ *        day d's bank); historical getters return zero after overwrite.
  *
  * @dev DRAW SECURITY — WHY day d SETTLES ON WORD d+1:
  *      A normal daily request advances the logical index before its word can
- *      arrive. enter() reads that index from Game slot 0, so normal word
+ *      arrive. enterDraw() reads that index from Game slot 0, so normal word
  *      d+1 is unknowable while participation day d remains open. Entries after
  *      game over are unguarded: WWXRP is worthless then.
  *      Thus a recorded word for
@@ -108,7 +110,6 @@ import {RngTags} from "./libraries/RngTags.sol";
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
-import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /// @dev Minimal Game surface consumed by the daily draw and generic WWXRP boon hook.
 interface IDrawGame {
@@ -129,7 +130,7 @@ interface IDrawGame {
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
-    ///         or zero `id`; never reverts on authorization. `enter` requires `authorized`.
+    ///         or zero `id`; never reverts on authorization. `enterDraw` requires `authorized`.
     function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
 
@@ -150,14 +151,12 @@ interface IDrawVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
-///      flip creditor alongside game/quests/affiliate/admin/sDGNRS).
+/// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized flip creditor).
 interface IDrawCoinflip {
-
     /// @notice Coinflip's credit of `amount` FLIP stake to wallet `id` (0 is a no-op).
     function creditFlip_g317(uint32 id, uint256 amount) external;
-    /// @notice The armed BAF draw day and its book: the whole-FLIP sum of every direct
-    ///         self-funded deposit that staked the armed day, and the entry count.
+    /// @notice The armed BAF draw day and its book: the whole-FLIP principal sum of every
+    ///         direct deposit that staked the armed day, and the entry count.
     function bafDrawInfo() external view returns (uint24 day, uint96 totalWeight, uint32 entryCount);
     /// @notice A flip day's stored result. An unresolved day reads (0, false).
     function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win);
@@ -193,7 +192,7 @@ contract WWXRP {
 
     /// @notice Emitted for every recorded daily-draw entry
     /// @param day Participation day (settles on rngWordForDay(day + 1))
-    /// @param player Key of the entrant account (the caller for a self entry)
+    /// @param player Wallet ID of the entrant account
     /// @param bucket Deterministic bucket for (day, entrant wallet ID)
     /// @param entryIndex Index of this entry within the bucket
     /// @param burnAmount WWXRP burned (0 decimals)
@@ -229,13 +228,13 @@ contract WWXRP {
 
     /// @notice Emitted for every recorded century BAF-incinerator entry
     /// @param bracket Century bracket the burn bets on (level x00)
-    /// @param player Key of the entrant account (the caller for a self entry)
+    /// @param player Wallet ID of the entrant account
     /// @param entryIndex Index of this entry within the bracket
     /// @param burnAmount WWXRP burned (0 decimals)
     /// @param effectiveScore Activity- and boon-weighted score recorded for this burn
-    ///        (whole tokens units — full precision)
+    ///        (whole-WWXRP units, the same weight as the carrying daily entry)
     /// @param cumulativeScore Bracket cumulative score endpoint after this
-    ///        burn (whole tokens units)
+    ///        burn (whole-WWXRP units)
     event IncineratorEntered(
         uint24 indexed bracket,
         uint32 indexed player,
@@ -259,7 +258,7 @@ contract WWXRP {
     /// @param winnerId Wallet ID recorded in the winning entry (paid as flip credit)
     /// @param flipAward FLIP credited to the winner by the game as flip credit
     /// @param roll Winner roll in [0, totalScore)
-    /// @param totalScore Bracket total effective score (whole tokens units)
+    /// @param totalScore Bracket total effective score (whole-WWXRP units)
     event IncineratorResolved(
         uint24 indexed bracket,
         uint32 indexed winnerId,
@@ -402,24 +401,13 @@ contract WWXRP {
     uint256 private constant GAME_WWXRP_LANE_SHIFT = 232;
     uint256 private constant GAME_LANE_TIER_MASK = 0x3;
 
-    /// @dev Draw accumulators use whole WWXRP; weighted amounts floor after BPS ratios.
-    ///      uint96 holds ~7.9e28 tokens per
-    ///      (day, bucket) — headroom for an arbitrarily inflationary supply.
-
-    /// @dev Domain tags for the draw's bucket hash and four outcome hashes
+    /// @dev Domain tag for the draw's bucket hash
     bytes32 private constant DOM_BUCKET = "WWXRP_DRAW_BUCKET";
-    bytes32 private constant DOM_BIG = "WWXRP_DRAW_BIG";
-    bytes32 private constant DOM_SMALL = "WWXRP_DRAW_SMALL";
-    bytes32 private constant DOM_WIN_BUCKET = "WWXRP_DRAW_WIN_BUCKET";
-    bytes32 private constant DOM_WINNER = "WWXRP_DRAW_WINNER";
 
     /// @dev Incinerator award, in basis points of the FLIP the armed BAF day's direct
-    ///      depositors burned and then lost when that day's flip came up tails. The
-    ///      coinflip's draw book already sums those deposits (whole FLIP), so the award
-    ///      needs no new accounting; it is paid as flip credit, never ETH.
+    ///      depositors staked and then lost when that day's flip came up tails, as summed
+    ///      by the coinflip's BAF draw book (whole FLIP); paid as flip credit, never ETH.
     uint256 private constant INCINERATOR_FLIP_BPS = 1_000;
-    /// @dev Domain tag for the BAF-incinerator winner roll
-    bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
 
     /*+======================================================================+
       |                          DAILY DRAW STATE                            |
@@ -438,31 +426,26 @@ contract WWXRP {
     ///      recorded entry (endpoint >= 25 units via MIN_BURN at 1.0x).
     mapping(uint256 => uint256) private _drawEntry;
 
-    /// @notice True once a day's draw prize has been claimed
+    /// @dev Claimed-day bitmap: bit (day & 255) of word day >> 8.
     mapping(uint24 => uint256) private _dayClaimed;
 
+    /// @notice True once a day's draw prize has been claimed.
     function dayClaimed(uint24 day) public view returns (bool) {
         return (_dayClaimed[day >> 8] & (uint256(1) << (day & 255))) != 0;
     }
 
     /*+======================================================================+
-      |                    CENTURY BAF-INCINERATOR STATE                       |
+      |                    CENTURY BAF-INCINERATOR STATE                     |
       +======================================================================+
       |  Burn-weighted entries recorded during a level x99, betting that the |
       |  next century BAF (level x00) skips. Interval accounting mirrors the |
-      |  daily draw but is keyed by bracket and denominated in full whole tokens.     |
+      |  daily draw but is keyed by bracket, with a uint192 accumulator.     |
       +======================================================================+*/
-
-    /// @dev Unlike the whole-token daily draw, incinerator scores are full
-    ///      whole tokens: the supply is uncapped-inflationary, so no
-    ///      whole-token uint96 bound can be guaranteed. uint192 for the
-    ///      bracket total (~6.3e57 whole tokens at a 3x activity ceiling) is safe for
-    ///      any reachable supply, and entry endpoints share it.
 
     /// @notice One incinerator interval entry in one slot: the endpoint (the bracket total
     ///         saturates at uint192.max, so every endpoint fits) and the entrant's wallet ID.
     struct IncinEntry {
-        /// @notice Cumulative effective score endpoint (exclusive, whole tokens units).
+        /// @notice Cumulative effective score endpoint (exclusive, whole-WWXRP units).
         uint192 cum;
         /// @notice Wallet ID credited if the winner roll lands in this interval.
         uint32 id;
@@ -473,13 +456,13 @@ contract WWXRP {
     mapping(uint256 => IncinEntry) private _incinEntry;
 
     /// @notice Addresses the vault owner has registered as minters/burners alongside the
-    ///         pinned game contracts (future games). Appended after every prior slot.
+    ///         pinned game contracts (future games).
     mapping(address => bool) public trustedMinter;
 
     /// @notice Whole-number multiplier on every WWXRP mint the pinned game contracts request
     ///         (Game and its modules, Coinflip, Jackpots): 1 = 1x, 0 = no game minting, no
     ///         upper bound. Set by the vault owner. Trusted-minter apps, vault mints and this
-    ///         contract's own draw payouts are not scaled. Appended after every prior slot.
+    ///         contract's own draw payouts are not scaled.
     uint256 public gameMintScale = 1;
 
     constructor() {
@@ -567,12 +550,10 @@ contract WWXRP {
 
     /// @dev Creates tokens in the recipient's balance, SATURATING at the supply ceiling. The vault
     ///      owner can mint any amount, so a checked add would let it push totalSupply to the top
-    ///      and make every later mint panic — including the ones the game makes inside the daily
-    ///      advance (Coinflip's loss reward, the golden-ticket consolation), which would brick
-    ///      it. Clamped instead, a mint past the ceiling mints what fits; a balance never exceeds
+    ///      and make every later mint (prize withdrawals, pinned-minter mints) panic. Clamped
+    ///      instead, a mint past the ceiling mints what fits; a balance never exceeds
     ///      totalSupply, so the balance add cannot overflow either.
-    ///      A zero recipient mints nothing rather than reverting: every mint the game makes names a
-    ///      real recipient, and a hot-path mint must never be able to revert.
+    ///      A zero recipient mints nothing rather than reverting.
     function _mint(address to, uint256 amount) internal {
         if (to == address(0)) return;
         uint256 room = type(uint256).max - totalSupply;
@@ -597,14 +578,13 @@ contract WWXRP {
       +======================================================================+*/
 
     /// @notice Mint WWXRP to a recipient (for lootbox/game/consolation prizes)
-    /// @dev Callable by the pinned minters (game/coinflip/jackpots) or a trusted minter. A
-    ///      pinned game mint is multiplied by gameMintScale, saturating at 2^256 - 1 (and then
-    ///      at the supply room in _mint), so the scaled path cannot revert on the amount; a
-    ///      trusted minter mints the exact amount.
+    /// @dev Callable by the pinned minters (game/coinflip/jackpots) or a trusted minter. A zero
+    ///      recipient mints nothing. A pinned game mint is multiplied by gameMintScale,
+    ///      saturating at 2^256 - 1, so the scaled path cannot revert on the amount; a trusted
+    ///      minter's amount is unscaled. Every mint is clamped to the supply room in _mint.
     /// @param to Recipient of the minted WWXRP
     /// @param amount Amount to mint (0 decimals), before the game mint scale
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
-    ///      A zero recipient mints nothing.
     function mintPrize(address to, uint256 amount) external {
         _mint(to, _scaledPrize(amount));
     }
@@ -623,7 +603,7 @@ contract WWXRP {
         emit PrizeCredited(id, amount, prior + amount);
     }
 
-    /// @dev Scale exactly once, at award time. Trusted apps retain their existing exact-unit policy.
+    /// @dev Scale exactly once, at award time. Trusted apps award exact units.
     function _scaledPrize(uint256 amount) private view returns (uint256) {
         if (msg.sender == MINTER_GAME || msg.sender == MINTER_COINFLIP || msg.sender == MINTER_JACKPOTS) {
             uint256 scale = gameMintScale;
@@ -710,8 +690,8 @@ contract WWXRP {
 
     /// @notice Register or revoke a trusted minter/burner (vault owner only).
     /// @dev Total by design: a trusted address may mint any amount to anyone through
-    ///      mintPrize, burn any balance through burnForGame, and consume any player's
-    ///      WWXRP boon through consumeBoon, exactly as the pinned game contracts can.
+    ///      mintPrize, burn any balance through burnForGame or burnForAccount, and consume any
+    ///      player's WWXRP boon through consumeBoon, exactly as the pinned game contracts can.
     ///      The vault owner is the pinned DGVE approval executor.
     /// @param account The address to trust or revoke.
     /// @param trusted True to register, false to revoke.
@@ -816,8 +796,7 @@ contract WWXRP {
         if (_holdsWwxrpBoon(id)) boonBps = game.consumeCoinflipBoon_g2902(id);
         uint8 bucket = _bucketOf(day, id);
         uint256 multBps = drawMultBps(score);
-        uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
-        uint256 effective = fullWeight;
+        uint256 effective = _entryWeight(amount, multBps, boonBps);
 
         uint256 header = _readDrawHeader(day, bucket);
         uint256 raw = header & type(uint96).max;
@@ -839,11 +818,11 @@ contract WWXRP {
         _drawEntry[_drawEntryKey(day, bucket, uint32(count))] = newTotal | (uint256(id) << 96);
 
         // Level-x99 burns double as century BAF-incinerator entries: the same
-        // burn and activity/boon multipliers also arm the next x00 bracket's skip
-        // draw (at whole-token precision there — no whole-token truncation).
+        // burn and weight also arm the next x00 bracket's skip draw, against its
+        // uint192 accumulator.
         uint24 lvl = game.currentLvl();
         if (lvl % 100 == 99) {
-            _recordIncineratorEntry(lvl + 1, id, amount, fullWeight);
+            _recordIncineratorEntry(lvl + 1, id, amount, effective);
         }
 
         uint256 shortfall = _consumePrize(id, amount);
@@ -960,10 +939,9 @@ contract WWXRP {
     /// @notice Winner-weight multiplier in bps for an activity score: the
     ///         Decimator curve shape rescaled from 1.0x-1.7833x to 1.0x-3.0x.
     function drawMultBps(uint256 activityScore) public pure returns (uint256) {
+        // decMultBps returns a value in [MULT_MIN_BPS, MULT_MAX_BPS], so the rescale
+        // lands in [BPS, BPS + TARGET_SPAN_BPS].
         uint256 base = ActivityCurveLib.decMultBps(activityScore);
-        // Saturate: the library caps at MULT_MAX_BPS already; clamp defends
-        // the subtraction ordering regardless.
-        if (base >= ActivityCurveLib.MULT_MAX_BPS) return BPS + TARGET_SPAN_BPS;
         return
             BPS +
             ((base - ActivityCurveLib.MULT_MIN_BPS) * TARGET_SPAN_BPS) /
@@ -971,7 +949,7 @@ contract WWXRP {
     }
 
     /// @notice Draw bucket totals for a (day, bucket); zero after that bank is reused.
-    /// @return rawBurned Whole WWXRP burned into the bucket (dust excluded).
+    /// @return rawBurned WWXRP burned into the bucket (saturating at uint96 max).
     /// @return totalScore Total effective (activity/boon-weighted) score in
     ///         whole-WWXRP units.
     /// @return entryCount Number of entries recorded.
@@ -1004,7 +982,7 @@ contract WWXRP {
     }
 
     /// @notice Non-reverting draw outcome preview for indexers/UI.
-    /// @return wordAvailable True once rngWordForDay(day + 1) is recorded.
+    /// @return wordAvailable True when the day's claim window is open and rngWordForDay(day + 1) is recorded.
     /// @return prize True when a gate hit AND the winning bucket has entries.
     /// @return big True when the BIG gate hit.
     /// @return winningBucket Selected bucket (only meaningful when a gate hit).
@@ -1103,12 +1081,11 @@ contract WWXRP {
       +======================================================================+*/
 
     /// @dev Record an incinerator entry riding a daily-draw burn during a
-    ///      level x99. The burn itself happened in enter(); this only appends
-    ///      the bracket-keyed interval entry, weighting the whole-token
-    ///      amount by the same activity/boon multipliers the carrying entry
-    ///      snapshotted (no whole-token truncation). The level increments to
+    ///      level x99. The carrying enterDraw() burns the WWXRP; this only appends
+    ///      the bracket-keyed interval entry with the same floored activity/boon
+    ///      weight as the daily entry. The level increments to
     ///      x00 in the same transaction that requests the VRF word whose
-    ///      tagged hash decides the BAF fire gate, so enter()'s level check alone
+    ///      tagged hash decides the BAF fire gate, so enterDraw()'s level check alone
     ///      closes entries before the deciding word can exist — no separate
     ///      rng-lock gate is needed. On a fired (won) BAF the bracket's
     ///      entries are simply never resolved: the burn was the losing side
@@ -1116,8 +1093,8 @@ contract WWXRP {
     ///      normally).
     /// @param bracket Century bracket being armed (level x00).
     /// @param id The entrant's wallet ID.
-    /// @param amount WWXRP burned by the carrying enter() (0 decimals).
-    /// @param effective Whole-token activity/boon weight computed by the carrying entry.
+    /// @param amount WWXRP burned by the carrying enterDraw() (0 decimals).
+    /// @param effective Activity/boon weight computed by the carrying entry (whole WWXRP).
     /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
     function _recordIncineratorEntry(
         uint24 bracket,
@@ -1208,7 +1185,7 @@ contract WWXRP {
     }
 
     /// @notice Incinerator bracket totals.
-    /// @return totalScore Total effective (activity/boon-weighted) score in whole tokens
+    /// @return totalScore Total effective (activity/boon-weighted) score in whole-WWXRP
     ///         units.
     /// @return entryCount Number of entries recorded.
     function incineratorInfo(
@@ -1220,7 +1197,7 @@ contract WWXRP {
     }
 
     /// @notice A recorded incinerator entry's wallet ID and cumulative score
-    ///         endpoint (whole tokens units).
+    ///         endpoint (whole-WWXRP units).
     function incineratorEntryAt(
         uint24 bracket,
         uint32 index
@@ -1280,6 +1257,7 @@ contract WWXRP {
         if (uint32(header >> 224) != uint256(day) + 1) return 0;
     }
 
+    /// @dev Day d's claims are open while the latest applied daily result is day d+1 or d+2.
     function _drawClaimOpen(uint24 participationDay) private view returns (bool) {
         if (participationDay == type(uint24).max) return false;
         uint256 today = game.latestDailyResultDay();
@@ -1294,20 +1272,21 @@ contract WWXRP {
     ) private pure returns (uint256) {
         return (uint256(day % 3) << 40) | (uint256(bucket) << 32) | index;
     }
+
     /// @dev Header per (day, bucket):
-    ///      bits [0..95]    whole WWXRP burned (analytics / future scaling input)
+    ///      bits [0..95]    WWXRP burned (analytics only; saturating)
     ///      bits [96..191]  total effective score (last cumulative endpoint,
     ///                      whole-WWXRP units)
     ///      bits [192..223] entry count
     ///      bits [224..255] participation day + 1 (zero means never initialized)
-    ///      Indexed by [day % 3][bucket], with ten buckets. A bank can only be replaced after
-    ///      its previous day's two-day claim window closes.
+    ///      Indexed by [day % 3][bucket], with ten buckets. Participation day d + 3 reuses
+    ///      day d's bank.
     uint256[10][3] private _drawHeader;
 
-    /// @dev Reused incinerator header, exact bracket24 at bits224..247:
+    /// @dev Reused incinerator header, authenticated by its bracket:
     ///      bits [0..191]   total effective score (last cumulative endpoint,
-    ///                      whole tokens units)
+    ///                      whole-WWXRP units)
     ///      bits [192..223] entry count
+    ///      bits [224..247] bracket
     uint256 private _incinHeader;
-
 }

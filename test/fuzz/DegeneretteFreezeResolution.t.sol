@@ -219,7 +219,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     {
         return amount > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(amount, entropy)
-            : FlipRoundLib.floorWholeFlip(amount);
+            : amount;
     }
 
     /// @notice ETH and FLIP players share the result board for the same RNG period: the same

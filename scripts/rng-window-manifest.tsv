@@ -144,7 +144,6 @@ PRODUCER	rngRequestDay	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WRI
 PRODUCER	rngWordCurrent	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WRITE
 EXEMPT-ADVANCE	_nudgeCount	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder adds the frozen receipt to the coinflip word only, logs and clears it; the recorded day word stays raw.
 CONSUMER-SEALED	_lootboxWord	_runTicketWork	modules/DegenerusGameTicketModule.sol	READ
-EXEMPT-ADVANCE	_recordedDailyWord	purchaseWhalePassForSdgnrs_g470	modules/DegenerusGameWhaleModule.sol	READ	exact tag authenticates processing word; public claims enforce the published-result frontier
 CONSUMER-SEALED	_lootboxWord	_runAfkingWork	modules/GameAfkingModule.sol	READ	Active published word; stampDay <= dailyIdx excludes pre-seal stamps; pending AFKing count prevents reuse until final open.
 CONSUMER-SEALED	_lootboxWord	_runHumanBoxWork	modules/GameAfkingModule.sol	READ
 DECL	dailyFoilDraw	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Two reusable parity slots store board/level/payout seed and exact day tag.

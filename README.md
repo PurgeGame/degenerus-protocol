@@ -8,12 +8,16 @@ execute by delegatecall, while craps uses a separate stateless dice engine.
 **External audit: start with [the audit handoff](docs/AUDIT.md) and verify the supplied snapshot hashes.**
 The [readiness record](docs/audit/freeze.json) identifies the candidate, tested inputs and
 remaining verification. Historical `audit-*` tags identify older sources.
+The [preparation findings](docs/AUDIT-READINESS.md#preparation-review--2026-10-28)
+record verification gaps and dependency advisories.
 
 | Document | Purpose |
 | --- | --- |
 | [Audit handoff](docs/AUDIT.md) | Exact source snapshot, scope and reading order |
 | [Token units](docs/TOKEN-UNITS.md) | Whole-token FLIP/WWXRP APIs and rounding rules |
 | [Architecture](docs/ARCHITECTURE.md) | Contract boundaries, value flow and invariants |
+| [Accounting](docs/ACCOUNTING.md) | Custody, obligation equations and reservations by phase |
+| [Properties](docs/PROPERTIES.md) | Critical properties mapped to code and test assertions |
 | [DGVE owner approval](docs/OWNER_GOVERNANCE.md) | Escrow, voting delegation, admin actions and icon bootstrap |
 | [Security and roles](SECURITY.md) | Authorities, external dependencies, audit boundaries and reporting |
 | [Known issues](KNOWN-ISSUES.md) | Accepted implementation limitations |
@@ -128,25 +132,31 @@ raw words 0 and 1, and otherwise stores the raw word. Daily nudges move only the
 ```sh
 npm ci
 sha256sum -c docs/audit/source-sha256.txt        # source and build-input identity
-make check-audit-snapshot test-assurance-tools   # manifest and assurance-tool checks
+make check-audit-snapshot                       # source/input manifest
 forge build --skip test                          # production build (default profile eip170)
+make test-assurance-tools                       # needs the solc installed by the build
 node scripts/check-deployment-sizes.js           # runtime and initcode ceilings of the selected profile
-make test-foundry                                # structural gates, then the Foundry groups
+FOUNDRY_ISOLATE=true make test-foundry ARGS='--group integration-gas --max-files 5 --threads 1'
+FOUNDRY_ISOLATE=false make test-foundry ARGS='--group repro-symbolic --group census --group fuzz-1 --group fuzz-2 --group fuzz-3 --group fuzz-4 --group invariants --max-files 5 --threads 1'
 make test-hardhat                                # structural gates, then Hardhat in bounded batches
-make test-fork                                   # mainnet-fork suite (needs an archive RPC)
+# Mainnet fork: use the split commands in docs/VERIFICATION.md (archive RPC required).
 ```
 
 `make test-foundry` and `make test-hardhat` patch `ContractAddresses.sol` with predicted
 addresses for the run and restore it afterwards. Run one compile at a time; the via-IR build
-is memory-heavy. To work on the alternate profile, run `PROFILE=glamsterdam node scripts/select-profile.js`
+is memory-heavy. The two Foundry commands separate cold-gas tests, which require transaction
+isolation, from the remaining groups. Bare `make test-foundry` does not select isolation
+per group. To work on the alternate profile, run `PROFILE=glamsterdam node scripts/select-profile.js`
 first and check sizes with `--schedule glamsterdam`. Its runtimes exceed 24,576 bytes, so
 Hardhat also needs `CONSOLIDATION_CANDIDATE=true`, which lifts Hardhat's contract-size limit;
 the `eip170` profile fits the default limits. [Verification](docs/VERIFICATION.md) lists every
 group, gate and known limit.
 
-### Results for this revision
+### Results for the tested revision
 
-The [readiness record](docs/audit/freeze.json) names the tested contract revision.
+The [readiness record](docs/audit/freeze.json) names the tested contract revision. These results
+and the sizes below apply to that revision; the current scoped sources
+([snapshot](docs/audit/snapshot.json)) include later contract changes.
 
 | Check | Result |
 | --- | --- |
@@ -154,7 +164,7 @@ The [readiness record](docs/audit/freeze.json) names the tested contract revisio
 | Hardhat / Halmos | 1,557 tests / 68 properties passing |
 | Structural gates | 24 checks per profile pass on both profiles; 0 profile differences |
 | Static analysis | Slither parsing and IR complete; Slither and Aderyn output triaged in [analyzer triage](docs/audit/ANALYZER-TRIAGE.md) |
-| Deep invariants (1,000 runs x depth 256) | Scheduled CI campaign; default-depth invariants (256 x 128) pass |
+| Deep invariants (defaults: 1,000 runs × depth 256) | Scheduled CI campaign; default-profile invariants pass (defaults: 256 × 128). Explicit property overrides apply. |
 
 ### Contract sizes (eip170 profile, runtime bytes)
 

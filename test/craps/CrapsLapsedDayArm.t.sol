@@ -22,8 +22,8 @@ contract LapseArmHarness is CrapsViews {
     }
 }
 
-/// @dev A day the advance never opened (a VRF stall that skipped the wall day, later backfilled
-///      with a word) is LAPSED to the keeper: its day-lane reservations are swept back to pass
+/// @dev A day the advance never opened (its word applied after the next wall reset, so the
+///      wall-day gate skipped the open) is LAPSED to the keeper: its day-lane reservations are swept back to pass
 ///      credits. A window of that same day, seeded ahead of time by a vault window-ahead comp,
 ///      must not be armable afterwards — arming it would bind a table and pay FLIP off a day
 ///      that banked no ladder. The arm refuses any window whose day never ran

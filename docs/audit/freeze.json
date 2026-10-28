@@ -1,15 +1,17 @@
 {
   "schema_version": 5,
-  "status": "audit candidate: full local battery on the contract revision; becomes a final freeze when hosted CI passes on the pushed commit and the audit tag is created",
+  "status": "audit candidate: contract sources unchanged; local preparation fixes applied; final freeze awaits successful hosted CI, deep invariants and an audit tag",
   "audit_tag": null,
-  "recorded_at_utc": "2026-10-28T03:00:00+00:00",
+  "recorded_at_utc": "2026-10-28T05:29:14.429194+00:00",
   "contract_revision": {
     "battery_commit": "76e8748ca147265d0bfd74d8bda64b8a8837cd23",
-    "identity": "contracts/ and test/ are byte-identical between battery_commit and the commit carrying this record; source-sha256.txt and snapshot.json authenticate the scoped sources",
+    "identity": "Production contracts are byte-identical to battery_commit; the test/tooling extensions in testing_gap_closure are separate from that retained full-battery result. source-sha256.txt and snapshot.json authenticate the current scoped sources.",
     "later_changes": [
       "Documentation: scope, criteria, disclosures, verification and analyzer triage.",
       "Repository tooling: unused study scripts and point-in-time evidence dumps removed; two gate self-tests added to test-assurance-tools; unused npm scripts and dependency removed.",
-      "Hardhat per-test timeout raised from 120 s to 300 s; CI Halmos per-query solver timeout raised from 120 s to 300 s."
+      "Hardhat per-test timeout raised from 120 s to 300 s; CI Halmos per-query solver timeout raised from 120 s to 300 s.",
+      "2026-10-28 preparation: compiler-dependent assurance self-tests moved after the production build in CI; production assurance Python pinned to 3.12.",
+      "2026-10-28 preparation: reproduction commands, environment template, gas-evidence limits and historical consolidation instructions corrected; unresolved findings recorded in docs/AUDIT-READINESS.md."
     ]
   },
   "predecessor_freeze": {
@@ -48,15 +50,16 @@
         "failed": 0,
         "skipped": 1
       },
-      "invariants (256 runs x depth 128)": {
-        "passed": 389,
-        "failed": 0,
-        "skipped": 0
-      },
       "fork (block 26193851)": {
         "passed": 36,
         "failed": 0,
         "skipped": 0
+      },
+      "invariants (default profile; property overrides apply)": {
+        "passed": 389,
+        "failed": 0,
+        "skipped": 0,
+        "budget_note": "Global default settings are256runs/depth128; explicit per-property overrides apply."
       }
     },
     "foundry_total": {
@@ -249,12 +252,13 @@
   },
   "outstanding_release_checks": [
     {
-      "check": "Hosted CI on the pushed commit",
-      "status": "pending push"
+      "check": "Hosted CI on the final handoff commit",
+      "status": "Run 40620501086 on 9f504b54911e60db1ca168965cdc8a15fe688815 has a failed production gate (assurance tests before solc installation); local workflow correction needs a new hosted run.",
+      "url": "https://github.com/PurgeGame/degenerus-protocol/actions/runs/40620501086"
     },
     {
-      "check": "Deep invariants: 60 partitions, 1000 runs x depth 256",
-      "status": "not completed locally; runs as the scheduled or manually dispatched CI deep-invariant workflow"
+      "check": "Deep invariants: complete source/property coverage; defaults1000runs/depth256 with explicit overrides",
+      "status": "Full local campaign is running; corrected handler reruns pass. The60-partition scheduled/manual CI workflow is configured separately and has not run on these final inputs."
     },
     {
       "check": "Final audit tag",
@@ -267,6 +271,439 @@
     "Generated address pins, compiler settings or any source change invalidate the corresponding build evidence.",
     "The Glamsterdam size schedule is an alternate configuration, not a statement of target-chain support.",
     "Tests and bounded proofs do not establish the impossibility of a mining-chain halt; required stETH transfers and VRF availability remain documented dependencies.",
-    "Raw logs are kept outside the repository; hosted CI artifacts for the pushed commit are the public evidence."
-  ]
+    "Raw logs are kept outside the repository; hosted CI artifacts for the pushed commit are the public evidence.",
+    "The original retained native archive verifies provenance and file identity; packaging itself is not a fresh replay or transaction-limit proof. New capped replay campaigns are recorded separately under testing_gap_closure."
+  ],
+  "preparation_review": {
+    "date": "2026-10-28",
+    "base_commit": "9f504b54911e60db1ca168965cdc8a15fe688815",
+    "report": "docs/AUDIT-READINESS.md#preparation-review--2026-10-28",
+    "contract_changes": false,
+    "test_source_changes": false,
+    "local_revalidation": {
+      "completed_at_utc": "2026-10-28T05:21:36.531809+00:00",
+      "audit_snapshot": {
+        "scoped_sources": 163,
+        "result": "pass"
+      },
+      "assurance_self_tests": {
+        "passed": 125,
+        "failed": 0
+      },
+      "production_build": {
+        "result": "pass with compiler/lint warnings",
+        "profile": "eip170",
+        "fresh_output": true
+      },
+      "deployment_sizes": {
+        "result": "pass",
+        "rows": 41,
+        "minimum_runtime_margin_bytes": 252
+      },
+      "profile_generation": "pass",
+      "source_gates": "pass (interfaces, routes, delegatecall, raw selectors, RNG window/taint/shape, pool writes, array delete, advance calls, unchecked blocks, write owners, gas reads, memory guard, recipient calls)",
+      "storage_layout_oracle": "pass: all goldens match",
+      "recursive_layout": {
+        "result": "pass",
+        "game_modules": 16,
+        "mismatches": 0
+      },
+      "owner_and_vault_actions": "pass: 36 owner selectors, owner packing, 70 player signatures",
+      "deployment_configuration_tests": {
+        "passed": 3,
+        "failed": 0
+      },
+      "steth_sweep_regression": {
+        "test": "test/repro/V08StethDeadSweep.t.sol:test_revertingSteth_sweepCompletesAndLeavesStethInPlace",
+        "passed": 1,
+        "failed": 0,
+        "note": "Confirms the reported stranded-stETH behavior, not its safety."
+      },
+      "ci_yaml_and_setup_order": "pass locally; new hosted run required",
+      "markdown_links": "31 tracked Markdown files; no missing local file targets",
+      "source_preservation": "git diff HEAD -- contracts test is empty after runner restoration",
+      "local_evidence_directory": ".audit-test-logs/preparation-2026-10-28",
+      "scope": "Targeted preparation checks only; the full battery above is retained prior evidence, not rerun in this preparation review."
+    },
+    "dependency_audit": {
+      "affected_development_package_entries": 49,
+      "critical": 1,
+      "high": 25,
+      "moderate": 10,
+      "low": 13,
+      "production_only_entries": 0,
+      "reachability": "not assessed; npm severity is not protocol finding severity",
+      "lockfile_changed": false
+    },
+    "hosted_ci_observation": {
+      "run_id": 40620501086,
+      "commit": "9f504b54911e60db1ca168965cdc8a15fe688815",
+      "workflow_status": "in_progress",
+      "production_gate": "failure",
+      "slither": "cancelled",
+      "deep_invariants": "skipped on push",
+      "observed_at_utc": "2026-10-28T05:17:32.543075+00:00"
+    }
+  },
+  "native_replay_evidence_artifact": {
+    "filename": "native-evidence-2026-10-28.tar.gz",
+    "local_path": ".audit-test-logs/preparation-2026-10-28/native-evidence-2026-10-28.tar.gz",
+    "bytes": 112800290,
+    "sha256": "899744e1e53171e87117ac7a07768f2f0ca76f90ebe61a99d4066f52bbccf162",
+    "delivery": "Supply alongside the audit repository; this binary is intentionally ignored by Git.",
+    "source_base_commit": "9f504b54911e60db1ca168965cdc8a15fe688815",
+    "member_hashes_verified": 2822,
+    "credential_scan_hits": 0,
+    "redactions": 0,
+    "provenance": "Exact retained replay totals; current eip170 production sources; alternate profile generation/address-pin differences explicitly preserved. Captured input manifests, initial dump hashes and runtime-set hashes verified.",
+    "native_replay_rerun": false,
+    "guide_inside_archive": "native-evidence/README.md"
+  },
+  "testing_gap_closure": {
+    "status": "in progress",
+    "contract_changes": false,
+    "steth_disposition": {
+      "status": "closed by project; provisional Medium withdrawn",
+      "reason": "Mocked balance-read failure requires a broken external dependency; no healthy-supported-Lido or ordinary-caller exploit established. Caller-induced healthy-dependency failures remain in scope."
+    },
+    "campaigns": {
+      "mature_composition": {
+        "status": "pass",
+        "fuzz_cases": 256,
+        "deterministic_regressions": 1,
+        "seed": "0x8ad17020261028",
+        "negative_controls_detected": 4,
+        "restored_baseline": "pass",
+        "source_sha256": "931114d70b9442f7dc66c1854e6ae633452296a67504065c7d434f52cda68b6c",
+        "evidence": ".audit-test-logs/mature-composition-2026-10-28/results.json",
+        "limits": "Healthy external mocks; initial backed allocation; terminal global pot/tally is a production quote. Claims, ledger deltas and sink payouts independently checked. Ending begins with unfinished live ticket work."
+      },
+      "coinflip_mutations": {
+        "status": "pass",
+        "mutations_killed": 8,
+        "clean_baselines": 5,
+        "production_source": "contracts/modules/CoinflipCore.sol",
+        "assertion_failures_required": true,
+        "disposable_inputs_restored": true,
+        "evidence": ".audit-test-logs/testing-gaps/mutations/result-complete.json",
+        "executed_runner": ".audit-test-logs/testing-gaps/mutations/executed-runner.py",
+        "executed_runner_sha256": "d3aade705a5d1b9d2efd221f7e65670a13283261d9aef8fe9c5cddee6a89b2ca",
+        "later_runner_change": "Normal-return and interruption process-group cleanup hardened with reproduced regression cases; final assurance suite passes. Mutation inputs, compiler/test commands and outcome classification are unchanged."
+      },
+      "capped_native_and_paid_mining": "Four default/minimum native campaigns and two explicitly adaptive maximum-with-normal-recovery campaigns complete the level31 capture. Strict constant maximum fails atomically at subscriber admission; another caller using normal calibration recovers. Paid default/minimum and extra-credit negative control pass.",
+      "deep_invariants": {
+        "status": "running; original campaign preserved",
+        "seed": "0x8ad17020261028",
+        "threads": 8,
+        "profile": "deep",
+        "evidence": ".audit-test-logs/gap-deep-2026-10-28/20261028T054942.576241Z-9e7f633b",
+        "coverage_oracle_failures": [
+          {
+            "family": "MultiLevelDegenesisTurbo",
+            "count": 3,
+            "reason": "Unsupported per-trace minimum3 purchases on unrestricted warp traces; no financial safety assertion failed.",
+            "correction": "Required first-walk activity and work;34 affected tests pass default/deep. Original traces retained."
+          },
+          {
+            "family": "WhaleSybilInvariant and WhaleSybilDegenesis",
+            "count": 6,
+            "reason": "Unsupported per-trace minimum4 sybil purchases on unrestricted warp traces; no financial safety assertion failed.",
+            "correction": "Required first-walk activity and work;21 affected tests pass default/deep. Original traces retained."
+          }
+        ]
+      }
+    },
+    "assurance_tools": {
+      "passed": 154,
+      "failed": 0,
+      "evidence": ".audit-test-logs/testing-gaps/assurance-tools-final.log",
+      "note": "154 checks pass after final wrapper-exit/interruption cleanup and paid-calibration evidence changes."
+    },
+    "paid_lifecycle": {
+      "status": "pass",
+      "environment": "Foundry transaction isolation; Osaka; base fee 1 gwei; gas price 3 gwei; transaction gas cap 16777216",
+      "final_level": 31,
+      "default": {
+        "calibration": 10000,
+        "actions": 7358,
+        "mining_calls": 1017,
+        "paid_calls": 370,
+        "paid_calls_at_mature_levels": 265,
+        "reward_flip": 10461
+      },
+      "minimum": {
+        "calibration": 2500,
+        "actions": 7207,
+        "mining_calls": 988,
+        "paid_calls": 366,
+        "paid_calls_at_mature_levels": 266,
+        "reward_flip": 10599
+      },
+      "actual_holder_balances_checked": 48,
+      "evidence": ".audit-test-logs/gap-native-2026-10-28/paid-holder-{default,min}",
+      "note": "Separate paid lifecycle, not a paid native Geth replay. Known NoWork/RngNotReady responses are not unexpected crank failures.",
+      "negative_control": {
+        "status": "detected",
+        "mutation": "Credit miner reward + 1 while keeping calculated/emitted reward unchanged",
+        "expected_assertion": "accepted stake must match remaining capacity: 124 != 123",
+        "evidence": ".audit-test-logs/gap-native-2026-10-28/paid-credit-negative",
+        "disposable_source_restored": true
+      }
+    },
+    "runner_cleanup": {
+      "status": "pass",
+      "behavior": "Foundry, Hardhat and mutation runners kill remaining compiler descendants on normal wrapper exit and interruption. Linux runners wait until no live group members remain before input restoration; wrapper exit codes are preserved.",
+      "before": ".audit-test-logs/testing-gaps/foundry-child-cleanup-before.log",
+      "after": ".audit-test-logs/testing-gaps/group-child-cleanup-after.log",
+      "provenance": "Earlier campaigns retain their frozen runner and recorded input hashes. Later changes affect child-process cleanup and recording NATIVE_PAID_MULTIPLIER, not successful Solidity test execution.",
+      "normal_exit_receipt": ".audit-test-logs/runner-normal-exit-2026-10-28/results.json"
+    },
+    "scheduled_lifecycle_ci": {
+      "status": "configured and YAML/matrix validated locally; hosted execution pending",
+      "trigger": "weekly schedule or workflow_dispatch",
+      "cases": [
+        "MatureComposition with deep profile (256 fuzz cases)",
+        "NativePaidLifecycle with default profile, isolation=true and NATIVE_PAID_MULTIPLIER=2500"
+      ],
+      "ordinary_ci": "Default mature and paid sources remain discovered in repro-symbolic and integration-gas."
+    },
+    "native_capped_replay": {
+      "status": "four complete default/minimum campaigns; two complete maximum-with-normal-recovery campaigns; strict constant maximum fails atomically at level23",
+      "transaction_gas_cap": 16777216,
+      "execution_rules": "Osaka Geth",
+      "completed": [
+        {
+          "profile": "eip170",
+          "multiplier": 0,
+          "datasetCalls": 7819,
+          "calls": 7844,
+          "minerCalls": 1090,
+          "checkpointComparisons": 6523,
+          "checkedExpectedRejectedPlayerAttempts": 246,
+          "finalLevel": 31,
+          "finalStateSha256": "ce1dae5015e11933209dbb271899801183381dc22716fddcc8be6c6a247f129d",
+          "maximum_gross_gas": 13227585,
+          "runner_sha256": "314119eff37fdd24cd43a43b41c095496f7e4d5769978109f7b4c88f6f4629cc",
+          "result_path": ".audit-test-logs/gap-native-2026-10-28/eip170-default-final/result.json",
+          "result_sha256": "df1114b22eb2215b4ef52fe014a266689cde517cb9fdb804b6430466d269558b"
+        },
+        {
+          "profile": "eip170",
+          "multiplier": 2500,
+          "datasetCalls": 7819,
+          "calls": 7827,
+          "minerCalls": 1073,
+          "checkpointComparisons": 6523,
+          "checkedExpectedRejectedPlayerAttempts": 246,
+          "finalLevel": 31,
+          "finalStateSha256": "ce1dae5015e11933209dbb271899801183381dc22716fddcc8be6c6a247f129d",
+          "maximum_gross_gas": 15603842,
+          "runner_sha256": "314119eff37fdd24cd43a43b41c095496f7e4d5769978109f7b4c88f6f4629cc",
+          "result_path": ".audit-test-logs/gap-native-2026-10-28/eip170-min-final/result.json",
+          "result_sha256": "5600abb120fcbaa382253220fbb85ec723f3af13bad93092330f9b6896d25738"
+        },
+        {
+          "profile": "glamsterdam",
+          "multiplier": 0,
+          "datasetCalls": 7819,
+          "calls": 7843,
+          "minerCalls": 1089,
+          "checkpointComparisons": 6523,
+          "checkedExpectedRejectedPlayerAttempts": 246,
+          "finalLevel": 31,
+          "finalStateSha256": "cba5b062d8c70edb010474c6774cf22105ee7cbda0072615e3c3159181315ad6",
+          "maximum_gross_gas": 13522762,
+          "runner_sha256": "314119eff37fdd24cd43a43b41c095496f7e4d5769978109f7b4c88f6f4629cc",
+          "result_path": ".audit-test-logs/gap-native-2026-10-28/glamsterdam-default-final/result.json",
+          "result_sha256": "f70b3041f24adf42f29398c499a218b24376f5642df7c1fb5cd22cb2ed4128ce"
+        },
+        {
+          "profile": "glamsterdam",
+          "multiplier": 2500,
+          "datasetCalls": 7819,
+          "calls": 7827,
+          "minerCalls": 1073,
+          "checkpointComparisons": 6523,
+          "checkedExpectedRejectedPlayerAttempts": 246,
+          "finalLevel": 31,
+          "finalStateSha256": "cba5b062d8c70edb010474c6774cf22105ee7cbda0072615e3c3159181315ad6",
+          "maximum_gross_gas": 15828179,
+          "runner_sha256": "ac379e3fff1cc539936bd7fe08e10687f4feb1fd2092d51531a3f887821521d2",
+          "result_path": ".audit-test-logs/gap-native-2026-10-28/glamsterdam-min/result.json",
+          "result_sha256": "9f4e78fc8588c2784b302ced1e50c923f8e211c59e3506c7dd884486392fed04"
+        }
+      ],
+      "comparison": "Exact financial/storage state except recorder bookkeeping/caller nonce and a source-pinned inactive sDGNRS reserve cache; raw cache differences retained. Zero-fee native replay; paid Foundry checks are separate.",
+      "negative_control": {
+        "status": "detected",
+        "fault": "Candidate fixture ETH balance increased by one wei after a real native call",
+        "evidence": ".audit-test-logs/gap-native-2026-10-28/fixture-eth-negative"
+      },
+      "comparison_code_attestation": ".audit-test-logs/gap-native-2026-10-28/comparison-code-attestation.json",
+      "constant_maximum": {
+        "status": "not complete; preserved failed runs",
+        "through_sequence": 5172,
+        "level": 23,
+        "native_calls_per_profile": 28084,
+        "miner_calls_per_profile": 23629,
+        "revert": "InsufficientExecutionGas() during subscriber-funding admission, before any stETH call",
+        "outputs": [
+          ".audit-test-logs/gap-native-2026-10-28/eip170-max-reviewed",
+          ".audit-test-logs/gap-native-2026-10-28/glamsterdam-max"
+        ],
+        "impact": "Retained-state controls: calibrations0,2500,10000,20000,50000 recover;100000 anduint32max refuse atomically before any stETH call. Failed attempt has no committed protocol changes/logs/reward. Unrelated-caller normal recovery produces direct-normal protocol state; final control receipts retained. No cross-caller lock or protocol-asset loss demonstrated.",
+        "control_receipt": ".audit-test-logs/gap-native-2026-10-28/max-refusal-summary.json"
+      },
+      "maximum_with_normal_recovery": {
+        "status": "pass under explicit recovery policy; not a constant-maximum pass",
+        "receipt": ".audit-test-logs/gap-native-2026-10-28/recovery-completion-attestation.json",
+        "receipt_sha256": "9c93e0801dac2a8921a64c7eb377c92397db3873ffa081570f388b1718ab6937",
+        "profiles": [
+          {
+            "profile": "eip170",
+            "constantMaxResult": "FAILED at sequence5173; preserved unchanged",
+            "policyResult": "PASS: checked prefix + max-with-normal-recovery suffix",
+            "prefixCheckedThrough": 5172,
+            "prefixCheckedGroups": 4300,
+            "suffixCheckedThrough": 7819,
+            "suffixCheckedGroups": 2223,
+            "finalLevel": 31,
+            "calls": 41472,
+            "minerCalls": 34718,
+            "expectedRejectedPlayerAttempts": 246,
+            "prefixAdmissionRefusals": 1,
+            "suffixAdmissionRefusals": 2,
+            "retainedWorkerRollbacks": 3,
+            "maximumGrossGas": 1876060,
+            "rawFinalDifferencesFromDefault": [
+              [
+                "0x89ca9f4f77b267778eb2ea0ba1beadee8523af36",
+                "0x0000000000000000000000000000000000000000000000000000000000000007",
+                "0x00000000000000000000000000000000000000000000d3c21bcecceda1000000",
+                "0x00000000008ba5c93e98ec0000000000000000000000d3c21bcecceda1000000"
+              ]
+            ],
+            "finalStateSha256": "09a48e98884f2d0ba1011c7d317cea732f1fe1cf3b2fc420b3af4fc81bda1cb6",
+            "equivalentToDefaultExceptSourcePinnedInactiveCache": true,
+            "suffixSeconds": 3417.5,
+            "prefixSeconds": 5774.4,
+            "resultSha256": "5cd4f4006f3a9c95a5e739df56097cabbaa72c3e0e6f75f2a789b01bb969ac6a",
+            "inputsSha256": "c39b3e5c53657c93cf0dbf970ec0181ad6047a298850593ca8a439279f44a1b3",
+            "runnerSha256": "61b28f22691c93d8f4678d57e90e1a2fadabdcf552cc594b883c9ed2e9c51cef"
+          },
+          {
+            "profile": "glamsterdam",
+            "constantMaxResult": "FAILED at sequence5173; preserved unchanged",
+            "policyResult": "PASS: checked prefix + max-with-normal-recovery suffix",
+            "prefixCheckedThrough": 5172,
+            "prefixCheckedGroups": 4300,
+            "suffixCheckedThrough": 7819,
+            "suffixCheckedGroups": 2223,
+            "finalLevel": 31,
+            "calls": 41472,
+            "minerCalls": 34718,
+            "expectedRejectedPlayerAttempts": 246,
+            "prefixAdmissionRefusals": 1,
+            "suffixAdmissionRefusals": 2,
+            "retainedWorkerRollbacks": 0,
+            "maximumGrossGas": 1881896,
+            "rawFinalDifferencesFromDefault": [
+              [
+                "0x89ca9f4f77b267778eb2ea0ba1beadee8523af36",
+                "0x0000000000000000000000000000000000000000000000000000000000000007",
+                "0x00000000000000000000000000000000000000000000d3c21bcecceda1000000",
+                "0x00000000008ba5c93e98ec0000000000000000000000d3c21bcecceda1000000"
+              ]
+            ],
+            "finalStateSha256": "bb9e38d5084c8b71d6b98ed0c3c8d116ead52ca5d59ace3b012016d418a726e4",
+            "equivalentToDefaultExceptSourcePinnedInactiveCache": true,
+            "suffixSeconds": 3362.5,
+            "prefixSeconds": 5651.9,
+            "resultSha256": "92d571b2f319146acc7586a8b716467c62eca3c64c584a7fc8c17980215d7c0d",
+            "inputsSha256": "67a3b11781ca797f9a07df684f66b5d475f855a1d8a28030ab798b5442499689",
+            "runnerSha256": "61b28f22691c93d8f4678d57e90e1a2fadabdcf552cc594b883c9ed2e9c51cef"
+          }
+        ],
+        "interpretation": "Each combines an authenticated4300-group strict-max prefix with2223 additional checked groups. Two suffix atomic refusals trigger normal-calibration retries by an unrelated caller. Original strict failure and all retry/rollback records are preserved. Final differences from default are restricted to the source-pinned inactive reserve cache."
+      }
+    },
+    "multilevel_coverage_repair": {
+      "status": "pass",
+      "default": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      },
+      "deep": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0,
+        "invariant_properties": 8,
+        "runs_per_property": 1000,
+        "depth": 256,
+        "seed": "0x8ad17020261028"
+      },
+      "evidence": ".audit-test-logs/multilevel-prefix-2026-10-28/validation.json",
+      "non_vacuity": "Three fuzz-dependent post-opening purchases with real ETH/activity changes and one committed MinerWork event are mandatory on the first walk call. Later timeouts, purchases, mining and raw VRF words remain unrestricted. Prefix failures persist and are asserted.",
+      "original_counterexamples_preserved": true
+    },
+    "snapshot": {
+      "status": "pass",
+      "scoped_sources": 163,
+      "production_diff_vs_HEAD": "empty",
+      "note": "Hashes authenticate current code and tests, not unfinished campaign results.",
+      "verification_inputs": 1253,
+      "source_and_build_inputs": 188
+    },
+    "test_source_changes": true,
+    "updated_at_utc": "2026-10-28T09:09:35.465578+00:00",
+    "sybil_coverage_repair": {
+      "status": "pass",
+      "original_suite": "WhaleSybilInvariant and WhaleSybilDegenesis",
+      "original_failure_count": 6,
+      "original_tests": [
+        "invariant_depositsExceedClaims",
+        "invariant_gameOverTerminal",
+        "invariant_obligationRatioHealthy",
+        "invariant_solvencyUnderPressure"
+      ],
+      "reason": "afterInvariant requires4 successful sybil purchases on unrestricted warp traces; six preserved counterexamples across the base and Degenesis suites shrink to one warpTime call. The named financial assertions did not fail.",
+      "remedy": "Test-only required first-walk purchases, whale participation and committed work with persistent failure; existing thresholds and later adversarial actions retained. All21 affected tests pass default and deep.",
+      "evidence": ".audit-test-logs/whalesybil-prefix-2026-10-28/validation.json",
+      "default": {
+        "passed": 21,
+        "failed": 0
+      },
+      "deep": {
+        "passed": 21,
+        "failed": 0,
+        "properties": 8,
+        "runs_per_property": 1000,
+        "depth": 256,
+        "seed": "0x8ad17020261028"
+      }
+    },
+    "subscriber_admission": {
+      "status": "pass",
+      "base_source": "test/gas/SubscriberAdmissionRecovery.t.sol",
+      "fork_source": "test/fork/SubscriberAdmissionRecoveryFork.t.sol",
+      "requires_isolation": true,
+      "native_funded_mock_probes": 627,
+      "real_lido_grid": {
+        "points": 1028,
+        "atomic_refusals": 537,
+        "funded_purchases": 491,
+        "block": 26193851,
+        "membership_losses": 0
+      },
+      "conclusion": "No healthy-token caller-gas-induced expiry reproduced. Source catch-all inner failure remains accurately documented; gas-induced outcome changes stay in audit scope. These are bounded tested envelopes, not a universal proof.",
+      "native_evidence": ".audit-test-logs/gap-native-2026-10-28/native-funded-admission",
+      "fork_evidence": ".audit-test-logs/subscriber-admission-2026-10-28/fork-guarded-final/20261028T084524.044826Z-eabf8f5a",
+      "base_fuzz_cases": 512,
+      "base_tests_passed": 2,
+      "fork_tests_passed": 2,
+      "evidence": ".audit-test-logs/subscriber-admission-2026-10-28/results.json",
+      "per_probe_completion_required": true
+    }
+  }
 }

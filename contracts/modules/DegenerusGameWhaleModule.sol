@@ -29,7 +29,6 @@ import {RngTags} from "../libraries/RngTags.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
-import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -52,20 +51,17 @@ interface ICrapsPassCredit {
  *      reads/writes operate on the game contract's storage.
  */
 contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
-
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
 
-    // error E() — inherited from DegenerusGameStorage
-    // error InvalidQuantity() — inherited from DegenerusGameMintStreakUtils
     /// @notice Thrown when, at a century milestone level (passLevel % 100 == 0), a
     ///         standard-price purchase takes fewer than two whale passes; the
     ///         boon-discount branch is not gated.
     error MinQuantityRequired();
     /// @notice Thrown when the current game level is not eligible for a lazy pass
-    ///         purchase (not level 0-2, x9, x0, or an unlocked century) and the caller
-    ///         has no valid lazy pass boon.
+    ///         purchase (not level 0-2, x9 other than x99, x0, or a century in its purchase
+    ///         phase) and the caller has no valid lazy pass boon.
     error InvalidLevelForPass();
     /// @notice Thrown when the buyer already holds a deity pass, which is incompatible
     ///         with purchasing a lazy pass.
@@ -78,17 +74,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @notice Thrown when the requested deity symbol has already been claimed by
     ///         another buyer.
     error SymbolTaken();
-    /// @notice Thrown when the buyer already holds a deity pass; only one per address
-    ///         is permitted.
+    /// @notice Thrown when the buyer, or another account with the same main wallet, already
+    ///         holds a deity pass; only one per main wallet is permitted.
     error AlreadyOwnsDeityPass();
-    // error RngLocked() — inherited from DegenerusGameStorage
 
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted on every pass-bundled box entry (whale / lazy / deity pass). Same
-    ///         signature/topic as the mint module's `LootBoxBuy` — one box-buy event across paths.
+    /// @notice A pass-bundled box entry (whale / lazy / deity pass), emitted by the Lootbox
+    ///         module's `recordCoverBox` in this call; same signature/topic on every box path.
     /// @param buyer The box recipient.
     event LootBoxBuy(
         uint32 indexed buyer,
@@ -114,16 +109,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     );
 
     // -------------------------------------------------------------------------
-    // External Contract References (compile-time constants)
-    // -------------------------------------------------------------------------
-
-    // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
-
-    /// @dev Maximum lootbox value eligible for boost (10 ETH scaled).
-
-    /// @dev Lootbox boost expiry duration (2 game days, expires at jackpot reset).
 
     /// @dev PPM scale for DGNRS pool calculations (1,000,000 = 100%).
     uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
@@ -280,11 +267,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         unchecked { totalPrice = firstPrice + restPrice * (quantity - 1); }
     }
 
-
-
     /**
      * @notice sDGNRS's once-per-level automatic whale purchase, driven from the afking process
-     *         STAGE (GameAfkingModule.runSubscriberWork) — never a player entry.
+     *         STAGE (GameAfkingModule.runSubscriberWork_g6352) — never a player entry.
      * @dev Delegatecall-only inside the Game (the STAGE nests into this module from its own
      *      delegatecall context); no facade stub forwards this selector, so nothing outside the
      *      daily crank can trigger reserve spending. Sizes the buy at the largest whole group of
@@ -296,11 +281,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      level, no later retry).
      *
      *      RNG timing contract: the entries this queues must never land against a word that
-     *      already exists. The STAGE runs unlocked and pre-RNG, and this re-checks both halves
-     *      live — lock down AND the process day's word uncommitted (a VRF-gap replay is unlocked
-     *      yet holds a public word) — before any debit, boon consumption or award. A zero return
-     *      costs the level its purchase, never the crank its day; the caller admits the call
-     *      against `SUBSCRIBER_WHALE_GAS` before it runs.
+     *      already exists. The only caller, the STAGE, runs with the lock down and no request
+     *      out, for the process day `dailyIdx + 1`, whose word cannot exist before its request;
+     *      nothing between that gate and this call requests a word. A zero return costs the
+     *      level its purchase, never the crank its day; the caller admits the call against
+     *      `SUBSCRIBER_WHALE_GAS` before it runs.
      *
      *      Liveness: a terminal game buys nothing. Everything the delivery touches is revert-free
      *      for a claimable-funded protocol buyer (its bundled boxes append as their own entry and
@@ -310,12 +295,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *
      *      Gas: one aggregate award (never per pass), admitted by the caller against
      *      `SUBSCRIBER_WHALE_GAS`.
-     * @param processDay The STAGE's boundary-pinned process day (the word key checked live).
+     *      The process-day argument is part of the selector's shape only.
      * @return paidPasses Paid passes bought this call (a multiple of five), 0 when nothing was.
      */
-    function purchaseWhalePassForSdgnrs_g470(uint24 processDay) external returns (uint256 paidPasses) {
+    function purchaseWhalePassForSdgnrs_g470(uint24) external returns (uint256 paidPasses) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (rngLockedFlag || _recordedDailyWord(processDay) != 0) return 0;
         if (_livenessTriggered()) return 0;
 
         uint24 passLevel = level + 1;
@@ -1145,15 +1129,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         return raw > type(uint16).max ? type(uint16).max : uint16(raw);
     }
 
-
     // =========================================================================
     // Whale Pass Claims
     // =========================================================================
-
-    bytes32 private constant TICKET_WHALE_TAG = keccak256("ticket-jackpot-whale");
-    bytes32 private constant QUADRANT_WHALE_TAG = keccak256("jackpot-quadrant-whale");
-
-
 
     /// @notice Nested jackpot award against GAME storage, with deferred delivery.
     /// @dev One recipient from one quadrant's bucket. A ticket leg supplies half-pass units
@@ -1182,13 +1160,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         emit JackpotWhalePassWin(winner, halfPasses, ticketLeg ? 4 : 5);
     }
 
-    /// @dev The deity holding a trait's symbol: the symbol id is the trait's quadrant (bits 7..6)
-    ///      times eight plus its symbol (bits 2..0) — derived from the trait alone, the same form
-    ///      the jackpot's deity lookups use, never from where the trait sits on a board.
-    function _deityOfTrait(uint8 trait) private view returns (uint32) {
-        return _traitDeity(trait);
-    }
-
     /// @dev Fresh recipient from one frozen bucket, weighting real and deity virtual entries
     ///      alike. Award sizes never enter the seed.
     function _drawWhalePassWinner(
@@ -1199,7 +1170,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ) private view returns (uint32) {
         uint256 entropy = EntropyLib.hash2(ticketLeg ? RngTags.WHALE_TICKET : RngTags.WHALE_QUADRANT, randWord);
         uint256 len = _bucketLength(lvl, trait);
-        uint32 deity = _deityOfTrait(trait);
+        uint32 deity = _traitDeity(trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         if (effectiveLen == 0) return 0;
         // A single recipient needs no packed-word group/cursor. Sample directly
@@ -1252,7 +1223,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      write to `mintPacked_[who]` can clobber it. Each account consumes its one
     ///      chance exactly once, and every pass purchase after the first pays only the
     ///      bit test — no external call on the repeat path.
-
     function _grantSeatCoin(uint32 who) private {
         uint256 packed = mintPacked_[who];
         if ((packed >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 0) {

@@ -6,6 +6,7 @@ import {console} from "forge-std/console.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
+import {ClaimablePoolIdentity} from "../helpers/ClaimablePoolIdentity.sol";
 import {TicketQueueStorage} from "../helpers/TicketQueueStorage.sol";
 import {AnyInputHandler, IAnyBalance} from "../handlers/AnyInputHandler.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -29,7 +30,7 @@ contract AnyInputSeizer is DegenerusGameStorage {
 }
 
 /// @title AnyInputSafety -- arbitrary inputs on the player doors no other handler drives
-/// @notice One campaign, four properties, checked after every handler call:
+/// @notice One campaign, five properties, checked after every handler call:
 ///         (a) ETH solvency: Game ETH + stETH >= SolvencyObligations.obligations(game).
 ///         (b) A passive BYSTANDER (funded in setUp through normal flows, never acts again, approves
 ///             no operator) never loses any tracked holding: afking funding, claimable winnings,
@@ -45,6 +46,11 @@ contract AnyInputSeizer is DegenerusGameStorage {
 ///             sealed and the engine answers NoWork, within MAX_CRANKS calls and with no gas failure.
 ///             A delivered reserved word uses the existing owner-authorized transport retry;
 ///             ordinary keeper progress still uses only the permissionless mineFlip door.
+///         (e) claimablePool identity (docs/ACCOUNTING.md): until the final sweep, claimablePool
+///             equals the balance words above their 1-wei sentinels plus every internal reservation
+///             (unsplit Degenesis volume, Vault budget, redemption reserve, staged BAF reservation,
+///             sealed Decimator rounds), and every allocated wallet keeps its sentinel; after the
+///             sweep it is zero. See ClaimablePoolIdentity.
 contract AnyInputSafety is DeployProtocol {
     AnyInputHandler public handler;
     address[] internal actors;
@@ -203,7 +209,20 @@ contract AnyInputSafety is DeployProtocol {
         _checkSolvency();
         _checkBystander();
         _checkConservation();
+        _checkClaimablePoolIdentity();
         _checkLiveness();
+    }
+
+    function _checkClaimablePoolIdentity() internal view {
+        ClaimablePoolIdentity.Terms memory t =
+            ClaimablePoolIdentity.terms(address(game), uint256(game.currentLvl()) + 2);
+        if (t.swept) {
+            assertEq(t.claimablePool, 0, "(e) CLAIMABLE IDENTITY: claimablePool nonzero after the final sweep");
+            return;
+        }
+        assertEq(t.claimablePool, ClaimablePoolIdentity.sum(t),
+            "(e) CLAIMABLE IDENTITY: claimablePool != balance words + reservations");
+        assertEq(t.missingSentinels, 0, "(e) CLAIMABLE IDENTITY: an allocated wallet lost its 1-wei sentinel");
     }
 
     function _checkSolvency() internal view {

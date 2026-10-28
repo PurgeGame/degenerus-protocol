@@ -6,22 +6,20 @@ import {RngTags} from "./RngTags.sol";
 
 /// @dev Replayable bounded survivor field, shared by settlement and the Lens.
 library DecimatorSamplingLib {
-    bytes32 internal constant SAMPLE_TAG = keccak256("decimator.battle.sample.v1");
-
     struct Field {
         uint256 entries;
         uint256 count;
         uint256 rotate;
     }
 
-    function field(uint256 word, uint24 lvl, uint256 entries) internal pure returns (Field memory) {
-        return Field(entries, survivors(entries), rotation(word, lvl, entries));
+    function field(uint256 word, uint256 entries) internal pure returns (Field memory) {
+        return Field(entries, survivors(entries), rotation(word, entries));
     }
 
-    function sample(uint256 word, uint24 lvl, Field memory f, uint256 stratum)
+    function sample(uint256 word, Field memory f, uint256 stratum)
         internal pure returns (uint64)
     {
-        return sample(word, lvl, f.entries, f.count, f.rotate, stratum);
+        return sample(word, f.entries, f.count, f.rotate, stratum);
     }
 
     function survivors(uint256 entries) internal pure returns (uint16) {
@@ -29,14 +27,14 @@ library DecimatorSamplingLib {
         return uint16(count > 1000 ? 1000 : count);
     }
 
-    function rotation(uint256 word, uint24 lvl, uint256 entries) internal pure returns (uint256) {
+    function rotation(uint256 word, uint256 entries) internal pure returns (uint256) {
         return uint256(EntropyLib.hash2(RngTags.DECIMATOR_ROTATION, word)) % entries;
     }
 
     /// @dev Disjoint strata give distinct positions; the common rotation preserves uniqueness
     ///      and makes each slot occur equally often across all possible rotations.
     ///      Both workers cache count/rotation. Internal callers supply a valid stratum.
-    function sample(uint256 word, uint24 lvl, uint256 entries, uint256 count, uint256 rotate, uint256 stratum)
+    function sample(uint256 word, uint256 entries, uint256 count, uint256 rotate, uint256 stratum)
         internal pure returns (uint64)
     {
         uint256 lo = stratum * entries / count;

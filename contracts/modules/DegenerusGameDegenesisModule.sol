@@ -33,6 +33,8 @@ interface IDegenesisPasses {
  *      the credit window's timestamp compare and slot-0 reads of degenesisClosed.
  */
 contract DegenerusGameDegenesisModule is DegenerusGameStorage {
+    /// @notice sDGNRS AFKing funding above SDGNRS_AFKING_TARGET moved to its claimable when the
+    ///         seventh cohort closed.
     event DegenesisAfkingExcessClaimable(uint256 amount);
 
     /// @notice Emitted when a Degenesis order joins its day's cohort.
@@ -79,8 +81,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @dev Bytes 0..2 are draw slots, zero if unused; ignored/discarded draws remain present.
     event DegenesisBoonsRolled(uint32 indexed id, uint8 degenesisDay, uint32 orderIndex, uint24 boonTypes);
 
-    /// @notice A sealed cohort funds future prizes (50%), the Vault budget (25%)
-    ///         and sDGNRS AFKing (25%).
+    /// @notice A sealed cohort funds future prizes, the insurance accumulator, the Vault budget
+    ///         and sDGNRS AFKing, 25% each.
     event DegenesisCohortSplit(uint8 indexed degenesisDay, uint256 volume);
     /// @notice A sealed cohort was priced and bound to `boundDay`'s daily word.
     event DegenesisCohortPriced(uint8 indexed degenesisDay, uint256 volume, uint256 payoutBudget, uint24 boundDay);
@@ -120,31 +122,20 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @dev Orders one settlement call may resolve; sizes the chunk's coin-credit batch.
     uint256 private constant DEGENESIS_ORDER_CHUNK = 128;
 
-    /// @dev Degenesis seed domain and its draw extractors: category, size, denomination.
-    uint256 private constant DEGENESIS_ORDER_DOMAIN = 0x446567656e657369734f72646572; // "DegenesisOrder"
-    uint256 private constant DEGENESIS_CATEGORY_TAG = 0x44656743617465676f7279; // "DegCategory"
-    uint256 private constant DEGENESIS_SIZE_TAG = 0x44656753697a65; // "DegSize"
-    uint256 private constant DEGENESIS_PASS_TAG = 0x5061737353696465; // "PassSide"
-
     /// @dev Nominal sDGNRS targets in raw units: 20B tokens on Degenesis days 1-3, 10B on 4-7.
     uint256 private constant DEGENESIS_TARGET_EARLY = 20_000_000_000 * 1e12;
     uint256 private constant DEGENESIS_TARGET_LATE = 10_000_000_000 * 1e12;
 
     /// @dev One whole WWXRP token, the consolation.
     uint256 private constant DEGENESIS_WWXRP_PRIZE = 1;
-    /// @dev Extractors shared in form with the ordinary box: the 100-FLIP collapse and the
-    ///      fractional pass round, read off the order's own seed.
-    uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
-    uint256 private constant BOX_PASS_ROUND_TAG = 0x50617373526f756e64; // "PassRound"
-
-
 
     /// @notice Buy a credit-gated Degenesis box, funded by msg.value, then the buyer's claimable,
     ///         then prepaid AFKing balance; overpay credits the payer's AFKing.
     /// @dev Sale-day, size and Vault gates, 1:1 credit consume, payment, then the whole amount is
     ///      held in claimablePool until the cohort split and the order joins today's cohort. No
     ///      affiliate, quest, streak or activity work at purchase; a settlement boon may grant
-    ///      activity or quest shields in addition to the exclusive primary reward. Raw msg.data target of Game.purchaseDegenesisBox.
+    ///      activity or quest shields in addition to the exclusive primary reward. Raw msg.data
+    ///      target of Game.purchaseDegenesisBox.
     /// @param id Account receiving the order (0 = caller; account rule).
     /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the
     ///        per-order bound.
@@ -197,8 +188,6 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         return day >= GameTimeLib.DEGENESIS_START_DAY && day < GameTimeLib.MAIN_LAUNCH_DAY;
     }
 
-
-
     /// @notice Daily-request step: split every sealed cohort, then close sealed empty cohorts and
     ///         price the next sealed one once the previous cohort has settled, binding it to this
     ///         request's word.
@@ -224,8 +213,6 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
             return;
         }
     }
-
-
 
     /// @notice Top sDGNRS AFKing funding up to SDGNRS_AFKING_TARGET from its claimable above the
     ///         1-wei sentinel, before each once-per-level bulk whale attempt.
@@ -255,9 +242,9 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         _splitDegenesisCohorts(type(uint24).max);
     }
 
-    /// @dev Cold accounting values retained across the inlined claimable purchase.
     error DegenesisMaxCostExceeded();
 
+    /// @dev Cold accounting values retained across the inlined claimable purchase.
     struct DegenesisSpend {
         uint256 budget;
         uint256 funded;
@@ -268,10 +255,11 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     ///         and lootboxes, or whale passes, at their normal price.
     /// @dev Vault-only, reached through the facade's delegatecall so msg.sender stays the Vault.
     ///      Moves `maxCost` from the budget into Vault claimable (a reclassification inside
-    ///      claimablePool), runs the existing claimable-funded purchase in this frame, then moves
+    ///      claimablePool), runs the ordinary claimable-funded purchase in this frame, then moves
     ///      back what the purchase did not take. The purchase may lower the Vault's balance word
     ///      by at most `maxCost`, from claimable alone, so the net move is exactly the cost and
-    ///      none of the budget stays withdrawable. No explicit affiliate code: the recipient's existing referral applies.
+    ///      none of the budget stays withdrawable. No explicit affiliate code: the recipient's
+    ///      existing referral applies.
     /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes.
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket).
@@ -297,7 +285,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
             _degenesisPurchaseWith(recipientId, quantity, boxOrder);
         }
         uint256 after_ = balancesPacked[VAULT_WALLET_ID];
-        // A growing word or AFKing draw remains invalid; reject spending above maxCost explicitly.
+        // A growing word underflows; an AFKing draw (upper half) exceeds maxCost.
         uint256 cost = spend.funded - after_;
         if (cost > spend.maxCost) revert DegenesisMaxCostExceeded();
         uint256 unspent;
@@ -323,8 +311,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     }
 
     /// @dev Split every sealed, unsplit cohort before `day`. Half of V leaves claimablePool for
-    ///      future prizes and insurance equally; the Vault budget and sDGNRS AFKing quarters stay inside it. V is a
-    ///      whole number of DEGENESIS_UNIT, so the quarters are exact.
+    ///      future prizes and insurance equally; the Vault budget and sDGNRS AFKing quarters stay
+    ///      inside it. V is a whole number of DEGENESIS_UNIT, so the quarters are exact.
     function _splitDegenesisCohorts(uint24 day) private {
         uint256 quarters;
         for (uint256 c = uint256(degenesisClosed) + 1; c <= DEGENESIS_DAYS; ++c) {
@@ -392,15 +380,14 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         bool wwxrp; // the consolation
     }
 
-
-
     /// @notice Settle the active Degenesis cohort's orders in order, then close the cohort.
     /// @dev Miner stage, not an RNG consumer. Each order's outcome is a pure function of the bound
     ///      word and the frozen cohort, derived before admission, so each admits against its own
     ///      branch bound plus the coin-credit flush still owed. The cursor advances before each
     ///      order pays. Coin credits pay in one batch per chunk; each boon delivery completes
-    ///      before the next order. Shared boon delivery runs atomically after the primary legs; bounded,
-    ///      saturating stat credits and ordinary upgrade/discard rules preserve settlement liveness.
+    ///      before the next order. Shared boon delivery runs atomically after the primary legs;
+    ///      bounded, saturating stat credits and ordinary upgrade/discard rules preserve settlement
+    ///      liveness.
     function runDegenesisWork_g1860(uint256 gasAllowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         if (!_degenesisSettlePending()) {
@@ -490,10 +477,10 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
                 * (DEGENESIS_BONUS_NUMERATOR - (lane >> DEGENESIS_SECONDS_SHIFT)) * DEGENESIS_K_UNITS)
                 / (DEGENESIS_FLIP_DENOMINATOR * (DEGENESIS_K_UNITS + g.volume) * PriceLookupLib.priceForLevel(1));
             // Collapse onto a whole 100-FLIP multiple above the threshold, EV-preserving;
-            // smaller awards keep the whole-FLIP floor.
+            // smaller awards are paid unrounded.
             flipOut = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(RngTags.DEGENESIS_ROUND, seed))
-                : FlipRoundLib.floorWholeFlip(flipOut);
+                : flipOut;
             if (flipOut == 0) {
                 o.wwxrp = true;
             } else if (EntropyLib.hash2(RngTags.DEGENESIS_PASS, seed) & 1 == 1) {

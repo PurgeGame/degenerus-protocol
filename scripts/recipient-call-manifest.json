@@ -939,7 +939,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.affiliateCode",
     "kind": "recipient-helper",
-    "expression": "_ownerKey(code, ownerId)",
+    "expression": "_ownerKey(ownerId)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -995,7 +995,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.getReferrer",
     "kind": "recipient-helper",
-    "expression": "_ownerKey(code, id)",
+    "expression": "_ownerKey(id)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -1003,7 +1003,7 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.getReferrerById",
     "kind": "recipient-helper",
-    "expression": "_ownerKey(code, id)",
+    "expression": "_ownerKey(id)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -2313,17 +2313,9 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._awardStreakBonus",
-    "kind": "recipient-helper",
-    "expression": "_questGameDay()",
-    "count": 1,
-    "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._canRollDecimatorQuest",
     "kind": "external",
-    "expression": "game_.decimatorActive()",
+    "expression": "questGame.decimatorActive()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2331,7 +2323,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._canRollDecimatorQuest",
     "kind": "external",
-    "expression": "game_.currentLvl()",
+    "expression": "questGame.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2475,7 +2467,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._handlePurchase",
     "kind": "recipient-helper",
-    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 0, p.ethMintSpendWei, target, currentDay, p.mintPrice, QUEST_TYPE_MINT_ETH, p.ethMintSpendWei, p.levelQuestPrice )",
+    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 0, p.ethMintSpendWei, target, currentDay, p.mintPrice, p.levelQuestPrice )",
     "count": 1,
     "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
@@ -2483,7 +2475,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._handlePurchase",
     "kind": "recipient-helper",
-    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 1, p.flipMintQty, target, currentDay, 0, QUEST_TYPE_MINT_FLIP, p.flipMintQty, p.levelQuestPrice )",
+    "expression": "_questHandleProgressSlot( p.id, state, quests, quest, 1, p.flipMintQty, target, currentDay, 0, p.levelQuestPrice )",
     "count": 1,
     "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
@@ -2555,7 +2547,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._questHandleProgressSlot",
     "kind": "recipient-helper",
-    "expression": "_handleLevelQuestProgress(id, handlerQuestType, levelDelta, levelQuestPrice)",
+    "expression": "_handleLevelQuestProgress(id, quest.questType, delta, levelQuestPrice)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -2595,7 +2587,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.awardQuestStreakBonus",
     "kind": "recipient-helper",
-    "expression": "_awardStreakBonus(id, amount, currentDay, currentDay)",
+    "expression": "_awardStreakBonus(id, amount, currentDay)",
     "count": 1,
     "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
@@ -2611,7 +2603,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.effectiveBaseStreak",
     "kind": "recipient-helper",
-    "expression": "_currentQuestDay(_materializeActiveQuestsForView())",
+    "expression": "_currentQuestDay(_loadActiveQuests())",
     "count": 1,
     "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
   },
@@ -2715,7 +2707,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.handleDegenerette_g3",
     "kind": "recipient-helper",
-    "expression": "_questHandleProgressSlot( id, state, quests, quest, slotIndex, amount, target, currentDay, mintPrice, targetType, amount, mintPrice )",
+    "expression": "_questHandleProgressSlot( id, state, quests, quest, slotIndex, amount, target, currentDay, mintPrice, mintPrice )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -2787,7 +2779,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordCrapsAction_g14623",
     "kind": "recipient-helper",
-    "expression": "_awardStreakBonus( id, actionFlags & CRAPS_FLAG_STREAK_HIGH != 0 ? CRAPS_DAY_STREAK_HIGH : CRAPS_DAY_STREAK, gameDay, gameDay )",
+    "expression": "_awardStreakBonus( id, actionFlags & CRAPS_FLAG_STREAK_HIGH != 0 ? CRAPS_DAY_STREAK_HIGH : CRAPS_DAY_STREAK, gameDay )",
     "count": 1,
     "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
   },
@@ -2843,9 +2835,9 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordGrowthBet",
     "kind": "recipient-helper",
-    "expression": "_currentQuestDay(_loadActiveQuests())",
+    "expression": "_questGameDay()",
     "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "LOGICAL_DAYS: the quest day comes from the virtual logical-day accessor (the Coinflip host overrides it with its packed local mirror; the standalone base reads immutable Game only), passed to _currentQuestDayFast instead of materializing the active-quest array. Same day value; reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -3723,7 +3715,7 @@
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS._redeemTo",
     "kind": "external",
-    "expression": "steth.transfer(recipient, stethOut)",
+    "expression": "steth.transfer(account, stethOut)",
     "count": 1,
     "review": "OFF_CHAIN: holder-initiated charity redemption."
   },
@@ -3731,7 +3723,7 @@
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS._redeemTo",
     "kind": "opcode-or-value",
-    "expression": "recipient.call{value: ethOut}(\"\")",
+    "expression": "account.call{value: ethOut}(\"\")",
     "count": 1,
     "review": "OFF_CHAIN: holder-initiated charity redemption."
   },
@@ -3739,7 +3731,7 @@
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS.burn",
     "kind": "recipient-helper",
-    "expression": "_redeemTo(burner, amount, burnerBal, supply, burner)",
+    "expression": "_redeemTo(burner, amount, burnerBal, supply)",
     "count": 1,
     "review": "OFF_CHAIN: existing holder withdrawal/loan/charity route; transitive helper call pinned, new caller requires review."
   },
@@ -3811,7 +3803,7 @@
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS.vaultRedeemFor",
     "kind": "recipient-helper",
-    "expression": "_redeemTo(holder, bal, bal, supply, holder)",
+    "expression": "_redeemTo(holder, bal, bal, supply)",
     "count": 1,
     "review": "OFF_CHAIN: existing holder withdrawal/loan/charity route; transitive helper call pinned, new caller requires review."
   },
@@ -3910,14 +3902,6 @@
     "expression": "_settleHighRollerReserve(slot)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._bookFees",
-    "kind": "external",
-    "expression": "IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps_g37225(earned)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -4384,6 +4368,14 @@
     "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._bookFees",
+    "kind": "recipient-helper",
+    "expression": "_creditComps(earned)",
+    "count": 1,
+    "review": "Internal helper edge to _creditComps, whose single typed FLIP creditCrapsComps_g37225 call (same selector, target and argument as the former inline call) is classified on its own row. Caller authorization and settlement ordering are unchanged."
+  },
+  {
     "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._currentDayIndex()",
     "kind": "recipient-helper",
@@ -4745,14 +4737,6 @@
   },
   {
     "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.callBoolRemaining",
-    "kind": "bounded-wrapper",
-    "expression": "callRemaining(meter, target, minimum, reserve, input, 32)",
-    "count": 1,
-    "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
     "scope": "BoundedCall.callRemaining",
     "kind": "bounded-wrapper",
     "expression": "callValueRemaining(meter, target, 0, minimum, reserve, input, expected)",
@@ -4881,25 +4865,17 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._addDailyFlip(uint32:default,uint256:default,uint256:default,bool:default)",
-    "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id, coinflipDeposit, recordAmount, manual, _flipDays())",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._addDailyFlip(uint32:default,uint256:default,uint256:default,bool:default,uint256:default)",
-    "kind": "external",
-    "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._addDailyFlip(uint32:default,uint256:default,uint256:default,bool:default,uint256:default)",
+    "scope": "CoinflipCore._addDailyFlip",
     "kind": "recipient-helper",
     "expression": "_armBigRecord( RECORD_KIND_FLIP, id, recordAmount )",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
+  },
+  {
+    "path": "contracts/modules/CoinflipCore.sol",
+    "scope": "CoinflipCore._addDailyFlip",
+    "kind": "external",
+    "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -4971,7 +4947,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint256:default)",
     "kind": "external",
-    "expression": "coinflipGame.purchaseInfo_g1027()",
+    "expression": "degenerusGame.purchaseInfo_g1027()",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5009,14 +4985,6 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._creditFlip",
-    "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id, amount, 0, false)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._depositCoinflip",
     "kind": "external",
     "expression": "flip.burnForCoinflip(funder, fromWallet)",
@@ -5027,7 +4995,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._depositCoinflip",
     "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true, cachedDays)",
+    "expression": "_addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, cachedDays)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5169,14 +5137,6 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.armDiceRunRecord",
-    "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id, paid, 0, false)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.armRecord",
     "kind": "recipient-helper",
     "expression": "_armBigRecord(kind, id, candidate)",
@@ -5284,30 +5244,6 @@
     "scope": "CoinflipCore.consumeFlipBacking",
     "kind": "recipient-helper",
     "expression": "_viewWalletId(player)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.creditFlipPair_g578",
-    "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id1, amount1, 0, false)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.creditFlipPair_g578",
-    "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id2, amount2, 0, false)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.creditFlip_g317",
-    "kind": "recipient-helper",
-    "expression": "_creditFlip(id, amount)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5995,7 +5931,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.deliverPasses",
     "kind": "recipient-helper",
-    "expression": "_reserveDay(id, uint24(tomorrow), takeHigh, chips, 0)",
+    "expression": "_reserveDay(id, uint24(tomorrow), takeHigh, chips)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -6425,23 +6361,7 @@
   },
   {
     "path": "contracts/modules/CrapsLifecycleViews.sol",
-    "scope": "CrapsLifecycleViews._jackpotCurrentBonusSlot()",
-    "kind": "recipient-helper",
-    "expression": "_currentDayIndex()",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated read-only lifecycle math/view helper reaches only the previously pinned Game/table reads; no new recipient or write path."
-  },
-  {
-    "path": "contracts/modules/CrapsLifecycleViews.sol",
-    "scope": "CrapsLifecycleViews._jackpotCurrentBonusSlot()",
-    "kind": "recipient-helper",
-    "expression": "_jackpotCurrentBonusSlot(_currentDayIndex())",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated read-only lifecycle math/view helper reaches only the previously pinned Game/table reads; no new recipient or write path."
-  },
-  {
-    "path": "contracts/modules/CrapsLifecycleViews.sol",
-    "scope": "CrapsLifecycleViews._jackpotCurrentBonusSlot(uint24:default)",
+    "scope": "CrapsLifecycleViews._jackpotCurrentBonusSlot",
     "kind": "recipient-helper",
     "expression": "_scheduleResetPassed()",
     "count": 1,
@@ -6731,7 +6651,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
     "kind": "external",
-    "expression": "IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, _levelPrizePool(poolLevel), level)",
+    "expression": "IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(day, _levelPrizePool(poolLevel), level)",
     "count": 1,
     "review": "BASELINE: pinned craps lock retained from the call census; only the pool argument now uses the lane-G storage accessor."
   },
@@ -6747,7 +6667,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
     "kind": "external",
-    "expression": "quests.rollDailyQuest(questDay, 0, false, true, _decDayOneActive())",
+    "expression": "quests.rollDailyQuest(day, 0, false, true, _decDayOneActive())",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -7227,17 +7147,9 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveBetWork",
     "kind": "recipient-helper",
-    "expression": "_resolveLootboxDirect( c.playerId, c.totals.betLootboxShare, EntropyLib.hash3(RngTags.BET_BOX, c.rngWord, c.betId), c.activityScore )",
+    "expression": "_boxResolveLootboxDirect( c.playerId, c.totals.betLootboxShare, EntropyLib.hash3(RngTags.BET_BOX, c.rngWord, c.betId), c.activityScore )",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Resolved-bet memory record carries the same frozen bet, word, payout accumulators and recipient IDs; extracted local box entry names preserve the original payout body and rollback framing."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
-    "scope": "DegenerusGameDegeneretteModule._resolveLootboxDirect",
-    "kind": "recipient-helper",
-    "expression": "_boxResolveLootboxDirect(id, amount, rngWord, activityScore)",
-    "count": 1,
-    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
@@ -7571,7 +7483,7 @@
     "path": "contracts/modules/DegenerusGameFoilCore.sol",
     "scope": "DegenerusGameFoilCore._tryClaimFoilMatch",
     "kind": "recipient-helper",
-    "expression": "_payFoilTier(id, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT))",
+    "expression": "_payFoilTier(id, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT))",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
@@ -7627,7 +7539,7 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._applyTerminalRng",
     "kind": "recipient-helper",
-    "expression": "_requestTerminalRng(day, meter, work)",
+    "expression": "_requestTerminalRng(meter, work)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -7699,7 +7611,7 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleGameOverAdvance",
     "kind": "recipient-helper",
-    "expression": "_applyTerminalRng(uint48(block.timestamp), day, lvl, meter, work)",
+    "expression": "_applyTerminalRng(meter, work)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -7779,7 +7691,7 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleGameOverDrain",
     "kind": "recipient-helper",
-    "expression": "_resumeTerminalPayout(day, meter, work)",
+    "expression": "_resumeTerminalPayout(meter, work)",
     "count": 2,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -11385,43 +11297,11 @@
   },
   {
     "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
-    "scope": "GlamsterdamCoinflip._affiliateCreditFlip",
-    "kind": "recipient-helper",
-    "expression": "_creditFlip(id, amount)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
-    "scope": "GlamsterdamCoinflip._affiliateCreditFlipPair",
-    "kind": "recipient-helper",
-    "expression": "_creditFlip(a, amountA)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
-    "scope": "GlamsterdamCoinflip._affiliateCreditFlipPair",
-    "kind": "recipient-helper",
-    "expression": "_creditFlip(b, amountB)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
     "scope": "GlamsterdamCoinflip._coinflipQuest",
     "kind": "recipient-helper",
     "expression": "_handleFlip(id, amount, day)",
     "count": 1,
     "review": "P9GAS: the trusted caller supplies the Game logical day it already holds (Game dailyIdx, the Coinflip requestedDailyIdx mirror, or one read per Quests call); Quests uses it in place of a day lookup. Recipients, rewards and caller authorization are unchanged."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
-    "scope": "GlamsterdamCoinflip._questCreditFlip",
-    "kind": "recipient-helper",
-    "expression": "_creditFlip(id, amount)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
   },
   {
     "path": "contracts/profiles/glamsterdam/GlamsterdamDaily.sol",
@@ -12174,14 +12054,6 @@
     "expression": "_runRedemptionWork(word, allowance)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/storage/CrapsBattleStorage.sol",
-    "scope": "CrapsBattleStorage._appendBet",
-    "kind": "recipient-helper",
-    "expression": "_betWriteDay(id)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",

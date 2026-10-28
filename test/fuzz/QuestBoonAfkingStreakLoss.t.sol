@@ -16,7 +16,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///         `vm.prank(ContractAddresses.GAME)` call into `quests.awardQuestStreakBonus(...)` with the player
 ///         holding a live afking run -- byte-identical to the call the boon module makes.
 ///
-/// @notice While afking, the manual `state.streak` is DORMANT: `finalizeAfking` (DegenerusQuests.sol:586)
+/// @notice While afking, the manual `state.streak` is DORMANT: `DegenerusQuests.finalizeAfking`
 ///         overwrites it with the afking-computed `earnedStreak` (the afking "sub streak base" plus funded
 ///         delivered days, owned Game-side via GameAfkingModule). `awardQuestStreakBonus` (CURRENT code) bumps
 ///         the dormant `state.streak` and grants a century shield off it. This test proves two failures:

@@ -30,7 +30,7 @@ contract SmurfGameHarness is DegenerusGame {
     }
 
     function x_setLevel(uint24 lvl) external { level = lvl; }
-    function x_setLevelDgnrs(uint24 lvl, uint256 allocation) external { _setLevelDgnrsAllocation(lvl, allocation); }
+    function x_setLevelDgnrs(uint24 lvl, uint256 allocation) external { _setLevelDgnrsAllocation(allocation); }
     function x_setFoilRecord(uint24 lvl, uint32 id, uint256 w) external { foilRecord[lvl & 3][id] = w; }
     function x_setFoilDraw(uint24 day, uint256 w) external { dailyFoilDraw[day & 1] = w; }
 

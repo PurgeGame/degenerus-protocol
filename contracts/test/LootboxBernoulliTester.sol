@@ -25,13 +25,14 @@ contract LootboxBernoulliTester {
     uint256 public constant LOOTBOX_WWXRP_PRIZE = 1;
     uint256 public constant LOOTBOX_WWXRP_PER_ETH = 500;
 
-    /// @notice Mirror of `DegenerusGameLootboxModule._boxWwxrpStake` — the WWXRP magnitude
-    ///         a roll both stakes on its spin and pays as its cold-bust consolation.
+    /// @notice Mirror of `DegenerusGameLootboxModule._boxWwxrpStake` — the whole-token WWXRP
+    ///         magnitude a roll pays as its cold-bust consolation (spins stake the fractional
+    ///         `_boxWwxrpSpinStake`).
     /// @dev    Instruction-sequence parity with the production helper:
     ///           stake = (amount * LOOTBOX_WWXRP_PER_ETH) / 1 ether;
     ///           if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;
     /// @param amount The roll's ETH chunk in wei.
-    /// @return stake WWXRP staked/paid for that roll, floored at one whole token.
+    /// @return stake WWXRP paid for that roll, floored at one whole token.
     function boxWwxrpStake(uint256 amount) external pure returns (uint256 stake) {
         stake = (amount * LOOTBOX_WWXRP_PER_ETH) / 1 ether;
         if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;

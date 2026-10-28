@@ -6,7 +6,6 @@ import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
-
 /// @dev Shared internal implementation in Game storage.
 abstract contract GameBingo is DegenerusGameStorage {
     /// @notice Thrown when the player (the claim beneficiary — claims are permissionless, so not
@@ -22,11 +21,11 @@ abstract contract GameBingo is DegenerusGameStorage {
     /// @notice Thrown when the symbol is out of range (>= 32).
     error InvalidSymbol();
 
-    /// @notice Thrown when this player has already claimed on this level.
+    /// @notice Thrown when this account has already claimed this level's bingo or affiliate reward.
     error AlreadyClaimed();
 
-    /// @notice Thrown when the claimed level is below the current game level: a level's bingo
-    ///         expires the moment the next level starts.
+    /// @notice Thrown when a later same-parity level has taken over the claimed level's ticket
+    ///         buffer.
     error BingoExpired();
 
     /// @dev sDGNRS draw: 0.05% of Pool.Reward.
@@ -35,7 +34,8 @@ abstract contract GameBingo is DegenerusGameStorage {
     /// @dev FLIP credit paid for a bingo.
     uint256 internal constant BINGO_FLIP = 1_000;
 
-    /// @dev Bonus FLIP credit for deity-pass affiliate claims: 20% of the claimant's affiliate score, capped (see CAP_ETH).
+    /// @dev Bonus FLIP credit for deity-pass affiliate claims: 20% of the claimant's affiliate
+    ///      score, capped by AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH.
     uint16 internal constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
 
     /// @dev Max deity bonus per level, denominated in ETH (converted to FLIP at current price).
@@ -75,9 +75,9 @@ abstract contract GameBingo is DegenerusGameStorage {
     /// @param id The bingo owner to claim for (0 = caller, which must hold an ID; otherwise allocated).
     /// @param lvl The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
-    /// @custom:reverts BingoExpired If a later same-parity level has taken over the ticket buffer.
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in lvlTraitEntry[(lvl) & 1][traitId] the owner occupies.
+    /// @param slots Per-color positions in the level's trait buckets that the owner occupies.
+    /// @custom:reverts BingoExpired If a later same-parity level has taken over the ticket buffer.
     function _claimBingo(uint32 id, uint24 lvl, uint8 symbol, uint32[8] calldata slots) internal {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
         // Bucket lanes hold wallet IDs; a caller with no ID owns no slot.
@@ -88,7 +88,7 @@ abstract contract GameBingo is DegenerusGameStorage {
         // No level upper-bound guard: the 8-color ownership check below is the gate —
         // an unmaterialized bucket is empty and fails it, while a bucket the sweep has
         // already filled for a future level qualifies on ownership alone. _claimBingo
-        // only READS lvlTraitEntry (never writes it) and writes only its own claim flag,
+        // only READS the trait buckets (never writes them) and writes only its own claim flag,
         // so this cannot corrupt VRF state (freeze-safe). The only level gate is the expiry:
         // a level's bingo closes when L+2 actually takes over its ticket buffer.
         if (gameOver) revert GameOver();
@@ -99,7 +99,7 @@ abstract contract GameBingo is DegenerusGameStorage {
         uint8 quadrant = symbol >> 3; // bits 7-6 of the trait byte
         uint8 symInQ = symbol & 7; // bits 2-0 of the trait byte
 
-        // ---- Ownership read (READ-ONLY; NO write to lvlTraitEntry) ----
+        // ---- Ownership read (read-only; no write to the trait buckets) ----
         // For each color c the owner must occupy occurrence slots[c] in the bucket of
         // traitId = (quadrant << 6) | (c << 3) | symInQ. Guard the index against the
         // array length BEFORE the read so a bad index fails closed with one clean
@@ -186,7 +186,7 @@ abstract contract GameBingo is DegenerusGameStorage {
         );
         if (paid == 0) revert NothingToClaim();
 
-        _addLevelDgnrsClaimed(currLevel, paid);
+        _addLevelDgnrsClaimed(paid);
 
         // score != 0 is guaranteed here: reward = (allocation * score) / denominator
         // reverted above when reward == 0, which a zero score would force.

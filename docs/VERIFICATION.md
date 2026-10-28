@@ -18,9 +18,10 @@ Two deployment profiles exist. `eip170` is the default, the deployment target an
 audit target: 37 deployment entries, checked against the 24,576-byte runtime and 49,152-byte
 initcode limits (`contracts/profiles/eip170/`, `deployments/eip170.json`). `glamsterdam` is the
 alternate: 21 entries checked against 65,536 / 131,072 bytes with `--schedule glamsterdam`
-(`contracts/profiles/glamsterdam/`, `deployments/glamsterdam.json`). Both profiles share every
-storage layout and all behavior; `scripts/consolidation/profile-differential.py` replays the same scenarios on
-both and compares slots, payouts, events and reverts.
+(`contracts/profiles/glamsterdam/`, `deployments/glamsterdam.json`). Both profiles use shared
+logic and storage definitions. `scripts/consolidation/profile-differential.py` compares slots,
+payouts, events and reverts in 11 scenarios with aligned state-owner addresses; passing those
+scenarios does not prove equivalence for every input or state.
 
 The `PROFILE` environment variable selects the profile (unset means `eip170`).
 `node scripts/select-profile.js` regenerates the selected-profile sources
@@ -54,7 +55,17 @@ deployment addresses. The maintained runners restore its original bytes on compl
 or handled interruption; raw `forge test` / `npx hardhat test` commands do not. Run concurrent
 campaigns in separate checkouts.
 
+Avoid the legacy `make invariant-build` helper in an audit worktree: it patches address pins,
+restores with `git checkout` rather than the original bytes, and has no failure cleanup. A
+failed build can leave patched sources; a successful restore can discard pre-existing pin
+edits. Use the production build below or the maintained grouped runners instead.
+
 ## Build and structural checks
+
+Use an empty output directory and its own cache for a handoff build. Incremental compilation
+can leave obsolete artifacts from earlier revisions, which the recursive layout gate rejects
+as duplicate contracts. The paths below are examples; choose new names if they already
+contain unrelated output.
 
 ```sh
 forge build --skip test --out forge-out-production --cache-path .foundry-cache-production
@@ -90,13 +101,19 @@ of the annotations they hold.
 ## Tests
 
 The grouped runners bound compilation memory, reject empty or failed batches and record commands
-and inputs under the ignored `.audit-test-logs/` directory. `--list` prints the selected files and
+and inputs under the ignored `.audit-test-logs/` directory. `--list` previews the selection and
 `--file` selects a focused source root. Foundry uses eight logical groups (`integration-gas`,
 `repro-symbolic`, `census`, `fuzz-1` to `fuzz-4`, `invariants`) plus `fork`, which runs only when
 named and needs an archive RPC in `MAINNET_RPC_URL`. Hardhat runs one test file per process by default.
 
 ```sh
-make test-foundry
+# Cold gas fixtures require transaction isolation.
+FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
+  --group integration-gas --max-files 5 --threads 1
+# Other groups use non-isolated execution; census is an additional local group.
+FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py \
+  --group repro-symbolic --group census --group fuzz-1 --group fuzz-2 \
+  --group fuzz-3 --group fuzz-4 --group invariants --max-files 5 --threads 1
 make test-hardhat
 python3 scripts/test-foundry-groups.py --list
 python3 scripts/test-hardhat-groups.py --list
@@ -104,15 +121,13 @@ python3 scripts/test-foundry-groups.py --file test/repro/TerminalPayoutCheckpoin
 python3 scripts/test-hardhat-groups.py --file test/edge/BackfillIdempotency.test.js
 ```
 
-Cold-path gas tests run with transaction isolation, as in CI:
+Use the two Foundry commands above for a complete local run without the optional fork group.
+The convenience `make test-foundry` target does not select isolation by group; a single
+isolation setting cannot reproduce both modes. Run the structural checks above as well.
 
-```sh
-FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
-  --group integration-gas --max-files 5 --threads 1
-```
-
-CI runs seven Foundry groups (all but `census` and `fork`) in separate jobs, plus a separate fork
-job. The other six groups run without isolation, at most five roots per batch and one thread. The
+CI runs the Foundry groups other than `census` and `fork` in separate jobs, with `invariants` split
+into three shards (`invariants-1` to `invariants-3`, selectable only by name), plus a separate fork
+job. All but `integration-gas` run without isolation, at most five roots per batch and one thread. The
 default fuzz campaign uses 1,000 runs; default invariants use 256 runs at depth 128, with
 per-suite overrides visible in source. `npm test` runs the maintained Hardhat runner, including
 all statistical files; discovery fails if a JavaScript test is outside the configured
@@ -120,16 +135,83 @@ directories. Focused `npm run test:*` commands use raw Hardhat and bypass pin re
 
 [The test review](TEST_REVIEW.md) separates model, structural and runtime coverage.
 
+### Composed and paid lifecycle checks
+
+```sh
+FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py \
+  --file test/repro/MatureComposition.t.sol --threads 1
+FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py \
+  --file test/repro/MatureComposition.t.sol --threads 1
+FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
+  --file test/gas/NativePaidLifecycle.t.sol --threads 1
+NATIVE_PAID_MULTIPLIER=2500 FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
+  --file test/gas/NativePaidLifecycle.t.sol --threads 1
+```
+
+The new sources are also discovered in the ordinary `repro-symbolic` and `integration-gas`
+groups respectively. Scheduled/manual CI adds the 256-case deep composed scenario and
+the paid lifecycle at minimum calibration; its run evidence records the calibration.
+The composed scenario requires repayment, seizure, live redemption,
+terminal ticket claims and individual sweep allocations in each case. The paid scenario
+retains reward effects in the production ledger through level 31. See
+[the test review](TEST_REVIEW.md#additional-lifecycle-and-detector-coverage) for oracle limits.
+
+Storage-reuse mutation checks require a separate disposable Git worktree with matching
+contracts, tests, configuration and dependencies. Replace `DISPOSABLE_WORKTREE` below with
+that checkout. The runner rejects the working checkout and mismatched inputs, runs clean
+baselines, and restores the temporary source, address-pin and artifact-permission edits.
+
+```sh
+python3 scripts/audit/mutate-storage-reuse.py --check-anchors
+python3 scripts/audit/mutate-storage-reuse.py \
+  --worktree DISPOSABLE_WORKTREE --output .audit-test-logs/storage-reuse-mutations.json
+```
+
+### Mainnet fork
+
+Export `MAINNET_RPC_URL` for an endpoint with archive state at the block in
+`test/fork/ForkPins.sol`. The maintained runner uses fork pins and restores them afterwards.
+Match CI's isolation split: `ForkGlamsterdamBudgets` and `SubscriberAdmissionRecoveryFork`
+use cold isolated calls, while the remaining fork suites use non-isolated execution. Bare
+`make test-fork` does not perform this split. Run in Bash:
+
+```sh
+# Set/export MAINNET_RPC_URL privately before running; do not include credentials in logs.
+fork_plain=()
+for file in test/fork/*.t.sol; do
+  case "$file" in
+    test/fork/ForkGlamsterdamBudgets.t.sol|test/fork/SubscriberAdmissionRecoveryFork.t.sol) ;;
+    *) fork_plain+=(--file "$file") ;;
+  esac
+done
+FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py "${fork_plain[@]}" --threads 2
+FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
+  --file test/fork/ForkGlamsterdamBudgets.t.sol \
+  --file test/fork/SubscriberAdmissionRecoveryFork.t.sol --threads 2
+```
+
+Both commands must succeed. Inspect and redact RPC credentials from retained logs before
+sharing them, including logs left by interrupted runs.
+
 ### Gas admission evidence
 
-Every mining checkpoint admits its next chunk only when the chunk's proven cold worst case and
-the complete call/return/flush tail fit both the remaining worker allowance and the gas actually
-available; the bounds are the constants in `contracts/libraries/MineFlipGasBounds.sol`, and the
-rules are in [the audit scope](AUDIT.md). A protocol path with no internal checkpoint is one
-indivisible chunk. The gas suites under `test/gas/` and `test/repro/` measure each bound's worst
-case on Osaka and under the repository's Glamsterdam repricing model with no state reservoir
-(`GlamsterdamReprice`), and pin the bound against it. Fixture gas limits do not establish cold
-bounds, and gas only selects whether to continue, never an outcome.
+Optional mining continuations compare the estimated chunk cost and full call/return/flush tail
+with the remaining worker allowance and available gas. The estimates are constants in
+`contracts/libraries/MineFlipGasBounds.sol`, scaled by the caller's multiplier. The first
+mandatory work unit is exempt from this admission test; it still needs enough supplied gas to
+execute, and nested call admission can refuse excessive calibration after the worker marks
+progress. The capped native campaign reaches such a refusal in subscriber funding; atomic
+rollback and unrelated-caller recovery are checked separately. Mandatory VRF requests have
+a separate minimum-gas check. See [the audit scope](AUDIT.md)
+for these rules and the requirement that gas selection must not alter a committed outcome.
+
+The gas suites under `test/gas/` and `test/repro/` measure constructed boundary cases on Osaka
+and under the repository's Glamsterdam repricing model with no state reservoir
+(`GlamsterdamReprice`). These measurements check the declared estimates against their fixtures;
+they do not prove a universal cold worst case. Reviewers should challenge state sizes, cold
+accesses, nested forwarding and return tails not covered by those cases. A path with no internal
+checkpoint is one indivisible unit. Large fixture gas limits are not deployment or liveness
+evidence.
 
 ## Deep and symbolic checks
 
@@ -138,7 +220,8 @@ FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.p
   --group invariants --max-files 5 --threads 1
 ```
 
-The deep invariant profile uses 1,000 runs at depth 256. CI runs it on scheduled or manual
+The deep invariant profile defaults to 1,000 runs at depth 256; explicit property overrides
+apply, and recorded run/call counts identify the actual budgets. CI runs it on scheduled or manual
 dispatch, one job per invariant source, splitting the three expensive Craps suites by named
 property, with a complementary job for every other test so that partition discovery cannot omit
 one (`python3 scripts/deep-invariant-matrix.py` prints the partition). The Halmos job uses
@@ -156,6 +239,22 @@ python3 scripts/test-split-arithmetic.py
 python3 scripts/check-split-arithmetic.py --json-output .audit-test-logs/split-arithmetic.json
 ```
 
+For the symbolic suites themselves, run the following in a **disposable checkout** after setup.
+The address patch writes contract constants and is not restored by this raw Halmos command.
+These are the scheduled/manual CI flags; preserve both the JSON and solver-query artifacts:
+
+```sh
+node scripts/lib/patchForFoundry.js
+mkdir -p .audit-test-logs/halmos
+set -o pipefail
+HALMOS_ALLOW_DOWNLOAD=1 FOUNDRY_PROFILE=halmos halmos \
+  --forge-build-out forge-out-halmos --loop 8 --panic-error-codes '*' \
+  --solver-timeout-assertion 300000 --solver-threads 2 \
+  --json-output .audit-test-logs/halmos/results.json --dump-smt-queries \
+  --dump-smt-directory .audit-test-logs/halmos/queries \
+  2>&1 | tee .audit-test-logs/halmos/output.log
+```
+
 Limits:
 
 - A solver timeout establishes neither a counterexample nor a proof.
@@ -164,6 +263,23 @@ Limits:
   accounting models are symbolic. Liveness evidence comes from the invariant and gas campaigns.
 - Imported helper suites can repeat across batches, so execution totals are not counts of unique
   properties. A bounded campaign does not cover every reachable state.
+
+## Profile comparison and native replay
+
+[Profile verification tools](../scripts/consolidation/README.md) provides a runner adapter and
+the current `profile-differential.py` invocation. It also distinguishes current comparisons
+from the historical consolidation adapters. The comparison normalizes `MinerWork.executionGas`
+and uses common state-owner addresses, so it is not a production deployment replay.
+
+The native replay result in the readiness record depends on separately retained recorder logs,
+an initial world dump, runtime artifacts and an Osaka Geth instance. The tracked parser and
+native replayer can consume that evidence, but the complete census recorder and its captured
+dataset are supplied separately as `native-evidence-2026-10-28.tar.gz`; the checksum and size
+are recorded in `docs/audit/freeze.json`. Obtain that artifact with the handoff and follow its
+README for portable paths and independent replay. Packaging verified source, input and runtime
+hashes but did not rerun the retained execution. A checkout alone is insufficient to reproduce
+that row. A high-budget native debug call is also not evidence
+that the same batch fits the network transaction limit.
 
 ## Static analysis
 
@@ -197,6 +313,9 @@ aderyn . -o aderyn-report.md
 
 ## Focused suites by area
 
+Assertion-level links for the critical properties are in [Properties](PROPERTIES.md), and for
+accounting identities in [Accounting](ACCOUNTING.md).
+
 | Area | Suites | Structural gates |
 | --- | --- | --- |
 | DGVE owner governance ([guide](OWNER_GOVERNANCE.md)) | `test/governance/OwnerGovernance*.t.sol`, `test/fuzz/DegenesisVaultSpend.t.sol`, `test/unit/OwnerGovernance.test.js` | `check-owner-actions.js`, `check-owner-governance-layout.js`, `check-vault-player-actions.js` |
@@ -207,5 +326,6 @@ aderyn . -o aderyn-report.md
 | Ticket and jackpot rounds | `test/repro/DirectJackpotTickets.t.sol`, `test/repro/DegradeDirectTicketFallback.t.sol` | `check-gasleft` |
 | Solvency, FSM and RNG freeze | `test/fuzz/invariant/` (EthSolvency, PoolConservation, GameFSM, RngWindowFreeze, VRFPathInvariants, AdvanceLiveness and their Degenesis variants) | `check-rng-window`, `check-rng-taint` |
 
-Run any row with `python3 scripts/test-foundry-groups.py --file <path>` (repeatable); add
-`FOUNDRY_ISOLATE=true` for files under `test/gas/`.
+Select Solidity files with `python3 scripts/test-foundry-groups.py --file <path>` (repeatable);
+add `FOUNDRY_ISOLATE=true` for files under `test/gas/`. Select JavaScript files with
+`python3 scripts/test-hardhat-groups.py --file <path>`.

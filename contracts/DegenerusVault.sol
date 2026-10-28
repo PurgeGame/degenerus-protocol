@@ -87,7 +87,6 @@ interface IERC721Sweep {
 |  |                                                                                                   | |
 |  |   User ----► burnCoin(amount) ----► Burns flipShare ----► Mints FLIP to user                      | |
 |  |   User ----► burnEth(amount) -----► Burns ethShare -----► Sends ETH + stETH to user               | |
-|  |   (No DGNRS share class in the vault)                                                             | |
 |  |                                                                                                   | |
 |  |   Formula: claimAmount = (reserveBalance * sharesBurned) / totalShareSupply                       | |
 |  |                                                                                                   | |
@@ -412,7 +411,7 @@ contract DegenerusVault {
     /// @dev True when the vault buys liquidated accounts that sDGNRS cannot fund. Owner-gated.
     bool private _liquidationBuyEnabled;
     /// @dev ETH (wei) reserve the vault keeps untouched when acting as liquidation buyer-of-last-resort.
-    ///      The game buys for the vault only while its game-side ETH (claimable + prepaid afking) >=
+    ///      The game buys for the vault only while its game-side ETH (claimable + prepaid afking) >
     ///      totalBudget + this floor.
     uint96 private _liquidationVaultFloorWei;
 
@@ -539,7 +538,7 @@ contract DegenerusVault {
     ///      vault-owner gated.
     /// @param enabled Whether the vault acts as liquidation buyer-of-last-resort.
     /// @param floorWei ETH (wei) reserve kept untouched; the vault buys only while its claimable + afking
-    ///        covers totalBudget + floorWei.
+    ///        exceeds totalBudget + floorWei.
     /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor.
     /// @custom:reverts Insufficient If floorWei exceeds the uint96 reserve-floor width.
     function setLiquidationBuyFallback(bool enabled, uint256 floorWei) external onlyVaultOwner {
@@ -590,7 +589,7 @@ contract DegenerusVault {
     /// @dev Uses the same shared FLIP comp lane and delegate allowance as `crapsComp`.
     ///      A refused donation or insufficient allowance reverts the entire operation.
     /// @param custom True for a custom battle, false for one of today's daily windows.
-    /// @param index The custom battle's number, or the daily window's period (0..6).
+    /// @param index The custom battle's number, or the daily window's period (0..5).
     /// @param granules Donation in 100-FLIP units: 10 adds 1,000 FLIP to the pool.
     /// @return charged whole FLIP charged to the comp lane and added to the pool.
     function crapsCompDonate(bool custom, uint256 index, uint24 granules) external returns (uint256 charged) {
@@ -667,10 +666,7 @@ contract DegenerusVault {
     }
 
     /// @notice Sweep a foreign ERC20 out of the vault.
-    /// @dev Access: vault owner. The vault can receive tokens it has no other handling for —
-    ///      native ETH recovered from a retired VRF subscription lands here with no way back out
-    ///      otherwise. Without this, routing a recovery to the vault only relocates the
-    ///      stranding.
+    /// @dev Access: vault owner. Rescues foreign tokens sent here, which otherwise have no exit.
     ///      stETH is permanently excluded: it sits here as a real balance backing DGVE, so
     ///      sweeping it would move value out from under holders. FLIP needs no exclusion —
     ///      FLIP redirects VAULT-destined transfers and mints into vaultMintAllowance, so this
@@ -909,7 +905,7 @@ contract DegenerusVault {
         if (totalValue > address(this).balance) revert Insufficient();
     }
 
-    /// @dev Sync ETH+stETH balances and return combined total.
+    /// @dev Current ETH and stETH balances and their sum.
     /// @return ethBal Current ETH balance
     /// @return stBal Current stETH balance
     /// @return combined Sum of ETH and stETH balances

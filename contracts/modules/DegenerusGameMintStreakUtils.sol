@@ -39,14 +39,11 @@ interface IDegenerusVaultOwner {
 }
 
 /// @dev Shared mint streak and activity score utilities. Contains _playerActivityScore
-///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
-///      and mint streak helpers (credits on completed 1x price ETH quest).
+///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass),
+///      the mint streak and mint-data recorders, the curse counter, and loan quoting helpers.
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @notice Thrown for an invalid whale-pass quantity.
     error InvalidQuantity();
-
-    /// @dev Jackpots processed per level before the phase ends. Mirrors the per-module copies;
-    ///      declared here for _activeTicketLevel's final-jackpot-day reroute.
 
     /// @notice Emitted whenever a player's cashout/smite curse counter changes, carrying the
     ///         resulting absolute value so indexers need no eth_call and never replay cap logic.
@@ -132,11 +129,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         );
     }
 
-    // =========================================================================
-    // Activity Score (shared across DegenerusGame and DegeneretteModule)
-    // =========================================================================
-
-
     /// @dev Loan rate in bps of face for a ticket `d` levels ahead (2 <= d <= 100): 10% at d2
     ///      down to 5% at d20, then down to 2% at d100. Truncation is under one bp.
     function _loanRateBps(uint256 d) internal pure returns (uint256) {
@@ -173,6 +165,10 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             principal += value * _loanRateBps(target - cl) / 10_000;
         }
     }
+
+    // =========================================================================
+    // Activity Score
+    // =========================================================================
 
     /// @dev Activity score body operating on a caller-supplied current level, so every
     ///      level comparison (pass window, mint count, affiliate cache) shares one read.
@@ -342,8 +338,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     // Cashout / smite curse counter (mintPacked_ bits 203-207)
     // =========================================================================
 
-    /// @dev Curse cap = 20 points (-20 points max). Doubles as the uint8-wrap guard: a
-    ///      saturating +2 can never wrap the 8-bit field 254->0.
+    /// @dev Curse cap = 20 points (-20 points max), below the 5-bit field's 31, so the
+    ///      saturating +2 never overflows the field.
     uint8 internal constant CURSE_COUNT_CAP = 20;
 
     /// @dev Add a saturating +2 curse stack to `target` (no SSTORE once at the cap).
@@ -393,11 +389,10 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
     /**
      * @notice Record mint metadata and update Activity Score metrics.
-     * @dev Runs directly after the mint payment on the ETH-purchase path
-     *      (the coin path never records mint data). Pure mintPacked_ accounting — touches
-     *      no claimable or pool state.
+     * @dev Runs after the mint payment on the purchase paths (tickets, lootboxes, foil
+     *      packs). Pure mintPacked_ accounting — touches no claimable or pool state.
      *
-     * @param player Address of the player making the purchase.
+     * @param player Wallet ID of the player making the purchase.
      * @param lvl Target level for this purchase (`_activeTicketLevel()`: level+1 during the
      *        purchase phase and once the final jackpot draw is locked or the phase transition is
      *        underway, else the current jackpot level).
@@ -601,6 +596,5 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             mintPacked_[player] = data;
             emit MintRecorded(player, data);
         }
-        return;
     }
 }

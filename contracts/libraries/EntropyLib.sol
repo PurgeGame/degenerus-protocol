@@ -84,18 +84,4 @@ library EntropyLib {
             r := keccak256(p, 0x80)
         }
     }
-
-    /**
-     * @notice Keccak of a single uint256 input using the EVM scratch slot.
-     * @dev Equivalent to `uint256(keccak256(abi.encode(a)))` without the
-     *      bytes-memory allocation — byte-identical preimage (one raw word).
-     * @param a Input word.
-     * @return r 256-bit Keccak digest of the input word.
-     */
-    function hash1(uint256 a) internal pure returns (uint256 r) {
-        assembly ("memory-safe") {
-            mstore(0x00, a)
-            r := keccak256(0x00, 0x20)
-        }
-    }
 }

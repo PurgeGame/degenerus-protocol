@@ -17,26 +17,19 @@ price tables and reward curves.
   **40B** over the contract's life into soulbound sDGNRS, or sweep it out.
 - Other initial sDGNRS allocations: affiliate 30%, lootbox 20%, whale 10%, reward 10%,
   Degenesis 10%. See `sDGNRS` and `DGNRS` for pool movements and redemption conditions.
-- At the final transition close after levels **100, 200, 300, etc.**, a random **25–75%** of all
-  sDGNRS burned since the previous such close is minted back into the ongoing
-  pools, split **Whale : Affiliate : Lootbox : Reward = 1 : 3 : 2 : 1**. The first
-  interval starts at deployment. This includes live player redemptions, wrapped
-  redemptions' underlying sDGNRS burn, and automatic self-award burns. The committed
-  transition RNG word selects a whole percentage (25 through 75; mean 50%). Each mint
-  rounds down in raw token units; allocation dust goes to Lootbox. Vault and
-  Degenesis allocations receive no refill.
-- Recycling adds no ETH/stETH/FLIP backing and reduces existing tokens' share of
-  that backing at the refill. If a fraction `b` of the supply standing at the
-  previous checkpoint was burned during the century and the refill fraction is
-  `r` (0.25–0.75), each surviving token loses `r*b / (1-b+r*b)` of its backing
-  at that close, ignoring raw-unit rounding. With 50% burned, a 25%, 50%, or 75%
-  refill reduces backing per surviving token by 20%, 33.3%, or 42.9%, respectively.
-  Existing submitted redemption claims retain their recorded amounts. Supply
-  remains below the initial ceiling and at or below the previous post-refill
-  supply; it can increase at the refill itself. Permissionless
-  reward settlement retains live-pool pricing, so an unresolved win may pay more
-  tokens after replenishment. Game over permanently ends recycling, with no final
-  catch-up mint for an unfinished century.
+- At the final transition close after levels **100, 200, 300, etc.**, a random **25–75%** (a
+  whole percentage from the committed transition word; mean 50%) of all sDGNRS burned since the
+  previous such close (the first interval starts at deployment) is minted back into the ongoing
+  pools, split **Whale : Affiliate : Lootbox : Reward = 1 : 3 : 2 : 1**, rounding down with dust
+  to Lootbox. Burns counted include live redemptions, wrapped redemptions' underlying burn and
+  automatic self-award burns. Vault and Degenesis allocations receive no refill.
+- Recycling adds no ETH/stETH/FLIP backing and dilutes existing tokens at the refill: with
+  fraction `b` of the previous checkpoint's supply burned and refill fraction `r`, each surviving
+  token loses `r*b / (1-b+r*b)` of its backing (with 50% burned, a 25/50/75% refill costs 20%,
+  33.3% or 42.9%). Submitted redemption claims keep their recorded amounts. Supply stays below
+  the initial ceiling and at or below the previous post-refill supply, but can increase at the
+  refill itself. Reward settlement uses live-pool pricing, so an unresolved win may pay more
+  tokens after a refill. Game over ends recycling with no catch-up mint.
 - Degenesis is a seven-day launch sale (day indices 2 through 8; the main game starts on day 9)
   with no cap on aggregate ETH. It is not a return guarantee, and every reward below is random.
   - **Eligibility.** A buyer first spends on normal assets (tickets, lootboxes, passes and foil
@@ -53,28 +46,24 @@ price tables and reward curves.
   - **ETH routing.** Each day's ETH is held as a reserved obligation, then split once per daily
     cohort at the first daily request after the day ends: **25%** to the future prize pool, **25%**
     to the insurance accumulator (yield), **25%** to a restricted Vault purchase budget, **25%** to
-    sDGNRS AFKing funding. The Vault budget buys
-    tickets, lootboxes or whale passes for the Vault through `spendDegenesis` and is never
-    withdrawable. Unspent Vault budget and all sDGNRS AFKing funding join the final prize
+    sDGNRS AFKing funding. The vault owner spends the budget through `spendDegenesis` on tickets,
+    lootboxes or whale passes at normal prices for **any allocated account it selects** (recipient
+    0 selects the Vault); the recipient receives the products and their normal rewards. The budget
+    is never withdrawable. Unspent Vault budget and all sDGNRS AFKing funding join the final prize
     distribution at game over.
   - **Outcomes.** Each order rolls one exclusive category: **50%** FLIP-valued reward, **40%**
     sDGNRS, **10%** WWXRP, with an independent size roll for FLIP and sDGNRS. A FLIP result below
     one whole FLIP, a lost fractional pass, or a zero sDGNRS award pays the WWXRP consolation
     (1 WWXRP before the vault owner's `gameMintScale`) instead; no order resolves to nothing.
   - **Additional boons.** Every primary outcome, including consolation, also draws from the
-    ordinary boon table using a probability budget of **20% of the raw ETH order, capped at
-    1 ETH**. Normalize at launch level 1 with the ordinary 50% boon utilization assumption: each full
-    100% chance guarantees a draw and the remainder rolls once for another, up to **three draws
-    per order**. Activity, boosts, early-purchase bonuses and cohort volume do not multiply this
-    budget. It creates no ETH reserve and does not reduce the exclusive primary reward.
-    Types may repeat; ordinary upgrades, ignored equal/lower tiers and deity-discount discards
-    apply. Three draws need not produce three active boons. Expiry starts on the settlement day,
-    so early-sale boons can expire before launch. Splitting large purchases into separate orders
-    can produce more total draws by avoiding the per-order ceiling. Neither Degenesis purchases
-    nor boon grants earn new Degenesis credit. Ordinary boxes follow their one-draw rules.
-    `DegenesisBoonsRolled` immediately precedes `DegenesisOrderResolved`: bytes 0, 1 and 2 of
-    `boonTypes` identify selected types in draw order, including ignored/discarded draws, with
-    unused bytes zero. A zero-draw order still emits the companion event.
+    ordinary boon table with a probability budget of **20% of the raw ETH order, capped at
+    1 ETH**, normalized at launch level 1 with the ordinary 50% utilization assumption: each full
+    100% guarantees a draw and the remainder rolls once more, up to **three draws per order**.
+    Activity, boosts, early bonuses and cohort volume do not multiply it; it creates no ETH reserve
+    and does not reduce the primary reward. Types may repeat and ordinary upgrade/discard rules
+    apply, so three draws need not give three active boons. Expiry starts on the settlement day,
+    so early-sale boons can expire before launch. Splitting a large purchase can produce more draws
+    by avoiding the per-order ceiling. Boon grants earn no Degenesis credit.
   - **sDGNRS schedule.** The sale pool is **100B** sDGNRS (10% of the initial supply). For a cohort
     with applied ETH `V` and remaining pool `R`, `Q = min(2.5T, 2/3 R)` with target `T = 20B` on days
     1-3 and `10B` on days 4-7. An sDGNRS order of `x` ETH receives `x * Q * m / V`, with `m`
@@ -104,26 +93,25 @@ price tables and reward curves.
   may participate in rewards under their entry rules. The vault is excluded from BAF's
   top-4 leaderboard and its 10% top-bettor and 5% third/fourth-place slices, but retains
   BAF score for eligible ticket-based awards.
-- The vault owner (the DGVE governance executor) can register any address as a WWXRP minter and burner
-  (`WWXRP.setTrustedMinter`), with no cap on what a trusted address may mint or burn. A trusted
-  address may also spend any player's WWXRP boon through `WWXRP.consumeBoon`, without that
-  player's approval. The vault owner also sets a whole-number multiplier, with no upper bound,
-  on every WWXRP mint the game contracts request (`WWXRP.setGameMintScale`, default 1x).
-  It applies when the mint happens, not when the prize is won: a WWXRP prize minted while the
-  multiplier is 0 mints nothing and is not paid later (anyone can trigger a BAF consolation
-  claim, so those are lost too), and an unclaimed award pays at whatever multiplier is set when
-  it is claimed. This is
-  deliberate: WWXRP is the inflationary side coin, future games are meant to pay and take it, and
-  the vault is its sovereign. Treat WWXRP's supply as fully at the vault owner's discretion.
-- The vault owner can mint **unlimited WWXRP for free** to any nonzero recipient through
-  `WWXRP.vaultMintTo` or `DegenerusVault.wwxrpMint`. There is no mint reserve or century
-  allocation. Vault-held WWXRP uses ordinary token balances and counts in total supply.
-- WWXRP is a joke prize token with no backing or intended value. Its discretionary minting
-  also applies to the daily draw (about 606 FLIP a day on average) and century incinerator
-  (10% of the BAF day's lost FLIP). Winners are weighted by WWXRP burned, so the vault owner
-  can mint enough to take nearly all of those FLIP awards. Supply, price and balances are
-  unprotected; the [audit boundaries](SECURITY.md#audit-boundaries) distinguish these rules
-  from a path that pays assets beyond the prescribed awards.
+- WWXRP is a joke prize token with no backing or intended value; its supply is fully at the
+  vault owner's (DGVE governance executor's) discretion:
+  - **Free minting.** The vault owner can mint **unlimited WWXRP for free** to any nonzero
+    recipient (`WWXRP.vaultMintTo`, `DegenerusVault.wwxrpMint`). There is no mint reserve or
+    century allocation; Vault-held WWXRP uses ordinary balances and counts in total supply.
+  - **Trusted minters** (`WWXRP.setTrustedMinter`, any address, revocable) each hold three
+    separate powers with no cap and no player approval: mint or credit any amount to any recipient
+    (`mintPrize`, `creditPrize`), burn any holder's balance or claimable credit (`burnForGame`, `burnForAccount`),
+    and consume any player's WWXRP boon (`consumeBoon`).
+  - **Game mint scale.** A whole-number multiplier with no upper bound applies to every WWXRP
+    mint the game contracts request (`WWXRP.setGameMintScale`, default 1x), at mint time, not
+    when the prize is won: a prize minted at scale 0 mints nothing and is not paid later (anyone
+    can trigger a BAF consolation claim, so those are lost too), and an unclaimed award pays at the
+    scale set when it is claimed.
+  - **Draws.** Discretionary minting also applies to the daily draw (about 606 FLIP a day on
+    average) and century incinerator (10% of the BAF day's lost FLIP). Winners are weighted by
+    WWXRP burned, so the vault owner can mint enough to take nearly all of those FLIP awards.
+    Supply, price and balances are unprotected; the [audit boundaries](SECURITY.md#audit-boundaries)
+    distinguish these rules from a path that pays assets beyond the prescribed awards.
 - AFKing subscription seats: construction mints serial 1 to sDGNRS (it has no transfer
   surface, so that seat never leaves) and serial 2 to the Vault (transferable like any seat).
   Once all **1,000** free-tranche seats are claimed, the vault owner can mint further seats
@@ -161,49 +149,33 @@ Craps uses distinct bankroll and bounty components: bounty does not earn the com
 Pass denominations and fixed future retail prices differ intentionally; expected-value
 constants are not promises of a realized payout.
 
-During jackpot phase, each quadrant's ETH allocation can fund a separate full
-whale-pass prize using up to 25% of that allocation, rounded down at 4.5 ETH per
-full prize pass. A quadrant starts converting at 18 ETH. One fresh draw from
-that quadrant receives all its passes; the remaining budget, including the
-unused part of the conversion allowance, pays its normal ETH winners. The exact
-pass cost goes to futurePrizePool. The solo quadrant follows this same full-pass
-rule. These awards concentrate part of the quadrant's prize in one longer-term
-participation claim; they do not create a cash withdrawal claim for that value.
+Jackpot prize shapes (mechanics in [jackpot legs](docs/ARCHITECTURE-DETAILS.md#jackpot-legs)):
 
-Daily ETH jackpots in both phases scale their winner counts with the day's ETH budget:
-32, 16 and 4 non-solo winners, doubling at 40, 160, 640, 2,560 and 10,240 ETH, up to
-1,024, 512 and 128. Every non-solo prize
-is a whole multiple of 0.1 ETH, so small budgets pay fewer winners rather than smaller
-prizes, and rounding leftovers go to the solo winner. Winning slots can pay the same
-wallet more than once. The terminal jackpot keeps its fixed winner counts.
+- **ETH quadrants, jackpot phase.** Up to 25% of each quadrant's ETH allocation (solo included)
+  converts to full whale passes at 4.5 ETH each, starting at 18 ETH; one fresh draw from the
+  quadrant receives all its passes, the rest pays its normal ETH winners, and the pass cost goes to
+  futurePrizePool. The passes are a longer-term participation claim, not a cash claim.
+- **Daily ETH winner counts** scale with the budget in both phases: 32, 16 and 4 non-solo winners,
+  doubling at 40, 160, 640, 2,560 and 10,240 ETH, up to 1,024, 512 and 128. Non-solo prizes are
+  whole multiples of 0.1 ETH, so small budgets pay fewer winners, not smaller prizes; rounding goes
+  to the solo winner. A wallet can win more than one slot. The terminal jackpot keeps fixed counts.
+- **Ticket jackpots** (purchase daily, early bird, jackpot-phase daily) pay the three non-solo
+  quadrants (solo only when it is the one quadrant with holders): 96 winners, 192 from 40 ETH, 384
+  from 160 ETH. Above 25 tickets per slot, when the surplus covers a full pass at 4.5 ETH, every
+  slot keeps 25 tickets and the surplus becomes whole passes split across paying quadrants in
+  proportion to their winners, one separately drawn recipient per quadrant (deity virtual entries
+  included), who need not have won tickets. Repeated ticket wins add no pass-draw chances. All
+  ticket-jackpot ETH and rounding stays in nextPrizePool; the passes must be claimed under the pass
+  rules, depend on continued play and are not a segregated ETH reserve or cash claim.
 
-Every ticket jackpot (the purchase-phase daily, the early bird and the jackpot-phase
-daily) pays tickets to holders of the day's winning traits in the board's three
-non-solo quadrants (the solo quadrant already pays the day's solo ETH prize; it serves
-only when it is the one quadrant with holders). Winner counts double with the ticket
-budget: 96, then 192 from 40 ETH and 384 from 160 ETH. Large
-prizes become a mixed award: once the payout exceeds 25 tickets per winning slot and
-the pooled surplus can cover a full prize pass at the 4.5 ETH accounting rate, every
-slot receives 25 tickets and the surplus full passes split across the quadrants that
-paid tickets, in proportion to their winners, with one separately drawn recipient per
-quadrant (deity virtual entries included). A recipient need not have won an immediate
-ticket prize. All ticket-jackpot ETH and rounding remainder still go to
-nextPrizePool; these passes confer future participation, not a segregated ETH
-reserve or cash claim. They must be claimed under the pass rules and
-depend on continued play. Repeated ticket wins each retain their 25-ticket award;
-they do not add chances to the separate pass draw.
-
-Every level's purchase target, level 0 included, has a **30-game-day** window counted from
-`purchaseStartDay`. Reaching `purchaseStartDay + 30` activates distress purchases; if the
-target is still unmet, game over becomes eligible once that day's session has completed and
-a later wall-clock reset day has begun. Level 0's window starts after the Degenesis sale
-(`MAIN_LAUNCH_DAY`). Game days advance at accepted daily requests, so a stall adds no game
-days; 14 days without a completed daily session takes the hard-stall ending instead. Funded
-jackpot phases can extend elapsed wall-clock time. Ordinary purchase dailies budget **4% of
-the future pool**, split 75/23/2 between ticket backing, ETH prizes and insurance; unpaid
-ETH prizes stay in the future pool. Level 0 runs a FLIP-only daily path instead. The
-deadline and the transition skim determine when funds become available for prizes; see
-[the timing and skim curve](docs/ARCHITECTURE.md#purchase-timing-and-pool-acceleration).
+Every level's purchase target, level 0 included, has a **30-game-day** window from
+`purchaseStartDay` (level 0's starts at `MAIN_LAUNCH_DAY`). Day 30 activates distress purchases;
+if the target is still unmet, game over becomes eligible once that day's session has completed and
+a later wall-clock reset day has begun. A stall adds no game days; 14 days without a completed
+daily session takes the hard-stall ending instead. Funded jackpot phases can extend wall-clock
+time. Ordinary purchase dailies budget **4% of the future pool**, split 75/23/2 between ticket
+backing, ETH prizes and insurance; unpaid ETH prizes stay in the future pool. Level 0 runs a
+FLIP-only daily path. See [the timing and skim curve](docs/ARCHITECTURE-DETAILS.md#purchase-timing-and-pool-acceleration).
 
 ### Game-over treatment
 
@@ -211,55 +183,46 @@ Terminal entry ends unfinished lootbox, Degenerette and non-daily Craps entropy 
 No prior session word is retained to resolve them. Already-earned claims and the terminal
 level's paid ticket obligations retain their specified protections.
 
-Game-over distribution and the later final sweep have distinct deadlines and beneficiaries.
-In the normal, VRF-alive ending, after existing claim liabilities and applicable paid-deity
-refunds are reserved, the whole distributable terminal pool goes to the terminal ticket
-level's terminal jackpot. The game-over path settles every outstanding loan, then requests
-its own terminal word after liveness freezes purchases and the terminal cohort is latched.
+- **VRF-alive ending (purchase timeout).** The game-over path settles every outstanding loan,
+  then requests its own terminal word after liveness freezes purchases and latches the terminal
+  cohort. After existing claims and applicable paid-deity refunds are reserved, the whole
+  distributable pool goes to the terminal level's ticket jackpot.
+- **Deterministic dead-VRF ending.** Fourteen days without a completed daily session, or a
+  request whose word is still not in use 14 days after it was sent (including a terminal
+  request), takes this path even if the coordinator would still answer. There is no loan
+  settlement, terminal request or jackpot draw: after claims and deity refunds are reserved, the
+  remaining pool is shared across the terminal level's tickets through `claimDeadVrf`.
+- **Final sweep.** **30 days after terminal payout completes** (`GO_TIME`, stamped when the
+  terminal jackpot finishes or the hard-stall pot is fixed), the Vault, sDGNRS and GNRUS receive
+  their own game balances and thirds of the remaining Game ETH/stETH, and **every other unclaimed
+  game balance, including unclaimed `claimDeadVrf` shares, is forfeited**.
 
-Fourteen days without a completed daily session, or a request whose word is still not in
-use 14 days after it was sent, triggers the deterministic dead-VRF ending even if the
-coordinator would still answer. This path performs no loan settlement, makes no terminal
-request and performs no jackpot draw. After existing claims and applicable deity refunds
-are reserved, the remaining pool is shared across the terminal level's tickets through
-`claimDeadVrf` until the final sweep. A normal-ending terminal request that reaches that
-timeout also takes this path.
-Read `DegenerusGameGameOverModule` and the reserve-token terminal paths for the exact
-claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md).
+The phase accounting is in [Accounting](docs/ACCOUNTING.md); owner authority is in
+[Security](SECURITY.md).
 
 ## Native randomness funding
 
-VRF requests are paid in ETH. At level entry, funding takes untracked yield before the
-23% stakeholder distributions, then sDGNRS ordinary claimable and finally its prepaid
-AFKing balance if needed. Level entry funds only a deficit of at least a tenth of the
-gap between target and low-water. A daily low-water check, and a coordinator swap whose
-old subscription could not refund, refill to target in the same order. Each sDGNRS
-debit reduces aggregate claim liabilities by the exact amount sent, so its live price
-and redemption preview reflect that spending immediately. No other player's claim,
-prize pool, redemption reserve or accumulated yield is debited.
+VRF requests are paid in ETH. Funding takes untracked yield first, then sDGNRS ordinary
+claimable, then its prepaid AFKing balance: at level entry (before the 23% stakeholder
+distributions, and only for a deficit of at least a tenth of the target/low-water gap), at a
+daily low-water check, and at a coordinator swap whose old subscription could not refund. Each
+sDGNRS debit reduces aggregate claim liabilities by the amount sent, so its live price and
+redemption preview reflect it immediately. No other player's claim, prize pool, redemption
+reserve or accumulated yield is debited. Funding uses only the Game's liquid ETH and never swaps
+or unstakes stETH; staking keeps one funding target beyond the player-claim ETH reserve, which is
+soft for funding, while total ETH plus stETH must still cover all obligations.
 
-Funding is limited to the Game's liquid ETH. It never swaps or unstakes stETH. Staking
-retains one funding target beyond the player-claim ETH reserve; that reserve is soft
-for funding, while total ETH plus stETH must still cover all remaining obligations.
+A native donation sends its full value to the subscription and banks floor(value / 4) wei of
+mid-day request credit, spendable only by the donor's own `mineRun` against pending work; it earns
+no FLIP and has no value after game over. Optional lootbox requests require the subscription
+balance floor; daily, retry, terminal and craps requests do not. Custom battles and expensive
+fulfillment can consume more than the scheduled-window estimate; refills and donations replenish
+the subscription when liquid sources exist.
 
-A native donation sends its full value to the subscription and banks floor(value / 4)
-wei of mid-day request credit. Only the donor's own mineRun can spend that credit,
-against pending work. It earns no FLIP and has no value after game over. Optional
-lootbox requests require the subscription balance floor; daily, retry, terminal and
-craps requests do not. Custom battles and unusually expensive fulfillment can consume
-more than the scheduled-window funding estimate; daily refills and donations replenish
-the subscription when liquid funding sources are available.
-
-When donated credit is needed to admit a below-threshold mid-day lootbox request, the
-charge is `300,000 * (max(basefee, 0.01 gwei) + 0.25 gwei) * 2`, denominated in wei and
-using the request block's basefee. Queues at or above the pending-ETH threshold and Craps
-windows do not pay this credit charge. Mid-day requests are refused above the owner-set
-basefee ceiling (four times that ceiling for a Craps window; zero disables the ceiling).
-
-The coordinator bills fulfillment at the later transaction's gas price. Four donated wei
-back each credit wei, providing a buffer against that price changing. At the measured
-bill of about 107,000 gas and 24% premium, the donation backing covers roughly 18 times
-`max(basefee, 0.01 gwei) + 0.25 gwei`; this is an estimate, not a guaranteed bound. The
-subscription pays the actual bill, including any excess over that request's donation
-backing. The compiled funding estimates and coordinator-rotation limits are documented
+A below-threshold mid-day lootbox request spends `300,000 * (max(basefee, 0.01 gwei) +
+0.25 gwei) * 2` wei of the caller's credit; queues at or above the threshold and Craps windows
+pay nothing ([mid-day gates](docs/ARCHITECTURE-DETAILS.md#mid-day-requests)). Four donated wei
+back each credit wei; at the measured bill of about 107,000 gas and 24% premium that covers
+roughly 18 times `max(basefee, 0.01 gwei) + 0.25 gwei`, an estimate, not a bound. The
+subscription pays the actual bill, including any excess over the donation backing. The compiled funding estimates and coordinator-rotation limits are documented
 in [Security](SECURITY.md#vrf-funding-configuration).

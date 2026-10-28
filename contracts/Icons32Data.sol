@@ -39,7 +39,7 @@ interface IVaultOwnerCheck {
 |                                                                                                       |
 |  ARCHITECTURE OVERVIEW                                                                                |
 |  ---------------------                                                                                |
-|  Icons32Data is an on-chain storage contract for SVG path data. It holds 33 icon                      |
+|  Icons32Data is an on-chain storage contract for SVG icon fragments. It holds 33 icon                 |
 |  paths representing the symbols used in Degenerus tokens and trophies.                                |
 |  Data is mutable until finalize() is called, after which it becomes immutable.                        |
 |                                                                                                       |
@@ -101,8 +101,8 @@ interface IVaultOwnerCheck {
 |  TRUST ASSUMPTIONS                                                                                    |
 |  -----------------                                                                                    |
 |                                                                                                       |
-|  1. The vault owner provides valid SVG path data before finalization                                  |
-|  2. Path data does not contain malicious SVG (script injection, etc.)                                 |
+|  1. The vault owner provides valid SVG fragments before finalization                                  |
+|  2. Fragment data does not contain malicious SVG (script injection, etc.)                             |
 |  3. Symbol names are appropriate and accurate                                                         |
 |                                                                                                       |
 +=======================================================================================================+
@@ -135,8 +135,8 @@ contract Icons32Data {
     // STORAGE
     // ---------------------------------------------------------------------
 
-    /// @notice SVG path data for 33 icons (32 quadrant symbols + 1 affiliate badge)
-    /// @dev Each path is the "d" attribute content for an SVG <path> element
+    /// @notice SVG fragments for 33 icons (32 quadrant symbols + 1 affiliate badge)
+    /// @dev Each entry is a complete SVG fragment (groups, styles, transforms and shapes), not bare path data
     string[33] private _paths;
 
     /// @notice Human-readable symbol names for Quadrant 0 (Crypto)
@@ -163,8 +163,6 @@ contract Icons32Data {
     error AlreadyInitialized();
     event BootstrapClosed(bool finalized);
 
-    // Note: Quadrant 3 (Dice) names are generated dynamically as "1" through "8"
-
     // ---------------------------------------------------------------------
     // CONSTRUCTOR
     // ---------------------------------------------------------------------
@@ -180,10 +178,11 @@ contract Icons32Data {
     // ---------------------------------------------------------------------
 
     /// @notice Set a batch of icon paths
-    /// @dev Only callable by the vault owner before finalization. Batch capped at 10 paths per call; path
+    /// @dev Callable before finalization by the vault owner, and by the creator to initialize each entry
+    ///      once until the bootstrap closes. Batch capped at 10 paths per call; path
     ///      strings are individually unbounded, so the caller still sizes the batch to fit gas.
     /// @param startIndex Starting index in _paths array (0-32)
-    /// @param paths Array of SVG path strings to set (max 10)
+    /// @param paths Array of SVG fragment strings to set (max 10)
     /// @custom:reverts NotVaultOwner When caller lacks governance or initial icon setup authority
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     /// @custom:reverts MaxBatch When paths.length > 10
@@ -282,11 +281,11 @@ contract Icons32Data {
     // VIEW FUNCTIONS
     // ---------------------------------------------------------------------
 
-    /// @notice Get the SVG path data for an icon by index
+    /// @notice Get the SVG fragment for an icon by index
     /// @dev Reverts with array out-of-bounds if index >= 33
     /// @param i Icon index: 0-31 for quadrant symbols, 32 for affiliate badge
     ///          Layout: i = (quadrant * 8) + symbolIndex
-    /// @return The SVG path "d" attribute string for the icon
+    /// @return The complete SVG fragment string for the icon
     function data(uint256 i) external view returns (string memory) {
         return _paths[i];
     }

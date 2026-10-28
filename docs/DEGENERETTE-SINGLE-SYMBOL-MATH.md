@@ -271,7 +271,11 @@ calibration model. Every uint16 activity value is checked for monotonicity and
 deviation from the WWXRP target.
 
 `DegeneretteHeroScore.t.sol` checks the compiled payout path against the exact
-neutral EV over every state; `DegeneretteFastScoreParity.t.sol` proves the
-branch-free scorer and producers against scalar references on every valid board;
+neutral EV over every state; `DegeneretteFastScoreParity.t.sol` compares the
+branch-free scorer and producers with scalar references by exhaustive enumeration of
+every (player lane, house lane) pair per lane and hero position in three fixed
+contexts, every joint per-lane class combination across the four lanes, and every
+per-lane producer value, plus fuzzing over whole valid boards and spins (it is a
+parity check over those enumerations and fuzz cases, not a proof over all boards);
 `DegeneretteSingleSymbol.t.sol` tests the shared streams, prefix invariance,
 placement commitment, scoring, the help rule and pinned natural jackpots.

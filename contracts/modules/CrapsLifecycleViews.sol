@@ -14,7 +14,7 @@ abstract contract CrapsLifecycleViews is CrapsBattleStorage {
         added = r.added;
         if (slot != 0 && _scheduledExpired(slot)) return (slot, added, true, true);
         started = r.started;
-        // The only writer assigns a scheduled day slot (uint24 day * 8 + 7).
+        // The only writer assigns a scheduled day slot: day * 8 + 6, or + 7 for a detached round.
         uint256 g = _loadBattle(bytes32(uint256(slot)));
         complete = started && uint32(g >> _BG_RESOLVED_SHIFT) == uint32(g);
     }
@@ -29,7 +29,7 @@ abstract contract CrapsLifecycleViews is CrapsBattleStorage {
         return keccak256(abi.encode(BATTLE_TAG, uint48(slot), bank, goal, played, terms));
     }
 
-
+    /// @dev The jackpot's hidden main-subsidy multiplier in bps: 60/30/9/1 odds, mean exactly 1x.
     function _subsidyMultiplier(uint256 entropy) internal pure returns (uint256) {
         uint256 roll = entropy % 100;
         return roll < 60 ? 2_500 : roll < 90 ? 10_000 : roll < 99 ? 50_000 : 100_000;
@@ -81,15 +81,13 @@ abstract contract CrapsLifecycleViews is CrapsBattleStorage {
     function _jackpotDecodeBest(uint256 best)
         internal
         pure
-        returns (Craps.SlipStop stop, uint256 hands, uint256 peakFlip, uint256 endFlip)
+        returns (Craps.SlipStop stop, uint256 peakFlip, uint256 endFlip)
     {
         unchecked {
             uint256 primary = (best >> _SC_PRIMARY_SHIFT) & _SC_PRIMARY_MASK;
             endFlip = (best >> _SC_WON_SHIFT) & _SC_WON_MASK;
-            if (best & _SC_GOAL_BIT == 0) {
-                return (Craps.SlipStop.Bust, primary >> _SC_BUST_HANDS_SHIFT, 0, endFlip);
-            }
-            return (Craps.SlipStop.Goal, 0, primary, endFlip);
+            if (best & _SC_GOAL_BIT == 0) return (Craps.SlipStop.Bust, 0, endFlip);
+            return (Craps.SlipStop.Goal, primary, endFlip);
         }
     }
 
@@ -162,10 +160,6 @@ abstract contract CrapsLifecycleViews is CrapsBattleStorage {
             _schedRound(bank), bounty / 100, pick + 1);
     }
 
-    function _jackpotCurrentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
-        return _jackpotCurrentBonusSlot(_currentDayIndex());
-    }
-
     function _jackpotCurrentBonusSlot(uint24 day) internal view returns (uint24, uint256 period, uint256 slot) {
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
         if (_scheduleResetPassed()) period = _BONUS_PERIODS_PER_DAY;
@@ -214,8 +208,8 @@ abstract contract CrapsLifecycleViews is CrapsBattleStorage {
             if (word == 0 && period != _BONUS_PERIODS_PER_DAY - 1) revert RngNotReady();
             return _jackpotWindowTermsOn(day, period, word);
         }
-        // Opened terms survive word retirement in the existing scoreboard. Settlement
-        // entropy still comes from the committed normal RNG cohort (or jackpot round).
+        // Opened terms survive word retirement in the scoreboard. Settlement entropy still
+        // comes from the committed normal RNG cohort (or jackpot round).
         w.tier = frozen & 3;
         w.stakeUnits = (state >> _BG_STAKE_SHIFT) & _BSTAKE_MAX;
         if (w.tier != 0) {

@@ -54,20 +54,18 @@ export function selectProfile({ check = false } = {}) {
   // Name each base directly in its importing source. Re-exported import aliases
   // compile in solc but Slither 0.11.5 cannot resolve them as inherited contracts.
   write('contracts/DegenerusGame.sol', banner +
-    `import {${prefix}Game} from "./profiles/${PROFILE}/${prefix}Game.sol";\n` +
-    'import {IDegenerusVaultOwnerGame} from "./modules/GameFacade.sol";\n\n' +
+    `import {${prefix}Game} from "./profiles/${PROFILE}/${prefix}Game.sol";\n\n` +
     `contract DegenerusGame is ${prefix}Game {}\n`);
   write('contracts/CrapsBattle.sol', banner +
     `import {${prefix}Craps} from "./profiles/${PROFILE}/${prefix}Craps.sol";\n` +
-    'import {ICrapsEngine, IFlipCoin, IVaultOwnership, IGameCraps, IHighRollerReserve, ICoinflipStake, IReadCohortLifecycle} from "./CrapsInterfaces.sol";\n\n' +
+    'import {IFlipCoin, IGameCraps, ICoinflipStake, IReadCohortLifecycle} from "./CrapsInterfaces.sol";\n\n' +
     `contract CrapsBattle is ${prefix}Craps {}\n`);
   const ctor = PROFILE === 'glamsterdam'
     ? '    constructor(address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,\n' +
       `        address[] memory players, bytes32[] memory refs) ${prefix}Coinflip(owners, codes, kicks, players, refs) {}\n`
     : '';
   write('contracts/Coinflip.sol', banner +
-    `import {${prefix}Coinflip} from "./profiles/${PROFILE}/${prefix}Coinflip.sol";\n` +
-    'import {IFLIP, IWWXRP, IDegenerusRecordBounty} from "./modules/CoinflipCore.sol";\n\n' +
+    `import {${prefix}Coinflip} from "./profiles/${PROFILE}/${prefix}Coinflip.sol";\n\n` +
     `contract Coinflip is ${prefix}Coinflip {\n` + ctor + '}\n');
   const setterFile = 'test/helpers/CoinflipStakeSetter.sol';
   const args = PROFILE === 'glamsterdam'

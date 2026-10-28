@@ -54,7 +54,8 @@ interface IDGNRSGame {
 /**
  * @title DGNRS (DGNRS)
  * @notice Transferable ERC20 — the liquid face of the DGNRS token
- * @dev Holders burn DGNRS to claim proportional ETH + stETH + FLIP backing.
+ * @dev After game over holders burn DGNRS for proportional ETH + stETH backing; during the game
+ *      sDGNRS.burnWrapped redeems it through the gambling burn.
  *      DGVE-approved Vault action can unwrap DGNRS back to soulbound sDGNRS for specific recipients.
  */
 contract DGNRS {
@@ -84,19 +85,19 @@ contract DGNRS {
     /// @notice Emitted on every token transfer (including mint and burn)
     /// @param from Sender (zero on mint).
     /// @param to Recipient (zero on burn).
-    /// @param amount Amount transferred, in wei.
+    /// @param amount Amount transferred, in raw DGNRS units (12 decimals).
     event Transfer(address indexed from, address indexed to, uint256 amount);
     /// @notice Emitted when an allowance is set via approve
     /// @param owner The account granting the allowance.
     /// @param spender The account authorized to spend it.
     /// @param amount The new allowance amount.
     event Approval(address indexed owner, address indexed spender, uint256 amount);
-    /// @notice Emitted when DGNRS is burned through to sDGNRS for ETH + stETH + FLIP
+    /// @notice Emitted when DGNRS is burned through to sDGNRS for its ETH + stETH backing
     /// @param from The address whose DGNRS was burned.
     /// @param amount DGNRS burned.
     /// @param ethOut ETH paid out.
     /// @param stethOut stETH paid out.
-    /// @param flipOut FLIP paid out.
+    /// @param flipOut FLIP paid out (always 0).
     event BurnThrough(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Emitted when the Vault unwraps DGNRS back to soulbound sDGNRS
     /// @param recipient The address receiving the unwrapped sDGNRS.
@@ -284,12 +285,11 @@ contract DGNRS {
     /// @notice Burn DGNRS to claim proportional ETH + stETH from sDGNRS backing
     /// @dev ETH sent last (checks-effects-interactions). Only available post-gameOver;
     ///      during active game, players must use burnWrapped() via sDGNRS gambling path.
-    ///      The post-gameOver sDGNRS burn pays no FLIP (flipOut is always 0; the
-    ///      return slot is kept for ABI stability).
+    ///      The post-gameOver sDGNRS burn pays no FLIP.
     /// @param amount Amount of DGNRS to burn (12 decimals).
     /// @return ethOut ETH received from backing.
     /// @return stethOut stETH received from backing.
-    /// @return flipOut Always 0 (kept for ABI stability).
+    /// @return flipOut Always 0.
     /// @custom:reverts GameNotOver If called during active game.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         _burn(msg.sender, amount);
@@ -379,7 +379,6 @@ contract DGNRS {
 
         (uint256 ethOut, uint256 stethOut,) = staked.burn(remaining);
 
-        // 50-50 split
         uint256 stethToGnrus = stethOut / 2;
         uint256 stethToVault = stethOut - stethToGnrus;
         uint256 ethToGnrus = ethOut / 2;

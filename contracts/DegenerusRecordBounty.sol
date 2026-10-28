@@ -277,9 +277,7 @@ contract DegenerusRecordBounty {
                 daysHeld,
                 recordName
             );
-            if (ok && bytes(extUri).length != 0) {
-                return extUri;
-            }
+            if (ok) return extUri;
         }
 
         string memory svg = _renderSvgInternal(tokenId);

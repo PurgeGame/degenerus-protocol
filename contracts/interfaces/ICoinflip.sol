@@ -26,9 +26,8 @@ pragma solidity 0.8.38;
 
 /**
  * @title ICoinflip
- * @notice Interface for Coinflip contract - handles all FLIP coinflip wagering logic.
- * @dev Standalone daily coinflip wagering system extracted from FLIP to reduce contract size.
- *      Integrates with FLIP for burn/mint operations and DegenerusGame for game state.
+ * @notice Interface for the Coinflip contract: daily FLIP coinflip wagering.
+ * @dev Integrates with FLIP for burn/mint operations and DegenerusGame for game state.
  */
 
 /// @dev All-time record kinds. Coinflip owns the records and the ONE shared pool;
@@ -77,10 +76,10 @@ interface ICoinflip {
     ///      Stakes and principal use whole FLIP. Each percentage bonus floors at its
     ///      calculation boundary before it is added to the day's stake. CoinflipStakeUpdated reports the accepted stake.
     ///      Both stake ledger and claim state are keyed by account ID. Self deposits register
-    ///      the caller subject to Game admission policy. Loss-streak WWXRP rewards credit
-    ///      that account's claimable balance; token withdrawals resolve its owner separately.
+    ///      the caller subject to Game admission policy. Per-loss-day WWXRP consolation credits
+    ///      the account ID's WWXRP claimable balance.
     /// @param id The account receiving the stake (0 = caller).
-    /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
+    /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims).
     /// @custom:reverts E (Game) If `id` is unallocated, or a new self depositor must register
     ///                 past paid admission (PAID_ADMISSION_WALLETS registered wallets; the hook
     ///                 carries no spend).
@@ -93,8 +92,9 @@ interface ICoinflip {
     /// @dev Processes pending daily claims, then mints up to the requested amount.
     ///      Authorized: `id == 0` is the caller; a nonzero `id` needs Game
     ///      `resolveAccount_g7029(id, msg.sender).authorized` (the key, a smurf's owner or an approved
-    ///      operator). The FLIP and any loss-streak WWXRP mint to the account's PAYEE (the
-    ///      caller for `id == 0`, a smurf's owner, or an ordinary account's own key).
+    ///      operator). The FLIP mints to the account's PAYEE (the caller for `id == 0`, a
+    ///      smurf's owner, or an ordinary account's own key); per-loss-day WWXRP consolation
+    ///      credits the account ID.
     ///      A self caller with no wallet ID has no stake and claims 0.
     /// @param id The account claiming (0 = caller).
     /// @param amount Amount to claim (will be capped at available balance).
@@ -121,8 +121,8 @@ interface ICoinflip {
 
     /// @notice Claim coinflip winnings via FLIP contract to cover token transfers/burns.
     /// @dev Access restricted to FLIP contract only. Processes pending claims and mints tokens.
-    ///      Keeps its address parameter: a holder with no wallet ID has no stake and claims 0,
-    ///      exactly as an empty ledger does (plain FLIP holders never newly revert here).
+    ///      Address-keyed: a holder with no wallet ID has no stake and claims 0, as an empty
+    ///      ledger does.
     /// @param player The player claiming.
     /// @param amount Amount to claim.
     /// @return claimed The actual amount claimed and minted.
@@ -131,8 +131,7 @@ interface ICoinflip {
 
     /// @notice Consume coinflip winnings via FLIP for burns without minting new tokens.
     /// @dev Access restricted to FLIP contract only. Reduces claimable balance without minting.
-    ///      Keeps its address parameter: a holder with no wallet ID consumes 0, exactly as an
-    ///      empty ledger does (FLIP burns by plain holders never newly revert here).
+    ///      Address-keyed: a holder with no wallet ID consumes 0, as an empty ledger does.
     /// @param player The player whose balance to consume.
     /// @param amount Amount to consume.
     /// @return consumed The actual amount consumed.
@@ -141,9 +140,9 @@ interface ICoinflip {
 
     /// @notice Configure auto-rebuy mode for account `id`'s coinflips.
     /// @dev Auto-rebuy automatically rolls over winnings as stake for future flips.
-    ///      When enabled, winnings accumulate as carry until claimed. When disabled,
-    ///      processes a larger window of pending claims and mints all accumulated tokens to the
-    ///      account's payee. Authorized as `claimCoinflips`.
+    ///      When enabled, winnings accumulate as carry until claimed. When disabled, settles
+    ///      pending claims and mints the settled winnings plus the carry to the account's payee.
+    ///      Authorized as `claimCoinflips`.
     /// @param id The account configuring auto-rebuy (0 = caller).
     /// @param enabled Whether auto-rebuy should be enabled.
     /// @param takeProfit Threshold up to uint128 max; whole multiples are banked. Zero rolls all; ignored when disabling.
@@ -204,18 +203,15 @@ interface ICoinflip {
       |                       CREDIT SYSTEM                                  |
       +======================================================================+*/
 
-
-
     /// @notice Credit flip stake to wallet `id` without burning tokens.
-    /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP,
+    /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, SDGNRS, WWXRP,
     ///      PARIMUTUEL, CRAPS) for rewards. Keyed by wallet ID only: writes the ID-keyed stake
-    ///      lane and never reads or fills the ID-keyed PlayerCoinflipState, so a creditor
-    ///      needs nothing but the ID. `id == 0` or `amount == 0` is a silent no-op, never a
-    ///      revert: credits reached from a mineFlip stage cannot fail on a missing wallet.
+    ///      lane and reads the account's claim cursor only when reusing a stale stake page, so a
+    ///      creditor needs nothing but the ID. `id == 0` or `amount == 0` is a silent no-op, never
+    ///      a revert: credits reached from a mineFlip stage cannot fail on a missing wallet.
     ///      Never touches the biggest-flip record (credits carry recordAmount 0).
-    ///      Each credit floors to whole FLIP on its own (two sub-FLIP credits add nothing) and
-    ///      saturates at the wallet's per-day cap of type(uint32).max whole FLIP rather than
-    ///      reverting; CoinflipStakeUpdated reports the amount the lane accepted.
+    ///      Each credit saturates at the wallet's per-day cap of type(uint32).max whole FLIP
+    ///      rather than reverting; CoinflipStakeUpdated reports the amount the lane accepted.
     /// @param id Wallet ID receiving the credit (0 = no wallet: no-op).
     /// @param amount Amount of flip credit to add to next day's stake, whole FLIP.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
@@ -223,7 +219,7 @@ interface ICoinflip {
 
     /// @notice Credit flips to multiple wallets in a single call.
     /// @dev Batch version of creditFlip for gas efficiency. Legs with a zero ID or a zero
-    ///      amount are skipped. Each leg floors and saturates on its own, as creditFlip does.
+    ///      amount are skipped. Each leg saturates on its own, as creditFlip does.
     ///      Callers pass equal-length arrays (a shorter `amounts` reverts on the index).
     /// @param ids Wallet IDs to credit (0 entries are skipped).
     /// @param amounts Credit amounts corresponding to each ID, whole FLIP (0 entries are skipped).
@@ -233,12 +229,10 @@ interface ICoinflip {
         uint256[] calldata amounts
     ) external;
 
-
-
     /// @notice Credit flips to exactly two wallets in a single call.
     /// @dev Fixed-arity variant of creditFlipBatch — spares the caller the two array
     ///      allocations and the dynamic ABI encode. Legs with a zero ID or a zero amount
-    ///      are skipped; each leg floors and saturates on its own.
+    ///      are skipped; each leg saturates on its own.
     /// @param id1 First recipient wallet ID (0 = skipped).
     /// @param amount1 First credit amount, whole FLIP.
     /// @param id2 Second recipient wallet ID (0 = skipped).
@@ -254,8 +248,8 @@ interface ICoinflip {
     /// @notice Arm a game-side all-time record for wallet `id` with `candidate` in the
     ///         record's own unit (spin and lootbox deposit: ETH wei; buy: whole tickets).
     /// @dev GAME only (delegatecall modules). Larger-than-mark candidates ratchet the
-    ///      record; clearing the mark by a fifth also claims the category's accrued
-    ///      share of the record pool, plus the sDGNRS leg at 1/500 scale. Callers gate
+    ///      record; a first mark, or clearing the mark by a fifth, also claims the category's
+    ///      accrued share of the record pool, plus the sDGNRS leg at 1/500 scale. Callers gate
     ///      each record's entry floor before paying for the call. The flip record arms
     ///      internally on direct deposits, never here.
     ///      Every ratchet calls Game `payRecordSdgnrs(id, shareBps)` (shareBps 0 when the
@@ -317,7 +311,7 @@ interface ICoinflip {
     /// @notice Get player's current coinflip stake for the next day's flip.
     /// @dev Returns the stake amount deposited for the upcoming flip day. Stakes are whole FLIP
     ///      (stored as uint32 units), returned without scaling. For VAULT and sDGNRS it includes
-    ///      the seed on days 1-20.
+    ///      the seed stake on flip days 2-21.
     /// @param player The player to check.
     /// @return The stake amount in whole FLIP for the next flip.
     function coinflipAmount(address player) external view returns (uint256);
@@ -359,7 +353,7 @@ interface ICoinflip {
     /// @notice True once today's flip has been applied — its VRF word recorded and paid out.
     /// @dev Settlement marker for the carry freeze: past it the carry has resolved through
     ///      today's word and rides tomorrow, whose word is not yet requested. Reopens the FLIP
-    ///      claim paths ahead of the game's RNG lock, which advanceGame holds through the
+    ///      claim paths ahead of the game's RNG lock, which the daily advance holds through the
     ///      chunked drains that follow settlement.
     function flipResolvedToday() external view returns (bool);
 }

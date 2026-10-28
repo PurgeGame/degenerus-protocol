@@ -52,15 +52,15 @@ interface IDegenerusCoinJackpotView {
     function bafDrawWinner(uint256 rngWord) external view returns (uint32 winnerId);
 }
 
-// ===========================================================================
-// Contract
-// ===========================================================================
-
 /// @notice WWXRP mint surface for skipped-bracket consolation prizes.
 interface IWwxrpMintPrize {
     /// @notice Mint WWXRP to a recipient.
     function creditPrize(uint32 to, uint256 amount) external;
 }
+
+// ===========================================================================
+// Contract
+// ===========================================================================
 
 /// @title DegenerusJackpots
 /// @author Burnie Degenerus
@@ -132,11 +132,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Data structures for BAF leaderboard tracking.                       |
       +======================================================================+*/
 
-    /// @notice A closing bracket must finish before its player record can be reused.
-
     /// @notice Per-player BAF state for a bracket level.
     /// @dev One reusable word: total (168) + epoch (64) + bracket (24). Both tags
-    ///      must match; the closing and next brackets occupy alternating homes.
+    ///      must match; the closing and next brackets occupy alternating homes, so a
+    ///      closing bracket finishes before its player record is reused.
     struct BafPlayer {
         /// @notice Winning payout credit; the reachable lifetime bound is below 2^155.
         uint168 total;
@@ -183,12 +182,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Fixed values for prize calculations and BAF configuration.          |
       +======================================================================+*/
 
-    /// @dev Entropy key of the far-future pair draws, above every scatter round index.
-    uint256 private constant BAF_FAR_PAIR_KEY = 1 << 16;
-    /// @dev Entropy key of head slot 2's third-or-fourth pick.
-    uint256 private constant BAF_HEAD_PICK_KEY = 1 << 17;
-    bytes32 private constant BAF_WINNERS_TAG = keccak256("degenerus.baf.winners");
-
     /// @dev Skipped-bracket consolation rate: 1 WWXRP per 1000 FLIP of frozen
     ///      bracket score (both whole tokens), with a minimum of 1 for a positive score.
     ///      WWXRP emission is economically
@@ -218,6 +211,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @notice Day index of the most recent BAF resolution or skip (any bracket).
     uint24 internal lastBafResolvedDay;
+    /// @dev Bracket level owning each of the four bafTop banks, 24 bits per bank.
     uint96 private bafTopLevels;
 
     constructor() {
@@ -316,7 +310,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |                                                                        |
       |  SECURITY:                                                             |
       |  • VRF-derived randomness for all random selections                    |
-      |  • Draws hashed per round pair from the single VRF seed                |
+      |  • Draws hashed per round or round pair from the single VRF word       |
       |  • Unfilled awards leave their reserve to the game's future pool       |
       +========================================================================+*/
 
@@ -423,9 +417,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
     }
 
-    /// @dev The bracket's winner stream, separate from the craps schedule's (word, ordinal) stream.
-
-
     /// @notice Mark a BAF bracket as skipped because the daily flip lost.
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit is filtered
     ///      out of future claims (Coinflip gates winningBafCredit on
@@ -433,12 +424,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      as-is — no new writes ever target a past bracket, so clearing
     ///      would only burn gas. Sets the bracket's skipped flag: the frozen
     ///      player scores become claimable as WWXRP consolation.
+    ///      The name keeps this selector dispatching after Coinflip's per-claim entries.
     /// @param lvl Level whose BAF was skipped.
-    /// @dev The name keeps this selector dispatching after Coinflip's per-claim entries.
+    /// @param today The Game's current logical day.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function markBafSkippedAt(uint24 lvl, uint24 today) external onlyGame {
         bafLevel[lvl].skipped = true;
-        // The authenticated Game caller supplies its current logical day.
         lastBafResolvedDay = today;
         emit BafSkipped(lvl, today);
     }
@@ -527,15 +518,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
         return ps.total;
     }
 
-    /// @dev Convert raw score to capped uint96 (whole tokens only).
-    /// @param s Raw score in base units.
-    /// @return Capped score in whole tokens.
+    /// @dev Cap a score at uint96.max for the leaderboard lane.
     function _score96(uint256 s) private pure returns (uint96) {
-        uint256 wholeTokens = s;
-        if (wholeTokens > type(uint96).max) {
-            wholeTokens = type(uint96).max;
-        }
-        return uint96(wholeTokens);
+        return s > type(uint96).max ? type(uint96).max : uint96(s);
     }
 
     /// @dev Update top-4 BAF leaderboard with new stake.
@@ -649,9 +634,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function getLastBafResolvedDay() external view returns (uint24) {
         return lastBafResolvedDay;
     }
+
     /// @notice Top-4 coinflip bettors for BAF per level, sorted by score descending. Two 128-bit
     ///         entries per word: entry i lives in word i >> 1 at bit (i & 1) * 128, laid out as
     ///         score (bits 0-95, whole tokens capped at uint96.max) | wallet ID (bits 96-127).
     uint256[2][4] internal bafTop;
-
 }

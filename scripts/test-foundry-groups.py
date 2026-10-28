@@ -12,10 +12,35 @@ import re
 import signal
 import subprocess
 import sys
+import time
 import uuid
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def wait_for_process_group_exit(group):
+    """On Linux, wait for killed compiler descendants before restoring their inputs."""
+    proc = Path('/proc')
+    if not proc.is_dir():
+        return  # Other Unix platforms still receive the process-group SIGKILL.
+    while True:
+        live = False
+        for entry in proc.iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+            except (FileNotFoundError, ProcessLookupError, PermissionError):
+                continue
+            if int(fields[2]) == group and fields[0] not in ('Z', 'X'):
+                live = True
+                break
+        if not live:
+            return
+        time.sleep(0.02)
+
+
 # Count selected source roots, not transitive imports. Imported helpers remain available.
 # Twenty roots leaves headroom below the former 89-source integration/gas compilation.
 DEFAULT_BATCH_SOURCES = 20
@@ -29,6 +54,7 @@ ENV_KEYS = (
     "FOUNDRY_SOLC", "FOUNDRY_SOLC_VERSION", "FOUNDRY_VIA_IR", "FOUNDRY_OPTIMIZER",
     "FOUNDRY_OPTIMIZER_RUNS", "FOUNDRY_EVM_VERSION", "FOUNDRY_CACHE_PATH", "FOUNDRY_OUT",
     "FOUNDRY_GAS_LIMIT", "FOUNDRY_BLOCK_GAS_LIMIT",
+    "NATIVE_PAID_MULTIPLIER",
 )
 
 
@@ -36,6 +62,7 @@ ENV_KEYS = (
 # and a differently patched ContractAddresses.sol, so it is never part of a full-tree run: only
 # an explicit `--group fork` (or `--file test/fork/...`) selects it, and then alone.
 FORK_GROUP = "fork"
+INVARIANT_SHARDS = 3
 FORK_ROOT = "test/fork/"
 FOUNDRY_PATCH = ["node", "scripts/lib/patchForFoundry.js"]
 FORK_PATCH = ["node", "scripts/lib/patchForFork.js"]
@@ -76,6 +103,12 @@ def groups():
     for i in range(4):
         result[f"fuzz-{i + 1}"] = set(fuzz[i * chunk:(i + 1) * chunk])
     result["invariants"] = set(Path("test/fuzz/invariant").rglob("*.sol"))
+    # CI shards of the invariants group (each fits a hosted job's time limit); a default
+    # full-tree run uses the whole group instead.
+    invariant_roots = sorted(p for p in result["invariants"] if p.name.endswith(".t.sol"))
+    shard = max(1, (len(invariant_roots) + INVARIANT_SHARDS - 1) // INVARIANT_SHARDS)
+    for i in range(INVARIANT_SHARDS):
+        result[f"invariants-{i + 1}"] = set(invariant_roots[i * shard:(i + 1) * shard])
     result[FORK_GROUP] = {p for p in files if is_fork_source(p)}
     missing = set(files) - support - set().union(*result.values())
     if missing:
@@ -222,6 +255,8 @@ def main():
     elif not args.file:
         # A full-tree run never reaches mainnet: the fork group is explicit opt-in only.
         selected.pop(FORK_GROUP, None)
+        for i in range(INVARIANT_SHARDS):
+            selected.pop(f"invariants-{i + 1}", None)
     chosen = set().union(*selected.values()) if selected else set()
     fork_run = any(is_fork_source(p) for p in chosen)
     if fork_run and not all(is_fork_source(p) for p in chosen):
@@ -310,10 +345,17 @@ def main():
     def run_child(command, **kwargs):
         child = subprocess.Popen(command, start_new_session=True, **kwargs)
         try:
-            return child.wait()
+            code = child.wait()
+            # Even a successful wrapper may leave a compiler reading patched inputs.
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            wait_for_process_group_exit(child.pid)
+            return code
         except BaseException:
             # Stop Forge and solc before restoring their compile inputs. Ignore
-            # repeated interrupts only while performing this bounded cleanup.
+            # repeated interrupts while completing cleanup.
             handlers = {sig: signal.signal(sig, signal.SIG_IGN)
                         for sig in (signal.SIGTERM, signal.SIGINT)}
             try:
@@ -326,6 +368,13 @@ def main():
                 except subprocess.TimeoutExpired:
                     os.killpg(child.pid, signal.SIGKILL)
                     child.wait()
+                # A wrapper can exit while solc ignores SIGTERM. Parent exit
+                # alone does not establish that all compile-input readers stopped.
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                wait_for_process_group_exit(child.pid)
             finally:
                 for sig, handler in handlers.items():
                     signal.signal(sig, handler)

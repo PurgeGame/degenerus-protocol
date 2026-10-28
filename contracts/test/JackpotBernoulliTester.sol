@@ -3,7 +3,7 @@ pragma solidity 0.8.38;
 
 /// @title JackpotBernoulliTester
 /// @notice Test helper that exposes the jackpot ticket-roll Bernoulli whole-ticket
-///         collapse arithmetic from `DegenerusGameJackpotModule._jackpotTicketRoll`
+///         collapse arithmetic from `DegenerusGameJackpotDrawModule._jackpotTicketRoll`
 ///         as external-pure passthroughs. Enables direct empirical verification of:
 ///           - EV-neutrality of the round-up: `E[whole] * 100 ≈ scaledTickets`
 ///             (exact under an ideal uniform mod-100 draw; the uint32 % 100 bias is ~2e-8)
@@ -11,10 +11,10 @@ pragma solidity 0.8.38;
 ///           - bits[96..127] bit-slice independence from the path/level-selection
 ///             consumers, which reduce the whole `entropy` word modularly
 ///             (`entropy % 100`, `(entropy / 100) % 4`, `(entropy / 100) % 46`)
-///           - 2-roll uniqueness across the `EntropyLib.hash2(entropy, entropy)`
-///             keccak self-mix evolution between the medium-amount-branch rolls
+///           - 2-roll uniqueness across the `EntropyLib.hash2(JACKPOT_TICKET_ROLL, entropy)`
+///             keccak evolution between the medium-amount-branch rolls
 /// @dev    The arithmetic mirrored here is the instruction sequence that ships in
-///         `DegenerusGameJackpotModule._jackpotTicketRoll` from the Bernoulli block
+///         `DegenerusGameJackpotDrawModule._jackpotTicketRoll` from the Bernoulli block
 ///         onward; production first saturates `wholeTicketsScaled` to `uint32.max`,
 ///         which this tester takes as its already-`uint32` input. The test suite asserts byte-identical reproduction by grepping the
 ///         production source for the canonical predicate
@@ -33,7 +33,7 @@ contract JackpotBernoulliTester {
 
     /// @notice Bernoulli whole-ticket collapse on bits[96..127] of `seed`.
     /// @dev Exact instruction-sequence parity with the inline Bernoulli block of
-    ///      `_jackpotTicketRoll` (contracts/modules/DegenerusGameJackpotModule.sol):
+    ///      `_jackpotTicketRoll` (contracts/modules/DegenerusGameJackpotDrawModule.sol):
     ///        uint32 scaledTickets = uint32(quantityScaled);
     ///        uint32 whole = scaledTickets / uint32(QTY_SCALE);
     ///        uint32 frac  = scaledTickets % uint32(QTY_SCALE);
@@ -45,7 +45,7 @@ contract JackpotBernoulliTester {
     /// @param scaledTickets Pre-Bernoulli scaled ticket count (== `uint32(quantityScaled)`
     ///                      at the inline-Bernoulli-block entry).
     /// @param seed Per-roll 256-bit entropy word (the production `entropy` local,
-    ///             already evolved via `EntropyLib.hash2(entropy, entropy)` on
+    ///             already evolved via `EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy)` on
     ///             `_jackpotTicketRoll` entry).
     /// @return whole Post-collapse whole ticket count.
     /// @return roundedUp True iff the Bernoulli round-up fired (fractional path).

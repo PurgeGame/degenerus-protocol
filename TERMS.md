@@ -1,7 +1,7 @@
 # Terms of Interaction
 
-These terms govern every contract in this repository's `contracts/` tree. The same text
-appears as a header comment at the top of each source file. Submitting a transaction to any
+These terms govern every contract in this repository's `contracts/` tree. A shortened
+form appears as a header comment in the main contract source files. Submitting a transaction to any
 of these contracts accepts them.
 
 ---

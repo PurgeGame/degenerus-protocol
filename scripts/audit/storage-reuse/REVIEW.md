@@ -1,5 +1,9 @@
 # Storage reuse implementation review
 
+> **Historical evidence.** This file records the storage-reuse implementation committed in `c4c1effe5` (2026-10-20; source baseline `fb2540c55`, Solidity 0.8.34). It is not a description of the current
+> source. Current layouts and behavior: [Storage reuse](../../../docs/STORAGE-REUSE.md) and
+> `scripts/layout/golden/`.
+
 Scope: the R90 Coinflip ring, daily-phase Vault backstop, two BAF records and one
 affiliate history/cache word. This is a new-deployment change. The implementation
 does not migrate live contracts. Test results and native measurements are separate

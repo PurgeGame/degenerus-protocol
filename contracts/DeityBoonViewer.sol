@@ -29,21 +29,9 @@ import {RngTags} from "./libraries/RngTags.sol";
 
 /// @dev Data source interface for deity boon state from the game contract.
 interface IDeityBoonDataSource {
+    /// @notice Raw boon state for a deity wallet ID: the preceding day's finalized word for
+    ///         today's boons, the current day, today's used-slot mask and two eligibility flags.
     function deityBoonDataById(uint32 id) external view returns (uint256, uint24, uint8, bool, bool);
-    /// @notice Get the raw boon state for a deity holder.
-    /// @param deity Address of the deity pass holder.
-    /// @return dailySeed The preceding day's finalized RNG word for today's boons.
-    /// @return day Current day index.
-    /// @return usedMask Bitmask of boon slots already consumed today.
-    /// @return decimatorOpen Whether decimator boons are available this level.
-    /// @return deityPassAvailable Whether deity pass boons are eligible.
-    function deityBoonData(address deity) external view returns (
-        uint256 dailySeed,
-        uint24 day,
-        uint8 usedMask,
-        bool decimatorOpen,
-        bool deityPassAvailable
-    );
 
     /// @notice Get the finalized RNG word for a game day (zero until available).
     function rngWordForDay(uint24 day) external view returns (uint256);
@@ -54,10 +42,9 @@ interface IDeityBoonDataSource {
 
 /// @title DeityBoonViewer
 /// @notice Standalone view contract for computing deity boon slot types.
-///         Reads raw state from DegenerusGame.deityBoonData() and applies the
+///         Reads raw state from DegenerusGame.deityBoonDataById() and applies the
 ///         weighted random selection logic to determine boon types per slot.
 contract DeityBoonViewer {
-
     uint8 private constant DEITY_DAILY_BOON_COUNT = 3;
 
     // Boon type IDs
@@ -163,7 +150,7 @@ contract DeityBoonViewer {
         );
     }
 
-    /// @dev Mirrors BoonModule._deityBoonForSlot using the issuance day and the
+    /// @dev Mirrors GameBoonActions._deityBoonForSlot using the issuance day and the
     ///      preceding day's finalized word. No live eligibility term can remap a slot.
     function _slotsForDay(uint32 deityId, uint24 day, uint256 dailySeed)
         private pure returns (uint8[3] memory slots)
@@ -181,7 +168,7 @@ contract DeityBoonViewer {
     }
 
     /// @dev Map a weighted random roll to a boon type ID over the static full table — the same
-    ///      weight-balanced tree `DegenerusGameBoonModule._boonFromRoll` walks, restated here
+    ///      weight-balanced tree `GameBoonActions._boonFromRoll` walks, restated here
     ///      because neither contract can read the other. `BoonRollTreeParity` holds the two
     ///      statements together on every reachable roll.
     /// @param roll Random value in [0, W_TOTAL).

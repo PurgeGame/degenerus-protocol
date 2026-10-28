@@ -166,7 +166,7 @@ by ordinal `id-N` (1..M, M ≤ N), reused across rounds; only candidates admitte
 an owner. Evictions need no cleanup. Original owners come from their entry records. Ranking
 scans at most 100 leaves, moves the champion first and releases pass funding once.
 
-Advance reserves `P` once. Initialization transfers `F` from current to claimable once,
+Advance reserves `P` once, moving the spent part of the seal from `futurePool` into `claimablePool` (`DegenerusGameAdvanceModule`, Decimator block after the BAF arm). Zero-quota rounds release the reservation after sampled work through `_releaseToFuture`; normal payouts keep the champion/pass rules. Initialization transfers `F` from current to claimable once,
 recording it in JackpotWork.paid. Jackpot debits subsequent solo cash and pass cost; only
 cash increases claimable liability, and pass cost funds futurePrizePool. Winner
 ETH consumes the reservation without increasing aggregate claimable funds. One plan word
@@ -196,5 +196,6 @@ peak and score. Skipped IDs replay from the sealed word and final field size. Sa
 originals emit `DecimatorRun`. `DecimatorRanked` identifies the champion; each
 `DecimatorClaimed` reports one entry's ETH and passes.
 
-Round storage packs a uint96 pool, uint40 original count and uint64 credited aggregate
-(`DecBattleRound`); every delegate module shares the layout.
+Round storage (`DecBattleRound`, two words) packs a uint96 pool, uint40 original count and
+uint64 credited aggregate with the phase, quota and stratum cursor; every delegate module shares
+the layout.

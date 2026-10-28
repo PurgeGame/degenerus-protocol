@@ -25,28 +25,26 @@ pragma solidity 0.8.38;
  */
 
 /// @title IDegenerusCoin
-/// @notice Interface for the Degenerus Coin token with game integration functionality
+/// @notice Game integration surface of the FLIP token.
 interface IDegenerusCoin {
-    /// @notice Burns coins from a target address
+    /// @notice Burns FLIP from a target address (GAME, PARIMUTUEL or CRAPS only).
+    /// @dev Settled coinflip winnings cover any wallet shortfall before the burn.
     /// @param target The address to burn coins from
     /// @param amount The amount of coins to burn
     function burnCoin_g27673(address target, uint256 amount) external;
 
-    /// @notice Mints new coins directly to a player for game rewards
+    /// @notice Mints FLIP to a player (COINFLIP or GAME only).
     /// @param player The address to mint coins to
     /// @param amount The amount of coins to mint
     function mintForGame_g152734(address player, uint256 amount) external;
 
-    /// @notice Spendable FLIP for a player: wallet balance + claimable coinflip stake.
+    /// @notice Spendable FLIP for a player: wallet balance (plus the mint allowance for VAULT)
+    ///         + claimable coinflip winnings.
     /// @param player The address to read.
     /// @return spendable The total amount the player can spend on a burn/transfer.
     function balanceOfWithClaimable(
         address player
     ) external view returns (uint256 spendable);
-
-
-
-
 
     /// @notice Burn FLIP during an active Decimator window for account `id`'s weighted entry.
     /// @dev Authorized: `id == 0` is the caller (no Game resolution call; on a first burn the
@@ -54,7 +52,7 @@ interface IDegenerusCoin {
     ///      nonzero `id` needs Game `resolveAccount_g7029(id, msg.sender).authorized` (the account's key,
     ///      a smurf's owner, or an approved operator). The FLIP burns from the account's PAYEE
     ///      (wallet balance, then the payee's settled coinflip winnings for a shortfall); the
-    ///      quest, boon, activity multiplier and the Decimator entry (`recordDecBurn(key, ...)`)
+    ///      quest, boon, activity multiplier and the Decimator entry (`recordDecBurn_g1271(id, ...)`)
     ///      belong to the account.
     /// @param id Account the entry belongs to (0 = caller).
     /// @param amount Amount (whole FLIP) to burn; must satisfy the 2,000 FLIP minimum.

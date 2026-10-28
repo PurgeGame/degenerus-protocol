@@ -17,13 +17,6 @@
     },
     {
       "file": "Craps.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.lootbox.craps.v1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "Craps.sol",
       "function": "handSeed",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_HAND,uint256(seed),i)",
       "class": "RNG",
@@ -248,13 +241,6 @@
     },
     {
       "file": "DegenerusJackpots.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.baf.winners\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "DegenerusJackpots.sol",
       "function": "bafHeadWinner",
       "expression": "EntropyLib.hash2(RngTags.BAF_HEAD_SIDE,rngWord)",
       "class": "RNG",
@@ -294,20 +280,6 @@
       "expression": "keccak256(data)",
       "class": "NON-RNG",
       "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
-    },
-    {
-      "file": "DegenerusQuests.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.quest.daily\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "DegenerusQuests.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.quest.level\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
     },
     {
       "file": "DegenerusQuests.sol",
@@ -507,13 +479,6 @@
     },
     {
       "file": "libraries/DecimatorSamplingLib.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"decimator.battle.sample.v1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "libraries/DecimatorSamplingLib.sol",
       "function": "rotation",
       "expression": "EntropyLib.hash2(RngTags.DECIMATOR_ROTATION,word)",
       "class": "RNG",
@@ -548,39 +513,11 @@
       "reason": "Fixed-width hashing primitive, all production callers independently registered"
     },
     {
-      "file": "libraries/EntropyLib.sol",
-      "function": "hash1",
-      "expression": "keccak256(0x00,0x20)",
-      "class": "HASH-IMPLEMENTATION",
-      "reason": "Fixed-width hashing primitive, all production callers independently registered"
-    },
-    {
-      "file": "libraries/FlipRoundLib.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.coinflip.reward-percent\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
       "file": "libraries/FlipRoundLib.sol",
       "function": "coinflipRewardPercent",
       "expression": "EntropyLib.hash2(RngTags.FLIP_REWARD,rngWord)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
-    },
-    {
-      "file": "libraries/GoldSixLib.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"GOLD_SIX_REPLACEMENT_V1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "libraries/GoldSixLib.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"GOLD_SIX_DAILY_V1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
     },
     {
       "file": "libraries/GoldSixLib.sol",
@@ -605,13 +542,6 @@
     },
     {
       "file": "libraries/JackpotBucketLib.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.jackpot.trait-board\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "libraries/JackpotBucketLib.sol",
       "function": "getRandomTraits",
       "expression": "EntropyLib.hash2(RngTags.JACKPOT_BOARD,rw)",
       "class": "RNG",
@@ -626,24 +556,10 @@
     },
     {
       "file": "libraries/TicketEntropy.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"DEGENERUS_TICKET_ROTATION_V1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "libraries/TicketEntropy.sol",
       "function": "queueStart",
       "expression": "EntropyLib.hash3(RngTags.TICKET_ROTATION,entropy,queueKey)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
-    },
-    {
-      "file": "libraries/TicketEntropy.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"DEGENERUS_TICKET_REMAINDER_V2\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
     },
     {
       "file": "libraries/TicketEntropy.sol",
@@ -656,27 +572,6 @@
       "file": "libraries/WalletTableLib.sol",
       "function": "<file-scope>",
       "expression": "keccak256(abi.encode(OWNERS_SLOT))",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameAdvanceModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"future-keep\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameAdvanceModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.skim.bps\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameAdvanceModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.skim.variance\")",
       "class": "CONSTANT",
       "reason": "Compile-time tag or storage root, no VRF input"
     },
@@ -728,41 +623,6 @@
       "expression": "EntropyLib.hash3(RngTags.BOX_BOON_LANE,seed,nonceBase+i)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
-    },
-    {
-      "file": "modules/DegenerusGameDecimatorModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"decimator.battle.dice.v1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameDecimatorModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"decimator.battle.board.v1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameDecimatorModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"decimator.battle.tie.v1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameDecimatorModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"decimator.battle.generated.player.v1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameDecimatorModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"decimator.battle.generated.recipient.v1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
     },
     {
       "file": "modules/DegenerusGameDecimatorModule.sol",
@@ -1011,20 +871,6 @@
     },
     {
       "file": "modules/DegenerusGameJackpotDrawModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"coin-level\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameJackpotDrawModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"far-future-coin\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameJackpotDrawModule.sol",
       "function": "_drawCoinEntry",
       "expression": "EntropyLib.hash3(RngTags.FLIP_LEVEL,randomWord,pull)",
       "class": "RNG",
@@ -1071,20 +917,6 @@
       "expression": "EntropyLib.hash4(RngTags.BUCKET_SAMPLE,randomWord,salt,pull)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
-    },
-    {
-      "file": "modules/DegenerusGameJackpotModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.jackpot.hero-symbol\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameJackpotModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"daily-current-bps\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
     },
     {
       "file": "modules/DegenerusGameJackpotModule.sol",
@@ -1228,13 +1060,6 @@
     },
     {
       "file": "modules/DegenerusGameTicketModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"DEGENERUS_DIRECT_JACKPOT_TICKETS_V1\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameTicketModule.sol",
       "function": "runJackpotTicketAwards",
       "expression": "EntropyLib.hash4(RngTags.TICKET_DIRECT,plan.entropy,(uint256(c.q)<<32)|c.i,c.round)",
       "class": "RNG",
@@ -1305,20 +1130,6 @@
     },
     {
       "file": "modules/DegenerusGameWhaleModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"ticket-jackpot-whale\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameWhaleModule.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"jackpot-quadrant-whale\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "modules/DegenerusGameWhaleModule.sol",
       "function": "_drawWhalePassWinner",
       "expression": "EntropyLib.hash2(ticketLeg?RngTags.WHALE_TICKET:RngTags.WHALE_QUADRANT,randWord)",
       "class": "RNG",
@@ -1354,20 +1165,6 @@
     },
     {
       "file": "sDGNRS.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"sdgnrs.century.refill\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "sDGNRS.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"sdgnrs.redemption.synthetic-flip\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "sDGNRS.sol",
       "function": "recycleCentury",
       "expression": "EntropyLib.hash2(RngTags.CENTURY_REFILL,rngWord)",
       "class": "RNG",
@@ -1379,27 +1176,6 @@
       "expression": "EntropyLib.hash3(RngTags.REDEMPTION_BOX,word,uint256(walletId))",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
-    },
-    {
-      "file": "storage/CrapsBattleStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"CrapsHighReserveDraw\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "storage/CrapsBattleStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"CrapsHighReserveWinner\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "storage/CrapsBattleStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"CrapsJackpotSubsidy\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
     },
     {
       "file": "storage/CrapsBattleStorage.sol",
@@ -1561,41 +1337,6 @@
       "expression": "keccak256(0,64)",
       "class": "NON-RNG",
       "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
-    },
-    {
-      "file": "storage/DegenerusGameStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"degenerus.protocol.boon.winner\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "storage/DegenerusGameStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"foil-payout-seed\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "storage/DegenerusGameStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"foil-seed\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "storage/DegenerusGameStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"foil-currency\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
-    },
-    {
-      "file": "storage/DegenerusGameStorage.sol",
-      "function": "<file-scope>",
-      "expression": "keccak256(\"foil-spin\")",
-      "class": "CONSTANT",
-      "reason": "Compile-time tag or storage root, no VRF input"
     },
     {
       "file": "storage/DegenerusGameStorage.sol",

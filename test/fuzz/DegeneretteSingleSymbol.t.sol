@@ -359,7 +359,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 ? FlipRoundLib.roundFlipToHundreds(
                     expectedTotal, uint256(keccak256(abi.encode(uint256(95), seed)))
                 )
-                : FlipRoundLib.floorWholeFlip(expectedTotal);
+                : expectedTotal;
             assertEq(payout, expectedTotal);
             assertEq(abi.decode(returned, (uint256)), expectedTotal);
         }

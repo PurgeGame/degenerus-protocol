@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {GameBoxInternals} from "./GameBoxInternals.sol";
-import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
-import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {RECORD_KIND_SPIN} from "../interfaces/ICoinflip.sol";
-import {
-    IDegenerusGameLootboxModule
-} from "../interfaces/IDegenerusGameModules.sol";
-import {ContractAddresses} from "../ContractAddresses.sol";
-import {MineFlipGas} from "../libraries/MineFlipGas.sol";
-import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
-import {EntropyLib} from "../libraries/EntropyLib.sol";
-import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
@@ -28,7 +17,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
     error UnsupportedCurrency();
 
     /// @notice Emitted when a Degenerette bet is placed.
-    /// @param player The bet owner (the address paid when it resolves).
+    /// @param player The bet owner's wallet ID.
     /// @param index The lootbox RNG index this bet is tied to.
     /// @param betId The bet's id within `index`: its queue position + 1.
     /// @param packed The queued bet word (layout on DegenerusGameStorage.degeneretteQueue).
@@ -70,17 +59,15 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
     ///      record's bootstrap minimum.
     uint256 internal constant BIGGEST_SPIN_MIN_ETH = 1 ether;
 
-    /// @dev Maximum spins per bet, per currency (encoded as ticketCount in the packed bet).
+    /// @dev Maximum spins per bet, per currency (the spin count field of the packed bet).
     uint8 internal constant MAX_SPINS_ETH = 25;
 
     uint8 internal constant MAX_SPINS_FLIP = 15;
 
-    /// Every symbol choice has the same distribution. The hero lane's color is wild, the
-    /// house rolls a wild per lane at 1/16, and the result-wild multiplier shares the
-    /// ETH/FLIP table. Internal WWXRP reward spins add a 5% help gate and a 70–130%
-    /// activity target.
-    //
-    // -------------------------------------------------------------------------
+    // Every symbol choice has the same distribution. The hero lane's color is wild, the
+    // house rolls a wild per lane at 1/16, and the result-wild multiplier shares the
+    // ETH/FLIP table. Internal WWXRP reward spins add a 5% help gate and a 70–130%
+    // activity target.
 
     uint256 internal constant BET_SYMBOL_SHIFT = 32;
 
@@ -123,9 +110,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
     }
 
     /// @notice Places a Degenerette bet with one chosen symbol and a generated ticket.
-    /// @dev Single chosen-attribute pick.
-    ///      spinCount is treated as "spin count": each spin resolves independently but shares
-    ///      the same lootbox RNG index/word (derived per spin).
+    /// @dev Each spin resolves independently from the bet's lootbox RNG index word.
     ///      The bet always belongs to account `id` (0 = caller). Funding source: a caller
     ///      authorized for the account (its payee — the key or a smurf's owner — or an approved
     ///      operator) spends the account's funds: fresh ETH from the caller, the claimable
@@ -135,7 +120,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
     ///      winnings).
     /// @param id The account the bet belongs to (0 = caller; otherwise allocated).
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported).
-    /// @param amountPerSpin Bet amount per ticket.
+    /// @param amountPerSpin Bet amount per spin.
     /// @param spinCount Number of spins (per-currency cap: ETH 25 / FLIP 15).
     /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     function _placeBet(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol) internal {
@@ -203,7 +188,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
         // already fixes this bet to the next session before any external call.
 
         c.totalBet = uint256(c.amountPerSpin) * uint256(c.spinCount);
-        // Decay-aware effective quest streak: a streak
+        // Decay-aware effective quest streak: once the day's quest has rolled, a streak
         // lapsed past its shields reads 0, so a returning-inactive player can't snapshot a
         // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
         // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.
@@ -220,8 +205,8 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
             // the record, so skipping the call costs no outcome and keeps the external
             // arm off the bets that make up nearly all ETH volume. The candidate is
             // the bet's TOTAL ETH — the whole transaction's wager, spins included.
-            // Gifted bets arm normally: the ETH is real and the record belongs to
-            // `player`.
+            // Gifted bets arm normally: the ETH is real and the record belongs to the
+            // bet's owner.
             //
             // The claim does not pay out here. It waits beside the queued bet as whole FLIP
             // and resolves as its own FLIP spin chain off the very word THIS bet is
@@ -229,12 +214,11 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
             // so a claim can never be armed against a known word. Beating the
             // biggest-spin record therefore buys a spin, not flip credit.
             if (c.totalBet >= BIGGEST_SPIN_MIN_ETH) {
-                uint256 whole = coinflip.armRecord(
+                c.recordBounty = coinflip.armRecord(
                     RECORD_KIND_SPIN,
                     c.playerId,
                     c.totalBet
                 );
-                c.recordBounty = whole;
             }
 
             uint256 wagerUnit = c.totalBet / 1e14;
@@ -255,7 +239,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
         // which funds collection and the pool credit). The bonus rides the PACKED bet only,
         // so the player spins on more than they paid without any unfunded ETH entering the
         // pools. ETH solvency is unaffected: an ETH win is capped at a share of the live pool
-        // at distribution time. The jackpot also respects the million-x paid-stake cap.
+        // at distribution time.
         //
         // Self-or-operator-funded bets only, mirroring the coinflip deposit boon's funder
         // gate: a permissionless gift must never spend the recipient's boon (a dust gift
@@ -277,7 +261,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
             uint256 boostBase = c.totalBet;
             if (c.currency == CURRENCY_ETH) {
                 if (boostBase > DEGENERETTE_BOON_ETH_CAP) boostBase = DEGENERETTE_BOON_ETH_CAP;
-            } else if (c.currency == CURRENCY_FLIP) {
+            } else {
                 if (boostBase > DEGENERETTE_BOON_FLIP_CAP) boostBase = DEGENERETTE_BOON_FLIP_CAP;
             }
             // Spread across the spins, then floor to the stake unit: integer division drops
@@ -314,7 +298,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
         uint32 playerId, uint8 symbol, uint24 day, uint256 amount, uint256 wagerUnits, uint16 score
     ) internal {
         uint32 issuer = symbol == 0 ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
-        if (deityBySymbol[symbol] != (symbol == 0 ? VAULT_WALLET_ID : SDGNRS_WALLET_ID)) return;
+        if (deityBySymbol[symbol] != issuer) return;
         uint256 weight = wagerUnits * ActivityCurveLib.boonDrawMultUnits(score);
         if (weight > type(uint64).max) revert InvalidBet();
         // The ring slot for `day` (see protocolBoonPools). One still tagged with an older day
@@ -377,8 +361,8 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
             // The bet's queue count commits in this same write.
             lootboxRngPacked = ((lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
                 | ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT)) + (uint256(1) << LR_BET_COUNT_SHIFT);
-            // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
-            // time, so solvency is guaranteed regardless of jackpot size
+            // No max payout check needed: ETH payouts are capped at 10% of the future pool at
+            // distribution time.
         } else if (currency == CURRENCY_FLIP) {
             coin.burnCoin_g27673(burnFrom, totalBet);
             // Pending FLIP and the bet's queue count commit in one write.
@@ -393,9 +377,9 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
         }
     }
 
-    /// @dev Consume the degenerette stake boon in this
-    ///      bet's own currency lane. Returns 0 when the lane is empty or expired (an
-    ///      expired lane is cleared); the other currencies' lanes are never touched.
+    /// @dev Consume the degenerette stake boon in this bet's own currency lane. Returns 0 when
+    ///      the lane is empty or expired (an expired lane is cleared); the other currencies'
+    ///      lanes are never touched.
     function _consumeDegeneretteBoon(
         uint32 id,
         uint8 currency

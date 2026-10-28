@@ -54,21 +54,20 @@ import {RngTags} from "./libraries/RngTags.sol";
 ///
 ///        * The board is the basics and nothing else: the pass line, all six place
 ///          numbers, the two iconic hardways — the hard four and the hard eight — and one dark
-///          lane, Don't Pass. Everything else that only bled (Big 6/8, the other hardways), every
-///          side lottery (Fire, All/Tall/Small) and pass odds has been cut. In this
-///          ride-to-the-seven-out model the pass line runs 2.79% (still the textbook 1.41% per
-///          decision), place 4/10 and 5/9 pay TRUE ODDS and run exactly 0%, place 6/8 at 7:6 run
-///          2.78%, and the indulgences are the hardways (10% on the eight, 12.5% on the four) and
-///          the dark lane, deliberately the dearest seat on the table: Don't Pass pays 3:4 and
-///          runs 13.73% per decision.
+///          lane, Don't Pass. There is no Big 6/8, no other hardway, no side lottery
+///          (Fire, All/Tall/Small) and no pass odds. In this ride-to-the-seven-out model the
+///          pass line runs 2.79% (still the textbook 1.41% per decision), place 4/10 and 5/9
+///          pay TRUE ODDS and run exactly 0%, place 6/8 at 7:6 run 2.78%, and the indulgences
+///          are the hardways (10% on the eight, 12.5% on the four) and the dark lane,
+///          deliberately the dearest seat on the table: Don't Pass pays 3:4 and runs 13.73% per
+///          decision.
 ///        * Stakes are WHOLE FLIP, uint24 per leg: the type itself is the table maximum of
-///          16,777,215 FLIP a leg. All payout math retains 10^18 sub-units internally, so fractions pay
-///          exactly as they always did. One consequence worth loving: the entire bet slip packs
-///          into a single storage slot.
+///          16,777,215 FLIP a leg. All payout math retains 10^18 sub-units internally, so
+///          fractions pay exactly. The ten legs pack into one 240-bit word.
 ///        * Place bets and the hardways are OFF on the come-out, the table default, and there is no
-///          toggle. Working them changes no house edge whatsoever — every roll is i.i.d. — so the
-///          switch bought a player nothing but a decision to get wrong.
-///        * Only the final token payment floors to whole FLIP; internal fractions survive every hand.
+///          toggle. Working them changes no house edge — every roll is i.i.d.
+///        * Only the final token payment is rounded to whole FLIP; internal fractions survive
+///          every hand.
 contract Craps {
     /// @dev Internal simulation precision: 10^18 sub-units per whole FLIP, independent of
     ///      the token's zero decimals. Never pass these units to a token or custody contract.
@@ -112,10 +111,9 @@ contract Craps {
     ///      from the base board and the seed alone.
     uint256 internal constant _ESC_HANDS = 3;
 
-    /// @notice The shooter from which every shooter doubles the wager. Shooter 30 wagers 1,024x
-    ///         either way. About one run in five hundred gets there in the Decimator's shared-dice
-    ///         simulation, and the high-water model's goal and progressive rates are unchanged by
-    ///         the switch, so it only ends the longest runs sooner.
+    /// @notice The shooter from which every shooter doubles the wager. Shooter 30 wagers 1,024x.
+    ///         About one run in five hundred gets there in the Decimator's shared-dice simulation,
+    ///         so it only ends the longest runs sooner.
     uint256 internal constant _ESC_FAST_FROM = 30;
 
     /// @notice The escalator ceiling, in base-board units. At `uint32.max` the escalator is the
@@ -139,22 +137,6 @@ contract Craps {
     /// @dev The two slices the next round inherits from this one: the latch and the multiplier.
     uint256 private constant _CUR_CARRY_MASK = (_CUR_MULT_MASK << _CUR_MULT_SHIFT) | _CUR_QUALIFIED;
 
-    /// @notice Domain tag for the mid-run second-chance coin, separated from the dice stream.
-    uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
-
-    /// @notice Domain tag for the field's rotating-shooter start, separated from every other
-    ///         draw the same seed answers. One draw per FIELD: the seat offset does the rest.
-    uint256 internal constant ROTATING_SHOOTER_TAG = 0x526f746174696e6753686f6f746572; // "RotatingShooter"
-
-    /// @notice Domain tag mixed into every craps seed.
-    bytes32 internal constant _CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
-    /// @dev Separates the per-bet rounding roll from everything else on the same committed word.
-    uint256 internal constant CRAPS_ROUND_TAG = 0x4372617073526f756e64; // "CrapsRound"
-    /// @dev Keys the owner's board scatter.
-    uint256 internal constant SCATTER_TAG = 0x437261707353636174746572; // "CrapsScatter"
-    /// @dev Keys an awarded entry's run to its bet id rather than its wallet.
-    uint256 internal constant JACKPOT_AWARDED_TAG = 0x4a61636b706f7441776172646564; // "JackpotAwarded"
-
     /// @dev Extra percentage points on HOT profit when this seat is the shooter. Both bonuses
     ///      apply only after the threshold, add before one floor, and never boost early profit.
     uint256 internal constant _ROTATION_UPLIFT = 30;
@@ -171,7 +153,7 @@ contract Craps {
     ///        bits 32..35  the point (0 = come-out)
     ///        bit  40      pass line live          bit 43  seven-out happened
     ///        bit  41      don't pass live         bit 44  hard four live
-    ///        bit  42      hard eight live
+    ///        bit  42      hard eight live         bit 45  don't pass won this hand
     uint256 private constant ST_POINT = 32;
     uint256 private constant ST_PLACE_ANY = 0xFFFF;
     uint256 private constant ST_POINT_MASK = 0xF << 32;
@@ -289,10 +271,10 @@ contract Craps {
     ///
     ///      Stop conditions are judged BETWEEN shooters, in this order: goal first (so a run that
     ///      is simultaneously at goal and out of the next stake counts as a win), then the hard
-    ///      bounds, then affordability. A round short of even half its escalating wager busts outright; one that
-    ///      can cover between half and all of it takes a single committed double-or-nothing on the
-    ///      whole bankroll — surviving doubles it (enough to cover the round) and plays on, losing
-    ///      ends the slip with nothing. Each played round escrows its wager — the base board times
+    ///      bounds, then affordability. A round short of even half its escalating wager busts
+    ///      outright; one that can cover between half and all of it takes a single committed
+    ///      double-or-nothing on the whole bankroll — surviving doubles it (enough to cover the
+    ///      round) and plays on, losing ends the slip with nothing. Each played round escrows its wager — the base board times
     ///      the escalating mandatory multiplier (see `_ESC_HANDS`) — out of the bankroll, plays one
     ///      hand, and credits back whatever it returned; the bounded-loss invariant is exactly what
     ///      makes the escrow subtraction safe unchecked after the affordability check. A busted
@@ -309,7 +291,7 @@ contract Craps {
     ///        * the survival coin is never taken again — the reserve rule, not a coin, decides
     ///          affordability from the latch on;
     ///        * a hard bound reached AFTER the latch stops as Goal, and one reached before it is
-    ///          the ordinary bust it always was;
+    ///          a bust;
     ///        * `bankrollOut` is the bankroll at the ACTUAL stop. The high point ranks the run and
     ///          feeds the records; it is never paid.
     ///
@@ -329,8 +311,8 @@ contract Craps {
     /// @param bankroll   The bankroll the run starts on, in internal 10^18 sub-units.
     /// @param goal       The bankroll that latches a Goal, in internal 10^18 sub-units.
     /// @param cap        Shooter cap on the run.
-    /// @param rollBudget Roll cap on the run, judged between shooters; one under `_MAX_ROLLS` is
-    ///                   exact, cutting the last hand where it runs out.
+    /// @param rollBudget Roll cap on the run, judged between shooters; a budget below `_MAX_ROLLS`
+    ///                   is exact, cutting the last hand where it runs out.
     /// @param salt       The slip's owner identity, which seasons the survival coin: a real
     ///                   owner's wallet ID, or a synthetic entry's 160-bit salt.
     /// @param boost Packed schedule: the hot roll threshold in bits 0..7, the percent
@@ -477,7 +459,7 @@ contract Craps {
 
     /// @notice Total staked across every leg of `b` — one hand's charge.
     /// @dev What an escrow must collect up front, and the exact ceiling on what the player can
-    ///      lose. Multiply by the hand count for a session.
+    ///      lose. A session sums it over its hands, each scaled by the escalator `_escOf(hand)`.
     function _stakeFor(Bets memory b) internal pure returns (uint256 total) {
         // Stakes are whole FLIP; the simulated charge uses 10^18 sub-units. Bounded far below 2^256: ten uint24 legs.
         unchecked {
@@ -495,20 +477,11 @@ contract Craps {
         }
     }
 
-    /// @notice The seed for hand `i` of a session seeded by `seed`.
-    /// @dev Exposed so a single hand of a run can be pulled out and replayed on its own, and so a
-    ///      whole run can be checked off-chain from the one word.
+    /// @notice The seed for hand `i` of a run seeded by `seed`, so a single hand can be replayed
+    ///         on its own.
     function handSeed(bytes32 seed, uint256 i) internal pure returns (bytes32 h) {
         return bytes32(EntropyLib.hash3(RngTags.CRAPS_HAND, uint256(seed), i));
     }
-
-    /// @dev Exact `keccak256(abi.encode(a, b))` over the EVM scratch space. Kept here because
-    ///      table seeding, mapping-slot reads and several settlement draws all share this shape.
-
-
-    /// @dev Exact `keccak256(abi.encode(a, b, c))`, using temporary free memory without moving
-    ///      its pointer. Three words do not fit in the EVM's 64-byte scratch region.
-
 
     // ---------------------------------------------------------------------------------------
     // Core
@@ -758,17 +731,13 @@ contract Craps {
     /// @dev The fair, committed second-chance coin for round `n`. Salting by the round keeps each
     ///      affordability decision on its own coin, and salting by the OWNER keeps one player's
     ///      coin off every other player's: the shooter is the table's, but a bust is not, so two
-    ///      seats reaching the same round no longer live or die together. Both inputs were fixed
+    ///      seats reaching the same round do not live or die together. Both inputs were fixed
     ///      before the word existed — the seed is the table's and the owner is who placed the slip
-    ///      — so settlement order cannot change the result. It is the same salt the board scatter
-    ///      already uses, so a player's whole run is decorrelated from the field by one key.
+    ///      — so settlement order cannot change the result. It is the same key the board scatter
+    ///      uses, so a player's whole run is decorrelated from the field by one key.
     function _survived(bytes32 seed, uint256 n, uint256 salt) internal pure returns (bool) {
         return EntropyLib.hash4(RngTags.CRAPS_SURVIVAL, uint256(seed), n, salt) & 1 == 1;
     }
-
-    /// @dev Exact `abi.encode(tag, seed, n, salt)` digest without allocating or advancing the
-    ///      free-memory pointer. The survival draw uses this four-word preimage layout.
-
 
     /// @dev THE MERIT VERDICT as one lexicographic scalar, so the common fold is one comparison.
     ///      Built by `_rankOf`. One hundred and five
@@ -791,9 +760,8 @@ contract Craps {
     ///      BOTH MONEY FIELDS SATURATE rather than mask. A mask would wrap a seventeen-trillion-
     ///      FLIP figure to a small one and rank it WORSE; saturating can only ever fail to
     ///      separate two runs that are already past the horizon, and the comparison then falls
-    ///      through to the next field. The largest bankroll the schedule can hand out is 60,000
-    ///      FLIP, so reaching the field's ceiling means a 2.9e8x run — the same order of
-    ///      unreachable as the engine's own 512-roll hand bound.
+    ///      through to the next field. A custom bankroll is at most 25 x 16,777,215 FLIP, so
+    ///      reaching the 44-bit ceiling takes a run of over 40,000x that bankroll.
     uint256 internal constant _SC_GOAL_BIT = 1 << 104;
     uint256 internal constant _SC_PRIMARY_SHIFT = 60;
     uint256 internal constant _SC_PRIMARY_MASK = 0xFFFFFFFFFFF;
@@ -885,9 +853,7 @@ contract Craps {
         unchecked {
             for (uint256 i = 0; i < n; ++i) {
                 // Memory structs are one word per field, so leg `n` is at offset 32n — and the
-                // ten bettable legs are exactly fields 0..9, the dark side last. The draw hashes
-                // the same two words `abi.encode(word, i)` would, out of scratch space so the loop
-                // allocates none.
+                // ten bettable legs are exactly fields 0..9, the dark side last.
                 uint256 draw = EntropyLib.hash3(RngTags.CRAPS_SCATTER_CHIP, word, i);
                 assembly ("memory-safe") {
                     let p := add(b, mul(mod(draw, 10), 0x20))

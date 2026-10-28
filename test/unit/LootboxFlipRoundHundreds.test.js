@@ -11,14 +11,13 @@
 //     now:  uint256 flipAmount = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
 //               ? FlipRoundLib.roundFlipToHundreds(
 //                     flipOut, EntropyLib.hash2(RngTags.BOX_ROUND, rollSeed))
-//               : FlipRoundLib.floorWholeFlip(flipOut);
+//               : flipOut;
 //
 //   SITE 4 — `_degenesisOutcome` (`DegenerusGameDegenesisModule.sol`, the 50% FLIP branch)
 //     the same threshold-gated collapse, keyed on the order's own committed `seed`.
 //
-// The whole-FLIP floor itself is NOT retired — it moved behind
-// `FlipRoundLib.floorWholeFlip` and now serves only the sub-threshold branch, so no award
-// leaves either site carrying wei-scale residue.
+// FLIP has 0 decimals, so the sub-threshold branch passes the whole-FLIP amount through
+// unchanged and no award leaves either site carrying sub-unit residue.
 //
 // Two properties are load-bearing and are asserted structurally below:
 //
@@ -129,8 +128,8 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
         "the collapse must key on `EntropyLib.hash2(RngTags.BOX_ROUND, rollSeed)` — a domain-separated hash, not a bit-slice"
       ).to.equal(true);
       expect(
-        /:\s*FlipRoundLib\.floorWholeFlip\(\s*flipOut\s*\)\s*;/.test(body),
-        "at or below the threshold `flipOut` must keep the whole-FLIP floor via `FlipRoundLib.floorWholeFlip`"
+        /:\s*flipOut\s*;/.test(body),
+        "at or below the threshold `flipOut` must pass through unrounded (FLIP has 0 decimals)"
       ).to.equal(true);
     });
 
@@ -220,8 +219,8 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
         "the collapse must key on `EntropyLib.hash2(RngTags.DEGENESIS_ROUND, seed)` — the order's own committed seed"
       ).to.equal(true);
       expect(
-        /:\s*FlipRoundLib\.floorWholeFlip\(\s*flipOut\s*\)\s*;/.test(body),
-        "at or below the threshold `flipOut` must keep the whole-FLIP floor via `FlipRoundLib.floorWholeFlip`"
+        /:\s*flipOut\s*;/.test(body),
+        "at or below the threshold `flipOut` must pass through unrounded (FLIP has 0 decimals)"
       ).to.equal(true);
     });
 
@@ -253,11 +252,11 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       ).to.be.lessThan(assignIdx);
     });
 
-    it("[02d] the module declares its own `FLIP_ROUND_TAG` domain separator", function () {
+    it("[02d] the module hashes the collapse under the dedicated `RngTags.DEGENESIS_ROUND` tag", function () {
       const source = fs.readFileSync(DEGENESIS_SOURCE_PATH, "utf8");
       expect(
-        /uint256\s+private\s+constant\s+FLIP_ROUND_TAG\s*=/.test(source),
-        "`FLIP_ROUND_TAG` must be declared in the Degenesis module"
+        /EntropyLib\.hash2\(\s*RngTags\.DEGENESIS_ROUND\s*,/.test(source),
+        "the Degenesis collapse must hash under `RngTags.DEGENESIS_ROUND`"
       ).to.equal(true);
     });
   });
@@ -265,11 +264,11 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
   describe("Module-wide: the whole-FLIP floor is gone from the module entirely", function () {
 
 
-    it("[03b] the module declares its own `FLIP_ROUND_TAG` domain separator", function () {
+    it("[03b] the module hashes the collapse under the dedicated `RngTags.BOX_ROUND` tag", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       expect(
-        /uint256\s+private\s+constant\s+FLIP_ROUND_TAG\s*=/.test(source),
-        "`FLIP_ROUND_TAG` must be declared so both sites hash under a dedicated domain"
+        /EntropyLib\.hash2\(\s*RngTags\.BOX_ROUND\s*,/.test(source),
+        "the lootbox collapse must hash under `RngTags.BOX_ROUND`"
       ).to.equal(true);
     });
   });

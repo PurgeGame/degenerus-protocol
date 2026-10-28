@@ -2,13 +2,11 @@
 pragma solidity 0.8.38;
 
 import {RngTags} from "../libraries/RngTags.sol";
-
 import {GameBoxInternals} from "./GameBoxInternals.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {GamePurchaseBoon} from "./GamePurchaseBoon.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
-import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 
 /// @dev Shared internal implementation in Game storage.
@@ -16,9 +14,10 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     uint24 internal constant COINFLIP_BOON_EXPIRY_DAYS = 2;
 
     /// @notice Consume the caller's coinflip, craps or WWXRP boon lane.
-    /// @dev The Game facade authorizes COINFLIP, COIN and WWXRP. The original caller remains: COINFLIP spends the coinflip boon, COIN spends the
-    ///      craps boon, and WWXRP spends its ecosystem boon. Each caller reaches
-    ///      only its own lane through this shared selector. ID 0 holds no boon state.
+    /// @dev The Game facade authorizes COINFLIP, COIN and WWXRP. The original caller remains:
+    ///      COINFLIP spends the coinflip boon, COIN spends the craps boon, and WWXRP spends its
+    ///      ecosystem boon. Each caller reaches only its own lane through this shared selector.
+    ///      ID 0 holds no boon state.
     /// @param id Wallet ID of the player to consume boon for
     /// @return boonBps Bonus BPS: WWXRP uses 400/800/1200; the other lanes use
     ///      500/1000/2500. Zero means no live boon.
@@ -333,9 +332,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     /// @dev Combined weight of deity pass discount boons (10% + 20% + 35%)
     uint16 internal constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
 
-    /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
+    /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight).
     ///      WWXRP occupies 2008..2607 and craps occupies the tail 2608..2855.
-    ///      The deity roll's decimator and deity-pass skip bands are unchanged.
     uint16 internal constant BOON_WEIGHT_TOTAL = 2856;
 
     /// @dev Cursor position where the decimator band starts in the `_boonFromRoll` walk
@@ -372,8 +370,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     ///      Deity boons: no LootBoxReward; manual gifts log DeityBoonIssued, automatic
     ///      draws log ProtocolBoonDrawAwarded. Instant awards keep their own
     ///      BoonConsumed/MintRecorded/quest events. Deity day = day.
-    ///      All boon state is stored in boonPacked[id] (2-slot packed struct). Only mint-stat
-    ///      access decodes the account key; reward events carry the wallet ID.
+    ///      All boon state is stored in boonPacked[id] (2-slot packed struct).
     ///      Players can hold one boon per packed lane simultaneously (coinflip, lootbox,
     ///      purchase, decimator, whale, lazy, deity pass, craps, and one per Degenerette
     ///      currency); activity, quest-shield and whale-pass awards credit instantly.
@@ -404,9 +401,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             // (nor zero a held deity boon's same-day flag).
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_COINFLIP_TIER_SHIFT)) | (uint256(newTier) << BP_COINFLIP_TIER_SHIFT);
-                // Set coinflipDay = currentDay
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_COINFLIP_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_COINFLIP_DAY_SHIFT);
-                // Set deityCoinflipDay = isDeity ? day : 0
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_COINFLIP_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_COINFLIP_DAY_SHIFT);
                 bp.slot0 = (s0) | BP_SLOT0_RETAINED;
@@ -426,7 +421,6 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
-                // Clear lootbox fields, set new values
                 s0 = s0 & BP_LOOTBOX_CLEAR;
                 s0 = s0 | (uint256(uint24(currentDay)) << BP_LOOTBOX_DAY_SHIFT);
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
@@ -455,9 +449,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_PURCHASE_TIER_SHIFT)) | (uint256(newTier) << BP_PURCHASE_TIER_SHIFT);
-                // Set purchaseDay = currentDay
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_PURCHASE_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_PURCHASE_DAY_SHIFT);
-                // Set deityPurchaseDay
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_PURCHASE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_PURCHASE_DAY_SHIFT);
                 bp.slot0 = (s0) | BP_SLOT0_RETAINED;
@@ -482,7 +474,6 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             // ignored lower/equal-tier roll is a no-op and must not zero a held deity boon.
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_DECIMATOR_TIER_SHIFT)) | (uint256(newTier) << BP_DECIMATOR_TIER_SHIFT);
-                // Set deityDecimatorDay (no award day for decimator)
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_DECIMATOR_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DECIMATOR_DAY_SHIFT);
                 bp.slot0 = (s0) | BP_SLOT0_RETAINED;
@@ -513,10 +504,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(3) << BP_WHALE_TIER_SHIFT)) | (uint256(newTier) << BP_WHALE_TIER_SHIFT);
-                // whaleDay = isDeity ? day : currentDay
                 uint24 whaleDayVal = isDeity ? uint24(day) : uint24(currentDay);
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_WHALE_DAY_SHIFT)) | (uint256(whaleDayVal) << BP_WHALE_DAY_SHIFT);
-                // deityWhaleDay = isDeity ? day : 0
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_WHALE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_WHALE_DAY_SHIFT);
                 bp.slot0 = (s0) | BP_SLOT0_RETAINED;
@@ -558,9 +547,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (tier > existingTier) {
                 s1 = (s1 & ~(uint256(BP_MASK_8) << BP_DEITY_PASS_TIER_SHIFT)) | (uint256(tier) << BP_DEITY_PASS_TIER_SHIFT);
-                // Set deityPassDay = currentDay
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_PASS_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_DEITY_PASS_DAY_SHIFT);
-                // Set deityDeityPassDay
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_DEITY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DEITY_PASS_DAY_SHIFT);
                 bp.slot1 = s1 | BP_SLOT1_RETAINED;
@@ -659,10 +646,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s1 = (s1 & ~(uint256(BP_MASK_8) << BP_LAZY_PASS_TIER_SHIFT)) | (uint256(newTier) << BP_LAZY_PASS_TIER_SHIFT);
-                // lazyPassDay = isDeity ? day : currentDay
                 uint24 lazyDayVal = isDeity ? uint24(day) : uint24(currentDay);
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_LAZY_PASS_DAY_SHIFT)) | (uint256(lazyDayVal) << BP_LAZY_PASS_DAY_SHIFT);
-                // deityLazyPassDay = isDeity ? day : 0
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
                 bp.slot1 = s1 | BP_SLOT1_RETAINED;

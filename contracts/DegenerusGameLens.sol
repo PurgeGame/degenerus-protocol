@@ -33,7 +33,6 @@ import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./modules/Dege
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
-import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 
 /// @dev Read surface the lens needs from the game: the raw-slot escape hatch plus
@@ -44,9 +43,8 @@ interface IDegenerusGameLensSource {
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
 
-    /// @notice DegenerusGame's aggregate activity-score read for `player`.
+    /// @notice DegenerusGame's aggregate activity-score read for wallet `id`.
     function playerActivityScoreById(uint32 id) external view returns (uint256);
-    function playerActivityScore(address player) external view returns (uint256 scorePoints);
     function livenessTriggered() external view returns (bool);
 }
 
@@ -311,7 +309,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 cursePoints; // subtracted, floored at 0, before the hard cap
     }
 
-    /// @notice A wallet's accumulated entry for one event; `stack` in wei of virtual chips.
+    /// @notice A wallet's accumulated entry for one event; `stack` in weighted whole-FLIP chips.
     struct DecBurnEntry {
         uint64 entryId;
         address owner;
@@ -777,14 +775,14 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         p.mode = uint8(w >> 248);
     }
 
-    /// @notice Replay a survivor from its sealed word, level, final field size and stratum.
-    function decSurvivorAt(uint256 word, uint24 lvl, uint64 fieldEntries, uint16 stratum)
+    /// @notice Replay a survivor from its sealed word, final field size and stratum.
+    /// @dev The level argument is not part of the derivation.
+    function decSurvivorAt(uint256 word, uint24, uint64 fieldEntries, uint16 stratum)
         external pure returns (uint64)
     {
         uint256 count = Sampling.survivors(fieldEntries);
         if (stratum >= count) revert E();
-        return Sampling.sample(word, lvl, fieldEntries, count,
-            Sampling.rotation(word, lvl, fieldEntries), stratum);
+        return Sampling.sample(word, fieldEntries, count, Sampling.rotation(word, fieldEntries), stratum);
     }
 
     /// @dev The pending battle owns this published session until its final payout.
@@ -798,6 +796,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             wordSlot := rngWordCurrent.slot
         }
         uint256 flags = _sload(game, flagsSlot) >> (offset * 8);
+        // rngFlagsAndNudges bit 15: session published; bit 13: terminal request.
         if (flags & (uint256(1) << 15) == 0 || flags & (uint256(1) << 13) != 0) return 0;
         word = _sload(game, wordSlot);
         if (word == RNG_WORD_WAITING) return 0;
@@ -827,6 +826,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             stampSlot := ticketBufferLevels.slot
             stampOffset := ticketBufferLevels.offset
         }
+        // traitBucketStale shares ticketBufferLevels' slot.
         uint256 stamps = _sload(game, stampSlot);
         uint24 occupyingLevel = uint24(stamps >> (stampOffset * 8 + (lvl & 1) * 24));
         uint256 staleOffset;
@@ -841,7 +841,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return _findPackedIndex(game, slot, ownerIndices, offset, maxWords, true);
     }
 
-    /// @notice Permanent wallet ID, or zero before its first registration.
+    /// @notice Current default gameplay wallet ID; zero before registration or after its sale.
     function walletIdOf(address game, address player) external view returns (uint32) {
         return _walletId(game, player);
     }

@@ -6,12 +6,12 @@ pragma solidity 0.8.38;
 ///      checkpoint/return tails separately. Measured witnesses or conservative component
 ///      sums carry about 20% margin; fixed reserves are identified beside their constants.
 ///      Continuations use caller calibration; first mandatory progress bypasses estimates.
-///      Revalidate after operation, compiler or gas-schedule changes.
 library MineFlipGasBounds {
-    // Fixed 32-winner direct round. Osaka cold worst 2.320M. Glamsterdam: 1.989M execution worst
+    // Fixed 32-winner direct round. Osaka cold worst 2.320M. Glamsterdam: at most 1.989M execution
     // plus 97,920 per new slot. Past a buffer's high-water mark a round writes at most 24 new
-    // words (3.58M); a common round over a never-used buffer, 32 new headers and words (3.627M).
-    // Rarer rounds, up to 80 new slots (9.823M), need a reservoir, a multiplier or a smaller call.
+    // words: at most 4.34M, measured worst 3.58M. A common round over a never-used buffer writes
+    // 32 new headers and words, measured 3.627M. Rounds with more new slots (at most 80, 9.823M)
+    // need a reservoir, a multiplier or a smaller call.
     uint256 internal constant TICKET_DIRECT_ROUND_GAS_MAX = 4_500_000;
     // Eight packed winner draws, padding redraws, deity cache and batch event.
     uint256 internal constant TICKET_DIRECT_GROUP_GAS = 65_000;
@@ -20,9 +20,9 @@ library MineFlipGasBounds {
     // Selection plus native-balance admission: 50k minimum + 200k read reserve + 10k frame,
     // caller-credit lookup and cold selection reads, with margin.
     uint256 internal constant ENGINE_SELECTION = 450_000;
-    // Return and one caller credit; native R90 fresh/spill transactions: 130.7k/148.1k.
+    // Return and one caller credit; native fresh/spill credit transactions: 130.7k/148.1k.
     uint256 internal constant ENGINE_RETURN = 200_000;
-    // Prior cold-century envelope: 5.954M including 25 fresh slots; revalidate R90 callers.
+    // Cold-century envelope: 5.954M including 25 fresh slots.
     uint256 internal constant DAILY_APPLY = 7_200_000;
     // Native cold request/credit witnesses peak at 523.9k. The subscription read admits at 50k
     // above the request's own 1M floor and reserve; retain forwarding and frame headroom.
@@ -38,8 +38,8 @@ library MineFlipGasBounds {
     // Nonempty close plus mixed ETH/stETH pull: 443.5k, including proxy and
     // 10k balance / 40k transfer execution padding. No historical coinflip walk here.
     uint256 internal constant RNG_REDEMPTION_CLOSE = 550_000;
-    // Prior 2.5M terminal envelope plus the new 500k request reserve and margin;
-    // cold cohort setup is included; no redemption close.
+    // 2.5M terminal envelope plus the 500k request reserve and margin; includes cold
+    // cohort setup, excludes redemption close.
     uint256 internal constant RNG_TERMINAL_REQUEST = 3_100_000;
     // Cold century close 4.762M + stake 248,175 + balance 60,794 and rollback frame.
     uint256 internal constant TRANSITION_CLOSE = 6_200_000;
@@ -53,10 +53,10 @@ library MineFlipGasBounds {
     // Level entry after its VRF top-up: the yield split, the rest of the consolidation and the
     // phase tail. Measured at most 0.79M (x00 win, Amsterdam), with margin.
     uint256 internal constant VRF_LEVEL_FUND_TAIL = 1_000_000;
-    // Prior 150k phase tail + bounded balance 60,794 and allocation/frame margin.
+    // 150k phase tail + bounded balance 60,794 and allocation/frame margin.
     uint256 internal constant DAILY_PHASE_TAIL = 250_000;
-    // Conservative prior full-walk envelope, retained for the 90-day Vault checkpoint
-    // and x0 seal including the Game stamp. Final R90 Glamsterdam calibration is required.
+    // Conservative full-walk envelope for the 90-day Vault checkpoint and x0 seal,
+    // including the Game stamp.
     uint256 internal constant BAF_VAULT_SETTLE = 3_500_000;
     // Forced all-gold grand prize with distinct traits and fresh buffer: 2.263M.
     uint256 internal constant FOIL_PACK = 3_000_000;
@@ -100,7 +100,7 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_FOIL_CALL_MAX = FOIL_PACK + 200_000;
     // Delegatecall and worker dispatch reserve.
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
-    // Prior cold delivery 472.3k + atomic 1M pull + 15,873 EIP-150 + 10k frame, with margin.
+    // Cold delivery 472.3k + atomic 1M pull + 15,873 EIP-150 + 10k frame, with margin.
     uint256 internal constant SUBSCRIBER_ITEM_GAS = 1_700_000;
     // Cold sDGNRS 1,000-pass purchase 2.378M plus the AFKing top-up 20.2k.
     uint256 internal constant SUBSCRIBER_WHALE_GAS = 2_800_000;
@@ -133,7 +133,7 @@ library MineFlipGasBounds {
     uint256 internal constant DEGENESIS_FLIP_PASS_GAS = 175_000;
     // Cold first sDGNRS award to a fresh two-link payee: <=165.8k; fallback 147.3k.
     uint256 internal constant DEGENESIS_DGNRS_GAS = 200_000;
-    // R90 live-collision recipient: native cold marginal 129,647, state gas included.
+    // Live-collision recipient: native cold marginal 129,647, state gas included.
     // 160k retains >23% margin; the ordinary fresh recipient is cheaper.
     uint256 internal constant DEGENESIS_FLUSH_PER_CREDIT = 160_000;
     // Flush frame, seventh close with AFKing excess/events and burn, decode/return: <=118.1k.
@@ -204,7 +204,7 @@ library MineFlipGasBounds {
     // Cold final-seat body, 1,111-roll engine and real award/record callees:
     // native no-reservoir component envelope 2.298M, with >20% margin.
     uint256 internal constant CRAPS_SEAT_GAS_MAX = 2_800_000;
-    // R90 live-collision recipient: native cold marginal 129,647, state gas included.
+    // Live-collision recipient: native cold marginal 129,647, state gas included.
     // Shared by Craps, jackpot-battle and growth flush admission; >23% margin.
     uint256 internal constant CRAPS_CREDIT_GAS_MAX = 160_000;
     // Craps settlement checkpoint, flush frame and return reserve.
