@@ -31,9 +31,9 @@
         "name": "decimatorBurn",
         "inputs": [
           {
-            "name": "player",
-            "type": "address",
-            "internalType": "address"
+            "name": "id",
+            "type": "uint32",
+            "internalType": "uint32"
           },
           {
             "name": "amount",
@@ -55,9 +55,9 @@
         "inputs": [
           {
             "name": "player",
-            "type": "address",
+            "type": "uint32",
             "indexed": true,
-            "internalType": "address"
+            "internalType": "uint32"
           },
           {
             "name": "amountBurned",
@@ -91,12 +91,12 @@
       },
       {
         "type": "function",
-        "name": "recordDecBurn",
+        "name": "recordDecBurn_g1271",
         "inputs": [
           {
             "name": "",
-            "type": "address",
-            "internalType": "address"
+            "type": "uint32",
+            "internalType": "uint32"
           },
           {
             "name": "",
@@ -269,9 +269,9 @@
         "inputs": [
           {
             "name": "player",
-            "type": "address",
+            "type": "uint32",
             "indexed": true,
-            "internalType": "address"
+            "internalType": "uint32"
           },
           {
             "name": "lvl",
@@ -317,10 +317,10 @@
         "name": "DecimatorClaimed",
         "inputs": [
           {
-            "name": "player",
-            "type": "address",
+            "name": "walletId",
+            "type": "uint32",
             "indexed": true,
-            "internalType": "address"
+            "internalType": "uint32"
           },
           {
             "name": "lvl",
@@ -391,10 +391,10 @@
             "internalType": "uint64"
           },
           {
-            "name": "recipient",
-            "type": "address",
+            "name": "recipientId",
+            "type": "uint32",
             "indexed": true,
-            "internalType": "address"
+            "internalType": "uint32"
           },
           {
             "name": "quadrant",
@@ -703,6 +703,57 @@
             "name": "player",
             "type": "address",
             "internalType": "address"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "e",
+            "type": "tuple",
+            "internalType": "struct DegenerusGameLens.DecBurnEntry",
+            "components": [
+              {
+                "name": "entryId",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "stack",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "chips",
+                "type": "uint32",
+                "internalType": "uint32"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "decBurnOfById",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "id",
+            "type": "uint32",
+            "internalType": "uint32"
           }
         ],
         "outputs": [

@@ -1,28 +1,21 @@
 {
-  "schema_version": 4,
-  "status": "audit candidate; locally verified changes, not a tagged final release freeze",
+  "schema_version": 5,
+  "status": "audit candidate: full local battery on the contract revision; becomes a final freeze when hosted CI passes on the pushed commit and the audit tag is created",
   "audit_tag": null,
-  "recorded_at_utc": "2026-10-27T21:58:37.163361+00:00",
-  "candidate": {
-    "base_commit": "adba2b9d78b0ddea17a01ec6e482737074619be8",
-    "identity": "working-tree sources and assurance inputs authenticated by snapshot_files; base commit alone does not identify this candidate",
-    "changes": [
-      "Direct selected-base imports in the three generated facades and unique DGNRS local interface names for complete Slither analysis.",
-      "Holder-exit stETH read admission raised to 111588 gas to account for cold-call overhead and EIP-150 retention.",
-      "Cold-access regression, reviewed gas-read registry, required Slither IR integrity gate and seven integrity-gate unit tests.",
-      "Corrected audit handoff, verification record and source/assurance hashes."
-    ],
-    "full_battery_after_changes": "not rerun; focused verification is listed separately"
+  "recorded_at_utc": "2026-10-28T03:00:00+00:00",
+  "contract_revision": {
+    "battery_commit": "76e8748ca147265d0bfd74d8bda64b8a8837cd23",
+    "identity": "contracts/ and test/ are byte-identical between battery_commit and the commit carrying this record; source-sha256.txt and snapshot.json authenticate the scoped sources",
+    "later_changes": [
+      "Documentation: scope, criteria, disclosures, verification and analyzer triage.",
+      "Repository tooling: unused study scripts and point-in-time evidence dumps removed; two gate self-tests added to test-assurance-tools; unused npm scripts and dependency removed.",
+      "Hardhat per-test timeout raised from 120 s to 300 s; CI Halmos per-query solver timeout raised from 120 s to 300 s."
+    ]
   },
   "predecessor_freeze": {
     "tag": "audit-2026-10-16",
     "production_source_commit": "1375c3e315b3d2313dee094a7a54fa8bd994f684",
     "record": "docs/audit/freeze-audit-2026-10-16.json"
-  },
-  "snapshot_files": {
-    "snapshot.json": "df48deaa338c24771da7d4238e2f3e7289eec767da53ef1d0b9301e85c96c2f3",
-    "source-sha256.txt": "c21a264e476ff36cedb8c82ca1a2596f085bb7613bfc9c7109e6e2dded03b6cf",
-    "verification-sha256.txt": "2bf418009c31618493aabd9c82d80589ce7e43cc93d13fe7a54bfd82e1b55fda"
   },
   "toolchain": {
     "forge": "1.6.0-nightly c07d504b",
@@ -37,40 +30,30 @@
     "halmos_baseline": "0.3.3",
     "geth_baseline": "1.17.7"
   },
-  "baseline_battery": {
-    "battery_tree": "929426c2bb7667f669c123993e6774c7a6d1e569",
-    "production_source_commit": "0cd4a84b78ce0bb581234326c8e9bca9f73e40af",
-    "test_fix_commit": "42721dbe9d360b3f79b5d253a3a901cd0480924c",
-    "provenance": "Earlier completed battery recovered from raw runner evidence; this preparation rechecked 42 compiler-input manifests against candidate base HEAD, excluding fixture address pins: 162 production files, zero mismatches. It is not a full battery on the changed candidate.",
-    "source_validation": {
-      "base_commit": "adba2b9d78b0ddea17a01ec6e482737074619be8",
-      "manifests": 42,
-      "compared_production_files": 162,
-      "excluded_fixture_pin": "contracts/ContractAddresses.sol",
-      "mismatches": []
-    },
+  "battery": {
+    "commit": "76e8748ca147265d0bfd74d8bda64b8a8837cd23",
     "foundry_by_group": {
-      "iso": {
+      "integration-gas (FOUNDRY_ISOLATE=true)": {
         "passed": 2187,
         "failed": 0,
         "skipped": 1
       },
-      "rep": {
+      "repro-symbolic + census": {
         "passed": 646,
         "failed": 0,
         "skipped": 0
       },
-      "fuzz": {
+      "fuzz-1..4": {
         "passed": 3457,
         "failed": 0,
         "skipped": 1
       },
-      "inv": {
+      "invariants (256 runs x depth 128)": {
         "passed": 389,
         "failed": 0,
         "skipped": 0
       },
-      "fork": {
+      "fork (block 26193851)": {
         "passed": 36,
         "failed": 0,
         "skipped": 0
@@ -85,26 +68,52 @@
       "files": 98,
       "passed": 1557,
       "failed": 0,
-      "skipped": 0
+      "note": "two first-test fixture timeouts at 120 s under heavy host load passed on rerun"
     },
     "halmos": {
       "properties_passed": 68,
       "suites": 9,
       "failed": 0,
-      "timeouts_or_unknowns": 0
+      "note": "check_boxQueue_threeLanesRoundTrip needs 108-146 s; it exceeded the 120 s query limit under host load and passes without contention"
     },
-    "native_replay": {
-      "calls_per_profile": 7819,
+    "structural_gates": {
       "profiles": [
         "eip170",
         "glamsterdam"
       ],
-      "failures": 0,
-      "rules": "Osaka Geth"
+      "checks_per_profile": 24,
+      "failed": 0,
+      "includes": "select-profile --check, production build, deployment sizes, storage oracle, recursive layout, owner actions, owner-governance layout, Vault player actions, profile routes, storage-reuse phase-2 layout, every make check-* source gate"
+    },
+    "slither_ir_integrity": {
+      "result": "pass",
+      "contracts": 459,
+      "functions": 6899,
+      "compiler_sources": 306
     },
     "profile_differential": {
       "scenarios_per_profile": 11,
-      "differences": 0
+      "differences": 0,
+      "mutations_detected": [
+        "slot",
+        "payout",
+        "event",
+        "revert"
+      ]
+    },
+    "native_replay": {
+      "rules": "Osaka Geth",
+      "calls_per_profile": 7819,
+      "failures": 0,
+      "total_gas": {
+        "eip170": 2981185536,
+        "glamsterdam": 2942596145
+      }
+    },
+    "manifests": {
+      "source-sha256.txt": "pass",
+      "verification-sha256.txt": "pass",
+      "audit-snapshot": "pass"
     },
     "skips": [
       {
@@ -115,25 +124,15 @@
         "test": "testFuzz_FoilMatchesArchivedRuntime",
         "reason": "CUSTOMER_GROWTH_FOIL_REFERENCE not configured; optional archived-runtime comparison"
       }
-    ],
-    "superseded_attempts": [
-      "Initial fuzz batch pulled in isolation-only gas tests via an imported seeder; the helper was moved and the entire affected batch rerun successfully. The fix is merged into candidate base HEAD.",
-      "Initial Hardhat OwnerGovernance attempts hit 120-second timeouts under load; the file passed when rerun without competing jobs. Candidate base HEAD also increases the timeout."
-    ],
-    "evidence": [
-      "baseline-battery.json",
-      "baseline-source-check.json",
-      "baseline-evidence/SHA256SUMS.json"
     ]
   },
-  "candidate_verification": {
-    "structural_eip170": {
-      "result": "pass",
-      "deployment_rows": 41,
+  "deployment_sizes": {
+    "eip170": {
       "limits_bytes": {
         "runtime": 24576,
         "initcode": 49152
       },
+      "deployables": 41,
       "smallest_runtime_margins": [
         {
           "key": "CRAPS_LIFECYCLE_MODULE",
@@ -171,46 +170,9 @@
           "runtime_remaining": 340,
           "initcode_remaining": 24730
         }
-      ],
-      "checks": [
-        {
-          "check": "sizes",
-          "exit_code": 0
-        },
-        {
-          "check": "recursive",
-          "exit_code": 0
-        },
-        {
-          "check": "storage",
-          "exit_code": 0
-        },
-        {
-          "check": "owners",
-          "exit_code": 0
-        },
-        {
-          "check": "owner-layout",
-          "exit_code": 0
-        },
-        {
-          "check": "gates",
-          "exit_code": 0
-        },
-        {
-          "check": "generation",
-          "exit_code": 0
-        }
-      ],
-      "additional_checks": [
-        "Vault player-action surface",
-        "Phase 2 nested/peripheral layouts using the canonical compiler-only XaLayout probe"
-      ],
-      "evidence_prefix": "final-deployment"
+      ]
     },
-    "structural_glamsterdam": {
-      "result": "pass",
-      "deployment_rows": 25,
+    "glamsterdam": {
       "limits_bytes": {
         "runtime": 65536,
         "initcode": 131072
@@ -258,183 +220,53 @@
           "runtime_remaining": 9025,
           "initcode_remaining": 70882
         }
-      ],
-      "checks": [
-        {
-          "check": "sizes",
-          "exit_code": 0
-        },
-        {
-          "check": "recursive",
-          "exit_code": 0
-        },
-        {
-          "check": "storage",
-          "exit_code": 0
-        },
-        {
-          "check": "owners",
-          "exit_code": 0
-        },
-        {
-          "check": "owner-layout",
-          "exit_code": 0
-        },
-        {
-          "check": "gates",
-          "exit_code": 0
-        },
-        {
-          "check": "generation",
-          "exit_code": 0
-        }
-      ],
-      "additional_checks": [
-        "Vault player-action surface",
-        "Phase 2 nested/peripheral layouts using the canonical compiler-only XaLayout probe"
-      ],
-      "evidence_prefix": "glamsterdam-deployment"
-    },
-    "focused_regressions": {
-      "per_mode_passed": 48,
-      "modes": [
-        "FOUNDRY_ISOLATE=true",
-        "FOUNDRY_ISOLATE=false"
-      ],
-      "failed": 0,
-      "evidence": [
-        "focused-corrected-isolate-true.log",
-        "focused-corrected-isolate-false.log"
       ]
-    },
-    "jackpot_regressions": {
-      "passed": 42,
-      "failed": 0,
-      "isolation": true,
-      "evidence": "jackpot-driver.log"
-    },
-    "steth_mainnet_fork": {
-      "passed": 6,
-      "failed": 0,
-      "block": 26193851,
-      "isolation": true,
-      "rpc": "https://eth.drpc.org",
-      "evidence": "fork-driver.log"
-    },
-    "regression_source_check": {
-      "compared_files": 163,
-      "mismatches": [],
-      "excluded_fixture_pin": "contracts/ContractAddresses.sol"
-    },
-    "assurance_tools": {
-      "unit_tests": 111,
-      "deep_matrix_tests": 6,
-      "failed": 0,
-      "evidence": "final-assurance-tools.log"
-    },
-    "split_arithmetic": {
-      "checks": 24,
-      "sensitivity_tests": 4,
-      "failed": 0,
-      "evidence": [
-        "split-arithmetic.log",
-        "split-sensitivity.log"
-      ]
-    },
-    "deployment_configuration": {
-      "tests": 3,
-      "failed": 0,
-      "evidence": "deployment-config.log"
-    },
-    "analysis_compatibility_bytecode": {
-      "result": "pass before the separate gas-admission correction; ABI, runtime without metadata and creation code after compiler-metadata normalization matched for 40 unique eip170 and 24 unique glamsterdam deployment artifacts",
-      "qualification": "Glamsterdam equivalence comparison held eip170 address pins constant across both builds; deployment size and metadata gates were rerun separately using the correct Glamsterdam pins.",
-      "evidence": [
-        "bytecode-comparison.json",
-        "glamsterdam-tooling-bytecode-comparison.json"
-      ]
-    },
-    "final_primary_bytecode": {
-      "abi": "all 40 deployed artifact ABIs unchanged",
-      "runtime_changes": [
-        "DegenerusVault",
-        "GNRUS",
-        "sDGNRS",
-        "Eip170Jackpot"
-      ],
-      "qualification": "Eip170Jackpot compiler output changed from 22770 to 22718 bytes although its source did not change; 42 focused jackpot tests and recursive layout checks pass. Runtime equivalence is not claimed after the gas correction.",
-      "evidence": "final-bytecode-eip170.json"
-    },
-    "slither_ir_integrity": {
-      "result": "pass",
-      "build_info_files": 1,
-      "compiler_sources": 306,
-      "contracts": 459,
-      "functions": 6899,
-      "analysis": "complete parsing and SlithIR; detector dependency closure is a separate run",
-      "evidence": "final-slither-integrity.log"
-    },
-    "slither_full_detectors": {
-      "status": "not completed on this candidate",
-      "note": "A superseded run was stopped during expensive transitive dependency closure. The required CI integrity gate performs complete parsing and IR generation without that closure; the separate normal detector command retains it. A timeout is incomplete coverage, never a clean report.",
-      "evidence": "slither-integrity-interruption.txt"
+    }
+  },
+  "static_analysis": {
+    "slither": {
+      "version": "0.11.5",
+      "framework": "hardhat",
+      "contracts_analysed": 293,
+      "ir_gaps": 0,
+      "results": {
+        "high": 251,
+        "medium": 774,
+        "low": 531,
+        "informational": 4041,
+        "optimization": 81
+      },
+      "triage": "docs/audit/ANALYZER-TRIAGE.md"
     },
     "aderyn": {
-      "status": "completed, raw findings require triage",
+      "version": "0.6.8",
       "high_categories": 12,
       "low_categories": 25,
       "nsloc": 32257,
       "files": 176,
-      "evidence": [
-        "aderyn.log",
-        "aderyn-report.md"
-      ]
-    },
-    "verification_incidents": [
-      "The original stETH regression failed in isolated mode before the gas-admission correction; its trace is retained. Corrected tests pass in both execution modes.",
-      "The source gas-read gate rejected the changed statement until its reviewed pin was updated; the final complete source gate runs pass on both profiles.",
-      "An intermediate Glamsterdam build used --no-pins and retained eip170 address pins, causing an oversized Endgame artifact. Correct profile generation without --no-pins and a fresh build pass all deployment gates.",
-      "The Phase 2 layout checker requires the compiler-only XaLayout probe; it was compiled from the canonical builder and combined with fresh production layouts for both passing checks."
-    ]
+      "triage": "docs/audit/ANALYZER-TRIAGE.md"
+    }
   },
   "outstanding_release_checks": [
     {
-      "check": "Full battery on the final committed candidate",
-      "status": "not run after the gas-admission change"
+      "check": "Hosted CI on the pushed commit",
+      "status": "pending push"
     },
     {
       "check": "Deep invariants: 60 partitions, 1000 runs x depth 256",
-      "status": "not completed; zero completed partitions in the recovered baseline campaign",
-      "reason": "The first AdvanceLiveness partition exceeded 1.5 hours; use the existing partitioned CI workflow for the full campaign."
+      "status": "not completed locally; runs as the scheduled or manually dispatched CI deep-invariant workflow"
     },
     {
-      "check": "Full Slither detector analysis and analyzer finding triage",
-      "status": "unfinished; Aderyn raw report is available"
-    },
-    {
-      "check": "Hosted CI for the exact final candidate",
-      "status": "not verified; no candidate was pushed by this preparation"
-    },
-    {
-      "check": "Final release tag",
-      "status": "not created; audit-2026-10-25 does not identify this candidate"
+      "check": "Final audit tag",
+      "status": "not created"
     }
   ],
-  "evidence_archive": {
-    "path": ".audit-test-logs/readiness-2026-10-27-evidence.tar.gz",
-    "sha256": "36f1540a36b3064358cc37851c4e3f0ac304a1b7c8d13360bb738a2b3b3fd7d6",
-    "contents": "Selected raw baseline logs, candidate logs and reports, source identity manifests and candidate Solidity/tool changes; local archive, not uploaded",
-    "files": 719,
-    "bytes": 34158848
-  },
-  "evidence_directory": ".audit-test-logs/readiness-2026-10-27",
   "limits": [
-    "Foundry totals count runner executions, including imported suites repeated between batches.",
-    "The full baseline battery cannot be advertised as a full test pass for this changed candidate.",
-    "Compiler integrity is not detector completion; analyzer severity labels are not confirmed protocol vulnerabilities.",
+    "Foundry totals count runner executions; imported suites can repeat between batches.",
+    "Analyzer severity labels are tool classifications, not confirmed protocol vulnerabilities.",
     "Generated address pins, compiler settings or any source change invalidate the corresponding build evidence.",
     "The Glamsterdam size schedule is an alternate configuration, not a statement of target-chain support.",
-    "Tests and bounded proofs do not establish impossibility of a mining-chain halt. Required external stETH transfers and VRF availability remain documented dependencies.",
-    "No candidate was committed, pushed, tagged or deployed during this preparation."
+    "Tests and bounded proofs do not establish the impossibility of a mining-chain halt; required stETH transfers and VRF availability remain documented dependencies.",
+    "Raw logs are kept outside the repository; hosted CI artifacts for the pushed commit are the public evidence."
   ]
 }

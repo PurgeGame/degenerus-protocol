@@ -1,6 +1,6 @@
 # DGVE owner approval
 
-`DegenerusOwnerGovernance` executes existing owner controls when settled approval exceeds **50.1% of the current DGVE supply**. A holder with all the shares uses the same route as several heirs acting together. `Vault.isVaultOwner` recognizes only this fixed executor; a wallet's balance does not grant direct administrative access.
+[`DegenerusOwnerGovernance`](../contracts/DegenerusOwnerGovernance.sol) executes the owner controls listed under [Allowed actions](#allowed-actions-and-callbacks) when settled approval exceeds **50.1% of the current DGVE supply**. A holder with all the shares uses the same route as several heirs acting together. `Vault.isVaultOwner` recognizes only this fixed executor; a wallet's balance does not grant direct administrative access.
 
 Each owner has one escrow position. Tokens remain transferable and redeemable outside escrow. Depositing grants no additional claim on Vault reserves, and sending tokens directly to governance creates no position or votes. There is no recovery function for unsolicited tokens or ETH.
 
@@ -14,7 +14,7 @@ Each owner has one escrow position. Tokens remain transferable and redeemable ou
 
 Proposals expire after seven days. Exactly 50.1% does not pass. Redemptions change the live denominator; idle deposits and direct donations still remain in that denominator without approving any action. A failed target call rolls the whole execution back, allowing retry or withdrawal.
 
-Positions cannot be partially withdrawn or topped up. `clearVote(owner)` removes support while leaving idle custody. Reassigning the position excludes it for the new assignment block, even if the tokens have long been escrowed. Withdrawal clears custody and the delegate. No function enumerates voters.
+Positions cannot be partially withdrawn or topped up. `clearVote(owner)` removes support while leaving idle custody. Reassigning the position excludes it for the new assignment block, even if the tokens have long been escrowed. Withdrawal clears custody and any assignment; the stored delegate has no effect while the amount is zero, and a later deposit replaces it. No function enumerates voters.
 
 ## Voting delegation
 
@@ -28,19 +28,19 @@ Delegation is full voting trust over the allocated amount. Anyone controlling en
 
 A holder or delegate controlling more than 50.1% of supply in existing escrow can call `directAction(data, owners)` without a proposal. Each listed position must belong to the caller or currently delegate to them. The list must use strictly increasing addresses, and only deposits from earlier blocks count. Withdrawal and redeposit reset this block boundary; assigning existing escrow to a proposal does not.
 
-The function calls only the Vault, with calldata selecting `playerAction` or `spendDegenesis`. The player wrapper keeps its target/selector restrictions; `spendDegenesis(recipientId, whalePass, quantity, boxOrder, maxCost)` buys for any allocated account using the restricted budget; recipient 0 selects the Vault. Recipient approval is not required. Normal rewards and boons apply, but the spend adds no DeGenesis credit. All admin actions, including comp allowances, mints and sweeps, still need proposals. Independent holders without a common controller use proposals for gameplay too. Voting delegation grants no access to a holder's personal player account; a majority of delegated positions does authorize this Vault gameplay route.
+The function calls only the Vault, with calldata selecting `playerAction` or `spendDegenesis`. `playerAction` enforces its own target/selector allowlist ([Vault player actions](VAULT_PLAYER_ACTIONS.md)); `spendDegenesis(recipientId, whalePass, quantity, boxOrder, maxCost)` buys for any allocated account using the restricted budget; recipient 0 selects the Vault. Recipient approval is not required. Normal rewards and boons apply, but the spend adds no DeGenesis credit. All admin actions, including comp allowances, mints and sweeps, still need proposals. Independent holders without a common controller use proposals for gameplay too. Voting delegation grants no access to a holder's personal player account; a majority of delegated positions does authorize this Vault gameplay route.
 
 Direct gameplay changes no governance storage. It forwards the caller's `msg.value`, which `DirectAction` logs with the caller and Vault selector. For `playerAction`, the encoded `ethValue` argument specifies additional Vault reserves. The owner list is supplied by the caller; governance never enumerates all depositors.
 
 ## Allowed actions and callbacks
 
-`contracts/libraries/OwnerActions.sol` fixes the allowed target and selector pairs. It covers existing Vault, Game, Admin, WWXRP, Craps, GNRUS and artwork controls. Targets retain their existing limits. Vault player actions additionally enforce their own nested allowlist. Governance cannot call itself or the DGVE token, redeem escrow, make arbitrary calls or use `delegatecall`.
+`contracts/libraries/OwnerActions.sol` fixes the allowed target and selector pairs. It covers selectors on the Vault, Admin, Game, WWXRP, Craps, GNRUS, Icons32Data, DeityPass, RecordBounty and AFKing subscription token contracts. Each target enforces its own limits, and Vault `playerAction` enforces its nested allowlist. Governance cannot call itself or the DGVE token, redeem escrow, make arbitrary calls or use `delegatecall`.
 
 The executor has no reentrancy lock or OpenZeppelin helpers. It calls the fixed, non-upgradeable DGVE implementation, whose transfers have no hooks and return a checked boolean. Custody accounting is committed before transfers, and proposals are marked executed before calling the target. An authorized callback may clear or withdraw its own position, but cannot replay execution, withdraw twice, or count reassigned support in its assignment block. A later revert rolls those callback changes back too. Tests exercise both rejected and permitted callbacks.
 
-Positions occupy two storage slots and proposals occupy four. Each proposal stores a calldata hash; its `ProposalCreated` event retains the full calldata and domain-separated action hash. Execution requires those exact bytes. The ETH value is bounded by `uint96`, and DGVE's maximum supply of `1e30` fits the `uint128` position and weight fields. Block numbers occupy packed `uint40` fields. No activation transaction or global voter enumeration is required. The threshold uses quotient/remainder arithmetic, avoiding multiplication overflow without a general-purpose math library.
+Positions occupy two storage slots and proposals occupy four. Each proposal stores a calldata hash; its `ProposalCreated` event carries the full calldata and domain-separated action hash. Execution requires those exact bytes. The ETH value is bounded by `uint96`, and DGVE's maximum supply of `1e30` fits the `uint128` position and weight fields. Block numbers occupy packed `uint40` fields. No activation transaction or global voter enumeration is required. The threshold uses quotient/remainder arithmetic, avoiding multiplication overflow without a general-purpose math library.
 
-Admin owner recovery proposals use a reserved bookkeeping identity and require no Game wallet registration. Community sDGNRS proposal and voting rules stay separate. `Admin.swapGameEthForStEth(recipient)` includes the recipient in the approved calldata; zero and the executor itself are rejected.
+`DegenerusAdmin.propose` called by the executor (the admin VRF-coordinator-swap path) uses reserved proposer identity 1 and needs no Game wallet registration. Community sDGNRS proposal and voting rules stay separate. `Admin.swapGameEthForStEth(recipient)` includes the recipient in the approved calldata; zero and the executor itself are rejected.
 
 ## Initial icons and deployment
 
@@ -50,11 +50,11 @@ The creator can upload each of the 33 paths and three name quadrants once withou
 
 `wireIcons32` verifies previously written entries before resuming, uploads missing entries, and checks the entire canonical dataset afterward. A fresh setup uses seven upload transactions. Repeating completed setup submits none. A mismatch requires an approved correction; it is never silently overwritten.
 
-The executor is the final deployment in each profile: nonce `N+36` in the eip170 profile and `N+20` in the glamsterdam profile, where `N` is the first deployment's nonce. Earlier contract addresses and the Vault-created share addresses retain their existing positions.
+The executor is the final deployment in each profile: nonce `N+36` in the eip170 profile and `N+20` in the glamsterdam profile, where `N` is the first deployment's nonce. Earlier contract addresses follow the deployer's CREATE nonces in profile order; the Vault's constructor creates the DGVF and DGVE tokens from the Vault's own nonce.
 
 ## CLI
 
-Compile first. `scripts/owner-governance.js` reads `RPC_URL` and `OWNER_GOVERNANCE_ADDRESS`; write commands additionally use `PRIVATE_KEY`. Token amounts and ETH values are integer base units. Keep signing keys out of shell command arguments.
+Compile first. `scripts/owner-governance.js` reads `RPC_URL` (or `--rpc`; default `http://127.0.0.1:8545`) and `OWNER_GOVERNANCE_ADDRESS` (or `--governance`); write commands additionally use `PRIVATE_KEY`. Token amounts and ETH values are integer base units. Keep signing keys out of shell command arguments.
 
 ```sh
 node scripts/owner-governance.js inspect --owner "$OWNER" --proposal 1

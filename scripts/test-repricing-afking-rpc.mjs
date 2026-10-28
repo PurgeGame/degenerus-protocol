@@ -1,4 +1,4 @@
-// Replay exported, initialized protocol states through production mineFlip on a local Geth.
+// Replay exported, initialized protocol states through production mineRun on a local Geth.
 // Read-only eth_call/debug_traceCall; no transactions are broadcast.
 // Usage: node scripts/test-repricing-afking-rpc.mjs OUT STATE_DIR RPC REPORT [osaka|amsterdam]
 // Export test/gas/AfkingRepricingFixtures.t.sol with AFKING_REPRICING_STATE_DIR and a

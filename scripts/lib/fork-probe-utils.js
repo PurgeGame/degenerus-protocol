@@ -43,7 +43,7 @@ export async function driveUntilReadComplete({ complete, action, step, requestFr
     }
     const receipt = await step(selected);
     const request = requestFrom(receipt);
-    // mineFlip may finish one cohort then request its successor in the same call.
+    // mineRun may finish one cohort then request its successor in the same call.
     // Keep draining; never mistake the next request's lock for old completion.
     if (request) await fulfill(request);
   }

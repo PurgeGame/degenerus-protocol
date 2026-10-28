@@ -1,25 +1,27 @@
 # WWXRP boons
 
-WWXRP boons keep award IDs **38 / 39 / 40**, bonuses **4% / 8% / 12%**, and
-their existing packed lane in Game storage. Each tier retains weight 200 in
-the boon table. They are separate from ETH and FLIP Degenerette stake boons.
+WWXRP boons use award IDs **38 / 39 / 40** (bonuses **4% / 8% / 12%**, tier x 400 BPS) in a
+dedicated 24-bit lane of `boonPacked` slot 1 (bits 232-255, `BP_WWXRP_LANE_SHIFT`). Each ID has
+weight 200 of 2,856 in the boon roll table (`GameBoonActions._boonFromRoll`, mirrored by
+`DeityBoonViewer`). They are separate from ETH and FLIP Degenerette stake boons (IDs 32-37), which
+have their own lanes.
 
 ## Whole-token awards
 
 Positive WWXRP prizes below one token award **1 WWXRP**. This applies to skipped-BAF
 consolation (`score / 1000`) and the shared reward-spin resolver used by lootboxes
-and foil rewards. Zero scores and losing spins still pay zero. Larger awards keep
-their existing whole-token floor: 1.9 pays 1, and 2.9 pays 2.
+and foil rewards. Zero scores and losing spins still pay zero. Larger awards floor to
+whole tokens: 1.9 pays 1, and 2.9 pays 2.
 
 The minimum applies before the vault owner's `gameMintScale`. That whole-number
-multiplier still applies at mint time, including scale 0 disabling game minting.
-Coinflip loss prizes, the Degenesis-box consolation and golden-ticket consolation are already
-whole-token awards; the lootbox cold-bust award already has a one-token minimum.
+multiplier applies when the prize is credited or minted, including scale 0 disabling game minting.
+Coinflip loss prizes (1 per loss), the Degenesis consolation and the zero-gold golden-ticket consolation (100) are
+whole-token constants; the lootbox cold-bust award has a one-token minimum.
 
 The Degenesis consolation is a fixed 1 WWXRP credit (`WWXRP.creditPrize`, before `gameMintScale`).
 An order pays it when it rolls the 10% WWXRP category, when its FLIP-valued result rounds below one
 whole FLIP, when a pass denomination loses its fractional pass, and when an sDGNRS award is zero or
-the Degenesis pool cannot pay it. Such an order pays nothing else.
+the Degenesis pool cannot pay it. Such an order pays no other award.
 
 ## Daily burn and century incinerator
 
@@ -37,15 +39,15 @@ dailyWeight = weightedTokens
 centuryWeight = weightedTokens
 ```
 
-The century entry is recorded only during level x99, as before. The same
-consumed boon boosts both entries from that burn. The token balance and total
-supply decrease by exactly `amount`; the bonus does not mint tokens or enlarge
-the prize pool. Existing weight caps saturate. A failed entry rolls back the
-burn, boon consumption and draw records together.
+`amount` is at least `MIN_BURN` (25). The century entry is recorded only while the current level is
+x99. The same consumed boon boosts both entries from that burn. The burn consumes the account's
+claimable WWXRP credit first and burns held tokens from the payee for the shortfall; the bonus does
+not mint tokens or enlarge the prize pool. The bucket total saturates at `uint96` and the century
+weight at `uint192`. A failed entry rolls back the burn, boon consumption and draw records together.
 
-A lootbox boon remains valid through award day + 2. A deity boon is valid only
-on its award day. An empty or expired boon gives no bonus. Automatic WWXRP box
-and foil reward spins do not consume this boon or award whale passes.
+A lootbox-rolled boon is valid through award day + 2 (`BOON_LANE_EXPIRY_DAYS`). A deity boon is
+valid only on its award day. An empty or expired boon gives no bonus; consuming an expired lane
+clears it. Automatic WWXRP box and foil reward spins do not consume this boon.
 
 ## Future ecosystem applications
 
@@ -55,7 +57,7 @@ An application can consume the same boon for another WWXRP action through:
 function consumeBoon(uint32 playerId) external returns (uint16 boostBps);
 ```
 
-The only permission is the existing trusted-minter registry: when the vault
+The only permission is the trusted-minter registry: when the vault
 owner calls `WWXRP.setTrustedMinter(application, true)`, the application may
 also consume WWXRP boons, and revoking it removes that right as well. There is
 no per-player approval. A trusted minter can already mint any amount and burn

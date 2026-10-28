@@ -1,4 +1,4 @@
-# Audit exclusions — read alongside scope.txt and KNOWN-ISSUES.md
+# Audit exclusions — read alongside scope.txt and docs/AUDIT.md
 # Test-only code, upstream implementations and off-chain applications are not production
 # Solidity targets. Tests, deployment scripts and compiler settings remain supporting
 # evidence: report a deployment/configuration defect that affects in-scope contracts.
@@ -12,11 +12,14 @@ lib/
 artifacts/
 cache/
 forge-out/
+forge-out-halmos/
 out/
 # Separate frontend, indexer and website repositories.
 # Style-only reports and gas micro-optimizations are not audit priorities; any reachable
 # state that leaves the mineRun chain unable to complete (gas-limit failures, unbounded
 # work, reverts, stuck cursors) IS in scope.
-# Accepted mechanisms are enumerated in KNOWN-ISSUES.md.
+# Severity criteria and exclusions: docs/AUDIT.md. Authority, trust assumptions and audit
+# boundaries (sDGNRS governance outcomes, WWXRP supply and draw weighting): SECURITY.md.
+# Game rules: ECONOMIC_DISCLOSURES.md. Accepted implementation limitations: KNOWN-ISSUES.md.
 # Outcomes requiring valid sDGNRS governance approval are governance decisions, not findings.
 # Bypasses of governance authorization, voting or execution rules remain in scope.

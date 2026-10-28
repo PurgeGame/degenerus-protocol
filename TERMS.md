@@ -31,11 +31,12 @@ also AGPL-3.0 §§15–17.
 ## What these terms do not do
 
 They do not retract anything the protocol asserts about itself. The invariants published in
-`README.md` and the dispositions in `KNOWN-ISSUES.md` are claims about how the code is
+`README.md`, `ECONOMIC_DISCLOSURES.md`, `SECURITY.md` and `KNOWN-ISSUES.md` are claims about how the code is
 intended to behave, and they stand. "Any permitted transition is authorised" allocates the
 risk that remains after auditing — it is not an assertion that the protocol has no bugs, nor a
 withdrawal of the properties it claims to hold.
 
 Nor do they narrow the scope of a security review. A finding is eligible under the rules in
-`KNOWN-ISSUES.md`; these terms describe the position of a participant transacting with the
+`docs/AUDIT.md`, with the boundaries in `SECURITY.md` and limitations in `KNOWN-ISSUES.md`;
+these terms describe the position of a participant transacting with the
 deployed contracts, not that of someone reviewing them.

@@ -1,25 +1,27 @@
 # Deity pass cosmetics
 
-`DeityPassCustomizationRenderer` adds per-token artwork settings to an **existing**
-`DegenerusDeityPass`. No NFT redeployment, migration, remint, proxy upgrade, pass
-storage change, or gameplay change is required. The inspected pass already calls
-`IDeityPassRendererV1.render(...)` with the token ID, canonical symbol path and
-collection colors. The extension implements that exact hook and stores overrides
-in its own contract.
+`DeityPassCustomizationRenderer` adds per-token artwork settings to a deployed
+`DegenerusDeityPass`. It needs no NFT redeployment, migration, remint, proxy upgrade,
+pass storage change, or gameplay change. `DegenerusDeityPass.tokenURI` calls
+`IDeityPassRendererV1.render(tokenId, quadrant, symbolIdx, symbolName, iconPath,
+isCrypto, outlineColor, backgroundColor, nonCryptoSymbolColor)` on the configured
+renderer. The extension implements that hook and stores overrides in its own contract.
 
 Only the current `pass.ownerOf(tokenId)` can write or clear overrides. Game
 operator approval, DGVE voting authority, and the renderer deployer convey no
 additional editing permission. `pass.setRenderer(address)` and
-`pass.setRenderColors(string,string,string)` require approval through DGVE owner governance. Passes remain soulbound: holders can never transfer one, and only the game
-moves a pass, with its deity account, to the lender of a defaulted loan.
+`pass.setRenderColors(string,string,string)` require approval through DGVE owner
+governance (`DegenerusOwnerGovernance`). Passes are soulbound: holders can never
+transfer one, and only the game moves a pass, with its deity account, to the lender
+of a defaulted loan.
 
 ## Frontend contract
 
 Full generated ABI: [`abi/DeityPassCustomizationRenderer.json`](abi/DeityPassCustomizationRenderer.json).
 Send customization transactions to the **renderer address**, not the NFT address.
 Read the active address using `pass.renderer()` and verify it against the supported
-deployment on the selected chain. The existing champion picker can continue reading
-`pass.tokenURI(tokenId)`; it receives the customized SVG automatically after activation.
+deployment on the selected chain. A frontend picker can keep reading
+`pass.tokenURI(tokenId)`; it receives the customized SVG once this renderer is active.
 
 Struct fields, in ABI order:
 
@@ -51,6 +53,9 @@ struct Customization {
 | `backgroundColor` | NFT card fill | Collection background | 8 |
 | `outlineColor` | NFT card border | Collection outline | 16 |
 | `geometry` | Size and center of the whole badge, including all rings and the icon | Radius 4600, center `(0,0)` | 32 |
+
+The bits are also readable as `RIM()`, `BADGE_BACKGROUND()`, `SYMBOL()`, `BACKGROUND()`,
+`OUTLINE()` and `GEOMETRY()`.
 
 Hex colors must be exactly `#RRGGBB` (case insensitive). In **setter/raw override**
 values, `""` means inherit that one field. A nonempty value remains an override even
@@ -133,7 +138,8 @@ await renderer.connect(owner).setTokenColors(8, {
 All geometry fields use **hundredths of one SVG unit**, not percentages or pixels.
 The card is 100 units wide, centered at `(0,0)`; positive X moves right and positive Y
 moves down. The SVG `viewBox` is `-52 -52 104 104`, including the card's full outline
-(the original internal renderer's 102-unit viewBox cuts off 0.1 unit of that stroke).
+(the pass's internal renderer uses a 102-unit viewBox, which cuts off 0.1 unit of that
+stroke).
 
 `geometryBounds()` returns `(100, 1200, 4890, 4600, 4890, 1090)`:
 
@@ -161,7 +167,7 @@ larger than 10.9. For circles at least that large, the axis bounds above also ke
 the entire circle within every rounded corner (not just its center or a square
 card). Rings have no strokes; the fitted canonical icon artwork and its scaling
 strokes stay within the outer ring. This relies on the production Icons32 artwork,
-as does the original renderer; arbitrary replacement SVGs in an unfinalized Icons32
+as does the pass's internal renderer; arbitrary replacement SVGs in an unfinalized Icons32
 contract are trusted collection data, not holder-controlled input.
 
 ## Events and cache refresh
@@ -177,7 +183,7 @@ Every successful setting/reset emits its specific event plus `MetadataUpdate`.
 `TokenColorsUpdated.overrideMask` is the complete post-write mask, including any
 geometry bit. Geometry reset emits the effective `(4600,0,0)` and `overridden=false`.
 Complete reset emits `TokenCustomizationCleared` rather than separate color and
-geometry events. Events originate at the **renderer**. The unchanged NFT does not
+geometry events. Events originate at the **renderer**. The NFT does not
 emit ERC-4906 events or advertise that interface, so marketplaces listening only
 to the NFT may require their usual explicit metadata refresh.
 
@@ -188,32 +194,35 @@ and token ID; overrides belong to a particular renderer instance.
 
 ## Exact deployment and activation requirements
 
-No live deployment or transactions were performed for this change. Deployment is
-an explicit future operation:
+The renderer is a separate, optional deployment:
 
-1. Select the target chain and existing pass address. Verify that the deployed pass
-   has the inspected V1 hook and Vault-controlled `setRenderer`; confirm its
-   `ownerOf`, `renderColors`, `renderer`, and `tokenURI` views. Confirm the expected
-   production Icons32 paths are installed (normally finalized by deployment).
-   This source-based compatibility result does not attest an unspecified live address.
+1. Select the target chain and pass address. Verify that the deployed pass calls the
+   V1 `render` hook from `tokenURI` and gates `setRenderer` on DGVE owner governance;
+   confirm its `ownerOf`, `renderColors`, `renderer`, and `tokenURI` views. Confirm the
+   expected production Icons32 paths are installed and `Icons32Data.finalized()` is true
+   (`scripts/deploy.js` finalizes it when run with `ICONS32_FINALIZE=1`).
+   Compatibility is established against this source only; verify any other deployed
+   pass independently.
 2. Compile `contracts/DeityPassCustomizationRenderer.sol` with the repository's
    Solidity **0.8.38**, optimizer **1000 runs**, **viaIR=true**, EVM **osaka** settings.
    The target network must support that EVM target. Deploy **one**
-   `DeityPassCustomizationRenderer(existingPassAddress)` after the pass exists.
+   `DeityPassCustomizationRenderer(passAddress)` after the pass exists.
    The constructor rejects addresses with no code; the binding is immutable.
-   Do not insert this deployment into the existing predicted nonce sequence or
-   change `ContractAddresses.sol`; it is a separate, optional deployment.
+   Do not insert this deployment into the predicted nonce sequence or change
+   `ContractAddresses.sol`.
 3. Verify the extension's source/constructor argument, and that `renderer.pass()`
-   equals the existing NFT address. Record the chain, pass and renderer addresses
+   equals the pass address. Record the chain, pass and renderer addresses
    for the frontend. The extension has no administrator or initialization call.
-4. Propose **`existingPass.setRenderer(newRendererAddress)`** through DGVE owner
-   governance, gather settled approval exceeding 50.1% of live supply, and execute it.
-   The fixed executor satisfies the pass's `vault.isVaultOwner(msg.sender)` check.
-   No collection-color transaction or NFT migration is required. For an older deployed
-   pass, verify its deployed authorization rules instead of assuming this source applies.
+4. Propose **`pass.setRenderer(newRendererAddress)`** through DGVE owner governance
+   (`propose`, then `execute` within the 7-day proposal lifetime), gather settled
+   approval exceeding 50.1% of live DGVE supply, and execute it. The governance
+   contract is the account `vault.isVaultOwner` accepts, which satisfies the pass's
+   owner check. No collection-color transaction or NFT migration is required. For
+   another deployed pass, verify its deployed authorization rules instead of assuming
+   this source applies.
 5. Configure frontend writes and event subscriptions with the new renderer ABI and
    address. Confirm a minted token's `tokenURI` contains the `id='badge'` group and
-   matches `effectiveTokenStyle`. Existing holders can now submit their own settings.
+   matches `effectiveTokenStyle`. Holders can then submit their own settings.
 
 Holders may save settings before activation, but they appear in `tokenURI` only
 while this renderer is selected. Setting `pass.setRenderer(address(0))` restores
@@ -245,8 +254,4 @@ verify the mutation paths use only external `STATICCALL` and write only renderer
 storage. Symbol metadata stays unchanged; no gameplay contract imports or reads
 this extension, and no scoring, roll, odds, ticket-color or boon logic is modified.
 
-Validation: [final battery] customization tests and [final battery] existing pass/gold-dice
-regressions passed. All 32 production symbols were also rendered through the
-compiled extension and raster-checked for badge-envelope overflow; none exceeded
-the outer ring. The published ABI matches the compiled artifact. Renderer runtime
-bytecode size with the stated compiler settings: [final battery] bytes.
+The published ABI (`docs/abi/DeityPassCustomizationRenderer.json`) matches the compiled artifact.

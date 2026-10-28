@@ -8,17 +8,17 @@ Baseline production and Foundry-pin artifacts are stored under `.planning/consol
 
 `testFocusedPurchases` and `testWarmPurchases` cover the purchase/account slice and actual Affiliate/Quests callbacks. `testLongRunCensus` runs the deterministic storage census. Gas totals are instrumented Osaka execution measurements, not native transaction bills: account/storage warmth is controlled, but SSTORE original values are not reset as independent transactions. `reconcile-gas.py` applies the separate call-traffic model to P1's eliminated edges and retains the Foil adapter and Degenesis delegate boundary.
 
-Use one compile at a time, four Foundry threads, and the required 20G memory/1G swap scope. Do not edit source inputs while a runner is active. Verify `ContractAddresses.sol` is restored after every run or interruption.
+Use one compile at a time, four Foundry threads, and a memory limit (a via-IR build needs about 20 GB). Do not edit source inputs while a runner is active. Verify `ContractAddresses.sol` is restored after every run or interruption.
 
 Native validation uses an unlocked signer on local chain ID 1337 only. Start Geth with `--dev --dev.period 1 --dev.gaslimit 1000000000 --miner.gaslimit 1000000000 --override.amsterdam 0`, HTTP on 127.0.0.1:18548, then:
 
 ```sh
 node scripts/consolidation/native-deploy.js prepare http://127.0.0.1:18548 .planning/consolidation/native/deployment
-systemd-run --user --scope -q -p MemoryMax=20G -p MemorySwapMax=1G /home/zak/.svm/0.8.38/solc-0.8.38 --base-path . --include-path node_modules --standard-json < .planning/consolidation/native/deployment/input.json > .planning/consolidation/native/deployment/output.json
+solc-0.8.38 --base-path . --include-path node_modules --standard-json < .planning/consolidation/native/deployment/input.json > .planning/consolidation/native/deployment/output.json
 node scripts/consolidation/native-deploy.js deploy http://127.0.0.1:18548 .planning/consolidation/native/deployment
 ```
 
-The script records client identity, predicted addresses, runtime/initcode sizes, per-contract receipts, deity bootstrap and four purchases. Production contracts use local VRF/stETH/LINK mocks. Live integrations require the fork group. `liveness-variant-gas.js` compares compiled inline/helper Game variants via read-only native state overrides, with cold storage and an explicit warm access list; access-list intrinsic overhead is included equally in each pair.
+The script records client identity, predicted addresses, runtime/initcode sizes, per-contract receipts, deity bootstrap and four purchases. Production contracts use local VRF and stETH mocks. Live integrations require the fork group. `liveness-variant-gas.js` compares compiled inline/helper Game variants via read-only native state overrides, with cold storage and an explicit warm access list; access-list intrinsic overhead is included equally in each pair.
 
 For native baseline/candidate purchase gas, run `native-paired-gas.js LOCAL_RPC DEPLOYMENT_DIRECTORY BASELINE_ROOT` to prepare `baseline-input.json`, compile that standard JSON to `baseline-output.json` under the same resource scope, then rerun the script without `BASELINE_ROOT`. It replaces Game and all 17 module runtimes through read-only Geth state overrides at one fixed block. Each cold/warm pair shares storage, balances, input and context; warm probes use the union of both access lists. First registration and Foil use a fresh buyer, since the deployment signer already owns that level's Foil pack. The earlier deployment purchase receipts represent different state and are reported separately. This supplements the long-run instrumented totals; it is not a native lifetime replay.
 

@@ -219,7 +219,7 @@ async function main() {
       await hre.network.provider.send("evm_mine", []);
 
       await game.connect(deployer).mineRun(0, { gasLimit: 12_000_000 });
-      console.log("  VRF request issued (mineFlip).");
+      console.log("  VRF request issued (mineRun).");
 
       // Fulfill VRF with the mock (honest seed word).
       const requestId = await mockVRF.lastRequestId();

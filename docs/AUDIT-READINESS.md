@@ -26,58 +26,49 @@ Properties reviewed at this revision:
 - **Backing and accounts.** See [architecture](ARCHITECTURE.md), with the storage positions of
   the current layout (`scripts/layout/golden`).
 
-The [readiness record](audit/freeze.json) separates the completed baseline battery from
-verification of the candidate's later changes. It also records the
-unfinished deep invariant campaign and the absence of remote CI results for this candidate.
-This is not a tagged final freeze.
+The [readiness record](audit/freeze.json) identifies the tested contract revision and lists the
+remaining release checks: hosted CI on the pushed commit, the 60-partition deep invariant
+campaign (a scheduled or manual CI workflow) and the final audit tag.
 
 ### Verification available for reviewers
 
-| Evidence | Result | Revision covered |
-|---|---|---|
-| Full Foundry battery | 6,715 passing executions, 2 optional skips, 0 failures | Baseline before the later candidate changes; imported suites can repeat between batches |
-| Full Hardhat battery | 1,557 passing, 0 failures after the documented reruns | Baseline |
-| Halmos | 68 properties passing across 9 suites | Baseline; not a proof of gas-metered liveness |
-| Liveness, holder-exit and settlement regressions | 48 passing with isolation, 48 passing without isolation | Current candidate |
-| Jackpot checkpoint, ticket and gas regressions | 42 passing | Current candidate |
-| Mainnet-fork stETH regressions | 6 passing at block 26,193,851 | Current candidate |
-| Assurance-tool tests | 111 unit tests and 6 deep-matrix tests passing | Current candidate |
-| Production size, ABI coverage, storage and source gates | Both deployment profiles pass | Current candidate, with each profile's generated address pins |
-| Slither compiler integrity | Complete parsing and SlithIR for 459 contracts / 6,899 functions | Current candidate; detector dependency analysis is separate |
-| Aderyn | Completed; 12 High and 25 Low finding categories | Current candidate; raw findings remain untriaged |
+All results below are for the contract revision named in the readiness record.
 
-The baseline full battery, symbolic proofs
-and native replay are supporting evidence, not results for the final candidate. The current
-candidate has focused regression coverage; a complete rerun remains a release check.
+| Evidence | Result |
+|---|---|
+| Foundry, all groups | 6,715 passing executions, 0 failures, 2 optional skips (integration and gas suites with transaction isolation; mainnet-fork stETH and VRF suites at block 26,193,851) |
+| Hardhat | 98 files, 1,557 passing, 0 failures |
+| Invariants | 389 passing at 256 runs × depth 128 |
+| Halmos | 68 properties passing across 9 suites; not a proof of gas-metered liveness |
+| Structural gates | 24 checks per profile pass on both profiles: sizes, storage layouts (top-level and recursive), owner and Vault action coverage, generated-file freshness and every source gate |
+| Profile differential | 11 scenarios per profile, 0 differences; slot, payout, event and revert mutations detected |
+| Native replay | 7,819 calls per profile on Osaka Geth, 0 failures |
+| Slither 0.11.5 | complete parsing and SlithIR (459 contracts, 6,899 functions); detector output triaged in [analyzer triage](audit/ANALYZER-TRIAGE.md) |
+| Aderyn 0.6.8 | 12 High and 25 Low categories, triaged in [analyzer triage](audit/ANALYZER-TRIAGE.md) |
+
 The EIP-170 deployment's smallest runtime margin is 252 bytes; the alternate Glamsterdam
-schedule's smallest margin is 69 bytes. These are measured build limits, not a claim that
-the alternate schedule is available on the target chain.
-
-Before a final release freeze, rerun the complete battery on the committed candidate,
-complete the 60-partition deep invariant campaign, finish the full Slither detector run
-and triage analyzer findings, and verify hosted CI for that same commit. Record the exact
-revision and evidence before creating a final audit tag. These outstanding checks do not
-prevent an auditor from reviewing this explicitly identified candidate.
+schedule's smallest margin is 69 bytes. These are measured build limits, not a claim that the
+alternate schedule is available on the target chain. Commands to reproduce every row are in
+[verification](VERIFICATION.md).
 
 ## DGVE owner governance
 
-The escrow executor, voting delegation, direct Vault gameplay, and bounded creator
-icon setup are part of the current source. The [owner-governance guide](OWNER_GOVERNANCE.md)
-describes the authority changes, and [verification](VERIFICATION.md#dgve-owner-governance-2026-10-19)
-records the focused results and regression status.
+The [owner-governance guide](OWNER_GOVERNANCE.md) describes the escrow executor, voting
+delegation, direct Vault gameplay and bounded creator icon setup, and [verification](VERIFICATION.md#focused-suites-by-area)
+lists its focused suites.
 
 ## Degenesis sale — review scope
 
-The seven-day Degenesis sale, its module and the supporting changes are in the current source.
+The seven-day Degenesis sale runs on logical days 2 to 8, before the main launch on day 9.
 
-New and changed surface:
+Surface:
 
 - `DegenerusGameDegenesisModule` (delegatecall module, `GAME_DEGENESIS_MODULE`; in the `eip170` profile
   it is hosted by the `DegenesisFoil` deployment): the standalone `purchaseDegenesisBox`,
   `prepareDegenesis_g47` (split and pricing at the daily request), `runDegenesisWork_g1860`
   (the `DegenesisSettle` miner stage), `splitDegenesis` (terminal), `topUpSdgnrsAfking_g318` and
   `spendDegenesis` (the Vault's restricted purchase). See [architecture](ARCHITECTURE.md#degenesis-sale).
-- Storage: slot 0 byte 27 `degenesisClosed`, slot 12 `degenesisVaultBudget`, slot 13 `degenesisCredit`,
+- Storage: slot 0 byte 27 `degenesisClosed`, slot 12 `degenesisVaultBudget` and `degenesisOpenedAt`, slot 13 `degenesisCredit`,
   slot 20 `degenesisActive`, appended `degenesisWord` (slot 66), `degenesisDays` (67) and
   `degenesisOrders` (68). `Pool.Degenesis` is sDGNRS pool index 4 (10% of the initial supply).
 - Credit accrual at the Mint, Whale, foil and purchase spend sites; credit is 25% of
@@ -109,8 +100,8 @@ Questions for review:
   withdrawable.
 
 Unopened boxes are forfeited at game over and unspent credit has no value after the window; both are
-disclosed in [economic disclosures](../ECONOMIC_DISCLOSURES.md). Verification of this source is
-recorded in [verification](VERIFICATION.md#degenesis-sale-verification).
+disclosed in [economic disclosures](../ECONOMIC_DISCLOSURES.md). Its suites are listed in
+[verification](VERIFICATION.md#focused-suites-by-area).
 
 ## Trust boundaries and release constraints
 
@@ -124,7 +115,7 @@ recorded in [verification](VERIFICATION.md#degenesis-sale-verification).
   availability, with its native-ETH subscription balance, remain dependencies. Optional funding/individual redemption failure
   isolation does not make every protocol-level transfer failure ignorable.
 - **Terminal treatment:** unfinished game entropy consumers have the ending treatment
-  disclosed in [Known Issues](../KNOWN-ISSUES.md). Earned claims and paid terminal
+  disclosed in [Economic Disclosures](../ECONOMIC_DISCLOSURES.md#game-over-treatment). Earned claims and paid terminal
   ticket obligations must retain their specified protections.
 - **Deployment headroom:** the `eip170` profile exists because its deployments are sized
   against the 24,576-byte EIP-170 limit. Any source, compiler, optimizer, profile or

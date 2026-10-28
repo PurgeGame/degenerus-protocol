@@ -1,10 +1,15 @@
 # Vault player controls
 
-An [owner governance proposal](OWNER_GOVERNANCE.md) approved by **more than 50.1% of live DGVE supply** can call
-`vault.playerAction(target, data, ethValue)` to perform player actions as the Vault.
+The [DGVE owner executor](OWNER_GOVERNANCE.md) calls
+`vault.playerAction(target, data, ethValue)` to perform player actions as the Vault. It does so
+for a proposal approved by **more than 50.1% of live DGVE supply**, or for a holder or delegate
+who controls that majority through `directAction`
+([Direct Vault gameplay](OWNER_GOVERNANCE.md#direct-vault-gameplay)). No other caller can reach it.
 `data` is the destination's normal ABI-encoded function call. `ethValue` is ETH
 drawn from the Vault in addition to the transaction's `msg.value`. Return values
-are returned as ABI-encoded `bytes`; destination reverts propagate unchanged.
+are returned as ABI-encoded `bytes`; destination reverts propagate unchanged. A target or
+selector outside the allowlist reverts `UnsupportedPlayerAction`. Each call emits
+`PlayerAction(operator, target, selector, value)`.
 
 Before game over, the Vault can hold native ETH, stETH, Game-side claimable
 winnings and prepaid AFKing funding. These are different locations: `ethValue`
@@ -36,13 +41,13 @@ Wallet-wide functions without an account-ID argument still act on the Vault wall
 | Craps | Boards, custom battle creation/entry/closing, slip amendments, bonus window/day entries, pass reservations, future days, normal-to-high conversion, reserved-day/window upgrades |
 | Parimutuel | Growth bets |
 | WWXRP | Reward withdrawals, acquired-account collection, burn-game entries and claims |
-| sDGNRS / DGNRS | Native/wrapped burns, ordinary and parked redemption claims, vesting and year sweep |
+| sDGNRS / DGNRS | Native/wrapped burns, redemption claims, vesting and year sweep |
 | Affiliate / Jackpots | Create a Vault-owned referral code, referral registration, affiliate claims, BAF consolation claims |
 | AFKing seat token | Restyle, approve operators (seats move with `sweepNft`) |
 | GNRUS | Charity votes and GNRUS burns |
 | Admin | `donateVrf` (native ETH VRF subscription funding) |
 
-For example, the approved transaction below buys a foil pack with 0.1 ETH from Vault reserves. Encode this Vault call as the governance proposal; a holder cannot call it directly:
+For example, the approved transaction below buys a foil pack with 0.1 ETH from Vault reserves. The executor makes this Vault call, from a proposal or `directAction`; a holder cannot call the Vault directly:
 
 ```solidity
 vault.playerAction(
@@ -51,23 +56,23 @@ vault.playerAction(
         IDegenerusGame.purchaseOrderFor,
         (0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true)
     ),
-    0.1 ether // Must cover the current quote; normal payment rules apply.
+    0.1 ether // A foil pack costs 10 tickets at the active level's price (0.1 ETH at 0.01 ETH per ticket); normal payment rules apply.
 );
 ```
 
-Ordinary gameplay uses `playerAction`; the 22 former gameplay wrappers have been
-removed. Callers encode the destination ABI and decode returned `bytes` where
-needed. Dedicated Vault controls remain for restricted Degenesis spending, capped
+Ordinary gameplay uses `playerAction`; the Vault has no per-action gameplay wrappers.
+Callers encode the destination ABI and decode returned `bytes` where
+needed. Dedicated Vault controls cover restricted Degenesis spending, capped
 DGNRS unwrapping, WWXRP and AFKing seat minting, Craps comp batches/donations and
 delegate budgets, foreign-token/NFT sweeps, liquidation fallback settings, and
 share redemption. Their privileged destination selectors are excluded from
-`playerAction`, so each budgeted operation has one route. Approved Game operators can continue
-to use explicit account ID 1; that approval does not grant access to
+`playerAction`, so each budgeted operation has one route. Approved Game operators can
+use explicit account ID 1; that approval does not grant access to
 `playerAction` or ETH held directly by the Vault. Such approvals persist across a
-change of DGVE ownership; a subsequent owner proposal revokes any of them through
-`playerAction`.
+change of DGVE ownership; a later owner approval (proposal or `directAction`) revokes any
+of them through `playerAction`.
 
-## Rules that still apply
+## Rules
 
 The fixed allowlist in `contracts/libraries/VaultPlayerActions.sol` checks both
 the destination and selector. Calls use ordinary `CALL`, never `delegatecall`.
@@ -76,7 +81,7 @@ or approvals, direct FLIP allowance minting, and internal settlement hooks are
 outside this entry point. DGVF and DGVE redemption paths retain their accounting.
 Player actions can spend or risk Vault backing.
 
-Underlying restrictions are deliberately preserved:
+Destination restrictions that apply:
 
 - Vault AFKing is box-only, quantity 0 pauses its permanent seat, and quantity 1–8
   resumes/changes it. The normal AFKing timing gates still apply.
@@ -91,10 +96,10 @@ Underlying restrictions are deliberately preserved:
 - Craps custom battle creation requires creator authorization. An owner proposal
   can grant that to the Vault with `CrapsBattle.setBattleCreator(VAULT, true)`.
 - Normal RNG/day locks, game-over restrictions, prices, quotas, balances,
-  claim existence and voting eligibility remain enforced at the destination.
+  claim existence and voting eligibility are enforced at the destination.
 
 Controls that check `isVaultOwner(msg.sender)` are called **by the governance
-executor** at their own target address: Game thresholds/Thanos/smurf allowances,
+executor** at their own target address: Game thresholds/Thanos/smurf allowances/ETH-to-stETH staking,
 Craps creator permissions, WWXRP mint scale/trusted minters, GNRUS charity/recovery
 controls, and Admin owner operations. Permissionless maintenance and cache/identity
 helpers can likewise be called externally without impersonating the Vault.
@@ -103,8 +108,8 @@ helpers can likewise be called externally without impersonating the Vault.
 
 `test/fuzz/VaultPlayerActions.t.sol` exercises real payment/identity routes,
 authorization, timing restrictions, rejection of system hooks and protected-token
-calls, return values and revert propagation. Existing Vault suites cover the
-retained controls and share accounting.
+calls, return values and revert propagation. The other `test/fuzz/Vault*.t.sol` suites
+cover the dedicated controls and share accounting.
 
 After compiling the focused Foundry suites, run:
 
@@ -114,5 +119,5 @@ node scripts/check-vault-player-actions.js
 
 This checks every allowed signature against compiled ABIs, requires every other
 mutable method on those targets to have an explicit classification, confirms the
-removed wrappers stay absent, detects
+Vault ABI has no per-action gameplay wrappers, detects
 excluded-method selector collisions, and checks the Vault's deployment size.

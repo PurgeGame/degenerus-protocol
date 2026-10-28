@@ -27,12 +27,18 @@ results or a deployed instance.
 ## Read in this order
 
 1. [Architecture](ARCHITECTURE.md): modules, funding and settlement boundaries.
-2. [Security](../SECURITY.md): who can do what and which dependencies are trusted.
-3. [Known issues](../KNOWN-ISSUES.md) and [economic disclosures](../ECONOMIC_DISCLOSURES.md).
-4. [RNG domains](audit/RNG-DOMAINS.md): seeds, intentional shared outcomes and retained exceptions.
-5. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
-6. [Current readiness review](AUDIT-READINESS.md): the properties reviewed at this
+2. [Security](../SECURITY.md): who can do what, which dependencies are trusted, VRF
+   configuration and the audit boundaries.
+3. [Economic disclosures](../ECONOMIC_DISCLOSURES.md): game rules, allocations and economic rights.
+4. [Known issues](../KNOWN-ISSUES.md): accepted implementation limitations.
+5. [RNG domains](audit/RNG-DOMAINS.md): seeds, intentional shared outcomes and retained exceptions.
+6. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
+7. [Current readiness review](AUDIT-READINESS.md): the properties reviewed at this
    revision, the Degenesis review scope and the trust boundaries.
+
+Mechanism references (token units, DGVE owner approval, loans, Craps, Decimator,
+Degenerette, deity passes, WWXRP boons, Vault actions, storage reuse) are indexed in
+[the documentation index](README.md).
 
 ## Review priorities
 
@@ -48,7 +54,10 @@ results or a deployed instance.
    balances, credits, backing, allowances and prize pools. Verify award calculations,
    eligibility, recipients, rounding and exactly-once settlement across all games.
 
-Operational assumptions, including scheduled progression, are disclosed in Known Issues.
+Authority and external-service assumptions are documented in [Security](../SECURITY.md),
+and game rules in [Economic Disclosures](../ECONOMIC_DISCLOSURES.md). Accepted implementation
+limitations are listed separately in [Known Issues](../KNOWN-ISSUES.md). Scheduled progression
+is a prerequisite for the High-severity criteria below, not an exclusion of actor-induced stalls.
 
 Gas admission is caller-calibrated. Optional continuations reserve the next chunk's
 estimated cost and complete call/return/flush envelope, scaled by the caller's multiplier,
@@ -62,6 +71,19 @@ tail, otherwise the call reverts `InsufficientExecutionGas` before the coordinat
 supplied budgets may admit more chunks. Network transaction/block limits remain separate
 constraints. Caller gas may select a safe continuation checkpoint, never a committed game
 outcome.
+
+Chunked work (ticket rounds, settlement, terminal processing) uses `MineFlipGas` admission
+with the estimates declared in `MineFlipGasBounds` and stops at a deterministic checkpoint
+before any chunk it does not admit. Zero calibration means 10,000 basis points. Default bounds include Glamsterdam new-state gas
+without a reservoir unless a constant says otherwise. Callers may choose a larger
+multiplier for more conservative batching, or a factor down to 2,500 for cheaper schedules
+at their own transaction's risk. Only estimate-admitted work is held to the floor when a
+worker finishes; a first unit that ran below the floor is not an estimate failure.
+A transaction can perform several admitted operations. Review the declared bounds against
+reachable worst cases, nested EIP-150 forwarding and full return tails. A caller choosing
+too little gas must not change an outcome or cause an out-of-gas failure to be accepted as
+a semantic fallback.
+
 At game over, fair ETH distribution and completion take priority. FLIP has no
 post-game value by design; unfinished Craps or other FLIP bookkeeping does not
 justify adding prerequisites to ETH release.
@@ -87,22 +109,11 @@ Attacks requiring vault-owner (DGVE-majority) privileges against a mature game w
 participants are classified as Medium, including terminal-distribution impacts.
 Genesis-only self-disruption is excluded.
 
-## Governance exclusion
+## Exclusions
 
 Outcomes requiring valid sDGNRS governance approval are the governance mechanism, not
 audit findings. Bypassing its authorization, voting or execution rules remains in scope.
-
-Ticket work uses `MineFlipGas` admission bounds and deterministic checkpoints.
-After the first mandatory checkpoint, the engine admits the next chunk only when
-its caller-scaled estimate, including the call, return and checkpoint envelope,
-fits both the remaining worker allowance and actual available gas. Otherwise it
-stops at a safe checkpoint before starting that chunk. Zero calibration means
-10,000 basis points. Default bounds include Glamsterdam new-state gas without a
-reservoir. Callers may choose a larger multiplier for more conservative batching,
-or a factor down to 2,500 for cheaper schedules at their own transaction's risk.
-Only estimate-admitted work is held to the floor when a worker finishes; a first unit
-that ran below the floor is not an estimate failure.
-A transaction can perform several admitted operations. Review the
-declared bounds against reachable worst cases, nested EIP-150 forwarding and full
-return tails. A caller choosing too little gas must not change an outcome or cause
-an out-of-gas failure to be accepted as a semantic fallback.
+Findings about WWXRP value, supply or draw weighting are excluded; a path where WWXRP moves
+ETH, stETH, sDGNRS or tickets, or pays FLIP beyond what its draws pay by rule, remains in
+scope. See [the audit boundaries](../SECURITY.md#audit-boundaries). Style-only reports and
+gas micro-optimizations are not audit priorities; see [out_of_scope.txt](../out_of_scope.txt).

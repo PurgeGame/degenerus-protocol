@@ -57,7 +57,7 @@
 #                   VRF-callback / mint-queue path (a cursor-index allocation). A writer that
 #                   appears in a NEW function is the highest-signal drift: re-verify it cannot
 #                   rewrite a sealed word a pending consumption will read.
-#   EXEMPT-ADVANCE  read inside mineFlip / the VRF request-response / seal / gap-backfill /
+#   EXEMPT-ADVANCE  read inside mineRun / the VRF request-response / seal / gap-backfill /
 #                   game-over terminal flow — the v45-exempt heartbeat (no player interleave
 #                   between the read and the word it depends on).
 #   CONSUMER-SEALED player-reachable read that consumes a SEALED, write-once word for a value

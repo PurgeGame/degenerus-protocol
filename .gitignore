@@ -68,6 +68,7 @@ docs/abi/*
 !docs/abi/Decimator.json
 !docs/audit/
 docs/audit/*
+!docs/audit/ANALYZER-TRIAGE.md
 !docs/audit/RNG-DOMAINS.md
 !docs/audit/snapshot.json
 !docs/audit/freeze.json

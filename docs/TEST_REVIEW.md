@@ -1,117 +1,72 @@
-# Test usefulness review — 2026-09-29
+# Test suite usefulness notes
 
-Review baseline: `62e950c3c`. The initial `test/` tree contained 466 test files:
-365 Foundry roots, 97 JavaScript files and four Python files, totaling about
-173,500 lines.
+These notes say which tests in `test/` are execution evidence for production behavior
+and which are not. They do **not** establish that every assertion is correct or that
+all protocol behavior is covered. Passing a model or source-text guard is not a
+production execution proof. Run commands and results are in
+[VERIFICATION.md](VERIFICATION.md).
 
-This review inventories the whole tree, checks discovery and runner behavior,
-screens assertions, skips, stale interfaces/storage, duplicated properties and
-model-only tests, and runs the ordinary suites. It does **not** establish that
-every surviving assertion is correct or that all protocol behavior is covered.
-Passing a model or source-text guard is not a production execution proof.
+## Discovery
 
-## Repairs
+`npm test` runs `scripts/test-hardhat-groups.py`, which assigns every
+`test/**/*.test.js` file to a Hardhat batch and fails on any unassigned file
+(`test/unit/test_hardhat_groups.py` covers the runner; `test/unit/test_foundry_groups.py`
+covers the Foundry grouping). The statistical suites in `test/stat` are part of the
+default selection.
 
-| Area | Problem found | Change |
+## What is not a production execution proof
+
+- **Arithmetic and statistical models.** `test/fuzz/DustAccumulation.t.sol` and most
+  of `test/fuzz/PrecisionBoundary.t.sol` exercise local arithmetic models (both files
+  say so in their headers), as do parts of the statistical suites. They are useful
+  for distributions and bounds but can drift from production. Pair a protocol claim
+  with a test that calls the implementation or a checked differential harness.
+- **Source-text guards** check structure, not runtime semantics.
+- **Gas benchmarks.** Tests that only print gas measurements are benchmarks, not
+  ceiling gates. Small helper gas checks such as `test/gas/Phase261GasRegression.test.js`
+  do not establish transaction-level ceilings; the Foundry cold gas gates run
+  separately.
+- **Halmos** `check_*` functions are not executed as proofs by ordinary Forge runs.
+  The Halmos job, the deep invariant campaign and their limits are recorded in
+  [VERIFICATION.md](VERIFICATION.md) and [AUDIT-READINESS.md](AUDIT-READINESS.md).
+
+## Opt-in cases
+
+The suite has no unconditionally skipped cases. Two tests skip unless an
+environment variable is set, and report SKIP, never PASS, without it:
+
+| Test | Variable | Purpose |
 | --- | --- | --- |
-| Discovery | All 19 statistical files were outside the default Hardhat selection. Several npm commands passed directory names that Hardhat could not load. | Include `stat`, use the maintained runner for `npm test`, expand focused npm commands to files, and fail discovery on unassigned JavaScript test files. Add an orphan-file regression for the runner. |
-| Vault units | Share supply, allowance, authorization and ownership tests often checked proxies or merely that a call returned. | Assert the actual share contracts, genesis balances, strict >50.1% ownership threshold, real ETH/FLIP payouts, remaining reserves and unauthorized share minting. |
-| Share fuzzing | `ShareMathInvariants` tested copied arithmetic, including a duplicate function and an unreachable refill sub-branch. | Fuzz the deployed vault: partial burn/preview agreement, two holders exhausting reserves, refill plus a second deposit, and ETH preference before stETH. |
-| FLIP fuzzing | `FLIPInvariants` exercised a private mock with an obsolete initial allowance. | Use the deployed token for mint/burn, transfer, supply/escrow accounting and allowance exhaustion. |
-| Stateful vault/levels | Nonnegative unsigned values, self-derived supply checks and incomplete deposit accounting passed without checking the advertised property. | Track burns/refills and both deposit sources; reconcile share supply; compare level with its observed high-water mark; include stETH in solvency assets. Add successful-action and deliberate-bad-state checks. |
-| Redemption | Invariants read removed scalar storage slots or counters that were never updated. INV-05 duplicated INV-02 to inflate an attestation matrix. | Retain current solvency, wrapper, pool and supply checks. Keep exact per-day reservation/cap checks in `RedemptionAccounting`, with the duplicate removed. |
-| Handler accounting | A successful no-op `openBoxes` call counted as a resolved Degenerette bet. | Count resolution only when a known live bet actually disappears. |
-| Quest fixtures | A helper expected a return value from a now-void function, swallowed the resulting error and skipped. Constants still used a 200-FLIP reward and quest kind 0. | Read active quests, search deterministic seeds with isolated snapshots, require success, and use the current 100-FLIP reward and kind 9. |
-| Ticket mixing | Lootbox fixtures probed removed getters and silently skipped; a second test could return before checking queue changes. | Reuse a daily-ready fixture, drive current box orders/RNG and require a ticket-producing result before checking queue accounting. |
-| Other units | Leaderboard setup was reset by reloading its fixture; winner failures were swallowed. Referral, unwrap and post-game-over cases omitted their claimed checks. | Preserve leaderboard state, assert exact leading payout, resolve the default referral, check both token balance changes and require terminal errors. |
-| Historical checks | Literal-only paper examples, permanently skipped old harnesses and file-vs-HEAD comparisons inflated the suite. The latter accepted any committed regression. | Retire them; preserve current contract-backed examples and useful structural guards. |
-| Diagnostics | Three “exercised” invariants discarded getter results without asserting or printing them. | Remove those functions, preserving the real properties and `afterInvariant` activity requirements. |
-| Reproducibility | Governance fixtures used `Math.random`; coinflip seed-search failure skipped a check. | Derive deterministic governance words and fail explicitly if a required coinflip seed is absent. |
+| `test/gas/AfkingRepricingFixtures.t.sol` `test_ExportRepricingFixtures` | `AFKING_REPRICING_STATE_DIR` | Exports repricing fixture state; not a check. |
+| `test/fuzz/GrowthFoilStorage.t.sol` `testFuzz_FoilMatchesArchivedRuntime` | `CUSTOMER_GROWTH_FOIL_REFERENCE` | Optional differential oracle against an archived runtime; the file's independent policy/lane tests always run. |
 
-The review does not change production contract logic or raise gas ceilings.
+## Redemption batch coverage
 
-## Retired coverage and current counterparts
+Common deployment and worker fixtures live in `test/fuzz/helpers/RedemptionFixture.sol`
+and `test/fuzz/helpers/RedemptionCloseTools.sol`. The latter exposes the production
+close/funding hook (`_closeRedemptionBatch`) without a whole VRF session; real request
+integration is covered by `RedemptionForwardBatches` and the session suites.
 
-81 unconditional `vm.skip(true)` cases were removed from 13 Solidity files.
-They executed no property before this cleanup. The table identifies current
-counterparts, **not** a claim that every historical scenario has an exact modern
-replacement. Git history retains the original bodies and skip explanations.
-
-| Historical file | Cases removed | Current coverage / limitation |
-| --- | ---: | --- |
-| `AfKingFundingWaterfall` | 13 | `V56SubHardening`, `V56FreezeSolvency`: funded subscribe and debit/delivery accounting. |
-| `V55SetMutationOpenE` | 9 | `V56SecUnmanipulable`, `V56SubHardening`, `V56AfkingGasMarginal`: current valve, finalize hooks and no-orphan checks. |
-| `V56SecUnmanipulable` | 1 | Remaining hooks and grounded-subscription cases in the same family. |
-| `AfKingConcurrency` | 9 | Current funded-subscribe/crossing/finalize behavior in the V56 suites. |
-| `KeeperRouterOneCategory` | 2 | Current routing and open-leg behavior in `V56SubHardening` / `V56AfkingGasMarginal`. |
-| `KeeperRewardRoutingSameResults` | 1 | Subscribe-time stamping replaces the obsolete first STAGE buy. |
-| `KeeperNonBrick` | 13 | Current subscription, finalize/no-orphan and solvency suites. |
-| `KeeperFaucetResistance` | 5 | Grounded subscription and current marginal gas tests; the retired ungrounded round trip is no longer constructible. |
-| `V55FreezeDeterminism` (file removed) | 7 | `V56FreezeSolvency`: stamp-before-resolution and two-block determinism. |
-| `RngLockDeterminism` | 14 | Five active legacy cases retained. Current commitment-binding, `RngWindowFreeze` and VRF suites cover related behavior; this is not 14 newly verified replacements. |
-| `RouterWorstCaseGas` | 5 | `V56AfkingGasMarginal` and current miner gas suites. |
-| `OpenWalkCompositionGas` | 1 | Removed composition required both afking and human opens in one call, which the current valve excludes. Other measurements retained. |
-| `KeeperLeversAndPacking` | 1 | Unified `openBoxes` coverage in `V56AfkingGasMarginal`. |
-
-Also removed: the wholly vacuous `VaultShare.inv.t.sol`, 55 literal-only paper
-cases, historical surface/file-identity checks, a permanently skipped obsolete
-quick-play gas benchmark, and selected duplicate/no-op invariant functions.
-`DustAccumulation` retains two arithmetic models; stale allocation examples,
-a literal gas-profit comparison with an unused fuzz input and duplicate division
-identities were removed. Model-only redemption/precision files are explicitly
-identified as such.
-
-## Remaining limits and maintenance rules
-
-- Some JavaScript gas fixtures still cannot reach their target stages and report
-  pending. `Phase261GasRegression` contains two disabled historical comparison
-  cases. These are not gas coverage. Current Foundry cold gas gates run separately;
-  small helper gas checks do not establish transaction-level ceilings.
-- `LastPurchaseDayRace.test.js` retains three disabled historical reproduction
-  cases. Its reachability rationale is not independently proved by this review.
-  Keep them visible as unresolved coverage, not as passing regressions.
-- Pure arithmetic/statistical models remain useful for distributions and bounds,
-  but can drift from production. Pair protocol claims with a test calling the
-  implementation or a checked differential harness. `PrecisionBoundary` and some
-  statistical suites belong in this category.
-- Source-text guards check structure, not runtime semantics. Tests that merely
-  print gas measurements are benchmarks, not ceiling gates. Halmos `check_*`
-  functions are not executed as proofs by ordinary Forge runs.
-- Halmos solver timeouts and the status of the deep campaign are recorded under
-  the known verification limits in [VERIFICATION.md](VERIFICATION.md) and in
-  [AUDIT-READINESS.md](AUDIT-READINESS.md). This review runs the default
-  campaigns; it does not replace either job or remote CI.
-
-For new or changed tests, require a specific observable failure when the claimed
-behavior breaks. Assert the fixture reached the intended state before checking
-it. Do not catch assertion failures, silently skip fixture errors, compare an
-unsigned value with zero, or count a setup-only check as a protocol property.
-Use `afterInvariant` and focused success cases to establish meaningful activity;
-use a deliberate bad state or mutation where an invariant's detector is subtle.
-Keep shared handler changes under the campaigns that consume those handlers.
-
-## Forward redemption batches — 2026-10-05
-
-The redemption suites now exercise request-bound batches. Historical assertions
-about day-keyed claims, submit-time pricing/reservation, blocked burns during RNG,
-and 5 ETH chunks no longer describe the protocol and were replaced, rather than
-preserved behind compatibility shims. Common deployment and worker fixtures live
-in `test/fuzz/helpers/RedemptionFixture.sol` and `RedemptionCloseTools.sol`.
-The latter exposes the production close/funding hook; real request integration
-remains covered separately by `RedemptionForwardBatches` and the session suites.
-
-| Former property | Current regression coverage |
+| Property | Regression coverage |
 | --- | --- |
-| A burn fixes its base and reserves 175% immediately | Burns record raw token weights and frozen scores; escrow preserves holder share until a daily or midday request closes and prices the batch. `RedemptionForwardBatches`, `StakedStonkRedemption`, `RedemptionEdgeCases`. |
-| Day-keyed pending totals and supply cap | Exact batch token conservation, first-burn supply snapshot, 50% cap, wallet wall-day cap across batches, and exact reserves including cursor rounding dust and parked claims. `RedemptionAccounting` and `RedemptionEdgeCases`. |
-| The next daily coinflip pays the escrow | A tagged synthetic batch flip uses the shared no-bonus percent function; its result is independent of the daily win bit. `RedemptionForwardBatches`, `StakedStonkRedemption`, `RedemptionBatching`. |
-| Per-5-ETH chunks and overflow handling | One custom order with at most 20 boxes, full value funding, amount-independent first-draw identity, cold gas bounds, and constant-time cleanup. `RedemptionForwardBatches`, `RedemptionBatchGas`, `RandomnessSeedInputs`. The retired independent chunk-award model does not describe the shared human-order roller. |
-| Submit-time Game ETH or custody fallback | At close, existing custody offsets the reserve; the Game transfers only the shortfall, ETH first and stETH for the remainder, with matching claimable and pool debits. Transfer failure rolls back the close. `RedemptionStethFallback`. |
-| Burn immediately counts toward century recycling | Open escrow remains in the economic holder base; the burn counts once the batch closes. Pending and resolved claims survive refills. `SdgnrsCenturyRecycle`. |
-| A terminal word rerolls unresolved claims | Both endings resolve an unrolled closed batch at 100%; a live resolved batch retains its roll, while the open batch unwinds at terminal backing value. `RedemptionForwardBatches`, `DeadVrfEnding`. |
+| A burn leaves supply at once and records raw token weight and the first activity score; escrow keeps the holder's share of the base until a daily or mid-day request closes and prices the batch. | `RedemptionForwardBatches`, `StakedStonkRedemption`, `RedemptionEdgeCases` |
+| Exact batch token conservation; no daily or supply cap (burns accumulate across days and a batch can exceed half the supply); exact reserves including cursor rounding dust and parked claims. | `RedemptionAccounting` (invariant), `RedemptionEdgeCases` |
+| The batch's FLIP leg pays on a tagged synthetic flip, independent of the daily coinflip bit. | `RedemptionForwardBatches`, `StakedStonkRedemption`, `RedemptionBatching` |
+| The lootbox leg resolves as one box order of at most 20 boxes, with cold gas bounds. | `RedemptionForwardBatches`, `RedemptionBatchGas`, `RandomnessSeedInputs` |
+| The close moves the batch's maximum (175%) payout, capped at free backing, from sDGNRS's Game claimable into the redemption reserve; live legs pay only from that reserve, a stETH transfer failure cannot block the close or settlement, and token donations wait for the ending. | `RedemptionStethFallback` |
+| Open escrow stays in the holder base until its batch closes; pending and resolved claims survive century refills. | `SdgnrsCenturyRecycle` |
+| Both endings resolve an unrolled settling batch at 100; a batch resolved live keeps its roll; the open batch unwinds at the terminal burn price. | `RedemptionForwardBatches`, `DeadVrfEnding` |
 
-The migrated repros retain real payable forwarding, stETH-before-ETH reentrancy
-checks, protection of other claims' reserves, settlement order, parked retries,
-operator authorization and terminal claims without an expiry. Older source-pinned
-reports and their test counts are historical evidence, not attestations for this
-migration. Current commands and run evidence are recorded in `VERIFICATION.md`.
+The redemption suites also cover real payable forwarding, stETH-before-ETH reentrancy,
+protection of other claims' reserves, settlement order, parked retries, operator
+authorization and terminal claims without an expiry.
+
+## Rules for new or changed tests
+
+Require a specific observable failure when the claimed behavior breaks. Assert the
+fixture reached the intended state before checking it. Do not catch assertion
+failures, silently skip fixture errors, compare an unsigned value with zero, or count
+a setup-only check as a protocol property. Use `afterInvariant` and focused success
+cases to establish meaningful activity; use a deliberate bad state or mutation where
+an invariant's detector is subtle. Keep shared handler changes under the campaigns
+that consume those handlers.

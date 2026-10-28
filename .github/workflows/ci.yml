@@ -451,7 +451,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p .audit-test-logs/halmos
-          FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --panic-error-codes '*' --solver-timeout-assertion 120000 --solver-threads 2 --json-output .audit-test-logs/halmos/results.json --dump-smt-queries --dump-smt-directory .audit-test-logs/halmos/queries 2>&1 | tee .audit-test-logs/halmos/output.log
+          FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --panic-error-codes '*' --solver-timeout-assertion 300000 --solver-threads 2 --json-output .audit-test-logs/halmos/results.json --dump-smt-queries --dump-smt-directory .audit-test-logs/halmos/queries 2>&1 | tee .audit-test-logs/halmos/output.log
       - name: Preserve symbolic evidence, including unresolved queries
         if: always()
         uses: actions/upload-artifact@v4

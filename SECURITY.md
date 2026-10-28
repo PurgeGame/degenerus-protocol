@@ -33,9 +33,10 @@ borrowing across blocks. Proposals expire after seven days. See [DGVE owner appr
   manage eligible vault seats and recover foreign tokens/NFTs. The foreign-token
   sweep excludes stETH backing. Share redemption still burns the relevant shares.
 - Set lootbox RNG threshold and midday basefee ceiling. Declare Thanos scaling at least
-  six levels ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
-- Stake surplus Game ETH into stETH subject to player-claim reserves; exchange supplied
-  ETH for an equal amount of Game stETH through Admin, paying the explicitly approved recipient.
+  three levels ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
+- Stake surplus Game ETH into stETH, keeping the player-claim ETH reserve and the VRF funding
+  target in ETH; exchange supplied ETH for an equal amount of Game stETH through Admin,
+  paying the explicitly approved recipient.
 - Permanently raise a registered main ID's base smurf allowance directly through the Game,
   up to 65,535 base creations, plus one per 120 current main activity points, subject
   to the 65,535 total lifetime creation cap.
@@ -64,6 +65,52 @@ can replace the external VRF coordinator endpoint and the owner can change the c
 Chainlink VRF v2.5 supplies randomness. Requests are paid in native ETH from the
 subscription, which yield surplus, sDGNRS balances and `donateVrf` donations fund; there is no
 LINK token or price feed. Lido stETH supplies external asset accounting.
+
+### VRF callback trust and request IDs
+
+Callback authority is the coordinator address plus the low 64 bits of the request ID
+(`vrfRequestId`, packed beside `vrfCoordinator`). All request paths, including retries and
+coordinator-swap re-issues, refuse an ID whose low 64 bits are zero. A consumed session
+retains its answered ID. The callback relies on Chainlink VRF v2.5 deleting the request
+commitment before calling back, so each request can be fulfilled only once.
+
+A coordinator that delivered the same request twice could overwrite `rngWordCurrent`
+while boxes, bets, Craps or Decimator consumers remain unresolved; later consumers would
+use the second word. The accepted trust assumption is the coordinator's one-fulfillment
+guarantee. Separately, a superseded or dropped request could match a later retained ID
+through a low-64-bit collision. Assuming independent, uniformly distributed IDs, the
+chance of that match is 2^-64 per late delivery against a retained nonzero ID. Coordinator
+authentication still applies; truncation does not let an arbitrary caller submit a word.
+
+### VRF funding configuration
+
+Funding estimates use the constants compiled into `ContractAddresses`:
+`VRF_LANE_MAX_GAS_PRICE` is 200 gwei and `VRF_NATIVE_PREMIUM` is 24% for the configured
+Ethereum mainnet lane. The minimum fulfillment balance includes the configured callback
+gas limit; low-water and target balances scale up when that limit exceeds 150,000.
+A mid-day lootbox request requires 1.5x the minimum fulfillment balance. Daily, retry,
+Craps and terminal requests are not balance-gated.
+
+Rotating to a lane with a higher maximum gas price or premium does not update the compiled
+constants. The subscription must have enough ETH for the selected coordinator's actual
+billing. Underfunding can leave requests unanswered until `donateVrf` or a direct top-up
+funds them; retry, rotation and the 14-day ending retain their existing rules. Credit
+pricing and refill sources are described in [Native randomness funding](ECONOMIC_DISCLOSURES.md#native-randomness-funding).
+
+## Audit boundaries
+
+Outcomes of valid sDGNRS governance approval are governance decisions; bypasses of
+authorization, voting or execution rules remain in scope. Genesis-only self-disruption
+is excluded under the [audit criteria](docs/AUDIT.md).
+
+WWXRP's discretionary supply and burn-weighted draws are described in
+[Economic Disclosures](ECONOMIC_DISCLOSURES.md#creator-and-vault-interests). Findings about
+its value, supply or draw weighting are excluded. A path where WWXRP moves ETH, stETH,
+sDGNRS or tickets, or pays FLIP beyond what those draws pay by rule, remains in scope.
+
+The ending rules do not exclude an actor-induced stall, brick or premature ending.
+Earned claims and the terminal level's paid ticket obligations must retain their
+specified protections; losing those claims or tickets remains in scope.
 
 Treat external failures, compromised owners and permissionless callers according to the
 explicit boundaries above. Trusted governance decisions within those powers and the

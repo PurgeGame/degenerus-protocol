@@ -1,13 +1,11 @@
 # Degenerette bet queue
 
-FLIP has zero decimals: pass integer token amounts directly to the API. ETH remains
-wei. The packed FLIP stake already used whole tokens and keeps its existing width.
+FLIP has zero decimals: pass integer token amounts directly to the API. ETH amounts
+are wei.
 
-Degenerette bets resolve the same way lootboxes do: a permissionless miner crank
-walks a queue and settles what it can afford, instead of the player or a
-dedicated resolver paying to settle each bet. This replaces the old per-player
-`degeneretteBets`/`degeneretteBetNonce` bet book and its own resolver
-(`degeneretteResolve`).
+Degenerette bets resolve the same way lootboxes do: the permissionless miner crank
+(`mineRun(uint32)`) walks a queue and settles what its gas allowance admits. There is
+no per-player bet book and no separate resolver entry point.
 
 ## Queue and bet id
 
@@ -42,28 +40,30 @@ restarts the write count at zero. The biggest-spin record bounty lives in
 
 Storage, resolution, placement events and public views use this same 124-bit
 payload directly. Two lanes share one storage word. There is no stored processed
-bit or expansion into the old address layout. Event and view consumers must use
-these compact offsets for the fresh deployment.
+bit: the read cursor alone marks the resolved prefix.
 
 ## Placement rules
 
-`betDegenerette(id, currency, amountPerSpin, spinCount, symbol)` only
-accepts ETH (0) and FLIP (1); `spinCount` is capped per currency (ETH 25, FLIP
-15). `amountPerSpin` must be a whole multiple of the currency's stake unit —
-1 gwei for ETH, 1 whole FLIP for FLIP — and at least the currency's minimum bet
-(0.005 ETH / 100 FLIP); any violation, an out-of-range symbol, or a bet placed
-against an already-revealed index reverts `InvalidBet` (or `RngNotReady` for
-the revealed-index case). A self-or-operator-funded bet may also consume a
-per-currency stake boon, which raises the effective stake per spin by a
-percentage of the (capped) total bet, spread across the spins and then floored
-to the stake unit — the player never spins on an un-funded fractional unit.
+`betDegenerette(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount,
+uint8 symbol)` accepts only ETH (0) and FLIP (1); any other currency reverts
+`UnsupportedCurrency`. `spinCount` is 1..25 for ETH and 1..15 for FLIP.
+`amountPerSpin` must be a whole multiple of the currency's stake unit (1 gwei for
+ETH, 1 whole FLIP for FLIP) and at least the currency's minimum bet (0.005 ETH /
+100 FLIP). A spin-count or amount violation, a symbol above 23, an ETH `msg.value`
+above the total bet, or a boosted stake above 64 bits reverts `InvalidBet`; any bet
+after the liveness trigger reverts `GameOver`. Every bet binds to the current write
+buffer, whose word is not yet requested, so no bet can target a revealed word. A
+self- or operator-funded bet may also consume a per-currency stake boon, which
+raises the effective stake per spin by a percentage of the (capped) total bet,
+spread across the spins and then floored to the stake unit; the player never spins
+on an unfunded fractional unit. A gifted bet never consumes the recipient's boon.
 
 ## Sweep integration
 
-`mineRun()` runs the read cohort's consumers in a fixed order: sDGNRS
-redemption settlement, AFKing boxes, human box entries
-(`GameAfkingModule.runHumanBoxWork_g315`), then Degenerette bets
-(`DegenerusGameDegeneretteModule.runDegeneretteWork_g670`), the Decimator and
+`mineRun(uint32)` runs the read cohort's consumers in a fixed order
+(`_rngConsumerStage`, stages 1..6): sDGNRS redemption settlement, pending AFKing
+boxes, human box entries (`GameAfkingModule.runHumanBoxWork_g315`), Degenerette
+bets (`DegenerusGameDegeneretteModule.runDegeneretteWork_g670`), the Decimator and
 read-bound Craps. The bet worker walks `degeneretteCursor` up to
 `degeneretteReadCount`, admits each bet against its declared gas bound, and
 resolves it against the buffer's published session word. It writes the advanced
@@ -95,22 +95,24 @@ wild count (bits 4-6)`; bit 7 is zero. Traits use the Degenerette lane format
 lane is its only wild) and `resultTraits` is the spin-0 house ticket in the same
 format. Per-spin payouts are recomputable off-chain from each spin's score and
 wild count, the bet word's stake-per-spin and currency, and its
-activity score — nothing else needed to itemize an indexer's view of a bet's
-spins beyond this one event. `PayoutCapped` (ETH pool-cap overflow to
-lootbox) is unchanged.
+activity score; this one event itemizes a bet's spins. `PayoutCapped(uint32
+indexed playerId, uint256 cappedEthPayout, uint256 excessConverted)` is emitted
+for an ETH spin whose cash leg exceeds the pool cap; `excessConverted` is that
+spin's whole lootbox share (split remainder plus cap overflow).
 
 ## Settlement order and indexing
 
-Everything a bet's spins roll — player tickets, the house reel, scores, house
-wilds, the FLIP survival flip and rounding — is fixed by the index word and
-the bet's own id, so no choice made after the word lands can change them. A
+Everything a bet's spins roll (player tickets, the house reel, scores, house
+wilds, the FLIP survival flip and rounding) is fixed by the index word, the bet's
+symbol and spin positions, and the bet's own id, so no choice made after the word
+lands can change them. A
 few payout legs read live state instead, so the order bets settle in can shift
 their size: the ETH leg is capped at 10% of the live future pool (later wins
 in a busy index see a smaller pool), the S>=7 sDGNRS award is a share of the
 live Reward pool, and the win box and affiliate legs price at the live level.
-That order is now fixed by the sweep, which resolves a queue strictly in id
-order — no caller can jump their own bet ahead of an earlier one to claim a
-bigger share of a live-priced leg.
+The sweep fixes that order: it resolves a queue strictly in id order, so no
+caller can move a bet ahead of an earlier one to claim a bigger share of a
+live-priced leg.
 
 `PayoutCapped` carries no bet id, but every capped spin of a bet emits it
 before that bet's `DegeneretteResolved` (and after the previous bet's), so an

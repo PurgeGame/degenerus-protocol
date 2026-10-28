@@ -6,7 +6,7 @@
 # correspondence with source and requires every CRANK-PINNED row to name a test that drives
 # the callee (the file must literally mention the callee function).
 #
-# Roots: DegenerusGame.mineFlip -> MinerModule.mineFlip -> shared derived selector.
+# Roots: DegenerusGame.mineRun -> MinerModule.mineRun -> shared derived selector.
 # Miner dispatches publication/request/retry to Rng; tickets/future/foil to Ticket;
 # daily economic phases and terminal delegation to Advance; subscriptions and boxes
 # to AFKing/Lootbox; remaining read consumers to their native worker modules or

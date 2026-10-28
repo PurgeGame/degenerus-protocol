@@ -39,8 +39,9 @@ For ordinary ETH and FLIP bets:
 - Different hero symbols independently regenerate the other symbols and colors.
 - ETH and FLIP share the player and house streams. The house stream is shared
   across hero selections, so every hero faces the same house board on a spin.
-- Placement rejects an already revealed RNG index. Draws cannot be rerolled by
-  changing settlement order or batching.
+- Every bet binds to the RNG write buffer, whose word is not yet requested, so no
+  bet is placed against a revealed word. Draws cannot be rerolled by changing
+  settlement order or batching.
 
 Using `H` for keccak256 over 32-byte ABI words, with a unique numeric tag first:
 
@@ -61,8 +62,9 @@ houseSeed  = H(SPIN_HOUSE, rewardSeed)
 rigSeed    = H(SPIN_RIG, rewardSeed)
 ```
 
-FLIP survival and award rounding keep their separate owner/bet-id domains, where
-the bet id is scoped to the RNG index the bet queued at (see
+FLIP survival (`H(BET_SURVIVAL, rngWord, betId)`) and award rounding
+(`H(BET_ROUND, rngWord, betId)`) use their own tagged domains keyed by the bet id,
+which is scoped to the RNG buffer the bet queued in (see
 [DEGENERETTE-BET-QUEUE.md](DEGENERETTE-BET-QUEUE.md)). Shared reels do not imply
 identical final FLIP awards. Activity, stake boons, ETH caps and downstream
 reward draws also affect settlement independently.
@@ -230,24 +232,22 @@ A natural WWXRP score 9 pays its token prize through the ordinary payout path.
 ## Side rewards
 
 - **sDGNRS** (paid ETH bets and box ETH spins): scores 7 / 8 / 9 pay **2.04% /
-  4.66% / 10.10%** of the Reward pool per capped 1 ETH of stake. Each tier is
-  scaled by its old/new frequency, keeping the previous expected pool outflow per
-  1-ETH spin (99.86% of the previous rate).
+  4.66% / 10.10%** of the live Reward pool per spin at a 1-ETH stake per spin,
+  pro rata below it; stake above 1 ETH adds nothing.
 - **Affiliate** (paid ETH bets): the referrer receives **4.26%** of the summed
-  lootbox share of the bet's score ≥5 spins, as FLIP, including cash redirected by
-  the pool cap. This keeps the previous expected referrer credit per ETH staked
-  (99.3–100.05% across the activity knees, nonbinding cap).
-- Quests and records are unchanged and outside the spin multiplier.
+  lootbox share of the bet's score ≥5 spins, as FLIP priced at the live level,
+  including cash redirected by the pool cap.
+- Quests and records sit outside the spin multiplier.
 
-## Other rewards, automatic spins and compatibility
+## Other rewards and automatic spins
 
 - ETH and FLIP stake boons raise effective stake versus paid stake under their
   caps. WWXRP boons do not boost automatic reward spins. See
   [WWXRP boons](WWXRP-BOONS.md).
-- FLIP keeps its 50/50 double-or-nothing survival flip per bet, EV-neutral before
+- FLIP has one 50/50 double-or-nothing survival flip per bet, EV-neutral before
   whole-token flooring and stochastic hundred-FLIP rounding.
-- ETH keeps its payout split, pool caps and downstream boxes. Scheduled return is
-  not all immediately withdrawable ETH.
+- ETH pays through its 3-tier cash/lootbox split, the 10% future-pool cap and
+  downstream boxes. Scheduled return is not all immediately withdrawable ETH.
 - Box spins request a random hero using internal sentinel `32`; symbols `0..23`,
   including zero, are real hero selections. Record awards keep the selected hero.
   Foil awards select one hero from the matched line using the sealed seed and
@@ -266,8 +266,8 @@ Run `python3 scripts/data/degenerette_single_symbol_math.py` (the
 enumerates every symbol-hit / house-wild / color-equality state and every eligible
 help choice, cross-checked against the generating-function convolution. The model
 verifies the compiled payout table, ETH additions, WWXRP factors, rig rate, base
-normalization, target curves and the sDGNRS/affiliate rates against an exact model
-of the previous rules. Every uint16 activity value is checked for monotonicity and
+normalization, target curves and the sDGNRS/affiliate rates against its exact
+calibration model. Every uint16 activity value is checked for monotonicity and
 deviation from the WWXRP target.
 
 `DegeneretteHeroScore.t.sol` checks the compiled payout path against the exact

@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/abi/Decimator.json"
 MEMBERS = {
     "FLIP": {"decimatorBurn", "autoDecimatorBurn", "DecimatorBurn"},
-    "DegenerusGame": {"recordDecBurn", "runDecimatorJackpot", "decimatorActive"},
+    "DegenerusGame": {"recordDecBurn_g1271", "runDecimatorJackpot", "decimatorActive"},
     "DegenerusGameDecimatorModule": {"runDecimatorJackpotAwards", "runDecimatorWork", "DecBurnRecorded"},
     "DegenerusGameLens": set(),
 }

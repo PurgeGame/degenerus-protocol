@@ -63,7 +63,7 @@ price tables and reward curves.
     (1 WWXRP before the vault owner's `gameMintScale`) instead; no order resolves to nothing.
   - **Additional boons.** Every primary outcome, including consolation, also draws from the
     ordinary boon table using a probability budget of **20% of the raw ETH order, capped at
-    1 ETH**. Normalize at launch level 1 with the existing 50% utilization assumption: each full
+    1 ETH**. Normalize at launch level 1 with the ordinary 50% boon utilization assumption: each full
     100% chance guarantees a draw and the remainder rolls once for another, up to **three draws
     per order**. Activity, boosts, early-purchase bonuses and cohort volume do not multiply this
     budget. It creates no ETH reserve and does not reduce the exclusive primary reward.
@@ -71,7 +71,7 @@ price tables and reward curves.
     apply. Three draws need not produce three active boons. Expiry starts on the settlement day,
     so early-sale boons can expire before launch. Splitting large purchases into separate orders
     can produce more total draws by avoiding the per-order ceiling. Neither Degenesis purchases
-    nor boon grants earn new Degenesis credit. Ordinary boxes keep their existing one-draw rules.
+    nor boon grants earn new Degenesis credit. Ordinary boxes follow their one-draw rules.
     `DegenesisBoonsRolled` immediately precedes `DegenesisOrderResolved`: bytes 0, 1 and 2 of
     `boonTypes` identify selected types in draw order, including ignored/discarded draws, with
     unused bytes zero. A zero-draw order still emits the companion event.
@@ -118,11 +118,21 @@ price tables and reward curves.
 - The vault owner can mint **unlimited WWXRP for free** to any nonzero recipient through
   `WWXRP.vaultMintTo` or `DegenerusVault.wwxrpMint`. There is no mint reserve or century
   allocation. Vault-held WWXRP uses ordinary token balances and counts in total supply.
-- The vault holds one permanent AFKing subscription seat and controls a **998-seat**
-  tranche it can mint to chosen recipients once all **1,000** free-tranche seats have
-  been minted. sDGNRS holds the other permanent seat, for **2,000** seats total.
+- WWXRP is a joke prize token with no backing or intended value. Its discretionary minting
+  also applies to the daily draw (about 606 FLIP a day on average) and century incinerator
+  (10% of the BAF day's lost FLIP). Winners are weighted by WWXRP burned, so the vault owner
+  can mint enough to take nearly all of those FLIP awards. Supply, price and balances are
+  unprotected; the [audit boundaries](SECURITY.md#audit-boundaries) distinguish these rules
+  from a path that pays assets beyond the prescribed awards.
+- AFKing subscription seats: construction mints serial 1 to sDGNRS (it has no transfer
+  surface, so that seat never leaves) and serial 2 to the Vault (transferable like any seat).
+  Once all **1,000** free-tranche seats are claimed, the vault owner can mint further seats
+  to chosen recipients while live seats plus the subscriber set stay at or below **2,000**
+  (`SEAT_CAP`), which leaves at most **998** vault-minted seats.
 - The craps comp allowance starts at **4.96M FLIP-equivalent** (`200 * CrapsPriceLib.NORMAL_VALUE`)
-  and grows by **2% of completed battle bankroll**. It cannot be cashed out, but grants produce ordinary player reward
+  and grows by **2% of completed battle bankroll**, plus a jackpot battle's high-seat comp
+  share (80% of a 12% loss budget on high-seat fees) and refunds of prepaid jackpot-window
+  entries for periods that never ran. It cannot be cashed out, but grants produce ordinary player reward
   opportunities. Owner and delegate recipients are not restricted to unrelated wallets.
   Owner grants charge no delegate allowance; the lane balance is their only cap.
 
@@ -143,7 +153,7 @@ Affiliate leaderboard and proportional DGNRS scores cap at **34,359,738,367 whol
 FLIP per wallet ID per level**. The allocation denominator counts only accepted score.
 Commissions, kickbacks, quest rewards and AFKing payouts keep their uncapped inputs.
 Current scores remain exact; exact retired history is available from events, while
-clipped history preserves the existing activity-bonus calculation.
+clipped history preserves the activity-bonus calculation.
 
 Game EV depends on the product, activity, timing, prices and other participants. Do not
 extend a claim about ticket-ETH routing into a claim of zero house edge for every side-game.
@@ -179,36 +189,41 @@ paid tickets, in proportion to their winners, with one separately drawn recipien
 quadrant (deity virtual entries included). A recipient need not have won an immediate
 ticket prize. All ticket-jackpot ETH and rounding remainder still go to
 nextPrizePool; these passes confer future participation, not a segregated ETH
-reserve or cash claim. They must be claimed under the existing pass rules and
+reserve or cash claim. They must be claimed under the pass rules and
 depend on continued play. Repeated ticket wins each retain their 25-ticket award;
 they do not add chances to the separate pass draw.
 
-Every level's purchase target, level 0 included, has a **30-game-day** window: day 30 is
-the distress rescue day, and an unmet target can trigger game over on day 31. Level 0's
-window starts after the Degenesis sale. Game days advance at completed daily requests, so
-a stall adds no game days; 14 days without a completed daily session takes the hard-stall
-ending instead. Funded jackpot phases can extend elapsed wall-clock time. Ordinary purchase dailies budget **4% of the future
-pool**, retaining the 75/23/2 ticket-backing / ETH-prize / insurance split; unpaid ETH
-prizes stay in the future pool. Level 0 keeps its FLIP-only daily path. The faster
-deadline and revised transition skim change when funds become available for prizes;
-see [the timing and skim
-curve](docs/ARCHITECTURE.md#purchase-timing-and-pool-acceleration).
+Every level's purchase target, level 0 included, has a **30-game-day** window counted from
+`purchaseStartDay`. Reaching `purchaseStartDay + 30` activates distress purchases; if the
+target is still unmet, game over becomes eligible once that day's session has completed and
+a later wall-clock reset day has begun. Level 0's window starts after the Degenesis sale
+(`MAIN_LAUNCH_DAY`). Game days advance at accepted daily requests, so a stall adds no game
+days; 14 days without a completed daily session takes the hard-stall ending instead. Funded
+jackpot phases can extend elapsed wall-clock time. Ordinary purchase dailies budget **4% of
+the future pool**, split 75/23/2 between ticket backing, ETH prizes and insurance; unpaid
+ETH prizes stay in the future pool. Level 0 runs a FLIP-only daily path instead. The
+deadline and the transition skim determine when funds become available for prizes; see
+[the timing and skim curve](docs/ARCHITECTURE.md#purchase-timing-and-pool-acceleration).
+
+### Game-over treatment
+
+Terminal entry ends unfinished lootbox, Degenerette and non-daily Craps entropy consumers.
+No prior session word is retained to resolve them. Already-earned claims and the terminal
+level's paid ticket obligations retain their specified protections.
 
 Game-over distribution and the later final sweep have distinct deadlines and beneficiaries.
 In the normal, VRF-alive ending, after existing claim liabilities and applicable paid-deity
-refunds are reserved, 2% of the distributable terminal pool is credited to the top affiliate
-for the terminal ticket level; the remainder goes to that level's terminal ticket jackpot. With no ranked affiliate, the
-ticket jackpot receives the entire distributable pool. Affiliate score must be claimed
-before the terminal cohort is latched to affect this award. The game-over path requests its
-own terminal word after liveness freezes purchases and the cohort and affiliate are latched.
-Changing the allocation does not reroll jackpot recipients.
-Later affiliate claims cannot change the credited winner or the terminal pool.
+refunds are reserved, the whole distributable terminal pool goes to the terminal ticket
+level's terminal jackpot. The game-over path settles every outstanding loan, then requests
+its own terminal word after liveness freezes purchases and the terminal cohort is latched.
 
-When VRF is dead, the ending is deterministic: it pays no affiliate share and performs no
-jackpot draw. After existing claims and applicable deity refunds are reserved, the remaining
-pool is shared across the terminal level's tickets through `claimDeadVrf` until the final
-sweep. An unanswered normal-ending terminal request, or 14 days without a completed daily session, also takes this path.
-The terminal decimator has been removed.
+Fourteen days without a completed daily session, or a request whose word is still not in
+use 14 days after it was sent, triggers the deterministic dead-VRF ending even if the
+coordinator would still answer. This path performs no loan settlement, makes no terminal
+request and performs no jackpot draw. After existing claims and applicable deity refunds
+are reserved, the remaining pool is shared across the terminal level's tickets through
+`claimDeadVrf` until the final sweep. A normal-ending terminal request that reaches that
+timeout also takes this path.
 Read `DegenerusGameGameOverModule` and the reserve-token terminal paths for the exact
 claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md).
 
@@ -234,3 +249,17 @@ lootbox requests require the subscription balance floor; daily, retry, terminal 
 craps requests do not. Custom battles and unusually expensive fulfillment can consume
 more than the scheduled-window funding estimate; daily refills and donations replenish
 the subscription when liquid funding sources are available.
+
+When donated credit is needed to admit a below-threshold mid-day lootbox request, the
+charge is `300,000 * (max(basefee, 0.01 gwei) + 0.25 gwei) * 2`, denominated in wei and
+using the request block's basefee. Queues at or above the pending-ETH threshold and Craps
+windows do not pay this credit charge. Mid-day requests are refused above the owner-set
+basefee ceiling (four times that ceiling for a Craps window; zero disables the ceiling).
+
+The coordinator bills fulfillment at the later transaction's gas price. Four donated wei
+back each credit wei, providing a buffer against that price changing. At the measured
+bill of about 107,000 gas and 24% premium, the donation backing covers roughly 18 times
+`max(basefee, 0.01 gwei) + 0.25 gwei`; this is an estimate, not a guaranteed bound. The
+subscription pays the actual bill, including any excess over that request's donation
+backing. The compiled funding estimates and coordinator-rotation limits are documented
+in [Security](SECURITY.md#vrf-funding-configuration).

@@ -7,7 +7,7 @@ execute by delegatecall, while craps uses a separate stateless dice engine.
 
 **External audit: start with [the audit handoff](docs/AUDIT.md) and verify the supplied snapshot hashes.**
 The [readiness record](docs/audit/freeze.json) identifies the candidate, tested inputs and
-remaining verification. This candidate has no final audit tag; historical tags identify older sources.
+remaining verification. Historical `audit-*` tags identify older sources.
 
 | Document | Purpose |
 | --- | --- |
@@ -15,10 +15,11 @@ remaining verification. This candidate has no final audit tag; historical tags i
 | [Token units](docs/TOKEN-UNITS.md) | Whole-token FLIP/WWXRP APIs and rounding rules |
 | [Architecture](docs/ARCHITECTURE.md) | Contract boundaries, value flow and invariants |
 | [DGVE owner approval](docs/OWNER_GOVERNANCE.md) | Escrow, voting delegation, admin actions and icon bootstrap |
-| [Security and roles](SECURITY.md) | Authorities, external dependencies and reporting |
-| [Known issues](KNOWN-ISSUES.md) | Accepted assumptions and disclosed limitations |
-| [Economic disclosures](ECONOMIC_DISCLOSURES.md) | Creator allocations and economic rights |
+| [Security and roles](SECURITY.md) | Authorities, external dependencies, audit boundaries and reporting |
+| [Known issues](KNOWN-ISSUES.md) | Accepted implementation limitations |
+| [Economic disclosures](ECONOMIC_DISCLOSURES.md) | Game rules, creator allocations and economic rights |
 | [Verification](docs/VERIFICATION.md) | Build, tests and known verification limits |
+| [Documentation index](docs/README.md) | Technical references for individual mechanisms |
 
 Solidity **0.8.38**, via IR, optimizer **1,000 runs**, EVM **Osaka**. Dependencies are
 recorded in `package-lock.json` and `foundry.lock`; see verification instructions before
@@ -91,7 +92,8 @@ production deployment manifest.
 
 ## Entry points
 
-The Game answers every player-facing name below and delegates to its workers by selector.
+The Game answers every name in its row and delegates to its workers by selector; the other
+rows are separate contracts.
 
 | Contract | Entry |
 | --- | --- |
@@ -115,10 +117,11 @@ coordinator subscription; there is no LINK token or price feed.
 `DegenerusAdmin.donateVrf()` forwards the whole ETH amount to the subscription and credits a
 quarter of it, in wei, as the donor's mid-day request credit. The Game tops the subscription
 up when yield is distributed at level entry (if the deficit is at least a tenth of the refill
-band) and refills it at the top of a daily request, taking yield surplus first, then sDGNRS
-claimable, then its AFKing balance; neither step gates a request. `rawFulfillRandomWords`
-runs on the Game itself, accepts only the coordinator and the stored request ID (its low 64
-bits), refuses raw words 0 and 1, and stores the raw word. Daily nudges move only the coinflip.
+band) and, when the balance is below low water, refills it to target at the top of a daily
+request. Both take yield surplus first, then sDGNRS claimable, then its AFKing balance;
+neither step gates a request. `rawFulfillRandomWords` runs on the Game itself, accepts only
+the coordinator and the stored request ID (its low 64 bits), leaves the request pending on
+raw words 0 and 1, and otherwise stores the raw word. Daily nudges move only the coinflip.
 
 ## Build and test
 
@@ -143,17 +146,15 @@ group, gate and known limit.
 
 ### Results for this revision
 
-The [readiness record](docs/audit/freeze.json) separates the completed baseline battery
-from verification of the candidate's later changes. This is not a final freeze.
+The [readiness record](docs/audit/freeze.json) names the tested contract revision.
 
 | Check | Result |
 | --- | --- |
-| Baseline Foundry battery | 6,715 passing executions, 0 failures, 2 optional skips; imported suites can repeat |
-| Baseline Hardhat / Halmos | 1,557 tests / 68 properties passing |
-| Candidate regressions | 48 passing in each isolation mode, 42 jackpot tests, 6 mainnet-fork stETH tests |
-| Candidate structural gates | Both profiles pass; 111 assurance-tool and 6 matrix tests pass |
-| Deep invariants (1000 runs x 256 depth) | Full 60-partition campaign remains incomplete |
-| Candidate static analysis | Slither parsing and IR complete; full detectors unfinished. Aderyn completed with untriaged findings |
+| Foundry, all groups including mainnet fork | 6,715 passing executions, 0 failures, 2 optional skips; imported suites can repeat |
+| Hardhat / Halmos | 1,557 tests / 68 properties passing |
+| Structural gates | 24 checks per profile pass on both profiles; 0 profile differences |
+| Static analysis | Slither parsing and IR complete; Slither and Aderyn output triaged in [analyzer triage](docs/audit/ANALYZER-TRIAGE.md) |
+| Deep invariants (1,000 runs x depth 256) | Scheduled CI campaign; default-depth invariants (256 x 128) pass |
 
 ### Contract sizes (eip170 profile, runtime bytes)
 

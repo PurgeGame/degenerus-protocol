@@ -12,6 +12,8 @@ check-slither:
 test-assurance-tools:
 	@python3 -m unittest discover -s test/unit -p 'test_*.py'
 	@python3 scripts/test-deep-invariant-matrix.py
+	@python3 scripts/test-gas-meter.py
+	@python3 scripts/test-rng-window-extract.py
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
