@@ -77,13 +77,12 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
     function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
         uint256 slot;
         uint24 today;
-        unchecked {
-            if (custom) slot = _CUSTOM_SLOT_BASE + index;
-            else {
-                if (index >= _BONUS_PERIODS_PER_DAY) revert BonusPeriodSpent();
-                today = _currentDayIndex();
-                slot = _jackpotSlotOf(today, index);
-            }
+        // Checked: a custom index cannot wrap into the scheduled slot range.
+        if (custom) slot = _CUSTOM_SLOT_BASE + index;
+        else {
+            if (index >= _BONUS_PERIODS_PER_DAY) revert BonusPeriodSpent();
+            today = _currentDayIndex();
+            slot = _jackpotSlotOf(today, index);
         }
         if (slot >= _CUSTOM_SLOT_BASE) {
             uint256 c = _customBattle[slot];

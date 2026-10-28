@@ -83,7 +83,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         address player = makeAddr("finalize-calendar-tail");
         _roll(10); _award(player, 10, 10); _beginAfking(player, 10);
         vm.warp(block.timestamp + 8 days);
-        _finalizeAfking(player, 10, 10, 10);
+        _finalizeAfking(player, 10, 10);
         assertEq(_questField(player, OFF_STREAK, 16), 10);
         assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 10);
         _roll(11); assertEq(quests.effectiveBaseStreak(_qid(player)), 10);
@@ -93,23 +93,14 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     function test_FinalizeDeliveredAheadRetainsPreRequestCoverage() public {
         address player = makeAddr("delivered-ahead");
         _roll(10); _award(player, 10, 10); _beginAfking(player, 10);
-        _finalizeAfking(player, 11, 11, 10);
+        _finalizeAfking(player, 11, 11);
         assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 11);
         assertEq(_questField(player, OFF_SHIELD, 8), 0);
         _roll(11); _roll(12);
         (,,uint32 streak,bool completed) = _completePrimary(player);
         assertTrue(completed); assertEq(streak, 12);
-        _finalizeAfking(player, 999, 999, 999);
+        _finalizeAfking(player, 999, 999);
         assertEq(_questField(player, OFF_STREAK, 16), 12, "finalize is idempotent");
-    }
-
-    function test_FinalizeNeverLicensesLogicalMisses() public {
-        address player = makeAddr("no-miss-license");
-        _roll(10); _award(player, 10, 10); _beginAfking(player, 10);
-        _finalizeAfking(player, 10, 13, 15);
-        assertEq(_questField(player, OFF_STREAK, 16), 0);
-        assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 13);
-        assertEq(_questField(player, OFF_SHIELD, 8), 0);
     }
 
     function test_LogicalMissesAcrossFormerBitmapBoundary() public {
@@ -197,10 +188,10 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         quests.beginAfking(qid4, wallDay);
     }
 
-    function _finalizeAfking(address player, uint24 earned, uint24 covered, uint24 wallDay) private {
+    function _finalizeAfking(address player, uint24 earned, uint24 covered) private {
         uint32 qid5 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.finalizeAfking(qid5, earned, covered, wallDay);
+        quests.finalizeAfking(qid5, earned, covered);
     }
 
     function _completePrimary(address player)

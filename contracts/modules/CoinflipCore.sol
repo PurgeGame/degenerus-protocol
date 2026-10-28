@@ -841,14 +841,10 @@ abstract contract CoinflipCore {
                 cachedResults = coinflipDayResultPacked[resultKey];
                 totals.cachedResultKey = resultKey;
             }
+            // Every day after day 1 through `latest` has a stored result. Day 1 has none, and
+            // nothing stakes or carries into it, so it settles nothing.
             uint16 rewardPercent = uint8(cachedResults >> ((cursor & 31) * 8));
             bool win = rewardPercent >= 50;
-
-            // Skip a day with no stored result. Only bootstrap day 1 has none.
-            if (rewardPercent == 0) {
-                unchecked { ++cursor; --remaining; }
-                continue;
-            }
 
             uint24 stakeKey = uint24(cursor / 7);
             if (stakeKey != totals.cachedStakeKey) {
@@ -1916,7 +1912,9 @@ abstract contract CoinflipCore {
         uint256 cachedStakes;
         while (remaining != 0 && cursor <= latestDay) {
             (uint16 rewardPercent, bool win) = _dayResult(uint24(cursor));
-            // Skip a day with no stored result. Only bootstrap day 1 has none.
+            // Only day 1 has no result, and nothing stakes or carries into it. Skipping it here
+            // is equivalent to walking it; removing this skip makes via-IR reserve a stack-spill
+            // slot that taxes every Coinflip call.
             if (rewardPercent == 0) {
                 unchecked { ++cursor; --remaining; }
                 continue;

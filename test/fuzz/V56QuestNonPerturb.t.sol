@@ -188,7 +188,7 @@ contract V56QuestNonPerturb is DeployProtocol {
         _awardStreak(other1, 11, day);
         _beginAfking(other1, day);
         _beginAfking(other2, day);
-        _finalizeAfking(other2, 2, day, day); // a sibling finalize write lands before the target path
+        _finalizeAfking(other2, 2, day); // a sibling finalize write lands before the target path
         _awardStreak(target, 4, day);
         _awardStreak(target, 3, day);
         uint256 wordB = _questStateWord(target);
@@ -320,10 +320,10 @@ contract V56QuestNonPerturb is DeployProtocol {
     }
 
     /// @dev End a player's afking run (hands the earned streak back), pranked as GAME.
-    function _finalizeAfking(address player, uint24 earned, uint32 coveredDay, uint32 day) internal {
+    function _finalizeAfking(address player, uint24 earned, uint32 coveredDay) internal {
         uint32 qid3 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.finalizeAfking(qid3, earned, uint24(coveredDay), uint24(day));
+        quests.finalizeAfking(qid3, earned, uint24(coveredDay));
     }
 
     /// @dev Complete a LOOTBOX slot-1 quest via the COIN-gated handlePurchase_g23478 (the O1 region) with the

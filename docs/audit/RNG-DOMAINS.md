@@ -217,9 +217,10 @@ Match currency and spin hash the saved seed with the ticket index under `FOIL_CU
 Claims on draw day D stay open through the published frontier D+1 and expire at D+2; calendar
 resets and outstanding requests cannot expire them. Each player's match markers occupy one word:
 two day-tagged lanes with four ticket bits each. Golden foil claims use the generation-day and
-next-day window against published daily results; WWXRP draw payouts use resolving day D and D+1
-(D = participation day + 1) against the same frontier. Both expire at published D+2. The
-liveness/game-over cutoff closes claims.
+next-day window against published daily results and expire at published D+2. WWXRP draw payouts
+for participation day d open once day d+1 is published and close when the day-(d+3) daily request
+goes out, the request that opens day d+3's entries in day d's storage bank; an outstanding request
+therefore closes them. The liveness/game-over cutoff closes claims.
 
 Pack metadata and lines share four reusable records per player, keyed by `level & 3` and
 authenticated by the full level in bits 208–231; gold-paid state is bit 232. A purchase can reuse

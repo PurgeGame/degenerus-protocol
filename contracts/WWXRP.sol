@@ -82,9 +82,11 @@ import {RngTags} from "./libraries/RngTags.sol";
  *        immutable word and verifies the supplied entry's cumulative interval
  *        in O(1) storage reads. Claiming is permissionless but always credits
  *        the prize to the player recorded in the winning entry. A claim for day d
- *        is open while the latest applied daily result is day d+1 or d+2. Three
- *        tagged storage banks recycle daily headers and entries (day d+3 reuses
- *        day d's bank); historical getters return zero after overwrite.
+ *        opens when word d+1 is recorded and closes when the day-(d+3) request
+ *        goes out (logical days d+1 and d+2). Three tagged storage banks recycle
+ *        expired daily headers and entries: day d+3's entries open at that same
+ *        request, so a bank is reused only after its day's claims close; historical
+ *        getters return zero after overwrite.
  *
  * @dev DRAW SECURITY — WHY day d SETTLES ON WORD d+1:
  *      A normal daily request advances the logical index before its word can
@@ -113,7 +115,6 @@ import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 
 /// @dev Minimal Game surface consumed by the daily draw and generic WWXRP boon hook.
 interface IDrawGame {
-    function latestDailyResultDay() external view returns (uint24);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyerId);
     /// @notice DegenerusGame's recorded VRF word for `day` (0 if none recorded yet).
     function rngWordForDay(uint24 day) external view returns (uint256);
@@ -1257,12 +1258,14 @@ contract WWXRP {
         if (uint32(header >> 224) != uint256(day) + 1) return 0;
     }
 
-    /// @dev Day d's claims are open while the latest applied daily result is day d+1 or d+2.
+    /// @dev Day d's claims close at the day-(d+3) request (Game slot 0 bits 24..47, the same
+    ///      requested day `enterDraw` keys on), which opens day d+3's entries in day d's bank.
+    ///      The opening half is the caller's `rngWordForDay(d + 1) != 0`: the Game retains a
+    ///      word only while it is the latest applied result or the one before it.
     function _drawClaimOpen(uint24 participationDay) private view returns (bool) {
         if (participationDay == type(uint24).max) return false;
-        uint256 today = game.latestDailyResultDay();
-        uint256 resolves = uint256(participationDay) + 1;
-        return resolves <= today && today - resolves <= 1;
+        uint256 requested = uint24(uint256(game.extsload_g2807007(bytes32(0))) >> 24);
+        return requested <= uint256(participationDay) + 2;
     }
 
     function _drawEntryKey(
@@ -1280,7 +1283,8 @@ contract WWXRP {
     ///      bits [192..223] entry count
     ///      bits [224..255] participation day + 1 (zero means never initialized)
     ///      Indexed by [day % 3][bucket], with ten buckets. Participation day d + 3 reuses
-    ///      day d's bank.
+    ///      day d's bank; its entries open at the day-(d + 3) request, the same request that
+    ///      closes day d's claims (`_drawClaimOpen`).
     uint256[10][3] private _drawHeader;
 
     /// @dev Reused incinerator header, authenticated by its bracket:

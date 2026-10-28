@@ -391,7 +391,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * - `baseStreak` snapshots streak at day start for consistent view rendering
      * - `lastActiveDay` tracks slot-0 (the funded primary mint) — the reset anchor
      * - Missing a logical day after lastActiveDay resets the streak unless shields cover it;
-     *   while afking the manual streak is dormant and finalizeAfking overwrites it
+     *   while afking nothing is billed, the manual streak is dormant and finalizeAfking
+     *   overwrites it
      *
      * Progress Freshness:
      * - `lastProgressDay{0,1}` must match the active quest day
@@ -774,43 +775,33 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Ends an afking run: hands the afking-computed streak back to the manual quest
      *         system. Idempotent — a no-op unless the player is currently afking.
      * @dev GAME-only, called on every run-ending path (cancel, funding expiry, loan seizure)
-     *      before the run leaves the subscriber set. The last valid mint day is the later of
-     *      the Game-side handback anchor (`afkingCoveredDay` — the day before the run ended,
-     *      floored at the reward endpoint, since any lag on a live run is protocol-caused) and
-     *      `lastActiveDay` (which
-     *      captures manual primary completions during the run — a slot-0 completion still bumps it
-     *      even though it is streak-neutral while afking). Logical days strictly after that anchor
-     *      and before `currentDay` are misses; calendar stalls create none. A delivered
-     *      anchor remains valid even when its quest rolls later.
-     *      Anchors the manual system at that handback day and clears
-     *      `afkingSince`. A double-call is safe: the second finds `afkingSince` already 0
-     *      and returns.
+     *      before the run leaves the subscriber set. Every day up to the reward endpoint is a
+     *      delivered day of the run, so the run hands back its earned streak intact and the
+     *      manual system is anchored at the endpoint: the first sync after the run bills only
+     *      the logical days after it. A manual primary completion during the run sets
+     *      `lastActiveDay` to a day no later than the endpoint, so the endpoint is the later
+     *      anchor. No miss is billed while the run is open (`_questSyncState`), so nothing here
+     *      restores or re-bills shields. A double-call is safe: the second finds `afkingSince`
+     *      already 0 and returns.
      * @param id Wallet ID of the subscriber whose run is ending.
      * @param earnedStreak The run's live streak at the reward endpoint, Game-computed.
-     * @param afkingCoveredDay The Game-side handback anchor (the day before the run ended,
-     *        floored at the reward endpoint).
-     * @param currentDay The current logical game day (the decay reference).
+     * @param afkingCoveredDay The run's reward endpoint (its last delivered day).
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
     function finalizeAfking(
         uint32 id,
         uint24 earnedStreak,
-        uint24 afkingCoveredDay,
-        uint24 currentDay
+        uint24 afkingCoveredDay
     ) external questsContext onlyGame {
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
         if (state.afkingSince == 0) return; // idempotent: already finalized / never afking
-        uint24 lastValid = afkingCoveredDay;
-        if (state.lastActiveDay > lastValid) lastValid = state.lastActiveDay;
-        uint32 missedDays = _missedQuestDays(lastValid, currentDay);
-        uint24 finalStreak = missedDays == 0 ? earnedStreak : 0;
-        state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
+        state.streak = earnedStreak > type(uint16).max ? type(uint16).max : uint16(earnedStreak);
         _grantCenturyShield(id, state);
 
-        state.lastActiveDay = lastValid;
-        state.lastCompletedDay = lastValid;
+        state.lastActiveDay = afkingCoveredDay;
+        state.lastCompletedDay = afkingCoveredDay;
         state.afkingSince = 0;
-        emit QuestStreakBonusAwarded(id, 0, finalStreak, lastValid);
+        emit QuestStreakBonusAwarded(id, 0, earnedStreak, afkingCoveredDay);
     }
 
     // =========================================================================
@@ -1260,7 +1251,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // mutate it.
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
         uint24 currentDay = _currentQuestDay(quests, gameDay);
-        streakSnapshot = _effectiveBaseStreak(state, currentDay);
+        streakSnapshot = _effectiveBaseStreak(state, gameDay);
         _handleFoilPackQuest(
             id, state, quests, currentDay,
             ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0
@@ -1296,7 +1287,9 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 currentDay = _currentQuestDay(quests, p.day);
         PlayerQuestState storage state = _questsStorage().questPlayerState[p.id];
         if (currentDay == 0) {
-            return (0, quests[0].questType, state.streak, false);
+            // Between the daily request and its quest roll: no quest is live, and the streak
+            // reads decay-aware against the Game day.
+            return (0, quests[0].questType, _effectiveBaseStreak(state, p.day), false);
         }
         if (p.ethMintSpendWei == 0 && p.flipMintQty == 0 && p.lootBoxAmount == 0) {
             return (0, quests[0].questType, state.streak, false);
@@ -1540,20 +1533,20 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @notice Player-specific view of quests with fixed requirements and progress.
      * @dev Handles streak decay preview: if the logical days strictly between the player's
-     *      anchor and the current rolled quest day exceed their streak shields, the effective
-     *      streak shown is 0, matching what the next action's sync would do. Before the Game
-     *      day's quest rolls there is no current quest day and nothing is billed.
+     *      anchor and the Game's current day exceed their streak shields, the effective streak
+     *      shown is 0, matching what the next action's sync would do.
      *      This is the recommended view function for frontends displaying quest UI.
      * @param id Wallet ID of the player to query.
      * @return viewData Comprehensive view including quests, progress, completion, and streak.
      */
     function getPlayerQuestView(uint32 id) external questsContext view returns (PlayerQuestView memory viewData) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _loadActiveQuests();
-        uint24 currentDay = _currentQuestDay(local);
+        uint24 gameDay = _questGameDay();
+        uint24 currentDay = _currentQuestDay(local, gameDay);
         PlayerQuestState memory state = _questsStorage().questPlayerState[id];
 
         viewData.lastCompletedDay = state.lastCompletedDay;
-        viewData.baseStreak = _effectiveBaseStreak(state, currentDay);
+        viewData.baseStreak = _effectiveBaseStreak(state, gameDay);
 
         for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
             (viewData.quests[slot], viewData.progress[slot], viewData.completed[slot]) = _questViewData(
@@ -1570,17 +1563,14 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice The player's decay-aware effective reward streak — the value getPlayerQuestView
     ///         exposes as baseStreak, computed WITHOUT materializing the per-quest view structs
-    ///         (a cheap read for reward scaling). Once the Game day's quest has rolled, a streak
-    ///         lapsed past its shields reads 0, so a stale-high raw streak (built then abandoned
-    ///         with no quest sync) can't inflate downstream reward scaling — lootbox EV or sDGNRS
-    ///         claims.
+    ///         (a cheap read for reward scaling). A streak lapsed past its shields reads 0 against
+    ///         the Game's logical day, including between the daily request and the quest roll, so
+    ///         a stale-high raw streak (built then abandoned with no quest sync) can't inflate
+    ///         downstream reward scaling — lootbox EV or sDGNRS claims.
     /// @param id Wallet ID of the player to query.
     /// @return The effective (decay-applied) reward streak.
     function effectiveBaseStreak(uint32 id) external questsContext view returns (uint32) {
-        return _effectiveBaseStreak(
-            _questsStorage().questPlayerState[id],
-            _currentQuestDay(_loadActiveQuests())
-        );
+        return _effectiveBaseStreak(_questsStorage().questPlayerState[id], _questGameDay());
     }
 
     /// @notice effectiveBaseStreak plus the player's afking-run flag, from the single quest-state
@@ -1592,7 +1582,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @return afking True while the player is mid afking-run.
     function effectiveBaseStreakAndAfking_g1521(uint32 id, uint24 day) external questsContext view returns (uint32 streak, bool afking) {
         PlayerQuestState memory state = _questsStorage().questPlayerState[id];
-        streak = _effectiveBaseStreak(state, _currentQuestDayFast(day));
+        streak = _effectiveBaseStreak(state, day);
         afking = state.afkingSince != 0;
     }
 
@@ -1624,17 +1614,18 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Single source of truth for the effective reward streak (getPlayerQuestView.baseStreak,
-    ///      effectiveBaseStreak and the foil purchase snapshot). `currentDay` is the current
-    ///      rolled quest day, 0 before the Game day's quest rolls (which bills nothing). A streak
-    ///      lapsed past its shields reads 0; once synced today the start-of-day baseStreak
-    ///      snapshot is used.
+    ///      effectiveBaseStreak and the purchase streak). `currentDay` is the Game's logical day,
+    ///      also between its daily request and the quest roll: every earlier day has rolled, so
+    ///      the day count is the same one the next sync bills. A streak lapsed past its shields
+    ///      reads 0; once synced today the start-of-day baseStreak snapshot is used. While an
+    ///      afking run is open nothing is billed, as in `_questSyncState`.
     function _effectiveBaseStreak(
         PlayerQuestState memory state,
         uint24 currentDay
     ) private pure returns (uint32) {
         if (state.lastSyncDay == currentDay) return state.baseStreak;
         uint24 anchorDay = state.lastActiveDay;
-        if (anchorDay != 0) {
+        if (anchorDay != 0 && state.afkingSince == 0) {
             // Mirror _questSyncState: only count days not already adjudicated by a prior sync,
             // so the view agrees with the synced state instead of re-billing settled days.
             if (state.lastSyncDay != 0 && state.lastSyncDay - 1 > anchorDay) {
@@ -1946,6 +1937,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *        and afking finalize write it)
      *      - Each logical day strictly between the anchor and the current day is a miss; the
      *        streak resets unless shields cover every missed day
+     *      - While an afking run is open nothing is billed: the run delivers those days, and
+     *        finalize anchors the manual system at the run's endpoint
      *      - On new day, resets completionMask and snapshots baseStreak
      *
      *      baseStreak Snapshot:
@@ -1957,7 +1950,7 @@ contract DegenerusQuests is IDegenerusQuests {
     function _questSyncState(PlayerQuestState storage state, uint32 id, uint24 currentDay) private {
         if (state.lastSyncDay >= currentDay) return; // already synced this quest day
         uint24 anchorDay = state.lastActiveDay;
-        if (anchorDay != 0) {
+        if (anchorDay != 0 && state.afkingSince == 0) {
             // A prior sync on day L scanned (anchor, L) and billed its misses, so days <= L-1
             // are already adjudicated. Advance the floor past them; re-scanning from the raw
             // anchor re-charges already-billed days (double-consumes shields, resets early).

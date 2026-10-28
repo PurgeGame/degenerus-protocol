@@ -1630,8 +1630,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ) external view returns (uint256 scorePoints, uint32 walletId) {
         // Unified effective quest streak: a live afking sub reads the Sub-side compute-on-read
         // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
-        // streak, which (once the day's quest has rolled) zeroes a lapsed stale-high streak so it
-        // can't inflate
+        // streak, billed against the Game's logical day (also between the daily request and its
+        // quest roll), which zeroes a lapsed stale-high streak so it can't inflate
         // lootbox EV or sDGNRS claims.
         walletId = _walletIdOf(player);
         scorePoints = _playerActivityScore(walletId, _effectiveQuestStreak(walletId));

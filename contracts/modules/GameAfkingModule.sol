@@ -235,7 +235,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
             // Pay both sides before the record goes, then hand the streak back to Quests.
             _settleBoth(subId);
             uint256 cancelled = _subLaneAt(position1 - 1);
-            _finalizeAfking(subId, cancelled, today);
+            _finalizeAfking(subId, cancelled);
             _removeFromSet(position1);
             _setSubMetaLane(subId, 0);
             emit SubscriptionUpdated(subId, 0, cancelled & SUB_TICKETS_BIT != 0);
@@ -551,23 +551,18 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     }
 
     /// @dev Hand the afking-computed streak back to the manual quest system on a run-ending path.
-    ///      Anchors the handback at `currentDay - 1` (floored at the endpoint): the run's streak
-    ///      hands back intact and the manual decay owns it from `currentDay` forward.
-    ///      `quests.finalizeAfking` also folds in any manual completion day and is idempotent (a
-    ///      no-op if the player is not currently afking).
+    ///      Anchors the handback at the reward endpoint, which never lags the current day: the
+    ///      run's streak hands back intact and the manual decay owns the days after it.
+    ///      `quests.finalizeAfking` is idempotent (a no-op if the player is not currently afking).
     /// @param id The wallet ID of the subscriber whose run is ending.
     /// @param lane The subscriber's lane.
-    /// @param currentDay The current day (the decay reference passed to DegenerusQuests).
-    function _finalizeAfking(uint32 id, uint256 lane, uint24 currentDay) private {
+    function _finalizeAfking(uint32 id, uint256 lane) private {
         uint24 endpoint = _afkingEndpoint();
         uint256 earned = _subStreakAt(lane, endpoint);
-        uint24 anchor = endpoint;
-        if (currentDay != 0 && currentDay - 1 > anchor) anchor = currentDay - 1;
         quests.finalizeAfking(
             id,
             earned > type(uint24).max ? type(uint24).max : uint24(earned),
-            anchor,
-            currentDay
+            endpoint
         );
     }
 
@@ -597,7 +592,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     function _cancelAcquiredSubscription(uint32 id) private {
         (uint256 lane, uint256 position1) = _subLaneOf(id);
         if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
-        _finalizeAfking(id, lane, _gameDay());
+        _finalizeAfking(id, lane);
         _setSubLaneAt(position1 - 1, lane | SUB_REMOVAL_BIT);
         emit SubscriptionUpdated(id, 0, lane & SUB_TICKETS_BIT != 0);
     }
@@ -768,10 +763,10 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                     unchecked { ++c.cursor; ++c.processed; }
                     continue;
                 }
-                // An unfunded ordinary member expires: hand its streak back (anchored at
-                // yesterday; the manual decay owns it from today), then remove it. What it had
-                // not settled is forfeited.
-                _finalizeAfking(element, lane, processDay);
+                // An unfunded ordinary member expires: hand its streak back (anchored at the
+                // endpoint, yesterday; the manual decay owns it from today), then remove it. What
+                // it had not settled is forfeited.
+                _finalizeAfking(element, lane);
                 _removeFromSet(position + 1);
                 _setSubMetaLane(element, 0);
                 emit SubscriptionExpired(element, 1);

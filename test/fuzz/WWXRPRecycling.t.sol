@@ -10,14 +10,23 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @dev Only the draw's external dependencies are mocked. The token, bucket hash,
 ///      entry book, claim gates and payment dispatch are the production code.
 contract WwxrpRecyclingGameMock {
-    mapping(uint24 => uint256) public rngWordForDay;
+    mapping(uint24 => uint256) private _words;
     mapping(uint32 => uint256) public playerActivityScore;
     uint24 public level;
     uint24 public currentDayView_g542950;
     uint24 public latestDailyResultDay;
     bool public livenessTriggered;
+    /// @dev Day `day` requested and its word applied.
     function setDay(uint24 day) external { currentDayView_g542950 = day; latestDailyResultDay = day; }
-    function setWord(uint24 day, uint256 word) external { rngWordForDay[day] = word; }
+    /// @dev Day `day` requested (slot 0 `dailyIdx`); its word is not applied yet.
+    function setRequested(uint24 day) external { currentDayView_g542950 = day; }
+    function setWord(uint24 day, uint256 word) external { _words[day] = word; }
+    /// @dev The Game retains only the latest applied result day's word and the one before it.
+    function rngWordForDay(uint24 day) external view returns (uint256) {
+        uint24 latest = latestDailyResultDay;
+        if (day > latest || uint256(latest) - day > 1) return 0;
+        return _words[day];
+    }
     function setActivity(address player, uint256 score) external { playerActivityScore[walletIdOf_g3120[player]] = score; }
     mapping(address => uint32) public walletIdOf_g3120;
     function setId(address player, uint32 id) external { walletIdOf_g3120[player] = id; }
@@ -138,6 +147,36 @@ contract WWXRPRecyclingTest is Test {
         vm.expectRevert(WWXRP.WordUnavailable.selector);
         token.claim(2, 0);
         assertEq(coinflip.totalCredited(), 10_000);
+    }
+
+    /// @notice Day d's claims close at the day-(d+3) request, before word d+3 lands: that request
+    ///         opens day d+3's entries in day d's bank, so a later claim could otherwise read a
+    ///         reused bucket. Control: the same claim one step earlier pays.
+    function test_ClaimClosesAtDayPlusThreeRequestBeforeBankReuse() public {
+        address player = _actor(2, 0, 0);
+        _enter(player, 50);
+        _day(3);
+        game.setWord(3, _winningWord(2, 0));
+        _day(4);
+        uint256 snapshot = vm.snapshotState();
+        token.claim(2, 0);
+        assertEq(coinflip.credited(_id(player)), 10_000, "control: open on day d+2");
+        assertTrue(vm.revertToState(snapshot));
+
+        game.setRequested(5); // day-5 request out, word 5 not applied: latest stays 4
+        (bool available,,,,,,) = token.previewOutcome(2);
+        assertFalse(available, "preview closed at the d+3 request");
+        (bool found,,) = token.findWinningEntry(2);
+        assertFalse(found, "finder closed at the d+3 request");
+        vm.expectRevert(WWXRP.WordUnavailable.selector);
+        token.claim(2, 0);
+
+        // The day-5 entrant now writes day 2's bank; day 2 stays closed and unpaid.
+        _enter(_actor(5, 0, 0), 25);
+        vm.expectRevert(WWXRP.WordUnavailable.selector);
+        token.claim(2, 0);
+        assertEq(coinflip.totalCredited(), 0);
+        assertFalse(token.dayClaimed(2));
     }
 
     function test_VrfStallCannotPayExpiredDrawOrNewDrawWithOldWord() public {

@@ -239,16 +239,14 @@ interface IDegenerusQuests {
 
     /// @notice Ends an afking run: hands the afking-computed streak back to the manual system
     /// @dev GAME-only, called on every run-ending path before the run leaves the subscriber set.
-    ///      Idempotent (a no-op unless the player is currently afking). Keeps the Game-computed
-    ///      earned streak when no logical day lies strictly between the newest valid mint anchor
-    ///      and the current day, and hands back 0 otherwise.
+    ///      Idempotent (a no-op unless the player is currently afking). Hands back the
+    ///      Game-computed earned streak and anchors the manual system at the reward endpoint;
+    ///      no day a run covers is billed as missed.
     ///      Revert-free for any input (it runs on mineFlip sub-ending paths).
     /// @param id Wallet ID of the subscriber whose run is ending
     /// @param earnedStreak The run's live streak at the reward endpoint, Game-computed
-    /// @param afkingCoveredDay The Game-side handback anchor: the day before the run ended,
-    ///        floored at the reward endpoint
-    /// @param currentDay The current logical game day (the decay reference)
-    function finalizeAfking(uint32 id, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
+    /// @param afkingCoveredDay The run's reward endpoint (its last delivered day)
+    function finalizeAfking(uint32 id, uint24 earnedStreak, uint24 afkingCoveredDay) external;
 
     /// @notice Returns the quest state for a specific player
     /// @dev Zero results for an untouched ID (including 0).

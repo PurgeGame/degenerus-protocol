@@ -82,7 +82,7 @@ contract QuestActivePackingTest is Test {
         (,,,, afking) = quests.handlePurchase_g23478(1, PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         assertTrue(afking);
         vm.prank(ContractAddresses.GAME);
-        quests.finalizeAfking(PLAYER, 0, day, day);
+        quests.finalizeAfking(PLAYER, 0, day);
         vm.prank(ContractAddresses.GAME);
         (,,,, afking) = quests.handlePurchase_g23478(1, PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         assertFalse(afking);

@@ -57,8 +57,9 @@ contract CoinflipReuseReference {
             carry = 0;
         }
         for (uint256 d = start + 1; d <= frontier; ++d) {
+            // Resolved days are contiguous from day 2; only bootstrap day 1 reads 0, and nothing
+            // stakes or carries into it, so it is walked like a loss day that settles nothing.
             uint256 reward = results[uint24(d)];
-            if (reward == 0) continue;
             uint256 stake = stakes[id][uint24(d)];
             if ((id == 1 || id == 2) && d >= seedFirst && d <= seedLast) stake += 200_000;
             stake += carry;

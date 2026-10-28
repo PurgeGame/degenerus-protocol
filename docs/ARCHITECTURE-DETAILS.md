@@ -183,7 +183,8 @@ after the day's subscriber pass, burns one `AFKingSubscriptionToken` seat held b
 payee (`consumeSeat`, never reminted), and starts the quest-side run with
 `DegenerusQuests.beginAfking(id, today)`; its first purchase and first credited day are the next
 day. Changing quantity or mode settles the run first and keeps its start. Cancelling settles,
-then `finalizeAfking` hands the accumulated streak back to Quests. Unfunded members expire at the
+then `finalizeAfking(id, earnedStreak, endpoint)` hands the accumulated streak back to Quests and
+anchors the manual quest streak at the run's reward endpoint. Unfunded members expire at the
 daily pass (rewards not yet settled are forfeit); loan seizure cancels a borrower's run. The
 member set is capped at 2,000 (`SUBSCRIBER_CAP`); seats are capped at 2,000 live seats plus
 members (`SEAT_CAP`), the first 1,000 (`FREE_TRANCHE`) minted free to pass buyers and the rest
@@ -210,11 +211,12 @@ a slot-1 completion, or a slot-0 (primary) completion on the run's start day by 
 than the protocol seats (ID > 2), pays its normal reward and adds one to the run's streak
 (`recordAfkingSecondary_g3316(id, 1)`); the run does not credit its start day. A slot-0
 completion on any later day pays nothing at the time and adds no streak, because the
-subscription credits that day at settlement. When a quest sync runs (a manual quest action,
-during a run or not), each logical day strictly between the anchor day (the last primary
-completion, streak bonus, foil floor or handback) and the current rolled quest day is a miss;
-shields absorb misses one each, and a miss with no shield left resets the streak. Before the
-Game day's quest rolls there is no current quest day and nothing is billed.
+subscription credits that day at settlement. No day a run covers is billed as a missed quest day:
+while `afkingSince` is set, quest syncs bill no misses and consume no shields, and the streak view
+applies no decay. Outside a run, each logical day strictly between the anchor day (the last
+primary completion, streak bonus, foil floor or handback) and the current Game day is a miss; shields absorb misses one each, and a miss with
+no shield left resets the streak. The decay reference is the Game's logical day, also between a
+daily request and the quest roll its word performs.
 
 The Vault (wallet ID 1) and sDGNRS (ID 2) subscribe in their constructors at quantity 1 in box
 mode, burn no seat and cannot use ticket mode. The Vault owner can pause and resume the Vault's

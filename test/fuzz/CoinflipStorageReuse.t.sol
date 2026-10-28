@@ -89,8 +89,9 @@ contract CoinflipStorageReuseTest is Test {
         for (uint24 day = 1; day <= 240; ++day) {
             seed = uint256(keccak256(abi.encode(seed, day)));
             _credit(id, day + 1, 1 + (seed & 0x3fff));
-            // Missing interior results, losses and the full reward range.
-            uint16 reward = seed % 7 == 0 ? 0 : seed % 3 == 0 ? 1 : uint16(50 + seed % 107);
+            // Losses and the full reward range. Resolved days are contiguous from day 2, as the
+            // Game applies every requested day's word; bootstrap day 1 has no result.
+            uint16 reward = day == 1 ? 0 : seed % 3 == 0 ? 1 : uint16(50 + seed % 107);
             _resolve(day, reward);
             if (seed % 13 == 0) _settle(id);
         }
@@ -146,9 +147,10 @@ contract CoinflipStorageReuseTest is Test {
         _configure(ID, 0, 5, 900, true, 0);
         _credit(ID, 10, 17);
         _credit(ID, 11, 23);
-        _resolve(10, 100);
-        _resolve(11, 100);
-        _resolve(100, 100);
+        // Every day from 2 resolves (contiguous, as the Game applies them); interior days lose.
+        for (uint24 day = 2; day <= 100; ++day) {
+            _resolve(day, day == 10 || day == 11 || day == 100 ? 100 : 1);
+        }
         _settle(ID);
         _settle(ID);
     }

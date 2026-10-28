@@ -55,7 +55,7 @@ Settlement must not block the ending. Borrowing closes when liveness fires and t
 | Lender credit | The lender is sDGNRS or the Vault (never ID 0); total ETH is far below 2^128. |
 | `sDGNRS.burnForLiquidation` | Game-only, no liveness gate, a zero balance returns early, and supply always covers a holder's balance. |
 | Ownership write | A raw slot write; protocol roots never borrow. |
-| AFKing stop and `Quests.finalizeAfking` | A run's covered day never precedes its start day, and the Quests arithmetic is guarded. |
+| AFKing stop and `Quests.finalizeAfking` | Finalize is idempotent and only writes the handback: the streak saturates at uint16, the century-shield grant is capped and guarded, and the anchor is the reward endpoint. |
 | `DeityPass.seize` | Passes are soulbound and never burned, so a registered symbol always has an owner; the receiver is sDGNRS or the Vault. |
 
 The intended only failure is gas: a starved call reverts whole and leaves every loan and cursor as it was, and the first unit of every call is always admitted, so a call with enough gas always makes progress. The worst unit (a six-account deity family) costs well under 1M gas. Manual repayment during settlement removes only an unsettled entry, and the entry it swaps into the freed lane is unsettled too, so the cursor never passes an open loan.

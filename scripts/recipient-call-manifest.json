@@ -2603,9 +2603,9 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.effectiveBaseStreak",
     "kind": "recipient-helper",
-    "expression": "_currentQuestDay(_loadActiveQuests())",
+    "expression": "_questGameDay()",
     "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged. The effective streak decays against the Game day directly."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2643,9 +2643,9 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.getPlayerQuestView",
     "kind": "recipient-helper",
-    "expression": "_currentQuestDay(local)",
+    "expression": "_questGameDay()",
     "count": 1,
-    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged."
+    "review": "LOGICAL_DAYS: quest identity calls the virtual logical-day accessor; Coinflip host overrides it with its packed local mirror. Standalone base reads immutable Game only. Existing reward recipient authorization is unchanged. The Game day is read once; the quest day derives from it in memory."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -4499,9 +4499,9 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP._drawClaimOpen",
     "kind": "external",
-    "expression": "game.latestDailyResultDay()",
+    "expression": "game.extsload_g2807007(bytes32(0))",
     "count": 1,
-    "review": "LOGICAL_DAYS: typed STATICCALL to the immutable Game for logical identity, schedule/ending readiness or authenticated retained result. No value, player-controlled destination, mutation or callback."
+    "review": "LOGICAL_DAYS: typed STATICCALL to the immutable Game's raw slot-0 read (the requested logical day, the same read enterDraw makes) to close day d's claims at the day-(d+3) request. No value, player-controlled destination, mutation or callback."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -9395,9 +9395,9 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._cancelAcquiredSubscription",
     "kind": "recipient-helper",
-    "expression": "_finalizeAfking(id, lane, _gameDay())",
+    "expression": "_finalizeAfking(id, lane)",
     "count": 1,
-    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
+    "review": "TRANSITIVE_BASELINE: existing protocol helper reaches the pinned quests.finalizeAfking site; the logical-day argument is gone (the handback anchors at the reward endpoint). No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9411,9 +9411,9 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._finalizeAfking",
     "kind": "external",
-    "expression": "quests.finalizeAfking( id, earned > type(uint24).max ? type(uint24).max : uint24(earned), anchor, currentDay )",
+    "expression": "quests.finalizeAfking( id, earned > type(uint24).max ? type(uint24).max : uint24(earned), endpoint )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census, now three arguments (the reward endpoint is the handback anchor; the dead current-day floor and decay reference are gone). onlyGame callee, idempotent, no external call, no value."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9507,7 +9507,7 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._runSubscriberWork",
     "kind": "recipient-helper",
-    "expression": "_finalizeAfking(element, lane, processDay)",
+    "expression": "_finalizeAfking(element, lane)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -9699,7 +9699,7 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.subscribe",
     "kind": "recipient-helper",
-    "expression": "_finalizeAfking(subId, cancelled, today)",
+    "expression": "_finalizeAfking(subId, cancelled)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },

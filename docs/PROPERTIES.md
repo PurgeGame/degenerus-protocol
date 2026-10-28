@@ -214,6 +214,35 @@ The equations and per-phase transitions are in [Accounting](ACCOUNTING.md).
   - `test/fuzz/AccountLoans.t.sol::test_RepaidLoanIsNeverSeized`, `::test_GameOverClosesRepaymentOfALoanTheEndingLeftOpen`, `::testFuzz_DueListSwapAndPop`
   - `test/fuzz/invariant/LoanAccounting.inv.t.sol::invariant_closedLoansPaidSpecOrSeized`, `::invariant_ownershipAndDueLists`
 
+## Player state
+
+### AFKing days are never billed as missed
+
+- **Implementation.** `DegenerusQuests._questSyncState` and `_effectiveBaseStreak` bill misses only
+  when `state.afkingSince == 0`; `beginAfking` syncs (billing the pre-run gap) before setting
+  `afkingSince`; `finalizeAfking(id, earnedStreak, afkingCoveredDay)` is idempotent, anchors
+  `lastActiveDay` at the run's reward endpoint and clears `afkingSince`;
+  `GameAfkingModule._finalizeAfking` passes `_afkingEndpoint()`.
+- **Tests.**
+  - `test/repro/AfkingMidRunShieldBurn.t.sol::test_MidRunManualActionBurnsNoShield` ("a mid-run manual action bills no run-covered day")
+  - `test/repro/AfkingMidRunShieldBurn.t.sol::test_MidRunManualActionKeepsHighWaterAndGrantsNoCentury` ("mid-run high-water untouched by the manual action", "no re-granted century shields")
+  - `test/repro/QuestStreakStallForgiveness.t.sol::test_FinalizeDeliveredAheadRetainsPreRequestCoverage` ("finalize is idempotent"), `::test_MissedLogicalDaysConsumeShieldsExactlyOnce`
+  - `test/fuzz/V56QuestNonPerturb.t.sol::testStreakNeutralDuringAfkingSlot0`, `::testStreakNeutralIsGatedByAfkingActiveOnly`
+  - Complement (outside a run, misses beyond shields decay against the Game day): `test/repro/QuestStreakRequestWindow.t.sol::test_LapsedStreakStaysDecayedInRequestWindow` ("window: decayed against the Game day")
+
+### WWXRP claim window
+
+Day `d`'s draw opens when word `d+1` is published and closes at the day-`(d+3)` daily request,
+before that request reuses day `d`'s storage bank.
+
+- **Implementation.** `WWXRP._drawClaimOpen` (Game slot 0 bits 24..47 `dailyIdx <= d + 2`), with
+  each caller's `rngWordForDay(d + 1) != 0`; callers `findWinningEntry`, `previewOutcome`, `claim`
+  (reverts `WordUnavailable`).
+- **Tests.**
+  - `test/repro/WwxrpBankReuseTail.t.sol::test_ClaimWindowClosesAtDayPlus3RequestBeforeBankReuse` ("control claim paid on day d+2", "finder closed at the d+3 request", "preview closed at the d+3 request")
+  - `test/fuzz/WWXRPRecycling.t.sol::test_ClaimClosesAtDayPlusThreeRequestBeforeBankReuse` ("control: open on day d+2", "preview closed at the d+3 request")
+  - `test/fuzz/WWXRPRecycling.t.sol::test_VrfStallCannotPayExpiredDrawOrNewDrawWithOldWord`
+
 ## Build profiles
 
 ### Storage layout identity across profiles

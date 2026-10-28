@@ -939,9 +939,9 @@ contract QuestsWalletIdsTest is DeployProtocol {
         (uint256 before, uint32 wid) = game.playerActivityScore(p);
         assertEq(wid, id);
         _as(address(game), abi.encodeCall(quests.awardQuestStreakBonus, (id, 40, game.currentDayView_g542950())));
-        // The reward streak is the start-of-day snapshot, so the bonus shows from the next quest day.
-        vm.prank(address(game));
-        quests.rollDailyQuest(_questDay() + 1, 11, false, false, false);
+        // The reward streak is the start-of-day snapshot, so the bonus shows from the next logical
+        // day: publish the next quest day and advance the Game day with it (they move together).
+        _setDaily(_questDay() + 1, QT_FLIP);
         (uint256 afterBonus,) = game.playerActivityScore(p);
         assertGt(afterBonus, before, "the streak awarded to the ID raises the address's score");
     }
@@ -1011,8 +1011,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
             address(parimutuel),
             abi.encodeCall(quests.recordGrowthBet, (id, game.currentLvl(), amount % 1e6))
         );
-        _as(address(game), abi.encodeCall(quests.finalizeAfking, (id, uint24(amount), wallDay - 1, wallDay)));
+        _as(address(game), abi.encodeCall(quests.finalizeAfking, (id, uint24(amount), wallDay - 1)));
         _as(address(game), abi.encodeCall(quests.beginAfking, (id, wallDay)));
-        _as(address(game), abi.encodeCall(quests.finalizeAfking, (id, uint24(amount >> 24), wallDay, wallDay + 1)));
+        _as(address(game), abi.encodeCall(quests.finalizeAfking, (id, uint24(amount >> 24), wallDay)));
     }
 }
