@@ -1069,7 +1069,8 @@ contract sDGNRS {
         } else {
             ethOut = ethBal;
             stethOut = value - ethOut;
-            if (stethOut > stethBal) revert Insufficient();
+            // A stETH pull can land 1-2 wei short of nominal (Lido share rounding); a full exit takes what arrived.
+            if (stethOut > stethBal) stethOut = stethBal;
         }
 
         if (stethOut > 0) {

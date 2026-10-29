@@ -402,6 +402,8 @@ contract GNRUS {
 
         uint256 ethOut = owed <= ethBal ? owed : ethBal;
         uint256 stethOut = owed - ethOut;
+        // A stETH pull can land 1-2 wei short of nominal (Lido share rounding); a full exit takes what arrived.
+        if (stethOut > stethBal) stethOut = stethBal;
 
         unchecked { balanceOf[account] = acctBal - amount; }
         unchecked { totalSupply = supply - amount; }

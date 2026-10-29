@@ -765,7 +765,7 @@ contract DegenerusVault {
     /// @param amount Amount of DGVE shares to burn
     /// @return ethOut Amount of ETH sent to caller
     /// @return stEthOut Amount of stETH sent to caller
-    /// @custom:reverts Insufficient If amount is 0 or reserve is insufficient
+    /// @custom:reverts Insufficient If amount is 0
     /// @custom:reverts TransferFailed If ETH or stETH transfer fails
     function burnEth(uint256 amount) external returns (uint256 ethOut, uint256 stEthOut) {
         DegenerusVaultShare share = ethShare;
@@ -800,7 +800,8 @@ contract DegenerusVault {
         } else {
             ethOut = ethBal;
             stEthOut = claimValue - ethBal;
-            if (stEthOut > stBal) revert Insufficient();
+            // A stETH pull can land 1-2 wei short of nominal per leg (Lido share rounding); a full exit takes what arrived.
+            if (stEthOut > stBal) stEthOut = stBal;
         }
 
         share.vaultBurn(msg.sender, amount);
