@@ -1083,7 +1083,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
                 assertEq(abi.decode(logs[i].data, (uint256)), 23 ether, "100 ETH real surplus");
             }
             if (topic == keccak256("GrowthRoundSealed(uint24,bool)")) ++t.growth;
-            if (topic == keccak256("LevelQuestRolled(uint24,uint8,uint8,uint256)")) ++t.quest;
+            if (topic == keccak256("LevelQuestRolled(uint24,uint24,uint8,uint256)")) ++t.quest;
             if (
                 topic == keccak256("CrapsPassesCredited(uint32,bool,uint256)")
                     && uint32(uint256(logs[i].topics[1])) == 2

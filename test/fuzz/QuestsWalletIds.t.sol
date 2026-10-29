@@ -87,8 +87,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
     /// @dev Switch the level quest type and bump its version, as a roll does.
     function _setLevelQuest(uint8 qt) private {
         uint256 w = _active();
-        uint256 version = uint8(w >> 136) + 1;
-        w = (w & ~(uint256(0xffff) << 128)) | (uint256(qt) << 128) | ((version & 0xff) << 136);
+        uint256 version = uint24(w >> 136) + 1;
+        w = (w & ~(uint256(0xffffffff) << 128)) | (uint256(qt) << 128) | ((version & 0xffffff) << 136);
         vm.store(address(quests), bytes32(ACTIVE_ROOT), bytes32(w));
     }
 
@@ -489,7 +489,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq(abi.decode(mp[0], (uint32)), id);
         assertEq(_calls(acc, address(quests), address(game), game.hasDeityPass.selector).length, 0, "no hasDeityPass");
         _assertQuestCredit(acc, id, 800);
-        assertEq((_lq(id) >> 136) & 1, 1, "completed");
+        assertEq((_lq(id) >> 152) & 1, 1, "completed");
         assertEq(_countTopic(logs, E_LEVEL, id), 1, "LevelQuestCompleted by ID");
     }
 
@@ -516,8 +516,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_calls(acc, address(quests), address(game), game.extsload_g2807007.selector).length, 0);
         assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip_g317.selector).length, 0, "no credit");
-        assertEq((_lq(id) >> 136) & 1, 0, "not completed");
-        assertEq(uint128(_lq(id) >> 8), 6_000, "progress kept");
+        assertEq((_lq(id) >> 152) & 1, 0, "not completed");
+        assertEq(uint128(_lq(id) >> 24), 6_000, "progress kept");
         _eligible(o, false, 5);
         vm.startStateDiffRecording();
         _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 1, _fixtureGameDay())));
@@ -532,11 +532,11 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _setLevelQuest(QT_AFFILIATE);
         uint24 day = _fixtureGameDay();
         _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 1_000, day + 1)));
-        assertEq(uint128(_lq(id) >> 8), 0, "a stale day records nothing");
+        assertEq(uint128(_lq(id) >> 24), 0, "a stale day records nothing");
         _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 1_000, 0)));
-        assertEq(uint128(_lq(id) >> 8), 1_000, "a zero day reads the Game day");
+        assertEq(uint128(_lq(id) >> 24), 1_000, "a zero day reads the Game day");
         _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 500, day)));
-        assertEq(uint128(_lq(id) >> 8), 1_500, "the supplied current day records the same");
+        assertEq(uint128(_lq(id) >> 24), 1_500, "the supplied current day records the same");
     }
 
     function test_UplineCompletingLevelQuestThroughAffiliateIsCreditedById() public {
@@ -829,7 +829,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(abi.decode(ret, (uint256)), 50);
-        assertEq((_lq(pid) >> 137) & 1, 1, "recorded under the ID");
+        assertEq((_lq(pid) >> 153) & 1, 1, "recorded under the ID");
         _assertQuestCredit(acc, pid, 50);
         assertEq(_countTopic(logs, E_GROWTH, pid), 1);
         bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
@@ -875,7 +875,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq(r.length, 1);
         (uint32 rid,,) = abi.decode(r[0], (uint32, uint24, uint256));
         assertEq(rid, id, "the gate's ID");
-        assertEq((_lq(id) >> 137) & 1, 1);
+        assertEq((_lq(id) >> 153) & 1, 1);
     }
 
     // =====================================================================
@@ -956,8 +956,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _as(address(coinflip), abi.encodeCall(quests.handleFlip_g217, (id, 100, _fixtureGameDay())));
         assertEq(_field(id, OFF_LAST_SYNC, 24), _questDay(), "questPlayerState at slot 1 keyed uint256(id)");
         uint256 lq = _lq(id);
-        assertEq(uint8(lq), uint8(_active() >> 136), "levelQuestPlayerState at slot 2: version");
-        assertEq(uint128(lq >> 8), 100, "levelQuestPlayerState at slot 2: progress");
+        assertEq(uint24(lq), uint24(_active() >> 136), "levelQuestPlayerState at slot 2: version");
+        assertEq(uint128(lq >> 24), 100, "levelQuestPlayerState at slot 2: progress");
         (uint32 streak,,,) = quests.playerQuestStates(id);
         assertEq(streak, _field(id, OFF_STREAK, 16));
     }

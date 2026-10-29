@@ -94,10 +94,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @custom:storage-location erc7201:degenerus.storage.quests.v1
     /// @dev activeQuestsPacked: two 64-bit daily quest records (day 24b | questType 8b; slot 0
     ///      in bits 0-63, slot 1 in bits 64-127), then the level quest type (bits 128-135) and
-    ///      version (bits 136-143), so the daily handlers' warm word also carries the level quest.
+    ///      version (bits 136-159), so the daily handlers' warm word also carries the level quest.
     ///      questPlayerState: per-wallet daily progress, streak and shields, keyed by wallet ID.
     ///      levelQuestPlayerState: per-wallet level quest word, keyed by wallet ID: version
-    ///      (bits 0-7) | progress (bits 8-135) | completed (bit 136) | growth-bet quest (bit 137).
+    ///      (bits 0-23) | progress (bits 24-151) | completed (bit 152) | growth-bet quest (bit 153).
     struct DegenerusQuestsStorage {
         uint256 activeQuestsPacked;
         mapping(uint32 => PlayerQuestState) questPlayerState;
@@ -191,7 +191,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///        and count types are fixed).
     event LevelQuestRolled(
         uint24 indexed lvl,
-        uint8 version,
+        uint24 version,
         uint8 questType,
         uint256 target
     );
@@ -427,7 +427,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Level quest type/version positions in activeQuestsPacked.
     uint256 private constant LEVEL_QUEST_TYPE_SHIFT = 128;
     uint256 private constant LEVEL_QUEST_VERSION_SHIFT = 136;
-    uint256 private constant LEVEL_QUEST_MASK = uint256(type(uint16).max) << LEVEL_QUEST_TYPE_SHIFT;
+    uint256 private constant LEVEL_QUEST_MASK = uint256(type(uint32).max) << LEVEL_QUEST_TYPE_SHIFT;
+    /// @dev levelQuestPlayerState positions above the 24-bit version.
+    uint256 private constant LQ_PROGRESS_SHIFT = 24;
+    uint256 private constant LQ_COMPLETED_BIT = 152;
 
     constructor() {
         // Seed the level-1 quest at deploy so a level quest is always active: `rollLevelQuest`
@@ -502,7 +505,7 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Replace only the level type/version; daily quest rolls and level rolls commute.
-    function _storeLevelQuest(uint8 questType, uint8 version) private {
+    function _storeLevelQuest(uint8 questType, uint24 version) private {
         _questsStorage().activeQuestsPacked = (_questsStorage().activeQuestsPacked & ~LEVEL_QUEST_MASK) |
             (uint256(questType) << LEVEL_QUEST_TYPE_SHIFT) |
             (uint256(version) << LEVEL_QUEST_VERSION_SHIFT);
@@ -2506,10 +2509,10 @@ contract DegenerusQuests is IDegenerusQuests {
             EntropyLib.hash2(RngTags.QUEST_LEVEL, entropy),
             type(uint8).max, decAllowed, QUEST_TYPE_CRAPS_DAY_PASS
         );
-        uint8 version;
+        uint24 version;
         uint24 questLevel;
         unchecked {
-            version = uint8(_questsStorage().activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT) + 1;
+            version = uint24(_questsStorage().activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT) + 1;
             // The daily advance must never gain a revert; level is a uint24 the game
             // increments once per level, so the +1 cannot reach the boundary.
             questLevel = questGame.currentLvl() + 1;
@@ -2609,9 +2612,9 @@ contract DegenerusQuests is IDegenerusQuests {
         // Type mismatch or no quest active — exit before any player SLOAD
         if (lqType != handlerQuestType) return;
 
-        uint8 currentVersion = uint8(active >> LEVEL_QUEST_VERSION_SHIFT);
+        uint24 currentVersion = uint24(active >> LEVEL_QUEST_VERSION_SHIFT);
         uint256 packed = _questsStorage().levelQuestPlayerState[id];
-        uint8 playerVersion = uint8(packed);
+        uint24 playerVersion = uint24(packed);
 
         // Version mismatch: reset stale progress from previous level's quest
         if (playerVersion != currentVersion) {
@@ -2619,9 +2622,9 @@ contract DegenerusQuests is IDegenerusQuests {
         }
 
         // Already completed this level's quest
-        if ((packed >> 136) & 1 == 1) return;
+        if ((packed >> LQ_COMPLETED_BIT) & 1 == 1) return;
 
-        uint128 progress = uint128(packed >> 8);
+        uint128 progress = uint128(packed >> LQ_PROGRESS_SHIFT);
         progress = _clampedAdd128(progress, delta);
 
         uint256 target = _levelQuestTargetValue(lqType, mintPrice);
@@ -2632,13 +2635,13 @@ contract DegenerusQuests is IDegenerusQuests {
             // shared with the completion event.
             uint24 lvl = questGame.currentLvl();
             if (!_isLevelQuestEligible(id, lvl)) {
-                packed = uint256(currentVersion) | (uint256(progress) << 8);
+                packed = uint256(currentVersion) | (uint256(progress) << LQ_PROGRESS_SHIFT);
                 _questsStorage().levelQuestPlayerState[id] = packed;
                 return;
             }
             packed = uint256(currentVersion)
-                   | (uint256(progress) << 8)
-                   | (uint256(1) << 136);
+                   | (uint256(progress) << LQ_PROGRESS_SHIFT)
+                   | (uint256(1) << LQ_COMPLETED_BIT);
             _questsStorage().levelQuestPlayerState[id] = packed;
 
             // Level-quest completion advances the quest streak by LEVEL_QUEST_STREAK_BONUS (a daily
@@ -2659,7 +2662,7 @@ contract DegenerusQuests is IDegenerusQuests {
             _questCreditFlip(id, 800);
             emit LevelQuestCompleted(id, lvl + 1, lqType, 800);
         } else {
-            packed = uint256(currentVersion) | (uint256(progress) << 8);
+            packed = uint256(currentVersion) | (uint256(progress) << LQ_PROGRESS_SHIFT);
             _questsStorage().levelQuestPlayerState[id] = packed;
         }
     }
@@ -2669,7 +2672,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      completed flag (136); everything above is free. rollLevelQuest bumps the shared
     ///      version byte at the same level transition that opens the growth round, so the
     ///      two quests share one lifecycle and the stale-version reset clears both flags.
-    uint16 private constant LQ_GROWTH_BET_BIT = 137;
+    uint16 private constant LQ_GROWTH_BET_BIT = 153;
 
     /// @dev The growth-bet quest is a participation quest, so it moves the streak by a
     ///      +1 rather than the level quest's LEVEL_QUEST_STREAK_BONUS — and, like that
@@ -2731,12 +2734,12 @@ contract DegenerusQuests is IDegenerusQuests {
         if (msg.sender != ContractAddresses.PARIMUTUEL) revert OnlyParimutuel();
         if (reward == 0) return 0;
 
-        uint8 currentVersion = uint8(_questsStorage().activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT);
+        uint24 currentVersion = uint24(_questsStorage().activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT);
         uint256 packed = _questsStorage().levelQuestPlayerState[id];
 
         // Version mismatch: this is the first touch of the word this level, so drop the
         // previous level's progress and both completion flags.
-        if (uint8(packed) != currentVersion) packed = uint256(currentVersion);
+        if (uint24(packed) != currentVersion) packed = uint256(currentVersion);
         if ((packed >> LQ_GROWTH_BET_BIT) & 1 == 1) return 0;
 
         if (
@@ -2789,11 +2792,11 @@ contract DegenerusQuests is IDegenerusQuests {
         questType = uint8(active >> LEVEL_QUEST_TYPE_SHIFT);
 
         uint256 packed = _questsStorage().levelQuestPlayerState[id];
-        uint8 playerVersion = uint8(packed);
+        uint24 playerVersion = uint24(packed);
 
-        if (playerVersion == uint8(active >> LEVEL_QUEST_VERSION_SHIFT) && questType != 0) {
-            progress = uint128(packed >> 8);
-            completed = (packed >> 136) & 1 == 1;
+        if (playerVersion == uint24(active >> LEVEL_QUEST_VERSION_SHIFT) && questType != 0) {
+            progress = uint128(packed >> LQ_PROGRESS_SHIFT);
+            completed = (packed >> LQ_COMPLETED_BIT) & 1 == 1;
         }
 
         uint24 lvl = questGame.currentLvl();

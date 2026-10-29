@@ -236,7 +236,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         );
         assertEq(_countTopic(logs, keccak256("YieldSurplusDistributed(uint256)")), 1, "surplus distributes");
         assertEq(_countTopic(logs, keccak256("GrowthRoundSealed(uint24,bool)")), 1, "growth round seals");
-        assertEq(_countTopic(logs, keccak256("LevelQuestRolled(uint24,uint8,uint8,uint256)")), 1, "level quest rolls");
+        assertEq(_countTopic(logs, keccak256("LevelQuestRolled(uint24,uint24,uint8,uint256)")), 1, "level quest rolls");
         assertEq(_dailyLegLogs(logs), 0, "consolidation pays no award");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
