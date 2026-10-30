@@ -2,7 +2,7 @@
 
 ## Target and identity
 
-**Audit commit/tag: `<AUDIT_COMMIT>`** (the owner fills this at freeze). The target is the **EIP-170
+**Audit tag: `audit-2026-10-30`** (the commit this tag points to). The target is the **EIP-170
 profile**, selected by `PROFILE=eip170`, with deployment order and aliases in
 [deployments/eip170.json](../deployments/eip170.json). Runtime and initcode ceilings are 24,576 and
 49,152 bytes per deployment. Compiler settings are Solidity 0.8.38, via IR, optimizer runs 1,000 and

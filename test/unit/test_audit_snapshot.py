@@ -41,11 +41,22 @@ class VerificationInputTests(unittest.TestCase):
             replacement = patch.object(AUDITOR, attribute, value)
             replacement.start()
             self.addCleanup(replacement.stop)
-        git = patch.object(AUDITOR.subprocess, "check_output", side_effect=lambda command, **kwargs:
-                           b"scripts/audit-snapshot.py\0" if "ls-files" in command else b"a" * 40 + b"\n")
+        self.ignored = set()
+        git = patch.object(AUDITOR.subprocess, "check_output", side_effect=self.git)
         git.start()
         self.addCleanup(git.stop)
         self.assertEqual(self.check(write=True), 0)
+
+    def git(self, command, **kwargs):
+        if "ls-files" not in command:
+            return b"a" * 40 + b"\n"
+        if "--others" not in command:
+            return b"scripts/audit-snapshot.py\0"
+        pathspecs = command[command.index("--exclude-standard") + 1:]
+        found = sorted(p.relative_to(self.root).as_posix() for spec in pathspecs
+                       for p in (self.root / spec).rglob("*") if p.is_file())
+        return "".join(f"{p}\0" for p in found
+                       if p != "scripts/audit-snapshot.py" and p not in self.ignored).encode()
 
     def check(self, write=False):
         args = ["audit-snapshot.py", "--write"] if write else ["audit-snapshot.py"]
@@ -88,6 +99,13 @@ class VerificationInputTests(unittest.TestCase):
         self.assertEqual(self.check(write=True), 0)
         path.write_text("# changed checker\n")
         self.assertEqual(self.check(), 1)
+
+    def test_git_ignored_local_file_is_not_an_input(self):
+        path = self.root / "scripts/local-only.js"
+        path.write_text("// local helper\n")
+        self.ignored.add("scripts/local-only.js")
+        self.assertEqual(self.check(), 0)
+        self.assertNotIn("scripts/local-only.js", (self.root / "docs/audit/source-sha256.txt").read_text())
 
     def test_vectors_and_module_helpers_are_verification_inputs(self):
         for name in ("vectors.json", "reference.mjs", "table.csv", "reference.hex"):

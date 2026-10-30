@@ -39,15 +39,17 @@ def verification_files(build_inputs=()):
     tracked = subprocess.check_output(["git", "ls-files", "-z", "scripts", "test", "contracts"],
                                       cwd=ROOT).decode().split("\0")
     paths.update(p for p in tracked if p and (ROOT / p).is_file())
-    for directory in ("scripts", "test", "contracts/mocks", "contracts/test"):
-        paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / directory).rglob("*")
-                     if p.is_file() and "__pycache__" not in p.parts
-                     and p.suffix in {".py", ".js", ".mjs", ".sh", ".sol", ".hex"})
-    # Unstaged vectors, tables and module helpers are verification inputs too.
-    paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / "test").rglob("*")
-                 if p.is_file() and "__pycache__" not in p.parts
-                 and p.suffix in {".sol", ".js", ".cjs", ".mjs", ".ts", ".py",
-                                  ".json", ".hex", ".csv", ".tsv"})
+    # Untracked, not-ignored work in progress counts too; git-ignored local files never do.
+    untracked = subprocess.check_output(["git", "ls-files", "-z", "--others", "--exclude-standard",
+                                         "scripts", "test", "contracts/mocks", "contracts/test"],
+                                        cwd=ROOT).decode().split("\0")
+    for p in untracked:
+        if not p or "__pycache__" in p.split("/") or not (ROOT / p).is_file():
+            continue
+        suffix = Path(p).suffix
+        if suffix in {".py", ".js", ".mjs", ".sh", ".sol", ".hex"} or (
+                p.startswith("test/") and suffix in {".cjs", ".ts", ".json", ".csv", ".tsv"}):
+            paths.add(p)
     paths.update(p for p in build_inputs if (ROOT / p).is_file())
     return sorted(paths)
 
