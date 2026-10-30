@@ -30,7 +30,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
 
     event MinerWork(address indexed caller, uint8 firstAction, uint256 executionGas, uint256 flipReward);
 
-    /// @notice The next action for a mineFlip by msg.sender: a donor holding credit sees a
+    /// @notice The next action for a mineRun by msg.sender: a donor holding credit sees a
     ///         below-threshold mid-day request that a creditless caller does not.
     function _minerAction() internal view returns (uint8) {
         return uint8(_nextMinerAction(msg.sender));

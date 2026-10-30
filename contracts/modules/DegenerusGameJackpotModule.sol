@@ -67,7 +67,7 @@ import {IDegenerusGameWhaleModule, IDegenerusGameTicketModule, IDegenerusGameDec
  *      FUND ACCOUNTING:
  *      - ETH flows through `futurePrizePool` (unified reserve), `currentPrizePool`,
  *        `nextPrizePool`, `claimablePool`.
- *      - Per-wallet claimable ETH sums to `claimablePool`, the aggregate liability.
+ *      - `claimablePool` reserves winnings, prepaid AFKing, Degenesis obligations and redemption backing.
  *
  *      RANDOMNESS:
  *      - All entropy originates from VRF words passed by the parent contract.

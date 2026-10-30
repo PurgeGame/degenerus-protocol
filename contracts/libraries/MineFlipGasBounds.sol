@@ -66,7 +66,7 @@ library MineFlipGasBounds {
     uint256 internal constant TERMINAL_SETUP = 1_700_000;
     // Terminal checkpoint and return reserve.
     uint256 internal constant TERMINAL_TAIL = 250_000;
-    // Record body; the fresh tally cursor is covered by TALLY_TAIL.
+    // Record body; the fresh tally cursor is covered by TERMINAL_TALLY_TAIL.
     uint256 internal constant TERMINAL_TALLY_RECORD = 25_000;
     // Full 256-record scan plus immediate 30-refund setup: 1.878M.
     uint256 internal constant TERMINAL_TALLY_FINAL = 2_300_000;

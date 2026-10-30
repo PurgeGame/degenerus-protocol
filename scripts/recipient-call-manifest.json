@@ -317,7 +317,7 @@
     "kind": "external",
     "expression": "ICrapsStorageReader(table).extsload_g2807007(bytes32(slot))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/CrapsLens.sol",
@@ -797,7 +797,7 @@
     "kind": "external",
     "expression": "affiliateCoinflip.creditFlip_g317(id, amount)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -805,7 +805,15 @@
     "kind": "external",
     "expression": "affiliateCoinflip.creditFlipPair_g578(a, amountA, b, amountB)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate._affiliateQuestReward",
+    "kind": "external",
+    "expression": "affiliateQuests.handleAffiliate_g2566281(id, amount, day)",
+    "count": 1,
+    "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -813,7 +821,7 @@
     "kind": "external",
     "expression": "game.registerWallet_g9539(player, true)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -869,7 +877,7 @@
     "kind": "external",
     "expression": "game.registerWallet_g9539(owner, true)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -893,7 +901,7 @@
     "kind": "external",
     "expression": "game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -913,11 +921,19 @@
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate._settleShare",
+    "kind": "recipient-helper",
+    "expression": "_affiliateQuestReward(winnerId, shareBase, day)",
+    "count": 1,
+    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.affiliateCode",
     "kind": "external",
     "expression": "game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -989,7 +1005,7 @@
     "kind": "external",
     "expression": "game.walletIdOf_g3120(player)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -1013,7 +1029,7 @@
     "kind": "external",
     "expression": "game.walletIdOf_g3120(player)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -1033,11 +1049,35 @@
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate.payAffiliate",
+    "kind": "recipient-helper",
+    "expression": "_settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, uint24(levelDay >> 24))",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate.payAffiliateCombined_g3742656",
+    "kind": "recipient-helper",
+    "expression": "_resolveReferral(code, senderId)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate.payAffiliateCombined_g3742656",
+    "kind": "recipient-helper",
+    "expression": "_settleShare(ref, routeCode, senderId, lvl, sumScaled, sumScaled - playerKickback, uint24(levelDay >> 24))",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.referPlayer",
     "kind": "external",
     "expression": "game.registerWallet_g9539(msg.sender, true)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -1053,7 +1093,7 @@
     "kind": "external",
     "expression": "game.walletIdOf_g3120(player)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusDeityPass.sol",
@@ -1265,6 +1305,14 @@
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens._loanDailyLateMirror",
+    "kind": "recipient-helper",
+    "expression": "_sload(game, bytes32(slot))",
+    "count": 1,
+    "review": "READ ONLY: preview reads the Game completion timestamp through the existing extsload view; no value or state writes."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens._protocolPausedMirror",
     "kind": "recipient-helper",
     "expression": "_sload(game, bytes32(slot))",
@@ -1277,7 +1325,7 @@
     "kind": "external",
     "expression": "IDegenerusGameLensSource(game).extsload_g2807007(slot)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -1405,7 +1453,7 @@
     "kind": "external",
     "expression": "affiliate.affiliateBonusPointsBest_g3878(currLevel, id)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -1873,6 +1921,14 @@
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.previewBorrow",
+    "kind": "recipient-helper",
+    "expression": "_loanDailyLateMirror(game)",
+    "count": 1,
+    "review": "READ ONLY: mirrors the 48-hour daily completion gate using the Game timestamp, not the Lens constructor timestamp; same existing extsload trust boundary."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.protocolBoonEntryAt",
     "kind": "recipient-helper",
     "expression": "_sload(game, _mapSlot(uint256(index), uint256(daySlot)))",
@@ -2053,7 +2109,7 @@
     "kind": "external",
     "expression": "degenerusGame.walletIdOf_g3120(player)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusJackpots.sol",
@@ -2093,7 +2149,7 @@
     "kind": "external",
     "expression": "degenerusGame.walletIdOf_g3120(msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusJackpots.sol",
@@ -2229,7 +2285,7 @@
     "kind": "external",
     "expression": "game.walletIdOf_g3120(player)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusParimutuel.sol",
@@ -2237,7 +2293,7 @@
     "kind": "recipient-helper",
     "expression": "marketStateById(game.walletIdOf_g3120(player), round)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusParimutuel.sol",
@@ -2269,7 +2325,7 @@
     "kind": "external",
     "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusParimutuel.sol",
@@ -2277,7 +2333,7 @@
     "kind": "external",
     "expression": "game.walletIdOf_g3120(msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusParimutuel.sol",
@@ -2315,7 +2371,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._canRollDecimatorQuest",
     "kind": "external",
-    "expression": "questGame.decimatorActive()",
+    "expression": "questGame.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2323,7 +2379,7 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._canRollDecimatorQuest",
     "kind": "external",
-    "expression": "questGame.currentLvl()",
+    "expression": "questGame.decimatorActive()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -2366,6 +2422,14 @@
     "expression": "_questCompleteWithPair(id, state, quests, slotIndex, quest, currentDay, 0)",
     "count": 1,
     "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handleAffiliate",
+    "kind": "recipient-helper",
+    "expression": "_questGameDay()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: a zero day argument reads the logical-day accessor the quest identity already used; the Coinflip host overrides it with its packed local mirror. Reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2485,7 +2549,7 @@
     "kind": "external",
     "expression": "questGame.mintPackedOfId_g5372(id)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2533,7 +2597,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(id, amount)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2657,6 +2721,14 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests.handleAffiliate_g2566281",
+    "kind": "recipient-helper",
+    "expression": "_handleAffiliate(id, amount, day)",
+    "count": 1,
+    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.handleDecimator",
     "kind": "recipient-helper",
     "expression": "_currentQuestDay(quests)",
@@ -2765,7 +2837,7 @@
     "kind": "external",
     "expression": "questGame.mintPackedOfId_g5372(playerId)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2821,7 +2893,7 @@
     "kind": "external",
     "expression": "questGame.mintPackedOfId_g5372(id)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -2835,17 +2907,17 @@
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordGrowthBet",
     "kind": "recipient-helper",
-    "expression": "_questGameDay()",
+    "expression": "_questCreditFlip(id, reward)",
     "count": 1,
-    "review": "LOGICAL_DAYS: the quest day comes from the virtual logical-day accessor (the Coinflip host overrides it with its packed local mirror; the standalone base reads immutable Game only), passed to _currentQuestDayFast instead of materializing the active-quest array. Same day value; reward recipient authorization is unchanged."
+    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests.recordGrowthBet",
     "kind": "recipient-helper",
-    "expression": "_questCreditFlip(id, reward)",
+    "expression": "_questGameDay()",
     "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+    "review": "LOGICAL_DAYS: the quest day comes from the virtual logical-day accessor (the Coinflip host overrides it with its packed local mirror; the standalone base reads immutable Game only), passed to _currentQuestDayFast instead of materializing the active-quest array. Same day value; reward recipient authorization is unchanged."
   },
   {
     "path": "contracts/DegenerusQuests.sol",
@@ -3341,7 +3413,7 @@
     "kind": "external",
     "expression": "IDeityBoonDataSource(game).walletIdOf_g3120(deity)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DeityBoonViewer.sol",
@@ -3349,7 +3421,7 @@
     "kind": "recipient-helper",
     "expression": "deityBoonSlotsById(game, IDeityBoonDataSource(game).walletIdOf_g3120(deity))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DeityBoonViewer.sol",
@@ -3365,7 +3437,7 @@
     "kind": "external",
     "expression": "IDeityBoonDataSource(game).walletIdOf_g3120(deity)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DeityBoonViewer.sol",
@@ -3373,7 +3445,7 @@
     "kind": "recipient-helper",
     "expression": "deityBoonSlotsTomorrowById(game, IDeityBoonDataSource(game).walletIdOf_g3120(deity))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/DeityBoonViewer.sol",
@@ -3509,7 +3581,7 @@
     "kind": "external",
     "expression": "degenerusGame.recordDecBurn_g1271(id, lvl, baseAmount, decBurnMultBps, chips)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/FLIP.sol",
@@ -3517,7 +3589,7 @@
     "kind": "external",
     "expression": "degenerusGame.registerWallet_g9539(key, true)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/FLIP.sol",
@@ -3585,19 +3657,11 @@
   },
   {
     "path": "contracts/FLIP.sol",
-    "scope": "FLIP.burnCoin_g27673",
-    "kind": "recipient-helper",
-    "expression": "_consumeCoinflipShortfall(target, amount)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/FLIP.sol",
     "scope": "FLIP.burnCoinForCraps_g292454",
     "kind": "external",
     "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/FLIP.sol",
@@ -3605,13 +3669,21 @@
     "kind": "external",
     "expression": "questModule.recordCrapsAction_g14623(id, flags)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/FLIP.sol",
     "scope": "FLIP.burnCoinForCraps_g292454",
     "kind": "recipient-helper",
     "expression": "_consumeCoinflipShortfall(player, gross)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/FLIP.sol",
+    "scope": "FLIP.burnCoin_g27673",
+    "kind": "recipient-helper",
+    "expression": "_consumeCoinflipShortfall(target, amount)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -3627,7 +3699,7 @@
     "path": "contracts/FLIP.sol",
     "scope": "FLIP.decimatorBurn",
     "kind": "external",
-    "expression": "degenerusGame.decimatorActive()",
+    "expression": "degenerusGame.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3635,7 +3707,7 @@
     "path": "contracts/FLIP.sol",
     "scope": "FLIP.decimatorBurn",
     "kind": "external",
-    "expression": "degenerusGame.currentLvl()",
+    "expression": "degenerusGame.decimatorActive()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -3645,7 +3717,7 @@
     "kind": "external",
     "expression": "degenerusGame.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/FLIP.sol",
@@ -3690,6 +3762,14 @@
   {
     "path": "contracts/GNRUS.sol",
     "scope": "GNRUS._redeemTo",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this))",
+    "count": 2,
+    "review": "ISOLATED: a failed or short stETH answer reads as zero, so a dead token never blocks an ETH-only holder exit; the pinned token is trusted and read with all gas, no fixed cap."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS._redeemTo",
     "kind": "external",
     "expression": "game.claimClaimable(0)",
     "count": 1,
@@ -3702,14 +3782,6 @@
     "expression": "game.claimableWinningsOf(address(this))",
     "count": 1,
     "review": "OFF_CHAIN: holder-initiated charity redemption."
-  },
-  {
-    "path": "contracts/GNRUS.sol",
-    "scope": "GNRUS._redeemTo",
-    "kind": "bounded-wrapper",
-    "expression": "BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this))",
-    "count": 2,
-    "review": "ISOLATED: a failed or short stETH answer reads as zero, so a dead token never blocks an ETH-only holder exit; the pinned token is trusted and read with all gas, no fixed cap."
   },
   {
     "path": "contracts/GNRUS.sol",
@@ -3734,6 +3806,30 @@
     "expression": "_redeemTo(burner, amount, burnerBal, supply)",
     "count": 1,
     "review": "OFF_CHAIN: existing holder withdrawal/loan/charity route; transitive helper call pinned, new caller requires review."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.castBallot",
+    "kind": "external",
+    "expression": "IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(voter)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.castBallot",
+    "kind": "external",
+    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.castBallot",
+    "kind": "external",
+    "expression": "sdgnrs.balanceOf(voter)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/GNRUS.sol",
@@ -3808,30 +3904,6 @@
     "review": "OFF_CHAIN: existing holder withdrawal/loan/charity route; transitive helper call pinned, new caller requires review."
   },
   {
-    "path": "contracts/GNRUS.sol",
-    "scope": "GNRUS.castBallot",
-    "kind": "external",
-    "expression": "IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(voter)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/GNRUS.sol",
-    "scope": "GNRUS.castBallot",
-    "kind": "external",
-    "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/GNRUS.sol",
-    "scope": "GNRUS.castBallot",
-    "kind": "external",
-    "expression": "sdgnrs.balanceOf(voter)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
     "path": "contracts/Icons32Data.sol",
     "scope": "Icons32Data._authorizeWrite",
     "kind": "external",
@@ -3869,7 +3941,7 @@
     "kind": "external",
     "expression": "IGameCraps(_GAME).resolveAccount_g7029(id, msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -3905,11 +3977,19 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._bookFees",
+    "kind": "recipient-helper",
+    "expression": "_creditComps(earned)",
+    "count": 1,
+    "review": "Internal helper edge to _creditComps, whose single typed FLIP creditCrapsComps_g37225 call (same selector, target and argument as the former inline call) is classified on its own row. Caller authorization and settlement ordering are unchanged."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._completeRngSlot",
     "kind": "external",
     "expression": "IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending_g1406(index, false)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -3933,7 +4013,7 @@
     "kind": "external",
     "expression": "ICoinflipStake(ContractAddresses.COINFLIP).creditFlip_g317(id, amount)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -3941,7 +4021,7 @@
     "kind": "external",
     "expression": "IReadCohortLifecycle(address(this)).registerRngSlot_g709(index, slot, w.key)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -3949,7 +4029,7 @@
     "kind": "external",
     "expression": "IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -4109,7 +4189,7 @@
     "kind": "external",
     "expression": "IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -4157,7 +4237,7 @@
     "kind": "external",
     "expression": "IReadCohortLifecycle(address(this)).registerRngSlot_g709(index, slot, key)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -4195,7 +4275,7 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(msg.sender, amount)",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoinForCraps_g292454( ContractAddresses.VAULT, _VAULT_ID, (amount << 8) | _CRAPS_FLAG_COMP )",
     "count": 1,
     "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
   },
@@ -4203,7 +4283,7 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "external",
-    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoinForCraps_g292454( ContractAddresses.VAULT, _VAULT_ID, (amount << 8) | _CRAPS_FLAG_COMP )",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin_g27673(msg.sender, amount)",
     "count": 1,
     "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
   },
@@ -4301,7 +4381,7 @@
     "kind": "external",
     "expression": "IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending_g1406(index, true)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -4366,14 +4446,6 @@
     "expression": "_storeBet(betId, header | _BET_DAYHIGH_MASK)",
     "count": 1,
     "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._bookFees",
-    "kind": "recipient-helper",
-    "expression": "_creditComps(earned)",
-    "count": 1,
-    "review": "Internal helper edge to _creditComps, whose single typed FLIP creditCrapsComps_g37225 call (same selector, target and argument as the former inline call) is classified on its own row. Caller authorization and settlement ordering are unchanged."
   },
   {
     "path": "contracts/LootboxCraps.sol",
@@ -4509,7 +4581,7 @@
     "kind": "external",
     "expression": "game.extsload_g2807007(slot)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4533,7 +4605,7 @@
     "kind": "external",
     "expression": "game.resolveAccount_g7029(id, address(0))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4541,7 +4613,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(winner, prize)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4565,7 +4637,7 @@
     "kind": "external",
     "expression": "game.consumeCoinflipBoon_g2902(playerId)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4573,15 +4645,7 @@
     "kind": "external",
     "expression": "game.consumeCoinflipBoon_g2902(id)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
-  },
-  {
-    "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enterDraw",
-    "kind": "external",
-    "expression": "game.extsload_g2807007(bytes32(0))",
-    "count": 1,
-    "review": "LDAYS2: trusted Game static read of slot 0 combines logical day and irreversible terminal latch. No player-controlled callee, write or callback; close before terminal entropy can settle that day."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4590,6 +4654,14 @@
     "expression": "game.currentLvl()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP.enterDraw",
+    "kind": "external",
+    "expression": "game.extsload_g2807007(bytes32(0))",
+    "count": 1,
+    "review": "LDAYS2: trusted Game static read of slot 0 combines logical day and irreversible terminal latch. No player-controlled callee, write or callback; close before terminal entropy can settle that day."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4605,7 +4677,7 @@
     "kind": "external",
     "expression": "game.registerWallet_g9539(msg.sender, true)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4613,7 +4685,7 @@
     "kind": "external",
     "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4677,7 +4749,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(winnerId, flipAward)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4717,7 +4789,7 @@
     "kind": "external",
     "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4725,7 +4797,7 @@
     "kind": "external",
     "expression": "game.walletIdOf_g3120(msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4813,7 +4885,7 @@
     "kind": "external",
     "expression": "game.extsload_g2807007(bytes32(OWNERS_BASE + id))",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/libraries/WalletTableLib.sol",
@@ -4821,7 +4893,7 @@
     "kind": "external",
     "expression": "game.extsload_g2807007(bytes32(OWNERS_BASE + ownerId))",
     "count": 2,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/mocks/MockLinkToken.sol",
@@ -4866,16 +4938,16 @@
   {
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._addDailyFlip",
-    "kind": "recipient-helper",
-    "expression": "_armBigRecord( RECORD_KIND_FLIP, id, recordAmount )",
+    "kind": "external",
+    "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._addDailyFlip",
-    "kind": "external",
-    "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
+    "kind": "recipient-helper",
+    "expression": "_armBigRecord( RECORD_KIND_FLIP, id, recordAmount )",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5473,6 +5545,14 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore._joinDay",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "DAYS_EFF_FIX: Game slot-0 header read for the logical day, only for an ordinary scheduled slot; custom and jackpot slots skip it. View only; no value transfer or recipient hook."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._joinableSlot",
     "kind": "external",
     "expression": "IGameCraps(_GAME).rngLocked()",
@@ -5502,14 +5582,6 @@
     "expression": "_slotWindow(slot)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._joinDay",
-    "kind": "recipient-helper",
-    "expression": "_currentDayIndex()",
-    "count": 1,
-    "review": "DAYS_EFF_FIX: Game slot-0 header read for the logical day, only for an ordinary scheduled slot; custom and jackpot slots skip it. View only; no value transfer or recipient hook."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
@@ -5827,17 +5899,17 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.amendSlip",
     "kind": "recipient-helper",
-    "expression": "_joinableSlot(slot, _joinDay(slot))",
+    "expression": "_joinDay(slot)",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+    "review": "DAYS_EFF_FIX: caller-local logical day for the joinability check (custom and jackpot slots read none). View only; no value transfer or recipient hook."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.amendSlip",
     "kind": "recipient-helper",
-    "expression": "_joinDay(slot)",
+    "expression": "_joinableSlot(slot, _joinDay(slot))",
     "count": 1,
-    "review": "DAYS_EFF_FIX: caller-local logical day for the joinability check (custom and jackpot slots read none). View only; no value transfer or recipient hook."
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
@@ -5947,14 +6019,6 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.enterBattle",
     "kind": "recipient-helper",
-    "expression": "_joinableSlot(slot, _joinDay(slot))",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.enterBattle",
-    "kind": "recipient-helper",
     "expression": "_joinDay(slot)",
     "count": 1,
     "review": "DAYS_EFF_FIX: caller-local logical day for the joinability check (custom and jackpot slots read none). View only; no value transfer or recipient hook."
@@ -5963,7 +6027,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.enterBattle",
     "kind": "recipient-helper",
-    "expression": "_paidDoor(id)",
+    "expression": "_joinableSlot(slot, _joinDay(slot))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -5971,61 +6035,13 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.enterBattle",
     "kind": "recipient-helper",
-    "expression": "_rememberBoard(word, chips)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.throwCraps",
-    "kind": "recipient-helper",
-    "expression": "_enterWindow(w, chips, multiple, account, 0)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.throwCraps",
-    "kind": "recipient-helper",
-    "expression": "_joinableWindow(period)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.throwCraps",
-    "kind": "recipient-helper",
     "expression": "_paidDoor(id)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.throwCraps",
-    "kind": "recipient-helper",
-    "expression": "_rememberBoard(word, chips)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.playCraps",
-    "kind": "recipient-helper",
-    "expression": "_enterToday(chips, multiple, account, 0)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.playCraps",
-    "kind": "recipient-helper",
-    "expression": "_paidDoor(id)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.playCraps",
+    "scope": "CrapsBattleCore.enterBattle",
     "kind": "recipient-helper",
     "expression": "_rememberBoard(word, chips)",
     "count": 1,
@@ -6089,6 +6105,30 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.playCraps",
+    "kind": "recipient-helper",
+    "expression": "_enterToday(chips, multiple, account, 0)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.playCraps",
+    "kind": "recipient-helper",
+    "expression": "_paidDoor(id)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.playCraps",
+    "kind": "recipient-helper",
+    "expression": "_rememberBoard(word, chips)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.resolveRngSlot_g1079",
     "kind": "recipient-helper",
     "expression": "_resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS)",
@@ -6106,6 +6146,38 @@
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.setPreferredBoard",
+    "kind": "recipient-helper",
+    "expression": "_rememberBoard(word, chips)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.throwCraps",
+    "kind": "recipient-helper",
+    "expression": "_enterWindow(w, chips, multiple, account, 0)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.throwCraps",
+    "kind": "recipient-helper",
+    "expression": "_joinableWindow(period)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.throwCraps",
+    "kind": "recipient-helper",
+    "expression": "_paidDoor(id)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.throwCraps",
     "kind": "recipient-helper",
     "expression": "_rememberBoard(word, chips)",
     "count": 1,
@@ -6589,7 +6661,7 @@
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.runSubDraw_g1232.selector, day) )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6597,7 +6669,7 @@
     "kind": "recipient-helper",
     "expression": "_boundedStethBalance(meter, 150_000)",
     "count": 1,
-    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6677,7 +6749,7 @@
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.prepareDegenesis_g47.selector, day) )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7029,7 +7101,7 @@
     "kind": "external",
     "expression": "IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload_g2807007(preferenceSlot)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameDecimatorModule.sol",
@@ -7139,7 +7211,7 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveBetWork",
     "kind": "recipient-helper",
-    "expression": "_flushOwner(c.acc)",
+    "expression": "_boxResolveLootboxDirect( c.playerId, c.totals.betLootboxShare, EntropyLib.hash3(RngTags.BET_BOX, c.rngWord, c.betId), c.activityScore )",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Resolved-bet memory record carries the same frozen bet, word, payout accumulators and recipient IDs; extracted local box entry names preserve the original payout body and rollback framing."
   },
@@ -7147,7 +7219,7 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveBetWork",
     "kind": "recipient-helper",
-    "expression": "_boxResolveLootboxDirect( c.playerId, c.totals.betLootboxShare, EntropyLib.hash3(RngTags.BET_BOX, c.rngWord, c.betId), c.activityScore )",
+    "expression": "_flushOwner(c.acc)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Resolved-bet memory record carries the same frozen bet, word, payout accumulators and recipient IDs; extracted local box entry names preserve the original payout body and rollback framing."
   },
@@ -7325,7 +7397,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(buyerId, kickback)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameFoilCore.sol",
@@ -7413,7 +7485,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(id, flipOut)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameFoilCore.sol",
@@ -7477,7 +7549,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(id, flipCredit)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameFoilCore.sol",
@@ -7554,18 +7626,18 @@
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleFinalSweep",
-    "kind": "external",
-    "expression": "charityGameOver.onFinalSweep()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule._handleFinalSweep",
     "kind": "bounded-wrapper",
     "expression": "BoundedCall.admitFirst(meter, BoundedCall.STETH_READ_MIN_GAS, GasBounds.TERMINAL_SWEEP_AFTER_READ)",
     "count": 1,
     "review": "ISOLATED: pre-call admission of the one-shot sweep's stETH read; reverts InsufficientExecutionGas when the first unit starts short, so a zero read means a dead token, never a shortage of gas. No external call."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule._handleFinalSweep",
+    "kind": "external",
+    "expression": "charityGameOver.onFinalSweep()",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -7773,7 +7845,7 @@
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_TICKET_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork_g1150.selector, drainLevel | TICKET_SLOT_BIT, allowance) )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -7925,7 +7997,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(winner, flipCredit)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
@@ -7981,7 +8053,7 @@
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameWhaleModule.awardWhalePass_g5502.selector, lvl, trait, amount, randWord, ticketLeg ) )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -8229,7 +8301,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(id, acc.flip)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
@@ -8469,7 +8541,7 @@
     "kind": "external",
     "expression": "affiliate.affiliateBonusPointsBest_g3878( currLevel, player )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameMintStreakUtils.sol",
@@ -8485,7 +8557,7 @@
     "kind": "external",
     "expression": "affiliate.affiliateBonusPointsBest_g3878( currLevel, player )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameMintStreakUtils.sol",
@@ -8582,6 +8654,14 @@
     "expression": "payoutSteth.transfer(to, amount)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameRngModule.sol",
+    "scope": "DegenerusGameRngModule._requestLootboxRng",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE)",
+    "count": 1,
+    "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -8757,7 +8837,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(buyerId, kickback)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
@@ -8973,7 +9053,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(buyerId, kickback)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
@@ -9389,7 +9469,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(id, owed)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9485,7 +9565,7 @@
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.topUpSdgnrsAfking_g318.selector) )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9493,7 +9573,7 @@
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameWhaleModule.purchaseWhalePassForSdgnrs_g470.selector, processDay ) )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9525,7 +9605,7 @@
     "kind": "recipient-helper",
     "expression": "_tryFundAfkingSteth(element, ethValue, funding, c.meter)",
     "count": 1,
-    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9653,7 +9733,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(winner, prize)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9749,7 +9829,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(playerId, bonus)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GameBingo.sol",
@@ -9765,7 +9845,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(playerId, BINGO_FLIP)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GameBingo.sol",
@@ -10257,17 +10337,17 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.borrow",
+    "scope": "GameFacade.betDegenerette",
     "kind": "recipient-helper",
-    "expression": "_gameBorrow(id, dueLevel, amount, minEthOut)",
+    "expression": "_gamePlaceBet(id, currency, amountPerSpin, spinCount, symbol)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.purchaseDegenesisBox",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.buyDegenesisBox_g1442.selector, id, amount) )",
+    "scope": "GameFacade.borrow",
+    "kind": "recipient-helper",
+    "expression": "_gameBorrow(id, dueLevel, amount, minEthOut)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -10313,6 +10393,14 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
+    "scope": "GameFacade.claimClaimable",
+    "kind": "recipient-helper",
+    "expression": "_gameClaimWinnings(id)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
+  },
+  {
+    "path": "contracts/modules/GameFacade.sol",
     "scope": "GameFacade.claimDeadVrf",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses .GAME_GAMEOVER_MODULE .delegatecall(msg.data)",
@@ -10353,14 +10441,6 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.claimClaimable",
-    "kind": "recipient-helper",
-    "expression": "_gameClaimWinnings(id)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
-  },
-  {
-    "path": "contracts/modules/GameFacade.sol",
     "scope": "GameFacade.claimWinnings",
     "kind": "recipient-helper",
     "expression": "_gameClaimWinnings(id, amount)",
@@ -10372,6 +10452,14 @@
     "scope": "GameFacade.claimWinningsStethFirst",
     "kind": "recipient-helper",
     "expression": "_gameClaimWinningsStethFirst()",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
+  },
+  {
+    "path": "contracts/modules/GameFacade.sol",
+    "scope": "GameFacade.clearDebtNow",
+    "kind": "recipient-helper",
+    "expression": "_gameRepay(id)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -10465,6 +10553,14 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
+    "scope": "GameFacade.giveBoon",
+    "kind": "recipient-helper",
+    "expression": "_gameIssueDeityBoon(deityId, recipientId, slot)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
+  },
+  {
+    "path": "contracts/modules/GameFacade.sol",
     "scope": "GameFacade.initProtocolDeity",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data)",
@@ -10473,9 +10569,9 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.giveBoon",
-    "kind": "recipient-helper",
-    "expression": "_gameIssueDeityBoon(deityId, recipientId, slot)",
+    "scope": "GameFacade.initVrf",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses .GAME_GAMEOVER_MODULE .delegatecall(msg.data)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -10508,14 +10604,6 @@
     "scope": "GameFacade.payRecordSdgnrs",
     "kind": "recipient-helper",
     "expression": "_gamePayRecordSdgnrs(id, shareBps)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
-  },
-  {
-    "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.betDegenerette",
-    "kind": "recipient-helper",
-    "expression": "_gamePlaceBet(id, currency, amountPerSpin, spinCount, symbol)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -10577,17 +10665,9 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.purchaseOrderFor",
+    "scope": "GameFacade.purchaseDegenesisBox",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_FOILPACK_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameFoilPackModule.purchaseWithFoil.selector, id, entryQuantityScaled, boxOrder, affiliateCode, payKind ) )",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
-  },
-  {
-    "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.purchaseOrderFor",
-    "kind": "recipient-helper",
-    "expression": "_gamePurchase( id, entryQuantityScaled, boxOrder, affiliateCode, payKind )",
+    "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.buyDegenesisBox_g1442.selector, id, amount) )",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -10604,6 +10684,22 @@
     "scope": "GameFacade.purchaseLazyPass",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
+  },
+  {
+    "path": "contracts/modules/GameFacade.sol",
+    "scope": "GameFacade.purchaseOrderFor",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses .GAME_FOILPACK_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameFoilPackModule.purchaseWithFoil.selector, id, entryQuantityScaled, boxOrder, affiliateCode, payKind ) )",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
+  },
+  {
+    "path": "contracts/modules/GameFacade.sol",
+    "scope": "GameFacade.purchaseOrderFor",
+    "kind": "recipient-helper",
+    "expression": "_gamePurchase( id, entryQuantityScaled, boxOrder, affiliateCode, payKind )",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -10660,14 +10756,6 @@
     "scope": "GameFacade.registerWallet_g9539",
     "kind": "recipient-helper",
     "expression": "_gameRegisterWallet_g9539(owner, allocate)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
-  },
-  {
-    "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.clearDebtNow",
-    "kind": "recipient-helper",
-    "expression": "_gameRepay(id)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -10809,14 +10897,6 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.initVrf",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_GAMEOVER_MODULE .delegatecall(msg.data)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
-  },
-  {
-    "path": "contracts/modules/GameFacade.sol",
     "scope": "GameFacade.withdrawAfkingFunding",
     "kind": "recipient-helper",
     "expression": "_gameWithdrawAfkingFunding(id, amount)",
@@ -10845,7 +10925,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(minerId, reward)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GameMiner.sol",
@@ -10869,7 +10949,7 @@
     "kind": "recipient-helper",
     "expression": "_nextMinerAction(msg.sender, meter)",
     "count": 2,
-    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Allowance is current checkpoint sizing, not a target-specific fixed cap. Preserve gas admission, rollback, retry and parent tail. Optimization item 2 external-boundary review: Pinned protocol implementation; no independently upgradeable target. Preserve authorization, caller context and atomic failure propagation. Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback. Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Allowance is current checkpoint sizing, not a target-specific fixed cap. Preserve gas admission, rollback, retry and parent tail. Optimization item 2 external-boundary review: Pinned protocol implementation; no independently upgradeable target. Preserve authorization, caller context and atomic failure propagation. Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback. Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GameMiner.sol",
@@ -10931,17 +11011,9 @@
     "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._borrow",
     "kind": "recipient-helper",
-    "expression": "_payoutWithStethFallback(borrower, principal - ticketWei)",
-    "count": 1,
-    "review": "Owner-authorized loan: resolves the funded protocol lender, records debt and debits backing before ETH/stETH payout to the account payee."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._borrow",
-    "kind": "recipient-helper",
     "expression": "_resolveLender(principal)",
     "count": 1,
-    "review": "Owner-authorized loan: resolves the funded protocol lender, records debt and debits backing before ETH/stETH payout to the account payee."
+    "review": "Owner-authorized loan: resolves the funded protocol lender, records debt and moves lender liability to borrower AFKing and ticket pools; no ETH/stETH payout."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
@@ -11035,6 +11107,14 @@
     "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._purchaseForWithCached",
     "kind": "external",
+    "expression": "affiliate.payAffiliateCombined_g3742656( affiliateCode, buyerId, (uint256(dailyIdx) << 24) | (quote.cachedLevel + 1), ticket.ticketFreshFlip, ticket.ticketRecycledFlip, lbFreshFlip, lbRecycledFlip, uint16(cachedScore) )",
+    "count": 1,
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "external",
     "expression": "coinflip.armRecord( RECORD_KIND_BUY, buyerId, entryQuantityScaled / (4 * QTY_SCALE) )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
@@ -11045,7 +11125,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlipPair_g578( buyerId, lootboxFlipCredit, affWinnerId, affWinnerCredit )",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
@@ -11117,7 +11197,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(buyerId, questReward)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
@@ -11292,6 +11372,14 @@
     "scope": "GlamsterdamBox._boxRollBoxBoons",
     "kind": "recipient-helper",
     "expression": "_localboxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase)",
+    "count": 1,
+    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
+  },
+  {
+    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
+    "scope": "GlamsterdamCoinflip._affiliateQuestReward",
+    "kind": "recipient-helper",
+    "expression": "_handleAffiliate(id, amount, day)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
   },
@@ -11613,7 +11701,7 @@
     "kind": "external",
     "expression": "coinflip.creditFlip_g317(walletId, flipPaid)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -11677,7 +11765,7 @@
     "kind": "external",
     "expression": "game.resolveAccount_g7029(id, msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -11685,7 +11773,7 @@
     "kind": "external",
     "expression": "game.walletIdOf_g3120(msg.sender)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -11797,7 +11885,7 @@
     "kind": "external",
     "expression": "game.rngConsumerStage_g379()",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -12069,7 +12157,7 @@
     "kind": "external",
     "expression": "IGameCrapsWorkStage(_GAME).rngConsumerStage_g379()",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",
@@ -12117,7 +12205,7 @@
     "kind": "external",
     "expression": "IGameCrapsWorkStage(_GAME).registerWallet_g9539(who, allocate)",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",
@@ -12134,6 +12222,14 @@
     "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, tail, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
     "count": 1,
     "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed balance read; failure or an impossible value counts as zero, which only under-counts."
+  },
+  {
+    "path": "contracts/storage/DegenerusGameStorage.sol",
+    "scope": "DegenerusGameStorage._boundedVrfRequest",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE)",
+    "count": 1,
+    "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -12157,7 +12253,7 @@
     "kind": "external",
     "expression": "IGameMinerMaintenance(ContractAddresses.CRAPS).minerMaintenancePending_g11976()",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -12270,93 +12366,5 @@
     "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, tail, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
     "count": 1,
     "review": "EXTERNAL READ: stETH balance read with all gas above the meter floor and caller tail, 32-byte prefix and uint128 sanity limit; failure skips optional funding so source order is never guessed."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate._affiliateQuestReward",
-    "kind": "external",
-    "expression": "affiliateQuests.handleAffiliate_g2566281(id, amount, day)",
-    "count": 1,
-    "review": "Optimization item 2 external-boundary review: Pinned protocol implementation or its self-call; no independently upgradeable target. Preserve authorization, caller context, value and atomic failure propagation."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate._settleShare",
-    "kind": "recipient-helper",
-    "expression": "_affiliateQuestReward(winnerId, shareBase, day)",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate.payAffiliate",
-    "kind": "recipient-helper",
-    "expression": "_settleShare(ref, routeCode, senderId, lvl, scaledAmount, scaledAmount - playerKickback, uint24(levelDay >> 24))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests._handleAffiliate",
-    "kind": "recipient-helper",
-    "expression": "_questGameDay()",
-    "count": 1,
-    "review": "LOGICAL_DAYS: a zero day argument reads the logical-day accessor the quest identity already used; the Coinflip host overrides it with its packed local mirror. Reward recipient authorization is unchanged."
-  },
-  {
-    "path": "contracts/DegenerusQuests.sol",
-    "scope": "DegenerusQuests.handleAffiliate_g2566281",
-    "kind": "recipient-helper",
-    "expression": "_handleAffiliate(id, amount, day)",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule._requestLootboxRng",
-    "kind": "bounded-wrapper",
-    "expression": "BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE)",
-    "count": 1,
-    "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamCoinflip.sol",
-    "scope": "GlamsterdamCoinflip._affiliateQuestReward",
-    "kind": "recipient-helper",
-    "expression": "_handleAffiliate(id, amount, day)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
-  },
-  {
-    "path": "contracts/storage/DegenerusGameStorage.sol",
-    "scope": "DegenerusGameStorage._boundedVrfRequest",
-    "kind": "bounded-wrapper",
-    "expression": "BoundedCall.admitFirst(meter, VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE)",
-    "count": 1,
-    "review": "FIRST_UNIT_ADMISSION: gas-only check ahead of the coordinator call; makes no call and moves no value. A short mandatory first unit reverts InsufficientExecutionGas before the request, never after it."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate.payAffiliateCombined_g3742656",
-    "kind": "recipient-helper",
-    "expression": "_resolveReferral(code, senderId)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
-  },
-  {
-    "path": "contracts/DegenerusAffiliate.sol",
-    "scope": "DegenerusAffiliate.payAffiliateCombined_g3742656",
-    "kind": "recipient-helper",
-    "expression": "_settleShare(ref, routeCode, senderId, lvl, sumScaled, sumScaled - playerKickback, uint24(levelDay >> 24))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._purchaseForWithCached",
-    "kind": "external",
-    "expression": "affiliate.payAffiliateCombined_g3742656( affiliateCode, buyerId, (uint256(dailyIdx) << 24) | (quote.cachedLevel + 1), ticket.ticketFreshFlip, ticket.ticketRecycledFlip, lbFreshFlip, lbRecycledFlip, uint16(cachedScore) )",
-    "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   }
 ]

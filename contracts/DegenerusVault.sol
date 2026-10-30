@@ -642,7 +642,7 @@ contract DegenerusVault {
     ///         seat.
     /// @dev The token refuses mints until all 1,000 free-tranche seats are gone, then allows
     ///      them while live seats + `amount` + the game's subscriber-set length stay within
-    ///      2,000. Every subscription start burns a seat and every subscription the game
+    ///      2,000. Every non-exempt subscription start burns a seat and every subscription the game
     ///      removes from its set frees one unit, so churn reopens room to sell.
     /// @param to Seat recipient
     /// @param amount Seats to mint

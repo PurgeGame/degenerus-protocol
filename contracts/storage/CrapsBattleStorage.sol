@@ -841,7 +841,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint256 pot
     );
 
-    /// @notice The vault owner moved the battle-creator roll.
+    /// @notice The vault owner changed the battle-creator role.
     event BattleCreatorSet(address indexed account, bool allowed);
 
     /// @notice A custom battle was opened. `terms` is the packed definition — everything an
@@ -953,7 +953,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      day that never opened is seen.
     /// @param contribution What this day added, in whole FLIP. The ladder half is
     ///        `CrapsHighRollerDayOpened.mainBoostBudget`, and the two conserve the raw allocation
-    ///        exactly — the odd wei lands here.
+    ///        exactly — the odd whole-FLIP unit lands here.
     /// @param balance The pool AFTER the contribution.
     event CrapsProgressiveFunded(uint24 indexed day, uint256 contribution, uint256 balance);
 

@@ -973,9 +973,9 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
 
     /// @notice Commit `count` of account `id`'s day-pass credits (0 = the caller) to `count`
     ///         consecutive future days.
-    /// @dev ALL OR NOTHING. The whole range is checked before a single credit is spent, and any
+    /// @dev ALL OR NOTHING. Credits are debited before the range is checked day by day, and any
     ///      day in it that is already taken, already worded or not yet future takes the entire
-    ///      call down. There is no skipping, no partial application and no partial debit — a
+    ///      call down, rolling the debit back. There is no skipping, no partial application and no partial debit — a
     ///      caller who wanted the days either side of an occupied one asks for them separately.
     ///
     ///      A run this walks is bounded by `count`'s own byte, so the caller pays for exactly what
@@ -1284,7 +1284,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @dev Called by the GAME, on the daily advance that applies that word — never by a player,
     ///      which is what keeps the opening on the same crank as the word it depends on.
     ///
-    ///      NOTHING HERE REVERTS. It runs inside the advance, so a revert would not skip the
+    ///      AUTHORIZED OPENING IS FAIL-SOFT. It runs inside the advance, so a revert would not skip the
     ///      opening, it would take the whole protocol's daily crank down with it. A day already
     ///      open and a day whose word has not landed both simply do nothing, and the absence of
     ///      `CrapsBonusOpened` is how either is seen. The seat burns are already fail-soft for the
@@ -1301,8 +1301,8 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
             if (_bonus >= uint256(today) + 1) return;
             // The word is what draws every window's terms, and it is what makes the house's seat
             // payable: sDGNRS holds its FLIP entirely as coinflip backing, which only settles once
-            // the day it belongs to has resolved. The advance applies it two calls before this
-            // one, so it is here; if it ever is not, the day goes unopened rather than unadvanced.
+            // the day it belongs to has resolved. The advance applies it earlier in this daily
+            // setup, so it is here; if it ever is not, the day goes unopened rather than unadvanced.
             // Read ONCE for the whole day and hand it to all six. Having it here is also what
             // lets a missing word be a day that does not open rather than a revert: this runs
             // inside the advance, where reverting stops the protocol's crank and not just the
@@ -1518,8 +1518,8 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///      them outright, sDGNRS resolves its own self-subscription boxes — so both are handed
     ///      passes by `deliverPasses` like any other winner, and the house banks its level cut as
     ///      high passes at every level close besides. sDGNRS has no controller to call
-    ///      `applyCrapsPasses`, and the vault's own surface has no such door (only an operator its
-    ///      owner approves for wallet 1 could reach it). So the daily seat spends them, and a
+    ///      `applyCrapsPasses`; the Vault owner or its approved operator can reserve ahead through
+    ///      the Vault's player-action door. The daily seat spends any remaining credits, and a
     ///      body that arrives already paid for is not charged twice.
     ///
     ///      A HIGH pass is honoured as a high seat, exactly as the paid door builds one: the
@@ -1892,7 +1892,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
 
             // THE HIGH LANE'S COMPONENT SPLITS TWO WAYS: two parts in five to the main boost and
             // the other three to the lane that earned them. Floored on the main side, which puts
-            // the one-wei split remainder with the high lane.
+            // the one-FLIP split remainder with the high lane.
             uint256 fromHigh = (eh * _HIGH_MAIN_NUM) / _HIGH_MAIN_DEN;
             highBudget = eh - fromHigh;
             // The base rides the MAIN lane alone. Subsidising a high lane nobody played would
@@ -1906,7 +1906,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
 
     /// @dev THE SPLIT, and the one statement of it. Half the day's raw main allocation is the
     ///      ladder its five ordinary windows share; the other half is banked in the progressive.
-    ///      Floored on the ladder side, so the odd wei goes to the pool and the two ALWAYS sum
+    ///      Floored on the ladder side, so the odd FLIP goes to the pool and the two ALWAYS sum
     ///      back to the raw figure.
     function _splitMainBudget(uint256 rawMain) internal pure returns (uint256 ladder, uint256 progressive) {
         unchecked {
@@ -1925,7 +1925,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///
     ///      `768(1) + 208(4) + 20(40) + 4(400) = 4000` quarters over 1,000 draws.
     ///
-    ///      Four rungs, each an order up from the last, and each carrying about a fifth of the
+    ///      Four rungs (0.25x, 1x, 10x, 100x), each carrying about a fifth of the
     ///      budget except the top, which carries twice that. Three windows in four pay a quarter
     ///      of their share; the hundred-times rung lands about once in every 250 windows, which
     ///      across a day's five boosted windows is roughly once every fifty days. The mean being

@@ -185,10 +185,16 @@ contract MatureCompositionTest is DeployProtocol {
         assertTrue(quote.eligible, "real pass collateral admits loan");
         assertEq(quote.principal, PRINCIPAL, "requested principal");
         uint256 cash = _cash(player);
+        uint256 prepaid = game.afkingFundingOf(player);
+        uint256 custody = _cash(address(game));
+        uint256 pool = game.claimablePoolView();
         uint256 lenderFunds = _cashLedger(address(sdgnrs));
         vm.prank(player);
         game.borrow(id, due, PRINCIPAL, PRINCIPAL - quote.ticketWei);
-        assertEq(_cash(player) - cash, PRINCIPAL - quote.ticketWei, "loan pays cash once");
+        assertEq(_cash(player), cash, "borrow sends no assets");
+        assertEq(_cash(address(game)), custody, "borrow retains backing");
+        assertEq(game.afkingFundingOf(player) - prepaid, PRINCIPAL - quote.ticketWei, "loan credits prepaid once");
+        assertEq(game.claimablePoolView(), pool - quote.ticketWei, "only tickets leave claimable pool");
         assertEq(lenderFunds - _cashLedger(address(sdgnrs)), PRINCIPAL, "loan debits lender once");
         DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), id);
         assertEq(info.principal, PRINCIPAL, "loan record principal");

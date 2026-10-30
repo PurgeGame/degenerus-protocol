@@ -153,7 +153,7 @@ contract sDGNRS {
     /// @notice Earlier RNG consumers must finish before live redemptions can settle.
     error RedemptionStageBlocked();
 
-    /// @notice Live redemptions settle only through mineFlip, in order; a self-claim opens once the
+    /// @notice Live redemptions settle only through mineRun, in order; a self-claim opens once the
     ///         game is over.
     error NotGameOver();
 
@@ -654,7 +654,7 @@ contract sDGNRS {
 
     /// @dev Maximum redemption roll (percent). The resolve roll is in [21, 175]; at batch close the
     ///      MAX possible payout min(base × MAX_ROLL / 100, free backing) is reserved and held in the
-    ///      Game's redemption reserve, moved out of claimableWinnings[SDGNRS], so no concurrent claimable drain
+    ///      Game's redemption reserve, moved out of sDGNRS's Game claimable balance, so no concurrent claimable drain
     ///      can under-fund a later claim. Resolution lowers the reserve from MAX to the rolled total
     ///      (accounting only — any over-pull stays as free backing).
     uint256 private constant MAX_ROLL = 175;
@@ -797,9 +797,9 @@ contract sDGNRS {
     // =====================================================================
 
     /// @notice Crank the game miner router on behalf of sDGNRS (advance + box opens)
-    /// @dev Routes through mineFlip so sDGNRS earns the miner bounty for the work;
+    /// @dev Routes through mineRun so sDGNRS earns the miner bounty for the work;
     ///      reverts NoWork() when nothing is due.
-    /// @param gasMultiplierBps Forwarded to mineFlip unchanged; 0 selects the 1x default.
+    /// @param gasMultiplierBps Forwarded to mineRun unchanged; 0 selects the 1x default.
     function gameAdvance(uint32 gasMultiplierBps) external {
         game.mineRun(gasMultiplierBps);
     }
@@ -1088,7 +1088,7 @@ contract sDGNRS {
     // =====================================================================
 
     /// @notice Claim account `id`'s gambling-burn redemption in batch `batchId` once the game is over.
-    /// @dev In a live game mineFlip settles every redemption in batch order, so this is the
+    /// @dev In a live game mineRun settles every redemption in batch order, so this is the
     ///      post-gameover door only, and it deletes the claim under the account's wallet ID. Only
     ///      the account's key, a smurf's owner or an operator approved for the account on the GAME
     ///      may call (`id == 0` is the caller); acquired-account claims are permissionless.

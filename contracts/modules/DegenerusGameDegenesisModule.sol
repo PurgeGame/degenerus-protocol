@@ -30,7 +30,7 @@ interface IDegenesisPasses {
  * @notice Delegatecall module for the seven-day Degenesis sale: purchases, the per-cohort split
  *         and pricing at the daily request, and the miner's settlement stage.
  * @dev Runs in the Game's storage. Outside this module the sale costs the rest of the game only
- *      the credit window's timestamp compare and slot-0 reads of degenesisClosed.
+ *      the credit window's logical-day compare and slot-0 reads of degenesisClosed.
  */
 contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @notice sDGNRS AFKing funding above SDGNRS_AFKING_TARGET moved to its claimable when the

@@ -48,7 +48,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 interface IFoilWwxrp {
-    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
+    /// @notice Credit unminted WWXRP to an account (WWXRP, authorized minters only).
     function creditPrize(uint32 to, uint256 amount) external;
 }
 
@@ -801,7 +801,7 @@ abstract contract DegenerusGameFoilCore is
                 symbol
             );
         } else {
-            // WWXRP (20%): one spin; free mint, no solvency impact.
+            // WWXRP (20%): one spin; unminted prize credit, no solvency impact.
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,
                 id,

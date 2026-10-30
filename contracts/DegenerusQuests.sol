@@ -66,7 +66,7 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
  * 1. GAME (AdvanceModule) calls `rollDailyQuest()` with VRF entropy at day transition
  * 2. Slot 0 is always the fixed MINT_ETH quest: ETH-denominated ticket/lootbox spend, fresh or recycled
  * 3. Slot 1 is a weighted-random quest from the remaining quest types
- * 4. Player actions trigger handle* functions (handlePurchase, handleFlip_g217, etc.)
+ * 4. Player actions trigger handle* functions (handlePurchase_g23478, handleFlip_g217, etc.)
  * 5. Progress accumulates until target is met; each completion (primary, secondary, level) credits streak
  *
  * Progress Freshness
@@ -80,8 +80,8 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
  * -----------------------------------------------------------------------------
  * • Primary, secondary, and level quests credit the streak independently. A daily
  *   completion adds 1; a level quest adds LEVEL_QUEST_STREAK_BONUS (5). While an
- *   afking run is active, a slot-0 (primary) completion is streak-neutral locally —
- *   the afking compute-on-read owns the primary
+ *   afking run is active after its start day, a slot-0 (primary) completion is streak-neutral
+ *   locally — the afking compute-on-read owns the primary
  * • The streak contributes floor(questStreak / 2) whole activity-score points
  *   (uint16-capped, and bounded again by the activity-score cap)
  * • The secondary is gated behind the primary, so the missed-day reset stays keyed
@@ -458,8 +458,8 @@ contract DegenerusQuests is IDegenerusQuests {
         );
 
         // Seed logical day 1's daily quest pair for the same reason: the first rollDailyQuest
-        // fires only when day 1's word is delivered, and the same-day idempotency guard then
-        // holds this seeded pair for the whole day, with the first entropy roll on day two.
+        // fires when day 2's word is delivered; the seeded pair serves logical day 1 until
+        // that first entropy roll.
         // Types are fixed (no VRF exists at deploy): slot 0 is the roll's own always-MINT_ETH
         // slot; slot 1 is DEGENERETTE_ETH — the ETH degenerette bet has no level or phase gate
         // and its quest progress credits at placement, so the quest is completable before any
@@ -607,7 +607,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @notice Award quest streak bonus to a player.
      * @dev Access: GAME contract only.
-     *      Does not alter per-day completion snapshots.
+     *      Syncs per-day bookkeeping before awarding the bonus.
      *      Silently returns if amount is zero or currentDay is zero.
      *      Clamps at uint16 max on overflow.
      * @param id Wallet ID of the player to receive the streak bonus.
@@ -954,7 +954,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Streak credit for keeping a whole craps day. A HIGH seat buys the same day at the
     ///      day's own multiple — the largest single commitment the table sells — so it counts for
-    ///      five. Bounded to one credit per address per day by the table's own `_daySeated` latch.
+    ///      five. Bounded to one credit per account per day by the table's own `_daySeated` latch.
     uint16 private constant CRAPS_DAY_STREAK = 1;
     uint16 private constant CRAPS_DAY_STREAK_HIGH = 5;
 
@@ -1284,7 +1284,7 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Shared purchase-path quest legs (mint ETH/FLIP + lootbox). Modifier-less core
-    ///      behind handlePurchase (COIN-gated) and handleFoilPurchase (GAME-gated).
+    ///      behind handlePurchase_g23478 (COIN-gated) and handleFoilPurchase (GAME-gated).
     function _handlePurchase(PurchaseQuestInputs memory p, DailyQuest[QUEST_SLOT_COUNT] memory quests)
         private returns (uint256 reward, uint8 questType, uint32 streak, bool completed) {
         uint24 currentDay = _currentQuestDay(quests, p.day);
@@ -2668,9 +2668,9 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Bit position in levelQuestPlayerState marking the growth-bet quest complete.
-    ///      The word's low bits are version (0-7), progress (8-135) and the level quest's
-    ///      completed flag (136); everything above is free. rollLevelQuest bumps the shared
-    ///      version byte at the same level transition that opens the growth round, so the
+    ///      The word's low bits are version (0-23), progress (24-151) and the level quest's
+    ///      completed flag (152); the growth flag occupies bit 153. rollLevelQuest bumps the
+    ///      shared version at the same level transition that opens the growth round, so the
     ///      two quests share one lifecycle and the stale-version reset clears both flags.
     uint16 private constant LQ_GROWTH_BET_BIT = 153;
 
@@ -2717,7 +2717,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      funding — participation as real as a manual mint, just never routed through
     ///      the units tally — and a funded seat clears the loyalty bar besides. The level
     ///      quest proper keeps the plain gate. PARIMUTUEL's one-bet-per-round gate is the
-    ///      real idempotence guarantee here — bit 137 only short-circuits a repeat within
+    ///      real idempotence guarantee here — bit 153 only short-circuits a repeat within
     ///      the same version epoch until the next level-quest progress event rewrites the
     ///      word and clears it.
     /// @param id The bettor's wallet ID, as `marketBetGates` returned it in the same call

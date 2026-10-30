@@ -50,7 +50,7 @@ interface IDegenerusVaultOwner {
 }
 
 /**
- * @title DegenerusDonations (GNRUS)
+ * @title GNRUS
  * @notice Soulbound GNRUS token with proportional burn-for-ETH/stETH redemption
  *         and per-level sDGNRS-weighted governance controlling GNRUS distribution.
  * @dev GNRUS is minted entirely to this contract at deploy. Each level, the winning

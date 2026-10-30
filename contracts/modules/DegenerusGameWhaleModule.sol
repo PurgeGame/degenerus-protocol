@@ -827,7 +827,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 basePrice = _deityPassBasePrice(deityPassSales);
 
         // Apply discount boon if active (tier 1=10%, 2=20%, 3=35%). Boons are keyed by the wallet
-        // ID the mint word carries; an unregistered buyer reads the empty ID-0 lanes.
+        // ID resolved above; an unregistered buyer reads the empty ID-0 lanes.
         uint256 totalPrice = basePrice;
         BoonPacked storage bpDeity = boonPacked[existingId];
         uint256 s1Deity = bpDeity.slot1;
@@ -1002,7 +1002,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         for (uint256 i = 0; i < quantity; ) {
             unchecked {
                 // Each step's share is <= remaining, and the product fits: the pool is a
-                // bps slice of the 1e24 supply, far below 2^256 / PPM_SCALE.
+                // bps slice of the 1e24 supply, far below 2^256 / DGNRS_WHALE_MINTER_PPM.
                 remaining -= (remaining * DGNRS_WHALE_MINTER_PPM) / DGNRS_WHALE_REWARD_PPM_SCALE;
                 ++i;
             }

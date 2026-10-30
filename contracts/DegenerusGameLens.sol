@@ -878,10 +878,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                              LOANS                                   |
       +======================================================================+*/
 
-    /// @notice What `borrow(id, dueLevel, amount, ...)` would pay now and whether every gate
+    /// @notice What `borrow(id, dueLevel, amount, ...)` would credit now and whether every gate
     ///         except the caller's ownership passes. Mirrors the game's quote and lender selection.
     ///         `maxPrincipal` is the full quote, `principal` that capped at `amount`, and
-    ///         `ticketWei` the part of `principal` paid as tickets; the rest is ETH.
+    ///         `ticketWei` the part of `principal` paid as tickets; the rest is prepaid AFKing credit.
     function previewBorrow(address game, uint32 id, uint24 dueLevel, uint256 amount)
         external view returns (LoanQuote memory q)
     {
@@ -921,7 +921,16 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         q.lenderId = _lenderMirror(game, q.principal);
         q.eligible = id > GNRUS_WALLET_ID && !over && q.lenderId != 0
             && q.principal >= LOAN_MIN_PRINCIPAL && _borrowableMirror(game, id)
-            && !IDegenerusGameLensSource(game).livenessTriggered();
+            && !_loanDailyLateMirror(game) && !IDegenerusGameLensSource(game).livenessTriggered();
+    }
+
+    /// @dev Read the Game's completion clock, including its deployment-time initialization.
+    function _loanDailyLateMirror(address game) private view returns (bool) {
+        uint256 slot;
+        uint256 offset;
+        assembly { slot := lastDailyCompletedAt.slot offset := lastDailyCompletedAt.offset }
+        uint48 completedAt = uint48(_sload(game, bytes32(slot)) >> (offset << 3));
+        return block.timestamp >= uint256(completedAt) + LOAN_LATE_WINDOW;
     }
 
     /// @notice The open loan of `id` and what repaying it costs at the current level; zero when

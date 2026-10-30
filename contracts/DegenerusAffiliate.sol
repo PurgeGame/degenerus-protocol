@@ -965,7 +965,6 @@ contract DegenerusAffiliate {
     }
 
     /// @notice Read both inputs to a score-proportional affiliate claim in one call.
-    /// @dev The late selector leaves the existing hot-entry comparison order intact.
     function affiliateScoreAndTotal_g4013(uint24 lvl, uint32 id) external affiliateContext view
         returns (uint256 score, uint256 total)
     {

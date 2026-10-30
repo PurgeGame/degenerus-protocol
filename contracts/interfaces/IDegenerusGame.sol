@@ -60,6 +60,7 @@ interface IDegenerusGame {
     function mineRun(uint32 gasMultiplierBps) external;
 
     /// @notice Borrow up to `amount` against far-future tickets, due when the game enters `dueLevel`.
+    /// @dev Non-ticket principal credits account AFKing; `minEthOut` is the minimum credit.
     function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external;
     /// @notice Repay an open loan before its due level; excess ETH funds the account's AFKing.
     function clearDebtNow(uint32 id) external payable;
@@ -386,7 +387,7 @@ interface IDegenerusGame {
     function retryRng() external;
 
     /// @notice Mint mid-day RNG credit to a native ETH donor.
-    /// @dev Access: ADMIN only. A donor's mineFlip spends credit on the mid-day request when
+    /// @dev Access: ADMIN only. A donor's mineRun spends credit on the mid-day request when
     ///      pending work sits below the threshold; the subscription native ETH floor still applies.
     ///      A donation is a paying action: the donor is registered (existing ID or a new one)
     ///      and the ID is returned to Admin.
@@ -580,7 +581,7 @@ interface IDegenerusGame {
     ///      account's; the FLIP is burned from the account's payee (wallet balance, then the
     ///      payee's settled coinflip winnings for a shortfall).
     /// @param id Account receiving the tickets (0 = caller).
-    /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
+    /// @param entryQuantityScaled Nonzero scaled entry quantity (400 units = 1 whole ticket).
     /// @custom:reverts NotApproved If the caller may not act for `id`.
     /// @custom:reverts E If `id` is unallocated.
     function redeemFlip(
@@ -617,7 +618,7 @@ interface IDegenerusGame {
     function claimWhalePass(uint32 id) external;
 
     /// @notice Permissionlessly resolve account `id`'s foil match claim for (`day`, `ticketIndex`).
-    /// @dev Credits the account by ID; a WWXRP box-spin prize mints to the account's payee. A tuple
+    /// @dev Credits the account by ID, including unminted WWXRP box-spin prizes. A tuple
     ///      pays at most once.
     /// @param id Pack owner (0 = caller; otherwise allocated).
     /// @param day Draw day of the claim.
@@ -744,7 +745,7 @@ interface IDegenerusGame {
     /// @param id Subscriber account (0 = caller).
     /// @param useTickets Deliver tickets (true) or lootboxes (false).
     /// @param dailyQuantity Daily delivery quantity, 1..8; 0 cancels the subscription.
-    /// @param seatId Seat serial to burn when this call starts a new run (ignored otherwise).
+    /// @param seatId Seat serial to burn for a new non-exempt run (ignored otherwise).
     /// @custom:reverts RngLocked During the RNG freeze window, or for a new run before today's
     ///                 subscriber pass completed.
     /// @custom:reverts GameOver Once the liveness trigger fires.

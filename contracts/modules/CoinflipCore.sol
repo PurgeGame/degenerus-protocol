@@ -38,7 +38,7 @@ import {RngTags} from "../libraries/RngTags.sol";
  *      - Manages the daily coinflip system with a flat recycle bonus
  *      - Integrates with FLIP for burn/mint operations
  *      - Holds the all-time record pool (flip / degenerette spin / lootbox deposit /
- *        ticket buy) and quest rewards
+ *        ticket buy / dice run) and quest rewards
  *      - Seeds the initial FLIP emission as flip stakes (200k/day, rounds 2-21, to
  *        VAULT and sDGNRS); arms sDGNRS perpetual auto-rebuy after the seed window
  *
@@ -66,7 +66,7 @@ interface IFLIP {
 
 /// @notice Interface for WWXRP contract methods used by Coinflip.
 interface IWWXRP {
-    /// @notice Mint WWXRP consolation prize to a player on coinflip loss.
+    /// @notice Credit unminted WWXRP consolation to an account on coinflip loss.
     function creditPrize(uint32 to, uint256 amount) external;
 }
 
@@ -488,7 +488,7 @@ abstract contract CoinflipCore {
     ///      account (`key`, wallet `id`, 0 = look it up). An authorized deposit is funded
     ///      claimable-first and burns `payee`'s wallet FLIP for whatever the settled winnings did
     ///      not cover; a gift burns the caller's FLIP for the whole principal. Any loss
-    ///      consolation of the claim walk mints to `payee`.
+    ///      consolation of the claim walk credits wallet `id` in WWXRP.
     function _depositCoinflip(
         address key,
         address payee,
@@ -596,7 +596,7 @@ abstract contract CoinflipCore {
       |                    CLAIM FUNCTIONS                                   |
       +======================================================================+*/
 
-    /// @notice Claim account `id`'s coinflip winnings (exact amount).
+    /// @notice Claim up to `amount` of account `id`'s coinflip winnings.
     /// @dev Processes resolved days and claims from claimableStored (accumulated from
     ///      settlements, take-profit, and mode changes). Auto-rebuy carry is never exposed.
     ///      The FLIP mints to the account's payee.
@@ -700,8 +700,8 @@ abstract contract CoinflipCore {
         emit CoinflipClaimState(player, s.claimableStored, s.autoRebuyCarry, s.lastClaim);
     }
 
-    /// @dev Internal claim exact amount for the account keyed `key` (wallet `id`, 0 = look it
-    ///      up); FLIP and any loss consolation mint to `payee`. A wallet with no ID has no stake
+    /// @dev Internal claim up to `amount` for the account keyed `key` (wallet `id`, 0 = look it
+    ///      up); FLIP mints to `payee`, while loss consolation credits wallet `id`. A wallet with no ID has no stake
     ///      and claims nothing.
     function _claimCoinflipsAmount(
         address key,

@@ -414,7 +414,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
     /// @return wwxrpOut The spin's whole-token WWXRP payout, returned for the box entry's WWXRP lane (the
-    ///         caller mints once).
+    ///         caller credits once).
     function resolveWwxrpSpinFromBox(
         uint32 playerId,
         uint256 stake,
@@ -527,8 +527,8 @@ interface IGameAfkingModule {
     function decurse(uint32 id) external;
 
     /// @notice Deity-gated smite: add a saturating curse stack to account `smiteeId` for 200 FLIP
-    ///         burned from the caller, who must own pass `deityId` (0 = caller; otherwise
-    ///         allocated, else E).
+    ///         burned from the caller, who must own NFT `deityId` (symbol 0..31).
+    ///         `smiteeId` is 0 for the caller, otherwise an allocated account ID.
     function smite(uint256 deityId, uint32 smiteeId) external;
 }
 
@@ -563,7 +563,7 @@ interface IDegenerusGameFoilPackModule {
     ///      a claimable win. Claims are valid on the draw day and the following day,
     ///      revert with RngLocked under the daily RNG lock, and close when terminal
     ///      settlement triggers.
-    ///      Raw msg.data target of Game.claimFoilMatch; WWXRP box-spin prizes go to the payee.
+    ///      Raw msg.data target of Game.claimFoilMatch; unminted WWXRP box-spin prizes credit the account ID.
     /// @param id Pack owner the win credits to (0 = caller; otherwise allocated, else E).
     /// @param day The draw day to claim against.
     /// @param ticketIndex Which of the pack's four tickets to claim (0-3).

@@ -123,7 +123,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev Activity score at the curve knee K (seg-A end; deity pass theoretical max).
+    /// @dev Activity score at the curve knee K (seg-A end).
     uint16 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
 
     /// @dev Minimum ROI in basis points (90%, score 0).
@@ -924,7 +924,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     /// @dev Uses the 5% reel rig, shared table and 70–130% activity target before token rounding.
     ///      Stake is in 10^18 sub-units per WWXRP. The final payout converts to whole
     ///      WWXRP with a minimum of one for a positive sub-token win; a loss stays zero.
-    ///      Returned for the calling box or foil entry to mint its WWXRP lane once.
+    ///      Returned for the calling box or foil entry to credit its WWXRP lane once.
     function resolveWwxrpSpinFromBox(
         uint32 playerId,
         uint256 stake,
@@ -952,10 +952,10 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 payout = rawPayout / TOKEN_MATH_SCALE;
         if (payout == 0 && rawPayout != 0) payout = 1;
 
-        // Returned, not minted: the caller sums every WWXRP lane in the entry and mints once.
+        // Returned for the caller to sum every WWXRP lane in the entry and credit once.
         wwxrpOut = payout;
 
-        // One self-contained record: the single reel + WWXRP-minted payout (no ETH split).
+        // One self-contained record: the single reel + WWXRP payout before prize credit (no ETH split).
         emit BoxSpin(
             playerId,
             betId,

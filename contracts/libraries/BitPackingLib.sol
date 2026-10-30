@@ -39,7 +39,7 @@ pragma solidity 0.8.38;
  *      [144-145] WHALE_PASS_TYPE_SHIFT       - Pass type (2 bits: 0=none, 1=lazy/10-lvl, 3=whale/100-lvl)
  *      [146]     SEAT_CLAIMED_SHIFT          - AFKing seat mint latch (1 bit)
  *      [147]     SMURF_FLAG_SHIFT            - Smurf account flag (1 bit; written only by createSmurf)
- *      [148-171] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
+ *      [148-171] MINT_STREAK_LAST_COMPLETED_SHIFT - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
  *      [172]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
  *      [173-196] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
  *      [197-202] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
@@ -95,8 +95,8 @@ library BitPackingLib {
     ///         when the seat is minted to the account's payee; one free-tranche
     ///         seat per account, ever. Passes that are won (the whale-pass claim
     ///         lane) or conferred (a deity buyer's affiliate) never set it; the
-    ///         Vault and sDGNRS genesis deities have it set at construction with
-    ///         no seat. This bit is the sole once-per-account guard — the token
+    ///         Vault and sDGNRS genesis deities have it set by initialization without
+    ///         a free-tranche mint. This bit is the sole once-per-account guard — the token
     ///         caps the tranche at 1,000 but keeps no per-account record of its own.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 146;
 

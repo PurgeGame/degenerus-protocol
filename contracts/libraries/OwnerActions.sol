@@ -14,7 +14,7 @@ import {DegenerusDeityPass} from "../DegenerusDeityPass.sol";
 import {DegenerusRecordBounty} from "../DegenerusRecordBounty.sol";
 import {AFKingSubscriptionToken} from "../AFKingSubscriptionToken.sol";
 
-/// @notice Immutable owner call surface. No token custody operations or executor self-calls.
+/// @notice Immutable owner call surface. No executor escrow movements or executor self-calls.
 /// @dev Target-side conditions and the Vault's nested player allowlist still apply.
 library OwnerActions {
     function isAllowed(address target, bytes4 selector) internal pure returns (bool) {

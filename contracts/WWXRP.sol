@@ -460,7 +460,7 @@ contract WWXRP {
     ///         pinned game contracts (future games).
     mapping(address => bool) public trustedMinter;
 
-    /// @notice Whole-number multiplier on every WWXRP mint the pinned game contracts request
+    /// @notice Whole-number multiplier on WWXRP mints and prize credits the pinned game contracts request
     ///         (Game and its modules, Coinflip, Jackpots): 1 = 1x, 0 = no game minting, no
     ///         upper bound. Set by the vault owner. Trusted-minter apps, vault mints and this
     ///         contract's own draw payouts are not scaled.
@@ -675,9 +675,9 @@ contract WWXRP {
     }
 
     /// @notice Set the scale applied to WWXRP the game prints (vault owner only).
-    /// @dev 1 = 1x (the deploy default), 0 stops game minting, no upper bound. Applies to mints
+    /// @dev 1 = 1x (the deploy default), 0 stops game awards, no upper bound. Applies to awards
     ///      requested by the Game and its modules, Coinflip and Jackpots; the game's own
-    ///      events keep reporting the unscaled amount, the Transfer shows what minted. The
+    ///      events keep reporting the unscaled amount; Transfer and PrizeCredited report the scaled award. The
     ///      scale applies when a producer awards a mint or claimable credit. Withdrawals do
     ///      not rescale earned credits. A prize awarded while scale is 0 pays nothing; an
     ///      unsettled BAF consolation uses the scale when its claim credits the account.

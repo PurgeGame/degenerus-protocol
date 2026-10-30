@@ -952,7 +952,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     /// @dev An owed word's uncreated weight in QTY_SCALE units, snap-adjusted exactly as the
-    ///      ticket drain applies it on first touch (_processOneTicketEntry).
+    ///      ticket drain applies it on first touch (_snapOwedPacked).
     function _deadWeight(uint80 packed, uint8 shift) private pure returns (uint256) {
         uint256 weight = uint256(uint32(packed >> 8)) * QTY_SCALE + uint8(packed);
         // Only the scaled weight is needed here. The drain's snap helper repacks the
@@ -1135,9 +1135,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Detect what is in flight and re-issue on the new coordinator. A re-issue is the same
         // request sent again: rngRequestTime is left as it was, so the request keeps the day it
         // was first issued for and the VRF-dead window keeps running from the original send.
-        // If the new coordinator also stalls, the vault owner's one retry is
-        // the remaining recourse, and a request unanswered _VRF_DEAD_TIMEOUT from its original
-        // send reaches the VRF-dead ending.
         // One re-issue site. Mid-day: only an active unanswered request; delivery does not clear
         // its ID, and a delivered word awaiting miner publication must remain unchanged.
         // Daily in flight (rngLockedFlag stays true): only a word not yet delivered. The swap

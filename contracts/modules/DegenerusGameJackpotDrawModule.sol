@@ -808,6 +808,6 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
 }
 
 interface IWwxrpMintPrize {
-    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
+    /// @notice Credit unminted WWXRP to an account (WWXRP, authorized minters only).
     function creditPrize(uint32 to, uint256 amount) external;
 }

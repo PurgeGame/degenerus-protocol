@@ -137,7 +137,7 @@ interface IsDGNRS {
     /// @notice Close the open redemption batch: price it, take its FLIP escrow and reserve its MAX
     ///         payout. Game only, inside the transaction that sends the next live (daily or
     ///         mid-day) VRF request; the ending's request closes nothing.
-    /// @dev Never reverts. An empty batch, or a close while another batch settles, is a no-op.
+    /// @dev An empty batch, or a close while another batch settles, is a no-op.
     /// @param gameClaimable sDGNRS's claimable balance on the Game.
     /// @return pull Value the Game moves from that claimable into its redemption reserve.
     function closeRedemptionBatch_g165517(uint256 gameClaimable) external returns (uint256 pull);

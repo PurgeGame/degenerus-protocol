@@ -152,6 +152,8 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         bytes32 rootBank = game.extsload_g2807007(GameSlotKeys.balances(root));
         bytes32 childBank = game.extsload_g2807007(GameSlotKeys.balances(child));
         IdReviewSeller(payable(owner)).borrow(game, coinflip, operator, root, child);
+        // Preserve the intended default and the pre-loan balances under prepaid loan funding.
+        vm.prank(owner); game.withdrawAfkingFunding(root, q.principal - q.ticketWei);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), address(new IdReviewSeizer()).code);
         IdReviewSeizer(address(game)).seizeDue(1);

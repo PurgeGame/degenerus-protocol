@@ -66,8 +66,9 @@ struct PlayerQuestView {
 ///      has no player entry points and resolves no address (level-quest eligibility reads the
 ///      ID's mint word from the Game). Wallet ID 0 means
 ///      "no wallet". Callers always pass a nonzero ID they hold (Game modules, Coinflip's
-///      forward word, FLIP after registration, Affiliate's stored IDs, Parimutuel's
-///      `marketBetGates`). No handler reverts on any ID, and a view of an untouched ID
+///      Game registry lookup, FLIP after registration, Affiliate's stored IDs, Parimutuel's
+///      `marketBetGates`). Handlers do not reject unallocated IDs themselves; caller checks
+///      still apply. A view of an untouched ID
 ///      (including 0) returns its zero/default result.
 interface IDegenerusQuests {
     /// @notice Rolls the daily quest for a given day using provided entropy.
@@ -242,7 +243,7 @@ interface IDegenerusQuests {
     ///      Idempotent (a no-op unless the player is currently afking). Hands back the
     ///      Game-computed earned streak and anchors the manual system at the reward endpoint;
     ///      no day a run covers is billed as missed.
-    ///      Revert-free for any input (it runs on mineFlip sub-ending paths).
+    ///      Revert-free for any input (it runs on mineRun sub-ending paths).
     /// @param id Wallet ID of the subscriber whose run is ending
     /// @param earnedStreak The run's live streak at the reward endpoint, Game-computed
     /// @param afkingCoveredDay The run's reward endpoint (its last delivered day)

@@ -89,7 +89,7 @@ abstract contract GamePurchaseBox is DegenerusGameStorage {
         if (distress) word |= LB_DISTRESS;
 
         // Biggest-box bounty: a CUSTOM only, and its per-box size, never the order's total.
-        // Presets are excluded outright — the bounty marks deliberately going big, and a large
+        // Presets are excluded outright — the bounty marks deliberately going big, and a large preset
         // at a milestone price would clear the floor on its own. With presets out and the
         // candidate a single box, no quantity of small buys can reach it.
         if ((boxOrder >> BO_KIND_SHIFT) & 3 == BO_KIND_CUSTOM) {

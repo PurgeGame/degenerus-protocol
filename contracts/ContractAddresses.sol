@@ -92,15 +92,12 @@ library ContractAddresses {
         address(0x2e234DAe75C793f67A35089C9d99245E1C58470b);
     address internal constant GNRUS =
         address(0x8227724C33C1748A42d1C1cD06e21AB8Deb6eB0A);
-    // Foil pack module — appended, so it shifts no prior address (AFKING_SUB_TOKEN follows).
     address internal constant GAME_FOILPACK_MODULE =
         address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
     address internal constant AFKING_SUB_TOKEN =
         address(0x883816205341a6ba3C32AE8dAdCEbDD9d59BC2C4);
-    // Growth-bet parimutuel — appended, so it shifts no prior address.
     address internal constant PARIMUTUEL =
         address(0xe916cadb12C49389E487eB1e8194B1459b29B0eC);
-    // Record-bounty trophy — appended, so it shifts no prior address.
     address internal constant RECORD_BOUNTY =
         address(0x83898D1F3C03189fF03B471dd3456908FCA4423d);
     address internal constant CREATOR =
@@ -112,12 +109,9 @@ library ContractAddresses {
     // network — L1 ReverseRegistrar on mainnet, L2ReverseRegistrar on Base.
     address internal constant ENS_REVERSE_REGISTRAR =
         address(0x0000000000000000000000000000000000000000);
-    // Craps table — appended, so it shifts no prior address. FLIP authorizes this
-    // address for mintForGame_g152734 (payouts) and burnCoin_g27673 (stakes), the same pair of
-    // sinks every other FLIP game uses. Like every constant above it, the value
-    // committed here is the Foundry deterministic-test address (DEPLOY_ORDER
-    // nonce N+29), so a clean checkout tests craps unpatched; the deploy
-    // pipeline overwrites it with the real prediction.
+    // Craps table: FLIP authorizes burnCoin_g27673 and burnCoinForCraps_g292454
+    // for stakes; payouts use Coinflip credits. The deployment pipeline patches
+    // this deterministic-test address with the real prediction.
     address internal constant CRAPS =
         address(0xE194aA6b80fFd71989dd196c7f84fa624b8d7D5d);
     // Dice engine: hosted by CrapsBattle in the combined (Glamsterdam) profile, where this alias
@@ -127,7 +121,6 @@ library ContractAddresses {
     // Jackpot lifecycle entries share the CrapsBattle host and storage; no separate deployment.
     address internal constant JACKPOT_BATTLE =
         address(0xE194aA6b80fFd71989dd196c7f84fa624b8d7D5d);
-    // State-engine modules append to the CREATE sequence; all prior identities stay fixed.
     address internal constant GAME_TICKET_MODULE =
         address(0x3D7Ebc40AF7092E3F1C81F2e996cbA5Cae2090d7);
     address internal constant GAME_MINER_MODULE =
@@ -138,6 +131,5 @@ library ContractAddresses {
         address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
     address internal constant GAME_DEGENESIS_MODULE =
         address(0x03A6a84cD762D9707A21605b548aaaB891562aAb);
-    // Owner escrow appended after all existing CREATEs.
     address internal constant OWNER_GOVERNANCE = address(0x688B74D1C43f65C2236A81bdaADF85671Dfe8072);
 }

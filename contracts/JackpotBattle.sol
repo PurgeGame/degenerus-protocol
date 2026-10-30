@@ -38,7 +38,7 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
     event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, uint32 indexed playerId, uint256 units, uint32 chips);
 
     /// @notice Open a custom battle with validated immutable terms.
-    /// @dev The creator roll is checked FIRST so a granted creator never pays for the
+    /// @dev The creator role is checked FIRST so a granted creator never pays for the
     ///      cross-contract call; the DGVE governance executor always qualifies, so the authority
     ///      behind the grant can never be locked out of its own table.
     function createBattle(

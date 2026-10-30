@@ -184,7 +184,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /// @param id Subscriber account (0 = caller).
     /// @param useTickets Mint mode — true = tickets, false = lootboxes.
     /// @param dailyQuantity Daily buy units, 1..8 (upsert); 0 cancels.
-    /// @param seatId Seat serial burned when this call starts a new run (ignored otherwise).
+    /// @param seatId Seat serial burned for a new non-exempt run (ignored otherwise).
     function subscribe(
         uint32 id,
         bool useTickets,

@@ -294,7 +294,7 @@ contract DegenerusAdmin {
     /// @param proposalId The proposal voted on.
     /// @param voter The ordinary wallet ID casting the vote.
     /// @param approve True to approve, false to reject.
-    /// @param weight The voter's sDGNRS weight (wei) applied to the vote.
+    /// @param weight The voter's sDGNRS weight in raw 12-decimal units, after whole-token truncation.
     event VoteCast(
         uint256 indexed proposalId,
         uint32 indexed voter,

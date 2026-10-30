@@ -145,7 +145,7 @@ contract LoanAccountingHandler is Test {
     uint256 public constant N_OPS = 10;
     /// @dev Random-phase weights: index = seed % 14.
     bytes internal constant WEIGHTED = hex"0001010102030304040506070809";
-    /// @dev Forced opening: seed, cash borrow, warp to day 20 exactly (still cash), warp past it,
+    /// @dev Forced opening: seed, credit borrow, warp to day 20 exactly (still all credit), warp past it,
     ///      two late borrows, repay, cover one loan, then settle every remaining due level.
     bytes internal constant PLAN = hex"000108010801010203040404";
 
@@ -197,7 +197,7 @@ contract LoanAccountingHandler is Test {
     uint256[N_OPS] public opCalls;
     uint256 public ghost_borrows;
     uint256 public ghost_ticketBorrows;
-    uint256 public ghost_day20Borrows; // purchase phase, exactly 20 days in: still all cash
+    uint256 public ghost_day20Borrows; // purchase phase, exactly 20 days in: still all credit
     uint256 public ghost_jackpotBorrows;
     uint256 public ghost_vaultLoans;
     uint256 public ghost_smurfLoans;
@@ -302,6 +302,9 @@ contract LoanAccountingHandler is Test {
         uint256 minEthOut;
         bool eligible;
         uint256 cashBefore;
+        uint256 prepaidBefore;
+        uint256 custodyBefore;
+        uint256 poolBefore;
         uint256 fundsVault;
         uint256 fundsSdgnrs;
         uint256 next;
@@ -352,6 +355,9 @@ contract LoanAccountingHandler is Test {
             && c.principal >= MIN_PRINCIPAL && c.lender != 0 && c.principal - c.ticketWei >= c.minEthOut;
 
         c.cashBefore = _cash(c.borrower);
+        (, c.prepaidBefore) = lens.accountBalances(address(game), c.id);
+        c.custodyBefore = _cash(address(game));
+        c.poolBefore = uint256(vm.load(address(game), bytes32(uint256(1)))) >> 128;
         c.fundsVault = _funds(VAULT_ID);
         c.fundsSdgnrs = _funds(SDGNRS_ID);
         c.next = game.nextPrizePoolView();
@@ -374,7 +380,10 @@ contract LoanAccountingHandler is Test {
 
     function _checkBorrow(BorrowCtx memory c) internal {
         uint256 price = PriceLookupLib.priceForLevel(uint24(c.cl));
-        if (_cash(c.borrower) != c.cashBefore + c.principal - c.ticketWei) _flag(3, "borrower cash != principal - ticket part");
+        if (_cash(c.borrower) != c.cashBefore || _cash(address(game)) != c.custodyBefore) _flag(3, "borrow moved custody");
+        (, uint256 prepaid) = lens.accountBalances(address(game), c.id);
+        if (prepaid != c.prepaidBefore + c.principal - c.ticketWei) _flag(3, "incorrect AFKing credit");
+        if ((uint256(vm.load(address(game), bytes32(uint256(1)))) >> 128) != c.poolBefore - c.ticketWei) _flag(3, "incorrect borrow pool delta");
         if (_owedEntries(c.writeKey, c.id) != c.entries + c.ticketWei / price * 4) _flag(3, "ticket part entries");
         uint256 toFuture = c.ticketWei / 10;
         if (game.nextPrizePoolView() != c.next + c.ticketWei - toFuture) _flag(3, "ticket part next-pool share != 90%");

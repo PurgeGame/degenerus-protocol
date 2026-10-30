@@ -448,6 +448,7 @@ abstract contract GamePurchase is
         _payoutWithStethFallback(payee, amount);
     }
 
+    /// @notice Principal funds `ticketWei` of tickets and credits the remainder to account AFKing.
     event LoanTaken(uint32 indexed accountId, address indexed borrower, uint32 indexed lenderId,
         uint256 principal, uint24 dueLevel, uint256 ticketWei);
     event LoanRepaid(uint32 indexed accountId, address indexed payer, uint256 owed);
@@ -458,11 +459,14 @@ abstract contract GamePurchase is
     ///         takes the account as a sale does: a main with its family, burning the borrower
     ///         wallet's native sDGNRS. A game that ends first with VRF alive settles the loan the
     ///         same way before the ending's draw, repaying at the price `clearDebtNow` would charge then.
-    ///         A main with more than five smurfs cannot borrow; smurfs can. Pays ETH first and
-    ///         stETH for any shortfall. More than 20 days into a level's purchase phase, half the
+    ///         A main with more than five smurfs cannot borrow; smurfs can. Credits the non-ticket
+    ///         principal to the account's prepaid AFKing balance; no ETH or stETH leaves the Game.
+    ///         New loans close 48 hours after the last completed day (deployment before the first),
+    ///         until another day completes. Repayment and settlement remain available.
+    ///         More than 20 days into a level's purchase phase, half the
     ///         principal arrives as whole tickets at the live ticket level, priced and pooled like
     ///         a ticket buy. The principal is the quote capped at `amount`; `minEthOut` bounds the
-    ///         ETH part.
+    ///         minimum credit.
     function _borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) internal {
         if (id == 0) id = _walletIdOf(msg.sender);
         _requireAllocated(id);
@@ -470,7 +474,8 @@ abstract contract GamePurchase is
         address borrower = _payee(element);
         if (borrower != msg.sender) revert NotApproved();
         if (id <= GNRUS_WALLET_ID || _isAcquired(id) || uint96(_loans[id]) != 0) revert E();
-        if (gameOver || _livenessTriggered()) revert E();
+        if (gameOver || _livenessTriggered()
+            || block.timestamp >= uint256(lastDailyCompletedAt) + LOAN_LATE_WINDOW) revert E();
         uint256 family = 1;
         if (uint32(element >> 160) == 0) {
             family += uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
@@ -499,7 +504,9 @@ abstract contract GamePurchase is
             _addPrizeContribution(uint128(ticketWei - futureShare), uint128(futureShare));
         }
         emit LoanTaken(id, borrower, lender, principal, dueLevel, ticketWei);
-        _payoutWithStethFallback(borrower, principal - ticketWei);
+        // The helper restores the credited liability after the lender principal debit above:
+        // net claimablePool change is -ticketWei, with all backing retained in the Game.
+        _creditAfkingValue(id, principal - ticketWei);
     }
 
     /// @notice Repay an open loan before the game enters its due level. Owed: principal plus 5%

@@ -52,9 +52,9 @@ interface IDegenerusCoinJackpotView {
     function bafDrawWinner(uint256 rngWord) external view returns (uint32 winnerId);
 }
 
-/// @notice WWXRP mint surface for skipped-bracket consolation prizes.
+/// @notice WWXRP prize-credit surface for skipped-bracket consolation prizes.
 interface IWwxrpMintPrize {
-    /// @notice Mint WWXRP to a recipient.
+    /// @notice Credit unminted WWXRP to a recipient account.
     function creditPrize(uint32 to, uint256 amount) external;
 }
 
@@ -114,7 +114,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     event BafSkipped(uint24 indexed lvl, uint24 day);
 
     /// @notice Emitted when the WWXRP consolation for a skipped bracket is claimed.
-    /// @param player Key of the score owner account; its payee receives the mint (claims are
+    /// @param player Wallet ID of the score owner account credited with unminted WWXRP (claims are
     ///        permissionless).
     /// @param lvl Skipped BAF bracket level.
     /// @param score Frozen bracket score consumed by the claim (FLIP-denominated).
@@ -172,7 +172,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Core game contract for jackpot resolution and player queries (constant).
     IDegenerusGame internal constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
 
-    /// @notice WWXRP token minted as skipped-bracket consolation (constant).
+    /// @notice WWXRP token credited as skipped-bracket consolation (constant).
     IWwxrpMintPrize internal constant wwxrp = IWwxrpMintPrize(ContractAddresses.WWXRP);
 
 
@@ -316,7 +316,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @notice Opens a bracket's resolution: winning-flip credit claimed from today on belongs
     ///         to the next bracket.
-    /// @dev The name keeps this selector dispatching after Coinflip's per-claim entries.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function beginBafOn(uint24 day) external onlyGame {
         lastBafResolvedDay = day;
@@ -424,7 +423,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      as-is — no new writes ever target a past bracket, so clearing
     ///      would only burn gas. Sets the bracket's skipped flag: the frozen
     ///      player scores become claimable as WWXRP consolation.
-    ///      The name keeps this selector dispatching after Coinflip's per-claim entries.
     /// @param lvl Level whose BAF was skipped.
     /// @param today The Game's current logical day.
     /// @custom:access Restricted to game contract via onlyGame modifier.
@@ -445,20 +443,19 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+*/
 
     /// @notice Claim the WWXRP consolation of account `id` for a skipped BAF bracket.
-    /// @dev Permissionless: anyone may execute, but the mint always goes to
-    ///      the score owner's payee — no value can move from a non-consenting
-    ///      party. The score is keyed by the owner's Game wallet ID; a wallet without
-    ///      one holds no score. `id == 0` is the caller (ID from Game `walletIdOf`, paid
-    ///      to the caller); any other ID resolves its payee through Game
-    ///      `resolveAccount` (authorization is not required). Pays only when the bracket
+    /// @dev Permissionless: anyone may execute, but unminted WWXRP always credits the
+    ///      score owner's account ID — no value can move from a non-consenting party.
+    ///      The score is keyed by the owner's Game wallet ID; a wallet without
+    ///      one holds no score. `id == 0` resolves the caller's ID through Game
+    ///      `walletIdOf_g3120`; other IDs are used directly without a payee lookup or
+    ///      authorization check. Pays only when the bracket
     ///      is marked skipped and the score
     ///      belongs to the bracket's live epoch (a resolved bracket bumped its
     ///      epoch, so its scores read stale and pay nothing). Zeroing only the
     ///      total is the claim flag, retaining both tags for reuse. Old consolation
     ///      expires when that parity home is reused. A claim can never affect a resolution: skipped is terminal, so a
     ///      claimable bracket can never resolve later. VAULT's consolation
-    ///      (it accrues bracket score from its daily flips) escrows into its
-    ///      WWXRP mint allowance via the token's vault routing.
+    ///      credits its ID-keyed WWXRP claimable balance like any other account.
     /// @param id Score owner account (0 = caller).
     /// @param lvl Skipped bracket level to claim.
     /// @custom:reverts NothingToClaim When the bracket is not skipped, or the
@@ -478,7 +475,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     }
 
     /// @notice Claimable WWXRP consolation for a player at a bracket level, before WWXRP's
-    ///         gameMintScale (the mint at claim is scaled).
+    ///         gameMintScale (the prize credit at claim is scaled).
     /// @return Zero unless the bracket is skipped and the player holds an
     ///         unclaimed score with matching bracket and epoch tags.
     function bafConsolationOf(address player, uint24 lvl) external view returns (uint256) {

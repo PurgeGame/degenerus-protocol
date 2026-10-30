@@ -11,7 +11,7 @@ import {LoanAccountingHandler} from "../handlers/LoanAccountingHandler.sol";
 ///         1. every closed loan paid its lender exactly the spec amount (early: P(100+T+4c)/100,
 ///            at the due level: P(1+5%T)) or the lender owns the account; nothing else happens;
 ///         2. each lender's claimable + AFKing moved by exactly receipts - principals + sweeps;
-///         3. a borrow pays principal - ticket part in cash, the ticket part (half, whole tickets,
+///         3. a borrow credits principal - ticket part to AFKing without moving custody, the ticket part (half, whole tickets,
 ///            past day 20 of the purchase phase, never in the jackpot phase) as entries at the
 ///            active level, pooled 90/10;
 ///         4. canonical solvency holds, and no loan, funding, sweep or claim step moves
@@ -49,7 +49,7 @@ contract LoanAccountingInvariant is DeployProtocol {
         handler.checkLedger();
     }
 
-    function invariant_borrowPayout() public view {
+    function invariant_borrowCredit() public view {
         _noViolations(3);
     }
 

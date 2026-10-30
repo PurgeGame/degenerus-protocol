@@ -68,7 +68,7 @@ interface IGameMinerMaintenance {
  * in the context of DegenerusGame's storage. This means:
  *   1. Storage slots MUST match exactly between the main contract and all modules.
  *   2. This contract ensures slot alignment by providing a single source of truth.
- *   3. Never add storage variables to module contracts — they would collide with game storage.
+ *   3. Keep module storage in this shared layout so every delegatecall agrees on its slots.
  *
  * STORAGE SLOT LAYOUT (EVM assigns slots sequentially):
  * -----------------------------------------------------------------------------
@@ -76,7 +76,7 @@ interface IGameMinerMaintenance {
  * +---------------------------------------------------------------------------------+
  * | EVM SLOT 0 (32 bytes) -- Timing, per-level flags, counters, buffer, freeze      |
  * +---------------------------------------------------------------------------------+
- * | [0:3]   purchaseStartDay         uint24   Deploy-relative day idx level began   |
+ * | [0:3]   purchaseStartDay         uint24   Logical day idx purchase phase began  |
  * | [3:6]   dailyIdx                 uint24   Most recently accepted logical round |
  * | [6:12]  rngRequestTime           uint48   When last VRF request was fired       |
  * | [12:15] level                    uint24   Current jackpot level (starts at 0)   |
@@ -118,9 +118,9 @@ interface IGameMinerMaintenance {
  * -----------------------------------------------------------------------------
  * 1. SLOT STABILITY: Never reorder, remove, or change types of existing variables.
  *
- * 2. DELEGATECALL SAFETY: All modules inherit this exact layout. If a module
- *    declared its own storage variables, they would occupy the same slots as
- *    game data, causing catastrophic corruption.
+ * 2. DELEGATECALL SAFETY: All modules inherit this exact layout. Extra module
+ *    storage would sit beyond this base, where another component may assign
+ *    different data; keep all shared state in this layout.
  *
  * 3. ACCESS CONTROL: Most state is `internal`; `gameOver` and `boonPacked` are `public`
  *    (auto-getters). Other external reads go through explicit getters in DegenerusGame.
@@ -129,8 +129,8 @@ interface IGameMinerMaintenance {
  *    - purchaseStartDay = logical day 9 at level 0, excluding the seven Degenesis cohorts
  *    - jackpotPhaseFlag = false (purchase phase)
  *    - decimatorFlags = 0 (window closed, no loans due)
- *    - levelPrizePool[level] is the per-level ratchet target; levelPrizePool[0] is set to
- *      BOOTSTRAP_PRIZE_POOL (50 ether) in the Game constructor (also the zero-fallback in the view)
+ *    - _levelPrizePool(level) reads a tagged four-slot ratchet history; the Game constructor
+ *      records BOOTSTRAP_PRIZE_POOL (50 ether) at level 0 (also the zero-fallback in the view)
  *
  * 5. OVERFLOW PROTECTION: Solidity 0.8+ provides automatic overflow checks.
  *    `unchecked` blocks in modules are intentional optimizations for safe ops.
@@ -194,7 +194,7 @@ abstract contract DegenerusGameStorage {
     uint16 internal constant PASS_MINT_COUNT_FLOOR_POINTS = 25;
 
     /// @dev Conversion factor for FLIP token amounts (FLIP has 0 decimals).
-    ///      Used in price calculations: price / PRICE_COIN_UNIT = FLIP per mint.
+    ///      Used in price calculations: price / PRICE_COIN_UNIT = wei per FLIP.
     uint256 internal constant PRICE_COIN_UNIT = 1000;
 
     /// @dev Fractional precision for virtual reward spins, independent of token decimals.
@@ -202,7 +202,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant TOKEN_MATH_SCALE = 1e18;
 
     /// @dev Scale factor for fractional ticket calculations (2 decimal places).
-    ///      100 means 1 ticket = 100 scaled units.
+    ///      100 means 1 entry = 100 scaled units (400 per whole ticket).
     uint256 internal constant QTY_SCALE = 100;
 
     /// @dev Only Crypto, Zodiac and Cards can be Degenerette heroes; Dice still roll naturally.
@@ -233,7 +233,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
 
     /// @dev Bootstrap value for prize pool target at level 1 (before any level completes).
-    ///      The Game constructor writes it to levelPrizePool[0].
+    ///      The Game constructor records it with _setLevelPrizePool(0, BOOTSTRAP_PRIZE_POOL).
     uint256 internal constant BOOTSTRAP_PRIZE_POOL = 50 ether;
 
     /// @dev Bit mask for ticket queue double-buffer key encoding.
@@ -658,7 +658,7 @@ abstract contract DegenerusGameStorage {
     ///      half can overflow.
     ///
     ///      Keyed by wallet ID: every payout already holds the ID; address-only paths (withdraw,
-    ///      deposits, views) read it from mintPacked_ once. ID 0 never holds a balance.
+    ///      deposits, views) read it from walletIds once. ID 0 never holds a balance.
     ///
     ///      SECURITY: Pull pattern — players and funders withdraw their own funds (the claim
     ///      function / withdrawAfkingFunding), separating credit from transfer.
@@ -921,9 +921,9 @@ abstract contract DegenerusGameStorage {
     ///      own naming the wallet and amount (see _creditClaimableLogged).
     event PlayerCredited(uint32 indexed walletId, uint256 amount);
 
-    /// @dev Emitted when a VRF word is bound to a lootbox RNG index (mid-day finalize,
-    ///      daily apply, or dead-man fallback). Emitted from both the Game callback and
-    ///      the AdvanceModule, so it lives in the shared base.
+    /// @dev Emitted when the miner publishes a VRF word for a lootbox RNG buffer during
+    ///      ordinary or terminal processing. The callback stores the word without
+    ///      publishing it; the deterministic ending does not publish a fallback word.
     event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
 
     /// @dev Emitted when a native donation adds mid-day RNG credit, in wei.
@@ -963,10 +963,9 @@ abstract contract DegenerusGameStorage {
     /// @dev `MinerBounty.kind` for a paid mining crank.
     uint8 internal constant MINER_BOUNTY_ADVANCE = 1;
 
-    /// @dev Emitted whenever a player's claimable balance is debited by the protocol. Covers
-    ///      mint payments (MintPaymentKind.Claimable / Combined), lootbox/ticket shortfall
-    ///      (Internal), foil pack shortfall (Internal), salvage debits (Internal), sDGNRS
-    ///      redemption reserve (Internal), and game-over sweep (Internal). `amount` is the
+    /// @dev Emitted for protocol claimable debits that fund purchases, subscriptions, loans,
+    ///      VRF funding, sDGNRS redemption reserves, Degenesis top-ups and the final sweep.
+    ///      Winnings withdrawals use WinningsClaimed instead. `amount` is the
     ///      exact claimable wei removed; `newBalance` is the post-debit claimable balance.
     event ClaimableSpent(
         uint32 indexed walletId,
@@ -1334,7 +1333,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev True from the purchase deadline day (the last day before liveness can fire) until
     ///      the level's target is met: once lastPurchaseDay or jackpotPhaseFlag is set the level
-    ///      can no longer die by liveness, so there is nothing left to rescue.
+    ///      can no longer hit the purchase timeout, so there is nothing left to rescue.
     ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
     ///      and 25% ticket bonus on the distress-bought portion.
     function _isDistressMode() internal view returns (bool) {
@@ -3059,7 +3058,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Activates a 10-level pass for a registered player. Shared logic for lazy pass purchases
     ///      and awards. Updates mintPacked_ (levelCount + min(10, freeze extension), saturating;
     ///      frozenUntilLevel, passType, lastLevel, day) and queues tickets for the 10-level range
-    ///      under the wallet ID the word carries.
+    ///      under the supplied wallet ID.
     /// @param player Wallet ID receiving the pass activation.
     /// @param ticketStartLevel First level of the 10-level range.
     /// @param entriesPerLevel Entries to queue per level (4 entries = 1 whole ticket).
@@ -4532,12 +4531,12 @@ abstract contract DegenerusGameStorage {
     uint256 internal goldenTicket;
 
     /// @dev Unspent request credit in wei; donations bank floor(value / 4).
-    /// Only the donor's own mineFlip can spend it, against nonempty pending work.
+    /// Only the donor's own mineRun can spend it, against nonempty pending work.
     mapping(uint32 => uint256) internal middayRngCredit;
 
     /// @dev Achieved prize pool of every completed century level (x00) — the pre-skim
     ///      nextPrizePool recorded at each x00 purchase→jackpot transition — in completion
-    ///      order, so century N sits at index N-1. levelPrizePool[x00] cannot serve as this
+    ///      order, so century N sits at index N-1. _levelPrizePool(x00) cannot serve as this
     ///      history: _endPhase overwrites
     ///      it with 40% of futurePool as the reachable x01 ratchet base, so the achieved value
     ///      survives only here.
@@ -4658,8 +4657,8 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev The shared session payload is usable by lootbox consumers only after fulfillment.
-    ///      Daily callback stores its final nudge; the miner publishes readiness and unlock retains it.
+    /// @dev The shared session payload is usable by lootbox consumers only after miner publication.
+    ///      The callback stores the raw word; nudges affect only the daily coinflip word.
     function _lootboxWord(uint48 buffer) internal view returns (uint256) {
         return buffer == _rngReadBuffer() && _rngSessionPublished() ? _currentRngWord() : 0;
     }
@@ -5003,6 +5002,8 @@ abstract contract DegenerusGameStorage {
     /// @dev Open loans due at each level; seizure leaves a level's count behind.
     mapping(uint24 => uint256) internal _loansDueCount;
 
+    /// @dev Close new loans after a whole missed day beyond the normal daily cadence.
+    uint256 internal constant LOAN_LATE_WINDOW = 2 days;
     uint256 internal constant LOAN_MIN_PRINCIPAL = 0.05 ether;
     uint256 internal constant LOAN_INTEREST_BPS_PER_LEVEL = 500;
     uint256 internal constant LOAN_EARLY_FEE_BPS_PER_LEVEL = 100;

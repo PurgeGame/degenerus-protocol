@@ -114,7 +114,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     // error RngLocked(), NotApproved() — inherited from DegenerusGameStorage
 
-    /// @notice mineFlip could not admit any useful execution step with the supplied gas.
+    /// @notice mineRun could not admit any useful execution step with the supplied gas.
     error InsufficientExecutionGas();
     /// @notice A nonzero gas-estimate multiplier must be at least 2,500 basis points.
     error InvalidGasMultiplier();
@@ -257,14 +257,14 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |  The afking subscriber set / cursors / lanes live in this Game's        |
       |  storage (DegenerusGameStorage), so the module MUST run in this          |
       |  contract's context — delegatecall preserves msg.sender, so the account  |
-      |  gates and the mineFlip bounty payee read the real caller. These are the |
+      |  gates and the mineRun bounty payee read the real caller. These are the |
       |  canonical afking entrypoints. `subscribe` is the SINGLE subscription    |
       |  mutator (create / replace / cancel). Afking box opens run only as a     |
-      |  mineFlip stage.                                                         |
+      |  mineRun stage.                                                         |
       +==========================================================================+*/
 
     /// @notice Start, change or cancel a daily afking subscription for account `id`.
-    /// @dev The account check runs in-context (delegatecall preserves msg.sender). A new run
+    /// @dev The account check runs in-context (delegatecall preserves msg.sender). A new non-exempt run
     ///      burns seat `seatId` of the subscriber's payee. msg.value > 0 credits the
     ///      subscriber's prepaid afking ETH (claimablePool in tandem).
     ///      Signature: subscribe(uint32 id, bool useTickets, uint8 dailyQuantity, uint256 seatId).
@@ -389,7 +389,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     /// @notice Deity-gated smite: add a curse stack to account `smiteeId` for 200 FLIP.
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's smite body.
-    ///      Signature: smite(uint256 deityId, uint32 smiteeId) (0 = caller). The signature
+    ///      Signature: smite(uint256 deityId, uint32 smiteeId) (smiteeId 0 = caller). The signature
     ///      matches the module function exactly, so the calldata forwards as-is.
     function smite(uint256, uint32) external {
         (bool ok, bytes memory data) = ContractAddresses
@@ -1572,7 +1572,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @dev Batches multiple stats into single call for gas efficiency.
     /// @param player The player address to query.
     /// @return lvl Current game level.
-    /// @return levelCount Total levels with ETH mints.
+    /// @return levelCount Credited level count, including FLIP mints, passes and activity awards.
     /// @return streak Consecutive level mint streak.
     function ethMintStats(
         address player

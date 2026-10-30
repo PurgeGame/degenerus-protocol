@@ -1,9 +1,10 @@
 # Accounting
 
-The ETH/stETH accounting map by phase: who holds custody, the obligation equation, what is
-reserved inside `claimablePool`, which functions move value, how the ending treats each item,
-and which test asserts it. FLIP, WWXRP, sDGNRS supply and the comp allowance are not ETH obligations; units are in [Token units](TOKEN-UNITS.md) and
-the separate ledgers in [Economic disclosures](../ECONOMIC_DISCLOSURES.md#accounting-and-value).
+The ETH/stETH accounting map by phase: who holds custody, the obligation equation, what is reserved
+inside `claimablePool`, which functions move value, how the ending treats each item, and which test
+asserts it. FLIP, WWXRP, sDGNRS supply and the comp allowance are not ETH obligations; units are in
+[Token units](TOKEN-UNITS.md) and the separate ledgers in [Economic
+disclosures](../ECONOMIC_DISCLOSURES.md#accounting-and-value).
 
 Test references are `file::function`; the quoted text is the assertion message.
 
@@ -13,7 +14,7 @@ Test references are `file::function`; the quoted text is the assertion message.
 | --- | --- | --- |
 | Game (`DegenerusGame`) | ETH balance plus stETH balance | The obligation sum below. Staking (`adminStakeEthForStEth`, `adminSwapEthForStEth`, `stakeExcessEth`) changes the asset mix, not the obligations |
 | sDGNRS | Its own ETH and stETH, plus its Game claimable (above the sentinel) and the Game-held redemption reserve | Redemption claims. Live pricing uses Game backing only; token custody counts after game over (`sDGNRS._redemptionBacking`, `_liveMoney`) |
-| Vault | Its own ETH/stETH, plus its Game claimable and prepaid AFKing | DGVE/DGVF share redemptions |
+| Vault | Its own ETH/stETH, plus its Game claimable and prepaid AFKing | DGVE share redemptions |
 | GNRUS | Its own balances | Charity rules |
 | Admin | A retired-subscription cancellation refund | Funds the replacement subscription |
 | VRF coordinator subscription | Native ETH sent by `donateVrf` and `_refillVrfNative` | Fulfillment billing; not Game custody |
@@ -32,12 +33,12 @@ yield       = max(custody - obligations, 0)
 ```
 
 `GameFacade.yieldPoolView` reports the same set. The test helper
-`test/fuzz/helpers/SolvencyObligations.sol` mirrors it: `backing(game)` is Game ETH plus stETH,
-and `obligations(game)` is the sum above while live and `claimablePoolView()` alone once
-`gameOver` is set. The pending buffer has no external view; the helper reads its slot (bit 255 is
-the slot's nonzero sentinel, not value).
+`test/fuzz/helpers/SolvencyObligations.sol` mirrors it: `backing(game)` is Game ETH plus stETH, and
+`obligations(game)` is the sum above while live and `claimablePoolView()` alone once `gameOver` is
+set. The pending buffer has no external view; the helper reads its slot (bit 255 is the slot's
+nonzero sentinel, not value).
 
-`claimablePool` is the aggregate of three kinds of item:
+`claimablePool` aggregates balance words and reservations:
 
 ```text
 claimablePool = Σ_id (claimable_id − 1 + afking_id)       // player and protocol balance words
@@ -62,13 +63,15 @@ prepaid AFKing funding.
 | A freeze-window purchase adds exactly its price to obligations | `test/economics/FoilClaimBatch.t.sol::test_freezeWindowObligationsAreExact` ("obligation of exactly the buy") |
 | A stETH rebase changes custody, not obligations | `test/fork/ForkSteth.t.sol::test_positiveRebaseAccruesToTheGameAsYield` ("obligations unchanged", "a positive rebase restores strict solvency") |
 
-The full `claimablePool` identity is asserted for the Degenesis terms (balance words, Vault
-budget and unsplit volume) by `test/fuzz/invariant/DegenesisSolvency.inv.t.sol::invariant_claimablePoolIdentity`
-("claimablePool != balance words + Vault budget + unsplit volume"), with a falsifiability check in
+The full `claimablePool` identity is asserted for the Degenesis terms (balance words, Vault budget
+and unsplit volume) by
+`test/fuzz/invariant/DegenesisSolvency.inv.t.sol::invariant_claimablePoolIdentity` ("claimablePool
+!= balance words + Vault budget + unsplit volume"), with a falsifiability check in
 `::test_IdentityIsFalsifiable`. The identity with every reservation (balance words above their
 sentinels, unsplit Degenesis volume, the Vault budget, the redemption reserve, the staged BAF
-reservation and sealed Decimator rounds) is asserted after every action of a real game from the
-Degenesis days to level 10 by `test/repro/ClaimablePoolIdentityComposed.t.sol::test_IdentityHoldsThroughEveryReservation`
+reservation and sealed Decimator rounds) is asserted across a real game's Degenesis and live phases
+until every reservation type is observed by
+`test/repro/ClaimablePoolIdentityComposed.t.sol::test_IdentityHoldsThroughEveryReservation`
 (falsifiability: `::test_IdentityIsFalsifiable`), and as property (e) of
 `test/fuzz/invariant/AnyInputSafety.inv.t.sol::invariant_anyInputSafety` ("(e) CLAIMABLE IDENTITY:
 claimablePool != balance words + reservations"), whose Degenesis variant inherits it. A Decimator
@@ -77,8 +80,8 @@ the future pool and the ETH already paid to places.
 
 ## Pre-game and Degenesis (day indices 1–8)
 
-Custody and the obligation equation are as above; the prize pools start empty. Degenesis adds
-two reservations inside `claimablePool`.
+Custody and the obligation equation are as above; the prize pools start empty. Degenesis adds two
+reservations inside `claimablePool`.
 
 | Transition | Function | Effect |
 | --- | --- | --- |
@@ -109,9 +112,9 @@ two reservations inside `claimablePool`.
 | AFKing funding | `_creditAfkingValue`; `_withdrawAfkingFunding`; AFKing delivery (`GameAfkingModule`) | Prepaid funding enters `claimablePool`; delivery moves it into the pools |
 | VRF funding | `_refillVrfNative` → `_topUpVrfNative` | Untracked yield first, then sDGNRS claimable (above the sentinel), then sDGNRS AFKing; each non-yield wei sent removes one wei of `claimablePool` |
 | Yield distribution | `DegenerusGameJackpotModule._distributeYieldSurplus` | Distributes only `custody − obligations` |
-| Redemption batch close | `DegenerusGameRngUtils._closeRedemptionBatch` at each request | Releases the previous reserve to sDGNRS claimable, then moves the batch's priced pull from sDGNRS claimable into the redemption reserve; `claimablePool` unchanged |
+| Redemption batch close | `DegenerusGameRngUtils._closeRedemptionBatch` at each fresh daily or mid-day request | Releases the previous reserve to sDGNRS claimable, then moves the batch's priced pull from sDGNRS claimable into the redemption reserve; `claimablePool` unchanged |
 | Redemption settlement | `DegenerusGameLootboxModule.resolveRedemptionLootbox`, `creditRedemptionDirect` | Spend only from the reserve |
-| Loan borrow | `GamePurchase._borrow` | Lender claimable `−principal` (`claimablePool −= principal`); ETH to borrower, ticket part (late purchase phase) to pools |
+| Loan borrow | `GamePurchase._borrow` | Lender claimable, then Vault prepaid AFKing if needed, `−principal`; borrower AFKing `+(principal − ticketWei)` via `_creditAfkingValue`; net `claimablePool −= ticketWei`, ticket part to prize pools, no ETH/stETH leaves Game |
 | Loan repayment | `GamePurchase._repay` (`clearDebtNow`), `DegenerusGameAdvanceModule._autoRepayLoan` | Lender credited; fresh ETH enters `claimablePool`; auto-repayment is an internal move |
 | BAF reservation | `DegenerusGameJackpotDrawModule.runBafJackpot` (arm), `runBafAwards` (pay), `_releaseBafReserve` (residue) | The x0 consolidation moves the schedule's ETH term from `futurePool` into `claimablePool` and `jackpotWork.paid`; each group's credits reduce `paid`; the residue returns to the pending future pool |
 | Decimator reservation | Advance Decimator block; `DegenerusGameDecimatorModule` (`claimablePool += funding`, `_releaseToFuture`) | The sealed pool `P` moves from `futurePool` into `claimablePool`; generated funding `F` moves from `currentPrizePool`; winners consume the reservation; unused parts return to `futurePool` |
@@ -120,7 +123,7 @@ two reservations inside `claimablePool`.
 | Assertion | Test |
 | --- | --- |
 | Repayment from claimable keeps the sentinel and the pool | `test/fuzz/AccountLoans.t.sol::test_RepayFromClaimableKeepsSentinelAndConservesPool` ("internal move") |
-| Loan accounting | `test/fuzz/invariant/LoanAccounting.inv.t.sol::invariant_lenderLedger`, `::invariant_borrowPayout`, `::invariant_closedLoansPaidSpecOrSeized`, `::invariant_solvency` |
+| Loan accounting | `test/fuzz/invariant/LoanAccounting.inv.t.sol::invariant_lenderLedger`, `::invariant_borrowCredit`, `::invariant_closedLoansPaidSpecOrSeized`, `::invariant_solvency` |
 | BAF credits plus residue equal the reservation | `test/fuzz/BafStagedResume.t.sol::test_RealConsolidationArmsTheScheduleReserve` ("credits plus residue equal the reservation", "claimablePool releases exactly the residue"); `::test_EmptyBafSlotForfeitsToResidue` |
 | Redemption reserve counted once | `test/repro/RedemptionReserve.t.sol::testSettlingReserveCountsOnceInBackingPreview`; `test/invariant/RedemptionAccounting.t.sol::invariant_INV_02_EthConservationExact` |
 
@@ -141,25 +144,24 @@ session; real request integration is covered by `RedemptionForwardBatches` and t
 | Both endings resolve an unrolled settling batch at 100; a batch resolved live keeps its roll; the open batch unwinds at the terminal burn price | `test/fuzz/RedemptionForwardBatches.t.sol::test_TerminalWordResolvesTheSettlingBatchAndOpenBatchUnwinds`, `::test_DeadEndingResolvesTheSettlingBatchAtExpectedValue`, `::test_OpenBatchUnwindsAtTheGameOverBurnPrice`; `test/fuzz/DeadVrfEnding.t.sol::test_pendingRedemptionResolvesAtExpectedValue` |
 | Terminal claims pay exactly once, with no expiry; operators claim for the owner only | `test/fuzz/RedemptionEdgeCases.t.sol::testFuzz_TerminalClaimPaysExactlyOnce`, `::test_OperatorCanClaimTerminalForOwnerOnly` |
 
-The redemption suites also cover real payable forwarding, stETH-before-ETH reentrancy,
-protection of other claims' reserves, settlement order, parked retries and operator
-authorization.
+The redemption suites also cover real payable forwarding, stETH-before-ETH reentrancy, protection of
+other claims' reserves, settlement order, parked retries and operator authorization.
 
 ## Liveness triggered and terminal processing
 
-Once `_endingReason()` is not `None`, purchases, borrowing and AFKing changes close. The
-obligation equation still holds until `gameOver` is set.
+Once `_endingReason()` is not `None`, purchases, borrowing and AFKing changes close. The obligation
+equation still holds until `gameOver` is set.
 
 | Step | Function | Effect |
 | --- | --- | --- |
 | Decision (purchase timeout, VRF alive) | `DegenerusGameGameOverModule` terminal entry | Latches the terminal level; a staged BAF reservation releases its uncredited part (`if (jackpotWork.kind == 7) claimablePool −= jackpotWork.paid`) into the distributable total |
 | Terminal loan settlement | `DegenerusGameAdvanceModule._settleTerminalLoans` (stage 20) | Each loan repays at the current price (internal move) or is seized; no Game ETH moves |
-| Drain | `_handleGameOverDrain` | Splits all Degenesis cohorts (`splitDegenesis`); `available = custody − claimablePool`; credits deity refunds (levels below 10, `claimablePool += refunded`); releases `degenesisVaultBudget` and sDGNRS AFKing (`claimablePool −= both`, `DegenesisFundsReleased`); sets `gameOver`; burns unallocated GNRUS/DGNRS inventory and clears `degenesisActive`; zeroes current/next/future, `yieldAccumulator` and the pending buffer |
+| Drain | `_handleGameOverDrain` | Splits all Degenesis cohorts (`splitDegenesis`); `available = custody − claimablePool`; credits deity refunds (levels below 10, `claimablePool += refunded`); releases `degenesisVaultBudget` and sDGNRS AFKing (`claimablePool −= both`, `DegenesisFundsReleased`); sets `gameOver`; burns unallocated GNRUS/sDGNRS inventory and clears `degenesisActive`; zeroes current/next/future, `yieldAccumulator` and the pending buffer |
 | Payout | `_startJackpotWork` / `_resumeTerminalPayout` (VRF alive) or `deadPot` + `claimDeadVrf` (hard stall) | `available = custody − claimablePool` goes to the terminal ticket jackpot, or is fixed as `deadPot` and credited to `claimablePool` claim by claim. Empty-bucket leftovers stay in custody for the final sweep |
 | Completion | `_finishTerminalPayout` | Sets `GO_JACKPOT_PAID` and `GO_TIME` |
 
-The Game-held redemption reserve stays inside `claimablePool` through the drain; a hard stall
-calls `sDGNRS.resolveTerminalRedemptions()`.
+The Game-held redemption reserve stays inside `claimablePool` through the drain; a hard stall calls
+`sDGNRS.resolveTerminalRedemptions()`.
 
 | Assertion | Test |
 | --- | --- |
@@ -183,20 +185,20 @@ Final sweep (`_handleFinalSweep`, at `GO_TIME + 30 days`, once):
 2. Releases the redemption reserve to sDGNRS claimable.
 3. Takes the Vault, sDGNRS and GNRUS balance words (claimable plus AFKing) as `owed`; sets
    `claimablePool = 0`. Every other player balance is forfeited.
-4. Reads custody with a one-shot stETH read (`BoundedCall.admitFirst` at `STETH_READ_MIN_GAS`,
-   then `_boundedStethBalance`). A read that starts short of gas reverts the sweep; a failed or
-   malformed read counts as zero and can leave stETH at the Game after closure
-   ([Security](../SECURITY.md#external-dependencies-and-settlement)). Vault, sDGNRS and GNRUS
-   holder exits read stETH through `BoundedCall.stethBalanceOrZero` with the same
-   `STETH_READ_MIN_GAS` floor ([details](ARCHITECTURE-DETAILS.md#miner-bounty-admission-bounds-and-stage-events)).
+4. Reads custody with a one-shot stETH read (`BoundedCall.admitFirst` at `STETH_READ_MIN_GAS`, then
+   `_boundedStethBalance`). A read that starts short of gas reverts the sweep; a failed or malformed
+   read counts as zero and can leave stETH at the Game after closure
+   ([Security](../SECURITY.md#external-dependencies-and-settlement)). Vault, sDGNRS and GNRUS holder
+   exits read stETH through `BoundedCall.stethBalanceOrZero` with the same `STETH_READ_MIN_GAS`
+   floor ([details](ARCHITECTURE-DETAILS.md#miner-bounty-admission-bounds-and-stage-events)).
 5. Pays each sink its `owed` plus a third of the remainder (GNRUS takes the rounding wei); if
    custody is short of `owed` (the three unbacked sentinels, or an stETH loss), the legs are pro
    rata and sum to custody. stETH is sent first.
 6. Shuts down the VRF subscription through Admin; a failed shutdown reverts the whole sweep.
 
 After the sweep, `claimWinnings`/`claimClaimable` revert `AlreadySwept`, AFKing withdrawal and
-`sweepAccounts` revert, `claimDeadVrf` reverts, and `claimablePoolView()` returns 0. sDGNRS
-terminal redemption claims are held by sDGNRS and have no expiry.
+`sweepAccounts` revert, `claimDeadVrf` reverts, and `claimablePoolView()` returns 0. sDGNRS terminal
+redemption claims are held by sDGNRS and have no expiry.
 
 | Assertion | Test |
 | --- | --- |

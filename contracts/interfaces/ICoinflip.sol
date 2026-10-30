@@ -88,7 +88,7 @@ interface ICoinflip {
     ///                 per-day cap of type(uint32).max whole FLIP; every prior mutation rolls back.
     function playCoinflip(uint32 id, uint256 amount) external;
 
-    /// @notice Claim an exact amount of account `id`'s coinflip winnings as FLIP tokens.
+    /// @notice Claim up to `amount` of account `id`'s coinflip winnings as FLIP tokens.
     /// @dev Processes pending daily claims, then mints up to the requested amount.
     ///      Authorized: `id == 0` is the caller; a nonzero `id` needs Game
     ///      `resolveAccount_g7029(id, msg.sender).authorized` (the key, a smurf's owner or an approved
@@ -208,7 +208,7 @@ interface ICoinflip {
     ///      PARIMUTUEL, CRAPS) for rewards. Keyed by wallet ID only: writes the ID-keyed stake
     ///      lane and reads the account's claim cursor only when reusing a stale stake page, so a
     ///      creditor needs nothing but the ID. `id == 0` or `amount == 0` is a silent no-op, never
-    ///      a revert: credits reached from a mineFlip stage cannot fail on a missing wallet.
+    ///      a revert: credits reached from a mineRun stage cannot fail on a missing wallet.
     ///      Never touches the biggest-flip record (credits carry recordAmount 0).
     ///      Each credit saturates at the wallet's per-day cap of type(uint32).max whole FLIP
     ///      rather than reverting; CoinflipStakeUpdated reports the amount the lane accepted.

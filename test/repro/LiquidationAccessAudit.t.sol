@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameSlotKeys} from "../helpers/GameSlots.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -107,8 +108,12 @@ contract LiquidationAccessAuditTest is DeployProtocol {
 
     function _default(uint32 id) private {
         uint24 due = game.currentLvl() + 1;
+        uint256 prepaid = uint256(vm.load(address(game), GameSlotKeys.balances(id))) >> 128;
         vm.prank(borrower);
         game.borrow(id, due, type(uint256).max, 0);
+        // Default intentionally: withdraw only the new credit, preserving the subscription fixture.
+        uint256 credit = (uint256(vm.load(address(game), GameSlotKeys.balances(id))) >> 128) - prepaid;
+        vm.prank(borrower); game.withdrawAfkingFunding(id, credit);
         host.seizeAt(due);
         assertEq(game.acquiredBuyer(id), 2, "seized to sDGNRS");
     }

@@ -42,11 +42,11 @@ import {SigFigLib} from "../libraries/SigFigLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
-/// @notice Interface for minting WWXRP prize tokens
+/// @notice Interface for crediting unminted WWXRP prizes
 interface IWWXRP {
-    /// @notice Mint prize tokens to a recipient
+    /// @notice Credit unminted prize tokens to a recipient account
     /// @param to The recipient's wallet ID
-    /// @param amount The amount of tokens to mint
+    /// @param amount The amount of tokens to credit
     function creditPrize(uint32 to, uint256 amount) external;
 }
 
@@ -54,7 +54,7 @@ interface IWWXRP {
 ///         never once per box, and it never reverts on an unavailable day.
 interface ICrapsPassDelivery {
     /// @notice Seat a rolled pass award for wallet `id` on tomorrow when available, banking the
-    ///         rest as credit (CrapsBattle, game/vault-only; revert-free; the Game passes the
+    ///         rest as credit (CrapsBattle, game-only; revert-free for the supplied ID; the Game passes the
     ///         nonzero ID it holds).
     function deliverPasses(uint32 id, uint32 normal, uint32 high) external returns (uint24 day);
 }
@@ -565,9 +565,6 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @param rngWord RNG word to use for resolution
     /// @param activityScore Whole-point activity score frozen at commitment by the caller —
     ///        degenerette passes the score snapshotted at bet time. Never a live read.
-    // payable: reachable from the payable redemption path via an ETH-spin's recirc
-    // (`resolveEthSpinFromBox` -> `_resolveLootboxDirect`); delegatecall preserves the
-    // in-flight msg.value, so a non-payable callvalue guard here would revert the claim.
     function resolveLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
         external
         payable
@@ -741,7 +738,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///        - near-level offset: bits[16..23] via uint8(seed >> 16) % 5 (bias 0.39%)
     ///        - far-level offset:  bits[24..39] via uint16(seed >> 24) % 46 (bias 0.05%)
     /// @param baseLevel The base level to roll from
-    /// @param seed Per-resolution 256-bit keccak seed (derived once at _resolveLootboxCommon entry)
+    /// @param seed Per-resolution 256-bit keccak seed (derived by the caller before the target-level roll)
     /// @return targetLevel The rolled target level
     function _rollTargetLevel(uint24 baseLevel, uint256 seed) private pure returns (uint24 targetLevel) {
         uint256 rangeRoll = uint16(seed) % 100;
@@ -1197,7 +1194,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @dev Calculate scaled ticket count from budget with ranged variance tiers.
     ///      Returns count × QTY_SCALE (100) for fractional ticket support. The tier
     ///      chances are 1% / 4% / 20% / 45% / 30%, and each tier draws a multiplier
-    ///      uniformly across a symmetric BPS band about its per-tier mean; the overall
+    ///      by floored linear interpolation across a symmetric BPS band; the overall
     ///      variance EV is ~0.941x:
     ///        1% -> 4.00x-6.50x, 4% -> 2.00x-3.50x, 20% -> 1.00x-1.60x,
     ///        45% -> 0.5923x-0.9923x, 30% -> 0.360x-0.720x.
@@ -1261,8 +1258,8 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
 
     /// @dev Linearly map a uniform `roll` within [windowLow, windowHigh) onto the inclusive
     ///      BPS range [bpsLow, bpsHigh]: the window's first index maps to bpsLow, its last to
-    ///      bpsHigh. A roll uniform over the window yields a uniform multiplier whose mean is
-    ///      the range midpoint, i.e. the tier's per-tier mean.
+    ///      bpsHigh. Uniform window indices yield evenly spaced inputs before integer flooring;
+    ///      the multiplier's mean is less than one BPS below the range midpoint.
     function _ticketRangeBps(uint256 roll, uint256 windowLow, uint256 windowHigh, uint256 bpsLow, uint256 bpsHigh)
         private
         pure
