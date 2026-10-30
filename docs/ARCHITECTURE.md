@@ -1,11 +1,10 @@
 # Architecture
 
-This is the short system model: contract boundaries, deployment profiles, the main value
-flow, the miner's action order, the commitment and settlement boundaries, the ending and the
-invariants to preserve. Mechanism detail is in [Architecture details](ARCHITECTURE-DETAILS.md)
-and the specialist references listed [at the end](#mechanism-references). The phase-specific
-accounting map is [Accounting](ACCOUNTING.md); property-to-test links are in
-[Properties](PROPERTIES.md).
+This is the short system model: contract boundaries, deployment profiles, the main value flow, the
+miner's action order, the commitment and settlement boundaries, the ending and the invariants to
+preserve. Mechanism detail is in [Architecture details](ARCHITECTURE-DETAILS.md) and the specialist
+references listed [at the end](#mechanism-references). The phase-specific accounting map is
+[Accounting](ACCOUNTING.md); property-to-test links are in [Properties](PROPERTIES.md).
 
 ## Contract boundaries
 
@@ -27,74 +26,69 @@ accounting map is [Accounting](ACCOUNTING.md); property-to-test links are in
 
 ## Deployment profiles
 
-`eip170` is the primary audit and deployment target; `glamsterdam` is the maintained
-alternate. Both inherit the same `DegenerusGameStorage`. The layout goldens in
-`scripts/layout/golden/` pin the Game layout, and `scripts/layout/check_recursive_layout.py`
-checks the selected profile's delegatecall modules against it. The gates run against the
-profile selected by `PROFILE` ([Verification](VERIFICATION.md#setup),
-[structural checks](VERIFICATION.md#build-and-structural-checks)); the
-[readiness review](AUDIT-READINESS.md#verification-available-for-reviewers) reports them for both
-profiles.
+`eip170` is the audit and deployment target. The retained `glamsterdam` profile is out of scope. The
+layout goldens in `scripts/layout/golden/` pin Game storage; the recursive layout gate compares
+deployed delegates with their storage host.
+[Testing](TESTING.md#production-build-and-artifact-gates) describes those checks. [Module
+map](MODULE-MAP.md) lists the selected hosts and nested routes.
 
 `ContractAddresses.sol` pins every protocol contract plus the external endpoints and build
-parameters: the VRF coordinator, the key hash, the lane's maximum gas price and native
-premium, stETH, the ENS reverse registrar, the CREATOR address and the deploy-day boundary.
-VRF requests are paid in native ETH from the coordinator subscription. The ENS registrar
-receives a best-effort raw `setName(string)` call from the constructors of the named
-protocol contracts, skipped when the pin is zero. The `eip170` deployment order
-(`deployments/eip170.json`) has 37 entries; the `glamsterdam` alternate
-(`deployments/glamsterdam.json`) has 21, with shared addresses aliasing hosted components.
-The Vault also creates its two share tokens. `DegenerusGameLens` and `DeityBoonViewer`
-are in scope but are not entries in that deployment sequence. Third-party renderers,
-the VRF coordinator and stETH have distinct trust boundaries described in [Security](../SECURITY.md).
+parameters: the VRF coordinator, the key hash, the lane's maximum gas price and native premium,
+stETH, the ENS reverse registrar, the CREATOR address and the deploy-day boundary. VRF requests are
+paid in native ETH from the coordinator subscription. The ENS registrar receives a best-effort raw
+`setName(string)` call from the constructors of the named protocol contracts, skipped when the pin
+is zero. The `eip170` deployment order (`deployments/eip170.json`) has 37 entries; the `glamsterdam`
+alternate (`deployments/glamsterdam.json`) has 21, with shared addresses aliasing hosted components.
+The Vault also creates its two share tokens. `DegenerusGameLens` and `DeityBoonViewer` are in scope
+but are not entries in that deployment sequence. Third-party renderers, the VRF coordinator and
+stETH have distinct trust boundaries described in [Security](../SECURITY.md).
 
 ## Main value flow
 
-Ticket and ordinary lootbox ETH funds the next and future prize pools (the pending buffer while
-the pools are frozen); level transitions move value into the current pool. Degenesis-box ETH is held in `claimablePool` until its cohort
-splits. Jackpot and redemption paths create claimable obligations or game-specific credits;
-moving ETH/stETH to a player follows the relevant claim/recipient checks. Permissionless
-processing is not authority to redirect payment. Every allocated wallet ID carries a 1-wei
-claimable sentinel outside `claimablePool`. The custody/obligation equations for each phase,
+Ticket and ordinary lootbox ETH funds the next and future prize pools (the pending buffer while the
+pools are frozen); level transitions move value into the current pool. Degenesis-box ETH is held in
+`claimablePool` until its cohort splits. Jackpot and redemption paths create claimable obligations
+or game-specific credits; moving ETH/stETH to a player follows the relevant claim/recipient checks.
+Permissionless processing is not authority to redirect payment. Every allocated wallet ID carries a
+1-wei claimable sentinel outside `claimablePool`. The custody/obligation equations for each phase,
 the reservations held inside `claimablePool` and the functions that move them are in
 [Accounting](ACCOUNTING.md).
 
-FLIP has special routing for VAULT and sDGNRS: their backing/allowances are not ordinary
-wallet balances. Coinflip credits are not equivalent to minting immediately spendable
-FLIP. The comp allowance is neither circulating FLIP nor vault mint backing.
+FLIP has special routing for VAULT and sDGNRS: their backing/allowances are not ordinary wallet
+balances. Coinflip credits are not equivalent to minting immediately spendable FLIP. The comp
+allowance is neither circulating FLIP nor vault mint backing.
 
-Degenesis is a seven-day launch sale (day indices 2–8; `MAIN_LAUNCH_DAY = 9`). Qualifying
-spend earns `spend / 4` of Degenesis credit, which a box purchase consumes 1:1. At the first
-daily request after a cohort's day, its volume `V` splits in four: the Vault's restricted
-purchase budget, sDGNRS AFKing funding, the future pool and insurance (`yieldAccumulator`).
-The Vault owner spends the budget through `Vault.spendDegenesis` on ordinary purchases for
-any allocated recipient (0 selects the Vault). Orders settle from their cohort's bound
-daily word. See [details](ARCHITECTURE-DETAILS.md#degenesis-sale).
+Degenesis is a seven-day launch sale (day indices 2–8; `MAIN_LAUNCH_DAY = 9`). Qualifying spend
+earns `spend / 4` of Degenesis credit, which a box purchase consumes 1:1. At the first daily request
+after a cohort's day, its volume `V` splits in four: the Vault's restricted purchase budget, sDGNRS
+AFKing funding, the future pool and insurance (`yieldAccumulator`). The Vault owner spends the
+budget through `Vault.spendDegenesis` on ordinary purchases for any allocated recipient (0 selects
+the Vault). Orders settle from their cohort's bound daily word. See
+[details](ARCHITECTURE-DETAILS.md#degenesis-sale).
 
 ## Mining engine and action order
 
-`mineRun(uint32 gasMultiplierBps)` is the single engine entry. The miner engine (`GameMiner`)
-is hosted per profile: under `eip170` the Game delegates `mineRun` to the MinerRng deployment,
-under `glamsterdam` the Game contains it. Each step selects the next action from storage
-(`_nextMinerAction`, `DegenerusGameStorage`); nothing stores an engine stage. Game workers run
-by delegatecall, preserving the original caller; the sDGNRS redemption, Parimutuel growth and
-Craps workers are plain calls to those contracts, which see the Game as caller.
-`gasMultiplierBps` scales every admission bound (0 = 1x; below `MIN_MULTIPLIER` = 2,500 reverts
-`InvalidGasMultiplier`). The first unit of every call is attempted whatever the bounds say;
-when it is a VRF request, `BoundedCall.admitFirst` reverts `InsufficientExecutionGas` unless
-gas covers `VRF_REQUEST_MIN_GAS` plus `VRF_REQUEST_RESERVE` (500,000 each). Every later chunk
-is admitted only while both the remaining worker allowance and actual available gas cover its
-cold-path bound and complete call, checkpoint and return tail. A call can execute multiple
-admitted chunks (at most 32 action transitions); there is no fixed transaction gas ceiling. A
-call whose first action is `Idle` reverts `NoWork`, and `Wait` reverts `RngNotReady`.
+`mineRun(uint32 gasMultiplierBps)` is the single engine entry. The miner engine (`GameMiner`) is
+hosted per profile: under `eip170` the Game delegates `mineRun` to the MinerRng deployment, under
+`glamsterdam` the Game contains it. Each step selects the next action from storage
+(`_nextMinerAction`, `DegenerusGameStorage`); nothing stores an engine stage. Game workers run by
+delegatecall, preserving the original caller; the sDGNRS redemption, Parimutuel growth and Craps
+workers are plain calls to those contracts, which see the Game as caller. `gasMultiplierBps` scales
+every admission bound (0 = 1x; below `MIN_MULTIPLIER` = 2,500 reverts `InvalidGasMultiplier`). The
+first unit of every call is attempted whatever the bounds say; when it is a VRF request,
+`BoundedCall.admitFirst` reverts `InsufficientExecutionGas` unless gas covers `VRF_REQUEST_MIN_GAS`
+plus `VRF_REQUEST_RESERVE` (500,000 each). Every later chunk is admitted only while both the
+remaining worker allowance and actual available gas cover its cold-path bound and complete call,
+checkpoint and return tail. A call can execute multiple admitted chunks (at most 32 action
+transitions); there is no fixed transaction gas ceiling. A call whose first action is `Idle` reverts
+`NoWork`, and `Wait` reverts `RngNotReady`.
 
 Action selection, first match wins (`MinerAction`):
 
-1. After `gameOver`: `Terminal` until the terminal jackpot is paid, then `Terminal` for the
-   final sweep once 30 days have passed since terminal payout completion (`GO_TIME`),
-   otherwise `Idle`.
-2. Once liveness has triggered: `Terminal`, or `Wait` while a latched VRF-alive ending waits for
-   its terminal word.
+1. After `gameOver`: `Terminal` until the terminal jackpot is paid, then `Terminal` for the final
+   sweep once 30 days have passed since terminal payout completion (`GO_TIME`), otherwise `Idle`.
+2. Once liveness has triggered: `Terminal`, or `Wait` while a latched VRF-alive ending waits for its
+   terminal word.
 3. `SeizeLoans` while loans due at the level just entered are pending.
 4. `Wait` while a request is unanswered; `Publish` once its word arrived.
 5. While the read session is incomplete (`rngComplete` clear): `Tickets` until
@@ -108,45 +102,45 @@ Action selection, first match wins (`MinerAction`):
 9. `GrowthSettle`, then `DegenesisSettle`, while pending (neither is an RNG consumer).
 10. `RequestMidday` when a mid-day request is eligible, otherwise `Idle`.
 
-Standalone advancement is paid by measured gas as Coinflip credit (`MinerBounty`); terminal
-actions are unpaid, and a miner without a wallet ID is paid nothing. Admission bounds live in
-`MineFlipGasBounds` (cold-path, including new-state gas, with no reservoir assumed unless a
-constant says so). The bounty formula, the largest bounds and the `Advance(stage, lvl)` stage
-constants are in [details](ARCHITECTURE-DETAILS.md#miner-bounty-admission-bounds-and-stage-events).
+Standalone advancement is paid by measured gas as Coinflip credit (`MinerBounty`); terminal actions
+are unpaid, and a miner without a wallet ID is paid nothing. Admission bounds live in
+`MineFlipGasBounds` (cold-path, including new-state gas, with no reservoir assumed unless a constant
+says so). The bounty formula, the largest bounds and the `Advance(stage, lvl)` stage constants are
+in [details](ARCHITECTURE-DETAILS.md#miner-bounty-admission-bounds-and-stage-events).
 
 ## RNG lifecycle and commitment boundaries
 
 ### Request, callback and publication
 
-A fresh daily request (`requestDailyRng_g8190`) runs only after the read session completed and
-the day's subscriber pass is done. Before calling the coordinator it prepares the request
-boundary (`prepareRequestBoundary`: Degenesis split and pricing, the turbo latch, early
-next-level ticket activation, and the daily RNG lock `rngLockedFlag`), swaps the ticket and foil write slots,
-seals hero wagers, freezes the prize pools into the pending buffer and seals the box/bet write
-buffer, then sets `dailyIdx` to the requested day. A mid-day request seals the box/bet write
-buffer the same way. For tickets it either activates the next level's future pool or swaps a
-nonempty, fully processed ticket slot; before a final jackpot day or a latched turbo it swaps
-nothing, and those tickets wait on the write side for the daily request. It never moves foil
-packs. A refused request reverts the whole call, so no seal survives without a request.
-Purchases after a seal enter the next cohort.
+A fresh daily request (`requestDailyRng_g8190`) runs only after the read session completed and the
+day's subscriber pass is done. Before calling the coordinator it prepares the request boundary
+(`prepareRequestBoundary`: Degenesis split and pricing, the turbo latch, early next-level ticket
+activation, and the daily RNG lock `rngLockedFlag`), swaps the ticket and foil write slots, seals
+hero wagers, freezes the prize pools into the pending buffer and seals the box/bet write buffer,
+then sets `dailyIdx` to the requested day. A mid-day request seals the box/bet write buffer the same
+way. For tickets it either activates the next level's future pool or swaps a nonempty, fully
+processed ticket slot; before a final jackpot day or a latched turbo it swaps nothing, and those
+tickets wait on the write side for the daily request. It never moves foil packs. A refused normal
+request rolls back its worker call, so no seal survives without a request. Purchases after a seal
+enter the next cohort.
 
-Every request passes `VRF_NATIVE_EXTRA_ARGS` (`nativePayment: true`) through
-`_boundedVrfRequest`, the Game's single `requestRandomWords` site. Daily and terminal requests
-use 6 confirmations, mid-day requests 4, and `retryRng` and the coordinator-swap re-issue use 6
-under the daily lock and 4 otherwise. The callback gas limit is `VRF_CALLBACK_GAS_LIMIT`
-(150,000) unless a governed coordinator swap sets another. Funding sources are in
-[details](ARCHITECTURE-DETAILS.md#request-state-queue-tags-and-vrf-funding) and the mid-day gates in
-[details](ARCHITECTURE-DETAILS.md#mid-day-requests).
+Every request passes `VRF_NATIVE_EXTRA_ARGS` (`nativePayment: true`). Normal and terminal requests
+use `_boundedVrfRequest`; coordinator-swap re-issues call `requestRandomWords` directly. Daily and
+terminal requests use 6 confirmations, mid-day requests 4, and `retryRng` and the coordinator-swap
+re-issue use 6 under the daily lock and 4 otherwise. The callback gas limit is
+`VRF_CALLBACK_GAS_LIMIT` (150,000) unless a governed coordinator swap sets another. Funding sources
+are in [details](ARCHITECTURE-DETAILS.md#request-state-queue-tags-and-vrf-funding) and the mid-day
+gates in [details](ARCHITECTURE-DETAILS.md#mid-day-requests).
 
 The VRF callback (`rawFulfillRandomWords`, in the Game itself) reverts `OnlyCoordinator` unless
-`msg.sender` is the stored coordinator. It then returns without effect unless the low 64 bits of
-the request ID equal the stored nonzero `vrfRequestId` (packed into the coordinator slot), and
-ignores raw words 0 and 1, which leave the request waiting. There is no active-flag check: the
-coordinator plus the retained nonzero ID is the whole authority. Request paths refuse an ID whose
-low 64 bits are zero; a consumed session keeps its answered ID; terminal paths that abandon a
-request reset the ID to 0. A superseded ID no longer matches. The callback stores the raw word in
-`rngWordCurrent` and nothing else. Its reliance on the coordinator answering each request once
-is stated in [Security](../SECURITY.md#vrf-callback-trust-and-request-ids).
+`msg.sender` is the stored coordinator. It then returns without effect unless the low 64 bits of the
+request ID equal the stored nonzero `vrfRequestId` (packed into the coordinator slot), and ignores
+raw words 0 and 1, which leave the request waiting. There is no active-flag check: the coordinator
+plus the retained nonzero ID is the whole authority. Request paths refuse an ID whose low 64 bits
+are zero; a consumed session keeps its answered ID; terminal paths that abandon a request reset the
+ID to 0. A superseded ID no longer matches. The callback stores the raw word in `rngWordCurrent` and
+nothing else. Its reliance on the coordinator answering each request once is stated in
+[Security](../SECURITY.md#vrf-callback-trust-and-request-ids).
 
 Mandatory miner publication (`Publish`) emits the word and performs request cleanup outside the
 callback; every consumer runs later in `mineRun`.
@@ -154,114 +148,112 @@ callback; every consumer runs later in `mineRun`.
 ### Nudges
 
 Daily nudges (`reverseFlip`, count 0..255, stored in slot 0 bits 240..247) move only the coinflip
-word: the daily apply adds the frozen count to the raw word for Coinflip, while the recorded
-daily word and every other consumer (lootbox and session words, jackpots, quests, craps, WWXRP,
-the terminal word) use the raw word. `DailyRngApplied(day, word, nudges)` records the apply.
-Mid-day requests apply no nudge.
+word: the daily apply adds the frozen count to the raw word for Coinflip, while the recorded daily
+word and every other consumer (lootbox and session words, jackpots, quests, craps, WWXRP, the
+terminal word) use the raw word. `DailyRngApplied(day, word, nudges)` records the apply. Mid-day
+requests apply no nudge.
 
 ### Retry and re-issue
 
-`retryRng` (Admin, once, after 20 hours unanswered) is transport-only: it spends the single
-retry and replaces the request ID. It runs no seal or buffer swap and does not move
-`rngRequestTime`, so the logical day, request kind, committed cohort and 14-day timeout origin
-are unchanged. A coordinator swap (`updateVrfCoordinatorAndSub`) re-issues an undelivered
-request the same way, spending the retry when under the daily lock, and leaves a delivered word
-in place. Neither path recommits a cohort; purchases made after the original seal stay in the
-next cohort.
+`retryRng` (Admin, once, after 20 hours unanswered) is transport-only: it spends the single retry
+and replaces the request ID. It runs no seal or buffer swap and does not move `rngRequestTime`, so
+the logical day, request kind, committed cohort and 14-day timeout origin are unchanged. A
+coordinator swap (`updateVrfCoordinatorAndSub`) re-issues an undelivered request the same way,
+spending the retry when under the daily lock, and leaves a delivered word in place. Neither path
+recommits a cohort; purchases made after the original seal stay in the next cohort.
 
 ### Settlement boundaries
 
-The first fresh mid-day RNG request after a purchase level meets its goal activates the next
-level's future-ticket pool. A daily request activates it early only on a turbo transition,
-where the early-bird draw needs those tickets. Ordinary purchase dailies leave that pool
-unminted for their jackpots. Mid-day requests keep the normal native-balance, basefee,
-pending-value and donation-credit rules. The queue freezes before its word is requested;
-advance calls then mint it in bounded batches. Later next-level purchases enter the ordinary
-write buffer for a subsequent word. A mid-day activation drains the future pool separately,
-leaving current-level queues for the daily request, including during a turbo last-purchase
-window. Turbo daily activation uses the ordinary sweep. The standard last-purchase transition
-drains its frozen next-level pool before jackpots, even without an earlier mid-day activation.
-An unanswered request keeps the 14-day deterministic ending. Early-created tickets leave the
-unminted future-queue FLIP draw. No extra request is scheduled for ticket minting.
+The first fresh mid-day RNG request after a purchase level meets its goal activates the next level's
+future-ticket pool. A daily request activates it early only on a turbo transition, where the
+early-bird draw needs those tickets. Ordinary purchase dailies leave that pool unminted for their
+jackpots. Mid-day requests keep the normal native-balance, basefee, pending-value and
+donation-credit rules. The queue freezes before its word is requested; advance calls then mint it in
+bounded batches. Later next-level purchases enter the ordinary write buffer for a subsequent word. A
+mid-day activation drains the future pool separately, leaving current-level queues for the daily
+request, including during a turbo last-purchase window. Turbo daily activation uses the ordinary
+sweep. The standard last-purchase transition drains its frozen next-level pool before jackpots, even
+without an earlier mid-day activation. An unanswered request keeps the 14-day deterministic ending.
+Early-created tickets leave the unminted future-queue jackpot-battle draw. No extra request is
+scheduled for ticket minting.
 
 `rngComplete` (slot 0 bit 248) is cleared by a fresh normal request and set only after committed
 tickets, the midday latch, sDGNRS redemption settlement, AFKing boxes, the combined human box/bet
 cursor, Decimator rounds and read-bound Craps all finish. The daily RNG lock stays held from the
-daily request through the day's daily-phase work, across midnight if necessary; foil claims
-and auto-rebuy changes revert `RngLocked`, and craps preference edits revert `BetLocked`, while it
-holds. Craps windows, the
-jackpot battle field, Decimator generated entries and BAF award groups all run under that lock
-with their inputs frozen ([craps](CRAPS-PREFERENCES.md#the-jackpot-battle),
+daily request through the day's daily-phase work, across midnight if necessary; foil claims and
+auto-rebuy changes revert `RngLocked`, and craps preference edits revert `BetLocked`, while it
+holds. Craps windows, the jackpot battle field, Decimator generated entries and BAF award groups all
+run under that lock with their inputs frozen ([craps](CRAPS-PREFERENCES.md#the-jackpot-battle),
 [Decimator](DECIMATOR-BATTLE.md), [BAF](ARCHITECTURE-DETAILS.md#baf-scatter-and-staged-payout)).
 
 Fixed randomness does not fix every payout input. Foil-pack ETH caps, sDGNRS rewards and
 recirculation read live state at claim ([RNG domains: foil packs](audit/RNG-DOMAINS.md#foil-packs)),
-and sDGNRS reward settlement uses live-pool pricing
-([Economic disclosures](../ECONOMIC_DISCLOSURES.md#creator-and-vault-interests)); review each
-consumer's sizing inputs separately from its committed word.
+and sDGNRS reward settlement uses live-pool pricing ([Economic
+disclosures](../ECONOMIC_DISCLOSURES.md#creator-and-vault-interests)); review each consumer's sizing
+inputs separately from its committed word.
 
 ## Game days, deadlines and the ending
 
-Game days are logical: `dailyIdx` advances once, at an accepted daily VRF request, and a stall
-or unattended stretch neither skips nor backfills days. Every level, level 0 included, has a
-30-game-day purchase deadline measured from `purchaseStartDay` (`_PURCHASE_TIMEOUT_DAYS`);
-level 0's timer starts at `MAIN_LAUNCH_DAY`. Reaching `purchaseStartDay + 30` activates distress
-purchases, and game over becomes eligible once that day's session has completed and a later
-wall-clock reset day has begun, if the next-pool target is still unmet (`_endingReason`). A funded
+Game days are logical: `dailyIdx` advances once, at an accepted daily VRF request, and a stall or
+unattended stretch neither skips nor backfills days. Every level, level 0 included, has a
+30-game-day purchase deadline measured from `purchaseStartDay` (`_PURCHASE_TIMEOUT_DAYS`); level 0's
+timer starts at `MAIN_LAUNCH_DAY`. Reaching `purchaseStartDay + 30` activates distress purchases,
+and game over becomes eligible once that day's session has completed and a later wall-clock reset
+day has begun, if the next-pool target is still unmet (`_endingReason`). A funded
 last-purchase/jackpot phase can finish beyond that boundary.
 
-Two wall-clock deadlines are independent of logical days (`_VRF_DEAD_TIMEOUT` = 14 days): no
-daily session completed within 14 days of the last completion (`_vrfDeadmanFired`), or an
-unpublished request 14 days after it was first sent (`_vrfDead`; retries and re-issues keep the
-original send time). Either gives `EndingReason.HardStall`, even if VRF would still answer.
+Two wall-clock deadlines are independent of logical days (`_VRF_DEAD_TIMEOUT` = 14 days): no daily
+session completed within 14 days of the last completion (`_vrfDeadmanFired`), or an unpublished
+request 14 days after it was first sent (`_vrfDead`; retries and re-issues keep the original send
+time). Either gives `EndingReason.HardStall`, even if VRF would still answer.
 
 The ending, in order:
 
-1. **Purchase timeout (VRF alive).** The deciding call latches the terminal level. Every
-   outstanding account loan then settles in later calls, repaying at the current
-   manual-repayment price or seizing ([account loans](ACCOUNT-LOANS.md#settlement-at-game-over)),
-   so a defaulted borrower's refunds and terminal awards accrue to its lender. The game-over
-   path then requests its own terminal word.
-2. **Drain.** Terminal setup splits every Degenesis cohort, reserves existing claims and
-   applicable deity refunds (levels below 10), releases the Vault's Degenesis budget and sDGNRS
-   AFKing funding into the distributable total, sets `gameOver`, burns unallocated inventory and
-   zeroes the prize pools. Unfinished boxes, bets and Craps end without a retained session word.
-3. **Payout.** With a terminal word, the entire remaining amount goes to the terminal ticket
-   jackpot (fixed 152/104/48/1 geometry). In a hard stall there is no loan settlement and no
-   terminal request: the remainder is split across every ticket of the terminal level and claimed
-   through `claimDeadVrf`. Terminal jackpot completion, or fixing the hard-stall pot, stamps
-   `GO_TIME` (`_finishTerminalPayout`).
+1. **Purchase timeout (VRF alive).** The deciding call latches the terminal level. Every outstanding
+   account loan then settles in later calls, repaying at the current manual-repayment price or
+   seizing ([account loans](ACCOUNT-LOANS.md#settlement-at-game-over)), so a defaulted borrower's
+   refunds and terminal awards accrue to its lender. The game-over path then requests its own
+   terminal word.
+2. **Drain.** Terminal setup splits every Degenesis cohort, reserves existing claims and applicable
+   deity refunds (levels below 10), releases the Vault's Degenesis budget and sDGNRS AFKing funding
+   into the distributable total, sets `gameOver`, burns unallocated inventory and zeroes the prize
+   pools. Unfinished boxes, bets and Craps end without a retained session word.
+3. **Payout.** With a terminal word, the entire remaining amount goes to the terminal ticket jackpot
+   (fixed 152/104/48/1 geometry). In a hard stall there is no loan settlement and no terminal
+   request: the remainder is split across every ticket of the terminal level and claimed through
+   `claimDeadVrf`. Terminal jackpot completion, or fixing the hard-stall pot, stamps `GO_TIME`
+   (`_finishTerminalPayout`).
 4. **Final sweep.** At `GO_TIME + 30 days`, `_handleFinalSweep` releases the redemption reserve,
    pays the Vault, sDGNRS and GNRUS their own game balances, splits the rest of the Game's ETH and
-   stETH in thirds between them (pro rata if short), forfeits all other unclaimed balances and
-   shuts down the VRF subscription. Player claims revert after the sweep.
+   stETH in thirds between them (pro rata if short), forfeits all other unclaimed balances and shuts
+   down the VRF subscription. Player claims revert after the sweep.
 
-Read the terminal paths separately from live-game withdrawal paths; [Accounting](ACCOUNTING.md#terminal-and-post-game-over)
-gives the equations.
+Read the terminal paths separately from live-game withdrawal paths;
+[Accounting](ACCOUNTING.md#terminal-and-post-game-over) gives the equations.
 
 ## Jackpots, battles and reserves
 
-These paths move value between pools and claimable at fixed points; their mechanics are in
-the specialist references.
+These paths move value between pools and claimable at fixed points; their mechanics are in the
+specialist references.
 
 - **Daily jackpots.** One winning board per day feeds the ETH, ticket and early-bird legs, the
-  golden ticket and the foil claim. Purchase dailies budget 4% of the future pool; jackpot
-  phases pay one (turbo) or three daily draws. See the daily board under
-  [ticket materialization](ARCHITECTURE-DETAILS.md#ticket-materialization), the 4% drip under
-  [purchase timing](ARCHITECTURE-DETAILS.md#purchase-timing-and-pool-acceleration),
-  [jackpot phases](ARCHITECTURE-DETAILS.md#jackpot-phases-and-turbo) and
-  [jackpot legs](ARCHITECTURE-DETAILS.md#jackpot-legs).
-- **Jackpot battle.** The day's sixth craps window. The daily request locks the paid field, fee
-  and award target; 5% of the gross allocation funds the high-roller reserve at lock. Draw and
-  settle steps run as stages 16/17 under the daily lock, and comps are booked once at seal. See
-  [the jackpot battle](CRAPS-PREFERENCES.md#the-jackpot-battle).
-- **BAF.** The x0 consolidation reserves the ETH term of the whole award schedule in
-  `claimablePool` (debiting `futurePool`); stage 19 pays groups of eight from that reservation and
-  returns the residue to the pending future pool. A game-over latch releases the uncredited
-  part. See [details](ARCHITECTURE-DETAILS.md#baf-scatter-and-staged-payout).
-- **Decimator.** At the window-close transition the sealed round's pool moves from `futurePool`
-  into `claimablePool`; ordinary x5 levels add generated entries funded from the jackpot day.
-  See [Decimator battle](DECIMATOR-BATTLE.md).
+  golden ticket and the foil claim. Purchase dailies budget 4% of the future pool; jackpot phases
+  pay one (turbo) or three daily draws. See the daily board under [ticket
+  materialization](ARCHITECTURE-DETAILS.md#ticket-materialization), the 4% drip under [purchase
+  timing](ARCHITECTURE-DETAILS.md#purchase-timing-and-pool-acceleration), [jackpot
+  phases](ARCHITECTURE-DETAILS.md#jackpot-phases-and-turbo) and [jackpot
+  legs](ARCHITECTURE-DETAILS.md#jackpot-legs).
+- **Jackpot battle.** The day's sixth craps window. The daily request locks the paid field, fee and
+  award target; 5% of the gross allocation funds the high-roller reserve at lock. Draw and settle
+  steps run as stages 16/17 under the daily lock, and comps are booked once at seal. See [the
+  jackpot battle](CRAPS-PREFERENCES.md#the-jackpot-battle).
+- **BAF.** The x0 consolidation reserves the ETH term of the whole award schedule in `claimablePool`
+  (debiting `futurePool`); stage 19 pays groups of eight from that reservation and returns the
+  residue to the pending future pool. A game-over latch releases the uncredited part. See
+  [details](ARCHITECTURE-DETAILS.md#baf-scatter-and-staged-payout).
+- **Decimator.** At the window-close transition the sealed round's pool moves from `futurePool` into
+  `claimablePool`; ordinary x5 levels add generated entries funded from the jackpot day. See
+  [Decimator battle](DECIMATOR-BATTLE.md).
 - **Century.** The BAF reservation and the Decimator draw precede the tagged 5d4 future-pool keep
   roll; sDGNRS recycles 25–75% of burns at each x00 close. See
   [details](ARCHITECTURE-DETAILS.md#century-transitions-and-the-sdgnrs-level-purchase).
@@ -272,11 +264,11 @@ the specialist references.
 - Game custody (ETH plus stETH) covers the phase's obligation sum under the stated external-asset
   assumptions ([Accounting](ACCOUNTING.md)).
 - Every allocated wallet ID, protocol IDs included, starts with a 1-wei claimable sentinel outside
-  `claimablePool`. No path pays it out, so `claimablePool` covers the sum over IDs of
-  (claimable − 1 + prepaid) plus the amounts reserved inside it (unsplit Degenesis box ETH, the
-  Vault's Degenesis budget, the Game-held redemption reserve, a staged BAF reservation and a
-  sealed Decimator round's pool), and no credit in metered work writes an empty balance slot.
-  Only the final game-over sweep takes it, at most 3 wei for the protocol sinks.
+  `claimablePool`. No path pays it out, so `claimablePool` covers the sum over IDs of (claimable − 1
+  + prepaid) plus the amounts reserved inside it (unsplit Degenesis box ETH, the Vault's Degenesis
+  budget, the Game-held redemption reserve, a staged BAF reservation and a sealed Decimator round's
+  pool), and no credit in metered work writes an empty balance slot. Only the final game-over sweep
+  takes it, at most 3 wei for the protocol sinks.
 - Token supply/backing/virtual allowances reconcile without treating them as interchangeable.
 - No double settlement, recipient substitution, duplicate ticket materialization or lost resume
   state.
@@ -289,10 +281,10 @@ the specialist references.
 
 ## DGVE owner approval
 
-[Owner governance](OWNER_GOVERNANCE.md) executes the bounded owner controls after escrowed
-approval exceeds 50.1% of the live DGVE supply. Voting delegates can manage allocated votes; each
-depositor alone can withdraw their tokens. Initial icon uploads use a one-time creator setup
-window, which closes permanently at completion or governance takeover.
+[Owner governance](OWNER_GOVERNANCE.md) executes the bounded owner controls after escrowed approval
+exceeds 50.1% of the live DGVE supply. Voting delegates can manage allocated votes; each depositor
+alone can withdraw their tokens. Initial icon uploads use a one-time creator setup window, which
+closes permanently at completion or governance takeover.
 
 ## Mechanism references
 

@@ -8,6 +8,7 @@
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
+import { degeneretteMathFixture } from "../helpers/degeneretteMathFixture.js";
 import {
   deployFullProtocol,
   restoreAddresses,
@@ -417,7 +418,7 @@ describe("Paper Parity (Phase 46)", function () {
   describe("PAR-16: Degenerette base payouts and ROI curve", function () {
     let math;
     before(async function () {
-      math = await (await ethers.getContractFactory("DegeneretteMathHarness")).deploy();
+      math = await degeneretteMathFixture();
     });
 
     it("shared base payouts match the documented score table", async function () {

@@ -63,9 +63,24 @@ ENV_KEYS = (
 # an explicit `--group fork` (or `--file test/fork/...`) selects it, and then alone.
 FORK_GROUP = "fork"
 INVARIANT_SHARDS = 3
+# Sources that only build against one profile's packaging. The Craps outcome-injection mock
+# overrides the external dice engine hook, which glamsterdam compiles inline; it and the
+# suites that use it are skipped (never compiled) under that profile.
+PROFILE_EXCLUDED = {
+    "glamsterdam": {
+        "test/craps/MockableCrapsViews.sol",
+        "test/craps/RngCohortRecycling.t.sol",
+        "test/repro/UnpushedSidegameRngSafety.t.sol",
+    },
+}
 FORK_ROOT = "test/fork/"
 FOUNDRY_PATCH = ["node", "scripts/lib/patchForFoundry.js"]
 FORK_PATCH = ["node", "scripts/lib/patchForFork.js"]
+COLD_FORK_SOURCES = {
+    "test/fork/ForkGlamsterdamBudgets.t.sol",
+    "test/fork/SubscriberAdmissionRecoveryFork.t.sol",
+}
+ISOLATED_DIRECTORIES = {"craps", "differential", "economics", "gas", "mutation", "invariant", "governance"}
 
 
 def is_fork_source(path):
@@ -96,7 +111,8 @@ def groups():
     result = {
         "integration-gas": {p for p in files if p.parts[1] in {
             "craps", "differential", "economics", "gas", "mutation", "invariant", "governance"}},
-        "repro-symbolic": {p for p in files if p.parts[1] in {"repro", "halmos"}},
+        "repro-symbolic": {p for p in files if p.parts[1] in {"repro", "halmos"}
+                           or (p.parts[1] == "unit" and p.name.endswith(".t.sol"))},
         "census": {p for p in files if p.parts[1] == "census" and p.name.endswith(".t.sol")},
     }
     chunk = max(1, (len(fuzz) + 3) // 4)
@@ -116,16 +132,26 @@ def groups():
     return files, support, result
 
 
-def split_batches(selected, maximum):
+def source_isolation(path):
+    """Match the CI execution mode, including focused sources and the two cold fork suites."""
+    return path.parts[1] in ISOLATED_DIRECTORIES or str(path) in COLD_FORK_SOURCES
+
+
+def split_batches(selected, maximum, automatic_isolation=False):
     for group, sources in selected.items():
-        ordered = sorted(sources)
+        partitions = [sources]
+        if automatic_isolation:
+            partitions = [set(p for p in sources if source_isolation(p) == mode) for mode in (False, True)]
         # Only integration-gas has demonstrated compiler memory exhaustion. Keep the
         # other established groups intact unless the caller explicitly asks for a cap.
         cap = maximum if maximum is not None else (
-            DEFAULT_BATCH_SOURCES if group == "integration-gas" else len(ordered))
-        for offset in range(0, len(ordered), cap):
-            number = offset // cap + 1
-            yield group, f"{group}-{number:02d}", set(ordered[offset:offset + cap])
+            DEFAULT_BATCH_SOURCES if group == "integration-gas" else len(sources))
+        number = 0
+        for partition in partitions:
+            ordered = sorted(partition)
+            for offset in range(0, len(ordered), cap):
+                number += 1
+                yield group, f"{group}-{number:02d}", set(ordered[offset:offset + cap])
 
 
 def write_json(path, value):
@@ -242,6 +268,10 @@ def main():
         files, support, selected = groups()
     except (ValueError, OSError, TypeError) as error:
         parser.error(str(error))
+    excluded = {Path(p) for p in PROFILE_EXCLUDED.get(os.environ.get("PROFILE", "eip170"), ())}
+    if excluded:
+        support = support - excluded
+        selected = {name: keep - excluded for name, keep in selected.items()}
     if args.file:
         keep = {Path(p) for p in args.file}
         if not keep <= set(files):
@@ -272,7 +302,12 @@ def main():
     selected = {name: keep for name, keep in selected.items() if keep}
     if not selected:
         parser.error("No Solidity test sources selected")
-    batches = list(split_batches(selected, args.max_sources_per_batch))
+    # Explicit caller overrides retain their meaning. Otherwise each physical batch gets
+    # its suite's mode, so make test-foundry/test-fork also reproduce CI's isolation split.
+    automatic_isolation = "FOUNDRY_ISOLATE" not in os.environ and not any(
+        argument == "--isolate" or argument.startswith("--isolate=") for argument in forge_args
+    )
+    batches = list(split_batches(selected, args.max_sources_per_batch, automatic_isolation))
     if args.list:
         for name, keep in selected.items():
             count = sum(group == name for group, _, _ in batches)
@@ -311,6 +346,7 @@ def main():
         "forge_arguments": forge_args, "max_sources_per_batch": args.max_sources_per_batch,
         "default_group_caps": {"integration-gas": DEFAULT_BATCH_SOURCES},
         "physical_batches": len(batches),
+        "isolation_policy": "per-source CI mode" if automatic_isolation else "explicit caller override",
         "test_count_semantics": "execution counts; imported helper suites may repeat between batches",
         "selected_sources": {name: list(map(str, sorted(keep))) for name, keep in selected.items()},
         "original_pins_sha256": hashlib.sha256(original_pins).hexdigest(),
@@ -388,6 +424,9 @@ def main():
         if patch_code:
             raise subprocess.CalledProcessError(patch_code, metadata["patch_command"])
         for group, name, keep in batches:
+            batch_env = dict(env)
+            if automatic_isolation:
+                batch_env["FOUNDRY_ISOLATE"] = str(source_isolation(next(iter(keep)))).lower()
             (run_dir / f"{name}-files.txt").write_text("".join(f"{p}\n" for p in sorted(keep)))
             skip = [arg for p in files if p not in keep | support for arg in ("--skip", str(p))]
             # Changing the selected roots can rebuild a shared handler while reusing
@@ -407,7 +446,8 @@ def main():
             input_path = run_dir / f"{name}-inputs.json"
             write_json(input_path, identity)
             log_path = run_dir / f"{name}.log"
-            evidence = {"command": command, "cwd": str(ROOT), "environment": metadata["environment"],
+            evidence = {"command": command, "cwd": str(ROOT),
+                        "environment": {key: batch_env[key] for key in ENV_KEYS if key in batch_env},
                         "selected_sources": list(map(str, sorted(keep))),
                         "input_manifest": str(input_path.relative_to(log_dir)),
                         "input_manifest_sha256": hashlib.sha256(input_path.read_bytes()).hexdigest()}
@@ -417,7 +457,7 @@ def main():
                    "log": str(log_path.relative_to(log_dir)), **evidence}
             pending_row = row
             with log_path.open("w") as log:
-                forge_code = run_child(command, env=env, stdout=log, stderr=subprocess.STDOUT)
+                forge_code = run_child(command, env=batch_env, stdout=log, stderr=subprocess.STDOUT)
             output = log_path.read_text(errors="replace")
             # A keyed RPC URL must not reach the evidence artifacts (forge echoes it on fork
             # errors). Hosted CI masks secrets in its console, not in uploaded files.

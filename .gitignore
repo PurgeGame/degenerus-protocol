@@ -47,14 +47,11 @@ docs/*
 !docs/README.md
 !docs/ACCOUNT-LOANS.md
 !docs/AUDIT.md
-!docs/AUDIT-READINESS.md
 !docs/ARCHITECTURE.md
 !docs/ARCHITECTURE-DETAILS.md
 !docs/ACCOUNTING.md
 !docs/PROPERTIES.md
 !docs/STORAGE-REUSE.md
-!docs/VERIFICATION.md
-!docs/TEST_REVIEW.md
 !docs/DECIMATOR-BATTLE.md
 !docs/CRAPS-PREFERENCES.md
 !docs/DEGENERETTE-BET-QUEUE.md
@@ -65,19 +62,13 @@ docs/*
 !docs/TOKEN-UNITS.md
 !docs/VAULT_PLAYER_ACTIONS.md
 !docs/OWNER_GOVERNANCE.md
-!docs/abi/
-docs/abi/*
-!docs/abi/DeityPassCustomizationRenderer.json
-!docs/abi/Decimator.json
 !docs/audit/
 docs/audit/*
-!docs/audit/ANALYZER-TRIAGE.md
 !docs/audit/RNG-DOMAINS.md
-!docs/audit/snapshot.json
-!docs/audit/freeze.json
-!docs/audit/freeze-audit-2026-10-16.json
 !docs/audit/source-sha256.txt
-!docs/audit/verification-sha256.txt
+!docs/audit/ETH-EXIT-ASSURANCE.md
+!docs/audit/eth-exit-proof-2026-10-28/
+!docs/audit/eth-exit-proof-2026-10-28/**
 
 # ── Meta ────────────────────────────────────────────────────────────────
 !/README.md
@@ -112,3 +103,8 @@ scripts/fork-run.sh
 scripts/lib/ensForwardConfirmed.js
 scripts/bytecode-manifest.sh
 docs/CRAPS-HIGH-WATER-*.tsv
+
+!docs/TESTING.md
+!docs/MODULE-MAP.md
+!docs/STORAGE-PACKING.md
+!/AUDITPREP-REPORT.md

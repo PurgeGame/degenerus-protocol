@@ -1,0 +1,13 @@
+test/fuzz/DailyJackpotCommitmentFreeze.t.sol
+test/fuzz/DegeneretteV73SolvencyFuzz.t.sol
+test/fuzz/DegenesisSolvencyVectors.t.sol
+test/fuzz/JackpotCommitmentFreeze.t.sol
+test/fuzz/OrdinaryLootboxCommitmentBinding.t.sol
+test/fuzz/RedemptionCommitmentBinding.t.sol
+test/fuzz/TerminalLoanConservation.t.sol
+test/fuzz/invariant/EthSolvency.inv.t.sol
+test/fuzz/invariant/LoanAccounting.inv.t.sol
+test/fuzz/invariant/PoolConservation.inv.t.sol
+test/fuzz/invariant/RedemptionInvariants.inv.t.sol
+test/fuzz/invariant/RngWindowFreeze.inv.t.sol
+test/repro/MatureComposition.t.sol

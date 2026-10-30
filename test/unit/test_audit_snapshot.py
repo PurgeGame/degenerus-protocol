@@ -2,7 +2,6 @@
 import importlib.util
 import contextlib
 import io
-import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -25,6 +24,7 @@ class VerificationInputTests(unittest.TestCase):
             "contracts/Logic.sol": "contract Logic {}\n",
             "contracts/ContractAddresses.sol": "library ContractAddresses {}\n",
             "contracts/Icons32Data.sol": "contract Icons32Data {}\n",
+            "contracts/DeityPassCustomizationRenderer.sol": "contract Renderer {}\n",
             "contracts/mocks/Harness.sol": "contract Harness {}\n",
             "contracts/test/Probe.sol": "contract Probe {}\n",
             "contracts/mocks/Reference.hex": "0x6000\n",
@@ -32,15 +32,11 @@ class VerificationInputTests(unittest.TestCase):
             "scope.txt": "contracts/Logic.sol\n",
             "out_of_scope.txt": "contracts/mocks/\ncontracts/test/\n",
         }
-        for name in AUDITOR.SUPPORTING_SOLIDITY:
-            contents.setdefault(name, "contract Supporting {}\n")
-        self.scoped = sorted(["contracts/Logic.sol", *AUDITOR.SUPPORTING_SOLIDITY])
+        self.scoped = sorted(name for name in contents
+                             if name.startswith("contracts/") and name.count("/") == 1)
         contents["scope.txt"] = "\n".join(self.scoped) + "\n"
         for name, content in contents.items():
             (self.root / name).write_text(content)
-        manifest = {"source_files": [], "source_file_count": 0,
-                    "build_and_deployment_inputs": sorted(AUDITOR.SUPPORTING_SOLIDITY)}
-        (self.root / "docs/audit/snapshot.json").write_text(json.dumps(manifest))
         for attribute, value in (("ROOT", self.root), ("AUDIT", self.root / "docs/audit")):
             replacement = patch.object(AUDITOR, attribute, value)
             replacement.start()
@@ -59,7 +55,7 @@ class VerificationInputTests(unittest.TestCase):
     def test_reference_bytecode_mutation_invalidates_verification_without_expanding_scope(self):
         self.assertEqual(self.check(), 0)
         self.assertEqual(AUDITOR.scope_files(), self.scoped)
-        manifest = (self.root / "docs/audit/verification-sha256.txt").read_text()
+        manifest = (self.root / "docs/audit/source-sha256.txt").read_text()
         for path in ("contracts/mocks/Harness.sol", "contracts/test/Probe.sol", "contracts/mocks/Reference.hex"):
             self.assertIn(path, manifest)
         production_before = (self.root / "docs/audit/source-sha256.txt").read_bytes()
@@ -92,6 +88,17 @@ class VerificationInputTests(unittest.TestCase):
         self.assertEqual(self.check(write=True), 0)
         path.write_text("# changed checker\n")
         self.assertEqual(self.check(), 1)
+
+    def test_vectors_and_module_helpers_are_verification_inputs(self):
+        for name in ("vectors.json", "reference.mjs", "table.csv", "reference.hex"):
+            with self.subTest(name=name):
+                path = self.root / "test" / name
+                path.write_text("original\n")
+                self.assertEqual(self.check(write=True), 0)
+                self.assertIn(str(path.relative_to(self.root)), (self.root / "docs/audit/source-sha256.txt").read_text())
+                path.write_text("changed\n")
+                self.assertEqual(self.check(), 1)
+                self.assertEqual(AUDITOR.scope_files(), self.scoped)
 
 
 if __name__ == "__main__":

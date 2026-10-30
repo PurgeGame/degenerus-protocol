@@ -104,7 +104,7 @@ jobs:
       # Run all source-drift gates, including the newer crank, randomness,
       # shared-storage, arithmetic and simulation parity registries.
       - name: Source-drift gates
-        run: make CHECK_ARTIFACTS=forge-out-production check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-memory-guard check-recipient-calls
+        run: make CHECK_ARTIFACTS=forge-out-production check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-memory-guard check-recipient-calls check-eth-loan-bootstrap
 
       # Cross-profile storage identity. Regenerates the glamsterdam profile files, builds the
       # production contracts only (contracts/; the test helpers target the default profile), then
@@ -471,6 +471,10 @@ jobs:
         run: |
           python3 scripts/test-split-arithmetic.py
           python3 scripts/check-split-arithmetic.py --json-output .audit-test-logs/halmos/split-arithmetic.json
+      - name: ETH production helper proofs and concrete replay (Yices)
+        env:
+          HALMOS_ALLOW_DOWNLOAD: '1'
+        run: python3 scripts/prove-eth-ledgers.py --output .audit-test-logs/eth-exit-helper
       - name: Configure deterministic Foundry deployment addresses
         run: node scripts/lib/patchForFoundry.js
       - name: Halmos symbolic proofs
@@ -480,13 +484,31 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p .audit-test-logs/halmos
-          FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --panic-error-codes '*' --solver-timeout-assertion 300000 --solver-threads 2 --json-output .audit-test-logs/halmos/results.json --dump-smt-queries --dump-smt-directory .audit-test-logs/halmos/queries 2>&1 | tee .audit-test-logs/halmos/output.log
+          # Only this exact harness uses the isolated production-helper configuration above.
+          FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --match-contract '^(?!EthLedgerProductionProof$).*' --loop 8 --panic-error-codes '*' --solver-timeout-assertion 300000 --solver-threads 2 --json-output .audit-test-logs/halmos/results.json --dump-smt-queries --dump-smt-directory .audit-test-logs/halmos/queries 2>&1 | tee .audit-test-logs/halmos/output.log
       - name: Preserve symbolic evidence, including unresolved queries
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: halmos-evidence
           path: .audit-test-logs/halmos/
+          include-hidden-files: true
+          if-no-files-found: ignore
+      - name: Preserve ETH helper proof inputs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eth-helper-evidence
+          # Avoid node_modules/lib symlinks and compiler output in the isolated project.
+          path: |
+            .audit-test-logs/eth-exit-helper/run.json
+            .audit-test-logs/eth-exit-helper/source-sha256.json
+            .audit-test-logs/eth-exit-helper/symbolic-results.json
+            .audit-test-logs/eth-exit-helper/symbolic.log
+            .audit-test-logs/eth-exit-helper/concrete.log
+            .audit-test-logs/eth-exit-helper/foundry.toml
+            .audit-test-logs/eth-exit-helper/contracts/
+            .audit-test-logs/eth-exit-helper/test/
           include-hidden-files: true
           if-no-files-found: ignore
 
@@ -582,17 +604,20 @@ jobs:
         with:
           version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
-      - name: Deep invariant partition (runs=1000 / depth=256, existing suite overrides retained)
+      - name: Deep invariant partition (Advance 10x100; suite overrides retained)
         env:
           INVARIANT_FILE: ${{ matrix.file }}
           INVARIANT_MATCH: ${{ matrix.match }}
           INVARIANT_EXCLUDE: ${{ matrix.exclude }}
-          # A fresh seed every scheduled run (the per-PR jobs keep the fixed profile seed). Replay a
-          # failure locally with FOUNDRY_PROFILE=deep FOUNDRY_FUZZ_SEED=<seed printed below>.
-          FOUNDRY_FUZZ_SEED: ${{ github.run_id }}
+          FOUNDRY_PROFILE: ${{ matrix.profile }}
+          INVARIANT_SEED_PARTITION: ${{ matrix.seed_partition }}
+          FOUNDRY_ISOLATE: 'false'
         run: |
+          # The runner records the exact profile and seed for local reproduction.
+          FOUNDRY_FUZZ_SEED="$(python3 scripts/deep-invariant-matrix.py --seed "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$INVARIANT_SEED_PARTITION")"
+          export FOUNDRY_FUZZ_SEED
           echo "deep invariant seed: $FOUNDRY_FUZZ_SEED"
-          FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --file "$INVARIANT_FILE" --match-test "$INVARIANT_MATCH" --no-match-test "$INVARIANT_EXCLUDE" --threads 1
+          python3 scripts/test-foundry-groups.py --file "$INVARIANT_FILE" --match-test "$INVARIANT_MATCH" --no-match-test "$INVARIANT_EXCLUDE" --threads 1
       - name: Preserve deep-invariant evidence, including failed batches
         if: always()
         uses: actions/upload-artifact@v4

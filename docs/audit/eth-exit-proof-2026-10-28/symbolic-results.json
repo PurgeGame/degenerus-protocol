@@ -1,0 +1,143 @@
+{
+    "exitcode": 0,
+    "test_results": {
+        "test/halmos/EthLedgerProductionProof.t.sol:EthLedgerProductionProof": [
+            {
+                "name": "check_claim_credit_is_local(uint32,uint32,uint96,uint96,uint96,uint256)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    13,
+                    4,
+                    0
+                ],
+                "time": [
+                    0.057443756028078496,
+                    0.057370360009372234,
+                    7.120694499462843e-05
+                ],
+                "num_bounded_loops": 0
+            },
+            {
+                "name": "check_combined_debit_keeps_lanes_separate(uint32,uint32,uint96,uint96,uint96,uint96)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    19,
+                    5,
+                    0
+                ],
+                "time": [
+                    0.17271379695739597,
+                    0.07246991794090718,
+                    0.10024132998660207
+                ],
+                "num_bounded_loops": 0
+            },
+            {
+                "name": "check_overdraw_reverts_without_cross_lane_borrow(uint32,uint32,uint96,uint96,uint256,uint256)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    11,
+                    5,
+                    0
+                ],
+                "time": [
+                    0.1555843100650236,
+                    0.055343944928608835,
+                    0.10023624508175999
+                ],
+                "num_bounded_loops": 0
+            },
+            {
+                "name": "check_prepaid_credit_accounts_liability(uint32,uint32,uint96,uint96,uint96,uint96)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    14,
+                    4,
+                    0
+                ],
+                "time": [
+                    0.07206890999805182,
+                    0.07201783894561231,
+                    4.836497828364372e-05
+                ],
+                "num_bounded_loops": 0
+            },
+            {
+                "name": "check_prize_contribution_conserves_in_either_buffer(uint96,uint96,uint96,uint96,uint96,uint96,bool)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    27,
+                    6,
+                    0
+                ],
+                "time": [
+                    0.17714897089172155,
+                    0.177096928935498,
+                    4.994997289031744e-05
+                ],
+                "num_bounded_loops": 0
+            },
+            {
+                "name": "check_redemption_release_is_reclassification_and_once(uint96,uint96,uint96)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    18,
+                    2,
+                    0
+                ],
+                "time": [
+                    0.2867130700033158,
+                    0.18636240810155869,
+                    0.10034709004685283
+                ],
+                "num_bounded_loops": 0
+            },
+            {
+                "name": "check_shortfall_conserves_and_preserves_sentinel(uint32,uint32,uint96,uint96,uint96,bool)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    80,
+                    11,
+                    0
+                ],
+                "time": [
+                    4.816677057999186,
+                    0.6081805001012981,
+                    4.208492917940021
+                ],
+                "num_bounded_loops": 0
+            },
+            {
+                "name": "check_yield_excludes_all_counted_obligations(uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96)",
+                "exitcode": 0,
+                "num_models": 0,
+                "models": [],
+                "num_paths": [
+                    19,
+                    2,
+                    0
+                ],
+                "time": [
+                    0.20171694399323314,
+                    0.10137512697838247,
+                    0.10033893503714353
+                ],
+                "num_bounded_loops": 0
+            }
+        ]
+    }
+}

@@ -184,12 +184,12 @@ def captured_files(folder):
 
 def source_identity(config):
     paths = {config, Path(__file__).relative_to(ROOT)}
-    for folder, suffixes in (("contracts", {".sol"}), ("test", {".sol", ".js", ".cjs", ".mjs", ".ts"}),
+    for folder, suffixes in (("contracts", {".sol"}), ("test", {".sol", ".js", ".cjs", ".mjs", ".ts", ".json", ".hex", ".csv", ".tsv"}),
                              ("scripts", {".js", ".cjs", ".mjs", ".py", ".json", ".tsv", ".sh"}),
                              ("lib", {".sol"}), ("node_modules", {".sol"})):
         paths.update(p for p in captured_files(folder) if p.suffix in suffixes)
     for name in ("package.json", "package-lock.json", "yarn.lock", "foundry.toml", "tsconfig.json", "docs/AUDIT.md",
-                 "docs/audit/snapshot.json", "scope.txt",
+                 "docs/audit/source-sha256.txt", "scope.txt",
                  "node_modules/hardhat/package.json", "node_modules/hardhat/internal/solidity/compiler/index.js"):
         if Path(name).is_file():
             paths.add(Path(name))

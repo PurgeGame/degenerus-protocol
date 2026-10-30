@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aggregate storage-census logs into ranked per-root creation tables.
 
-Input: forge `-vv` logs written by scripts/audit/storage-census/run.py (the focused runner's log
+Input: forge `-vv` logs written by scripts/test-foundry-groups.py --group census (the focused runner's log
 directory). Every census transaction logs CENSUS lines (one per created or cleared slot), a
 CENSUSTX summary, and every scenario a CENSUSMETA line (see test/census/StorageCensus.sol).
 

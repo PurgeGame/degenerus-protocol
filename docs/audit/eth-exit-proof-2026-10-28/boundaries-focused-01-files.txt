@@ -1,0 +1,6 @@
+test/fuzz/DeadVrfEnding.t.sol
+test/fuzz/DegeneretteFreezeResolution.t.sol
+test/fuzz/DegeneretteSingleSymbol.t.sol
+test/fuzz/StethLossLiveness.t.sol
+test/fuzz/TerminalLoanSettlement.t.sol
+test/repro/VrfRotationMidDayReRoll.t.sol

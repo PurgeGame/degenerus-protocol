@@ -1,0 +1,1614 @@
+Compiling 314 files with Solc 0.8.38
+Solc 0.8.38 finished in 208.90s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1339:9:
+     |
+1339 |         string calldata error
+     |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1353:9:
+     |
+1353 |         string calldata error
+     |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1361:79:
+     |
+1361 |     function assertApproxEqAbs(uint256 left, uint256 right, uint256 maxDelta, string calldata error) external pure;
+     |                                                                               ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1368:77:
+     |
+1368 |     function assertApproxEqAbs(int256 left, int256 right, uint256 maxDelta, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1385:9:
+     |
+1385 |         string calldata error
+     |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1403:9:
+     |
+1403 |         string calldata error
+     |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1413:86:
+     |
+1413 |     function assertApproxEqRel(uint256 left, uint256 right, uint256 maxPercentDelta, string calldata error)
+     |                                                                                      ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1424:84:
+     |
+1424 |     function assertApproxEqRel(int256 left, int256 right, uint256 maxPercentDelta, string calldata error) external pure;
+     |                                                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1431:77:
+     |
+1431 |     function assertEqDecimal(uint256 left, uint256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1438:75:
+     |
+1438 |     function assertEqDecimal(int256 left, int256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1444:46:
+     |
+1444 |     function assertEq(bool left, bool right, string calldata error) external pure;
+     |                                              ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1450:68:
+     |
+1450 |     function assertEq(string calldata left, string calldata right, string calldata error) external pure;
+     |                                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1456:66:
+     |
+1456 |     function assertEq(bytes calldata left, bytes calldata right, string calldata error) external pure;
+     |                                                                  ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1462:68:
+     |
+1462 |     function assertEq(bool[] calldata left, bool[] calldata right, string calldata error) external pure;
+     |                                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1468:74:
+     |
+1468 |     function assertEq(uint256[] calldata left, uint256[] calldata right, string calldata error) external pure;
+     |                                                                          ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1474:72:
+     |
+1474 |     function assertEq(int256[] calldata left, int256[] calldata right, string calldata error) external pure;
+     |                                                                        ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1483:74:
+     |
+1483 |     function assertEq(address[] calldata left, address[] calldata right, string calldata error) external pure;
+     |                                                                          ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1489:74:
+     |
+1489 |     function assertEq(bytes32[] calldata left, bytes32[] calldata right, string calldata error) external pure;
+     |                                                                          ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1495:72:
+     |
+1495 |     function assertEq(string[] calldata left, string[] calldata right, string calldata error) external pure;
+     |                                                                        ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1501:70:
+     |
+1501 |     function assertEq(bytes[] calldata left, bytes[] calldata right, string calldata error) external pure;
+     |                                                                      ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1504:52:
+     |
+1504 |     function assertEq(uint256 left, uint256 right, string calldata error) external pure;
+     |                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1510:50:
+     |
+1510 |     function assertEq(int256 left, int256 right, string calldata error) external pure;
+     |                                                  ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1516:52:
+     |
+1516 |     function assertEq(address left, address right, string calldata error) external pure;
+     |                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1522:52:
+     |
+1522 |     function assertEq(bytes32 left, bytes32 right, string calldata error) external pure;
+     |                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1528:42:
+     |
+1528 |     function assertFalse(bool condition, string calldata error) external pure;
+     |                                          ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1536:77:
+     |
+1536 |     function assertGeDecimal(uint256 left, uint256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1544:75:
+     |
+1544 |     function assertGeDecimal(int256 left, int256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1551:52:
+     |
+1551 |     function assertGe(uint256 left, uint256 right, string calldata error) external pure;
+     |                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1558:50:
+     |
+1558 |     function assertGe(int256 left, int256 right, string calldata error) external pure;
+     |                                                  ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1566:77:
+     |
+1566 |     function assertGtDecimal(uint256 left, uint256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1574:75:
+     |
+1574 |     function assertGtDecimal(int256 left, int256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1581:52:
+     |
+1581 |     function assertGt(uint256 left, uint256 right, string calldata error) external pure;
+     |                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1588:50:
+     |
+1588 |     function assertGt(int256 left, int256 right, string calldata error) external pure;
+     |                                                  ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1596:77:
+     |
+1596 |     function assertLeDecimal(uint256 left, uint256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1604:75:
+     |
+1604 |     function assertLeDecimal(int256 left, int256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1611:52:
+     |
+1611 |     function assertLe(uint256 left, uint256 right, string calldata error) external pure;
+     |                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1618:50:
+     |
+1618 |     function assertLe(int256 left, int256 right, string calldata error) external pure;
+     |                                                  ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1626:77:
+     |
+1626 |     function assertLtDecimal(uint256 left, uint256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1634:75:
+     |
+1634 |     function assertLtDecimal(int256 left, int256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1641:52:
+     |
+1641 |     function assertLt(uint256 left, uint256 right, string calldata error) external pure;
+     |                                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1648:50:
+     |
+1648 |     function assertLt(int256 left, int256 right, string calldata error) external pure;
+     |                                                  ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1655:80:
+     |
+1655 |     function assertNotEqDecimal(uint256 left, uint256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                                ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1662:78:
+     |
+1662 |     function assertNotEqDecimal(int256 left, int256 right, uint256 decimals, string calldata error) external pure;
+     |                                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1668:49:
+     |
+1668 |     function assertNotEq(bool left, bool right, string calldata error) external pure;
+     |                                                 ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1674:71:
+     |
+1674 |     function assertNotEq(string calldata left, string calldata right, string calldata error) external pure;
+     |                                                                       ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1680:69:
+     |
+1680 |     function assertNotEq(bytes calldata left, bytes calldata right, string calldata error) external pure;
+     |                                                                     ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1686:71:
+     |
+1686 |     function assertNotEq(bool[] calldata left, bool[] calldata right, string calldata error) external pure;
+     |                                                                       ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1692:77:
+     |
+1692 |     function assertNotEq(uint256[] calldata left, uint256[] calldata right, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1698:75:
+     |
+1698 |     function assertNotEq(int256[] calldata left, int256[] calldata right, string calldata error) external pure;
+     |                                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1707:77:
+     |
+1707 |     function assertNotEq(address[] calldata left, address[] calldata right, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1713:77:
+     |
+1713 |     function assertNotEq(bytes32[] calldata left, bytes32[] calldata right, string calldata error) external pure;
+     |                                                                             ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1719:75:
+     |
+1719 |     function assertNotEq(string[] calldata left, string[] calldata right, string calldata error) external pure;
+     |                                                                           ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1725:73:
+     |
+1725 |     function assertNotEq(bytes[] calldata left, bytes[] calldata right, string calldata error) external pure;
+     |                                                                         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1728:55:
+     |
+1728 |     function assertNotEq(uint256 left, uint256 right, string calldata error) external pure;
+     |                                                       ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1734:53:
+     |
+1734 |     function assertNotEq(int256 left, int256 right, string calldata error) external pure;
+     |                                                     ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1740:55:
+     |
+1740 |     function assertNotEq(address left, address right, string calldata error) external pure;
+     |                                                       ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1746:55:
+     |
+1746 |     function assertNotEq(bytes32 left, bytes32 right, string calldata error) external pure;
+     |                                                       ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> lib/forge-std/src/Vm.sol:1752:41:
+     |
+1752 |     function assertTrue(bool condition, string calldata error) external pure;
+     |                                         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/fuzz/handlers/SeatCapHandler.sol:139:9:
+    |
+139 |         uint256 at = seatSlot[serial] - 1;
+    |         ^^^^^^^^^^
+
+Warning (6335): "leave" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/fuzz/handlers/SeatCapHandler.sol:400:13:
+    |
+400 |             uint256 leave = seed % 3;
+    |             ^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/helpers/BafStageHost.sol:540:27:
+    |
+540 |             (uint8 stage, uint24 at) = abi.decode(logs[j].data, (uint8, uint24));
+    |                           ^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> test/helpers/DecimatorSamplingReference.sol:12:5:
+   |
+12 |     function at(uint256 word, uint24 lvl, uint256 total, uint256 stratum) internal pure returns (uint64) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> test/helpers/QaTrace.sol:91:58:
+   |
+91 |         quest=type(uint256).max;credit=type(uint256).max;uint256 at;
+   |                                                          ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/MineFlipGas.sol:91:67:
+   |
+91 |     function available(Meter memory meter) internal view returns (uint256 budget) {
+   |                                                                   ^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/MineFlipGas.sol:46:5:
+   |
+46 |     function budget(uint256 allowance, uint32 multiplierBps, bool mustProgress) internal pure returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3616:43:
+     |
+3616 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+     |                                           ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+    |
+350 |     uint24 internal level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3632:9:
+     |
+3632 |         uint24 level,
+     |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+    |
+350 |     uint24 internal level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3756:41:
+     |
+3756 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+     |                                         ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+    |
+350 |     uint24 internal level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3762:44:
+     |
+3762 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+     |                                            ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+    |
+350 |     uint24 internal level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/TicketEntropy.sol:32:54:
+   |
+32 |     function identity(uint24 queueKey, uint24 level, uint256 queueIndex, uint32 walletId)
+   |                                                      ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/TicketEntropy.sol:24:5:
+   |
+24 |     function queueIndex(uint256 logical, uint256 start, uint256 total) internal pure returns (uint256 physical) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (8760): This declaration has the same name as another declaration.
+  --> contracts/mocks/DegeneretteMathHarness.sol:15:9:
+   |
+15 |         SpinResult memory spin;
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+Note: The other declaration is here:
+  --> contracts/mocks/DegeneretteMathHarness.sol:57:5:
+   |
+57 |     function spin(uint256 seed, uint256 houseSeed, uint8 symbol, uint8 currency)
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/fuzz/helpers/TicketQueueStorage.sol:137:13:
+    |
+137 |             uint256 lane = uint32(uint256(vm.load(host, _future(key, id))) >> ((position & 7) * 32));
+    |             ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:144:9:
+    |
+144 |         uint256 lane = (word >> shift) & ((uint256(1) << 42) - 1);
+    |         ^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/fuzz/helpers/TicketQueueStorage.sol:160:13:
+    |
+160 |             uint256 prior = uint256(vm.load(host, target));
+    |             ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:172:9:
+    |
+172 |         uint256 prior = uint256(vm.load(host, slot));
+    |         ^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/fuzz/helpers/TicketQueueStorage.sol:163:13:
+    |
+163 |             uint256 lane = value == 0 ? 0 : 0x80000000 | count | ((uint256(value) >> 10) & 0x40000000);
+    |             ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:176:9:
+    |
+176 |         uint256 lane = value == 0 ? 0 : (uint256(value) & ((uint256(1) << 41) - 1)) | (uint256(1) << 41);
+    |         ^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/helpers/BoxOrderLib.sol:139:48:
+    |
+139 |     function boEntry(uint32 id, uint256 units, uint256 scoreCode, uint256 boostBps, uint256 qty, bool distress)
+    |                                                ^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/helpers/BoxOrderLib.sol:173:5:
+    |
+173 |     function scoreCode(uint256 score) internal pure returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/fuzz/handlers/MultiLevelHandler.sol:169:13:
+    |
+169 |             uint256 levelBefore = game.currentLvl();
+    |             ^^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/handlers/MultiLevelHandler.sol:197:9:
+    |
+197 |         uint256 levelBefore = game.currentLvl();
+    |         ^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> test/fuzz/helpers/ClaimablePoolIdentity.sol:57:64:
+   |
+57 |     function balanceWords(address game) internal view returns (uint256 sum, uint256 missing) {
+   |                                                                ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/ClaimablePoolIdentity.sol:147:5:
+    |
+147 |     function sum(Terms memory t) internal pure returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> test/fuzz/helpers/ClaimablePoolIdentity.sol:67:68:
+   |
+67 |     function unsplitDegenesis(address game) internal view returns (uint256 sum) {
+   |                                                                    ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/ClaimablePoolIdentity.sol:147:5:
+    |
+147 |     function sum(Terms memory t) internal pure returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> test/fuzz/helpers/ClaimablePoolIdentity.sol:92:87:
+   |
+92 |     function decimatorReserved(address game, uint256 maxLevel) internal view returns (uint256 sum, uint256 live) {
+   |                                                                                       ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/ClaimablePoolIdentity.sol:147:5:
+    |
+147 |     function sum(Terms memory t) internal pure returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1385:22:
+     |
+1385 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1454:22:
+     |
+1454 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1521:25:
+     |
+1521 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1978:25:
+     |
+1978 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/Icons32Data.sol:198:30:
+    |
+198 |                 uint64 bit = uint64(1) << (startIndex + i);
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/Icons32Data.sol:219:26:
+    |
+219 |             uint64 bit = uint64(1) << (33 + quadrant);
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> contracts/modules/DegenerusGameBoonModule.sol:90:26:
+   |
+90 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint24) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/modules/DegenerusGameBoonModule.sol:500:26:
+    |
+500 |             boonTypes |= uint24(boonType) << (8 * slot);
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/modules/DegenerusGameDecimatorModule.sol:265:24:
+    |
+265 |             weights |= uint64(weight) << (uint256(q) * 16);
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> contracts/modules/DegenerusGameFoilCore.sol:97:26:
+   |
+97 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/modules/DegenerusGameTicketModule.sol:234:22:
+    |
+234 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1321:62:
+     |
+1321 |             _setBatchPlayer(parity, index, uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
+     |                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1322:20:
+     |
+1322 |                 | (uint128(uint16(score) + 1) << BATCH_PLAYER_SCORE_SHIFT));
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> test/helpers/BucketSeed.sol:36:34:
+   |
+36 |         _seedOwedAt(rk, player, (uint80(id) << OWNER_IDX_SHIFT) | packedOwedRem);
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint24) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> test/fuzz/helpers/DegenesisBoonReference.sol:35:23:
+   |
+35 |             packed |= uint24(boonType(roll)) << (8 * i);
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> test/gas/AdvanceGasCeiling.sol:118:29:
+    |
+118 |         uint80 ownerBits = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> test/helpers/MintBucketSeed.sol:36:34:
+   |
+36 |         _seedOwedAt(rk, player, (uint80(id) << OWNER_IDX_SHIFT) | packedOwedRem);
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:11:9:
+   |
+11 |         uint32 played,
+   |         ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:12:9:
+   |
+12 |         uint8 bankMult,
+   |         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:13:9:
+   |
+13 |         uint16 goalMult,
+   |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:14:9:
+   |
+14 |         uint24 stakeUnits,
+   |         ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:15:9:
+   |
+15 |         uint40 closeTime,
+   |         ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:16:9:
+   |
+16 |         bool multiEntry,
+   |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:17:9:
+   |
+17 |         uint16 highRollerMult
+   |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:18:25:
+   |
+18 |     ) external returns (uint64 slot) {
+   |                         ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:22:26:
+   |
+22 |     function closeBattle(uint64 slot) external returns (uint48 index) {
+   |                          ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:22:57:
+   |
+22 |     function closeBattle(uint64 slot) external returns (uint48 index) {
+   |                                                         ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:26:21:
+   |
+26 |     function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
+   |                     ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:26:34:
+   |
+26 |     function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
+   |                                  ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:26:49:
+   |
+26 |     function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
+   |                                                 ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:26:84:
+   |
+26 |     function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
+   |                                                                                    ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:30:31:
+   |
+30 |     function setBattleCreator(address account, bool allowed) external {
+   |                               ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:30:48:
+   |
+30 |     function setBattleCreator(address account, bool allowed) external {
+   |                                                ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:34:27:
+   |
+34 |     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word)
+   |                           ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:34:40:
+   |
+34 |     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word)
+   |                                        ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:34:53:
+   |
+34 |     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word)
+   |                                                     ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:34:71:
+   |
+34 |     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word)
+   |                                                                       ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:34:84:
+   |
+34 |     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word)
+   |                                                                                    ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:34:99:
+   |
+34 |     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word)
+   |                                                                                                   ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:40:31:
+   |
+40 |     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory result) {
+   |                               ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:40:45:
+   |
+40 |     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory result) {
+   |                                             ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:40:82:
+   |
+40 |     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory result) {
+   |                                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:44:26:
+   |
+44 |     function admitCustom(uint64 slot) external {
+   |                          ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:48:35:
+   |
+48 |     function registerRngSlot_g709(uint48 index, uint64 slot, bytes32 key) external {
+   |                                   ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:48:49:
+   |
+48 |     function registerRngSlot_g709(uint48 index, uint64 slot, bytes32 key) external {
+   |                                                 ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:48:62:
+   |
+48 |     function registerRngSlot_g709(uint48 index, uint64 slot, bytes32 key) external {
+   |                                                              ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:52:32:
+   |
+52 |     function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external returns (bool locked) {
+   |                                ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:52:51:
+   |
+52 |     function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external returns (bool locked) {
+   |                                                   ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:52:65:
+   |
+52 |     function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external returns (bool locked) {
+   |                                                                 ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:52:97:
+   |
+52 |     function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external returns (bool locked) {
+   |                                                                                                 ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:56:35:
+   |
+56 |     function prepareJackpotBattle(uint24 level, uint256 word)
+   |                                   ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:56:49:
+   |
+56 |     function prepareJackpotBattle(uint24 level, uint256 word)
+   |                                                 ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:57:27:
+   |
+57 |         external returns (uint256 drawWord, uint256 cursor, uint256 remaining)
+   |                           ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:57:45:
+   |
+57 |         external returns (uint256 drawWord, uint256 cursor, uint256 remaining)
+   |                                             ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:57:61:
+   |
+57 |         external returns (uint256 drawWord, uint256 cursor, uint256 remaining)
+   |                                                             ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:62:34:
+   |
+62 |     function appendJackpotBattle(uint256[] calldata field, uint256 cursor, bool last) external {
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:62:60:
+   |
+62 |     function appendJackpotBattle(uint256[] calldata field, uint256 cursor, bool last) external {
+   |                                                            ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:62:76:
+   |
+62 |     function appendJackpotBattle(uint256[] calldata field, uint256 cursor, bool last) external {
+   |                                                                            ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:66:38:
+   |
+66 |     function settleHighRollerReserve(uint64 slot) external {
+   |                                      ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:70:34:
+   |
+70 |     function convertNormalToHigh(uint32 id, uint32 highCount) external {
+   |                                  ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:70:45:
+   |
+70 |     function convertNormalToHigh(uint32 id, uint32 highCount) external {
+   |                                             ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:74:33:
+   |
+74 |     function upgradeReservedDay(uint32 id, uint24 day) external {
+   |                                 ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:74:44:
+   |
+74 |     function upgradeReservedDay(uint32 id, uint24 day) external {
+   |                                            ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:78:35:
+   |
+78 |     function finalizeBattle_g3665(Window calldata w, uint256 board, uint256 word) external {
+   |                                   ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:78:54:
+   |
+78 |     function finalizeBattle_g3665(Window calldata w, uint256 board, uint256 word) external {
+   |                                                      ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:78:69:
+   |
+78 |     function finalizeBattle_g3665(Window calldata w, uint256 board, uint256 word) external {
+   |                                                                     ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:82:41:
+   |
+82 |     function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+   |                                         ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:82:78:
+   |
+82 |     function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+   |                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:86:33:
+   |
+86 |     function runDailyBattleWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+   |                                 ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/CrapsLifecycleRouter.sol:86:70:
+   |
+86 |     function runDailyBattleWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+   |                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:10:39:
+   |
+10 |     function _gameDrainAffiliateBases(uint256 ids, uint256 uplines) internal virtual returns (uint256, uint256, uint256) {
+   |                                       ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:10:52:
+   |
+10 |     function _gameDrainAffiliateBases(uint256 ids, uint256 uplines) internal virtual returns (uint256, uint256, uint256) {
+   |                                                    ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:14:40:
+   |
+14 |     function _gameRegisterWallet_g9539(address owner, bool allocate) internal virtual returns (uint32 id) {
+   |                                        ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:14:55:
+   |
+14 |     function _gameRegisterWallet_g9539(address owner, bool allocate) internal virtual returns (uint32 id) {
+   |                                                       ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:18:42:
+   |
+18 |     function _gameRegisterWalletIdentity(address owner) internal virtual returns (uint32 id) {
+   |                                          ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:22:41:
+   |
+22 |     function _gameRecordAfkingSecondary(uint32 id, uint16 amount) internal virtual {
+   |                                         ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:22:52:
+   |
+22 |     function _gameRecordAfkingSecondary(uint32 id, uint16 amount) internal virtual {
+   |                                                    ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:26:41:
+   |
+26 |     function _gameFloorAfkingStreakBase(uint32 id, uint16 floor) internal virtual {
+   |                                         ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:26:52:
+   |
+26 |     function _gameFloorAfkingStreakBase(uint32 id, uint16 floor) internal virtual {
+   |                                                    ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:31:9:
+   |
+31 |         uint32 id,
+   |         ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:32:9:
+   |
+32 |         uint256 shareBps
+   |         ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:37:39:
+   |
+37 |     function _gameSetOperatorApproval(uint32 id, address operator, bool approved) internal virtual {
+   |                                       ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:37:50:
+   |
+37 |     function _gameSetOperatorApproval(uint32 id, address operator, bool approved) internal virtual {
+   |                                                  ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:37:68:
+   |
+37 |     function _gameSetOperatorApproval(uint32 id, address operator, bool approved) internal virtual {
+   |                                                                    ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:41:42:
+   |
+41 |     function _gameSetLootboxRngThreshold(uint256 newThreshold) internal virtual {
+   |                                          ^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:45:39:
+   |
+45 |     function _gameSetMiddayMaxBasefee(uint256 newGwei) internal virtual {
+   |                                       ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:49:33:
+   |
+49 |     function _gameClaimWinnings(uint32 id) internal virtual {
+   |                                 ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:53:33:
+   |
+53 |     function _gameClaimWinnings(uint32 id, uint256 amount) internal virtual {
+   |                                 ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:53:44:
+   |
+53 |     function _gameClaimWinnings(uint32 id, uint256 amount) internal virtual {
+   |                                            ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:61:40:
+   |
+61 |     function _gameDepositAfkingFunding(uint32 id) internal virtual {
+   |                                        ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:66:9:
+   |
+66 |         address recipient,
+   |         ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:67:9:
+   |
+67 |         uint256 amount
+   |         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:72:41:
+   |
+72 |     function _gameAdminStakeEthForStEth(uint256 amount) internal virtual {
+   |                                         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> contracts/modules/GameActionInternals.sol:76:31:
+   |
+76 |     function _gameReverseFlip(uint256 expectedCost) internal virtual {
+   |                               ^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/modules/DegenerusGameLootboxModule.sol:699:67:
+    |
+699 |     function _localboxResolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
+    |                                                                   ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/craps/CrapsPins.sol:521:99:
+    |
+521 |     function _openBattle(CrapsViews c, uint32 played, uint8 bankMult, uint16 goalMult, uint24 su, uint16 bar)
+    |                                                                                                   ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/fuzz/helpers/DeadVrfSeeder.sol:48:26:
+   |
+48 |     function pendingWord(uint24 lvl, address player) external view returns (uint256) {
+   |                          ^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:212:32:
+    |
+212 |         vm.etch(address(game), type(DeadVrfSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:404:32:
+    |
+404 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:428:32:
+    |
+428 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:453:32:
+    |
+453 |         vm.etch(address(game), type(DeadVrfSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:530:32:
+    |
+530 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:577:32:
+    |
+577 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:658:32:
+    |
+658 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:695:32:
+    |
+695 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:716:32:
+    |
+716 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/helpers/DegeneretteReference.sol:30:37:
+   |
+30 |     function drawWord(uint256 word, bool wwxrp) internal pure returns (uint256) {
+   |                                     ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/helpers/DegeneretteReference.sol:34:35:
+   |
+34 |     function player(uint256 word, uint32 index, uint8 symbol, uint8 spin, bool wwxrp) internal pure returns (uint32 t) {
+   |                                   ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/helpers/DegeneretteReference.sol:34:75:
+   |
+34 |     function player(uint256 word, uint32 index, uint8 symbol, uint8 spin, bool wwxrp) internal pure returns (uint32 t) {
+   |                                                                           ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/helpers/DegeneretteReference.sol:42:34:
+   |
+42 |     function house(uint256 word, uint32 index, uint8 spin, bool wwxrp) internal pure returns (uint32) {
+   |                                  ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/helpers/DegeneretteReference.sol:42:60:
+   |
+42 |     function house(uint256 word, uint32 index, uint8 spin, bool wwxrp) internal pure returns (uint32) {
+   |                                                            ^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/fuzz/helpers/RedemptionCloseTools.sol:22:32:
+   |
+22 |         vm.etch(address(game), type(RedemptionCloseHarness).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/helpers/RedemptionFixture.sol:118:32:
+    |
+118 |         vm.etch(address(game), type(RedemptionGameOverLatch).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/fuzz/helpers/RedemptionFixture.sol:164:41:
+    |
+164 |     function _synthReward(uint256 word, uint32 id) internal pure returns (uint16) {
+    |                                         ^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/helpers/RedemptionFixture.sol:183:32:
+    |
+183 |         vm.etch(address(game), type(RedemptionCloseHarness).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/StethLossLiveness.t.sol:235:32:
+    |
+235 |         vm.etch(address(game), type(StethLossSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/StethLossLiveness.t.sol:308:32:
+    |
+308 |         vm.etch(address(game), type(StethLossSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/fuzz/TerminalLoanSettlement.t.sol:83:32:
+   |
+83 |         vm.etch(address(game), type(TerminalLoanSeeder).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/fuzz/handlers/CrapsRngSealHandler.sol:746:26:
+    |
+746 |     function sealRequest(uint256 seed) external {
+    |                          ^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/fuzz/handlers/DegeneretteHandler.sol:228:9:
+    |
+228 |         bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
+    |         ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/fuzz/handlers/WalletIdTruthHandler.sol:788:64:
+    |
+788 |     function _pmBet(uint256 action, address caller, uint32 id, address bettor, bool over) internal {
+    |                                                                ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/fuzz/helpers/DecimatorBattleHarness.sol:74:21:
+   |
+74 |     function nodeOf(uint24 lvl, uint8 i) external view returns (Node memory n) {
+   |                     ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/fuzz/helpers/DegenesisHarness.sol:339:34:
+    |
+339 |     function _seed(uint256 word, uint256 day, uint256 index, uint32 id) internal pure returns (uint256) {
+    |                                  ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/fuzz/helpers/DegenesisHarness.sol:339:62:
+    |
+339 |     function _seed(uint256 word, uint256 day, uint256 index, uint32 id) internal pure returns (uint256) {
+    |                                                              ^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/gas/AdvanceGasCeiling.sol:182:32:
+    |
+182 |         vm.etch(address(game), type(GameSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/helpers/BafStageHost.sol:294:32:
+    |
+294 |         vm.etch(address(game), type(BafStageHost).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/helpers/BoxQueueHost.sol:111:21:
+    |
+111 |     function direct(address player, uint32 id, uint256 amount, uint256 rngWord) external {
+    |                     ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/helpers/BoxQueueHost.sol:120:24:
+    |
+120 |     function afkingBox(address player, uint32 id, uint256 amount, uint24 day, uint256 rngWord) external {
+    |                        ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/helpers/BoxQueueHost.sol:131:25:
+    |
+131 |     function redemption(address player, uint32 id, uint256 amount, uint256 rngWord, uint32 batchId)
+    |                         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/helpers/DecimatorSamplingReference.sol:12:31:
+   |
+12 |     function at(uint256 word, uint24 lvl, uint256 total, uint256 stratum) internal pure returns (uint64) {
+   |                               ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> test/helpers/QueuedJackpotReference.sol:1492:9:
+     |
+1492 |         uint8 counter,
+     |         ^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/modules/CrapsBattleCore.sol:864:5:
+    |
+864 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/modules/CrapsLifecycleViews.sol:227:5:
+    |
+227 |     function _jackpotWindowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+    --> contracts/DegenerusAffiliate.sol:1113:5:
+     |
+1113 |     function _payoutUpline(uint32 ownerId, bool second, uint256 cache)
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/DegenerusRecordBounty.sol:444:5:
+    |
+444 |     function getApproved(uint256 tokenId) external view returns (address) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+  --> contracts/modules/GameMinerEntries.sol:13:5:
+   |
+13 |     function minerAction() external returns (uint8) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+  --> contracts/profiles/glamsterdam/GlamsterdamGame.sol:46:5:
+   |
+46 |     function _gameMinerAction() internal override returns (uint8) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/craps/CrapsViews.sol:592:5:
+    |
+592 |     function _fullSettlementOf(uint256 betId, uint256 header, Window memory w, uint256 word)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:896:5:
+    |
+896 |     function _rawPayouts(bytes memory spins, uint8 currency, uint128 stake, uint16 activity)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:972:5:
+    |
+972 |     function _countResolvedAndCapped(uint64 betA, uint64 betB)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+  --> test/fuzz/DegeneretteSingleSymbol.t.sol:77:5:
+   |
+77 |     function _resolve(address who, uint64 id, uint8 symbol, uint256 word)
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/fuzz/StethLossLiveness.t.sol:226:5:
+    |
+226 |     function _vaultOwner() private view returns (address) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/handlers/DegenesisRngFreezeHandler.sol:427:5:
+    |
+427 |     function _logsOf(bool ok) internal returns (Vm.Log[] memory logs) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/handlers/DegenesisSaleFlowHandler.sol:243:5:
+    |
+243 |     function _dropLogs() internal {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/handlers/FlipSupplyProbe.sol:255:5:
+    |
+255 |     function _before() private returns (uint256 t0, uint256 v0) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/handlers/V61AfkingSpendHandler.sol:280:5:
+    |
+280 |     function _afkingSpentAmount(address who) internal returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+  --> test/fuzz/helpers/ActivityAffiliateCacheFixture.sol:35:5:
+   |
+35 |     function scoreUncached(address player, uint32 streak, uint24 basis) external returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/helpers/BoundedGasProbe.sol:117:5:
+    |
+117 |     function _surcharge(VmSafe.AccountA ... ccountCount, uint256 firstWrites) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (4591): There are more than 256 warnings. Ignoring the rest.
+
+Ran 16 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfEndingTest
+[PASS] test_SameStableOwnerClaimsThreeTerminalDomainsExactlyOnce() (gas: 4484174)
+[PASS] test_UnattendedPurchaseDeadlineEndsWithoutCalendarCredit() (gas: 7079395)
+[PASS] test_claimsCloseAtTheFinalSweep() (gas: 4363855)
+[PASS] test_deadEndingSplitsThePotDeterministically() (gas: 4802442)
+[PASS] test_fulfilmentAfterTheDeadLatchIsANoOp() (gas: 4075882)
+[PASS] test_lootboxOnlyMiddayRequestIsReissuedBySwap() (gas: 8544467)
+[PASS] test_pendingRedemptionResolvesAtExpectedValue() (gas: 4272818)
+[PASS] test_sdgnrsDeterministicBurnWorksAfterTheDeadEnding() (gas: 4343715)
+[PASS] test_stallAcrossDeadlineKeepsTheLevelRescuable() (gas: 16036325)
+[PASS] test_starvedPreSwapBatchCannotCloseTheSwapWindow() (gas: 229300266)
+Logs:
+  batchGas: 78256
+  requestGas: 130821
+  witnessGas: 20211
+  leakGas: 0
+
+[PASS] test_starvedPreSwapBatchWithRefusingCoordinatorCannotCloseTheSwapWindow() (gas: 229200619)
+Logs:
+  batchGas: 78256
+  requestGas: 30818
+  witnessGas: 20211
+  leakGas: 0
+
+[PASS] test_stuckDayWithAppliedWordEndsOnAFreshWord() (gas: 2452224)
+[PASS] test_stuckDayWithDeliveredWordEndsOnAFreshWord() (gas: 2213579)
+[PASS] test_swapSpendsTheDailyRetry() (gas: 6915125)
+[PASS] test_unansweredMiddayRequestAtDeadlineEndsDeterministically() (gas: 6862632)
+[PASS] test_wordDeliveredAfterTheWindowIsDiscarded() (gas: 4094452)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 352.37ms (342.14ms CPU time)
+
+Ran 8 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfLivenessTest
+[PASS] test_backlogWordIsNeverDead() (gas: 105838)
+[PASS] test_deadlineFiresOnceCaughtUpOrOnceTheEndingStarted() (gas: 76725)
+[PASS] test_deadlineWaitsOutADayThatAlreadyHasItsWord() (gas: 97042)
+[PASS] test_middayRequestPastDeadmanUsesDeterministicEnding() (gas: 103861)
+[PASS] test_middayRequestUnansweredFourteenDaysIsDeadAndStaysLatched() (gas: 88240)
+[PASS] test_onlyAPublishedWordKeepsVrfAlivePastTheWindow() (gas: 69160)
+[PASS] test_retryBitKeepsTheWindowAndTheDay() (gas: 61798)
+[PASS] test_stallAcrossDeadlineWaitsForTheVrfDeadWindow() (gas: 61887)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 348.50µs (233.28µs CPU time)
+
+Ran 8 tests for test/fuzz/DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
+[PASS] testBatchedPayoutEqualsPerSpinExpectation_Tier1() (gas: 458497)
+Logs:
+  tier1_eth_claimable_delta: 10125000000000000
+  tier1_flip_delta: 4100
+  tier1_wwxrp_delta: 0
+
+[PASS] testDegeneretteUnfrozenPathRegression() (gas: 288163)
+[PASS] testDgnrsAwardStaysPerSpin() (gas: 989581)
+Logs:
+  dgnrs_parent_per_spin: 4037980161600000000000
+  dgnrs_parent_stale_hypothetical: 4079592000000000000000
+  dgnrs_nested_box_awards: 0
+
+[PASS] testEthCapBindsOnIdenticalSpin_Tier2() (gas: 413292)
+Logs:
+  tier2_eth_credited: 167900000000000000
+  tier2_spins_capped: 2
+
+[PASS] testFlipSurvivalFlipLossZeroesMint() (gas: 305644)
+[PASS] testLootboxSummedPerBetIdNotAcrossBets() (gas: 3270448)
+Logs:
+  perbetid_eth_one_call: 95000000000000000
+  perbetid_eth_two_calls: 95000000000000000
+
+[PASS] testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() (gas: 596324)
+[PASS] test_SharedBoardAcrossPlayersCurrenciesAndBets() (gas: 644329)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 13.10ms (7.64ms CPU time)
+
+Ran 15 tests for test/fuzz/DegeneretteSingleSymbol.t.sol:DegeneretteSingleSymbolTest
+[PASS] testAllAxesAllHeroesAndWildsAgainstIndependentScoreAndRig() (gas: 398732059)
+[PASS] testAutomaticFlipReelsExposeHeroAndUseIndependentColorsAndSharedMath() (gas: 240222)
+[PASS] testAutomaticFlipRejectsOversizedPerSpinStakeWithoutTruncation() (gas: 40625)
+[PASS] testAutomaticWwxrpHashesItsSeedAndScoresTheRiggedReel() (gas: 3693087)
+[PASS] testDiceBetsRejectAtomicallyForEveryCurrencyAndFundingRoute() (gas: 2840856)
+[PASS] testDifferentHeroesRerollRemainingTicketButShareHouse() (gas: 2051354)
+[PASS] testFuzzPayoutBoundsAndWwxrpBonusTiers(uint128,uint8,uint8,uint16) (runs: 1000, μ: 17570, ~: 17964)
+[PASS] testHeroIsStoredOnlyInTheSelectedSymbol() (gas: 702554)
+[PASS] testHouseProducerAllColorSymbolPairsAndWildNibble() (gas: 2543580)
+[PASS] testInvalidSymbolRejectedAndNewBetJoinsUnrevealedWriteCohort() (gas: 471945)
+[PASS] testNaturalEthJackpotCapsCashAndResolvesOverflow() (gas: 452177)
+[PASS] testNaturalWwxrpJackpotPaysTokens() (gas: 60312)
+[PASS] testSharedHeroTicketsAndPrefixAcrossPlayersBetsStakesAndEthFlip() (gas: 1793326)
+[PASS] testUnsupportedCurrenciesRejectAtomicallyForEveryFundingRoute() (gas: 701052)
+[PASS] testWildScoringAndNoGoldPremium() (gas: 15791)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 606.06ms (600.65ms CPU time)
+
+Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
+[PASS] test_deployerIsTestContract() (gas: 379)
+[PASS] test_nonceIncrements() (gas: 47513)
+[PASS] test_startingNonce() (gas: 2555)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 76.86µs (22.19µs CPU time)
+
+Ran 1 test for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerDegenesis
+[PASS] testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() (gas: 3491133)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.78ms (2.58ms CPU time)
+
+Ran 3 tests for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerShape
+[PASS] testActorsAreInDisjointRange() (gas: 34269)
+[PASS] testGhostCountersStartZero() (gas: 19086)
+[PASS] testTrackedAddrsIsCompleteCover() (gas: 27032)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.70ms (76.57µs CPU time)
+
+Ran 10 tests for test/fuzz/StethLossLiveness.t.sol:StethLossLiveness
+[PASS] testFuzz_stethLossAnyFractionAnyTime(uint256,uint8) (runs: 24, μ: 2494109226, ~: 2408522640)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss100Percent_afterGameOver() (gas: 2665249431)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss100Percent_beforeSweep() (gas: 2408463876)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss100Percent_midGame() (gas: 2408523890)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss10Percent_afterGameOver() (gas: 2665301881)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss10Percent_beforeSweep() (gas: 2408521702)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss10Percent_midGame() (gas: 2408521988)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss50Percent_afterGameOver() (gas: 2665302013)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss50Percent_beforeSweep() (gas: 2408520844)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+[PASS] test_stethLoss50Percent_midGame() (gas: 2408520835)
+Logs:
+  redemption roll: 160
+  redemption pending tokens: 0
+
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 82.33s (82.32s CPU time)
+
+Ran 1 test for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanPendingBatchTest
+[PASS] test_HardDeadlineBypassesUnfinishedNormalLoanBatch() (gas: 34878563)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 37.82ms (32.47ms CPU time)
+
+Ran 7 tests for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanSettlementTest
+[PASS] testFuzz_RandomBookSettlesOnceAtTheRepaymentPrice(uint256) (runs: 24, μ: 9357074, ~: 9435472)
+[PASS] test_ChunkedSettlementResumesAroundManualRepayment() (gas: 43855622)
+[PASS] test_DeadVrfAtTheDecisionLeavesLoansUntouched() (gas: 5055655)
+[PASS] test_DeadlineEndingSettlesEveryLoanBeforeTheTerminalRequest() (gas: 15988643)
+[PASS] test_EmptyBookScansInOneCallThenTheEndingProceeds() (gas: 2764248)
+[PASS] test_HardDeadlineInterruptsTerminalLoanBookWithoutReversingPaidPrefix() (gas: 18335249)
+[PASS] test_OlderWordLandingDuringSettlementChangesNothing() (gas: 6923746)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 405.49ms (399.27ms CPU time)
+
+Ran 2 tests for test/repro/VrfRotationMidDayReRoll.t.sol:VrfRotationMidDayReRoll
+[PASS] test_C1_rotationAfterMidDayWordLands_doesNotReRoll(uint256) (runs: 1000, μ: 7534467, ~: 7534467)
+[PASS] test_C1_rotationDuringGenuineMidDayFlight_stillReIssues(uint256) (runs: 1000, μ: 7624175, ~: 7624175)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 14.51s (14.51s CPU time)
+
+Ran 11 test suites in 98.28s (98.28s CPU time): 74 tests passed, 0 failed, 0 skipped (74 total tests)

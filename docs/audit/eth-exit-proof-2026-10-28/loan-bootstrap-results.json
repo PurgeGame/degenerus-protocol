@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "cases": 218000,
+  "max_ratio": "8207/62400",
+  "max_percent": 13.15224358974359,
+  "witness": {
+    "pass_level": 1,
+    "active_level": 1,
+    "quantity": 1,
+    "awarded_quantity": 1,
+    "principal_wei": 205175000000000000,
+    "cost_wei": 1560000000000000000
+  },
+  "scope": "new whale-pass ticket award; immediate borrow; excludes bundled rewards and later outcomes",
+  "source_hashes": {
+    "contracts/storage/DegenerusGameStorage.sol": "8e9c2c842fc9eeb8e71cd0e9418f02f39de6f6cae6b5b203722e880204ec3641",
+    "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "e18867f2d1428cbe78a7663fa6b04af63eabe9198699d174ee921dbb05e82b98",
+    "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46"
+  }
+}

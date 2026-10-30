@@ -1,0 +1,64 @@
+{
+  "run_id": "20261029T035348.653408Z-27ee44b6",
+  "cwd": "/home/zak/.cache/degenerus-auditprep-scratch/merge/campaign-tree",
+  "base_commit": null,
+  "forge_version": "forge Version: 1.6.0-nightly\nCommit SHA: c07d504b4ae67754584f4e05ff0c547a43c50f7b\nBuild Timestamp: 2026-03-28T06:16:40.973328215Z (1774678600)\nBuild Profile: dist",
+  "runner_sha256": "11b9e5a59ab84305030048449a3d585087679deafbe7ceefa857d4f801011312",
+  "effective_source_layout": {
+    "src": "contracts",
+    "test": "test",
+    "libs": [
+      "node_modules",
+      "lib"
+    ],
+    "remappings": [
+      "@openzeppelin/=node_modules/@openzeppelin/",
+      "forge-std/=lib/forge-std/src/",
+      "hardhat/=node_modules/hardhat/"
+    ],
+    "include_paths": [],
+    "allow_paths": []
+  },
+  "environment": {
+    "FOUNDRY_CACHE_PATH": "/home/zak/.cache/degenerus-auditprep-scratch/merge/campaign-cache",
+    "FOUNDRY_OUT": "/home/zak/.cache/degenerus-auditprep-scratch/merge/campaign-out"
+  },
+  "forge_arguments": [
+    "--threads",
+    "1"
+  ],
+  "max_sources_per_batch": null,
+  "default_group_caps": {
+    "integration-gas": 20
+  },
+  "physical_batches": 1,
+  "isolation_policy": "per-source CI mode",
+  "test_count_semantics": "execution counts; imported helper suites may repeat between batches",
+  "selected_sources": {
+    "focused": [
+      "test/fuzz/DailyJackpotCommitmentFreeze.t.sol",
+      "test/fuzz/DegeneretteV73SolvencyFuzz.t.sol",
+      "test/fuzz/DegenesisSolvencyVectors.t.sol",
+      "test/fuzz/JackpotCommitmentFreeze.t.sol",
+      "test/fuzz/OrdinaryLootboxCommitmentBinding.t.sol",
+      "test/fuzz/RedemptionCommitmentBinding.t.sol",
+      "test/fuzz/TerminalLoanConservation.t.sol",
+      "test/fuzz/invariant/EthSolvency.inv.t.sol",
+      "test/fuzz/invariant/LoanAccounting.inv.t.sol",
+      "test/fuzz/invariant/PoolConservation.inv.t.sol",
+      "test/fuzz/invariant/RedemptionInvariants.inv.t.sol",
+      "test/fuzz/invariant/RngWindowFreeze.inv.t.sol",
+      "test/repro/MatureComposition.t.sol"
+    ]
+  },
+  "original_pins_sha256": "0919b1c1aa0ba9833cb4ca3261cc0985611feebf2ccf813626c9ae6f1efccf46",
+  "patch_command": [
+    "node",
+    "scripts/lib/patchForFoundry.js"
+  ],
+  "published_input_manifest": "integration-focused-01-inputs.json",
+  "published_summary": "integration-summary.json",
+  "repository_contract_hashes": "source-sha256.json",
+  "contract_differences_from_repository": [],
+  "source_context": "Copied from the current auditprep worktree; fixture address processing is recorded separately. See contract_differences_from_repository for actual differences."
+}

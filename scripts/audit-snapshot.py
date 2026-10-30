@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
-"""Check or refresh the audit source identity; this does not certify test results."""
-
+"""Check or refresh one source/build/test hash manifest; this does not certify tests."""
 import argparse
-from datetime import datetime, timezone
 import hashlib
-import json
 from pathlib import Path
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from audit_scope import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT = ROOT / "docs/audit"
-SUPPORTING_SOLIDITY = {"contracts/ContractAddresses.sol", "contracts/DeityPassCustomizationRenderer.sol",
-                       "contracts/Icons32Data.sol"}
-
-
-def digest(path):
-    return hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+BUILD_INPUTS = ("package.json", "package-lock.json", "foundry.toml", "foundry.lock",
+                "hardhat.config.js", "halmos.toml", ".gitmodules", "Makefile",
+                "deployments/eip170.json", ".github/workflows/ci.yml")
 
 
 def scope_files():
@@ -25,112 +21,53 @@ def scope_files():
                if line.strip() and not line.lstrip().startswith("#")]
     if len(entries) != len(set(entries)):
         raise ValueError("scope.txt contains duplicate sources")
-    production = {p.relative_to(ROOT).as_posix() for p in (ROOT / "contracts").rglob("*.sol")
-                  if p.relative_to(ROOT).parts[1] not in {"mocks", "test"}}
-    # Build constants and renderer/data dependencies are part of the complete
-    # production inventory too. The deployment graph determines their review role;
-    # excluding them here hid newly introduced engine dependencies in older scopes.
-    expected = production
+    expected, excluded = inventory(ROOT)
     if set(entries) != expected:
         raise ValueError(f"scope drift: missing={sorted(expected - set(entries))}; "
                          f"unexpected={sorted(set(entries) - expected)}")
+    prefixes = [line.strip() for line in (ROOT / "out_of_scope.txt").read_text().splitlines()
+                if line.strip() and not line.startswith("#")]
+    unclassified = {p for p in excluded if not any(p == q or (q.endswith('/') and p.startswith(q))
+                                                 for q in prefixes)}
+    if unclassified:
+        raise ValueError(f"scope drift: unclassified production sources={sorted(unclassified)}")
     return sorted(entries)
 
 
-def verification_files(build_inputs):
-    # Include tracked assurance tooling and every current test, including newly
-    # written tests that have not been staged. Unrelated local simulation scripts
-    # and old logs are not silently promoted into the public verification pack.
-    tracked = subprocess.check_output(
-        ["git", "ls-files", "-z", "scripts"], cwd=ROOT
-    ).decode().split("\0")
-    paths = {p for p in tracked if p and (ROOT / p).is_file()}
-    paths.add("scripts/audit-snapshot.py")
-    # Reviewed audit additions must be authenticated before staging/committing too.
-    # Keep an explicit set of files the repository ships; gitignored local tools would
-    # make the manifest fail on a clean checkout.
-    paths.update(p for p in (
-        "scripts/audit/post_push_inventory.py", "scripts/layout/check_recursive_layout.py",
-        "scripts/lib/fork-probe-utils.js", "scripts/fork-hardhat.config.js",
-        "scripts/lib/dispatch_target.py",
-        "scripts/test-fork-probe-utils.js",
-        "scripts/export-decimator-abi.py", "scripts/test-decimator-sampling.py",
-        "scripts/check-split-arithmetic.py", "scripts/test-split-arithmetic.py",
-        "scripts/deep-invariant-matrix.py", "scripts/test-deep-invariant-matrix.py",
-        "scripts/check-owner-actions.js", "scripts/check-owner-governance-layout.js",
-        "scripts/check-slither.py",
-        "scripts/owner-governance.js", "scripts/lib/ownerProposal.js", "scripts/lib/ownerDirect.js",
-        "scripts/audit/fixtures/CoinflipReuseReference.sol", "scripts/audit/fixtures/CoinflipRingPrototype.sol",
-        "scripts/audit/model-coinflip-reuse.py", "scripts/audit/model-coinflip-reuse-lifetime.py",
-        "scripts/audit/model-coinflip-credit-bound.py", "scripts/audit/model-affiliate-storage-reuse.py",
-        "scripts/audit/benchmark-storage-reuse.py",
-        "scripts/audit/mutate-storage-reuse.py",
-        "scripts/check-storage-reuse-phase2-layout.py",
-        "scripts/audit/storage-reuse-phase2/REVIEW.md",
-        "scripts/audit/storage-reuse-phase2/validation.json",
-        "scripts/audit/storage-reuse-phase2/production-sizes.json",
-        "scripts/audit/storage-reuse-phase2/jackpotBattleOf.abi.json",
-    ) if (ROOT / p).is_file())
-    paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / "test").rglob("*")
-                 if p.is_file() and p.suffix in {".sol", ".js", ".py"})
-    # Deployed test harnesses and vm.readFile bytecode are verification inputs,
-    # not additions to the explicitly scoped production logic contracts.
-    for directory in ("contracts/mocks", "contracts/test"):
+def verification_files(build_inputs=()):
+    paths = {"scope.txt", "out_of_scope.txt"}
+    tracked = subprocess.check_output(["git", "ls-files", "-z", "scripts", "test", "contracts"],
+                                      cwd=ROOT).decode().split("\0")
+    paths.update(p for p in tracked if p and (ROOT / p).is_file())
+    for directory in ("scripts", "test", "contracts/mocks", "contracts/test"):
         paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / directory).rglob("*")
-                     if p.is_file() and p.suffix in {".sol", ".hex"})
-    paths.update(p for p in build_inputs if not p.startswith("contracts/"))
-    paths.update({"scope.txt", "out_of_scope.txt"})
+                     if p.is_file() and "__pycache__" not in p.parts
+                     and p.suffix in {".py", ".js", ".mjs", ".sh", ".sol", ".hex"})
+    # Unstaged vectors, tables and module helpers are verification inputs too.
+    paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / "test").rglob("*")
+                 if p.is_file() and "__pycache__" not in p.parts
+                 and p.suffix in {".sol", ".js", ".cjs", ".mjs", ".ts", ".py",
+                                  ".json", ".hex", ".csv", ".tsv"})
+    paths.update(p for p in build_inputs if (ROOT / p).is_file())
     return sorted(paths)
-
-
-def hash_text(paths):
-    return "".join(f"{digest(p)}  {p}\n" for p in sorted(set(paths)))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write", action="store_true", help="refresh hashes; does not run verification")
+    parser.add_argument("--write", action="store_true", help="refresh hashes without running tests")
     args = parser.parse_args()
-    manifest_path = AUDIT / "snapshot.json"
-    manifest = json.loads(manifest_path.read_text())
     sources = scope_files()
-    build_inputs = manifest["build_and_deployment_inputs"]
-    if not SUPPORTING_SOLIDITY <= set(build_inputs):
-        raise ValueError("snapshot omits supporting Solidity build inputs")
-    # Paths come from the repository's manifest, never from the shell.
-    for path in [*sources, *build_inputs]:
-        if Path(path).is_absolute() or ".." in Path(path).parts:
-            raise ValueError(f"invalid snapshot path: {path}")
-    expected = {
-        "source-sha256.txt": hash_text([*sources, *build_inputs]),
-        "verification-sha256.txt": hash_text(verification_files(build_inputs)),
-    }
+    paths = sorted(set(sources) | set(verification_files(BUILD_INPUTS)))
+    contents = "".join(f"{hashlib.sha256((ROOT / p).read_bytes()).hexdigest()}  {p}\n" for p in paths)
+    target = AUDIT / "source-sha256.txt"
     if args.write:
-        manifest.update(
-            date=datetime.now(timezone.utc).date().isoformat(),
-            status="working-tree source identity; verification status is recorded separately",
-            base_commit=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip(),
-            source_file_count=len(sources),
-            source_files=sources,
-        )
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-        for name, contents in expected.items():
-            (AUDIT / name).write_text(contents)
-        print(f"Recorded {len(sources)} scoped sources. No test or audit result is inferred.")
+        target.write_text(contents)
+        print(f"Recorded {len(sources)} scoped sources and {len(paths)} total inputs. No test result is inferred.")
         return 0
-
-    errors = []
-    if manifest["source_files"] != sources or manifest["source_file_count"] != len(sources):
-        errors.append("snapshot source list/count does not match scope.txt")
-    for name, contents in expected.items():
-        if not (AUDIT / name).is_file() or (AUDIT / name).read_text() != contents:
-            errors.append(f"{name} is stale or incomplete")
-    for error in errors:
-        print(error, file=sys.stderr)
-    if errors:
-        print("Refresh with --write only after recording the changed revision's verification status.", file=sys.stderr)
+    if not target.is_file() or target.read_text() != contents:
+        print("source-sha256.txt is stale or incomplete; review changes, then refresh with --write.", file=sys.stderr)
         return 1
-    print(f"Audit identity matches {len(sources)} scoped sources and the current verification inputs.")
+    print(f"Audit identity matches {len(sources)} scoped sources and {len(paths)} total inputs.")
     return 0
 
 

@@ -4,7 +4,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
-// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+// See docs/TESTING.md for replacement suites and remaining coverage limits.
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";

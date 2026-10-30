@@ -1,0 +1,47 @@
+[
+  {
+    "command": [
+      "bash",
+      "scripts/check-pool-writes.sh"
+    ],
+    "exitcode": 0,
+    "stdout": "SOLV pool-write drift gate\n==========================\nscanning: contracts\nmanifest: scripts/pool-write-manifest.tsv\n\nmanifest classes: DRAIN-ZERO=5, MUTATOR-DEF=17, POOL-TO-POOL=40, PRE-COUNTED=3, VALUE-OUT=4, DECL=5, VALUE-IN=17, PAIRED-CREDIT=12\nlive scoped accesses: 103   manifest rows: 103\n\n\u001b[0;32mPASS\u001b[0m every counted-term mutation is registered and classified\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "scripts/check-rng-window.sh"
+    ],
+    "exitcode": 0,
+    "stdout": "RNG-window consumer drift gate\n==============================\nscanning: contracts\nmanifest: scripts/rng-window-manifest.tsv\n\nmanifest classes: CURSOR=5, ACCESSOR=36, DECL=8, PRODUCER=16, EXEMPT-ADVANCE=31, GATE=25, CONSUMER-SEALED=20\nlive accesses: 141   manifest rows: 141\n\n\u001b[0;32mPASS\u001b[0m every VRF-word access is registered; runtime freeze net enumerates the FROZEN_SET\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "scripts/check-rng-taint.sh"
+    ],
+    "exitcode": 0,
+    "stdout": "manifest classes: PURE-DERIVE=189, EXEMPT-ADVANCE=80, CONSUMER-SEALED=100, PRODUCER=5, NOT-RNG=32\nlive sites: 406   manifest rows: 406\n\u001b[0;32mPASS\u001b[0m RNG-word taint registry matches source\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/check-rng-shape.py"
+    ],
+    "exitcode": 0,
+    "stdout": "{\"tags\": 113, \"reviewed_hash_sites\": 200, \"reviewed_raw_bit_exceptions\": 1, \"status\": \"PASS\"}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/check-recipient-calls.py"
+    ],
+    "exitcode": 0,
+    "stdout": "Recipient-call gate: 1575 reviewed expressions; external, value, hook, pointer, assembly and transitive helper calls covered.\n",
+    "stderr": ""
+  }
+]

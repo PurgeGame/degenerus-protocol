@@ -31,7 +31,7 @@ import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngMo
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
-/// @dev Run twice with DIFFERENTIAL_BASELINE=true/false; compare named observations with compare-replay.js.
+/// @dev Run twice with DIFFERENTIAL_BASELINE=true/false; compare the emitted DIFF observations at matching checkpoints.
 ///      Overrides keep common state-owner pins and separate code addresses for baseline modules.
 contract ConsolidationReplayTest is StorageCensusLongRunTest {
     address[] private observed;

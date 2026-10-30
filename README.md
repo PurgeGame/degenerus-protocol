@@ -1,187 +1,97 @@
 # Degenerus Protocol
 
-Ethereum gambling contracts: ticket jackpots, lootboxes and passes, coinflip, craps,
-Degenerette and a prize-pool growth parimutuel. ETH/stETH obligations and token credits
-are accounted for separately. Contracts use fixed deployment addresses; game modules
-execute by delegatecall, while craps uses a separate stateless dice engine.
+Ethereum gambling contracts for ticket jackpots, lootboxes, passes, coinflip, craps, Degenerette and
+prize-pool growth bets. ETH/stETH obligations and token credits are separate ledgers. The audit
+target is the **EIP-170 deployment profile**.
 
-**External audit: start with [the audit handoff](docs/AUDIT.md) and verify the supplied snapshot hashes.**
-The [readiness record](docs/audit/freeze.json) identifies the candidate, tested inputs and
-remaining verification. Historical `audit-*` tags identify older sources.
-The [preparation findings](docs/AUDIT-READINESS.md#preparation-review--2026-10-28)
-record verification gaps and dependency advisories.
+## ETH and stETH custody
 
-| Document | Purpose |
+| Contract | Assets and obligations |
 | --- | --- |
-| [Audit handoff](docs/AUDIT.md) | Exact source snapshot, scope and reading order |
-| [Token units](docs/TOKEN-UNITS.md) | Whole-token FLIP/WWXRP APIs and rounding rules |
-| [Architecture](docs/ARCHITECTURE.md) | Contract boundaries, value flow and invariants |
-| [Accounting](docs/ACCOUNTING.md) | Custody, obligation equations and reservations by phase |
-| [Properties](docs/PROPERTIES.md) | Critical properties mapped to code and test assertions |
-| [DGVE owner approval](docs/OWNER_GOVERNANCE.md) | Escrow, voting delegation, admin actions and icon bootstrap |
-| [Security and roles](SECURITY.md) | Authorities, external dependencies, audit boundaries and reporting |
-| [Known issues](KNOWN-ISSUES.md) | Accepted implementation limitations |
-| [Economic disclosures](ECONOMIC_DISCLOSURES.md) | Game rules, creator allocations and economic rights |
-| [Verification](docs/VERIFICATION.md) | Build, tests and known verification limits |
-| [Documentation index](docs/README.md) | Technical references for individual mechanisms |
+| `DegenerusGame` | Holds ETH/stETH backing prize pools, claimable balances, prepaid AFKing, redemption reserves and Degenesis liabilities. |
+| `DegenerusVault` | Holds its own ETH/stETH and tokens; also owns Game balances and Coinflip credits. DGVE and DGVF represent its separate backing pools. |
+| `sDGNRS` | Holds ETH/stETH reserves, FLIP and Game claims; processes native and wrapped holder redemptions. |
+| `GNRUS` | Holds its own ETH/stETH for charity allocation and token exits. |
+| `DegenerusAdmin` | Receives subscription refunds and forwards native funding to the VRF coordinator. The external coordinator holds the subscription ETH. |
+| `DGNRS` | Holds locked sDGNRS backing its transferable wrapper; forwards redemption proceeds. |
+| Game modules | Execute against Game storage and custody through `delegatecall`; they are not separate prize-pool custodians. |
+| Coinflip, CrapsBattle, Parimutuel, Quests, Affiliate, Jackpots, RecordBounty and token/NFT contracts | Track token balances, credits, eligibility or positions. Their internal credits are not separately held ETH/stETH. |
 
-Solidity **0.8.38**, via IR, optimizer **1,000 runs**, EVM **Osaka**. Dependencies are
-recorded in `package-lock.json` and `foundry.lock`; see verification instructions before
-running tests that patch deployment constants.
+[Accounting](docs/ACCOUNTING.md) defines the backing equations and terminal allocations.
 
-## Build profiles and deployment set
+## Daily lifecycle
 
-One source tree compiles to two deployment profiles. The profile is a compile-time choice
-(`PROFILE`, default `eip170`); no profile flag exists on chain. `node scripts/select-profile.js`
-regenerates the files that depend on it (`contracts/profiles/Selected.sol`, the Game, Coinflip and Craps facades,
-`deployments/<profile>.json` and the test helpers); `--check` verifies they are current.
+The public engine entry is `DegenerusGame.mineRun(uint32)`. It dispatches to `GameMiner._mineFlip`;
+`mineFlip` names the internal mining chain, not another public entry. `nextMinerAction()` exposes
+the next category selected from storage.
 
-| Profile | Role | Deployment entries | Runtime / initcode limit |
-| --- | --- | --- | --- |
-| `eip170` (`contracts/profiles/eip170`) | Deployment and primary audit target | 37 | 24,576 / 49,152 bytes |
-| `glamsterdam` (`contracts/profiles/glamsterdam`) | Maintained alternate that folds the workers into larger deployments | 21 | 65,536 / 131,072 bytes (EIP-7954) |
+1. Daily preparation and advance select `requestDailyRng_g8190` on the RNG module.
+2. Chainlink calls `rawFulfillRandomWords` on the Game; the callback stores an accepted raw word.
+3. Mining calls `publishRng_g4514`, applies the daily word, and drains ticket, loan, box, bet,
+   redemption and other work in resumable chunks. The callback does not run this work.
+4. `runDailyPhase_g2582` advances the daily stages and, when their conditions hold, the level.
+5. Timeout conditions select `runTerminalPhase`. The ending uses either a terminal jackpot or
+   deterministic dead-VRF ticket claims.
+6. The terminal path invokes `_handleFinalSweep` after the 30-day window measured from terminal payout
+   completion. It distributes the remaining Game custody and expires other unclaimed balances.
 
-Shared logic lives in `contracts/modules` (`GameFacade`, `GameActions`, `GamePurchase`,
-`GameMiner`, `CoinflipCore`, `CrapsBattleCore` and the delegatecall workers) and
-`contracts/storage`; the profile shells only choose which components share a deployment.
-The order and aliases of each deployment sequence are authoritative in
-[scripts/lib/deploymentProfiles.js](scripts/lib/deploymentProfiles.js) and
-[deployments/eip170.json](deployments/eip170.json); an alias never consumes a CREATE nonce.
+[Architecture](docs/ARCHITECTURE.md) describes action priority, commitment boundaries and ending
+rules.
 
-`eip170` deployment set, in creation order (37 entries):
+## EIP-170 architecture
 
-| Entry | Contract | Hosts |
-| --- | --- | --- |
-| `ICONS_32` | `Icons32Data` | Icon path data |
-| `GAME_ACTIONS_MODULE`, `GAME_BINGO_MODULE` | `Eip170Actions` | Account actions, bingo and allowance entries |
-| `GAME_PURCHASE_MODULE` | `Eip170Purchase` | Ticket, lootbox and pass purchase entries |
-| `GAME_MINT_MODULE` | `Eip170Mint` | Ticket mint |
-| `GAME_FOILPACK_MODULE`, `GAME_DEGENESIS_MODULE` | `Eip170DegenesisFoil` | Degenesis sale and foil packs |
-| `GAME_ADVANCE_MODULE` | `Eip170Advance` | Daily advance stages |
-| `GAME_JACKPOT_MODULE` | `Eip170Jackpot` | Jackpot payouts |
-| `GAME_JACKPOT_DRAW_MODULE` | `Eip170JackpotDraw` | Jackpot draws |
-| `GAME_WHALE_MODULE` | `Eip170Whale` | Whale, lazy and deity passes |
-| `GAME_TICKET_MODULE` | `Eip170TicketFoil` | Ticket materialization and foil workers |
-| `GAME_LOOTBOX_MODULE` | `Eip170Lootbox` | Lootboxes |
-| `GAME_BOON_MODULE` | `Eip170Boon` | Boons |
-| `GAME_DEGENERETTE_MODULE` | `Eip170Degenerette` | Degenerette bets |
-| `GAME_AFKING_MODULE` | `Eip170Afking` | AFKing subscriptions |
-| `GAME_GAMEOVER_MODULE` | `Eip170Endgame` | Terminal settlement, dead-VRF ending, VRF initialization and coordinator swap |
-| `GAME_DECIMATOR_MODULE` | `Eip170Decimator` | Decimator battle |
-| `GAME_MINER_MODULE`, `GAME_RNG_MODULE` | `Eip170MinerRng` | `mineRun` and the request, publication and retry stages |
-| `COIN` | `FLIP` | FLIP token |
-| `GAME` | `DegenerusGame` (`Eip170Game`) | Player entry points, VRF callback and views; delegates to the workers above |
-| `COINFLIP` | `Coinflip` | Daily flip stakes and credits |
-| `QUESTS` | `Eip170Quests` | Quests |
-| `AFFILIATE` | `Eip170Affiliate` | Referral rewards |
-| `JACKPOTS` | `DegenerusJackpots` | Jackpot support and BAF scores |
-| `DEITY_PASS` | `DegenerusDeityPass` | Deity pass NFT |
-| `VAULT` | `DegenerusVault` | Vault; it also creates the DGVE and DGVF share tokens |
-| `SDGNRS`, `DGNRS` | `sDGNRS`, `DGNRS` | Reserve token and its transferable wrapper |
-| `ADMIN` | `DegenerusAdmin` | VRF subscription, coordinator-swap governance, `donateVrf` |
-| `GNRUS` | `GNRUS` | Charity token and ballots |
-| `AFKING_SUB_TOKEN` | `AFKingSubscriptionToken` | Subscription seats |
-| `PARIMUTUEL` | `DegenerusParimutuel` | Growth bets |
-| `RECORD_BOUNTY` | `DegenerusRecordBounty` | Record bounty |
-| `CRAPS_ENGINE` | `Eip170CrapsEngine` | Stateless dice engine (`external pure`) |
-| `CRAPS_LIFECYCLE_MODULE` | `Eip170JackpotBattle` | Jackpot battle, run by the table's delegatecall |
-| `CRAPS`, `JACKPOT_BATTLE` | `CrapsBattle` (`Eip170Craps`) | Craps table, seats and payouts |
-| `WWXRP` | `WWXRP` | WWXRP token and daily draw |
-| `OWNER_GOVERNANCE` | `DegenerusOwnerGovernance` | DGVE owner approval |
+`DegenerusGame` inherits `Eip170Game`, which combines the `GameFacade` router and local boon
+entries. Facade functions either execute locally or delegate to fixed module addresses.
+`Game*Internals` contain forwarding helpers; `Game*Entries` expose worker entry points; `Eip170*`
+shells compose the deployed implementations. Nested delegatecalls retain the Game's storage and
+current `msg.sender`. Craps has its own storage context, a lifecycle delegate module, and a stateless
+engine called externally.
 
-`DegenerusGameLens`, `CrapsLens`, `DeityBoonViewer` and `DeityPassCustomizationRenderer`
-are in scope but are not part of the sequence. The deployment pipeline predicts the addresses,
-patches `ContractAddresses.sol`, recompiles and deploys; checked-in test pins are not a
-production deployment manifest.
+The `_g<digits>` suffix is part of a Solidity function name and therefore its four-byte ABI
+selector. The suffix encodes no authorization: check each implementation's guards. Interfaces and
+callers must use the full name. [Module map](docs/MODULE-MAP.md) maps entry points to their
+implementations; [storage packing](docs/STORAGE-PACKING.md) maps slots and bit ranges.
 
-## Entry points
+Profile selection happens at build time. The Glamsterdam shells and compatibility types remain
+available to fixtures but are outside this audit's scope. No source directories need renaming to
+follow the routing layers.
 
-The Game answers every name in its row and delegates to its workers by selector; the other
-rows are separate contracts.
+## Audit reading
 
-| Contract | Entry |
+| Reference | Purpose |
 | --- | --- |
-| `DegenerusGame` | `purchaseOrderFor`, `mineRun(gasMultiplierBps)`, `currentLvl`, `betDegenerette`, `decimatorActive`, `giveBoon`, `getGrowth`, `claimClaimable`, `purchaseDegenesisBox`, `clearDebtNow`, `reverseFlip`, `claimDeadVrf` |
-| `Coinflip` | `playCoinflip` |
-| `GNRUS` | `castBallot` |
-| `WWXRP` | `enterDraw`, `claim` |
-| `CrapsBattle` | `throwCraps`, `playCraps` |
-| `DegenerusAdmin` | `donateVrf` |
-| `DegenerusVault` | `playerAction` |
+| [Scope](scope.txt) / [out of scope](out_of_scope.txt) | EIP-170 sources and review boundaries |
+| [Audit handoff](docs/AUDIT.md) | Target, assumptions, severity and verification |
+| [Security](SECURITY.md) | Authorities and external trust boundaries |
+| [Known issues](KNOWN-ISSUES.md) | Owner-accepted implementation limitations |
+| [Economic disclosures](ECONOMIC_DISCLOSURES.md) | Game rules and economic rights |
+| [Token units](docs/TOKEN-UNITS.md) | Token scales and rounding |
+| [Accounting](docs/ACCOUNTING.md) | Custody, obligations and reserves |
+| [Architecture](docs/ARCHITECTURE.md) | Contract boundaries and lifecycle |
+| [Documentation index](docs/README.md) | Mechanism references |
 
-`mineRun` is the single engine entry. It selects the next action from storage (daily
-request, publication, read consumers, advance stages, settlement or terminal work) and runs it
-by delegatecall. Hooks that only other protocol contracts call carry a numeric suffix
-(`_g<number>`) in their names so the dispatcher reaches them first; players do not call them.
+## Build and test quickstart
 
-## Randomness and VRF funding
-
-Chainlink VRF v2.5 supplies randomness. Every request is paid in native ETH from the
-coordinator subscription; there is no LINK token or price feed.
-`DegenerusAdmin.donateVrf()` forwards the whole ETH amount to the subscription and credits a
-quarter of it, in wei, as the donor's mid-day request credit. The Game tops the subscription
-up when yield is distributed at level entry (if the deficit is at least a tenth of the refill
-band) and, when the balance is below low water, refills it to target at the top of a daily
-request. Both take yield surplus first, then sDGNRS claimable, then its AFKing balance;
-neither step gates a request. `rawFulfillRandomWords` runs on the Game itself, accepts only
-the coordinator and the stored request ID (its low 64 bits), leaves the request pending on
-raw words 0 and 1, and otherwise stores the raw word. Daily nudges move only the coinflip.
-
-## Build and test
+CI uses Node.js 20, Python 3.12 and Foundry with Solidity 0.8.38. Run from the repository root;
+install dependencies in your own checkout. The compiler settings are via IR, 1,000 optimizer runs
+and Osaka.
 
 ```sh
 npm ci
-sha256sum -c docs/audit/source-sha256.txt        # source and build-input identity
-make check-audit-snapshot                       # source/input manifest
-forge build --skip test                          # production build (default profile eip170)
-make test-assurance-tools                       # needs the solc installed by the build
-node scripts/check-deployment-sizes.js           # runtime and initcode ceilings of the selected profile
-FOUNDRY_ISOLATE=true make test-foundry ARGS='--group integration-gas --max-files 5 --threads 1'
-FOUNDRY_ISOLATE=false make test-foundry ARGS='--group repro-symbolic --group census --group fuzz-1 --group fuzz-2 --group fuzz-3 --group fuzz-4 --group invariants --max-files 5 --threads 1'
-make test-hardhat                                # structural gates, then Hardhat in bounded batches
-# Mainnet fork: use the split commands in docs/VERIFICATION.md (archive RPC required).
+git submodule update --init --recursive
+export AUDIT_SCRATCH="${TMPDIR:-/tmp}/degenerus-audit-build"
+mkdir -p "$AUDIT_SCRATCH"
+export FOUNDRY_CACHE_PATH="$AUDIT_SCRATCH/cache"
+export FOUNDRY_OUT="$AUDIT_SCRATCH/out"
+sha256sum -c docs/audit/source-sha256.txt
+PROFILE=eip170 node scripts/select-profile.js --no-pins
+node scripts/select-profile.js --check
+python3 scripts/test-foundry-groups.py --file test/unit/EthLedgerProductionReplay.t.sol \
+  --log-dir "$AUDIT_SCRATCH/logs/smoke" --threads 1
+python3 scripts/check-docs.py
 ```
 
-`make test-foundry` and `make test-hardhat` patch `ContractAddresses.sol` with predicted
-addresses for the run and restore it afterwards. Run one compile at a time; the via-IR build
-is memory-heavy. The two Foundry commands separate cold-gas tests, which require transaction
-isolation, from the remaining groups. Bare `make test-foundry` does not select isolation
-per group. To work on the alternate profile, run `PROFILE=glamsterdam node scripts/select-profile.js`
-first and check sizes with `--schedule glamsterdam`. Its runtimes exceed 24,576 bytes, so
-Hardhat also needs `CONSOLIDATION_CANDIDATE=true`, which lifts Hardhat's contract-size limit;
-the `eip170` profile fits the default limits. [Verification](docs/VERIFICATION.md) lists every
-group, gate and known limit.
+The sliced runner restores address pins and profile sources.
+[Testing](docs/TESTING.md) covers production builds, all test groups and structural gates.
 
-### Results for the tested revision
-
-The [readiness record](docs/audit/freeze.json) names the tested contract revision. These results
-and the sizes below apply to that revision; the current scoped sources
-([snapshot](docs/audit/snapshot.json)) include later contract changes.
-
-| Check | Result |
-| --- | --- |
-| Foundry, all groups including mainnet fork | 6,715 passing executions, 0 failures, 2 optional skips; imported suites can repeat |
-| Hardhat / Halmos | 1,557 tests / 68 properties passing |
-| Structural gates | 24 checks per profile pass on both profiles; 0 profile differences |
-| Static analysis | Slither parsing and IR complete; Slither and Aderyn output triaged in [analyzer triage](docs/audit/ANALYZER-TRIAGE.md) |
-| Deep invariants (defaults: 1,000 runs × depth 256) | Scheduled CI campaign; default-profile invariants pass (defaults: 256 × 128). Explicit property overrides apply. |
-
-### Contract sizes (eip170 profile, runtime bytes)
-
-The ceiling is 24,576 runtime and 49,152 initcode bytes per entry. The five entries with
-the least spare room:
-
-| Entry | Runtime bytes | Spare bytes |
-| --- | --- | --- |
-| Eip170JackpotBattle | 24,324 | 252 |
-| Eip170TicketFoil | 24,307 | 269 |
-| CrapsBattle | 24,267 | 309 |
-| Eip170Purchase | 24,236 | 340 |
-| DegenerusGame | 23,916 | 660 |
-
-The readiness record identifies the size reports and their source evidence. The alternate
-Glamsterdam schedule passes with 69 bytes of minimum runtime headroom.
-
-[Terms](TERMS.md) are separate from the technical audit specification.
-
-License: [AGPL-3.0-only](LICENSE). Security contact: **burnie@degener.us**.
+License: [AGPL-3.0-only](LICENSE). [Terms](TERMS.md). Security contact: **burnie@degener.us**.

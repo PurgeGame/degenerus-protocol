@@ -37,7 +37,8 @@ if "config" in sys.argv:
 state = Path("calls.json")
 calls = json.loads(state.read_text()) if state.exists() else []
 calls.append({"args": sys.argv[1:], "fuzz_runs": os.environ.get("FOUNDRY_FUZZ_RUNS"),
-              "invariant_depth": os.environ.get("FOUNDRY_INVARIANT_DEPTH")})
+              "invariant_depth": os.environ.get("FOUNDRY_INVARIANT_DEPTH"),
+              "isolate": os.environ.get("FOUNDRY_ISOLATE")})
 state.write_text(json.dumps(calls))
 mode = os.environ.get("FAKE_MODE", "pass")
 if mode == "kill_first" and len(calls) == 1:
@@ -188,6 +189,35 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         rows = self.rows()
         self.assertEqual([row["source_files"] for row in rows], [21, 7, 7, 7])
         self.assertNotEqual(rows[0]["run_id"], rows[1]["run_id"])
+
+    def test_default_run_selects_isolation_by_suite(self):
+        self.env.pop("FOUNDRY_ISOLATE", None)
+        self.sources("gas", 1)
+        self.sources("fuzz/invariant", 1)
+        result = self.run_driver()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual({row["group"]: row["environment"]["FOUNDRY_ISOLATE"] for row in self.rows()},
+                         {"integration-gas": "true", "invariants": "false"})
+        self.assertEqual([call["isolate"] for call in json.loads((self.root / "calls.json").read_text())],
+                         ["true", "false"])
+
+    def test_fork_run_separates_cold_sources(self):
+        self.env.pop("FOUNDRY_ISOLATE", None)
+        ordinary = self.sources("fork", 1)[0]
+        cold = "test/fork/SubscriberAdmissionRecoveryFork.t.sol"
+        (self.root / cold).write_text("// cold fork fixture\n")
+        result = self.run_driver("--group", "fork")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([(row["selected_sources"], row["environment"]["FOUNDRY_ISOLATE"])
+                          for row in self.rows()], [([ordinary], "false"), ([cold], "true")])
+
+    def test_explicit_isolation_override_is_preserved(self):
+        gas = self.sources("gas", 1)[0]
+        invariant = self.sources("fuzz/invariant", 1)[0]
+        result = self.run_driver("--file", gas, "--file", invariant, FOUNDRY_ISOLATE="false")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(self.rows()), 1)
+        self.assertEqual(self.rows()[0]["environment"]["FOUNDRY_ISOLATE"], "false")
 
     def test_paid_lifecycle_calibration_is_retained_in_run_evidence(self):
         self.sources("gas", 1)
@@ -399,6 +429,32 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.assertIn("41 source files, 3 batches", result.stdout)
         self.assertFalse((self.root / "calls.json").exists())
         self.assertFalse((self.root / ".audit-test-logs").exists())
+
+    def test_solidity_unit_suites_join_repro_symbolic_without_losing_support(self):
+        unit = self.sources("unit", 2)
+        repro = self.sources("repro", 1)
+        symbolic = self.sources("halmos", 1)
+        gas = self.sources("gas", 1)
+        helper = self.sources("unit", 1, ".sol")
+        selected = {*unit, *repro, *symbolic}
+        listed = self.run_driver("--group", "repro-symbolic", "--list")
+        self.assertEqual(listed.returncode, 0, listed.stdout + listed.stderr)
+        self.assertIn("repro-symbolic: 4 source files, 1 batch", listed.stdout)
+        self.assertFalse((self.root / "calls.json").exists())
+
+        result = self.run_driver()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        rows = self.rows()
+        self.assertEqual({row["group"] for row in rows}, {"integration-gas", "repro-symbolic"})
+        roots = [path for row in rows for path in row["selected_sources"]]
+        self.assertCountEqual(roots, [*selected, *gas])
+        for row in rows:
+            expected = selected if row["group"] == "repro-symbolic" else set(gas)
+            self.assertEqual(set(row["selected_sources"]), expected)
+            args = row["command"]
+            skipped = {args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--skip"}
+            self.assertEqual(set(roots) - skipped, expected)
+            self.assertFalse(set(helper) & skipped, "unit support still compiles in every group")
 
     def test_empty_selection_and_unassigned_source_fail_before_patching(self):
         self.assertNotEqual(self.run_driver().returncode, 0)

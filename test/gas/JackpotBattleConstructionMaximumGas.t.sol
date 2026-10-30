@@ -208,7 +208,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
 
     function test_MaxSearchDistinctPrefixesAndQueueWidths() public {
         // Long-prefix witnesses plus the best seed for all four multiplier branches,
-        // from search-jackpot-battle-gas.py, seeds 1..1,000,000.
+        // selected from seeds 1..1,000,000.
         uint256[8] memory words = [uint256(375906), 402703, 683165, 132695, 231013, 392095, 728309, 106207];
         uint8[11] memory widths = [uint8(1), 2, 3, 4, 7, 8, 9, 15, 16, 17, 31];
         uint256 pristine = vm.snapshotState();
@@ -271,7 +271,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         transactionGas = used.gasTotalUsed + 21_192;
         if (ok) assertEq(used.gasRefunded, 0, "gross transaction measurement");
         else {
-            // The first mandatory checkpoint bypasses estimates (AUDIT-READINESS.md).
+            // The first mandatory checkpoint bypasses estimates (AUDIT.md).
             // Too little physical gas may exhaust the first worker or its caller-credit tail.
             // It must revert atomically; every probe below verifies that rollback.
             assertTrue(reason.length == 0

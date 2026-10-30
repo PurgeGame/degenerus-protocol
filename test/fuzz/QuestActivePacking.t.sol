@@ -25,23 +25,23 @@ contract QuestActivePackingTest is Test {
     function test_GenesisDailySeedPreservesLevelQuest() public view {
         uint256 active = uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE)));
         assertEq(uint8(active >> 128), 1, "genesis MINT_ETH");
-        assertEq(uint8(active >> 136), 1, "genesis epoch");
+        assertEq(uint24(active >> 136), 1, "genesis epoch");
         assertEq(vm.load(address(quests), bytes32(QaSlots.LEVEL)), bytes32(0), "mapping base slot holds no data");
         QuestInfo[2] memory daily = quests.getActiveQuests();
         assertEq(daily[0].questType, 1);
         assertEq(daily[1].questType, 7);
     }
 
-    function testFuzz_DailyAndLevelRollsPreserveEachOther(uint256 entropy, uint8 version) public {
+    function testFuzz_DailyAndLevelRollsPreserveEachOther(uint256 entropy, uint24 version) public {
         uint256 beforeWord = uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE)));
         // Exercise the wrap boundary as well as ordinary epochs, retaining the seeded daily pair.
-        uint256 seeded = (beforeWord & ~(uint256(255) << 136)) | (uint256(version) << 136);
+        uint256 seeded = (beforeWord & ~(uint256(type(uint24).max) << 136)) | (uint256(version) << 136);
         vm.store(address(quests), bytes32(QaSlots.ACTIVE), bytes32(seeded));
         vm.prank(ContractAddresses.GAME);
         quests.rollLevelQuest(entropy);
         uint256 rolled = uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE)));
         assertEq(uint128(rolled), uint128(seeded), "level roll preserves both daily quests");
-        assertEq(uint8(rolled >> 136), uint8(uint256(version) + 1), "version wraps exactly once");
+        assertEq(uint24(rolled >> 136), uint24(uint256(version) + 1), "full-width version increment");
         uint24 nextDay = uint24(beforeWord) + 1;
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(nextDay, entropy, false, false, false);
@@ -59,7 +59,7 @@ contract QuestActivePackingTest is Test {
         quests.handlePurchase_g23478(1, PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         bytes32 progressSlot = keccak256(abi.encode(uint256(PLAYER), QaSlots.LEVEL));
         uint256 progress = uint256(vm.load(address(quests), progressSlot));
-        assertEq(uint128(progress >> 8), 0.01 ether);
+        assertEq(uint128(progress >> 24), 0.01 ether);
         uint24 day = uint24(uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE)))) + 1;
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(day, 123, true, false, false);
@@ -67,8 +67,23 @@ contract QuestActivePackingTest is Test {
         vm.prank(ContractAddresses.GAME);
         quests.handlePurchase_g23478(day, PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         progress = uint256(vm.load(address(quests), progressSlot));
-        assertEq(uint8(progress), 1);
-        assertEq(uint128(progress >> 8), 0.02 ether, "daily roll keeps level accumulation");
+        assertEq(uint24(progress), 1);
+        assertEq(uint128(progress >> 24), 0.02 ether, "daily roll keeps level accumulation");
+    }
+
+    function test_LevelQuestDoesNotReviveStaleCompletionAfter256Rolls() public {
+        bytes32 playerSlot = keccak256(abi.encode(uint256(PLAYER), QaSlots.LEVEL));
+        vm.store(address(quests), playerSlot, bytes32(uint256(1) | (uint256(123) << 24) | (uint256(1) << 152)));
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("mintPackedOfId_g5372(uint32)", PLAYER), abi.encode(uint256(0)));
+        for (uint256 i; i < 256; ++i) {
+            vm.prank(ContractAddresses.GAME);
+            quests.rollLevelQuest(i);
+        }
+        uint256 active = uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE)));
+        assertEq(uint24(active >> 136), 257, "version must not alias after 256 rolls");
+        (, uint128 progress,, bool completed,) = quests.getPlayerLevelQuestView(PLAYER);
+        assertEq(progress, 0, "old progress is stale");
+        assertFalse(completed, "old completion cannot block the new quest");
     }
 
     function test_PurchaseReturnsAfkingFlagFromQuestWord() public {

@@ -63,9 +63,10 @@ contract DegenesisLivenessHandler is Test {
 
     uint256 internal constant DAY_OFFSET = 82_620;
     uint256 internal constant MAX_GAS = 30_000_000;
-    /// @dev Total simulated time cap, in days after deploy: far inside the 30-day deadman and
-    ///      the 14-day VRF timeout (pending requests older than FORCE_FULFILL_AFTER are answered).
+    /// @dev This horizon deliberately permits the 14-day no-completed-session deadline.
+    ///      Answering a request does not complete its consumers or reset that deadline.
     uint256 internal constant MAX_SIM_DAYS = 22;
+    uint256 internal constant COMPLETION_DEADLINE = 14 days;
     uint256 internal constant FORCE_FULFILL_AFTER = 9 days;
     uint256 internal constant LEVEL_ONE_SEED = 60 ether;
 
@@ -131,9 +132,17 @@ contract DegenesisLivenessHandler is Test {
     bool public finishSettled;
     uint24 public finishLevel;
     uint256 public finishDays;
+    uint256 public finishDrainCapHits;
     /// @dev Diagnostics: the slot-0 word and wall day when liveness first fired during finish.
     uint256 public finishLivenessSlot0;
     uint24 public finishLivenessDay;
+    bool public finishTerminal;
+    bool public finishStartedHealthy;
+    bool public ghost_unjustifiedTerminal;
+    uint256 public deadlineObservedAt;
+    uint48 public deadlineLastCompletedAt;
+    uint256 public deadlineSlot0;
+    uint256 public terminalFinishCalls;
 
     address[] public actors;
     uint256 internal _deployTs;
@@ -161,6 +170,7 @@ contract DegenesisLivenessHandler is Test {
         _where = name;
         trace = string.concat(trace, name, "@", vm.toString(uint256(game.currentDayView_g542950())), " ");
         ++ghost_actions;
+        _observeDeadline();
         _trackRequest();
         _;
         _observe();
@@ -388,6 +398,7 @@ contract DegenesisLivenessHandler is Test {
     }
 
     function _tightStep(address caller) internal returns (bool) {
+        _observeDeadline();
         for (uint256 g = 200_000; g < MAX_GAS; g = g * 5 / 4) {
             if (game.gameOver()) return false;
             vm.prank(caller);
@@ -424,31 +435,120 @@ contract DegenesisLivenessHandler is Test {
 
     /// @notice VRF cooperating and the next pool funded, walk day by day until the sale is over,
     ///         every cohort is closed and the game stands at level 1 or beyond. Every call is
-    ///         judged as in actMine.
+    ///         judged as in actMine. The 40 chunks retain the 12,000-call completion bound;
+    ///         exhausting one chunk is not permission to advance the clock over ready work.
     function finish(uint256 seed) external {
         finishRan = true;
         _where = "finish";
+        _observeDeadline();
+        finishStartedHealthy = deadlineObservedAt == 0;
         for (uint256 d; d < 40; ++d) {
+            _observeDeadline();
+            if (ghost_unjustifiedTerminal) return;
+            if (deadlineObservedAt != 0) {
+                // Completion itself may not manufacture a deadline and count it as success.
+                if (finishStartedHealthy) return;
+                _finishDeadline(seed);
+                return;
+            }
             if (finishLivenessDay == 0 && game.livenessTriggered()) {
                 finishLivenessDay = game.currentDayView_g542950();
                 finishLivenessSlot0 = uint256(vm.load(address(game), bytes32(0)));
             }
             if (game.gameOver()) break;
             _fulfillPending();
-            _runToIdle(uint256(keccak256(abi.encode(seed, d))), 300);
+            bool drained = _runToIdle(uint256(keccak256(abi.encode(seed, d))), 300);
             _observe();
+            if (ghost_unjustifiedTerminal) return;
+            if (deadlineObservedAt != 0) {
+                if (finishStartedHealthy) return;
+                _finishDeadline(seed);
+                return;
+            }
             uint24 today = game.currentDayView_g542950();
             finishLeftSale = today >= GameTimeLib.MAIN_LAUNCH_DAY;
             finishSettled = _degenesisClosed() == 7;
             finishLevel = game.currentLvl();
             if (finishLeftSale && finishSettled && finishLevel >= 1) {
-                finishDays = d;
                 return;
+            }
+            if (!drained) {
+                ++finishDrainCapHits;
+                continue;
             }
             if (game.currentLvl() == 0) _seedNextPool(LEVEL_ONE_SEED);
             vm.warp(_nextDayStart() + 1 hours);
+            ++finishDays;
         }
         finishDays = type(uint256).max;
+    }
+
+    /// @notice Independent wall-clock witness, read before the engine can latch terminal state.
+    ///         A published word, VRF delivery or a logical-day change is not daily completion.
+    function deadlineDue() public view returns (bool) {
+        uint48 completed = _lastCompletedAt();
+        return completed != 0 && block.timestamp >= uint256(completed) + COMPLETION_DEADLINE;
+    }
+
+    function _lastCompletedAt() internal view returns (uint48) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LAST_DAILY_COMPLETED_AT)));
+        return uint48(packed >> (GameSlots.LAST_DAILY_COMPLETED_AT_OFFSET * 8));
+    }
+
+    function deadlineEvidenceValid() public view returns (bool) {
+        return deadlineObservedAt != 0 && deadlineLastCompletedAt != 0
+            && deadlineLastCompletedAt == _lastCompletedAt() && block.timestamp >= deadlineObservedAt
+            && deadlineObservedAt >= uint256(deadlineLastCompletedAt) + COMPLETION_DEADLINE
+            && uint8(deadlineSlot0 >> (GameSlots.GAME_OVER_OFFSET * 8)) == 0
+            && deadlineSlot0 & (uint256(1) << 253) == 0;
+    }
+
+    function _observeDeadline() internal {
+        uint256 header = uint256(vm.load(address(game), bytes32(0)));
+        // Never justify an already-ended game retroactively, even after a later large warp.
+        if (uint8(header >> (GameSlots.GAME_OVER_OFFSET * 8)) != 0
+            || header & (uint256(1) << 253) != 0) {
+            if (!deadlineEvidenceValid()) ghost_unjustifiedTerminal = true;
+            return;
+        }
+        if (deadlineObservedAt != 0 || !deadlineDue()) return;
+        deadlineObservedAt = block.timestamp;
+        deadlineLastCompletedAt = _lastCompletedAt();
+        deadlineSlot0 = header;
+        finishLivenessSlot0 = header;
+        finishLivenessDay = game.currentDayView_g542950();
+    }
+
+    /// @dev No additional time jumps or entropy are needed for the deterministic ending.
+    ///      A bounded drive must retire the terminal work, not merely observe gameOver.
+    function terminalOutcomeValid() public view returns (bool) {
+        uint256 ending = uint256(vm.load(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED)));
+        uint256 rng = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
+        bool allSplit = true;
+        for (uint256 c = 1; c <= 7; ++c) {
+            uint256 h = _header(c);
+            if (uint48(h) != 0 && h & (uint256(1) << 80) == 0) allSplit = false;
+        }
+        return deadlineEvidenceValid() && !ghost_unjustifiedTerminal && game.gameOver()
+            && uint48(ending) >= deadlineObservedAt && uint48(ending) <= block.timestamp
+            && uint8(ending >> 48) != 0 && uint8(rng >> 232) != 0 && game.nextMinerAction() == A_IDLE
+            && game.currentDayView_g542950() == uint24(deadlineSlot0 >> 24)
+            && game.currentLvl() == uint24(deadlineSlot0 >> 96)
+            && vm.load(address(game), bytes32(GameSlots.DEGENESIS_ACTIVE)) == bytes32(0)
+            && uint128(uint256(vm.load(address(game), bytes32(GameSlots.DEGENESIS_VAULT_BUDGET)))) == 0
+            && allSplit;
+    }
+
+    function _finishDeadline(uint256 seed) internal {
+        for (uint256 i; i < 1_000; ++i) {
+            uint256 ending = uint256(vm.load(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED)));
+            if (game.gameOver() && uint8(ending >> 48) != 0) {
+                finishTerminal = terminalOutcomeValid();
+                return;
+            }
+            ++terminalFinishCalls;
+            if (!_mineJudged(_actor(seed), uint256(keccak256(abi.encode(seed, "terminal", i))))) return;
+        }
     }
 
     // =====================================================================
@@ -457,7 +557,8 @@ contract DegenesisLivenessHandler is Test {
 
     /// @dev One call. Returns false when the engine reports nothing to do or waits.
     function _mineJudged(address caller, uint256 gasSeed) internal returns (bool) {
-        if (game.gameOver()) return false;
+        _observeDeadline();
+        if (game.gameOver() && game.nextMinerAction() == A_IDLE) return false;
         vm.prank(caller);
         uint8 a = game.minerAction();
         uint256 minimum = minGas(a);
@@ -529,21 +630,24 @@ contract DegenesisLivenessHandler is Test {
     // Helpers
     // =====================================================================
 
-    function _runToIdle(uint256 seed, uint256 maxCalls) internal {
+    /// @return drained True only when the engine stopped, rather than the call budget expiring.
+    function _runToIdle(uint256 seed, uint256 maxCalls) internal returns (bool drained) {
         address caller = _actor(seed);
         for (uint256 i; i < maxCalls; ++i) {
-            if (game.gameOver()) return;
+            if (game.gameOver()) return true;
             _fulfillPending();
             if (!_mineJudged(caller, uint256(keccak256(abi.encode(seed, "idle", i))))) {
-                if (!_fulfillPending()) return;
+                if (!_fulfillPending()) return true;
             }
         }
+        return false;
     }
 
     /// @dev Sale progress read from state (log capture would grow handler memory without bound):
     ///      split flags, the active cohort, the settled-order count (closed cohorts' orders plus
     ///      the active cursor) and the seventh close.
     function _observe() internal {
+        _observeDeadline();
         uint24 lvl = game.currentLvl();
         if (lvl > ghost_maxLevel) ghost_maxLevel = lvl;
         uint8 closed = _degenesisClosed();

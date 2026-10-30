@@ -1,34 +1,34 @@
 # Randomness inputs and domain separation
 
-Every hash that derives a value from VRF entropy is `EntropyLib.hashN(RngTags.X, ...)`:
-Keccak-256 over 32-byte ABI words (`hash1`..`hash4`), with the numeric domain constant first. The
-113 domains are defined once in [`contracts/libraries/RngTags.sol`](../../contracts/libraries/RngTags.sol)
-(values 1–115; 58 and 68 are unassigned). A tagged hash takes either the raw word or a seed
-already derived from it: the payout seed stored with each [foil pack](#foil-packs) and the
-direct-award round seed feed later tagged hashes, and the uint64 LCG inside each sixteen-entry
-[ticket group](#ticket-generation) expands a tagged seed without further hashing. The only use of
-a raw word bit is the coinflip win bit, bit 0 of the coin word ([below](#coin-word-and-nudges)).
+Every hash that derives a value from VRF entropy is `EntropyLib.hashN(RngTags.X, ...)`: Keccak-256
+over 32-byte ABI words (`hash2`..`hash4`), with the numeric domain constant first. The 113 domains
+are defined once in [`contracts/libraries/RngTags.sol`](../../contracts/libraries/RngTags.sol)
+(values 1–115; 58 and 68 are unassigned). A tagged hash takes either the raw word or a seed already
+derived from it: the payout seed stored with each [foil pack](#foil-packs) and the direct-award
+round seed feed later tagged hashes, and the uint64 LCG inside each sixteen-entry [ticket
+group](#ticket-generation) expands a tagged seed without further hashing. The only use of a raw word
+bit is the coinflip win bit, bit 0 of the coin word ([below](#coin-word-and-nudges)).
 
-The trust boundary is request → fulfillment → consumption. Hashing supplies domain separation,
-not fresh entropy and not protection for inputs chosen after a word is known; the commitment
-guards described below remain necessary. See `snapshot.json` for the supplied source identity.
+The trust boundary is request → fulfillment → consumption. Hashing supplies domain separation, not
+fresh entropy and not protection for inputs chosen after a word is known; the commitment guards
+described below remain necessary. See [the source hashes](source-sha256.txt) for the supplied input
+identity.
 
 ## Registry gate
 
 `scripts/check-rng-shape.py` checks the source against `scripts/rng-shape-manifest.json`:
 
-- every `keccak256` and `EntropyLib.hashN` site in production contracts (excluding
-  `interfaces/`, `mocks/`, `test/`) is registered by file, function and exact expression, and
-  classed `RNG`, `NON-RNG` (storage addressing, commitments, identities), `CONSTANT` or
-  `HASH-IMPLEMENTATION`; an unregistered or stale site fails;
+- every `keccak256` and `EntropyLib.hashN` site in production contracts (excluding `interfaces/`,
+  `mocks/`, `test/`) is registered by file, function and exact expression; an unregistered or stale
+  site fails. The manifest classes are `RNG`, `NON-RNG` (storage addressing, commitments, identities),
+  `CONSTANT` and `HASH-IMPLEMENTATION`;
 - every tag is a named nonzero constant, values are unique, and every tag is used;
 - the first argument of every `EntropyLib` call is a single `RngTags` constant (or the one
   `ticketLeg ? RngTags.WHALE_TICKET : RngTags.WHALE_QUADRANT` selector), and the argument count
   matches the hash width;
-- no tagged hash takes `address(`, `ContractAddresses.`, `block.`, `tx.`, `chainid()`,
-  `blockhash(` or `gasleft(`; the only exempt argument is the Lens expression
-  `issuer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID`, which maps an issuer
-  to its constant wallet ID;
+- no tagged hash takes `address(`, `ContractAddresses.`, `block.`, `tx.`, `chainid()`, `blockhash(`
+  or `gasleft(`; the only exempt argument is the Lens expression `issuer == ContractAddresses.VAULT
+  ? VAULT_WALLET_ID : SDGNRS_WALLET_ID`, which maps an issuer to its constant wallet ID;
 - `rawBitExceptions` holds exactly one entry, `bool win = (rngWord & 1) == 1;` in
   `CoinflipCore.processCoinflipPayouts`, and that statement must appear exactly once there.
 
@@ -37,32 +37,32 @@ The registry is a reviewed source inventory, not a whole-program taint proof; th
 
 ## Request, callback and publication
 
-VRF requests are paid in native ETH from the coordinator subscription. `rawFulfillRandomWords`
-runs in the Game itself (no delegatecall) and does three things: it requires the coordinator as
-`msg.sender`; it compares the low 64 bits of the request ID with the stored `vrfRequestId`, which
-is packed above the coordinator address in one storage slot (slot 21); and it stores the raw word
-in `rngWordCurrent`. ID 0 and superseded IDs return without reverting. Raw words 0 and 1 are
-ignored, which leaves the request pending for its retry. A request whose returned ID has zero low
-64 bits is treated as refused at request time (`_boundedVrfRequest`). A consumed session keeps
-its answered ID, and `LootboxRngApplied(index, word, requestId)` reports the low 64 bits.
-Publication, nudge application and every consumer run later in `mineRun`.
+VRF requests are paid in native ETH from the coordinator subscription. `rawFulfillRandomWords` runs
+in the Game itself (no delegatecall) and does three things: it requires the coordinator as
+`msg.sender`; it compares the low 64 bits of the request ID with the stored `vrfRequestId`, which is
+packed above the coordinator address in one storage slot (slot 21); and it stores the raw word in
+`rngWordCurrent`. ID 0 and superseded IDs return without reverting. Raw words 0 and 1 are ignored,
+which leaves the request pending for its retry. A request whose returned ID has zero low 64 bits is
+treated as refused at request time (`_boundedVrfRequest`). A consumed session keeps its answered ID,
+and `LootboxRngApplied(index, word, requestId)` reports the low 64 bits. Publication, nudge
+application and every consumer run later in `mineRun`.
 
-The logical day starts at 1 and advances exactly once when a fresh daily VRF request is
-accepted. Coinflip receives the same requested-day mirror atomically. Retry, coordinator
-replacement, mid-day requests and elapsed calendar windows never increment it. Only one fresh
-daily request is accepted in each 22:57 UTC reset window; unused windows create no rounds or
-recovery results. There is no gap backfill and no recovery-word domain.
+The logical day starts at 1 and advances exactly once when a fresh daily VRF request is accepted.
+Coinflip receives the same requested-day mirror atomically. Retry, coordinator replacement, mid-day
+requests and elapsed calendar windows never increment it. Only one fresh daily request is accepted
+in each 22:57 UTC reset window; unused windows create no rounds or recovery results. There is no gap
+backfill and no recovery-word domain.
 
-A mid-day request whose pending value is below the threshold is the only path that spends
-mid-day request credit, and it spends the caller's own credit (`middayRngCredit`, credited by
+A mid-day request whose pending value is below the threshold is the only path that spends mid-day
+request credit, and it spends the caller's own credit (`middayRngCredit`, credited by
 `Admin.donateVrf` at one quarter of the donated wei).
 
 ## Coin word and nudges
 
 `reverseFlip(expectedCost)` burns FLIP to queue one nudge. It reverts while `rngLockedFlag` is set
-or after liveness has fired, and the count is capped at 255 (`RNG_NUDGE_CAP`). The cost is 100
-FLIP, multiplied by 1.5 per nudge already queued. `prepareRequestBoundary` sets `rngLockedFlag`
-before the daily request, so the count is frozen from the request until the word is applied.
+or after liveness has fired, and the count is capped at 255 (`RNG_NUDGE_CAP`). The cost is 100 FLIP,
+multiplied by 1.5 per nudge already queued. `prepareRequestBoundary` sets `rngLockedFlag` before the
+daily request, so the count is frozen from the request until the word is applied.
 
 At the daily apply (`DegenerusGameAdvanceModule.applyDailyWord_g1652`), `_applyDailyRng(day, word)`:
 
@@ -71,45 +71,44 @@ At the daily apply (`DegenerusGameAdvanceModule.applyDailyWord_g1652`), `_applyD
 3. records the raw `word` for the day (`_recordDailyRng`);
 4. emits `DailyRngApplied(day, word, nudges)`.
 
-The coin word goes only to `Coinflip.processCoinflipPayouts(bonus, coinWord, day)`, which uses
-it twice: `win = (coinWord & 1) == 1`, and the reward percent
-`FlipRoundLib.coinflipRewardPercent(bonus, coinWord, day)`, whose seed is
-`H(FLIP_REWARD, coinWord)` (`seed % 20`: 0 → 50, 1 → 150, otherwise `78 + seed % 38`, plus the
-bonus). No other derivation sees nudges. The recorded daily word, the session word, jackpots,
-quests, WWXRP, Craps, Degenesis and the terminal word are all the raw word. The terminal path
-calls `_applyDailyRng` and discards the coin word, because no daily coinflip resolves after
-liveness.
+The coin word goes only to `Coinflip.processCoinflipPayouts(bonus, coinWord, day)`, which uses it
+twice: `win = (coinWord & 1) == 1`, and the reward percent
+`FlipRoundLib.coinflipRewardPercent(bonus, coinWord, day)`, whose seed is `H(FLIP_REWARD, coinWord)`
+(`seed % 20`: 0 → 50, 1 → 150, otherwise `78 + seed % 38`, plus the bonus). No other derivation sees
+nudges. The recorded daily word, the session word, jackpots, quests, WWXRP, Craps, Degenesis and the
+terminal word are all the raw word. The terminal path calls `_applyDailyRng` and discards the coin
+word, because no daily coinflip resolves after liveness.
 
 ## Words and their consumers
 
 - **Recorded daily word.** The Game retains two daily words in `rngWordByDay[day & 1]`,
-  authenticated by two uint24 day tags in `rngDayTags` (slot 25). `rngWordForDay` exposes the
-  latest applied result and its predecessor and returns zero for future, expired or mismatched
-  tags. Internal readers authenticate the same tags without a calendar cutoff, so a committed
-  daily consumer can finish after midnight.
-- **Session word.** The published read-buffer word (`_lootboxWord(_rngReadBuffer())`), from a
-  daily or mid-day request. Queued boxes, AFKing boxes, redemption settlement and Decimator
-  rounds use it. The read-completion gate waits for AFKing boxes, live sDGNRS redemption
-  settlement and Decimator rounds, along with committed tickets/foil, human boxes/bets and
-  read-bound Craps. An AFKing stamp cannot open before its day is sealed.
+  authenticated by two uint24 day tags in `rngDayTags` (slot 25). `rngWordForDay` exposes the latest
+  applied result and its predecessor and returns zero for future, expired or mismatched tags.
+  Internal readers authenticate the same tags without a calendar cutoff, so a committed daily
+  consumer can finish after midnight.
+- **Session word.** The published read-buffer word (`_lootboxWord(_rngReadBuffer())`), from a daily
+  or mid-day request. Queued boxes, AFKing boxes, redemption settlement and Decimator rounds use it.
+  The read-completion gate waits for AFKing boxes, live sDGNRS redemption settlement and Decimator
+  rounds, along with committed tickets/foil, human boxes/bets and read-bound Craps. An AFKing stamp
+  cannot open before its day is sealed.
 - **Craps windows** freeze their opened tier, high multiple and stake echo in the scoreboard, so
   scheduled cleanup reconstructs identical terms after the opening-day word retires.
 
 ### Degenesis cohort binding
 
-Degenesis orders draw from the daily word of the request that follows their cohort's pricing.
-Every outcome input is fixed before that request:
+Degenesis orders draw from the daily word of the request that follows their cohort's pricing. Every
+outcome input is fixed before that request:
 
-- Order lanes (wallet ID, amount units, seconds-into-day) are written at purchase, and a cohort
-  is sealed once its day index is below the request day, so no order joins a cohort whose word
-  was requested.
-- `prepareDegenesis_g47(day)` runs in `prepareRequestBoundary` before the request: it splits
-  sealed cohorts, then prices at most one nonempty cohort from its volume `V` and the
-  `Pool.Degenesis` balance, writing `degenesisActive` with the bound day. Pricing requires the
-  previous cohort to have closed, so a backlog delays the binding word and cannot alter a rate.
-- `_recordDailyRng` copies the word into `degenesisWord` when `degenesisClosed < DEGENESIS_DAYS`
-  (7) and the bound day equals the recorded day. The copy is the only way a word reaches the
-  module; mid-day words are never recorded as daily words.
+- Order lanes (wallet ID, amount units, seconds-into-day) are written at purchase, and a cohort is
+  sealed once its day index is below the request day, so no order joins a cohort whose word was
+  requested.
+- `prepareDegenesis_g47(day)` runs in `prepareRequestBoundary` before the request: it splits sealed
+  cohorts, then prices at most one nonempty cohort from its volume `V` and the `Pool.Degenesis`
+  balance, writing `degenesisActive` with the bound day. Pricing requires the previous cohort to
+  have closed, so a backlog delays the binding word and cannot alter a rate.
+- `_recordDailyRng` copies the word into `degenesisWord` when `degenesisClosed < DEGENESIS_DAYS` (7)
+  and the bound day equals the recorded day. The copy is the only way a word reaches the module;
+  mid-day words are never recorded as daily words.
 - `_degenesisOutcome(cohort, lane, index)` is pure in `degenesisWord`, the cohort terms and the
   order: reordering or partitioning settlement calls cannot change any order's reward, and the
   cursor only selects which index is paid next.
@@ -119,9 +118,9 @@ Every outcome input is fixed before that request:
 ### Ticket generation
 
 Ticket materialization is owned by `DegenerusGameTicketModule`. Output is identical across every
-successful stopping schedule, including lower transaction gas, cold/warm storage and access
-lists. The invariant covers each trait bucket's ordered owner lanes, the final round counter,
-consumed debts and downstream fixed-input samples.
+successful stopping schedule, including lower transaction gas, cold/warm storage and access lists.
+The invariant covers each trait bucket's ordered owner lanes, the final round counter, consumed
+debts and downstream fixed-input samples.
 
 A solo stream identity (`TicketEntropy.identity`) packs:
 
@@ -134,78 +133,77 @@ A solo stream identity (`TicketEntropy.identity`) packs:
 | 32–63 | Owner's wallet ID (masked to zero before hashing) |
 | 0–31 | Zero in the identity; the event key carries the run's start offset here |
 
-For absolute solo offset `i`, each sixteen-entry group uses
-`H(TICKET_TRAITS, committedWord, identity, i / 16)` with the wallet-ID field zeroed, expanded by
-the uint64 LCG within the group. Solo offset starts at zero when an owner first enters solo
-processing, including a survivor of seated rounds. It never includes the remaining balance,
-wallet ID, transaction gas or call count. Unfinished solo runs stop only on a multiple of sixteen
-entries. The final tail resolves its fraction and clears debt and progress atomically; the
-fraction `H(TICKET_REMAINDER, committedWord, identity) % 100 < remainder` (wallet-ID field
-zeroed) adds at most one emitted entry.
+For absolute solo offset `i`, each sixteen-entry group uses `H(TICKET_TRAITS, committedWord,
+identity, i / 16)` with the wallet-ID field zeroed, expanded by the uint64 LCG within the group.
+Solo offset starts at zero when an owner first enters solo processing, including a survivor of
+seated rounds. It never includes the remaining balance, wallet ID, transaction gas or call count.
+Unfinished solo runs stop only on a multiple of sixteen entries. The final tail resolves its
+fraction and clears debt and progress atomically; the fraction `H(TICKET_REMAINDER, committedWord,
+identity) % 100 < remainder` (wallet-ID field zeroed) adds at most one emitted entry.
 
 Round traits use `H(TICKET_ROUND, committedWord, level, globalRound)`. A round first fills eight
-live seats or reaches the frozen frontier; incomplete selection cannot roll or send waiting
-entries through the solo engine. Surviving seats preserve rotated queue order, and nothing else
-changes the global round counter.
+live seats or reaches the frozen frontier; incomplete selection cannot roll or send waiting entries
+through the solo engine. Surviving seats preserve rotated queue order, and nothing else changes the
+global round counter.
 
 Each frozen ordinary or future queue starts at `H(TICKET_ROTATION, committedWord, queueKey) %
 frozenLength` and wraps once. The start is recomputed, not stored. Cursors and seats use logical
 positions in that rotation; fractional and solo identities use the physical queue index.
 
-`TraitsGenerated(uint32 indexed walletId, uint256 baseKey, uint32 take)` emits
-`identity | absoluteStartOffset | goldSixTakenFlag`. Bit 255 (`GOLD_SIX_TAKEN`) is an event-only
-flag recording that gold Dice 6 was already present before the run; a decoder clears it and the
-low 32 bits before group hashing and uses it as the replay's initial cap state. The count
-includes any final fractional entry. Foil events use domain `0x23`, offset zero and the buyer's
-wallet ID at bits 32–63. Seated `EntryTraitsRevealed` events reveal credited entries and owners
-directly; each nonzero topic is `(level << 160) | walletId`.
+`TraitsGenerated(uint32 indexed walletId, uint256 baseKey, uint32 take)` emits `identity |
+absoluteStartOffset | goldSixTakenFlag`. Bit 255 (`GOLD_SIX_TAKEN`) is an event-only flag recording
+that gold Dice 6 was already present before the run; a decoder clears it and the low 32 bits before
+group hashing and uses it as the replay's initial cap state. The count includes any final fractional
+entry. Foil events use domain `0x23`, offset zero and the buyer's wallet ID at bits 32–63. Seated
+`EntryTraitsRevealed` events reveal credited entries and owners directly; each nonzero topic is
+`(level << 160) | walletId`.
 
 Jackpot ticket awards paid directly into a level run in rounds of up to 32 winners
 (`_materializeJackpotRound`), seeded `H(TICKET_DIRECT, allocationRoot, q << 32 | i, round)`.
 Quadrants 1–3 reorder the winners before assigning traits: a full batch of 32 uses
-`PackedTicketShuffle.shuffle` with `H(TICKET_SHUFFLE, seed, q)`; a smaller batch runs a
-Fisher–Yates walk chaining `H(TICKET_SHUFFLE_STEP, entropy, left)`. Each group of eight takes its
-quadrant's trait from 64-bit slice `q` of `H(TICKET_GROUP, seed, group)`.
-`JackpotTicketBatchTraits` reveals the result.
+`PackedTicketShuffle.shuffle` with `H(TICKET_SHUFFLE, seed, q)`; a smaller batch runs a Fisher–Yates
+walk chaining `H(TICKET_SHUFFLE_STEP, entropy, left)`. Each group of eight takes its quadrant's
+trait from 64-bit slice `q` of `H(TICKET_GROUP, seed, group)`. `JackpotTicketBatchTraits` reveals
+the result.
 
 ### Gold Dice 6
 
-Gold Dice 6 (trait 253) keeps only its first natural occurrence at each full level, shared by
-solo, round and foil producers. The live-bucket bit, authenticated against the full buffer level,
-is the claim marker: production appends always add nonzero entries and never remove them from an
-active level. Later occurrences become one of traits 248–252, 254 or 255, selected by
-`H(GOLD_REPLACEMENT, seed) % 7`, where `seed` is the candidate's LCG state for solo entries, the
-round seed for seated entries and the foil-line seed for packs. Retired foil levels redirect every
-candidate. Gold six receives zero virtual deity entries in every jackpot and pass sampler; a deity
-wallet's actual entry remains eligible.
+Gold Dice 6 (trait 253) keeps only its first natural occurrence at each full level, shared by solo,
+round and foil producers. The live-bucket bit, authenticated against the full buffer level, is the
+claim marker: production appends always add nonzero entries and never remove them from an active
+level. Later occurrences become one of traits 248–252, 254 or 255, selected by `H(GOLD_REPLACEMENT,
+seed) % 7`, where `seed` is the candidate's LCG state for solo entries, the round seed for seated
+entries and the foil-line seed for packs. Retired foil levels redirect every candidate. Gold six
+receives zero virtual deity entries in every jackpot and pass sampler; a deity wallet's actual entry
+remains eligible.
 
 A natural daily-board gold six survives when `H(GOLD_DAILY, word) % 6 == 0`; otherwise it is
 replaced from the same seven-die pool with `H(GOLD_REPLACEMENT, word)`. The final daily board is
 shared by the ETH, coin, ticket and foil-match paths. When it contains gold six, Dice receives the
 solo pool ahead of every other gold trait; the shared selector gives natural terminal gold six the
 same priority, while the one-in-six survival gate applies to daily boards only. All Dice are
-excluded from Degenerette hero selection and jackpot hero boosts; Degenerette boards keep their
-dice and match odds.
+excluded from Degenerette hero selection and jackpot hero boosts; Degenerette boards keep their dice
+and match odds.
 
-Producer order is part of the invariant. Ordinary queues precede the committed future pool and
-foil FIFO. If a parity dependency starts foil early, its continuation keeps precedence across
+Producer order is part of the invariant. Ordinary queues precede the committed future pool and foil
+FIFO. If a parity dependency starts foil early, its continuation keeps precedence across
 transactions; only the exact older queue blocking the FIFO head may interrupt it. Terminal
-continuation preserves an active solo offset and seats when finishing the same cohort on its
-word; repoints, completed queues and retired buffers clear progress.
+continuation preserves an active solo offset and seats when finishing the same cohort on its word;
+repoints, completed queues and retired buffers clear progress.
 
-Each indivisible miner operation is admitted only when its conservative cold-path bound,
-including its call, checkpoint and return tail, fits the remaining allowance and available gas.
-Available gas may select an earlier safe checkpoint; it never changes the final ticket inventory.
+Each indivisible miner operation is admitted only when its conservative cold-path bound, including
+its call, checkpoint and return tail, fits the remaining allowance and available gas. Available gas
+may select an earlier safe checkpoint; it never changes the final ticket inventory.
 
 ### Foil packs
 
-Foil purchases freeze level, boost and activity score and join the foil write cohort, which has
-its own toggle. Only the next daily request (or the single terminal swap) freezes that cohort; a
-mid-day request never moves foil packs, so every pack generates from a daily word and its grand is
-sized inside the daily pool freeze. Materialization stores four uint32 lines
-`H(FOIL_LINES, committedWord, buyerWalletId << 24 | level, line)` in the pack record, together with
-readiness, first eligible draw and actual generation day. Claims never reconstruct lines from a
-daily word.
+Foil purchases freeze level, boost and activity score and join the foil write cohort, which has its
+own toggle. Only the next daily request (or the single terminal swap) freezes that cohort; a mid-day
+request never moves foil packs, so every pack generates from a daily word and its grand is sized
+inside the daily pool freeze. Materialization stores four uint32 lines derived from
+`H(FOIL_LINES, committedWord, buyerWalletId << 24 | level, line)`, the frozen boost and the gold-six
+cap in the pack record, together with readiness, first eligible draw and actual generation day.
+Claims never reconstruct lines from a daily word.
 
 Each `dailyFoilDraw[day & 1]` holds the board in bits 0–31, the level in bits 64–87, a 128-bit
 payout seed `uint128(H(FOIL_PAYOUT, committedWord))` in bits 88–215, a seeded flag at bit 216 and
@@ -214,25 +212,25 @@ same-day or newer record makes the writer return without changing state or rever
 Match currency and spin hash the saved seed with the ticket index under `FOIL_CURRENCY` and
 `FOIL_SPIN`; they never read retained daily words. A zero seed is valid with the flag set.
 
-Claims on draw day D stay open through the published frontier D+1 and expire at D+2; calendar
-resets and outstanding requests cannot expire them. Each player's match markers occupy one word:
-two day-tagged lanes with four ticket bits each. Golden foil claims use the generation-day and
-next-day window against published daily results and expire at published D+2. WWXRP draw payouts
-for participation day d open once day d+1 is published and close when the day-(d+3) daily request
-goes out, the request that opens day d+3's entries in day d's storage bank; an outstanding request
-therefore closes them. The liveness/game-over cutoff closes claims.
+Claims on draw day D stay open through the published frontier D+1 and expire at D+2; calendar resets
+and outstanding requests cannot expire them. Each player's match markers occupy one word: two
+day-tagged lanes with four ticket bits each. Golden foil claims use the generation-day and next-day
+window against published daily results and expire at published D+2. WWXRP draw payouts for
+participation day d open once day d+1 is published and close when the day-(d+3) daily request goes
+out, the request that opens day d+3's entries in day d's storage bank; an outstanding request
+therefore closes them. The liveness/game-over cutoff closes foil match and golden-ticket claims.
 
 Pack metadata and lines share four reusable records per player, keyed by `level & 3` and
-authenticated by the full level in bits 208–231; gold-paid state is bit 232. A purchase can reuse
-an occupied record only after its pack has generated, its level is below the current level, its
-gold window is closed, and neither of the two latest sealed boards references its level
+authenticated by the full level in bits 208–231; gold-paid state is bit 232. A purchase can reuse an
+occupied record only after its pack has generated, its level is below the current level, its gold
+window is closed, and neither of the two latest sealed boards references its level
 (`_foilRecordReusable`). A live collision rejects only the new purchase.
 
-The stored seed fixes the board, currency and primary spin, not all proceeds. Stake pricing uses
-the draw's level and the pack's saved activity score. An ETH spin caps its ETH share at 10% of the
-live unfrozen future pool, with overflow recirculated through live lootbox state, and high-score
-ETH spins award sDGNRS from the live Reward pool, so claim timing within the window can change ETH,
-sDGNRS and recirculation proceeds. Claims during frozen pools keep the pending-pool solvency check.
+The stored seed fixes the board, currency and primary spin, not all proceeds. Stake pricing uses the
+draw's level and the pack's saved activity score. An ETH spin caps its ETH share at 10% of the live
+unfrozen future pool, with overflow recirculated through live lootbox state, and high-score ETH
+spins award sDGNRS from the live Reward pool, so claim timing within the window can change ETH,
+sDGNRS and recirculation proceeds. Foil match claims revert with `RngLocked` during the daily RNG lock.
 
 ### Jackpot battle, price and subsidy
 
@@ -241,47 +239,45 @@ The jackpot battle's entry price decodes the low two bits of the period-five sch
 Price freezes in the opening terms and is copied into the round at lock.
 
 The battle field, pool multiplier and subsidy consume `battleWord = H(FUTURE_BATTLE, word)` of a
-later committed word, not the known opening word. `JackpotBattle._prepare` draws the multiplier
-from `H(CRAPS_JACKPOT_MULT, battleWord) % 1000` and the subsidy from
-`H(CRAPS_SUBSIDY, battleWord) % 100` (buckets at 60/90/99), after the field, fee, award target,
-baseline and reserve contribution have locked; preparation persists both once across resumed
-chunks.
+later committed word, not the known opening word. `JackpotBattle._prepare` draws the multiplier from
+`H(CRAPS_JACKPOT_MULT, battleWord) % 1000` and the subsidy from `H(CRAPS_SUBSIDY, battleWord) % 100`
+(buckets at 60/90/99), after the field, fee, award target, baseline and reserve contribution have
+locked; preparation persists both once across resumed chunks.
 
 ### Century refill
 
-The sDGNRS century refill uses the committed transition word passed through `advanceGame`. It
-draws `25 + H(CENTURY_REFILL, word) % 51` percent (25–75 inclusive). Burn amounts size the mint
-but do not enter the draw, and `lastRecycledCentury` prevents a completed century from rolling
-again.
+The sDGNRS century refill uses the committed transition word passed through `advanceGame`. It draws
+`25 + H(CENTURY_REFILL, word) % 51` percent (25–75 inclusive). Burn amounts size the mint but do not
+enter the draw, and `lastRecycledCentury` prevents a completed century from rolling again.
 
 ### Redemptions
 
-Live sDGNRS redemptions settle on the published session word that answered the request closing
-their batch, for both manual claims and the bounded miner drain. One synthetic flip per batch uses
-`H(REDEMPTION_FLIP, word)`: bit 0 decides the win and the same hash feeds the coinflip
+Live sDGNRS redemptions settle through the bounded miner drain on the published session word that
+answered the request closing their batch. Manual redemption claims require game over. One synthetic
+flip per batch uses `H(REDEMPTION_FLIP, word)`: bit 0 decides the win and the same hash feeds the coinflip
 reward-percent mapping. Half the rolled ETH credits game claimable and half opens a redemption
-lootbox, subject to the dust rule. Terminal redemptions keep their roll, receipt and ETH
-reservation until withdrawal and need no historical RNG for it.
+lootbox, subject to the dust rule. Terminal redemptions keep their roll, receipt and ETH reservation
+until withdrawal and need no historical RNG for it.
 
 ### Endings without a word
 
 There is no entropy fallback. A VRF request whose word is not in use (published by `mineRun`) 14
-days after it was sent ends the game deterministically with no word, whether the word never came
-or came and was never published; a word delivered after that point is discarded, and the terminal
-level's tickets share the pot (`claimDeadVrf`). Fourteen days without a completed daily session
-end the game on the same path even while the coordinator answers; that ending settles no loans
-and sends no terminal request. A normal ending draws only on a terminal word it requested itself
-after liveness froze purchases. Terminal entry never invokes Craps. The NatSpec of
-`_endingReason`, `_vrfDeadmanFired`, `_vrfDead` and `_handleGameOverPath` states the implemented
-behaviour.
+days after it was sent ends the game deterministically with no word, whether the word never came or
+came and was never published; a word delivered after that point is discarded, and the terminal
+level's tickets share the pot (`claimDeadVrf`). Fourteen days without a completed daily session end
+the game on the same path even while the coordinator answers; that ending settles no loans and sends
+no terminal request. A normal ending draws only on a terminal word it requested itself after
+liveness froze purchases. Terminal entry never invokes Craps. The NatSpec of `_endingReason`,
+`_vrfDeadmanFired`, `_vrfDead` and `_handleGameOverPath` states the implemented behaviour.
 
 ### Miner compensation
 
 Miner compensation is separate from every outcome domain. It prices execution gas above
-`MineFlipGas.MIN_REWARDED_GAS` (1M) at `block.basefee` with an age-based FLIP multiplier, and
-requires successful nonterminal progress. The age anchor is the later of the latest VRF request
-time and the current 22:57 UTC reset. No entropy derivation or consumer payout reads gas price,
-work age or the multiplier, and the VRF callback writes no state other than the raw word.
+`MineFlipGas.MIN_REWARDED_GAS` (1M) at `block.basefee`, capped according to work age, with an age-based
+FLIP multiplier, and requires successful nonterminal progress. The age anchor is the later of the
+latest VRF request time and the current 22:57 UTC reset. No entropy derivation or consumer payout
+reads gas price, work age or the multiplier, and the VRF callback writes no state other than the raw
+word.
 
 ## Domain map
 
@@ -343,30 +339,29 @@ These are registered `NON-RNG` in the manifest and take no VRF input:
   address(this), uint24 day, uint32 walletId)) % 10`, over the entrant's admitted wallet ID;
   `bucketOf(day, 0)` returns 10 (no bucket).
 - Affiliate payout roll: `keccak256(abi.encodePacked(AFFILIATE_ROLL_TAG,
-  GameTimeLib.currentDayIndex(), buyerWalletId, code))`, deterministic and public by design.
+  GameTimeLib.currentDayIndex(), buyerWalletId, code))`, deterministic and public.
 
 ## Intended sharing
 
-- Every RNG period has one Degenerette house board for all ETH/FLIP bets. WWXRP reward spins apply
-  the tagged rig, which can adjust the displayed board based on the player's pick.
+- Every RNG period has one Degenerette house board per spin index for all ETH/FLIP bets. WWXRP reward
+  spins apply the tagged rig, which can adjust the displayed board based on the player's pick.
 - The packed ticket sampler groups eight draws from one sampled storage word. Equal marginal
   probabilities do not imply independent winners.
-- Ticket materialization binds the physical queue index and an absolute solo offset; remaining
-  debt and gas budgets do not enter the seed.
+- Ticket materialization binds the physical queue index and an absolute solo offset; remaining debt
+  and gas budgets do not enter the seed.
 - Weighted populations, effective symbol totals and probability denominators remain inputs to
   selection arithmetic. Keeping financial values out of hash preimages does not remove economic
   weighting or eligibility conditions.
 
 ## Verification
 
-See [Verification](../VERIFICATION.md) to run these tests and for their limits. They do not
-establish statistical independence.
+See [Verification](../TESTING.md) to run these tests and for their limits. They do not establish
+statistical independence.
 
 - `test/fuzz/JackpotEightWinnerGroups.t.sol`: ticket winners under different award budgets.
 - `test/fuzz/RandomnessSeedInputs.t.sol`: box resolutions after changing only the amount.
-- `test/fuzz/DegeneretteFreezeResolution.t.sol`: shared boards across owners, currencies, stakes
-  and bet ids; `test/fuzz/DegeneretteFlipRoundAntiGrind.t.sol`: payout invariance under batch
-  changes.
+- `test/fuzz/DegeneretteFreezeResolution.t.sol`: shared boards across owners, currencies, stakes and
+  bet ids; `test/fuzz/DegeneretteFlipRoundAntiGrind.t.sol`: payout invariance under batch changes.
 - `test/fuzz/DecimatorBattle.t.sol`: replay from the shared dice seed, exact-sample exclusion,
   payout conservation and settlement invariance across batch sizes;
   `test/fuzz/DecimatorJackpotIntegration.t.sol`: frozen preferences, generated identities,
@@ -380,4 +375,5 @@ establish statistical independence.
 - `scripts/check-rng-shape.py`, `scripts/check-rng-taint.sh`, `scripts/check-rng-window.sh`: the
   source registry gates.
 - Request, callback, retry, re-issue, nudge and deadline assertions:
-  [Properties](../PROPERTIES.md#rng) and [Properties: ending](../PROPERTIES.md#terminal-ordering-and-deadlines).
+  [Properties](../PROPERTIES.md#rng) and [Properties:
+  ending](../PROPERTIES.md#terminal-ordering-and-deadlines).

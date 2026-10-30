@@ -1,4 +1,6 @@
-.PHONY: test test-foundry test-fork test-hardhat check-audit-snapshot test-assurance-tools check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete invariant-test invariant-build invariant-clean
+AUDIT_LOG_DIR ?= .audit-test-logs/foundry
+
+.PHONY: test test-foundry test-fork test-hardhat check-audit-snapshot test-assurance-tools check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
 
 # Source/input identity only; this target does not run tests.
 check-audit-snapshot:
@@ -15,6 +17,12 @@ test-assurance-tools:
 	@python3 scripts/test-gas-meter.py
 	@python3 scripts/test-rng-window-extract.py
 	@python3 scripts/audit/mutate-storage-reuse.py --check-anchors
+
+# Source-pinned finite bound for immediate loans against new whale-pass tickets.
+.PHONY: check-eth-loan-bootstrap
+check-eth-loan-bootstrap:
+	@mkdir -p $(AUDIT_LOG_DIR)
+	@python3 scripts/check-eth-loan-bootstrap.py --json-output $(AUDIT_LOG_DIR)/eth-loan-bootstrap.json
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -141,14 +149,7 @@ test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-
 # Run both suites
 test: test-foundry test-hardhat
 
-# ── Legacy aliases ──────────────────────────────────────────────────────
 
-invariant-test: test-foundry
-
-invariant-build:
-	@node scripts/lib/patchForFoundry.js
-	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --force
-	@git checkout -- contracts/ContractAddresses.sol
-
-invariant-clean:
-	@rm -rf forge-out cache
+.PHONY: check-docs
+check-docs:
+	@python3 scripts/check-docs.py

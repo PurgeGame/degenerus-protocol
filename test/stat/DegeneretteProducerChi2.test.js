@@ -1,9 +1,9 @@
 import { expect } from 'chai';
-import hre from 'hardhat';
+import { degeneretteMathFixture } from '../helpers/degeneretteMathFixture.js';
 
 describe('Degenerette producers: exhaustive lane support', function () {
   let h;
-  before(async function () { h = await (await hre.ethers.getContractFactory('DegeneretteMathHarness')).deploy(); });
+  before(async function () { h = await degeneretteMathFixture(); });
   const word = (lane) => lane | (lane << 64n) | (lane << 128n) | (lane << 192n);
   it('ordinary lanes: each of 64 color/symbol combinations, untagged, in every quadrant', async function () {
     const counts = Array.from({ length: 4 }, () => Array(8).fill(0));

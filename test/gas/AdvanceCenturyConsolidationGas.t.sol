@@ -8,6 +8,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUtils.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {ICoinflip} from "../../contracts/interfaces/ICoinflip.sol";
 import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -346,7 +347,10 @@ library CenturyBafScores {
 
 /// @dev Complete production facade plus exact native worker seams. The seams do
 /// not seed progress or replace any production work inside the measured phase.
-contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
+contract CenturyNativeGasHost is DegenerusGame, WalletSeed, DegenerusGameRngUtils {
+    function closeRedemptionBatchOnly() external {
+        _closeRedemptionBatch();
+    }
     function publishOnly() external {
         _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng_g4514()"));
     }
@@ -526,11 +530,16 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         _giveWalletId(burner); // reward recipients are game players with wallet IDs
         vm.prank(address(game)); sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, burner, burn);
         vm.prank(burner); sdgnrs.burn(burn);
-        uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
-        vm.prank(address(game)); sdgnrs.closeRedemptionBatch_g165517(claimable);
+        // Close through the production Game helper: it debits sDGNRS's claimable and
+        // isolates the returned backing in the Game reserve before settlement can spend it.
+        original = address(game).code;
+        vm.etch(address(game), type(CenturyNativeGasHost).runtimeCode);
+        CenturyNativeGasHost(payable(address(game))).closeRedemptionBatchOnly();
+        vm.etch(address(game), original);
         (,uint32 settling,,) = sdgnrs.redemptionBatchState();
         assertGt(settling, 0);
         assertGt(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(game.redemptionReserve(), sdgnrs.pendingRedemptionEthValue(), "closed batch backing is isolated");
 
         uint8 historyMode = _vaultHistoryMode();
         if (historyMode != 0) {
@@ -621,8 +630,9 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         _checkConsolidation(true);
     }
 
-    /// @dev From a snapshot, one real mineFlip at 10M and one at 16.7M: each succeeds and
-    ///      progresses (emits a stage marker); state is restored after each.
+    /// @dev From a snapshot, real mineRun calls at 10M and 16.7M: the first advances a daily
+    ///      stage, and repeated calls finish that day and its pending redemption. Each call
+    ///      must perform work; state is restored after each allowance's complete run.
     function _checkRealisticMinerCalls(string memory label) private {
         uint256[2] memory allowances = [uint256(CAP), 16_700_000];
         for (uint256 a; a < allowances.length; ++a) {
@@ -634,6 +644,23 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
             assertTrue(ok, "a realistic miner allowance succeeds");
             assertGt(_countTopic(vm.getRecordedLogs(), keccak256("Advance(uint8,uint24)")), 0, "and makes progress");
             emit log_named_uint(string.concat(label, a == 0 ? "_at_10M" : "_at_16_7M"), used);
+            uint256 calls = 1;
+            while (game.rngLocked() || sdgnrs.redemptionSettlementPending_g153837()) {
+                assertLt(calls, positions / BAF_GROUP + 64, "real miner century run stalled");
+                vm.recordLogs();
+                (ok,) = address(game).call{gas: allowances[a]}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+                assertTrue(ok, "realistic allowance completes every continuation");
+                assertGt(
+                    _countTopic(vm.getRecordedLogs(), keccak256("MinerWork(address,uint8,uint256,uint256)")),
+                    0,
+                    "every continuation performs work"
+                );
+                ++calls;
+            }
+            (uint8 kind,,,) = CenturyNativeGasHost(payable(address(game))).bafWork();
+            assertEq(kind, 0, "real miner finishes the BAF and daily jackpot work");
+            assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "real miner settles the closed redemption");
+            emit log_named_uint(string.concat(label, a == 0 ? "_calls_at_10M" : "_calls_at_16_7M"), calls);
             vm.revertToState(snapshot);
         }
     }

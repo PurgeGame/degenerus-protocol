@@ -11,11 +11,9 @@ import importlib.util
 import json
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location(
-    "benchmark", Path(__file__).resolve().parents[1] / "audit/benchmark-storage-reuse.py")
-b = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(b)
-
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import native_rpc as b
 
 meter_spec = importlib.util.spec_from_file_location("native_meter", Path(__file__).with_name("native-gas-meter.py"))
 gas_meter = importlib.util.module_from_spec(meter_spec)

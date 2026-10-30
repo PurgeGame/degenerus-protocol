@@ -1,25 +1,26 @@
-# Audit exclusions — read alongside scope.txt and docs/AUDIT.md
-# Test-only code, upstream implementations and off-chain applications are not production
-# Solidity targets. Tests, deployment scripts and compiler settings remain supporting
-# evidence: report a deployment/configuration defect that affects in-scope contracts.
-# All production Solidity, including address pins and display/data dependencies,
-# is inventoried in scope.txt. Display artwork receives dependency review only.
+# Audit exclusions; severity and assumptions: docs/AUDIT.md and SECURITY.md.
+# Glamsterdam is retained for compilation/fixtures but is not the audit target.
+contracts/profiles/glamsterdam/
+deployments/glamsterdam.json
+# Compatibility compositions outside the EIP-170 deployment import closure:
+contracts/modules/DegenerusGameBoxModule.sol
+contracts/modules/DegenerusGameDailyModule.sol
+contracts/modules/DegenerusGameEndgameModule.sol
+contracts/modules/DegenerusGameFoilPackModule.sol
+contracts/modules/DegenerusGamePassModule.sol
+# Test-only sources and upstream implementations; retained as verification dependencies.
 contracts/mocks/
 contracts/test/
 test/
 node_modules/
 lib/
-artifacts/
-cache/
-forge-out/
-forge-out-halmos/
-out/
-# Separate frontend, indexer and website repositories.
-# Style-only reports and gas micro-optimizations are not audit priorities; any reachable
-# state that leaves the mineRun chain unable to complete (gas-limit failures, unbounded
-# work, reverts, stuck cursors) IS in scope.
-# Severity criteria and exclusions: docs/AUDIT.md. Authority, trust assumptions and audit
-# boundaries (sDGNRS governance outcomes, WWXRP supply and draw weighting): SECURITY.md.
-# Game rules: ECONOMIC_DISCLOSURES.md. Accepted implementation limitations: KNOWN-ISSUES.md.
-# Outcomes requiring valid sDGNRS governance approval are governance decisions, not findings.
-# Bypasses of governance authorization, voting or execution rules remain in scope.
+# Display data: dependency review only; also listed separately in scope.txt.
+# Artwork and cosmetic appearance are excluded; authority bypasses and effects on
+# in-scope contracts remain relevant.
+contracts/Icons32Data.sol
+contracts/DeityPassCustomizationRenderer.sol
+# Separate frontend, indexer and website repositories are outside this contest.
+# Style reports and gas micro-optimizations are excluded. Reachable failures that
+# prevent completion of the mineRun/mineFlip chain remain in scope.
+# Valid sDGNRS governance outcomes and WWXRP value/supply/draw weighting follow
+# SECURITY.md. KNOWN-ISSUES.md lists only the owner's accepted implementation limits.

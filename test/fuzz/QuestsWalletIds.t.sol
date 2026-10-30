@@ -856,6 +856,25 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq(_lq(qid), 0, "and writes nothing");
     }
 
+    function test_GrowthQuestCanRewardAgainAfter256LevelRolls() public {
+        address player = makeAddr("growthEpoch256");
+        uint32 id = _giveWalletId(player);
+        _eligible(player, false, 5);
+        uint24 lvl = game.currentLvl();
+        bytes memory callData = abi.encodeCall(quests.recordGrowthBet, (id, lvl, 50));
+        assertEq(abi.decode(_as(address(parimutuel), callData), (uint256)), 50);
+        assertEq(abi.decode(_as(address(parimutuel), callData), (uint256)), 0, "same epoch cannot pay twice");
+        uint24 oldVersion = uint24(_active() >> 136);
+        for (uint256 i; i < 256; ++i) {
+            _as(address(game), abi.encodeCall(quests.rollLevelQuest, (i)));
+        }
+        assertEq(uint24(_active() >> 136), uint256(oldVersion) + 256);
+        vm.recordLogs();
+        assertEq(abi.decode(_as(address(parimutuel), callData), (uint256)), 50, "old growth flag must reset");
+        assertEq(_countTopic(vm.getRecordedLogs(), E_GROWTH, id), 1);
+        assertEq(abi.decode(_as(address(parimutuel), callData), (uint256)), 0, "new epoch still pays only once");
+    }
+
     function test_ParimutuelBetPassesTheGateIdToRecordGrowthBet() public {
         address p = makeAddr("pariBettor");
         uint32 id = _buy(p);

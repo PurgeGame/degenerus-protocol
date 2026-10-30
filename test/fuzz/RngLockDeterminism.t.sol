@@ -5,7 +5,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
-// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+// See docs/TESTING.md for replacement suites and remaining coverage limits.
 
 // Active legacy checks cover redemption perturbations, purchases and whale claims
 // during the RNG lock, and the auto-open lock/unlock boundary. Broader current

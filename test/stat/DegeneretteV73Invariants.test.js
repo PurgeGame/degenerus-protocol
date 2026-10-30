@@ -1,12 +1,12 @@
 import { expect } from 'chai';
-import hre from 'hardhat';
+import { degeneretteMathFixture } from '../helpers/degeneretteMathFixture.js';
 import { execFileSync } from 'node:child_process';
 
 describe('Shared Degenerette payout and activity invariants', function () {
   let h;
   let m;
   before(async function () {
-    h = await (await hre.ethers.getContractFactory('DegeneretteMathHarness')).deploy();
+    h = await degeneretteMathFixture();
     m = JSON.parse(execFileSync('python3', ['-B', 'scripts/data/degenerette_single_symbol_math.py'], { encoding: 'utf8' }));
   });
   it('uses the agreed table and ETH additions in the deployed production math', async function () {

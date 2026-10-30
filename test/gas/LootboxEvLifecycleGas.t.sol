@@ -127,7 +127,7 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
     ///      10) after the RNG derivation changes. The limits stay at the original 1% / 1000-per-order.
     ///      Earlier calibration: frozen P7B 824d757cf. P6b changed RNG domains and therefore the realized
     ///      award branches and new-slot counts. The 0.8.34 b80dab839 measurements remain
-    ///      historical evidence in docs/VERIFICATION.md.
+    ///      historical evidence in docs/TESTING.md.
     function _baseline(bytes32 label) private pure returns (uint256, uint256, uint256) {
         if (label == keccak256("cover")) return (179460, 481520, 3);
         if (label == keccak256("distinct_wallets")) return (1307320, 4357560, 32);

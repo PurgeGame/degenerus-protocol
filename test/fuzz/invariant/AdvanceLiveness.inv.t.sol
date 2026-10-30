@@ -61,6 +61,9 @@ contract AdvanceLiveness is DeployProtocol {
     /// forge-config: default.invariant.depth = 100
     /// forge-config: deep.invariant.runs = 1000
     /// forge-config: deep.invariant.depth = 256
+    /// CI uses ten distinct seeds; each process still crosses every coverage threshold.
+    /// forge-config: deep_advance_ci.invariant.runs = 100
+    /// forge-config: deep_advance_ci.invariant.depth = 256
     function invariant_advanceLiveness() public view {
         if (handler.ghost_violations() == 0) return;
         AdvanceLivenessHandler.Violation memory v = handler.firstViolation();

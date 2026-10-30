@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
-/// @dev ERC-7201 pins verified by check-xa-layout.py and XaInitializationAndRollback.
+/// @dev ERC-7201 pins verified by scripts/layout/check_recursive_layout.py and XaInitializationAndRollback.
 library QaSlots {
     uint256 internal constant QUESTS = 0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200;
     uint256 internal constant ACTIVE = QUESTS;

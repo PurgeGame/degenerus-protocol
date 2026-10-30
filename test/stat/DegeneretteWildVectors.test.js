@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import hre from 'hardhat';
+import { degeneretteMathFixture } from '../helpers/degeneretteMathFixture.js';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
@@ -18,7 +19,7 @@ describe('Degenerette wild-color shared vectors', function () {
   const hashN = (...xs) => BigInt(ethers.keccak256(coder.encode(xs.map(() => 'uint256'), xs)));
   const v = JSON.parse(readFileSync(FIXTURE, 'utf8'));
   let h;
-  before(async function () { h = await (await ethers.getContractFactory('DegeneretteMathHarness')).deploy(); });
+  before(async function () { h = await degeneretteMathFixture(); });
 
   it('is the generator output (not stale)', function () {
     execFileSync('python3', ['-B', v.generator, '--check'], { encoding: 'utf8' });

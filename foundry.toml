@@ -88,6 +88,25 @@ dictionary_weight = 80
 include_storage = true
 include_push_bytes = true
 
+# CI schedules AdvanceLiveness as ten independently seeded 100-run processes.
+# Local deep stays at 1000 runs; every CI process crosses its 48-run rare-coverage gate.
+# The property also declares explicit inline settings for this profile because
+# its inline default settings otherwise override inherited profile values.
+[profile.deep_advance_ci.fuzz]
+runs = 10000
+max_test_rejects = 131072
+seed = "0xdeadbeef"
+
+[profile.deep_advance_ci.invariant]
+runs = 100
+depth = 256
+fail_on_revert = false
+shrink_run_limit = 5000
+show_metrics = true
+dictionary_weight = 80
+include_storage = true
+include_push_bytes = true
+
 # Halmos symbolic proofs need the via-IR build (the game facades hit stack-too-deep without it)
 # but must not pull the whole test tree into one solc unit: only the halmos suites are compiled.
 [profile.halmos]

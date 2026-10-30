@@ -357,7 +357,8 @@ class HardhatGroupsDriverTest(unittest.TestCase):
         golden.parent.mkdir(parents=True)
         golden.write_text('{"storage": []}\n')
         cases = [("golden_drift", "scripts/layout/golden/DegenerusGame.json")]
-        cases += [(mode, path) for path in ("docs/AUDIT.md", "docs/audit/snapshot.json", "scope.txt")
+        cases += [(mode, path) for path in ("docs/AUDIT.md", "docs/audit/source-sha256.txt", "scope.txt",
+                                           "test/fixtures/vectors.json", "test/fixtures/table.tsv")
                   for mode in ("doc_add", "doc_remove")]
         for mode, path in cases:
             with self.subTest(mode=mode):

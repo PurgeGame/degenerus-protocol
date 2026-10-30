@@ -1,0 +1,47 @@
+{
+  "utc": "2026-10-29T03:53:26.310063+00:00",
+  "configuration": "[profile.default]\nsrc = \"proofsrc\"\ntest = \"test\"\nout = \"out\"\nlibs = [\"node_modules\", \"lib\"]\nsolc_version = \"0.8.38\"\nauto_detect_solc = false\nvia_ir = true\noptimizer = true\noptimizer_runs = 1000\nevm_version = \"osaka\"\nremappings = [\"@openzeppelin/=node_modules/@openzeppelin/\", \"forge-std/=lib/forge-std/src/\"]\n\n[fuzz]\nruns = 1000\nseed = \"0xdeadbeef\"\n",
+  "commands": [
+    {
+      "command": [
+        "halmos",
+        "--contract",
+        "EthLedgerProductionProof",
+        "--loop",
+        "2",
+        "--panic-error-codes",
+        "*",
+        "--solver",
+        "yices",
+        "--solver-timeout-assertion",
+        "60000",
+        "--solver-threads",
+        "2",
+        "--json-output",
+        "symbolic-results.json"
+      ],
+      "log": "symbolic.log",
+      "exitcode": 0
+    },
+    {
+      "command": [
+        "forge",
+        "test",
+        "--match-contract",
+        "EthLedgerProductionReplay|EthLoanBootstrapTest",
+        "--threads",
+        "1",
+        "-vv"
+      ],
+      "log": "concrete.log",
+      "exitcode": 0
+    }
+  ],
+  "scope": "local production helpers and whale-ticket bootstrap parity",
+  "input_manifest": "helper-source-sha256.json",
+  "input_manifest_sha256": "b7678174fab2bf9d72f50f58fcac80eb1f39704e310595d4120b68bb33c07e5d",
+  "toolchain": {
+    "forge": "forge Version: 1.6.0-nightly\nCommit SHA: c07d504b4ae67754584f4e05ff0c547a43c50f7b\nBuild Timestamp: 2026-03-28T06:16:40.973328215Z (1774678600)\nBuild Profile: dist",
+    "halmos": "halmos 0.3.3"
+  }
+}

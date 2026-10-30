@@ -1,0 +1,15 @@
+Warning: This is a nightly build of Foundry. It is recommended to use the latest stable version. To mute this warning set `FOUNDRY_DISABLE_NIGHTLY_WARNING` in your environment. 
+
+No files changed, compilation skipped
+
+Ran 2 tests for test/unit/EthLedgerProductionReplay.t.sol:EthLedgerProductionReplay
+[PASS] testFuzz_ledgerTransitions(uint96,uint96,uint96) (runs: 1000, μ: 101590, ~: 108646)
+[PASS] test_symbolicCounterexamplesReplay() (gas: 58633)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 20.87ms (20.71ms CPU time)
+
+Ran 2 tests for test/unit/EthLoanBootstrap.t.sol:EthLoanBootstrapTest
+[PASS] testFuzz_bootstrapModelMatchesProduction(uint8,uint16,bool) (runs: 1000, μ: 4906153, ~: 5111249)
+[PASS] test_maximumBootstrapWitness() (gas: 3121780)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 576.48ms (576.41ms CPU time)
+
+Ran 2 test suites in 598.41ms (597.35ms CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)

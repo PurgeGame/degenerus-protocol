@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 
 // Permanently skipped historical cases were retired in the test review.
-// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+// See docs/TESTING.md for replacement suites and remaining coverage limits.
 
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";

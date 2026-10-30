@@ -1,14 +1,23 @@
 # Preferred craps boards and the jackpot battle
 
-Each wallet has one preference across all levels. New comp tickets and the daily jackpot battle use it. A comp ticket snapshots the preference when created; later edits do not change that ticket.
+Each wallet has one preference across all levels. New comp tickets and the daily jackpot battle use
+it. A comp ticket snapshots the preference when created; later edits do not change that ticket.
 
 ## Reservations and settlement deadline
 
-Future day tickets and window reservations can cover tomorrow through 30 days ahead. Every day in a paid or pass-funded batch must fit; an invalid day reverts the whole purchase. Automatic awards bank unused pass credits when they cannot reserve a day. Unspent pass credits do not expire.
+Future day tickets and window reservations can cover tomorrow through 30 days ahead. Every day in a
+paid or pass-funded batch must fit; an invalid day reverts the whole purchase. Automatic awards bank
+unused pass credits when they cannot reserve a day. Unspent pass credits do not expire.
 
-Scheduled day D can settle, or receive its unopened-day pass refund, through D+30. Starting D+31, remaining work is skipped without payment or refund, including unfinished jackpot fields. Payments already made stand. Each RNG word settles one non-empty scheduled window, so the deadline is reached only when mining sessions leave their requested craps words unconsumed for long enough. An RNG outage does not advance the logical day and adds no lag. Custom battles are not subject to this deadline.
+Scheduled day D can settle, or receive its unopened-day pass refund, through D+30. Starting D+31,
+remaining work is skipped without payment or refund, including unfinished jackpot fields. Payments
+already made stand. The deadline uses the logical game day. An RNG outage does not advance that day
+and adds no lag. Custom battles are not subject to this deadline.
 
-Scheduled bets, boards, cursors, reserve draws, high fields, day counters, budgets and jackpot rounds reuse 64 day banks. Each wallet's day-seat record packs four tagged days per word. Public bet IDs and events retain the actual day. A mismatched day reads empty; use events for overwritten history. Custom battles retain their full keys.
+Scheduled bets, boards, cursors, reserve draws, high fields, day counters, budgets and jackpot
+rounds reuse 64 day banks. Each wallet's day-seat record packs four tagged days per word. Public bet
+IDs and events retain the actual day. A mismatched day reads empty; use events for overwritten
+history. Custom battles retain their full keys.
 
 ## UI interface
 
@@ -33,11 +42,20 @@ Use the same canonical encoding as paid entries: three bits per leg, from least 
 | 8 | hard8 |
 | 9 | dontPass |
 
-Encode as `sum(count[i] << (3 * i))`. Each of the first nine counts is 0–3, dontPass is 0–5, the total is at most seven, and passLine and dontPass cannot both be named. Bits 30–31 must be zero. The dice scatter the remaining chips to reach ten. Zero means entirely random; unset preferences also read as zero.
+Encode as `sum(count[i] << (3 * i))`. Each of the first nine counts is 0–3, dontPass is 0–5, the
+total is at most seven, and passLine and dontPass cannot both be named. Bits 30–31 must be zero. The
+dice scatter the remaining chips to reach ten. Zero means entirely random; unset preferences also
+read as zero.
 
-Successful calls to `enterBattle`, `throwCraps`, `playCraps`, `buyFutureCrapsDays`, `applyCrapsPasses`, and `amendSlip` remember the supplied board. Explicit entry data always controls that ticket, including zero. Saving the already initialized board causes no preference write, event, or RNG lookup.
+Successful calls to `enterBattle`, `throwCraps`, `playCraps`, `buyFutureCrapsDays`,
+`applyCrapsPasses`, and `amendSlip` remember the supplied board. Explicit entry data always controls
+that ticket, including zero. Saving the already initialized board causes no preference write, event,
+or RNG lookup.
 
-While `Game.rngLocked()` is true, the setter rejects initialization and changes with `BetLocked()`. Automatic saving skips the update; the paid entry or amendment itself proceeds under its own rules. This freeze continues after VRF fulfillment until the daily advance fully unlocks. Reads and initialized equal-board calls remain available.
+While `Game.rngLocked()` is true, the setter rejects initialization and changes with `BetLocked()`.
+Automatic saving skips the update; the paid entry or amendment itself proceeds under its own rules.
+This freeze continues after VRF fulfillment until the daily advance fully unlocks. Reads and
+initialized equal-board calls remain available.
 
 ## Storage
 
@@ -54,43 +72,60 @@ While `Game.rngLocked()` is true, the setter rejects initialization and changes 
 | 118 | Retained storage sentinel |
 | 119–255 | Reserved |
 
-The sentinel is set on the first successful manual or automatic save, including zero. Clearing the board or spending the final pass preserves it. Awards and comp tickets do not initialize it. All balance and preference writes preserve the other fields.
+The sentinel is set on the first successful manual or automatic save, including zero. Clearing the
+board or spending the final pass preserves it. Awards and comp tickets do not initialize it. All
+balance and preference writes preserve the other fields.
 
-The **21-bit storage encoding differs from the 30-bit API encoding**. Use the lens's `preferredBoardOf` for UI reads. Raw readers use `extsload_g2807007(keccak256(abi.encode(walletId, uint256(9))))` on CRAPS and decode the word with `CrapsPreferenceLib.decode`, which expands the stored counts to the API encoding. Do not pass the compact field directly to a paid-entry API.
+The **21-bit storage encoding differs from the 30-bit API encoding**. Use the lens's
+`preferredBoardOf` for UI reads. Raw readers use `extsload_g2807007(keccak256(abi.encode(walletId,
+uint256(9))))` on CRAPS and decode the word with `CrapsPreferenceLib.decode`, which expands the
+stored counts to the API encoding. Do not pass the compact field directly to a paid-entry API.
 
 ## Automatic entries
 
-`deliverPasses` and vault comp kinds 0, 1, 2 and 5 snapshot the recipient's preference. Kind 3 upgrades the existing ticket without changing its board; kind 4 banks passes. Window-ahead batches reserve before the future day's terms are known. Protocol house and vault seats (`_seatBody`) play the body's saved board, fully random when unset.
+`deliverPasses` and vault comp kinds 0, 1, 2 and 5 snapshot the recipient's preference. Kind 3
+upgrades the existing ticket without changing its board; kind 4 banks passes. Window-ahead batches
+reserve before the future day's terms are known. Protocol house and vault seats (`_seatBody`) play
+the body's saved board, fully random when unset.
 
 ## The jackpot battle
 
-The jackpot battle is the day's sixth window (period 5, slot `day * 8 + 6`). It is one craps battle with two kinds of seat:
+The jackpot battle is the day's sixth window (period 5, slot `day * 8 + 6`). It is one craps battle
+with two kinds of seat:
 
-- **Paid seats.** The public daily base fee is 6,000 / 8,000 / 10,000 FLIP with 25% / 50% / 25% odds. A direct entry or the jackpot component of a day ticket burns this fee, subject to newcomer pricing. The seat plays its chosen board; high extras use the same fee times the day's high multiple. Future commitments use the 8,000-FLIP expected fee.
-- **Awarded seats.** The Game draws these from the far-future ticket queues of the next 99 levels. Each award plays the wallet's saved preference, and a wallet drawn twice gets two separate seats. Battles for days before `GameTimeLib.MAIN_LAUNCH_DAY` (the Degenesis days) have an award target of zero and run with their paid field only.
+- **Paid seats.** The public daily base fee is 6,000 / 8,000 / 10,000 FLIP with 25% / 50% / 25%
+  odds. A direct entry or the jackpot component of a day ticket burns this fee, subject to newcomer
+  pricing. The seat plays its chosen board; high extras use the same fee times the day's high
+  multiple. Future commitments use the 8,000-FLIP expected fee.
+- **Awarded seats.** The Game draws these from the far-future ticket queues of the next 99 levels.
+  Each award plays the wallet's saved preference, and a wallet drawn twice gets two separate seats.
+  Battles for days before `GameTimeLib.MAIN_LAUNCH_DAY` (the Degenesis days) have an award target of
+  zero and run with their paid field only.
 
-Warm-up and skipped days have no paid field. Their award-only battle uses the otherwise unused slot `day * 8 + 7`, which the lapse sweep never walks. `donate(false, 5, granules)` can add FLIP to the day's jackpot battle while `Game.rngLocked()` is false; donations join the pot in full.
+Warm-up and skipped days have no paid field. Their award-only battle uses the otherwise unused slot
+`day * 8 + 7`, which the lapse sweep never walks. `donate(false, 5, granules)` can add FLIP to the
+day's jackpot battle while `Game.rngLocked()` is false; donations join the pot in full.
 
 ### Lock and funding
 
 The opening schedule word sets the public price `P`. Its jackpot-period draw is
-`keccak256(abi.encode(uint256(39), dailyWord, uint256(5)))` (`RngTags.CRAPS_SCHEDULE` = 39);
-the low two bits select 6,000 for zero, 10,000 for three, and 8,000 otherwise.
-Both entry routes and the event quote use the frozen price.
+`keccak256(abi.encode(uint256(39), dailyWord, uint256(5)))` (`RngTags.CRAPS_SCHEDULE` = 39); the low
+two bits select 6,000 for zero, 10,000 for three, and 8,000 otherwise. Both entry routes and the
+event quote use the frozen price.
 
-At the daily RNG request, the field, fee, and award target lock before the future
-settlement word exists. The unscaled subsidy baseline `A` is 0.5% of the recorded
-prize pool converted at the level's ticket price, with a floor of 150,000 FLIP at
-levels 0–1 and 50,000 thereafter. The stored gross allocation is
-`Added = floor(A * P / 8000)`. Its original floor is applied only to `A`.
+At the daily RNG request, the field, fee, and award target lock before the future settlement word
+exists. The unscaled subsidy baseline `A` is 0.5% of the recorded prize pool converted at the
+level's ticket price, with a floor of 150,000 FLIP at levels 0–1 and 50,000 thereafter. The stored
+gross allocation is `Added = floor(A * P / 8000)`. Its original floor is applied only to `A`.
 
-The request funds `floor(Added / 20)` into the high-roller reserve once and fixes
-`awardTarget = min(floor(A / 10000), 500)`. Awarded seats are part of this funding,
-not another payment on top. Their target does not depend on either hidden roll
-or paid turnout. Warm-up/skipped-day detached rounds use the neutral price 8,000.
+The request funds `floor(Added / 20)` into the high-roller reserve once and fixes `awardTarget =
+min(floor(A / 10000), 500)`. Awarded seats are part of this funding, not another payment on top.
+Their target does not depend on either hidden roll or paid turnout. Warm-up/skipped-day detached
+rounds use the neutral price 8,000.
 
-The future word supplies two separately tagged draws from
-`battleWord = keccak256(abi.encode(uint256(66), rngWord))`, where `rngWord` is the settlement word (`RngTags.FUTURE_BATTLE` = 66):
+The future word supplies two separately tagged draws from `battleWord =
+keccak256(abi.encode(uint256(66), rngWord))`, where `rngWord` is the settlement word
+(`RngTags.FUTURE_BATTLE` = 66):
 
 | Probability | Hidden main subsidy multiplier S |
 | --- | ---: |
@@ -99,10 +134,9 @@ The future word supplies two separately tagged draws from
 | 9% | 5× |
 | 1% | 10× |
 
-The subsidy bucket is
-`uint256(keccak256(abi.encode(uint256(41), battleWord))) % 100` (`RngTags.CRAPS_SUBSIDY` = 41).
-Buckets 0–59, 60–89, 90–98, and 99 select the four outcomes. This cannot be
-computed from the public opening word. It becomes public on settlement fulfillment.
+The subsidy bucket is `uint256(keccak256(abi.encode(uint256(41), battleWord))) % 100`
+(`RngTags.CRAPS_SUBSIDY` = 41). Buckets 0–59, 60–89, 90–98, and 99 select the four outcomes. This
+cannot be computed from the public opening word. It becomes public on settlement fulfillment.
 
 | Probability | Event multiplier M |
 | --- | ---: |
@@ -111,10 +145,10 @@ computed from the public opening word. It becomes public on settlement fulfillme
 | 0.9% | 20× |
 | 0.1% | 100× |
 
-The event draw is
-`uint256(keccak256(abi.encode(uint256(33), battleWord))) % 1000` (`RngTags.CRAPS_JACKPOT_MULT` = 33).
-Buckets 0–899, 900–989, 990–998, and 999 select the four outcomes. Both multipliers
-have mean one. The 10× subsidy plus 100× event outcome has one-in-100,000 odds.
+The event draw is `uint256(keccak256(abi.encode(uint256(33), battleWord))) % 1000`
+(`RngTags.CRAPS_JACKPOT_MULT` = 33). Buckets 0–899, 900–989, 990–998, and 999 select the four
+outcomes. Both multipliers have mean one. The 10× subsidy plus 100× event outcome has one-in-100,000
+odds.
 
 ```text
 mainAdded = Added - floor(Added / 20)
@@ -124,98 +158,119 @@ highPool = floor((paidUnits - paidCount) * P * M)
 mainPool = totalPool - highPool
 ```
 
-The reserve receives neither multiplier. High extras receive only the event
-multiplier and remain fee-funded. The hidden subsidy can make a particular
-field's award funding smaller than the paid fee; the preserved rule is expected
-allocation, not a guarantee that paid seats never subsidize awards in an outcome.
+The reserve receives neither multiplier. High extras receive only the event multiplier and remain
+fee-funded. The hidden subsidy can make a particular field's award funding smaller than the paid
+fee; the preserved rule is expected allocation, not a guarantee that paid seats never subsidize
+awards in an outcome.
 
-At an 8,000 price, 50,000 baseline and ten paid plus five awarded seats, the
-unrounded mean main pool is 127,500 FLIP, or 8,500 per seat (bankroll plus bounty).
-The most common pair (0.25× subsidy and 0.5× event, probability 54%) gives 45,937.5
-before integer floors. Actual winnings depend on the runs and competitive prizes.
-These are nominal funding expectations. Engine limits and Coinflip's
-4,294,967,295-FLIP stake cap per wallet/day still apply; the credit event reports
-the amount actually accepted when several large awards reach the same wallet.
+At an 8,000 price, 50,000 baseline and ten paid plus five awarded seats, the unrounded mean main
+pool is 127,500 FLIP, or 8,500 per seat (bankroll plus bounty). The most common pair (0.25× subsidy
+and 0.5× event, probability 54%) gives 45,937.5 before integer floors. Actual winnings depend on the
+runs and competitive prizes. These are nominal funding expectations. Engine limits and Coinflip's
+4,294,967,295-FLIP stake cap per wallet/day still apply; the credit event reports the amount
+actually accepted when several large awards reach the same wallet.
 
-Preference edits and entries freeze with the request, which also latches the battle's
-pending bit. The RNG lock stays held, across midnight if necessary, until the field
-completes, so the paid field, preferences, queues and the committed word cannot change.
-Fees, award targets, reserve funding, multipliers, and draw identities remain fixed across
-midnight, word retirement, retries, and resumed draw/settlement chunks.
+Preference edits and entries freeze with the request, which also latches the battle's pending bit.
+The RNG lock stays held, across midnight if necessary, until the field completes, so the paid field,
+preferences, queues and the committed word cannot change. Fees, award targets, reserve funding,
+multipliers, and draw identities remain fixed across midnight, word retirement, retries, and resumed
+draw/settlement chunks.
 
-Wallet-funded entries and cash upgrades charge 5% extra (newcomer pricing) unless the
-player minted this or last level (next-level purchase-phase mints also qualify), has at
-least three credited lifetime mint levels, or holds a deity pass. The latter two checks
-use the packed player record and skip the current-level call. Awarded passes and vault
-comps keep their funded entitlement without a newcomer charge. Craps does not read or
-store the aggregate activity score; equivalent entries receive the same dice, ranking and
-payouts.
+Wallet-funded entries and cash upgrades charge 5% extra (newcomer pricing) unless the player minted
+this or last level (next-level purchase-phase mints also qualify), has at least three credited
+lifetime mint levels, or holds a deity pass. The latter two checks use the packed player record and
+skip the current-level call. Awarded passes and vault comps keep their funded entitlement without a
+newcomer charge. Craps does not read or store the aggregate activity score; equivalent entries
+receive the same dice, ranking and payouts.
 
 ### Draw and seal
 
-The Game draws awards in chunks of up to 50 entries. An advance keeps processing
-chunks while enough gas remains for another complete chunk; otherwise it saves the
-cursor and resumes on the next advance.
+The Game draws awards in chunks of up to 50 entries. An advance keeps processing chunks while enough
+gas remains for another complete chunk; otherwise it saves the cursor and resumes on the next
+advance.
 
-- Each visit picks a level uniformly among eligible nonempty far-future queues, chooses a starting position, and walks that level's whole queue circularly. Levels are picked with replacement between visits. Chunk boundaries preserve the unfinished visit.
-- The Game reads all distinct wallets' saved boards in one `extsload(bytes32[])` call. It passes one word per entry: wallet ID in bits 0–31, the 21-bit compact board in 160–180, one unit at bit 181 (`JackpotBattleFieldLib`). The battle makes no storage callbacks, and a malformed or empty entry forfeits its award.
+- Each visit picks a level uniformly among eligible nonempty far-future queues, chooses a starting
+  position, and walks that level's whole queue circularly. Levels are picked with replacement
+  between visits. Chunk boundaries preserve the unfinished visit.
+- The Game reads all distinct wallets' saved boards in one `extsload(bytes32[])` call. It passes one
+  word per entry: wallet ID in bits 0–31, the 21-bit compact board in 160–180, one unit at bit 181
+  (`JackpotBattleFieldLib`). The battle makes no storage callbacks, and a malformed or empty entry
+  forfeits its award.
 
-The chunk that reaches the award target, or finds no eligible level, seals the field.
-Each paid seat has one base place in the Added-funded main pool; extra high units
-receive a separate fee-only allocation under the same multiplier. With N base
-paid seats plus awarded seats:
+The chunk that reaches the award target, or finds no eligible level, seals the field. Each paid seat
+has one base place in the Added-funded main pool; extra high units receive a separate fee-only
+allocation under the same multiplier. With N base paid seats plus awarded seats:
 
-- each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP (at least 300, at most 41,943,000, `JackpotBattle.sol` `maxBank`);
+- each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP
+  (at least 300, at most 41,943,000, `JackpotBattle.sol` `maxBank`);
 - the rest of each unit's share is its bounty, in 100-FLIP granules, never above its bankroll;
 - rounding dust stays in the pot.
 
-Only the base seats' fee-funded bankroll is booked as the day's craps action, and
-the comp lane earns 2% of it, both once at seal. Extra high fees earn comps equal
-to 9.6% of their pre-roll at-risk value: all extra fees for a sole high seat, half
-for a contested high field. These extras, Added and multiplier gains never enter
-the action books.
+Only the base seats' fee-funded bankroll is booked as the day's craps action, and the comp lane
+earns 2% of it, both once at seal. Extra high fees earn comps equal to 9.6% of their pre-roll
+at-risk value: all extra fees for a sole high seat, half for a contested high field. These extras,
+Added and multiplier gains never enter the action books.
 
 ### Settlement
 
-Every seat throws the same dice. Seats settle through the table's normal resolver in one order: paid window seats, then day tickets, then awarded seats.
+Every seat throws the same dice. Seats settle through the table's normal resolver in one order: paid
+window seats, then day tickets, then awarded seats.
 
-- An awarded seat keys its scatter and survival coin to a hash of its own bet id (`RngTags.CRAPS_AWARDED`) rather than to the wallet. Repeat awards to one wallet are therefore separate runs. The shooter-boost turn follows the seat's position in the field.
-- Each advance step settles seats while its metered gas allowance admits another complete seat, each admitted against `CRAPS_SEAT_GAS_MAX` (2,800,000); each draw chunk is admitted against `JACKPOT_BATTLE_DRAW` (4,700,000). Settlement starts in the call after the seal; the sealing call settles nothing.
+- An awarded seat keys its scatter and survival coin to a hash of its own bet id
+  (`RngTags.CRAPS_AWARDED`) rather than to the wallet. Repeat awards to one wallet are therefore
+  separate runs. The shooter-boost turn follows the seat's position in the field.
+- Each advance step settles seats while its metered gas allowance admits another complete seat, each
+  admitted against `CRAPS_SEAT_GAS_MAX` (2,800,000); each draw chunk is admitted against
+  `JACKPOT_BATTLE_DRAW` (4,700,000). Settlement starts in the call after the seal; the sealing call
+  settles nothing.
 - Every run has the shared 600-roll between-shooter budget (1,111-roll ceiling), like every slip.
 
-Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat finalizes the field once:
+Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat
+finalizes the field once:
 
-- The bounties, the seal's remainder and any donations form the pot. With a hottest shooter, it splits 90/10 between the best-ranked run and that shooter; without one, the winner receives it all.
+- The bounties, the seal's remainder and any donations form the pot. With a hottest shooter, it
+  splits 90/10 between the best-ranked run and that shooter; without one, the winner receives it
+  all.
 - A contested high lane pays its winner.
-- The pot winner's high point can also claim a progressive share (`CrapsProgressiveActions._jackpotPayProgressive`). At **25×** it pays **5%** of the live progressive pool; at **120×** it pays **10%** instead. The share uses the usual award split (`_splitAward`: up to half in craps passes, the rest as Coinflip credit).
-- At **100×** or more, a strict improvement claims the biggest Dice Run record, with its FLIP, sDGNRS and trophy awards.
+- The pot winner's high point can also claim a progressive share
+  (`CrapsProgressiveActions._jackpotPayProgressive`). At **25×** it pays **5%** of the live
+  progressive pool; at **120×** it pays **10%** instead. The share uses the usual award split
+  (`_splitAward`: up to half in craps passes, the rest as Coinflip credit).
+- At **100×** or more, a strict improvement claims the biggest Dice Run record, with its FLIP,
+  sDGNRS and trophy awards.
 - Nothing doubles the jackpot's progressive shares.
-- A separate field-wide 1-in-10 roll pays the high-roller reserve to one uniformly sampled paid high seat, excluding sDGNRS. If there is no eligible seat or the roll misses, the reserve carries forward. This Coinflip credit creates no extra action, comps or passes.
+- A separate field-wide 1-in-10 roll pays the high-roller reserve to one uniformly sampled paid high
+  seat, excluding sDGNRS. If there is no eligible seat or the roll misses, the reserve carries
+  forward. This Coinflip credit creates no extra action, comps or passes.
 
 ### High-roller reserve
 
-`JackpotBattle.lockJackpotBattle` assigns 5% of gross, price-scaled, unrolled Added to a
-persistent reserve and leaves 95% for the main subsidy lottery. Award counts use the
-unscaled baseline and are fixed at lock. Neither hidden multiplier changes the reserve
-contribution. Once the field finalizes, any eligible high entry gives the event one 10%
-chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one
-equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass
-and comp entries consume their own funding and qualify. Paid entry/upgrade closure freezes
-the field before the settling RNG. The cold module samples already-resolved paid seats in
-bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve
-grants do not generate action, comps or another protocol multiplier.
+`JackpotBattle.lockJackpotBattle` assigns 5% of gross, price-scaled, unrolled Added to a persistent
+reserve and leaves 95% for the main subsidy lottery. Award counts use the unscaled baseline and are
+fixed at lock. Neither hidden multiplier changes the reserve contribution. Once the field finalizes,
+any eligible high entry gives the event one 10% chance to pay the whole reserve through Coinflip
+credit. Each accepted high entry has one equal ticket; sDGNRS is excluded, the vault is eligible,
+and activity score is unused. Pass and comp entries consume their own funding and qualify. Paid
+entry/upgrade closure freezes the field before the settling RNG. The cold module samples
+already-resolved paid seats in bounded batches, preserving its nominee/count/cursor; the final draw
+is idempotent. Reserve grants do not generate action, comps or another protocol multiplier.
 
 ### Advance stages
 
 1. The daily request locks the field.
-2. Stage 18 applies the fresh word (with its coinflip, quest, bonus-day and boon work) and runs no battle step or jackpot payout.
-3. Each later advance runs one battle step: stage 16 on jackpot days, 17 on purchase days. A step is a set of draw chunks (the last one may seal the field) or a settle batch.
+2. Stage 18 applies the fresh word (with its coinflip, quest, bonus-day and boon work) and runs no
+   battle step or jackpot payout.
+3. Each later advance runs one battle step: stage 16 on jackpot days, 17 on purchase days. A step is
+   a set of draw chunks (the last one may seal the field) or a settle batch.
 
-Once the field completes, the day continues with its usual stages. Miners should keep calling `mineRun(uint32)` while `advanceDue()` is true.
+Once the field completes, the day continues with its usual stages. Miners should keep calling
+`mineRun(uint32)` while `advanceDue()` is true.
 
 ### Reads and events
 
-`jackpotProgress` is a view at the **CRAPS address**; the state-changing lifecycle calls there are delegated to `JackpotBattle`. Read the cold views from a separately deployed **CrapsLens**. The lens reads the pinned CRAPS address through `extsload`; it needs no constructor arguments:
+`jackpotProgress` is a view at the **CRAPS address**; the state-changing lifecycle calls there are
+delegated to `JackpotBattle`. Read the cold views from a separately deployed **CrapsLens**. The lens
+reads the pinned CRAPS address through `extsload`; it needs no constructor arguments:
 
 ```solidity
 function jackpotEntryPrice() external view returns (uint256);
@@ -235,21 +290,35 @@ event HighRollerReserveDrawn(uint64 indexed slot, uint32 eligible, uint32 indexe
 event JackpotHighCompsAccrued(uint64 indexed slot, uint256 fees, uint256 atRisk, uint256 lossBudget, uint256 comps);
 ```
 
-- `JackpotBattleEntry.chips` is the canonical 30-bit board the award plays. An indexer can replay a run after the wallet changes its preference.
-- `JackpotRound.added` is the scaled gross allocation before either lottery. `entryPrice` is the frozen fee; `subsidyMultiplierBps` is zero until preparation, then 2,500 / 10,000 / 50,000 / 100,000. `multiplierBps` is the event multiplier (5,000 / 30,000 / 200,000 / 1,000,000). `awardTarget` is already populated at lock.
-- `JackpotRound` occupies five storage words. `entryPrice` and `subsidyMultiplierBps` are at word 4 offsets 20 and 24; `started` is at offset 28 and the exact `uint24 day` at offset 29. The ABI tuple appends `day` after `started`. The lens hides retained entropy until preparation, strips the internal prepared flag from `drawCursor`, and reports a pre-start bankroll as zero. Overwritten rounds return an empty record.
-- `jackpotEntryPrice()` quotes the currently advertised event. `jackpotEntryPriceOf(slot)` also serves a retained locked event after its fee field in the scoreboard becomes a bounty. An unopened event reverts with `RngNotReady`, rather than returning an apparent actual 8,000 quote; a slot that is not a jackpot slot reverts `BadJackpotField`.
-- `JackpotSubsidyRolled` reports the main subsidy after its own multiplier and before the event multiplier. It is emitted once. Before fulfillment, clients should show odds and an estimated baseline, not a realized subsidy.
-- Settlement and payment use the table's ordinary events: `CrapsBetSettled`, `CrapsBattleFinalized`, `CrapsBattlePaid`, `CrapsHottestShooterPaid`, `CrapsHighRollerPaid`, `CrapsProgressivePaid` and `CrapsProtocolAwardSplit`. Record claims appear as `BigRecordUpdated` and the trophy events.
+- `JackpotBattleEntry.chips` is the canonical 30-bit board the award plays. An indexer can replay a
+  run after the wallet changes its preference.
+- `JackpotRound.added` is the scaled gross allocation before either lottery. `entryPrice` is the
+  frozen fee; `subsidyMultiplierBps` is zero until preparation, then 2,500 / 10,000 / 50,000 /
+  100,000. `multiplierBps` is the event multiplier (5,000 / 30,000 / 200,000 / 1,000,000).
+  `awardTarget` is already populated at lock.
+- `JackpotRound` occupies five storage words. `entryPrice` and `subsidyMultiplierBps` are at word 4
+  offsets 20 and 24; `started` is at offset 28 and the exact `uint24 day` at offset 29. The ABI
+  tuple appends `day` after `started`. The lens hides retained entropy until preparation, strips the
+  internal prepared flag from `drawCursor`, and reports a pre-start bankroll as zero. Overwritten
+  rounds return an empty record.
+- `jackpotEntryPrice()` quotes the currently advertised event. `jackpotEntryPriceOf(slot)` also
+  serves a retained locked event after its fee field in the scoreboard becomes a bounty. An unopened
+  event reverts with `RngNotReady`, rather than returning an apparent actual 8,000 quote; a slot
+  that is not a jackpot slot reverts `BadJackpotField`.
+- `JackpotSubsidyRolled` reports the main subsidy after its own multiplier and before the event
+  multiplier. It is emitted once. Before fulfillment, clients should show odds and an estimated
+  baseline, not a realized subsidy.
+- Settlement and payment use the table's ordinary events: `CrapsBetSettled`, `CrapsBattleFinalized`,
+  `CrapsBattlePaid`, `CrapsHottestShooterPaid`, `CrapsHighRollerPaid`, `CrapsProgressivePaid` and
+  `CrapsProtocolAwardSplit`. Record claims appear as `BigRecordUpdated` and the trophy events.
 - `CrapsSlipPlaced` records the board of each paid ticket.
 
 ## Gas checks
 
-`test/fuzz/JackpotMergeAdvance.t.sol` exercises admitted draw checkpoints and
-metered settlement, using 5M draw allowances and a 10.5M settlement envelope.
-`test/gas/JackpotBattleStageGas.t.sol`, `test/gas/JackpotBattleDrawGas.t.sol` and
-`test/gas/JackpotBattleAwardsGas.t.sol` cover the stage, draw-chunk and award bounds.
-It checks the declared draw bound, progress and completion. These fixture budgets
-are not protocol transaction ceilings: admission depends on each operation's
-cold-path bound, remaining worker allowance and available gas, including the
-complete call/return tail. See [Verification](VERIFICATION.md) for cold gas checks.
+`test/fuzz/JackpotMergeAdvance.t.sol` exercises admitted draw checkpoints and metered settlement,
+using 5M draw allowances and a 10.5M settlement envelope. `test/gas/JackpotBattleStageGas.t.sol`,
+`test/gas/JackpotBattleDrawGas.t.sol` and `test/gas/JackpotBattleAwardsGas.t.sol` cover the stage,
+draw-chunk and award bounds. It checks the declared draw bound, progress and completion. These
+fixture budgets are not protocol transaction ceilings: admission depends on each operation's
+cold-path bound, remaining worker allowance and available gas, including the complete call/return
+tail. See [Verification](TESTING.md) for cold gas checks.
