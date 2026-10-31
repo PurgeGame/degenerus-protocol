@@ -67,8 +67,9 @@ credited to the account's AFKing balance.
 
 The daily request that enters level X arms the settlement of every unpaid loan due at X. The mining
 engine (`mineRun`) runs it next, ahead of the wait for the VRF word and every consumer of it
-(`MinerAction.SeizeLoans`), in bounded chunks that resume from a cursor. Each loan settles one of
-two ways.
+(`MinerAction.SeizeLoans`), in bounded chunks that resume from a cursor. The coordinator can deliver
+the word before settlement runs. A borrower who reads it may then repay, or leave the balances short
+and be seized; both are within the rules. Each loan settles one of two ways.
 
 **Automatic repayment.** If the borrowing account's own claimable (above its 1-wei sentinel) plus
 its prepaid AFKing funding covers the full-term amount `principal × (1 + 5%·T)` (the

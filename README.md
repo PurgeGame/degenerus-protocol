@@ -28,7 +28,7 @@ the next category selected from storage.
 1. Daily preparation and advance select `requestDailyRng_g8190` on the RNG module. Its preparation
    increments the level when `lastPurchaseDay` is set outside the jackpot phase.
 2. Chainlink calls `rawFulfillRandomWords` on the Game; the callback stores an accepted raw word.
-   Mining settles due-level loans before publication, whether delivery has occurred or not.
+   Mining settles due-level loans before it publishes the word; the word may already be on chain.
 3. Mining calls `publishRng_g4514`, drains tickets, then applies the daily word. The callback does
    not run this work.
 4. `runDailyPhase_g2582` advances the daily stages. Once the daily lock clears, mining drains
