@@ -13,14 +13,15 @@ Paths: contracts under `contracts/`, tests under `test/`. `Storage` is
 
 ### Commitment before request
 
-Every outcome input a word resolves is sealed before that word is requested; later purchases join
-the next cohort.
+The request seals its input cohorts before asking for their word; later purchases join the next
+cohort. Some payouts still read live pool balances and prices at settlement.
 
 - **Implementation.** `DegenerusGameRngModule.requestDailyRng_g8190`: `_rngPrepareRequestBoundary`,
   `_swapTicketSlot`, `_swapFoilSlot`, `_sealHeroWagers`, `_freezePool`, `_sealRngWriteBuffer`
   (`Storage._swapRngBuffers`, `_closeRedemptionBatch`), then `_setRngRequest(_requestVrfWord(…))`.
   Mid-day: `_requestLootboxRng` swaps the ticket slot (nonempty, processed queue) and calls
-  `_sealRngWriteBuffer` before the coordinator call. A refused request reverts the whole call.
+  `_sealRngWriteBuffer` before the coordinator call. A refused request reverts its worker call;
+  the miner preserves any earlier progress.
 - **Tests.**
   - `test/repro/MiddaySwapJackpotCohort.t.sol::testBuyAfterMiddayRequestIsFrozenOutOfThatWord` ("the
     mid-day drain must never consume the write side: the post-request buy is frozen out of the
@@ -164,10 +165,12 @@ same. Mining rewards depend on gas spent per call.
     `test/gas/JackpotBattleAwardsGas.t.sol`
   - Gas-admission evidence and its limits: [Testing](TESTING.md#test-selection)
 
-### No mining revert on immutable inputs
+### Mining admission and worker failures
 
-`mineRun` rejects invalid gas multipliers, idle/wait states and insufficient execution gas, and
-propagates worker failures. Workers report progress through `MineFlipGas.Result`.
+`mineRun` rejects invalid gas multipliers, initial idle/wait states and insufficient initial
+execution gas. Request refusals return without reverting earlier work; recognized checkpoint
+refusals preserve a completed prefix. Other worker failures propagate. Workers report progress
+through `MineFlipGas.Result`.
 
 - **Implementation.** `GameMiner` (dispatch and `MineFlipGas.Result`), `BoundedCall.admitFirst`.
 - **Tests.**
@@ -265,7 +268,10 @@ The equations and per-phase transitions are in [Accounting](ACCOUNTING.md).
 | BAF reservation | `runBafJackpot`, `runBafAwards`, `_releaseBafReserve`; game-over latch (`jackpotWork.kind == 7`) | `test/fuzz/BafStagedResume.t.sol::test_EmptyBracketReturnsTheWholeReservation` (`_checkResidue`: "claimablePool releases exactly the residue"); `test/fuzz/BafStagedGameOver.t.sol::test_LatchReleasesTheUncreditedReservationAndTheEndingDistributesIt` ("claimablePool releases exactly work.paid"); `test/fuzz/BafStagedSkip.t.sol::test_X0LosingFlipSkipsWithoutAStage` |
 | Redemption reserve | `_closeRedemptionBatch`, `_releaseRedemptionReserve` | `test/repro/RedemptionReserve.t.sol::testSettlingReserveCountsOnceInBackingPreview`; `test/invariant/RedemptionAccounting.t.sol::invariant_INV_02_EthConservationExact` |
 
-### Loans retired exactly once
+### Settled loans retire exactly once
+
+A hard-stall ending leaves unsettled loans open; it does not reverse completed settlements or
+settle the remaining loans later.
 
 - **Implementation.** `GamePurchase._borrow`, `_repay` (`LOAN_RETAINED`, swap-pop of the due list);
   `DegenerusGameAdvanceModule._settleLoans`, `_autoRepayLoan`, `_settleTerminalLoans`;
@@ -308,7 +314,7 @@ The equations and per-phase transitions are in [Accounting](ACCOUNTING.md).
 ### WWXRP claim window
 
 Day `d`'s draw opens when word `d+1` is recorded and closes at the day-`(d+3)` daily request,
-before that request reuses day `d`'s storage bank.
+before a day-`(d+3)` entry can reuse day `d`'s storage bank.
 
 - **Implementation.** `WWXRP._drawClaimOpen` (Game slot 0 bits 24..47 `dailyIdx <= d + 2`), with
   each caller's `rngWordForDay(d + 1) != 0`; callers `findWinningEntry`, `previewOutcome`, `claim`

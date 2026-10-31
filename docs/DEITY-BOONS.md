@@ -122,8 +122,9 @@ deity account cannot gift itself.
 - Every qualifying bet appends a cumulative-weight interval. Winner lookup is a binary search with
   at most 32 reads because the entry count is `uint32`.
 - Days with both pools populated issue all six awards inside the daily word application
-  (`applyDailyWord_g1652`), after the word is recorded, flips settle, and the daily quest and craps
-  window are opened. There is no extra advance call. A day whose word is already recorded cannot be
+  (`applyDailyWord_g1652`), after the word is recorded, flips settle, the daily quest rolls, and
+  Craps window opening is attempted. A word arriving after the next wall reset leaves that day
+  unopened. There is no extra advance call. A day whose word is already recorded cannot be
   applied again, so the draw runs at most once per day.
 - Each pool's three-bit `awardedMask` seals its awards before delivery, making repeated processing
   harmless. Nothing loops over all participants.
@@ -172,14 +173,15 @@ to ordinary placement.
 `protocolBoonEntryAt`, `protocolBoonQuote`, and `findProtocolBoonWinners`. Quotes return
 `(wagerUnits, score, multiplierUnits, weight)` for an ETH amount and the recipient's current
 canonical score (an amount below 0.005 ETH reverts `E()`); they do not promise bet eligibility or
-remaining pool capacity. The pool, entry and winner lookups answer for the wager day and its draw
-day, until a later same-parity day reuses the ring slot; after that the day reads as an empty,
-not-ready pool. Quotes and winner lookup stay outside the size-constrained GAME facade.
+remaining pool capacity. The pool and entry lookups retain a wager day until a later same-parity
+day reuses the ring slot; after that the pool reads empty. Winner lookup also requires the draw
+day's word to remain in the two-day RNG ring, and returns not-ready without it. Quotes and winner
+lookup stay outside the size-constrained GAME facade.
 `ProtocolBoonDrawEntered` and `ProtocolBoonDrawAwarded` provide entry and issuance logs. Entry
 events are emitted by the Degenerette bet module through GAME and include issuer, player, day, paid
-ETH, score, weight and entry index. Automatic draws update used-slot views and emit only the draw
-award event; `DeityBoonIssued` is the manual-gift event. The draw event's `day` identifies the wager
-pool, and the award day is `day + 1`.
+ETH, score, weight and entry index. Automatic draws update used-slot views and emit the draw award
+event alongside any events from the boon's effects; `DeityBoonIssued` is the manual-gift event. The
+draw event's `day` identifies the wager pool, and the award day is `day + 1`.
 
 ## Verification
 

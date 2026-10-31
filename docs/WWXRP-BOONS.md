@@ -20,7 +20,8 @@ whole-token constants; the lootbox cold-bust award has a one-token minimum.
 The Degenesis consolation is a fixed 1 WWXRP credit (`WWXRP.creditPrize`, before `gameMintScale`).
 An order pays it when it rolls the 10% WWXRP category, when its FLIP-valued result rounds below one
 whole FLIP, when a pass denomination rounds to zero passes, and when an sDGNRS award is zero or
-the Degenesis pool cannot pay it. Such an order pays no other category payout; it still rolls boons.
+nothing is paid from the Degenesis pool. Such an order pays no other category payout; it still
+rolls boons.
 
 ## Daily burn and century incinerator
 
@@ -57,11 +58,12 @@ function consumeBoon(uint32 playerId) external returns (uint16 boostBps);
 ```
 
 The only permission is the trusted-minter registry (`WWXRP.setTrustedMinter`, vault owner; revoking
-removes every power below). There is no per-player approval. A trusted address holds three separate
-powers:
+removes the registry-granted powers below). There is no per-player approval. A trusted address
+holds three separate powers:
 
-- **Mint or credit** any amount to any recipient (`mintPrize`, `creditPrize`; unscaled by
-  `gameMintScale`).
+- **Mint or credit** unscaled amounts (`mintPrize`, `creditPrize`): mints clamp to remaining
+  uint256 supply room, credits saturate at uint256 max minus one per account, and recipient 0 is
+  a no-op. `gameMintScale` does not apply to these trusted-minter awards.
 - **Burn** any holder's tokens (`burnForGame`) or spend any account's claimable WWXRP then its
   payee's tokens (`burnForAccount`).
 - **Consume another player's WWXRP boon** (`consumeBoon`), which removes that player's bonus on

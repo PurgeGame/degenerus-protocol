@@ -53,7 +53,7 @@ The size gate checks selected deployment hosts, share tokens and lenses, rejects
 artifacts and invokes the memory-guard gate. Storage checks compare top-level slots and recursively
 compare Game delegates and Craps lifecycle delegates with their respective storage hosts. Repeat
 deployment checks with the intended production addresses; fixture pins are not deployment addresses.
-The retained Glamsterdam files compile but remain outside the contest target.
+The retained Glamsterdam files remain outside the contest target.
 
 ## Source and tooling gates
 
@@ -114,11 +114,11 @@ occupy bits 152 and 153. Actual level rolls check that 256 transitions neither r
 nor prevent a fresh growth reward. See [Storage packing](STORAGE-PACKING.md).
 
 The four Degenerette math suites use `test/helpers/degeneretteMathFixture.js` to install the compiled
-pure-math wrapper runtime at a synthetic address. The wrapper inherits a complete production module
-and exceeds deployment limits. These tests exercise its pure functions without constructor state;
-they do not test wrapper deployability. Production size gates still apply. Both the source manifest
-and Hardhat runner authenticate test vectors, tables and module helpers; the runner rejects their
-creation, removal or modification during a run.
+pure-math wrapper runtime at a synthetic address. The wrapper inherits a complete production module.
+These tests exercise its pure functions without constructor state; they do not test wrapper
+deployability. Production size gates still apply. Both the source manifest and Hardhat runner
+authenticate test vectors, tables and module helpers; the runner rejects their creation, removal or
+modification during a run.
 
 ## Mainnet forks and deep invariants
 

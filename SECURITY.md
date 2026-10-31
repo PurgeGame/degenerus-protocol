@@ -64,7 +64,7 @@ external VRF coordinator endpoint and the owner can change the controls listed a
 
 Chainlink VRF v2.5 supplies randomness. Requests are paid in native ETH from the subscription, which
 yield surplus, sDGNRS balances and `donateVrf` donations fund; there is no LINK token or price feed.
-Lido stETH supplies external asset accounting.
+Healthy Lido stETH behavior is assumed for external asset accounting.
 
 A failed stETH balance read can be treated as zero. The Game's bounded read (`_boundedStethBalance`)
 returns zero for a failed or malformed response, so the one-shot final sweep can close while stETH
@@ -86,12 +86,12 @@ answered ID. The callback relies on Chainlink VRF v2.5 deleting the request comm
 calling back, so each request can be fulfilled only once.
 
 A coordinator that delivered the same request twice could overwrite `rngWordCurrent` while boxes,
-bets, Craps or Decimator consumers remain unresolved; later consumers would use the second word. The
-accepted trust assumption is the coordinator's one-fulfillment guarantee. Separately, a superseded
-or dropped request could match a later retained ID through a low-64-bit collision. Assuming
-independent, uniformly distributed IDs, the chance of that match is 2^-64 per late delivery against
-a retained nonzero ID. Coordinator authentication still applies; truncation does not let an
-arbitrary caller submit a word.
+bets, Craps or Decimator consumers remain unresolved; later reads of the shared session word would
+use the second word. The accepted trust assumption is the coordinator's one-fulfillment guarantee.
+Separately, a superseded or dropped request could match a later retained ID through a low-64-bit
+collision. Assuming independent, uniformly distributed IDs, the chance of that match is 2^-64 per
+late delivery against a retained nonzero ID. Coordinator authentication still applies; truncation
+does not let an arbitrary caller submit a word.
 
 ### VRF funding configuration
 

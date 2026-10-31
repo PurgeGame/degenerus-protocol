@@ -149,13 +149,13 @@ other claims' reserves, settlement order, parked retries and operator authorizat
 
 ## Liveness triggered and terminal processing
 
-Once `_endingReason()` is not `None`, purchases, borrowing and AFKing changes close. The obligation
-equation still holds until `gameOver` is set.
+Once `_endingReason()` is not `None`, purchases, borrowing and subscription changes close. The
+obligation equation still holds until `gameOver` is set.
 
 | Step | Function | Effect |
 | --- | --- | --- |
 | Decision (purchase timeout, VRF alive) | `DegenerusGameGameOverModule` terminal entry | Latches the terminal level; a staged BAF reservation releases its uncredited part (`if (jackpotWork.kind == 7) claimablePool −= jackpotWork.paid`) into the distributable total |
-| Terminal loan settlement | `DegenerusGameAdvanceModule._settleTerminalLoans` (stage 20) | Each loan repays at the current price (internal move) or is seized; no Game ETH moves |
+| Purchase-timeout loan settlement (until a hard stall) | `DegenerusGameAdvanceModule._settleTerminalLoans` (stage 20) | Each loan repays at the current price (internal move) or is seized; no Game ETH moves |
 | Drain | `_handleGameOverDrain` | Splits all Degenesis cohorts (`splitDegenesis`); `available = custody − claimablePool`; credits deity refunds (levels below 10, `claimablePool += refunded`); releases `degenesisVaultBudget` and sDGNRS AFKing (`claimablePool −= both`, `DegenesisFundsReleased`); sets `gameOver`; burns unallocated GNRUS/sDGNRS inventory and clears `degenesisActive`; zeroes current/next/future, `yieldAccumulator` and the pending buffer |
 | Payout | `_startJackpotWork` / `_resumeTerminalPayout` (VRF alive) or `deadPot` + `claimDeadVrf` (hard stall) | `available = custody − claimablePool` goes to the terminal ticket jackpot, or is fixed as `deadPot` and credited to `claimablePool` claim by claim. Empty-bucket leftovers stay in custody for the final sweep |
 | Completion | `_finishTerminalPayout` | Sets `GO_JACKPOT_PAID` and `GO_TIME` |
@@ -194,7 +194,8 @@ Final sweep (`_handleFinalSweep`, at `GO_TIME + 30 days`, once):
 5. Pays each sink its `owed` plus a third of the remainder (GNRUS takes the rounding wei); if
    custody is short of `owed` (the three unbacked sentinels, or an stETH loss), the legs are pro
    rata and sum to custody. stETH is sent first.
-6. Shuts down the VRF subscription through Admin; a failed shutdown reverts the whole sweep.
+6. Clears Admin's subscription handle and attempts cancellation, refunding the Vault on success.
+   Coordinator refusal leaves the sweep committed; a failed Admin call reverts the whole sweep.
 
 After the sweep, `claimWinnings`/`claimClaimable` revert `AlreadySwept`, AFKing withdrawal and
 `sweepAccounts` revert, `claimDeadVrf` reverts, and `claimablePoolView()` returns 0. sDGNRS terminal

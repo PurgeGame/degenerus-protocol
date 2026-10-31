@@ -2,10 +2,10 @@
 
 ## Conclusion and scope
 
-Eight local accounting properties have been verified by symbolic execution of the production storage
-helpers. A finite model also rules out funding a new whale-pass purchase with an immediate loan
-against that purchase's ticket award. These results do **not** constitute a proof that every
-protocol execution or economic strategy is unexploitable.
+The retained symbolic run reports passes for eight local accounting properties of its recorded
+production storage helpers. A finite model also rules out funding a new whale-pass purchase with an
+immediate loan against that purchase's ticket award. These results do **not** constitute a proof that
+every protocol execution or economic strategy is unexploitable.
 
 The model treats the Vault as having one authorized owner. Owner-directed spending is an authorized
 exit. This assumption does not make the VRF coordinator, stETH, compiler, deployment configuration,
@@ -18,12 +18,13 @@ target and repository hash manifest are defined in [AUDIT.md](../AUDIT.md). Inte
 deterministic address pins and mock external contracts; they do not attest to deployed mainnet
 bytecode.
 
-The retained source hashes match the current production contracts, including `DegenerusQuests.sol`,
-`DegenerusVault.sol`, `GNRUS.sol` and `sDGNRS.sol`. The helper hashes also identify the three copied
-harnesses. Integration and boundary run metadata records deterministic fixture address processing;
-their input manifests match the repository's contract hashes. Those standalone contracts are not
-the subject of the eight helper properties below. Matching inputs does not certify the complete
-package or replace review of their behavior.
+The retained source hashes differ from 38 current contract files, including `DegenerusQuests.sol`,
+`DegenerusVault.sol`, `GNRUS.sol` and `sDGNRS.sol`. The helper hashes identify three copied harnesses;
+two differ from the current harnesses. Integration and boundary run metadata records deterministic
+fixture address processing; their contract input hashes match the retained campaign manifest, not
+the current contracts. Results below apply to those recorded inputs. The four named standalone
+contracts are not the subject of the eight helper properties below, and the evidence does not
+certify the complete package or replace review of their behavior.
 
 ## What was proved
 
@@ -109,8 +110,9 @@ and include deliberately broken-state checks to show their assertions can fail.
 
 A second campaign passed **74 tests across 11 suites**, covering actual ETH Degenerette
 caps/overflow and frozen resolution, dead-VRF endings, hard-stall loan settlement, stETH-loss
-liveness, and coordinator rotation after fulfillment. The stETH-loss fuzz test uses 24 cases. Its
-success permits claims to fail with the documented shortfall error; it establishes progress, not
+liveness, and coordinator rotation after fulfillment. The stETH-loss and terminal-loan settlement
+fuzz tests each use 24 cases. The stETH-loss test's success permits claims to fail with the documented
+shortfall error; it establishes progress, not
 protection against asset loss. With repeated helper suites counted once and the four new concrete
 harness checks included, **130 distinct concrete tests passed** (137 executions). No test failed or
 was skipped in either completed campaign or the final helper run.
@@ -118,9 +120,9 @@ was skipped in either completed campaign or the final helper run.
 The independent split-arithmetic checker passed 24 checks, including sensitivity controls. Those are
 source-pinned mathematical models, not symbolic execution of every production payout caller.
 Structural gates also passed: 103 pool accesses, 141 VRF-window accesses, 406 RNG-taint sites, 200
-reviewed entropy-hash sites across 113 tags (plus one raw-bit exception), and 1,575 recipient/call
-expressions. These gates detect missing classifications and source drift. A manifest entry does not
-prove its classification correct.
+reviewed hash sites, including 142 RNG sites across 113 tags (plus one raw-bit exception), and 1,575
+recipient/call expressions. These gates detect missing classifications and source drift. A manifest
+entry does not prove its classification correct.
 
 For a full solvency proof, let `A` be held ETH plus supported stETH value and `L` the complete
 liability ledger, including reserved and pending value. Starting from `A >= L`, a deposit adding the

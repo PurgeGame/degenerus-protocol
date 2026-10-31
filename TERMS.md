@@ -11,9 +11,9 @@ being unlucky. That is the software working exactly as intended. Do not commit f
 prepared to lose entirely.
 
 **The deployed bytecode is the entire agreement and the exclusive source of truth.** Any comment,
-name, document or statement that disagrees with it — including this one — is in error. It has been
-audited but is not proven correct: it may contain defects the author did not find, and by
-interacting with it you accept that risk in full.
+name, document or statement that disagrees with it — including this one — is in error. It is not
+proven correct: it may contain defects the author did not find, and by interacting with it you accept
+that risk in full.
 
 **Any state transition the code permits is authorised.** That includes a transaction which exploits
 a defect, and it includes sequences the author did not intend or foresee. A bug is not a breach of

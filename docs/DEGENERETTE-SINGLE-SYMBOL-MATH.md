@@ -11,8 +11,9 @@ through flat high-score additions. WWXRP internal box/foil reward spins use the 
 scoring, separate score-8/9 prizes, a **5% help gate** and a **70–130%** activity target.
 
 FLIP and WWXRP have zero decimals. Token payouts are whole integers; internal reward spins keep
-fractional precision until the final conversion. FLIP floors that final award. WWXRP awards strictly
-between zero and one token pay **1 WWXRP**; zero pays zero, and larger awards floor to whole tokens.
+fractional precision until the final conversion. FLIP floors to whole tokens before stochastic
+rounding to hundreds where applicable. WWXRP awards strictly between zero and one token pay
+**1 WWXRP**; zero pays zero, and larger awards floor to whole tokens.
 Return targets describe payouts before token rounding.
 
 ## Ticket generation and shared draws

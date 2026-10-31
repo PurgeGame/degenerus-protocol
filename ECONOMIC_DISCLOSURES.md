@@ -80,10 +80,11 @@ tables and reward curves.
     bonus (up to +5%, falling to zero after six hours of the day), and a daily volume factor `46 ETH
     / (46 ETH + V)` frozen for the cohort. Expected FLIP-valued rewards over the sale stay below
     about **718 ETH of FLIP value (72M FLIP at 0.01 ETH per 1,000 FLIP)**, however much is sold;
-    individual rolls are random and uncapped. A busy day pays less FLIP per ETH and a quiet day
-    more.
+    realized rewards can exceed that expected-value ceiling. A busy day pays less FLIP per ETH and
+    a quiet day more.
   - **Settlement and forfeiture.** Orders resolve through the miner engine after their cohort's
-    daily word; primary FLIP and sDGNRS amounts are fixed by that word and the frozen cohort.
+    daily word; calculated primary FLIP and sDGNRS amounts are fixed by that word and the frozen
+    cohort. FLIP credits remain subject to Coinflip's daily stake cap.
     **Unopened boxes are forfeited at game over**: their rewards are not claimable against the
     burned inventory.
   - Ordinary ticket/lootbox prize-pool funding is distinct from the Degenesis allocation.
@@ -162,13 +163,13 @@ Jackpot prize shapes (mechanics in [jackpot legs](docs/ARCHITECTURE-DETAILS.md#j
   whole multiples of 0.1 ETH, so small budgets pay fewer winners, not smaller prizes; rounding goes
   to the solo winner. A wallet can win more than one slot. The terminal jackpot keeps fixed counts.
 - **Ticket jackpots** (purchase daily, early bird, jackpot-phase daily) pay the three non-solo
-  quadrants (solo only when it is the one quadrant with holders): 96 winners, 192 from 40 ETH, 384
-  from 160 ETH. Above 25 tickets per slot, when the surplus covers a full pass at 4.5 ETH, every
-  slot keeps 25 tickets and the surplus becomes whole passes split across paying quadrants in
-  proportion to their winners, one separately drawn recipient per quadrant (deity virtual entries
-  included), who need not have won tickets. Repeated ticket wins add no pass-draw chances. All
-  ticket-jackpot ETH and rounding stays in nextPrizePool; the passes must be claimed under the pass
-  rules, depend on continued play and are not a segregated ETH reserve or cash claim.
+  quadrants (solo only when it is the one quadrant with holders): up to 96 winners, up to 192 from
+  40 ETH, and up to 384 from 160 ETH. Above 25 tickets per slot, when the surplus covers a full pass
+  at 4.5 ETH, every slot keeps 25 tickets and the surplus becomes whole passes split across paying
+  quadrants in proportion to their winners, one separately drawn recipient per quadrant (deity
+  virtual entries included), who need not have won tickets. Repeated ticket wins add no pass-draw
+  chances. All ticket-jackpot ETH and rounding stays in nextPrizePool; the passes must be claimed
+  under the pass rules, depend on continued play and are not a segregated ETH reserve or cash claim.
 
 Every level's purchase target, level 0 included, has a **30-game-day** window from
 `purchaseStartDay` (level 0's starts at `MAIN_LAUNCH_DAY`). Day 30 activates distress purchases; if
@@ -210,11 +211,12 @@ VRF requests are paid in ETH. Funding takes untracked yield first, then sDGNRS o
 then its prepaid AFKing balance: at level entry (before the 23% stakeholder distributions, and only
 for a deficit of at least a tenth of the target/low-water gap), at a daily low-water check, and at a
 coordinator swap when the replacement subscription is below low water. Each sDGNRS debit reduces
-aggregate claim liabilities by the amount sent, so its live price and redemption preview reflect it
-immediately. No other player's claim, prize pool, redemption reserve or accumulated yield is
-debited. Funding uses only the Game's liquid ETH and never swaps or unstakes stETH; staking keeps
-one funding target beyond the player-claim ETH reserve, which is soft for funding, while total ETH
-plus stETH must still cover all obligations.
+aggregate claim liabilities by the amount sent. A debit from ordinary claimable reduces its live
+redemption backing immediately; prepaid AFKing is excluded from that backing. No other player's
+claim, prize pool, redemption reserve or accumulated yield is debited. Funding uses only the Game's
+liquid ETH and never swaps or unstakes stETH. Manual staking keeps one funding target beyond its
+claim ETH reserve; automatic staking retains `claimablePool` with no additional VRF target. These
+ETH reserves are soft for funding, while total ETH plus stETH must still cover all obligations.
 
 A native donation sends its full value to the subscription and banks floor(value / 4) wei of mid-day
 request credit, spendable only by the donor's own `mineRun` against pending work; it earns no FLIP

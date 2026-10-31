@@ -84,8 +84,8 @@ An account already acquired by a lender (a smurf whose main was seized) is never
 - A main takes its existing children, which keep their tickets and records. A child seized on its
   own earlier keeps its own lender.
 - For a main, the borrower wallet's entire native sDGNRS balance is burned for no payout, and the
-  wallet's default gameplay ID is cleared. Redeem before the due level to keep redemption value.
-  Already-submitted redemption claims stay with the account.
+  wallet's default gameplay ID is cleared. Redemption proceeds must be withdrawn before seizure
+  to keep them outside the seized account. Already-submitted redemption claims stay with the account.
 - The seized account's AFKing run stops, and for a main every smurf's run. Already-paid box stamps
   still open, with rewards going to the lender.
 - A deity account's soulbound pass moves with it to the lender (a family holds at most one deity).
@@ -179,8 +179,9 @@ into the freed lane is unsettled too, so the cursor never passes an open loan.
   account after game over, also move their prepaid funding. Settled FLIP goes to the payee. Acquired
   accounts also give up their auto-rebuy carry once caught up and unfrozen. Collection stays
   available for later awards, including terminal awards, until the final sweep; ordinary prize
-  resolution never traverses the family. Unclaimed prizes (bingo, foil, whale pass, AFKing FLIP and
-  so on) have permissionless claims that credit the account, after which a sweep collects them.
+  resolution never traverses the family. Permissionless prize claims retain their own eligibility
+  and expiry rules; AFKing FLIP and whale-pass claims close at liveness. A sweep collects resulting
+  ETH and FLIP credits, not tickets or tokens already delivered to the payee.
 - Swept ETH is usable by the lenders: sDGNRS counts its main game claimable as redemption backing;
   the Vault can withdraw through `Vault.playerAction` calling `Game.claimClaimable` or
   `Game.claimWinnings`, and DGVE burns (`burnEth`) pull the balance automatically. The final

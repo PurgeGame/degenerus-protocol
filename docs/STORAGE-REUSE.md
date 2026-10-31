@@ -62,11 +62,12 @@ Affiliate word, with `T = uint24(word >> 165)`:
 | 253, 254 | Upline validity flags |
 | 255 | Unused, zero |
 
-Production credits target the monotonic Game level + 1. A level-zero or backward target adds no
-score and leaves the word untouched without blocking the commission. A zero score does not roll the
-word. A gap of seven or more levels clears all score lanes and keeps the cache. The exact-score
-getter returns zero outside T/T−1, including future levels. Clipped lanes are bonus inputs only. The
-global `_levelScore` words are separate (`AffiliateEarningsLib`, `DegenerusAffiliate`).
+Production credits target the monotonic Game level + 1. `AffiliateEarningsLib.add` ignores a
+level-zero or backward target without blocking the commission; the caller can still update the
+upline cache. A zero score does not roll the word. A gap of seven or more levels clears all score
+lanes and keeps the cache. The exact-score getter returns zero outside T/T−1, including future levels.
+Clipped lanes are bonus inputs only. The global `_levelScore` words are separate
+(`AffiliateEarningsLib`, `DegenerusAffiliate`).
 
 The test fixtures `test/helpers/CoinflipStorage.sol` and `test/helpers/AffiliateStorage.sol` decode
 these records independently; BAF tests decode the tags directly.
@@ -81,8 +82,8 @@ these records independently; BAF tests decode the tags directly.
 - sDGNRS stores redemption queue counts in slot 6, bytes 24..31 (`_batchPlayerCounts`, even parity
   in the low 32 bits). Roots 8/9 (`_batchPlayers[parity]`) map word index to two packed 128-bit
   entries: `keccak256(abi.encode(index / 2, 8 + parity))`. Entries hold amount80/ID32/(activity + 1)16. A
-  finished batch resets only its count; its data is overwritten by the next batch. Locators and
-  cursors prevent stale claims; terminal manual claims clear their lane.
+  finished batch resets only its count; its data is overwritten by the next batch of that parity.
+  Locators and cursors prevent stale claims; terminal manual claims clear their lane.
 - Jackpot battle rounds occupy five words each in the fixed `_jackpotRounds` array
   (`JackpotRound[512]`, CrapsBattle slot 271). `drawWord` is frozen during preparation; `started`
   becomes true only when the draw seals, and the table and high-reserve draws use the same frozen

@@ -10,7 +10,7 @@ target is the **EIP-170 deployment profile**.
 | --- | --- |
 | `DegenerusGame` | Holds ETH/stETH backing prize pools, claimable balances, prepaid AFKing, redemption reserves and Degenesis liabilities. |
 | `DegenerusVault` | Holds its own ETH/stETH and tokens; also owns Game balances and Coinflip credits. DGVE and DGVF represent its separate backing pools. |
-| `sDGNRS` | Holds ETH/stETH reserves, FLIP and Game claims; processes native and wrapped holder redemptions. |
+| `sDGNRS` | Holds ETH/stETH reserves and Game claims, with FLIP redemption backing in Coinflip; processes native and wrapped holder redemptions. |
 | `GNRUS` | Holds its own ETH/stETH for charity allocation and token exits. |
 | `DegenerusAdmin` | Receives subscription refunds and forwards native funding to the VRF coordinator. The external coordinator holds the subscription ETH. |
 | `DGNRS` | Holds locked sDGNRS backing its transferable wrapper; forwards redemption proceeds. |
@@ -25,11 +25,14 @@ The public engine entry is `DegenerusGame.mineRun(uint32)`. It dispatches to `Ga
 `mineFlip` names the internal mining chain, not another public entry. `nextMinerAction()` exposes
 the next category selected from storage.
 
-1. Daily preparation and advance select `requestDailyRng_g8190` on the RNG module.
+1. Daily preparation and advance select `requestDailyRng_g8190` on the RNG module. Its preparation
+   increments the level when `lastPurchaseDay` is set outside the jackpot phase.
 2. Chainlink calls `rawFulfillRandomWords` on the Game; the callback stores an accepted raw word.
-3. Mining calls `publishRng_g4514`, applies the daily word, and drains ticket, loan, box, bet,
-   redemption and other work in resumable chunks. The callback does not run this work.
-4. `runDailyPhase_g2582` advances the daily stages and, when their conditions hold, the level.
+   Mining settles due-level loans before publication, whether delivery has occurred or not.
+3. Mining calls `publishRng_g4514`, drains tickets, then applies the daily word. The callback does
+   not run this work.
+4. `runDailyPhase_g2582` advances the daily stages. Once the daily lock clears, mining drains
+   redemption, AFKing, box, bet, Decimator and Craps work in resumable chunks.
 5. Timeout conditions select `runTerminalPhase`. The ending uses either a terminal jackpot or
    deterministic dead-VRF ticket claims.
 6. The terminal path invokes `_handleFinalSweep` after the 30-day window measured from terminal payout

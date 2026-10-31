@@ -28,7 +28,7 @@ sealed nonempty original field, including x00, zero-pot and zero-quota rounds. E
 rejected/repeated seals preserve it. Generated entries never enter this reference.
 
 The aggregate tracks actual credited additions to original stacks and is checked against uint64;
-original count is checked against uint40. These are storage packing bounds, not admission limits.
+original count is checked against uint40. Burns that exceed these storage packing bounds revert.
 
 ## Jackpot-generated entries
 
@@ -152,8 +152,9 @@ Generated work completes under the RNG lock; originals run at consumer stage 5 a
 cursors count strata, at most 1,000 each. The locked worker skips natural IDs; the unlocked worker
 skips generated IDs. With M=0 the locked loop is skipped entirely. Only the sampled survivors call
 the engine: at most 1,000 runs in total, independent of N. Gas and miner identity affect checkpoint
-sizes, never outcomes. Admission uses a measured small bound for opposite-type strata and the full
-engine-run bound.
+sizes, never outcomes. After the first mandatory checkpoint, admission uses a measured small bound
+for opposite-type strata and the full engine-run bound. The first mandatory checkpoint bypasses the
+estimate gate.
 
 One min-heap retains at most 200 eligible entries. Every node stores a 192-bit score and 64-bit ID.
 Original IDs are `1..N`; generated IDs are `N+1..N+M`. Generated owners are keyed by ordinal `id-N`

@@ -97,7 +97,8 @@ with two kinds of seat:
   odds. A direct entry or the jackpot component of a day ticket burns this fee, subject to newcomer
   pricing. The seat plays its chosen board; high extras use the same fee times the day's high
   multiple. Future commitments use the 8,000-FLIP expected fee.
-- **Awarded seats.** The Game draws these from the far-future ticket queues of the next 99 levels.
+- **Awarded seats.** The Game draws these from the far-future ticket queues of the 99 levels
+  immediately above the current mint ceiling.
   Each award plays the wallet's saved preference, and a wallet drawn twice gets two separate seats.
   Battles for days before `GameTimeLib.MAIN_LAUNCH_DAY` (the Degenesis days) have an award target of
   zero and run with their paid field only.
@@ -219,11 +220,11 @@ window seats, then day tickets, then awarded seats.
 - An awarded seat keys its scatter and survival coin to a hash of its own bet id
   (`RngTags.CRAPS_AWARDED`) rather than to the wallet. Repeat awards to one wallet are therefore
   separate runs. The shooter-boost turn follows the seat's position in the field.
-- Each advance step settles seats while its metered gas allowance admits another complete seat, each
-  admitted against `CRAPS_SEAT_GAS_MAX` (2,800,000); each draw chunk is admitted against
-  `JACKPOT_BATTLE_DRAW` (4,700,000). Settlement starts in the call after the seal; the sealing call
-  settles nothing.
-- Every run has the shared 600-roll between-shooter budget (1,111-roll ceiling), like every slip.
+- After the first mandatory checkpoint, each advance step admits further seats against
+  `CRAPS_SEAT_GAS_MAX` (2,800,000) and draw chunks against `JACKPOT_BATTLE_DRAW` (4,700,000),
+  including their return tails. The first mandatory checkpoint bypasses the estimate gate.
+  Settlement starts in the call after the seal; the sealing call settles nothing.
+- Every jackpot battle run has the shared 600-roll between-shooter budget (1,111-roll ceiling).
 
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat
 finalizes the field once:
@@ -260,8 +261,9 @@ is idempotent. Reserve grants do not generate action, comps or another protocol 
 1. The daily request locks the field.
 2. Stage 18 applies the fresh word (with its coinflip, quest, bonus-day and boon work) and runs no
    battle step or jackpot payout.
-3. Each later advance runs one battle step: stage 16 on jackpot days, 17 on purchase days. A step is
-   a set of draw chunks (the last one may seal the field) or a settle batch.
+3. Daily-phase battle work uses stage 16 on jackpot days, 17 on purchase days. A step is a set of
+   draw chunks (the last one may seal the field) or a settle batch. The miner can reach this worker
+   in the same call as word application; the vault-flip backstop can take priority.
 
 Once the field completes, the day continues with its usual stages. Miners should keep calling
 `mineRun(uint32)` while `advanceDue()` is true.

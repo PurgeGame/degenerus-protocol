@@ -8,10 +8,11 @@ entering a WWXRP draw with 25 tokens passes `25`. Do not multiply these amounts 
 ETH, stETH, GNRUS and the two vault share tokens use 18 decimals. DGNRS and sDGNRS use 12 decimals.
 Mathematical fixed-point scales are separate from token denominations. The stateless Craps
 simulation, Decimator normalized peak, and internal box/foil spin stakes carry 10^18 sub-units per
-token (`TOKEN_MATH_SCALE`); their receipts are computation results, not ERC20 balances. BoxSpin
-payouts and Craps battle payments are whole tokens.
+token (`TOKEN_MATH_SCALE`); their receipts are computation results, not ERC20 balances. FLIP/WWXRP
+`BoxSpin` payouts and Craps battle payments are whole tokens; ETH `BoxSpin` payouts are wei.
 
-Craps and box/foil spin payments floor to whole tokens at the final payment boundary. Craps keeps
+Craps and FLIP box/foil spin payments floor to whole tokens before award rounding. WWXRP spins floor
+to whole tokens with a 1-token minimum for a positive fractional payout. Craps keeps
 fractional wins and hot bonuses throughout a run, including escalation and affordability checks. Box
 and foil spins keep fractional stakes and payouts until the reward is paid. There is no persistent
 dust balance or carry ledger. FLIP-paid ticket charges round up to the next whole token so the buyer
@@ -19,15 +20,16 @@ is never undercharged.
 
 Explicit rounding rules:
 
-- A positive qualifying mining reward pays at least 1 FLIP. A reward whose 10^18-scaled value floors
-  to zero pays nothing, and ineligible callers are paid nothing.
+- A positive qualifying mining reward is calculated as at least 1 FLIP; the credited stake is
+  subject to Coinflip's daily lane cap. A reward whose 10^18-scaled value floors to zero pays nothing,
+  and ineligible callers are paid nothing.
 - Qualifying lootbox consolation has a base amount of `max(1, floor(ETH_wei * 500 / 10^18))`
   WWXRP, using the reward roll's ETH amount. Before WWXRP's `gameMintScale` (default 1), 0.01 ETH
   corresponds to 5 WWXRP and 0.003 ETH to 1 WWXRP; the scale applies when the prize is credited.
 - Where the award mechanic applies (`FlipRoundLib`), amounts above 1,000 FLIP are rounded
   stochastically to multiples of 100 FLIP. Smaller awards keep their integer amount.
 - RNG-nudge prices floor each recurrence: 100, 150, 225, 337, 505, 757, 1,135, …
-- Coinflip keeps seven uint32 daily stake lanes and a page tag per word. The per-day cap is
+- Coinflip keeps seven uint32 daily stake lanes and a page tag per word. The stored per-day cap is
   4,294,967,295 FLIP. Manual deposits above it revert `StakeAboveDailyCap`; automatic credits
   saturate.
 - Affiliate leaderboard/DGNRS scores cap at 34,359,738,367 FLIP per wallet ID per level. Commission

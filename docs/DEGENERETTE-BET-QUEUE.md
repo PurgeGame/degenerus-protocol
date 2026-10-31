@@ -58,10 +58,11 @@ fractional unit. A gifted bet never consumes the recipient's boon.
 1..6): sDGNRS redemption settlement, pending AFKing boxes, human box entries
 (`GameAfkingModule.runHumanBoxWork_g315`), Degenerette bets
 (`DegenerusGameDegeneretteModule.runDegeneretteWork_g670`), the Decimator and read-bound Craps. The
-bet worker walks `degeneretteCursor` up to `degeneretteReadCount`, admits each bet against its
-declared gas bound, and resolves it against the buffer's published session word. It writes the
-advanced cursor once at the end of a progressing batch. Resolution never writes to the bet words. A
-transient cursor blocks worker reentry and hides the in-flight settled prefix during payout
+bet worker walks `degeneretteCursor` up to `degeneretteReadCount` and resolves each bet against the
+buffer's published session word. After the first mandatory checkpoint, admission checks each bet's
+declared gas bound and return tail; the first mandatory checkpoint bypasses the estimate gate. It
+writes the advanced cursor once at the end of a progressing batch. Resolution never writes to the
+bet words. A transient cursor blocks worker reentry and hides the in-flight settled prefix during payout
 callbacks; a revert rolls back payouts and progress.
 
 Buffer reuse restarts counts and cursors without clearing the stored words. Placement overwrites
