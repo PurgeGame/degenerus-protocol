@@ -109,7 +109,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         lengths[order[count - 1]] = 500;
     }
 
-    function _seed(Case memory c) private {
+    function _seed(Case memory c) internal {
         uint24 day = GameTimeLib.currentDayIndex();
         vm.etch(address(game), type(BattleConstructionGameSeed).runtimeCode);
         vm.etch(address(crapsBattle), type(BattleMaximumTableSeed).runtimeCode);
