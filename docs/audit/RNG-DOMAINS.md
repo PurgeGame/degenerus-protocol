@@ -87,7 +87,9 @@ word, because no daily coinflip resolves after liveness.
   Internal readers authenticate the same tags without a calendar cutoff, so a committed daily
   consumer can finish after midnight.
 - **Session word.** The published read-buffer word (`_lootboxWord(_rngReadBuffer())`), from a daily
-  or mid-day request. Queued boxes, AFKing boxes, redemption settlement and Decimator rounds use it.
+  or mid-day request. Queued boxes, AFKing boxes and redemption settlement use it. A Decimator round
+  is sealed at a level transition on the daily word and must finish on that session word, so it
+  always resolves on a daily word.
   The read-completion gate waits for AFKing boxes, live sDGNRS redemption settlement and Decimator
   rounds, along with committed tickets/foil, human boxes/bets and read-bound Craps. An AFKing stamp
   cannot open before its day is sealed.
