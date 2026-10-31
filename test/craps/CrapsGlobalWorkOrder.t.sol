@@ -58,7 +58,8 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
     /// @dev The read worker takes the committed fields strictly in order: the later field cannot
     ///      settle before the earlier one, and a drained cohort is a no-op.
     function test_ReadWorkSettlesCommittedFieldsInOrder() public {
-        _worker(gasleft());
+        // Force one mandatory seat so this still observes the intermediate FIFO boundary.
+        _worker(MineFlipGas.budget(0, type(uint32).max, true));
         assertEq(table.bonusCursorOf(first), 1);
         assertEq(table.bonusCursorOf(second), 0);
         assertFalse(table.rngCohortComplete(index));
@@ -89,9 +90,10 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
         result = _worker(allowance);
         assertLt(before - gasleft(), allowance);
         assertTrue(result.progressed);
-        assertEq(result.rewardBasis, 1);
+        assertEq(result.rewardBasis, 2, "the allowance admits both short fields");
         assertEq(table.bonusCursorOf(first), 1);
-        assertEq(table.bonusCursorOf(second), 0);
+        assertEq(table.bonusCursorOf(second), 1);
+        assertTrue(result.done);
     }
 
     function test_ZeroWorkerAllowanceLeavesSettlementAndLifecycleUntouched() public {

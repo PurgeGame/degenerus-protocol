@@ -185,7 +185,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         // Protocol wallets take IDs 1-3 before any public door can register a wallet.
         _registerWallet(ContractAddresses.VAULT, 0);
         _registerWallet(ContractAddresses.SDGNRS, 0);
-        _registerWallet(ContractAddresses.GNRUS, 0);
+        (uint32 gnrusId, ) = _registerWallet(ContractAddresses.GNRUS, 0);
+        assert(gnrusId == GNRUS_WALLET_ID);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)

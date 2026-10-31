@@ -46,8 +46,10 @@ contract VaultBackstopHost is DegenerusGame {
 contract VaultBackstopSeeder is CoinflipStakeSetter {
     function seed(uint24 day, uint24 gap) external {
         playerState[1].lastClaim = day - gap;
+        playerState[3].lastClaim = day - gap;
         for (uint256 d = day - gap + 1; d <= day; ++d) {
             _setFlipStake(uint24(d), 1, 5000);
+            _setFlipStake(uint24(d), 3, 5000);
             _storeDayResult(uint24(d), 150, true);
         }
         flipsClaimableDay = day;
@@ -74,7 +76,11 @@ contract VaultFlipBackstopTest is DeployProtocol {
     }
 
     function _position() private view returns (uint128 bank, uint24 cursor) {
-        uint256 w = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint256(1), uint256(2)))));
+        return _positionFor(1);
+    }
+
+    function _positionFor(uint32 id) private view returns (uint128 bank, uint24 cursor) {
+        uint256 w = uint256(vm.load(address(coinflip), keccak256(abi.encode(id, uint256(2)))));
         return (uint128(w), uint24(w >> 128));
     }
 
@@ -95,10 +101,15 @@ contract VaultFlipBackstopTest is DeployProtocol {
             (uint128 bank, uint24 cursor) = _position();
             assertEq(bank, 45 * 12_500);
             assertEq(cursor, DAY);
+            (, uint24 gnrusCursor) = _positionFor(3);
+            assertEq(gnrusCursor, DAY);
+            assertEq(coin.balanceOf(ContractAddresses.GNRUS), 0);
             assertEq(coin.vaultMintAllowance(), allowanceBefore, "zero deposit banks without minting");
             // A later direct settle cannot duplicate the bank, or alter the Game stamp.
             vm.prank(ContractAddresses.GAME);
             coinflip.playCoinflip(1, 0);
+            vm.prank(ContractAddresses.GAME);
+            coinflip.playCoinflip(3, 0);
             (uint128 afterBank,) = _position();
             assertEq(afterBank, bank);
             assertEq(host.stamp(), DAY);
@@ -134,13 +145,15 @@ contract VaultFlipBackstopTest is DeployProtocol {
     function test_failedSettleRollsBackStampAndCursor() public {
         _seed(90, DAY - 90, 0);
         vm.mockCallRevert(ContractAddresses.JACKPOTS,
-            abi.encodeWithSignature("recordBafFlip(uint32,uint24,uint256)"), abi.encodeWithSignature("TestFailure()"));
+            abi.encodePacked(bytes4(keccak256("recordBafFlip(uint32,uint24,uint256)")), abi.encode(uint32(3))), abi.encodeWithSignature("TestFailure()"));
         vm.expectRevert(bytes4(keccak256("TestFailure()")));
         host.phase(9_000_000);
         assertEq(host.stamp(), DAY - 90);
         (uint128 bank, uint24 cursor) = _position();
         assertEq(bank, 0);
         assertEq(cursor, DAY - 90);
+        (, uint24 gnrusCursor) = _positionFor(3);
+        assertEq(gnrusCursor, DAY - 90, "second account failure rolls back both cursors");
         vm.clearMockedCalls();
         assertTrue(host.phase(9_000_000).progressed);
         (bank, cursor) = _position();

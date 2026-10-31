@@ -308,7 +308,7 @@ contract DegenerusAffiliate {
     // =====================================================================
 
     /// @notice Wires the VAULT and sDGNRS codes as each other's referrer, then records the
-    ///         deploy-time bootstrap affiliate codes and referrals.
+    ///         GNRUS launch code and deploy-time bootstrap affiliate codes and referrals.
     /// @dev Game and Ticket deploy first, so every bootstrap owner and player receives a
     ///      permanent ID immediately. All runtime referral traversal reads ID-keyed records.
     constructor(
@@ -341,6 +341,8 @@ contract DegenerusAffiliate {
         _setReferral(SDGNRS_ID, AFFILIATE_CODE_VAULT, AFFILIATE_CODE_VAULT, VAULT_ID);
         emit Affiliate(0, AFFILIATE_CODE_DGNRS, VAULT_ID);
         emit Affiliate(0, AFFILIATE_CODE_VAULT, SDGNRS_ID);
+
+        _createAffiliateCode(ContractAddresses.GNRUS, bytes32("GNRUS"), 10);
 
         uint256 len = bootstrapOwners.length;
         for (uint256 i; i < len; ) {

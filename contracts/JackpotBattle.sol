@@ -196,9 +196,9 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             result.progressed = result.progressed || child.progressed;
             if (child.progressed) MineFlipGas.markProgress(meter);
             result.rewardBasis += child.rewardBasis;
+            // A finished field's final seat advanced the stored head; an unfinished one resumes.
             if (child.done) ++pos;
-            // One field per batch preserves the established finalization boundary.
-            break;
+            if (!child.progressed) break;
         }
         // Final-seat settlement and expiry advance the stored head atomically.
         result.done = pos == slots.length;
@@ -843,9 +843,17 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             result.done = true;
             return result;
         }
-        if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
-        uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
-        result = IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance);
+        // Each resolve settles at most _RESOLVE_MAX_SEATS; repeat while another batch fits.
+        while (MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) {
+            uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
+            MineFlipGas.Result memory batch = IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance);
+            result.rewardBasis += batch.rewardBasis;
+            result.done = batch.done;
+            if (!batch.progressed) break;
+            result.progressed = true;
+            MineFlipGas.markProgress(meter);
+            if (batch.done) break;
+        }
         MineFlipGas.finish(meter);
     }
     function _crapsCustomDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits,

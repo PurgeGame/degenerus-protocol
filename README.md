@@ -11,7 +11,7 @@ target is the **EIP-170 deployment profile**.
 | `DegenerusGame` | Holds ETH/stETH backing prize pools, claimable balances, prepaid AFKing, redemption reserves and Degenesis liabilities. |
 | `DegenerusVault` | Holds its own ETH/stETH and tokens; also owns Game balances and Coinflip credits. DGVE and DGVF represent its separate backing pools. |
 | `sDGNRS` | Holds ETH/stETH reserves and Game claims, with FLIP redemption backing in Coinflip; processes native and wrapped holder redemptions. |
-| `GNRUS` | Holds its own ETH/stETH for charity allocation and token exits. |
+| `GNRUS` | Holds its own ETH/stETH for charity allocation and token exits. Its launch affiliate code gives players 10% of the affiliate reward; its own FLIP winnings roll continuously in Coinflip. |
 | `DegenerusAdmin` | Receives subscription refunds and forwards native funding to the VRF coordinator. The external coordinator holds the subscription ETH. |
 | `DGNRS` | Holds locked sDGNRS backing its transferable wrapper; forwards redemption proceeds. |
 | Game modules | Execute against Game storage and custody through `delegatecall`; they are not separate prize-pool custodians. |

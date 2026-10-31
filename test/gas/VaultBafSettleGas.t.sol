@@ -11,11 +11,13 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {VaultBafRig} from "../repro/VaultBafSettlement.t.sol";
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {VaultBackstopHost} from "../fuzz/VaultFlipBackstop.t.sol";
+import {ICoinflip} from "../../contracts/interfaces/ICoinflip.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 
-/// @title VaultBafSettleGas — cold cost of the vault settlement the x0 seal runs.
+/// @title VaultBafSettleGas — cold cost of Vault and GNRUS settlement at the x0 seal.
 ///
-/// @notice The seal settles the vault through `playCoinflip(1, 0)`: one claim walk over
+/// @notice The seal settles Vault and GNRUS through zero-deposit calls: two claim walks over
 ///         the days since its last settlement, at most COIN_CLAIM_DAYS (90), always through the
 ///         latest resolved day. Its gas is the BAF_VAULT_SETTLE reserve that every seal-capable
 ///         purchase leg keeps in its tail on an x0 purchase day.
@@ -31,6 +33,29 @@ import {VmSafe} from "forge-std/Vm.sol";
 
 /// @dev Writes the vault's coinflip history through Coinflip's own lane helpers.
 contract VaultSettleSeeder is CoinflipStakeSetter {
+    /// @dev Patterns 0..4: all wins, middle loss, final loss, alternating, all losses.
+    ///      Patterns 5..94 place a single loss at each of the 90 possible positions.
+    function seedUnlimitedHistory(uint32 id, uint24 latest, uint8 pattern) external {
+        PlayerCoinflipState storage s = playerState[id];
+        uint24 last = latest - 90;
+        s.claimableStored = 0;
+        s.lastClaim = last;
+        s.autoRebuyStartDay = last;
+        s.autoRebuyEnabled = true;
+        s.autoRebuyUnlimited = true;
+        s.initialized = true;
+        s.autoRebuyStop = 1;
+        s.autoRebuyCarry = type(uint128).max;
+        for (uint24 d = last + 1; d <= latest; ++d) {
+            _setFlipStake(d, id, type(uint32).max);
+            bool win = pattern == 0 || (pattern == 1 && d != last + 45)
+                || (pattern == 2 && d != latest) || (pattern == 3 && d % 2 == 0)
+                || (pattern >= 5 && d != uint256(last) + pattern - 4);
+            _storeDayResult(d, 156, win);
+        }
+        flipsClaimableDay = latest;
+    }
+
     function seedVaultHistory(uint24 latest, uint24 gap, bool rebuy) external {
         address v = ContractAddresses.VAULT;
         PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf_g3120(v)];
@@ -39,6 +64,7 @@ contract VaultSettleSeeder is CoinflipStakeSetter {
         s.lastClaim = last;
         s.autoRebuyStartDay = rebuy ? last : 0;
         s.autoRebuyEnabled = rebuy;
+        s.autoRebuyUnlimited = false;
         // A stop that never divides a payout: every win banks a slice and rolls a carry.
         s.autoRebuyStop = rebuy ? 7 ether : 0;
         s.autoRebuyCarry = 0;
@@ -53,6 +79,12 @@ contract VaultSettleSeeder is CoinflipStakeSetter {
 
 /// @dev Production facade plus native seams for the daily cycle after the request.
 contract VaultSettleHost is DegenerusGame {
+    function settleAccounts(uint8 mask) external {
+        ICoinflip flips = ICoinflip(ContractAddresses.COINFLIP);
+        if (mask & 1 != 0) flips.playCoinflip(1, 0);
+        if (mask & 2 != 0) flips.playCoinflip(3, 0);
+    }
+
     function publishOnly() external {
         _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng_g4514()"));
     }
@@ -192,7 +224,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
     function _slow() internal pure virtual returns (bool);
     /// @dev Control: settle the vault's available results before measuring the seal.
     function _presettle() internal pure virtual returns (bool);
-    /// @dev The vault rides auto-rebuy with a stop that keeps a carry on every win.
+    /// @dev Both seeded full-window accounts use unlimited rebuy and maximum starting carry.
     function _rebuy() internal pure virtual returns (bool) {
         return false;
     }
@@ -256,10 +288,14 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
             VaultSettleSeeder(address(coinflip)).seedVaultHistory(latchDay, 90, _rebuy());
+            VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(3, latchDay, 0);
+            if (_rebuy()) VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(1, latchDay, 0);
             vm.etch(address(coinflip), original);
             if (_presettle()) {
                 vm.prank(POKER);
                 coinflip.playCoinflip(1, 0);
+                vm.prank(POKER);
+                coinflip.playCoinflip(3, 0);
             }
         }
         emit log_named_uint("vault_days_unsettled", latchDay - _lastClaim(VAULT));
@@ -274,6 +310,16 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
     }
 
     /// @dev The first call of the test: the latch day's last purchase leg and its seal, cold.
+    function test_SealCrankCold() public {
+        game.mineRun{gas: CHUNK_CAP}(0);
+        uint256 used = vm.lastCallGas().gasTotalUsed;
+        assertTrue(_latched(), "the full crank seals within 10M supplied gas");
+        assertEq(_lastClaim(VAULT), settledAt);
+        assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt);
+        emit log_named_uint("protocol_seal_full_crank_gas", used);
+        assertLe(used, CHUNK_CAP);
+    }
+
     function test_SealChunkCold() public {
         uint256 snapshot = vm.snapshotState();
         VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
@@ -283,6 +329,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
         (uint24 armed, , ) = coinflip.bafDrawInfo();
         assertEq(armed, latchDay + 1, "and arms the BAF draw");
         assertEq(_lastClaim(VAULT), settledAt, "and settles the vault's claim window");
+        assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt, "and settles GNRUS's claim window");
         assertLe(used, CHUNK_CAP, "the sealing chunk stays at or under 10M");
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
             assertTrue(vm.revertToState(snapshot));
@@ -317,6 +364,56 @@ contract VaultSealChunkGasSlowSettled is VaultSealChunkGas {
 }
 
 contract VaultSealChunkGasSlowRebuy is VaultSealChunkGas {
+    function test_sealCrankAcrossOutcomePatterns() public {
+        require(vm.envOr("FOUNDRY_ISOLATE", false), "cold measurement requires isolation");
+        uint256 maximum;
+        for (uint8 pattern; pattern < 95; ++pattern) {
+            uint256 snap = vm.snapshotState();
+            bytes memory original = address(coinflip).code;
+            vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
+            VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(1, latchDay, pattern);
+            VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(3, latchDay, pattern);
+            vm.etch(address(coinflip), original);
+            game.mineRun{gas: CHUNK_CAP}(0);
+            uint256 used = vm.lastCallGas().gasTotalUsed;
+            assertTrue(_latched());
+            assertEq(_lastClaim(VAULT), settledAt);
+            assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt);
+            assertLe(used, CHUNK_CAP);
+            emit log_named_uint("seal_pattern", pattern);
+            emit log_named_uint("protocol_seal_full_crank_gas", used);
+            if (used > maximum) maximum = used;
+            assertTrue(vm.revertToState(snap));
+            vm.deleteStateSnapshot(snap);
+        }
+        emit log_named_uint("maximum_protocol_seal_crank_gas", maximum);
+    }
+
+    function test_secondSettlementFailureRollsBackSealAndBothAccounts() public {
+        uint24 vaultCursor = _lastClaim(VAULT);
+        uint24 gnrusCursor = _lastClaim(ContractAddresses.GNRUS);
+        bytes32 stampWord = vm.load(address(game), bytes32(uint256(4)));
+        (uint24 armedBefore, uint96 weightBefore, uint32 entriesBefore) = coinflip.bafDrawInfo();
+        vm.mockCallRevert(ContractAddresses.JACKPOTS,
+            abi.encodePacked(bytes4(keccak256("recordBafFlip(uint32,uint24,uint256)")), abi.encode(uint32(3))),
+            abi.encodeWithSignature("SecondSettlementFailed()"));
+        vm.expectRevert(bytes4(keccak256("SecondSettlementFailed()")));
+        VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
+        assertFalse(_latched());
+        assertEq(_lastClaim(VAULT), vaultCursor);
+        assertEq(_lastClaim(ContractAddresses.GNRUS), gnrusCursor);
+        assertEq(vm.load(address(game), bytes32(uint256(4))), stampWord);
+        (uint24 armedAfter, uint96 weightAfter, uint32 entriesAfter) = coinflip.bafDrawInfo();
+        assertEq(armedAfter, armedBefore);
+        assertEq(weightAfter, weightBefore);
+        assertEq(entriesAfter, entriesBefore);
+        vm.clearMockedCalls();
+        VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
+        assertTrue(_latched());
+        assertEq(_lastClaim(VAULT), settledAt);
+        assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt);
+    }
+
     function _slow() internal pure override returns (bool) { return true; }
     function _presettle() internal pure override returns (bool) { return false; }
     function _rebuy() internal pure override returns (bool) { return true; }
@@ -326,4 +423,87 @@ contract VaultSealChunkGasSlowRebuySettled is VaultSealChunkGas {
     function _slow() internal pure override returns (bool) { return true; }
     function _presettle() internal pure override returns (bool) { return true; }
     function _rebuy() internal pure override returns (bool) { return true; }
+}
+
+/// @dev Each measured call is a separate cold transaction under the gas runner's isolation mode.
+contract ProtocolSettleUnlimitedGas is DeployProtocol {
+    uint24 private constant LATEST = 1432;
+
+    function setUp() public {
+        _deployProtocol();
+        vm.warp((uint256(LATEST) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        vm.etch(address(game), type(VaultSettleHost).runtimeCode);
+    }
+
+    function _seed(uint8 pattern) private {
+        bytes memory original = address(coinflip).code;
+        vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
+        VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(1, LATEST, pattern);
+        VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(3, LATEST, pattern);
+        vm.etch(address(coinflip), original);
+    }
+
+    function _measure(uint8 mask) private {
+        require(vm.envOr("FOUNDRY_ISOLATE", false), "cold measurement requires isolation");
+        uint256 maximum;
+        for (uint8 pattern; pattern < 95; ++pattern) {
+            uint256 snap = vm.snapshotState();
+            _seed(pattern);
+            VaultSettleHost(payable(address(game))).settleAccounts(mask);
+            uint256 used = vm.lastCallGas().gasTotalUsed;
+            emit log_named_uint("pattern", pattern);
+            emit log_named_uint("osaka_settle_gas", used);
+            assertLt(used, GasBounds.BAF_VAULT_SETTLE / 2, "twofold settlement reserve margin");
+            if (used > maximum) maximum = used;
+            for (uint32 id = 1; id <= 3; id += 2) {
+                if ((mask & (id == 1 ? 1 : 2)) == 0) continue;
+                uint256 state = uint256(vm.load(address(coinflip), keccak256(abi.encode(id, uint256(2)))));
+                assertEq(uint24(state >> 128), LATEST);
+            }
+            vm.revertToState(snap);
+            _seed(pattern);
+            vm.startStateDiffRecording();
+            VaultSettleHost(payable(address(game))).settleAccounts(mask);
+            VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+            GlamsterdamReprice.Result memory r = this.repriceCall(used, accesses);
+            emit log_named_uint("glamsterdam_exec_gas", r.glamsterdamExec);
+            emit log_named_uint("glamsterdam_state_gas", r.stateGas);
+            assertLt(r.glamsterdamExec + r.stateGas, GasBounds.BAF_VAULT_SETTLE / 2);
+            assertTrue(vm.revertToState(snap));
+            vm.deleteStateSnapshot(snap);
+        }
+        emit log_named_uint("maximum_osaka_settle_gas", maximum);
+    }
+
+    /// @dev A fresh call frame releases the repricer's large scratch arrays after each case.
+    function repriceCall(uint256 used, VmSafe.AccountAccess[] memory accesses)
+        external view returns (GlamsterdamReprice.Result memory)
+    {
+        return GlamsterdamReprice.reprice(used, accesses, address(game));
+    }
+
+    function test_vaultAlone90Unlimited() public { _measure(1); }
+    function test_gnrusAlone90Unlimited() public { _measure(2); }
+    function test_both90Unlimited() public { _measure(3); }
+
+    function test_completeBackstop90UnlimitedBelow10M() public {
+        require(vm.envOr("FOUNDRY_ISOLATE", false), "cold measurement requires isolation");
+        for (uint8 pattern; pattern < 95; ++pattern) {
+            uint256 snap = vm.snapshotState();
+            _seed(pattern);
+            vm.etch(address(game), type(VaultBackstopHost).runtimeCode);
+            VaultBackstopHost host = VaultBackstopHost(payable(address(game)));
+            host.seedPhase(LATEST, LATEST - 90, 0);
+            MineFlipGas.Result memory result = host.phase(9_000_000);
+            uint256 used = vm.lastCallGas().gasTotalUsed;
+            assertTrue(result.progressed);
+            assertFalse(result.done);
+            assertEq(host.stamp(), LATEST);
+            assertLt(used, 10_000_000);
+            emit log_named_uint("checkpoint_pattern", pattern);
+            emit log_named_uint("complete_backstop_gas", used);
+            assertTrue(vm.revertToState(snap));
+            vm.deleteStateSnapshot(snap);
+        }
+    }
 }

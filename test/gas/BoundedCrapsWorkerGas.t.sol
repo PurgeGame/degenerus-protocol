@@ -6,6 +6,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoundedGasProbe} from "../helpers/BoundedGasProbe.sol";
 
 /// @dev Real CrapsBattle, JackpotBattle and engine bytecode during measurement;
@@ -51,9 +52,18 @@ contract BoundedCrapsWorkerGasTest is CrapsPins, BoundedGasProbe {
         _production();
         JackpotBattle api = JackpotBattle(address(table));
         if (previous) {
-            vm.prank(ContractAddresses.GAME); api.runCrapsReadWork(index, 9_000_000);
-            _views(); assertGt(table.dayStaked(day), 0); _production();
+            _views();
+            // Prepare an existing action book without consuming the field being measured.
+            // Each mandatory unit settles one seat, even after workers gained continuation.
+            for (uint256 i; i < count + 2; ++i) {
+                vm.prank(ContractAddresses.GAME);
+                assertTrue(api.runCrapsReadWork(index, MineFlipGas.budget(0, type(uint32).max, true)).progressed);
+            }
+            assertEq(table.bonusCursorOf(slot), count + 2);
+            assertGt(table.dayStaked(day), 0);
             ++slot;
+            assertEq(table.bonusCursorOf(slot), 0, "measured field must still be pending");
+            _production();
         }
         _measureBounded(label, address(table), ContractAddresses.GAME, 0,
             abi.encodeCall(api.runCrapsReadWork, (index, uint256(9_000_000))), false);

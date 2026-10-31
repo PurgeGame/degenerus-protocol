@@ -9,9 +9,10 @@ includes the bit fields and compiler-derived struct layouts.
 
 Coinflip settles at most the last **90 resolved days** (`COIN_CLAIM_DAYS`). Older stake and rolling
 carry forfeit; banked `claimableStored` does not expire. Claims consume days with `lastClaim` and
-keep the stake pages. The Game banks the Vault's winnings every 45 resolved days and at the x0
-purchase seal; its stamp (`vaultFlipSettledDay`) records only a successful Game-initiated
-settlement. Neither daily RNG application nor terminal resolution depends on this external
+keep the stake pages. The Game settles Vault and GNRUS every 45 resolved days and at the x0
+purchase seal. Vault winnings bank according to its configuration; GNRUS uses unlimited rebuy
+from day 1. The stamp (`vaultFlipSettledDay`) advances only after both Game-initiated settlements
+succeed atomically. Neither daily RNG application nor terminal resolution depends on this external
 settlement.
 
 Affiliate scores saturate at **34,359,738,367 whole FLIP per wallet per level** (2^35 − 1). The
@@ -36,7 +37,7 @@ from the **same block**, verify the deployed runtime, and resolve addresses to p
 | Coinflip ring (`coinflipStakeRing`, root 0) | `page = day / 7`; `H(id, 0) + page % 15` |
 | Coinflip overflow (`coinflipStakeOverflow`, root 9) | `H(page, H(id, 9))` |
 | Stake page | Seven uint32 amounts in bits 0–223; uint24 `page + 1` in 224–247; overflow hint in 248–255 |
-| Game Vault stamp | `vaultFlipSettledDay`: Game slot 4, byte offset 20, uint24 |
+| Game Vault/GNRUS stamp | `vaultFlipSettledDay`: Game slot 4, byte offset 20, uint24 |
 | BAF player (`bafPlayer`, root 0) | `H(id, 0) + ((bracket / 10) & 1)`; uint168 total at bit 0, uint64 epoch at 168, uint24 bracket at 232 |
 | Affiliate earnings (`affiliateCoinEarned`) | `H(id, R + 1)`, where `R` is the affiliate's ERC-7201 namespace root (`AFFILIATE_STORAGE_ROOT`); layout below |
 

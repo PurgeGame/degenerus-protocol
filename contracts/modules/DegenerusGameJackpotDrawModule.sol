@@ -146,6 +146,11 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
 
     uint256 private constant JACKPOT_BATTLE_ENTRANTS = JackpotBattleFieldLib.MAX_CHUNK;
     uint256 private constant COIN_DRAW_SHARES = 50;
+    /// @dev Return gas kept by the battle stage around its settlement call.
+    uint256 private constant JACKPOT_BATTLE_SETTLE_TAIL = 100_000;
+    /// @dev The settlement worker's own first-batch admission plus its resolver's reserve.
+    uint256 private constant JACKPOT_BATTLE_SETTLE_ADMISSION = GasBounds.CRAPS_SEAT_GAS_MAX
+        + GasBounds.CRAPS_SETTLE_TAIL_GAS + GasBounds.CRAPS_CREDIT_GAS_MAX + GasBounds.CRAPS_WORK_TAIL_GAS + 30_000;
 
     event JackpotFlipWin(uint32 indexed walletId, uint24 indexed level, uint8 indexed traitId,
         uint256 amount, uint256 entryIndex);
@@ -262,8 +267,9 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     ///      JACKPOT_BATTLE_ENTRANTS awarded entries (see _collectJackpotChunkWithLevels), reads
     ///      their saved boards in one batch and appends them while another group fits; the chunk
     ///      that reaches the award target, or finds no eligible level, seals the field. Settlement
-    ///      starts in its own subsequent call; its available execution gas never stacks on top of
-    ///      field construction. The pending latch clears once the battle completes.
+    ///      follows the seal in the same call only when a full seat batch fits after construction;
+    ///      it never runs on the first-unit permission. The pending latch clears once the battle
+    ///      completes.
     function _runPurchaseJackpotBattle(uint24 lvl, uint256 rngWord, uint256 allowance)
         private returns (MineFlipGas.Result memory result)
     {
@@ -271,16 +277,7 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         IJackpotBattle battle = IJackpotBattle(ContractAddresses.CRAPS);
         (,, bool started, bool complete) = battle.jackpotProgress();
         if (started) {
-            if (complete) result.done = true;
-            else {
-                uint256 childAllowance = MineFlipGas.child(meter, 100_000);
-                result = IJackpotBattleMeter(ContractAddresses.CRAPS).runDailyBattleWork(childAllowance);
-            }
-            if (result.done) {
-                dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
-                result.progressed = true;
-                MineFlipGas.markProgress(meter);
-            }
+            _settleJackpotBattle(meter, result, complete);
             MineFlipGas.finish(meter);
             return result;
         }
@@ -289,34 +286,59 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
         if (!MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
         uint256 battleWord = uint256(EntropyLib.hash2(RngTags.FUTURE_BATTLE, rngWord));
         (uint256 word, uint256 cursor, uint256 remaining) = battle.prepareJackpotBattle(lvl, battleWord);
-        if (remaining == 0) {
+        bool fieldSealed = remaining == 0;
+        if (fieldSealed) {
             // No awarded seats to draw (a paid-field-only round): seal without the level scan.
             battle.appendJackpotBattle(new uint256[](0), cursor, true);
             result.progressed = true;
             MineFlipGas.markProgress(meter);
-            ++result.rewardBasis;
-            MineFlipGas.finish(meter);
-            return result;
+        } else {
+            JackpotDrawLevels memory levels = _jackpotDrawLevels(lvl, cursor);
+            do {
+                (uint32[] memory winners, uint256 next, bool exhausted) =
+                    _collectJackpotChunkWithLevels(lvl, word, cursor, remaining, levels);
+                uint256[] memory field = JackpotBattleFieldLib.prepare(winners);
+                fieldSealed = exhausted || winners.length == remaining;
+                battle.appendJackpotBattle(field, next, fieldSealed);
+                result.progressed = true;
+                MineFlipGas.markProgress(meter);
+                result.rewardBasis += winners.length;
+                if (fieldSealed) break;
+                // Append persists the exact walk position. Read the accepted-unit count back
+                // from the battle, then admit another group only while its full bound fits.
+                (word, cursor, remaining) = battle.prepareJackpotBattle(lvl, battleWord);
+            } while (MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL));
         }
-        JackpotDrawLevels memory levels = _jackpotDrawLevels(lvl, cursor);
-        do {
-            (uint32[] memory winners, uint256 next, bool exhausted) =
-                _collectJackpotChunkWithLevels(lvl, word, cursor, remaining, levels);
-            uint256[] memory field = JackpotBattleFieldLib.prepare(winners);
-            bool last = exhausted || winners.length == remaining;
-            battle.appendJackpotBattle(field, next, last);
+        ++result.rewardBasis;
+        // Progress is marked, so this admission is a real estimate check against the floor.
+        if (fieldSealed && MineFlipGas.canRun(meter, JACKPOT_BATTLE_SETTLE_ADMISSION, JACKPOT_BATTLE_SETTLE_TAIL)) {
+            (,, started, complete) = battle.jackpotProgress();
+            if (started) _settleJackpotBattle(meter, result, complete);
+        }
+        MineFlipGas.finish(meter);
+    }
+
+    /// @dev Settle a sealed field's seats within the meter and clear the pending latch once the
+    ///      battle completes.
+    function _settleJackpotBattle(MineFlipGas.Meter memory meter, MineFlipGas.Result memory result, bool complete)
+        private
+    {
+        if (complete) result.done = true;
+        else {
+            uint256 childAllowance = MineFlipGas.child(meter, JACKPOT_BATTLE_SETTLE_TAIL);
+            MineFlipGas.Result memory settled = IJackpotBattleMeter(ContractAddresses.CRAPS).runDailyBattleWork(childAllowance);
+            result.done = settled.done;
+            result.rewardBasis += settled.rewardBasis;
+            if (settled.progressed) {
+                result.progressed = true;
+                MineFlipGas.markProgress(meter);
+            }
+        }
+        if (result.done) {
+            dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
             result.progressed = true;
             MineFlipGas.markProgress(meter);
-            result.rewardBasis += winners.length;
-            if (last) break;
-            // Append persists the exact walk position. Read the accepted-unit count back
-            // from the battle, then admit another group only while its full bound fits.
-            (word, cursor, remaining) = battle.prepareJackpotBattle(lvl, battleWord);
-        } while (MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL));
-        ++result.rewardBasis;
-        // Field construction and simulation are distinct bounded phases even if
-        // this append seals an empty field. The next call observes completion.
-        MineFlipGas.finish(meter);
+        }
     }
 
     /// @dev A visit walks one level once, starting at a random queue position and wrapping.

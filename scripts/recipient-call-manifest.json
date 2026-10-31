@@ -993,6 +993,14 @@
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
+    "scope": "DegenerusAffiliate.constructor",
+    "kind": "recipient-helper",
+    "expression": "_createAffiliateCode(ContractAddresses.GNRUS, bytes32(\"GNRUS\"), 10)",
+    "count": 1,
+    "review": "Launch code uses the existing registration helper before optional bootstrap entries. GNRUS has permanent Game ID 3; kickback 10 is percent and within the 25-percent bound. Existing duplicate protection rejects user and bootstrap collisions. Pinned by test/fuzz/GnrusAffiliate.t.sol."
+  },
+  {
+    "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.createAffiliateCode",
     "kind": "recipient-helper",
     "expression": "_createAffiliateCode(msg.sender, code_, kickbackPct)",
@@ -6595,7 +6603,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._sealPurchaseDay",
     "kind": "recipient-helper",
-    "expression": "_settleVaultFlips(day)",
+    "expression": "_settleProtocolFlips(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -6633,6 +6641,22 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule._settleProtocolFlips",
+    "kind": "external",
+    "expression": "coinflip.playCoinflip(GNRUS_WALLET_ID, 0)",
+    "count": 1,
+    "review": "Pinned Coinflip zero-deposit gift settles ID 3 without withdrawing or spending winnings. Unlimited rebuy retains carry; both calls precede the shared Game stamp. Second-account callback failure rolls back both settlements. Full 90-day pair is reserved in BAF_VAULT_SETTLE; pinned by VaultFlipBackstop and VaultBafSettleGas."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule._settleProtocolFlips",
+    "kind": "external",
+    "expression": "coinflip.playCoinflip(VAULT_WALLET_ID, 0)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._settleTerminalLoans",
     "kind": "recipient-helper",
     "expression": "_settleLevelLoans(meter, result)",
@@ -6646,14 +6670,6 @@
     "expression": "_settleLoans(uint24(lvl + step), i, meter, result)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._settleVaultFlips",
-    "kind": "external",
-    "expression": "coinflip.playCoinflip(VAULT_WALLET_ID, 0)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6907,7 +6923,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
     "kind": "recipient-helper",
-    "expression": "_settleVaultFlips(day)",
+    "expression": "_settleProtocolFlips(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
@@ -7931,17 +7947,9 @@
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
     "scope": "DegenerusGameJackpotDrawModule._runPurchaseJackpotBattle",
     "kind": "external",
-    "expression": "IJackpotBattleMeter(ContractAddresses.CRAPS).runDailyBattleWork(childAllowance)",
+    "expression": "battle.appendJackpotBattle(field, next, fieldSealed)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
-    "scope": "DegenerusGameJackpotDrawModule._runPurchaseJackpotBattle",
-    "kind": "external",
-    "expression": "battle.appendJackpotBattle(field, next, last)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "MINER_CONTINUATION: same pinned table, field, cursor and seal predicate; renamed flag also gates optional settlement. Each append remains capped at 50 entries and marks progress before further admission."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
@@ -7956,8 +7964,8 @@
     "scope": "DegenerusGameJackpotDrawModule._runPurchaseJackpotBattle",
     "kind": "external",
     "expression": "battle.jackpotProgress()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "count": 2,
+    "review": "MINER_CONTINUATION: bounded pinned-table view at entry and after sealing. The second read distinguishes an empty completed field from one requiring settlement; neither view calls an arbitrary recipient."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
@@ -7974,6 +7982,22 @@
     "expression": "JackpotBattleFieldLib.prepare(winners)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
+    "scope": "DegenerusGameJackpotDrawModule._runPurchaseJackpotBattle",
+    "kind": "recipient-helper",
+    "expression": "_settleJackpotBattle(meter, result, complete)",
+    "count": 2,
+    "review": "MINER_CONTINUATION: started-field entry and post-seal optional continuation share one helper. Post-seal construction has marked progress and passed settlement admission; the existing started-field branch retains first-unit permission. Both preserve accumulated reward basis and use the same pending-clear path. Production schedule/empty-field tests in MinerloopContinuation.t.sol."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
+    "scope": "DegenerusGameJackpotDrawModule._settleJackpotBattle",
+    "kind": "external",
+    "expression": "IJackpotBattleMeter(ContractAddresses.CRAPS).runDailyBattleWork(childAllowance)",
+    "count": 1,
+    "review": "MINER_CONTINUATION: same immutable table and ABI moved to the shared settlement helper. Child allowance retains the parent tail; construction has already spent first-unit permission. Resolver batches preserve cursors and completion clears pending. Covered by JackpotBattle.t.sol and MinerloopContinuation.t.sol."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",

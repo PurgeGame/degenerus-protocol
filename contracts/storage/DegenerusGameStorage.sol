@@ -620,8 +620,8 @@ abstract contract DegenerusGameStorage {
     /// @dev Next index of `_loansDue[level]` to seize while `LOANS_DUE_PENDING` is set;
     ///      slot-4 bytes 16..19.
     uint32 internal loanSeizeCursor;
-    /// @dev Last resolved day the Game successfully settled the Vault through. A lower
-    ///      bound on its actual Coinflip cursor; slot-4 bytes 20..22, preserving later roots.
+    /// @dev Last resolved day the Game successfully settled both Vault and GNRUS through.
+    ///      A lower bound on both Coinflip cursors; slot-4 bytes 20..22, preserving later roots.
     uint24 internal vaultFlipSettledDay;
     /// @dev Bits 0/1 invalidate the retained even/odd trait bitmap until its first append.
     uint8 internal traitBucketStale;

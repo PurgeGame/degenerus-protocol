@@ -337,14 +337,14 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         (,,cursor) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertEq(cursor, first, "the settled prefix depends only on the allowance");
     }
-    function test_FullSealingChunkLeavesNoSettleBudget() public {
+    function test_PartialFinalChunkUsesRemainingSettleBudget() public {
         (, uint256 draws,, uint64 sealCursor) = _driveChunks(17_900 ether);
         (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertGe(r.drawnUnits, 439, "sealing chunk of at least 139 entries");
         assertLe(r.drawnUnits, 450);
         assertGt(draws, 0);
         assertLe(draws, 9, "at most nine 50-entry checkpoints fill this field");
-        assertEq(sealCursor, 0, "the sealing call settled past its draw charge");
+        assertGt(sealCursor, 0, "the partial final group leaves enough gas to settle");
     }
     function test_EmptyAwardQueuesStillClosePaidField() public {
         _prepare(false,false,false,3,0); _requestAndApply(); _drain(false,false);

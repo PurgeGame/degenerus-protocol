@@ -215,8 +215,15 @@ contract CrapsStorageReuseTest is CrapsPins {
         vm.expectRevert(abi.encodeWithSignature("OnlyGame()"));
         vm.prank(alice); table.resolveRngSlot_g1079(slot + 1, 9_000_000);
         assertEq(table.pending(index), 2);
-        vm.prank(ContractAddresses.GAME);
-        JackpotBattle(address(table)).runCrapsReadWork(index, 9_000_000);
+        // Complete the head one mandatory seat at a time, retaining the second field
+        // for expiry. The head includes the protocol's paid day seats as well as Alice.
+        for (uint256 i; i < 10 && !table.battleOf(table.keyOfSlot(slot)).finalized; ++i) {
+            vm.prank(ContractAddresses.GAME);
+            MineFlipGas.Result memory step = JackpotBattle(address(table)).runCrapsReadWork(
+                index, MineFlipGas.budget(0, type(uint32).max, true));
+            assertTrue(step.progressed);
+            assertEq(table.bonusCursorOf(slot + 1), 0, "the next field cannot run first");
+        }
         assertEq(table.pending(index), 1);
         assertGt(table.bonusCursorOf(slot), 0);
         assertEq(table.bonusCursorOf(slot + 1), 0);

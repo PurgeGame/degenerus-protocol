@@ -267,13 +267,13 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             CEILING, WORD, 30_000_000
         );
         assertTrue(result.progressed);
-        assertFalse(result.done, "construction remains separate from simulation");
-        bytes32 transcript = keccak256(abi.encode(vm.getRecordedLogs()));
+        bytes32 transcript = _constructionTranscript(vm.getRecordedLogs());
         (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 resolved) =
             CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawnCount, 500, "one invocation must reuse the list across ten chunks");
         assertEq(round.started, true, "the final chunk seals the field");
-        assertEq(resolved, 0);
+        _finishBattle();
+        (round, board, resolved) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         bytes32 state = keccak256(abi.encode(round, board, resolved));
         uint256 comps = coin.crapsCompAllowance();
         assertTrue(vm.revertToStateAndDelete(snapshot));
@@ -288,9 +288,30 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             (round, board, resolved) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
             assertEq(round.drawnCount, (i + 1) * 50, "reference rebuilds the list once per chunk");
         }
-        assertEq(keccak256(abi.encode(vm.getRecordedLogs())), transcript, "identical ordered award and seal events");
+        assertEq(_constructionTranscript(vm.getRecordedLogs()), transcript, "identical ordered award and seal events");
+        _finishBattle();
+        (round, board, resolved) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(keccak256(abi.encode(round, board, resolved)), state, "identical cursor, field and sealed terms");
         assertEq(coin.crapsCompAllowance(), comps, "identical final comp accounting");
+    }
+
+    function _constructionTranscript(Vm.Log[] memory logs) private pure returns (bytes32 digest) {
+        // This fixture has a contested high lane and hundreds of seats: its first
+        // settlement event is the first non-construction log. Retain every preceding
+        // construction/fee event, including logs from FLIP, rather than weakening them.
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)")) break;
+            digest = keccak256(abi.encode(digest, logs[i].emitter, logs[i].topics, logs[i].data));
+        }
+    }
+
+    function _finishBattle() private {
+        for (uint256 i; i < 100; ++i) {
+            (,,,bool complete) = JackpotBattle(address(crapsBattle)).jackpotProgress();
+            if (complete) return;
+            assertTrue(BattleConstructionGameSeed(address(game)).runDraw{gas: 20_000_000}(CEILING, WORD, 19_000_000).progressed);
+        }
+        fail("battle did not finish");
     }
 
     function test_ColdSingletonVisitBranchWithinBound() public { _seed(50, 1); _worker(); }
@@ -369,7 +390,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawnCount, 150);
         assertGt(round.drawWord, 0);
-        assertEq(resolved, 0, "construction call must stop before simulations");
+        assertGt(resolved, 0, "sealing call uses its remaining gas for settlement");
         assertGt(coinflip.coinflipAmount(MINER), beforeReward, "real miner compensation must be included");
     }
 }

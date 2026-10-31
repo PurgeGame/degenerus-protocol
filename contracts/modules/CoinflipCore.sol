@@ -286,9 +286,10 @@ abstract contract CoinflipCore {
     ///      VAULT and sDGNRS. All initial FLIP must survive a coinflip before minting.
     uint256 private constant SEED_FLIP_DAILY = 200_000;
     uint24 private constant SEED_FLIP_DAYS = 20;
-    /// @dev The Game's constant wallet IDs for the two seed recipients.
+    /// @dev The Game's constant protocol wallet IDs.
     uint32 private constant VAULT_WALLET_ID = 1;
     uint32 private constant SDGNRS_WALLET_ID = 2;
+    uint32 private constant GNRUS_WALLET_ID = 3;
 
     // Player coinflip state, keyed by wallet ID: two slots. Slot A holds the claim bank,
     // cursor, auto-rebuy start day and flags; slot B holds the take-profit stop and rolling
@@ -401,6 +402,18 @@ abstract contract CoinflipCore {
         recordDayDiceRun = recordStartDay;
 
         emit SeedWindowArmed(2, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
+
+        // GNRUS rolls its affiliate winnings from launch, with no take-profit limit.
+        PlayerCoinflipState storage gnrusState = playerState[GNRUS_WALLET_ID];
+        gnrusState.lastClaim = recordStartDay;
+        gnrusState.autoRebuyStartDay = recordStartDay;
+        gnrusState.autoRebuyEnabled = true;
+        gnrusState.autoRebuyUnlimited = true;
+        gnrusState.initialized = true;
+        gnrusState.autoRebuyStop = 1;
+        emit CoinflipAutoRebuyStopSet(GNRUS_WALLET_ID, 0);
+        emit CoinflipAutoRebuyToggled(GNRUS_WALLET_ID, true);
+        _emitClaimState(GNRUS_WALLET_ID);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)

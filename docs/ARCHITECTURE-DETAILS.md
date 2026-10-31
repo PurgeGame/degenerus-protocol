@@ -307,7 +307,7 @@ Daily-phase work reports `Advance(stage, lvl)`. Stage constants (`DegenerusGameA
 transition done, 6 purchase daily, 7 entered jackpot, 8 jackpot coin+tickets, 9 jackpot phase ended,
 10 jackpot daily started, 14 early-bird tickets, 15 purchase daily tickets, 16 jackpot-day battle
 step, 17 purchase-day battle step, 18 daily word applied, 19 BAF award group, 20 terminal loans, 21
-Degenesis day, 22 Vault flips settled. The RNG module reports 1 (request issued) and the GameOver
+Degenesis day, 22 Vault and GNRUS flips settled. The RNG module reports 1 (request issued) and the GameOver
 module 0 (game over) and 5 (terminal tickets working). Stage events report work; none changes the
 game phase by itself.
 
@@ -429,15 +429,31 @@ pending future pool (the stage runs under the daily lock, with the pools frozen)
 and bumps the bracket epoch. A game-over latch during the stage releases the uncredited reservation
 into the distributable total.
 
-The x0 last-purchase seal arms the next day's weighted depositor draw and, in the same step, settles
-the vault's coinflip position through that day's applied result (`playCoinflip(VAULT, 0)`), so the
-vault's bracket score holds every winning flip the bracket counts, as for a player who claims at the
-close of that day. The BAF day's own flip settles after the next request and scores the next
-bracket. On an x0 purchase day every leg that can seal keeps `BAF_VAULT_SETTLE` (one full 90-day
-claim walk) in its tail. A separate daily-phase checkpoint settles the Vault every 45 resolved days
-before any phase can unlock, using the Game’s own successful-settle stamp (`vaultFlipSettledDay`,
-stage 22). Both routes bank winnings through the same zero-deposit helper; RNG application and
-terminal resolution do not depend on the Vault.
+The x0 last-purchase seal arms the next day's weighted depositor draw and, in the same step,
+settles Vault and GNRUS through that day's applied result (`playCoinflip(1, 0)` followed by
+`playCoinflip(3, 0)`). Both bracket scores include every winning flip the bracket counts. The BAF
+day's own flip settles after the next request and scores the next bracket. Every seal-capable x0
+purchase leg keeps `BAF_VAULT_SETTLE` (3.5M for both full 90-day walks) in its tail, in addition to
+`DAILY_PHASE_TAIL` (250k). The separate daily-phase checkpoint settles both accounts every 45
+resolved days before any phase can unlock. `_settleProtocolFlips` stamps `vaultFlipSettledDay`
+(stage 22) only after both calls succeed; a failure rolls back both claims and the stamp. This field
+retains Game slot 4, byte offset 20. Zero-deposit gifts require no account permission and cannot
+withdraw or spend the account's winnings. RNG application and terminal resolution have no added
+settlement dependency. The cold 90-day unlimited-rebuy pair measures at most 518,290 Osaka gas
+across 95 cases: every single-loss position, all wins, alternating outcomes and all losses. The largest combined
+execution/state estimate under the retained Glamsterdam repricing model is 1,118,208. Both stay
+below half of the 3.5M reserve; the model is not a native Glamsterdam execution measurement.
+The daily checkpoint peaks at 597,129 gas and the complete x0 `mineRun` seal at 1,766,093 gas,
+with a 10M supplied-gas cap. See `test/gas/VaultBafSettleGas.t.sol` for the assertions.
+
+The Affiliate constructor registers `bytes32("GNRUS")` for GNRUS wallet ID 3 with kickback 10,
+before optional bootstrap codes and referrals. The percentage applies to the calculated affiliate
+reward, not the purchase amount. Existing code validation and duplicate protection apply, including
+to conflicting bootstrap entries. Coinflip enables unlimited auto-rebuy for ID 3 at day 1: claim
+cursor and start day 1, enabled and unlimited flags set, internal stop sentinel 1, public take-profit
+0. Affiliate awards enter ID-keyed stakes; wins roll with the ordinary recycle bonus and losses
+consume the carry. No FLIP award mints to the GNRUS wallet, and no extra post-game-over FLIP path is
+required.
 
 ## Coinflip, BAF and affiliate records
 

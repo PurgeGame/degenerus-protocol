@@ -37,15 +37,19 @@ describe("JackpotFarFutureCoinUnits — the daily jackpot battle's award draw", 
     expect(draw).not.to.match(/queue\s*\[[^\]]+\]\s*=|queue\.push|queue\.pop|delete\s+queue/);
   });
 
-  it("appends the frozen field and reserves simulation for the next bounded phase", function () {
+  it("appends the frozen field and admits settlement only after marking construction progress", function () {
     const play = body("function _runPurchaseJackpotBattle(");
     expect(play).to.include("IJackpotBattle battle = IJackpotBattle(ContractAddresses.CRAPS)");
     expect(play).to.include("JackpotBattleFieldLib.prepare(winners)");
-    expect(play).to.include("battle.appendJackpotBattle(field, next, last)");
+    expect(play).to.include("battle.appendJackpotBattle(field, next, fieldSealed)");
     expect(play).to.include("MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL)");
-    expect(play).to.include("runDailyBattleWork(childAllowance)");
-    const afterAppend = play.slice(play.indexOf("battle.appendJackpotBattle("));
-    expect(afterAppend).not.to.include("runDailyBattleWork(");
-    expect(afterAppend).to.include("MineFlipGas.finish(meter)");
+    const admission = play.indexOf("if (fieldSealed && MineFlipGas.canRun(meter, JACKPOT_BATTLE_SETTLE_ADMISSION, JACKPOT_BATTLE_SETTLE_TAIL))");
+    expect(admission).to.be.greaterThan(play.indexOf("MineFlipGas.markProgress(meter)"));
+    expect(play.slice(admission)).to.include("_settleJackpotBattle(meter, result, complete)");
+    const settle = body("function _settleJackpotBattle(");
+    expect(settle).to.include("runDailyBattleWork(childAllowance)");
+    expect(settle).to.include("result.rewardBasis += settled.rewardBasis");
+    expect(settle).to.include("dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING");
+    expect(play.slice(admission)).to.include("MineFlipGas.finish(meter)");
   });
 });

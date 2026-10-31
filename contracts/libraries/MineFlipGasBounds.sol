@@ -55,8 +55,8 @@ library MineFlipGasBounds {
     uint256 internal constant VRF_LEVEL_FUND_TAIL = 1_000_000;
     // 150k phase tail + bounded balance 60,794 and allocation/frame margin.
     uint256 internal constant DAILY_PHASE_TAIL = 250_000;
-    // Conservative full-walk envelope for the 90-day Vault checkpoint and x0 seal,
-    // including the Game stamp.
+    // Conservative envelope for both 90-day Vault and GNRUS walks at the checkpoint and x0 seal,
+    // including the Game stamp; VaultBafSettleGas covers every single-loss position.
     uint256 internal constant BAF_VAULT_SETTLE = 3_500_000;
     // Forced all-gold grand prize with distinct traits and fresh buffer: 2.263M.
     uint256 internal constant FOIL_PACK = 3_000_000;

@@ -159,6 +159,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
     function _worker(Case memory c, uint256 allowance, uint256 supplied)
         private returns (uint256 executionGas, bool progressed)
     {
+        allowance = MineFlipGas.budget(allowance, type(uint32).max, true);
         bytes memory data = abi.encodeCall(BattleConstructionGameSeed.runDraw, (CEILING, c.word, allowance));
         _cool();
         MineFlipGas.Result memory result = BattleConstructionGameSeed(address(game)).runDraw{gas: supplied}(
@@ -268,9 +269,10 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         bytes memory reason;
         Vm.Gas memory used;
         (ok, used, reason) = paidProbe.run(address(game), MINER, supplied);
-        transactionGas = used.gasTotalUsed + 21_192;
-        if (ok) assertEq(used.gasRefunded, 0, "gross transaction measurement");
-        else {
+        // Completion can now clear the pending slot and earn a refund in this call.
+        // Initial minus remaining gas measures gross execution independently of refunds.
+        transactionGas = uint256(used.gasLimit) - used.gasRemaining + 21_192;
+        if (!ok) {
             // The first mandatory checkpoint bypasses estimates (AUDIT.md).
             // Too little physical gas may exhaust the first worker or its caller-credit tail.
             // It must revert atomically; every probe below verifies that rollback.
@@ -281,7 +283,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         }
     }
 
-    function test_MaxProductionTransactionsPayMinerAndStopBeforeSimulation() public {
+    function test_MaxProductionTransactionsPayMinerAndContinueSettlement() public {
         uint256[4] memory words = [uint256(375906), 402703, 683165, 392095];
         uint256 pristine = vm.snapshotState();
         uint256 largest;
@@ -293,12 +295,12 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
             assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.DailyPhase));
             (bool ok, uint256 used) = _mine(12_000_000);
             assertTrue(ok);
-            assertLt(used, 10_000_000);
+            assertLt(used, 10_000_000, "composed construction/settlement witness remains below 10M");
             (CrapsBattleStorage.JackpotRound memory r,, uint64 settled) =
                 CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
             assertEq(r.drawnCount, 150);
             assertEq(r.started, true);
-            assertEq(settled, 0, "must stop at construction checkpoint");
+            assertGt(settled, 0, "sealing continues into admitted settlement");
             assertGt(coinflip.coinflipAmount(MINER), 0, "include actual miner reward");
             emit log_named_uint("production_word", words[i]);
             emit log_named_uint("production_transaction_gas_including_intrinsic", used);
@@ -449,7 +451,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
     function _roundHash() private view returns (bytes32) {
         (CrapsBattleStorage.JackpotRound memory r, uint256 board, uint64 settled) =
             CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
-        assertEq(settled, 0, "field construction must leave simulation for the next call");
+        assertEq(settled, uint256(r.paidCount) + r.drawnCount, "compare completed outcomes");
         return keccak256(abi.encode(r, board, settled, vm.load(address(coin), bytes32(uint256(1)))));
     }
 
@@ -481,6 +483,17 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
                 assertEq((_round().drawnCount - prior) % 50, 0, "only complete groups may persist");
             }
         } while (!_round().started);
+        // Finish only this battle, using the production draw entry, so state comparisons
+        // include identical settled boards/reserve/fees despite different sealing cursors.
+        vm.etch(address(game), type(BattleConstructionGameSeed).runtimeCode);
+        for (uint256 i; i < 100; ++i) {
+            (,,, bool complete) = JackpotBattle(address(crapsBattle)).jackpotProgress();
+            if (complete) break;
+            MineFlipGas.Result memory result = BattleConstructionGameSeed(address(game)).runDraw{gas: 20_000_000}(
+                CEILING, _round().drawWord, 19_000_000);
+            assertTrue(result.progressed);
+        }
+        vm.etch(address(game), gameCode);
         state = _roundHash();
     }
 
@@ -545,7 +558,8 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         assertTrue(ok);
         assertEq(_round().drawnCount, 150);
         assertEq(_round().started, true);
-        _roundHash();
+        // Preference locking is about the field seal; settlement may already have begun.
+        assertGt(_round().drawCursor, 0);
     }
 
 }
