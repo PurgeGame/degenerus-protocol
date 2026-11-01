@@ -34,7 +34,7 @@ const excluded = {
     "spendDegenesis", // Dedicated Vault restricted-budget control.
     "borrow", "clearDebtNow", // The Vault never takes loans.
     // Direct DGVE-owner controls.
-    "raiseSmurfBaseAllowance", "setLootboxRngThreshold", "setMiddayMaxBasefee", "setThanosLevel",
+    "setLootboxRngThreshold", "setMiddayMaxBasefee", "setThanosLevel",
   ],
   COINFLIP: [
     "armBafDraw", "armDiceRunRecord", "armRecord", "claimCoinflipsFromFlip",
@@ -58,7 +58,7 @@ const excluded = {
   ],
   // Affiliate and Quests hooks: Game, token or Parimutuel authorized. A standalone Affiliate
   // exposes the first set; the Coinflip shell of the profile that hosts it adds both.
-  AFFILIATE: ["payAffiliate", "payAffiliateCombined", "referSmurf"],
+  AFFILIATE: ["payAffiliate", "payAffiliateCombined"],
   QUESTS_SHELL: [
     "awardQuestStreakBonus", "awardQuestStreakShield", "beginAfking", "finalizeAfking",
     "handleAffiliate", "handleDecimator", "handleDegenerette", "handleFlip", "handleFoilPurchase",

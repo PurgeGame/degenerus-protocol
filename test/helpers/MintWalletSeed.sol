@@ -34,17 +34,6 @@ abstract contract MintWalletSeed is GamePurchase {
         _purchaseWith(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, payerId);
     }
 
-    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
-        external
-        payable
-        returns (uint32 smurfId)
-    {
-        return _createSmurf(affiliateCode, payKind);
-    }
-
-    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external {
-        _raiseSmurfBaseAllowance(mainId, newBase);
-    }
 
     function redeemFlip(
         uint32 id,

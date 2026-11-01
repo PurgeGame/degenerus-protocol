@@ -42,7 +42,6 @@ contracts/interfaces/IDegenerusGameModules.sol
 contracts/interfaces/IDegenerusJackpots.sol
 contracts/interfaces/IDegenerusParimutuel.sol
 contracts/interfaces/IDegenerusQuests.sol
-contracts/interfaces/IGameActionModule.sol
 contracts/interfaces/IGameEntryModules.sol
 contracts/interfaces/IJackpotBattle.sol
 contracts/interfaces/ILiquidation.sol
@@ -107,7 +106,6 @@ contracts/modules/GameActionInternals.sol
 contracts/modules/GameActions.sol
 contracts/modules/GameAfkingClaims.sol
 contracts/modules/GameAfkingModule.sol
-contracts/modules/GameAllowanceEntries.sol
 contracts/modules/GameBetEntries.sol
 contracts/modules/GameBingo.sol
 contracts/modules/GameBingoEntries.sol

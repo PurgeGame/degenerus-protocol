@@ -51,7 +51,7 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  *        the uint32 Game wallet ID. Referral words are keyed by the player ID. VAULT and SDGNRS are the constant IDs 1 and 2.
  *
  * @dev SECURITY:
- *      - Access control: payAffiliate / payAffiliateCombined / referSmurf (game only); claim (permissionless settlement)
+ *      - Access control: payAffiliate / payAffiliateCombined (game only); claim (permissionless settlement)
  *      - Referral locking: invalid codes lock slot (REF_CODE_LOCKED sentinel)
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
@@ -179,8 +179,12 @@ contract DegenerusAffiliate {
     /// @notice Thrown when caller is not the game contract.
     error OnlyAuthorized();
 
-    /// @notice Thrown when code creation is given a zero owner or a reserved-range code, or referral bootstrapping a zero player.
+    /// @notice Thrown when code creation is given a zero owner, or referral bootstrapping a zero player.
     error Zero();
+
+    /// @notice Thrown when a custom code is not 1-32 characters of A-Z / 0-9 with at least one
+    ///         letter, left-aligned and zero-padded.
+    error InvalidCode();
 
     /// @notice Invalid bootstrap array lengths or referral configuration.
     error Insufficient();
@@ -294,9 +298,12 @@ contract DegenerusAffiliate {
             ownerId = game.walletIdentityOf_g8516(owner);
             return (ownerId == 0 ? owner : WalletTableLib.ownerOf(ownerId), ownerId, 0);
         }
-        if (uint256(code) >> 32 == ACCOUNT_CODE_TAG >> 32) {
-            ownerId = uint32(uint256(code));
-            if (ownerId == 0 || uint256(game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))) <= ownerId) return (address(0), 0, 0);
+        (bool decimal, uint256 value) = _decimalText(uint256(code));
+        if (decimal || uint256(code) >> 32 == ACCOUNT_CODE_TAG >> 32) {
+            if (!decimal) value = uint32(uint256(code));
+            if (value == 0 || value > type(uint32).max
+                || uint256(game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))) <= value) return (address(0), 0, 0);
+            ownerId = uint32(value);
             return (WalletTableLib.ownerOf(ownerId), ownerId, 0);
         }
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
@@ -394,12 +401,12 @@ contract DegenerusAffiliate {
      *      Creation registers the caller's wallet ID.
      *
      * VALIDATION:
-     * - uint256(code_) >= 2^192 (below it lie the sentinels, the address-derived default
-     *   codes and the default-code referral words)
+     * - 1-32 characters of A-Z or 0-9, at least one letter, left-aligned with only zero
+     *   bytes after the last character (so never an address, ID code or decimal ID text)
      * - kickbackPct <= 25 (max 25% kickback)
      * - code_ not already taken
      *
-     * @param code_ The affiliate code to claim (typically a short string cast to bytes32).
+     * @param code_ The affiliate code to claim (a short string cast to bytes32).
      * @param kickbackPct Percentage of rewards returned to referred players (0-25).
      */
     function createAffiliateCode(bytes32 code_, uint8 kickbackPct) external affiliateContext {
@@ -504,7 +511,8 @@ contract DegenerusAffiliate {
         return bytes32(uint256(uint160(addr)));
     }
 
-    /// @notice Zero-kickback referral code for an allocated account, including a subaccount.
+    /// @notice Zero-kickback referral code for an allocated account. The account's decimal ID
+    ///         as left-aligned ASCII text (e.g. bytes32("42")) resolves to the same account.
     function defaultCodeById(uint32 id) external pure returns (bytes32) {
         return bytes32(ACCOUNT_CODE_TAG | id);
     }
@@ -512,25 +520,6 @@ contract DegenerusAffiliate {
     // =====================================================================
     //                    GAMEPLAY ENTRYPOINTS
     // =====================================================================
-
-    /**
-     * @notice Permanently refer a new smurf through its current main account, with zero kickback.
-     * @dev GAME only, once at creation, after the main's upstream referral was resolved.
-     *      Game validates the ordinary parent and fresh child. Store its current gameplay ID,
-     *      not the address's permanent identity (which may belong to a liquidated main).
-     *      Registers nobody and moves no value. All nonzero referral words are permanent.
-     * @param ownerId The smurf owner's wallet ID.
-     * @param smurfId The new smurf's wallet ID.
-     */
-    function referSmurf(uint32 ownerId, uint32 smurfId) external affiliateContext {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
-        if (ownerId == 0 || smurfId == 0 || ownerId == smurfId
-            || _affiliateStorage().playerReferralCode[ownerId] == bytes32(0) || _affiliateStorage().playerReferralCode[smurfId] != bytes32(0)) {
-            revert Insufficient();
-        }
-        bytes32 word = bytes32(DEFAULT_ID_TAG | ownerId);
-        _setReferral(smurfId, word, word, ownerId);
-    }
 
     /**
      * @notice Process affiliate rewards for a purchase or gameplay action.
@@ -807,7 +796,10 @@ contract DegenerusAffiliate {
     /// @dev Validate a supplied code for `sender` and build its referral word. Returns a zero
     ///      resolution for a sentinel, an unknown code or a self-referral. A default code
     ///      given as an address registers that wallet subject to admission policy. An ID input
-    ///      must name an allocated account. Both formats store the same tagged ID word.
+    ///      (`ACCOUNT_CODE_TAG | id`, or the ID as decimal ASCII text) must name an allocated
+    ///      account; decimal text above uint32 resolves nothing. Every default format stores
+    ///      the same tagged ID word. Decimal text lies above 2^192, so it is tested before the
+    ///      custom-code lookup; custom codes contain a letter and never equal it.
     function _referralTarget(bytes32 code, uint32 senderId)
         private
         returns (uint256 ref, bytes32 word)
@@ -819,17 +811,35 @@ contract DegenerusAffiliate {
             if (id == senderId) return (0, 0);
             return (id, bytes32(DEFAULT_ID_TAG | id));
         }
-        if (c >> 32 == ACCOUNT_CODE_TAG >> 32) {
-            uint32 id = uint32(c);
-            if (id == 0 || id == senderId || uint256(game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))) <= id) return (0, 0);
-            return (id, bytes32(DEFAULT_ID_TAG | id));
+        if (c >> 32 != ACCOUNT_CODE_TAG >> 32) {
+            (bool decimal, uint256 value) = _decimalText(c);
+            if (!decimal) {
+                AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
+                uint32 ownerId = info.ownerId;
+                if (ownerId == 0 || ownerId == senderId) return (0, 0);
+                return (uint256(ownerId) | (uint256(info.kickback) << 32), code);
+            }
+            if (value > type(uint32).max) return (0, 0);
+            c = value;
         }
-        AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
-        uint32 ownerId = info.ownerId;
-        if (ownerId == 0 || ownerId == senderId) {
-            return (0, 0);
+        uint32 accountId = uint32(c);
+        if (accountId == 0 || accountId == senderId
+            || uint256(game.extsload_g2807007(bytes32(WalletTableLib.OWNERS_SLOT))) <= accountId) return (0, 0);
+        return (accountId, bytes32(DEFAULT_ID_TAG | accountId));
+    }
+
+    /// @dev Parse a left-aligned ASCII decimal word (digits, then zero bytes). `decimal` is false
+    ///      for any other content, including an interior zero byte.
+    function _decimalText(uint256 c) private pure returns (bool decimal, uint256 value) {
+        unchecked {
+            while (c != 0) {
+                uint256 d = (c >> 248) - 0x30;
+                if (d > 9) return (false, 0);
+                value = value * 10 + d;
+                c <<= 8;
+            }
         }
-        return (uint256(ownerId) | (uint256(info.kickback) << 32), code);
+        return (true, value);
     }
 
     /// @dev Owner ID and kickback of an existing custom code.
@@ -1150,9 +1160,22 @@ contract DegenerusAffiliate {
         uint8 kickbackPct
     ) private {
         if (owner == address(0)) revert Zero();
-        // SECURITY: Codes below 2^192 are the sentinels, the address-derived default codes and
-        // the default-code referral words; none may be claimed.
-        if (uint256(code_) < DEFAULT_WORD_END) revert Zero();
+        // SECURITY: A custom code is 1-32 characters of A-Z / 0-9 with at least one letter,
+        // left-aligned and zero-padded: its first byte puts it above every sentinel, address,
+        // ID code and referral word, and its letter separates it from decimal ID text.
+        {
+            uint256 rest = uint256(code_);
+            bool letter;
+            unchecked {
+                while (rest != 0) {
+                    uint256 b = rest >> 248;
+                    if (b - 0x41 < 26) letter = true;
+                    else if (b - 0x30 > 9) revert InvalidCode();
+                    rest <<= 8;
+                }
+            }
+            if (!letter) revert InvalidCode();
+        }
         // SECURITY: Cap kickback to prevent affiliate from giving away all rewards.
         if (kickbackPct > MAX_KICKBACK_PCT) revert InvalidKickback();
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code_];

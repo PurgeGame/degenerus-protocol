@@ -5,7 +5,6 @@ interface IGameClaimAll { function claimClaimable(uint32 id) external; }
 interface IGameClaimAmount { function claimWinnings(uint32 id, uint256 amount) external; }
 
 interface IGameActionModule {
-    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
     function drainAffiliateBases(uint256 ids, uint256 uplines) external returns (uint256, uint256, uint256);
     function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
     function registerWalletIdentity(address owner) external returns (uint32 id);

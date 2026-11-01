@@ -37,7 +37,6 @@ library VaultPlayerActions {
                 || selector == IDegenerusGame.betDegenerette.selector
                 || selector == IDegenerusGame.reverseFlip.selector || selector == IDegenerusGame.decurse.selector
                 || selector == IDegenerusGame.smite.selector || selector == IDegenerusGame.giveBoon.selector
-                || selector == IDegenerusGame.createSmurf.selector
                 || selector == IDegenerusGame.setOperatorApproval.selector
                 || selector == IDegenerusGame.sweepAccounts.selector
                 || selector == IDegenerusGame.depositAfkingFunding.selector

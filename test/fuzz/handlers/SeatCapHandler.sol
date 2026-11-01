@@ -7,7 +7,6 @@ import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToke
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
-import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../../helpers/GameSlots.sol";
 
 /// @title SeatCapHandler — drives seats and subscriptions on a real deploy and keeps an
@@ -31,30 +30,26 @@ contract SeatCapHandler is Test {
     uint32 internal constant SDGNRS_ID = 2;
     uint256 internal constant CAP = 2000;
     uint256 internal constant N_WALLETS = 10;
-    uint256 internal constant MAX_SMURFS = 8;
     bytes4 internal constant NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 internal constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
 
     uint256 internal constant A_PASS = 0;
-    uint256 internal constant A_SMURF = 1;
-    uint256 internal constant A_APPROVE = 2;
-    uint256 internal constant A_VMINT = 3;
-    uint256 internal constant A_FFWD = 4;
-    uint256 internal constant A_SUB = 5;
-    uint256 internal constant A_UNDERFUND = 6;
-    uint256 internal constant A_VAULTSUB = 7;
-    uint256 internal constant A_XFER = 8;
-    uint256 internal constant A_DAY = 9;
-    uint256 internal constant A_MINE = 10;
-    uint256 public constant N_ACTIONS = 11;
+    uint256 internal constant A_APPROVE = 1;
+    uint256 internal constant A_VMINT = 2;
+    uint256 internal constant A_FFWD = 3;
+    uint256 internal constant A_SUB = 4;
+    uint256 internal constant A_UNDERFUND = 5;
+    uint256 internal constant A_VAULTSUB = 6;
+    uint256 internal constant A_XFER = 7;
+    uint256 internal constant A_DAY = 8;
+    uint256 internal constant A_MINE = 9;
+    uint256 public constant N_ACTIONS = 10;
 
     address[] public wallets;
     address public immutable op;
     address public immutable vaultOp;
     address public immutable phantom;
 
-    uint32[] public smurfIds;
-    mapping(uint32 => address) public smurfOwner;
     mapping(uint32 => bool) public opApproved;
 
     // ── ghost seat model ──
@@ -234,36 +229,26 @@ contract SeatCapHandler is Test {
         uint32 callId;
     }
 
-    /// @dev Pick an account and an authorized caller for it: a wallet itself, a smurf's owner,
-    ///      or `op` where approved.
+    /// @dev Pick an account and an authorized caller for it: the wallet itself, or `op` where
+    ///      approved.
     function _pick(uint256 seed) internal view returns (Acct memory a) {
         // Bits 0..7 pick the account, 8..15 the operator route, bit 16 the self-call form.
-        uint256 nS = smurfIds.length;
-        uint256 i = (seed & 0xff) % (N_WALLETS + nS);
+        uint256 i = (seed & 0xff) % N_WALLETS;
         bool viaOp = ((seed >> 8) & 0xff) % 3 == 0;
-        if (i < N_WALLETS) {
-            a.key = wallets[i];
-            a.payee = a.key;
-            a.id = game.walletIdOf_g3120(a.key);
-            a.caller = a.key;
-            a.callId = ((seed >> 16) & 1 == 0) ? 0 : a.id;
-            if (viaOp && a.id != 0 && opApproved[a.id]) {
-                a.caller = op;
-                a.callId = a.id;
-            }
-        } else {
-            a.id = smurfIds[i - N_WALLETS];
-            a.key = address(0);
-            a.payee = smurfOwner[a.id];
-            a.caller = a.payee;
+        a.key = wallets[i];
+        a.payee = a.key;
+        a.id = game.walletIdOf_g3120(a.key);
+        a.caller = a.key;
+        a.callId = ((seed >> 16) & 1 == 0) ? 0 : a.id;
+        if (viaOp && a.id != 0 && opApproved[a.id]) {
+            a.caller = op;
             a.callId = a.id;
-            if (viaOp && opApproved[a.id]) a.caller = op;
         }
     }
 
     /// @dev Like `_pick`, but walks forward to an account with a live run when one exists.
     function _pickLive(uint256 seed) internal view returns (Acct memory a) {
-        uint256 total = N_WALLETS + smurfIds.length;
+        uint256 total = N_WALLETS;
         for (uint256 k; k < total; ++k) {
             uint256 sd = (seed & ~uint256(0xff)) | (((seed & 0xff) + k) % total);
             a = _pick(sd);
@@ -274,7 +259,7 @@ contract SeatCapHandler is Test {
 
     /// @dev Like `_pick`, but walks forward to an account that is live or whose payee holds a seat.
     function _pickUseful(uint256 seed) internal view returns (Acct memory a) {
-        uint256 total = N_WALLETS + smurfIds.length;
+        uint256 total = N_WALLETS;
         for (uint256 k; k < total; ++k) {
             uint256 sd = (seed & ~uint256(0xff)) | (((seed & 0xff) + k) % total);
             a = _pick(sd);
@@ -301,13 +286,12 @@ contract SeatCapHandler is Test {
 
     // ═════════════════════════ actions ═════════════════════════
 
-    /// @notice A wallet (self) or a smurf (its owner paying) buys a pass; a free seat, if any,
-    ///         must reach the payee.
+    /// @notice A wallet buys a pass for its own account; a free seat, if any, must reach the payee.
     function passPurchase(uint256 seed) external {
         ++calls[A_PASS];
         Acct memory a = _pick(seed);
         uint32 callId = a.id == 0 ? 0 : (a.caller == a.key ? 0 : a.id);
-        address caller = a.payee; // the wallet itself or the smurf's owner pays
+        address caller = a.payee; // the wallet itself pays
         uint256 free0 = token.freeClaims();
         _fund(caller, 3 ether);
         bool ok;
@@ -331,26 +315,7 @@ contract SeatCapHandler is Test {
         _checkLive();
     }
 
-    function createSmurf(uint256 seed) external {
-        ++calls[A_SMURF];
-        if (smurfIds.length >= MAX_SMURFS) return;
-        address owner = wallets[seed % N_WALLETS];
-        if (game.walletIdOf_g3120(owner) == 0) return;
-        uint256 price = game.mintPrice();
-        _fund(owner, price);
-        vm.prank(owner);
-        try game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth) returns (uint32 sid) {
-            smurfIds.push(sid);
-            smurfOwner[sid] = owner;
-            ++oks[A_SMURF];
-        } catch (bytes memory r) {
-            _noteRevert(A_SMURF, r);
-        }
-        _syncMints(0, token.freeClaims());
-        _checkLive();
-    }
-
-    /// @notice A wallet approves (or revokes) `op` for its own ID or for one of its smurfs.
+    /// @notice A wallet approves (or revokes) `op` for its own ID.
     function approveOperator(uint256 seed) external {
         ++calls[A_APPROVE];
         Acct memory a = _pick(seed);
@@ -439,8 +404,8 @@ contract SeatCapHandler is Test {
         gFree += k;
     }
 
-    /// @notice New run, change or cancel of a wallet or smurf, by its key, its owner or an
-    ///         approved operator.
+    /// @notice New run, change or cancel of a wallet's account, by its key or an approved
+    ///         operator.
     function subscribe(uint256 seed) external {
         ++calls[A_SUB];
         Acct memory a = (seed >> 56) % 5 == 0 ? _pick(seed) : _pickUseful(seed);
@@ -593,7 +558,6 @@ contract SeatCapHandler is Test {
     function _recipient(uint256 seed) internal view returns (address) {
         uint256 k = seed % 5;
         if (k == 0) return phantom;
-        if (k == 1 && smurfIds.length != 0) return smurfOwner[smurfIds[(seed >> 8) % smurfIds.length]];
         if (k == 2) return address(vault);
         return wallets[(seed >> 8) % N_WALLETS];
     }
@@ -715,7 +679,6 @@ contract SeatCapHandler is Test {
 
     function actionName(uint256 a) external pure returns (string memory) {
         if (a == A_PASS) return "passPurchase";
-        if (a == A_SMURF) return "createSmurf";
         if (a == A_APPROVE) return "approveOperator";
         if (a == A_VMINT) return "vaultMint";
         if (a == A_FFWD) return "fastForward";

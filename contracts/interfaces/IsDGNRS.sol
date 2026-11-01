@@ -56,7 +56,7 @@ interface IsDGNRS {
 
     /// @notice Transfer sDGNRS from a pool to a recipient
     /// @dev Restricted to the game contract. Game passes the recipient account's payee (an
-    ///      ordinary wallet's own address, or a smurf's owner), never a smurf key.
+    ///      ordinary wallet's own address, or an acquired account's lender), never a former borrower.
     /// @param pool Pool identifier to transfer from
     /// @param to Recipient address
     /// @param amount Amount of sDGNRS to transfer
@@ -82,8 +82,8 @@ interface IsDGNRS {
     /// @notice Claim account `id`'s gambling-burn redemption in batch `batchId` once the game is
     ///         over (live batches settle through the miner).
     /// @dev Authorized: `id == 0` is the caller (ID from Game.walletIdOf); a nonzero
-    ///      `id` needs Game `resolveAccount_g7029(id, msg.sender).authorized` (the account's key, a
-    ///      smurf's owner, or an approved operator), except an acquired account, which anyone may
+    ///      `id` needs Game `resolveAccount_g7029(id, msg.sender).authorized` (the account's
+    ///      payee or an approved operator), except an acquired account, which anyone may
     ///      claim. Pays the account's PAYEE directly in ETH/stETH: the rolled share of a resolved
     ///      batch, or the game-over value for the batch still open at game over. No lootbox or
     ///      FLIP leg.

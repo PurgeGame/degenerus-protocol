@@ -52,8 +52,8 @@ interface IDegenerusCoin {
     /// @notice Burn FLIP during an active Decimator window for account `id`'s weighted entry.
     /// @dev Authorized: `id == 0` is the caller (no Game resolution call; on a first burn the
     ///      caller registers through Game `registerWallet_g9539(msg.sender, true)`, a paying action). A
-    ///      nonzero `id` needs Game `resolveAccount_g7029(id, msg.sender).authorized` (the account's key,
-    ///      a smurf's owner, or an approved operator). The FLIP burns from the account's PAYEE
+    ///      nonzero `id` needs Game `resolveAccount_g7029(id, msg.sender).authorized` (the account's
+    ///      payee or an approved operator). The FLIP burns from the account's PAYEE
     ///      (wallet balance, then the payee's settled coinflip winnings for a shortfall); the
     ///      quest, boon, activity multiplier and the Decimator entry (`recordDecBurn_g1271(id, ...)`)
     ///      belong to the account.

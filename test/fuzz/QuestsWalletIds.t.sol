@@ -350,12 +350,12 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.prank(o);
         affiliate.referPlayer(bytes32(uint256(uint160(up))));
         vm.prank(o);
-        affiliate.createAffiliateCode(bytes32("QA_CODE"), 0);
+        affiliate.createAffiliateCode(bytes32("QACODE"), 0);
         vm.prank(b);
-        affiliate.referPlayer(bytes32("QA_CODE"));
+        affiliate.referPlayer(bytes32("QACODE"));
         uint32[2] memory expected = [game.walletIdOf_g3120(o), upid];
         for (uint8 cls; cls < 2; ++cls) {
-            uint32 sid = _canonicalSenderFor(b, bytes32("QA_CODE"), cls);
+            uint32 sid = _canonicalSenderFor(b, bytes32("QACODE"), cls);
             vm.record();
             vm.startStateDiffRecording();
             vm.prank(address(game));
@@ -549,12 +549,12 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.prank(o);
         affiliate.referPlayer(bytes32(uint256(uint160(up))));
         vm.prank(o);
-        affiliate.createAffiliateCode(bytes32("LQ_CODE"), 0);
+        affiliate.createAffiliateCode(bytes32("LQCODE"), 0);
         vm.prank(b);
-        affiliate.referPlayer(bytes32("LQ_CODE"));
+        affiliate.referPlayer(bytes32("LQCODE"));
         _eligible(up, false, 5);
         _setLevelQuest(QT_AFFILIATE);
-        uint32 sid = _canonicalSenderFor(b, bytes32("LQ_CODE"), 1);
+        uint32 sid = _canonicalSenderFor(b, bytes32("LQCODE"), 1);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(address(game));

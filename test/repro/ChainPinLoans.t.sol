@@ -4,27 +4,12 @@ pragma solidity 0.8.38;
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {SeizureGasSeeder, LoanSeizureGasBase} from "../gas/LoanSeizureGas.t.sol";
 
-interface IChainPinDeityMint {
-    function mint(address to, uint256 tokenId) external;
-}
-
-/// @dev SeizureGasSeeder plus: a deity pass forced onto any account (a purchase allows one per
-///      smurf group, so a family holding several passes is only reachable by seeding it) and a
-///      claimable-only balance setter for steering the lender choice.
+/// @dev SeizureGasSeeder plus a claimable-only balance setter for steering the lender choice.
 contract ChainPinLoanSeeder is SeizureGasSeeder {
-    function forceDeity(uint32 id, uint8 symbol) external {
-        mintPacked_[id] = mintPacked_[id] | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
-        deityBySymbol[symbol] = id;
-        _pushDeityId(id);
-        IChainPinDeityMint(ContractAddresses.DEITY_PASS).mint(_payee(_walletElement(id)), symbol);
-    }
-
     function setClaimable(uint32 id, uint128 claimable) external {
         uint256 old = balancesPacked[id];
         uint128 oldBacked = uint128(old) > 1 ? uint128(old) - 1 : 0;
@@ -36,24 +21,20 @@ contract ChainPinLoanSeeder is SeizureGasSeeder {
 
 /// @notice Loan seizure has no failure isolation: the live SeizeLoans stage and the game-over loan
 ///         stage both run `GameOverModule.seizeLoan`, so a deterministic revert in it (burn,
-///         subscription cancel, DeityPass.seize InvalidToken, an already-seized smurf) would block
-///         the chain. These pins run the worst reachable families through both stages and assert
-///         every mineFlip succeeds and the stage completes with the right ownership.
+///         subscription cancel, DeityPass.seize InvalidToken) would block the chain. These pins run
+///         the heaviest accounts (an active AFKing run, a deity pass and native sDGNRS each) owed
+///         to both lenders through both stages and assert every mineFlip succeeds and the stage
+///         completes with the right ownership.
 contract ChainPinLoansTest is LoanSeizureGasBase {
     uint8 private constant ACTION_SEIZE_LOANS = 19;
     uint256 private constant GO_LOAN_STEP_SHIFT = 64;
     uint32 private constant VAULT_ID = 1;
     uint32 private constant SDGNRS_ID = 2;
 
-    uint32[5] private kids;
+    address private other;
+    uint32 private second;
 
     function _pin() private view returns (ChainPinLoanSeeder) { return ChainPinLoanSeeder(address(game)); }
-
-    function _forceDeity(uint32 id, uint8 symbol) private {
-        _etch();
-        _pin().forceDeity(id, symbol);
-        _unetch();
-    }
 
     function _setClaimable(uint32 id, uint128 amount) private {
         _etch();
@@ -93,26 +74,32 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
     function _borrowFromVault(address who, uint32 id, uint24 due) private {
         _setClaimable(SDGNRS_ID, 1 ether);
         _borrowAs(who, id, due);
+        assertEq(lens.loanOf(address(game), id).lenderId, VAULT_ID, "the Vault lent");
         _setClaimable(SDGNRS_ID, 500 ether);
     }
 
-    /// @dev A subscribed main with five subscribed smurfs, a (forced) deity pass on every account,
-    ///      native sDGNRS on the main's wallet, and the Vault enabled as the second lender.
-    function _prepareFamily() private {
+    /// @dev `who` subscribed to AFKing, holding the deity pass on `symbol` and native sDGNRS.
+    function _loadAccount(address who, uint32 id, uint8 symbol) private {
+        uint256 seat = _grantSeat(who);
+        vm.prank(who);
+        game.subscribe{value: 2 ether}(id, false, 1, seat);
+        vm.prank(who);
+        game.purchaseDeityPass{value: 300 ether}(id, symbol, bytes32(0));
+        vm.prank(address(game));
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, who, 1e15);
+    }
+
+    /// @dev Two loaded accounts (the base borrower's and a second wallet's) and the Vault enabled
+    ///      as the second lender.
+    function _prepare() private {
         _setUpBase();
         seeder = address(new ChainPinLoanSeeder());
-        vm.prank(address(game));
-        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, borrower, 1e15);
-        _sub(root);
-        for (uint256 i; i < 5; ++i) {
-            uint256 price = game.mintPrice();
-            vm.prank(borrower);
-            kids[i] = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-            _sub(kids[i]);
-        }
-        _forceDeity(root, 10);
-        for (uint256 i; i < 5; ++i) _forceDeity(kids[i], uint8(11 + i));
-        _seedLevel(kids[0], 8, 400);
+        other = makeAddr("pin-second-borrower");
+        vm.deal(other, 1_000 ether);
+        second = _giveWalletId(other);
+        _seedLevel(second, 8, 400);
+        _loadAccount(borrower, root, 10);
+        _loadAccount(other, second, 31);
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 1 ether)), 0);
         _etch();
@@ -134,60 +121,52 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
         assertTrue(game.nextMinerAction() != ACTION_SEIZE_LOANS, "the seizure stage completed");
     }
 
-    /// @dev The main and four smurfs went to sDGNRS with their passes; kid 0 went to the Vault with its own.
-    function _assertFamilyOwnership(bool kid0ToVault) private view {
-        assertFalse(_open(root), "main loan closed");
-        assertEq(_payeeOf(root), address(sdgnrs), "main to its lender");
-        assertEq(sdgnrs.balanceOf(borrower), 0, "native sDGNRS burned");
-        assertEq(deityPass.ownerOf(10), address(sdgnrs), "main's pass follows it");
-        for (uint256 i; i < 5; ++i) {
-            bool toVault = kid0ToVault && i == 0;
-            assertEq(_payeeOf(kids[i]), toVault ? address(vault) : address(sdgnrs), "smurf follows its lender");
-            assertEq(deityPass.ownerOf(11 + i), toVault ? address(vault) : address(sdgnrs), "smurf pass follows");
-        }
+    function _assertSeized(uint32 id, address seller, uint8 symbol, address lender) private view {
+        assertFalse(_open(id), "loan closed");
+        assertEq(_payeeOf(id), lender, "account to its lender");
+        assertEq(sdgnrs.balanceOf(seller), 0, "native sDGNRS burned");
+        assertEq(game.walletIdOf_g3120(seller), 0, "seller's default ID cleared");
+        assertEq(deityPass.ownerOf(symbol), lender, "the pass follows its account");
+        (, , bool sellerAuth) = game.resolveAccount_g7029(id, seller);
+        assertFalse(sellerAuth, "the seller lost control");
     }
 
     // ---------------------------------------------------------------- live SeizeLoans
 
-    /// @dev S1 F6 / S4 F5 (b): smurf 0 seized to the Vault first, then its main (five more passes, six
-    ///      subscription runs, native sDGNRS) in the same stage; the seized smurf is skipped.
-    function test_LiveSeizure_MainWithFiveDeitySmurfsOneAlreadySeizedToTheOtherLender() public {
-        _prepareFamily();
-        _borrowFromVault(borrower, kids[0], 1);
-        _starve(kids[0]);
+    function test_LiveSeizure_BothLendersInOneStage() public {
+        _prepare();
+        _borrowFromVault(other, second, 1);
+        _starve(second);
         _borrowAs(borrower, root, 1);
         _starve(root);
         _seizeLive(1);
-        assertFalse(_open(kids[0]), "smurf loan closed");
-        _assertFamilyOwnership(true);
+        _assertSeized(second, other, 31, address(vault));
+        _assertSeized(root, borrower, 10, address(sdgnrs));
     }
 
-    /// @dev Reverse list order: the main's seizure takes the whole family first, then the smurf's own
-    ///      loan defaults to its own lender and its pass moves on.
-    function test_LiveSeizure_MainFirstThenItsSmurfsOwnLoanInTheSameStage() public {
-        _prepareFamily();
+    function test_LiveSeizure_BothLendersInReverseListOrder() public {
+        _prepare();
         _borrowAs(borrower, root, 1);
         _starve(root);
-        _borrowFromVault(borrower, kids[0], 1);
-        _starve(kids[0]);
+        _borrowFromVault(other, second, 1);
+        _starve(second);
         _seizeLive(1);
-        assertFalse(_open(kids[0]), "smurf loan closed");
-        _assertFamilyOwnership(true);
+        _assertSeized(root, borrower, 10, address(sdgnrs));
+        _assertSeized(second, other, 31, address(vault));
     }
 
-    /// @dev A smurf-only loan that comes due after its main's seizure.
-    function test_LiveSeizure_SmurfOnlyLoanAfterItsMainsSeizure() public {
-        _prepareFamily();
+    function test_LiveSeizure_LaterLoanAfterAnEarlierSeizure() public {
+        _prepare();
         _borrowAs(borrower, root, 1);
         _starve(root);
-        _borrowFromVault(borrower, kids[0], 2);
-        _starve(kids[0]);
+        _borrowFromVault(other, second, 2);
+        _starve(second);
         _seizeLive(1);
-        assertTrue(_open(kids[0]), "the smurf loan is not due yet");
-        _assertFamilyOwnership(false);
+        assertTrue(_open(second), "the other loan is not due yet");
+        assertEq(_payeeOf(second), other);
+        _assertSeized(root, borrower, 10, address(sdgnrs));
         _seizeLive(2);
-        assertFalse(_open(kids[0]), "smurf loan closed");
-        _assertFamilyOwnership(true);
+        _assertSeized(second, other, 31, address(vault));
     }
 
     // ---------------------------------------------------------------- game-over loan stage
@@ -206,12 +185,12 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
         return 0;
     }
 
-    /// @dev S4 F5 (a): the terminal latch with the same family plus loans at the near and far ends
-    ///      of the due scan. The decision call latches, the next call settles the whole book.
-    function test_TerminalLatch_SettlesTheDeityFamilyAndTheHorizonEdge() public {
-        _prepareFamily();
-        _borrowFromVault(borrower, kids[0], 1);
-        _starve(kids[0]);
+    /// @dev The terminal latch with both loaded accounts plus loans at the near and far ends of the
+    ///      due scan. The decision call latches, the next call settles the whole book.
+    function test_TerminalLatch_SettlesBothLendersAndTheHorizonEdge() public {
+        _prepare();
+        _borrowFromVault(other, second, 1);
+        _starve(second);
         _borrowAs(borrower, root, 1);
         _starve(root);
 
@@ -240,8 +219,8 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
         game.mineRun(0);
         assertEq(_loanStep(), 0, "one call finishes the book");
 
-        assertFalse(_open(kids[0]), "smurf loan closed");
-        _assertFamilyOwnership(true);
+        _assertSeized(second, other, 31, address(vault));
+        _assertSeized(root, borrower, 10, address(sdgnrs));
         assertFalse(_open(mid), "mid-horizon loan closed");
         assertFalse(_open(edge), "far-horizon loan closed");
         assertEq(_payeeOf(mid), address(sdgnrs));

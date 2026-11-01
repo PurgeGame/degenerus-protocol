@@ -171,10 +171,10 @@ awards no seats for window days before `MAIN_LAUNCH_DAY`, so paid seats share th
 pass reservations before day 3 are refused and `deliverPasses` clamps to day 3.
 
 **Terminal.** Game-over setup first runs `splitDegenesis()` over all cohorts (idempotent). After the
-deity-refund budget and before `gameOver` is set, it zeroes `degenesisVaultBudget` and sDGNRS's
-whole AFKing balance and subtracts them from `claimablePool`, so they join the final prizes
-(`DegenesisFundsReleased`); the missing-randomness check counts them as distributable. Unresolved
-orders are forfeited: `degenesisActive` clears with the terminal inventory burn.
+deity-refund step (deterministic ending below level 10 only) and before `gameOver` is set, it zeroes
+`degenesisVaultBudget` and sDGNRS's whole AFKing balance and subtracts them from `claimablePool`,
+so they join the final prizes (`DegenesisFundsReleased`); the missing-randomness check counts them
+as distributable. Unresolved orders are forfeited: `degenesisActive` clears with the terminal inventory burn.
 
 ## Purchase timing and pool acceleration
 
@@ -186,10 +186,13 @@ pool, 23% to ETH prizes, and 2% to the insurance accumulator. These are 3%, 0.92
 future pool respectively, before integer rounding. Unpaid ETH stays in the future pool. Level 0
 (`purchaseLevel == 1`) runs a FLIP-only daily path instead of this ETH drip.
 
-At the purchase-to-jackpot transition, the base next-to-future skim uses the elapsed purchase age in
-logical days directly. For levels after 0:
+At the purchase-to-jackpot transition, the base next-to-future skim uses the funding age: the
+purchase age, in logical days, at which the closure latched. An early closure at age 0 or 1
+consolidates on its latch day. A closure latched at the last-purchase seal consolidates one logical
+day later, so the skim steps a consolidation age above 1 back by one day; a day-0 seal reads as age
+1, the same shelf. For levels after 0:
 
-| Purchase age | Base skim |
+| Funding age | Base skim |
 | --- | --- |
 | Days 0–1 | 45% + level bonus |
 | Day 2 | 35% + level bonus |
@@ -203,9 +206,9 @@ so day 30 reaches the exact endpoint. If a funded transition finishes later, the
 continues up to a 100% base-rate ceiling. The x9 bonus (2 points), ratio adjustment, overshoot
 surcharge, randomness, 1% insurance skim, and 80% cap on the actual future-pool take apply on top.
 
-The level-0 transition (`purchaseLevel == 1`) uses its own curve: 30% through day 8, down to 13% on
-day 21, back to 30% on day 35, then +0.14 percentage points per day. An x01 transition in a later
-century uses the curve in the table.
+The level-0 transition (`purchaseLevel == 1`) uses its own curve by funding age: 30% through day 8,
+down to 13% on day 21, back to 30% on day 35, then +0.14 percentage points per day. An x01
+transition in a later century uses the curve in the table.
 
 ## AFKing subscriptions
 
@@ -513,8 +516,8 @@ into the newer buffer; its record and tagged draw still support unexpired match/
 old-level Bingo eligibility has expired at the same retirement boundary.
 
 `EntriesQueued` (with its scaled and range variants) identifies the wallet ID and level when entries
-are queued. `WalletRegistered` fires once per wallet ID registered to an address and `SmurfCreated`
-once per subaccount ID; an account uses the same ID across levels. The Lens exposes `walletIdOf` and
+are queued. `WalletRegistered` fires once per wallet ID registered to an address; an account uses
+the same ID across levels. The Lens exposes `walletIdOf` and
 `walletOfId` for direct identity lookup. Pending balances are separate: near balances share one
 reusable word per wallet ID: even/odd levels each have read/write lanes and an absolute-level tag. A
 parity can be rebound only after both balances clear. Near queues reuse two roots per cohort.
@@ -531,8 +534,8 @@ at least 0.04 ETH (`PAID_ADMISSION_MIN_SPEND`), whether funded by ETH, claimable
 AFKing or FLIP: a purchase counts its nominal ticket cost (before bonus entries) plus its box cost,
 a FLIP-paid ticket leg counts its ticket cost, and passes, foil packs, Degenerette bets, Degenesis
 boxes and AFKing subscriptions count their price or payment. Purchase overpayment does not count.
-Registrations with no quoted spend (protocol-contract hooks, mid-day credit) and smurf creation
-below a 0.04 ETH ticket price revert beyond the threshold. Existing IDs are unaffected; there is no
+Registrations with no quoted spend (protocol-contract hooks, mid-day credit) revert beyond the
+threshold. Existing IDs are unaffected; there is no
 registration fee.
 
 ## Trait events and generation bounds

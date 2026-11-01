@@ -75,15 +75,15 @@ library GameSlots {
     uint256 internal constant DEC_ENTRIES_LEVEL_OFFSET = 24;
     uint256 internal constant FOIL_SLOT_RETAINED = 41;
     uint256 internal constant FOIL_SLOT_RETAINED_OFFSET = 19;
-    uint256 internal constant LOANS = 63;
-    uint256 internal constant LOANS_DUE = 64;
-    uint256 internal constant LOANS_DUE_COUNT = 65;
+    uint256 internal constant LOANS = 62;
+    uint256 internal constant LOANS_DUE = 63;
+    uint256 internal constant LOANS_DUE_COUNT = 64;
     uint256 internal constant DAILY_TICKET_BUDGETS_PACKED = 5;
     uint256 internal constant BALANCES_PACKED = 6;
-    uint256 internal constant LVL_TRAIT_ENTRY = 70;
+    uint256 internal constant LVL_TRAIT_ENTRY = 69;
     uint256 internal constant MINT_PACKED = 7;
     uint256 internal constant WALLET_IDS = 61;
-    uint256 internal constant RNG_WORD_BY_DAY = 588;
+    uint256 internal constant RNG_WORD_BY_DAY = 587;
     uint256 internal constant PRIZE_POOL_PENDING_PACKED = 8;
     uint256 internal constant TICKET_QUEUE = 9;
     uint256 internal constant WALLETS = 10;
@@ -107,14 +107,14 @@ library GameSlots {
     uint256 internal constant DEGENESIS_VAULT_BUDGET = 12;
     uint256 internal constant DEGENESIS_CREDIT = 13;
     uint256 internal constant GAME_OVER_STATE_PACKED = 14;
-    uint256 internal constant DEGENERETTE_QUEUE = 844;
+    uint256 internal constant DEGENERETTE_QUEUE = 843;
     uint256 internal constant OPERATOR_APPROVALS = 15;
-    uint256 internal constant LEVEL_PRIZE_POOL = 590;
+    uint256 internal constant LEVEL_PRIZE_POOL = 589;
     uint256 internal constant PLAYER_CLAIM_WORD = 16;
     uint256 internal constant LEVEL_DGNRS_PACKED = 17;
     uint256 internal constant DEITY_PASS_PRICE_PAID = 18;
     uint256 internal constant DEITY_PASS_IDS = 19;
-    uint256 internal constant DEITY_BY_SYMBOL = 596;
+    uint256 internal constant DEITY_BY_SYMBOL = 595;
     uint256 internal constant DEGENESIS_ACTIVE = 20;
     uint256 internal constant VRF_COORDINATOR = 21;
     uint256 internal constant VRF_REQUEST_ID = 21;
@@ -129,14 +129,14 @@ library GameSlots {
     uint256 internal constant LOOTBOX_EV_CAP_PACKED = 29;
     uint256 internal constant DEC_BATTLE_ENTRIES = 30;
     uint256 internal constant DEC_BATTLE_ROUNDS = 31;
-    uint256 internal constant DEC_BATTLE_HEAP = 628;
+    uint256 internal constant DEC_BATTLE_HEAP = 627;
     uint256 internal constant DEC_BATTLE_PLAYERS = 32;
-    uint256 internal constant DAILY_HERO_WAGERS = 582;
+    uint256 internal constant DAILY_HERO_WAGERS = 581;
     uint256 internal constant YIELD_ACCUMULATOR = 33;
     uint256 internal constant CENTURY_BONUS_USED = 34;
     uint256 internal constant DEITY_PASS_SALES = 35;
-    uint256 internal constant PROTOCOL_BOON_POOLS = 832;
-    uint256 internal constant PROTOCOL_BOON_ENTRIES = 836;
+    uint256 internal constant PROTOCOL_BOON_POOLS = 831;
+    uint256 internal constant PROTOCOL_BOON_ENTRIES = 835;
     uint256 internal constant BOON_PACKED = 36;
     uint256 internal constant SUB_META = 37;
     uint256 internal constant SUBSCRIBERS = 38;
@@ -161,11 +161,11 @@ library GameSlots {
     uint256 internal constant AFKING_PROTOCOL_FLAGS_OFFSET = 26;
     uint256 internal constant AFKING_ENDPOINT_DAY = 39;
     uint256 internal constant AFKING_ENDPOINT_DAY_OFFSET = 27;
-    uint256 internal constant BOX_QUEUE = 840;
-    uint256 internal constant FOIL_RECORD = 828;
+    uint256 internal constant BOX_QUEUE = 839;
+    uint256 internal constant FOIL_RECORD = 827;
     uint256 internal constant FOIL_MATCH_CLAIMED = 40;
-    uint256 internal constant DAILY_FOIL_DRAW = 594;
-    uint256 internal constant FOIL_QUEUE = 842;
+    uint256 internal constant DAILY_FOIL_DRAW = 593;
+    uint256 internal constant FOIL_QUEUE = 841;
     uint256 internal constant FOIL_CURSOR = 41;
     uint256 internal constant FOIL_GENERATION_DAY = 41;
     uint256 internal constant FOIL_GENERATION_DAY_OFFSET = 4;
@@ -195,12 +195,12 @@ library GameSlots {
     uint256 internal constant DEAD_UNCREATED = 48;
     uint256 internal constant DEAD_UNCREATED_OFFSET = 14;
     uint256 internal constant DEAD_CREATED = 48;
-    uint256 internal constant DEAD_CREATED_OFFSET = 22;
+    uint256 internal constant DEAD_CREATED_OFFSET = 24;
     uint256 internal constant DEAD_POT = 49;
     uint256 internal constant DEAD_TOTAL = 49;
-    uint256 internal constant DEAD_TOTAL_OFFSET = 16;
+    uint256 internal constant DEAD_TOTAL_OFFSET = 12;
     uint256 internal constant DEAD_UNCREATED_LEFT = 49;
-    uint256 internal constant DEAD_UNCREATED_LEFT_OFFSET = 24;
+    uint256 internal constant DEAD_UNCREATED_LEFT_OFFSET = 22;
     uint256 internal constant DEAD_CLAIMED = 50;
     uint256 internal constant DEC_BATTLE_QUEUE = 51;
     uint256 internal constant TRAIT_BUCKET_LIVE = 52;
@@ -212,10 +212,10 @@ library GameSlots {
     uint256 internal constant DEC_PREVIOUS_COUNT_OFFSET = 8;
     uint256 internal constant DEC_JACKPOT_PLANS = 59;
     uint256 internal constant DEC_GENERATED_OWNERS = 60;
-    uint256 internal constant DEGENESIS_WORD = 66;
-    uint256 internal constant DEGENESIS_DAYS = 67;
-    uint256 internal constant DEGENESIS_ORDERS = 68;
-    uint256 internal constant REDEMPTION_RESERVE_STORED = 69;
+    uint256 internal constant DEGENESIS_WORD = 65;
+    uint256 internal constant DEGENESIS_DAYS = 66;
+    uint256 internal constant DEGENESIS_ORDERS = 67;
+    uint256 internal constant REDEMPTION_RESERVE_STORED = 68;
 }
 
 /// @title CrapsSlots
@@ -233,7 +233,7 @@ library CrapsSlots {
 /// @title GameSlotKeys
 /// @notice Derived storage keys for ID-keyed Game state, for tests reading a deployed Game.
 library GameSlotKeys {
-    /// @dev Wallet-table element `id` (key 0-159, smurf owner 160-191, half passes 192-255).
+    /// @dev Wallet-table element `id` (key 0-159, owner lane 160-191, half passes 192-255).
     function walletElement(uint32 id) internal pure returns (bytes32) {
         return bytes32(uint256(keccak256(abi.encode(GameSlots.WALLETS))) + id);
     }

@@ -42,16 +42,16 @@ interface IWidOwnerOf {
 /// @title WalletIdTruthHandler -- every wallet-ID allocator, cache and account door on the real protocol
 /// @notice Drives each door that allocates a Game wallet ID or fills a contract's ID cache, from a
 ///         seeded actor set plus fresh addresses minted on demand (so first contact happens on
-///         every door), creates smurf accounts, and acts for accounts by wallet ID with random
-///         callers (the account's payee, operators approved for it, the owner's operators and
-///         strangers). It records every `WalletRegistered`, `SmurfCreated` and seat transfer.
-///         `checkAll` is the suite-wide ID-truth oracle of LOOTBOX-ORDER-QUEUE-PLAN section 0,
-///         extended to Phase F accounts:
+///         every door), and acts for accounts by wallet ID with random callers (the account's
+///         payee, operators approved for it, the owner's operators and strangers). It records
+///         every `WalletRegistered` and seat transfer. `checkAll` is the suite-wide ID-truth
+///         oracle:
 ///         - ordinary forward-registry entries agree with wallet-table addresses;
 ///         - account IDs are contiguous, allocated once, and stored IDs reference live accounts;
-///         - subaccounts store only an ordinary owner ID, have their own mint flag and referral,
-///           and emit one SmurfCreated event;
-///         - at most one deity account belongs to a main wallet;
+///         - an owner lane is zero or a lender's reserved ID, and the retired mint-word bits
+///           stay clear;
+///         - custom affiliate codes are registered only in the uppercase alphanumeric form;
+///         - no player wallet is the payee of two deity accounts;
 ///         - authorized actions accept only owners or approved operators, except explicit gift
 ///           and permissionless credit doors; claims never allocate an account.
 /// @dev Storage roots of the other contracts come from `scripts/layout/golden/<Contract>.json`;
@@ -62,8 +62,6 @@ interface IWidOwnerOf {
 ///      A queued battle must drain before that buffer can be reused. The growth market opens
 ///      only in a jackpot phase at level >= 1, so the bet doors mock `getGrowth(0)` as open for
 ///      that one bet when the real market is shut. Neither touches an ID path.
-///      The handler never pranks as a smurf key and never transfers anything to one: user
-///      transfers to smurf keys are outside the invariant (PHASE-F-INVENTORY M14).
 contract WalletIdTruthHandler is Test {
     // ------------------------------------------------------------------ wiring
     DegenerusGame public immutable game;
@@ -105,12 +103,13 @@ contract WalletIdTruthHandler is Test {
     uint256 internal constant JP_BAF_TOP = PeripheralSlots.JP_BAF_TOP; // DegenerusJackpots.bafTop
     uint256 internal constant DEC_WINDOW_BIT = (GameSlots.DECIMATOR_FLAGS_OFFSET * 8); // DEC_WINDOW_OPEN = 1
 
-    // ------------------------------------------------------------------ accounts (plan F1/F2, decisions G1/G4)
-    uint256 internal constant SMURF_FLAG_SHIFT = 147; // mint word bit 147
+    // ------------------------------------------------------------------ accounts
+    uint256 internal constant RETIRED_BIT = 147; // mint word bits 147 and 224..255 carry nothing
     uint256 internal constant LANE_MASK = 0xffffffff; // wallet-table owner lane, bits 160..191
+    uint32 internal constant VAULT_ID = 1;
+    uint32 internal constant SDGNRS_ID = 2;
 
     bytes32 internal constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
-    bytes32 internal constant SMURF_CREATED = keccak256("SmurfCreated(uint32,uint32)");
     bytes32 internal constant ERC721_TRANSFER = keccak256("Transfer(address,address,uint256)");
     bytes32 internal constant DEC_BURN_RECORDED =
         keccak256("DecBurnRecorded(uint32,uint24,uint64,uint256,uint256,uint256,uint32)");
@@ -127,7 +126,7 @@ contract WalletIdTruthHandler is Test {
     uint256 internal constant GIFT = 1; // anyone; an unauthorized caller funds a gift
     uint256 internal constant OPEN = 2; // permissionless
     uint256 internal constant SD_AUTH = 3; // authorized callers only (sDGNRS: Unauthorized)
-    uint256 internal constant PAYEE_ONLY = 4; // the key or a smurf's owner (operator approvals)
+    uint256 internal constant PAYEE_ONLY = 4; // the account's payee only (operator approvals)
     uint256 internal constant F_NP = 1 << 8;
     uint256 internal constant F_CR = 1 << 9;
 
@@ -152,15 +151,6 @@ contract WalletIdTruthHandler is Test {
     uint256 public nonPayingRegs;
     string public nonPayingAction;
 
-    // ------------------------------------------------------------------ smurf ghosts
-    uint32[] public smurfIds;
-    mapping(uint32 => uint256) public smurfCreatedCount;
-    mapping(uint32 => uint32) public smurfCreatedOwner;
-    uint256 public smurfReturnMismatch;
-    mapping(uint32 => uint256) public lifetimeSmurfs;
-    mapping(uint32 => uint16) public smurfBase;
-    uint256 public quotaViolations;
-
     // ------------------------------------------------------------------ account-door ghosts
     uint256 public authViolations;
     string public authViolation;
@@ -169,7 +159,6 @@ contract WalletIdTruthHandler is Test {
     uint256 public unallocatedOks;
     string public unallocatedOk;
     uint256 public acctAuthorizedOks;
-    uint256 public acctSmurfOks;
     uint256 public acctRejects;
     uint256 public acctGifts;
 
@@ -181,6 +170,8 @@ contract WalletIdTruthHandler is Test {
     // ------------------------------------------------------------------ stored-ID ghosts
     bytes32[] public codes;
     mapping(bytes32 => address) public codeCreator;
+    uint256 public badCodeOks;
+    uint256 public badCodeRejects;
 
     struct WxEntry {
         uint24 day;
@@ -307,13 +298,16 @@ contract WalletIdTruthHandler is Test {
         return id != 0 ? id : uint32(_tableLength());
     }
 
-    /// @dev An affiliate code: none, default codes of known wallets, smurf keys and brand-new
-    ///      wallets, created custom codes, the protocol codes, and the rejected shapes (lock
-    ///      sentinel, forged default word, unknown custom code).
+    /// @dev An affiliate code: none, default codes of known wallets and brand-new wallets, an
+    ///      account ID (tagged word or decimal text), created custom codes, the protocol codes,
+    ///      and the rejected shapes (lock sentinel, forged default word, unknown custom code).
     function _code(uint256 sel, address self) internal returns (bytes32) {
         uint256 k = sel % 10;
         if (k == 0) return bytes32(0);
-        if (k == 2 && smurfIds.length != 0) return bytes32((uint256(1) << 160) | smurfIds[(sel >> 8) % smurfIds.length]);
+        if (k == 2 && regIds.length != 0) {
+            uint32 id = regIds[(sel >> 8) % regIds.length];
+            return (sel >> 16) & 1 == 0 ? bytes32((uint256(1) << 160) | id) : _decimal(id);
+        }
         if (k == 1 || k == 2) return bytes32(uint256(uint160(actors[(sel >> 8) % actors.length])));
         if (k == 3 && freshCount < MAX_FRESH) return bytes32(uint256(uint160(_fresh())));
         if (k == 4 && codes.length != 0) return codes[(sel >> 8) % codes.length];
@@ -362,17 +356,6 @@ contract WalletIdTruthHandler is Test {
                     _addKey(owner);
                     if (id < N_ACTIONS) ++regsBy[id];
                     if (nonPaying && nonPayingRegs++ == 0) nonPayingAction = _names[id];
-                } else if (t0 == SMURF_CREATED && l.topics.length == 3) {
-                    uint32 sid = uint32(uint256(l.topics[2]));
-                    if (smurfCreatedCount[sid]++ == 0) smurfIds.push(sid);
-                    uint32 mainId = uint32(uint256(l.topics[1]));
-                    smurfCreatedOwner[sid] = mainId;
-                    ++lifetimeSmurfs[mainId];
-                } else if (t0 == keccak256("SmurfBaseAllowanceRaised(uint32,uint16,uint16)") && l.topics.length == 2) {
-                    uint32 mainId = uint32(uint256(l.topics[1]));
-                    (uint16 previous, uint16 next) = abi.decode(l.data, (uint16, uint16));
-                    if (previous != smurfBase[mainId] || next <= previous) ++quotaViolations;
-                    smurfBase[mainId] = next;
                 } else if (t0 == DEC_BURN_RECORDED && l.topics.length == 4 && _dec.length < CAP) {
                     _dec.push(DecEntry(
                         uint24(uint256(l.topics[2])), uint64(uint256(l.topics[3])), uint32(uint256(l.topics[1]))
@@ -701,7 +684,7 @@ contract WalletIdTruthHandler is Test {
             "applyCrapsPasses(uint32,uint24,uint8,bool,uint32)", id, day, uint8(1), high, _validChips(chipSeed));
     }
 
-    /// @dev Amend an announced slip as its owner (a smurf's slip through its owner by ID), or a
+    /// @dev Amend an announced slip as its payee (an acquired account's slip by ID), or a
     ///      random bet ID as anyone.
     function cr_amendSlip(uint256 a, uint256 pick, uint256 chipSeed) external {
         address p = _actor(a);
@@ -740,15 +723,48 @@ contract WalletIdTruthHandler is Test {
     // Affiliate
     // =====================================================================================
 
+    /// @notice Create a custom code: usually a valid uppercase code, sometimes a shape the
+    ///         Affiliate must refuse (lowercase, symbol, all digits, not left-aligned).
     function af_createCode(uint256 a, uint256 s, uint256 kick) external {
         address p = _actor(a);
-        bytes32 code = bytes32(uint256(keccak256(abi.encode("wid-code", s))) | (uint256(1) << 255));
+        bool bad = s % 8 == 0;
+        bytes32 code = bad ? _badCode(s >> 3) : _validCode(s >> 3);
         (bool ok,) = _call(26, p, AFFILIATE, 0, abi.encodeWithSignature(
             "createAffiliateCode(bytes32,uint8)", code, uint8(kick % 26)), false);
-        if (ok && codes.length < 64) {
+        if (bad) {
+            if (ok) ++badCodeOks;
+            else ++badCodeRejects;
+        } else if (ok && codes.length < 64) {
             codes.push(code);
             codeCreator[code] = p;
         }
+    }
+
+    /// @dev 1..12 characters of A-Z/0-9, the first a letter, left-aligned and zero-padded.
+    function _validCode(uint256 s) internal pure returns (bytes32 code) {
+        bytes memory alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        uint256 len = 1 + s % 12;
+        s >>= 4;
+        uint256 w;
+        for (uint256 i; i < len; ++i) {
+            uint8 c = uint8(alphabet[i == 0 ? s % 26 : s % 36]);
+            s = uint256(keccak256(abi.encode(s)));
+            w |= uint256(c) << (248 - 8 * i);
+        }
+        code = bytes32(w);
+    }
+
+    function _badCode(uint256 s) internal pure returns (bytes32) {
+        uint256 k = s % 4;
+        if (k == 0) return bytes32("lower");
+        if (k == 1) return bytes32("SYM-BOL");
+        if (k == 2) return bytes32("12345");
+        return bytes32(uint256(bytes32("SHIFTED")) >> 8);
+    }
+
+    /// @dev `id` as left-aligned decimal ASCII text.
+    function _decimal(uint32 id) internal pure returns (bytes32) {
+        return bytes32(bytes(vm.toString(uint256(id))));
     }
 
     function af_referPlayer(uint256 a, uint256 codeSel) external {
@@ -965,65 +981,19 @@ contract WalletIdTruthHandler is Test {
     }
 
     // =====================================================================================
-    // Smurf accounts (plan F2, decision G7)
+    // Affiliate: referral by account ID text
     // =====================================================================================
 
-    /// @notice Create a smurf for a random owner (usually a registered actor, sometimes a wallet
-    ///         with no ID, which must revert) with a blank, valid or unregistered default code.
-    function sm_create(uint256 a, uint256 codeSel, uint256 kindSel) external {
-        address p = _smurfOwner(a);
-        _createSmurf(p, _smurfCode(codeSel, p), kindSel);
-    }
-
-    /// @notice Deterministic creation for the suite's tests. Not a fuzz target.
-    function createSmurfFor(address owner, bytes32 code, uint256 kindSel) external returns (bool ok, uint32 smurfId) {
-        return _createSmurf(owner, code, kindSel);
-    }
-
-    function _smurfOwner(uint256 a) internal returns (address) {
-        if (a % 8 == 0) return _actor(a >> 3);
-        for (uint256 i; i < 4; ++i) {
-            address p = actors[(a >> (3 + 16 * i)) % actors.length];
-            if (_fwd(p) != 0) return p;
-        }
-        return actors[0];
-    }
-
-    function _smurfCode(uint256 sel, address p) internal returns (bytes32) {
-        uint256 k = sel % 6;
-        if (k == 0) return bytes32(0);
-        if (k == 1) return bytes32(uint256(uint160(actors[(sel >> 8) % actors.length])));
-        if (k == 2 && codes.length != 0) return codes[(sel >> 8) % codes.length];
-        if (k == 3 && freshCount < MAX_FRESH) return bytes32(uint256(uint160(_fresh()))); // unregistered owner
-        if (k == 4) return bytes32("VAULT");
-        return _code(sel >> 8, p);
-    }
-
-    /// @dev One `createSmurf` by `p`: ETH for the ticket (sometimes over), part ETH part credit,
-    ///      or credit only.
-    function _createSmurf(address p, bytes32 code, uint256 kindSel) internal returns (bool ok, uint32 smurfId) {
-        (uint256 value, bytes memory data) = _smurfData(code, kindSel);
-        uint256 before = smurfIds.length;
-        uint32 mainId = game.walletIdOf_g3120(p);
-        uint256 limit = uint256(smurfBase[mainId]) + game.playerActivityScoreById(mainId) / 120;
-        if (limit > 65_535) limit = 65_535;
-        uint256 created = lifetimeSmurfs[mainId];
-        bytes memory ret;
-        (ok, ret) = _call(43, p, GAME, value, data, false);
-        if (ok) {
-            if (created >= limit) ++quotaViolations;
-            smurfId = abi.decode(ret, (uint32));
-            if (smurfIds.length != before + 1 || smurfIds[before] != smurfId) ++smurfReturnMismatch;
-        }
-    }
-
-    function _smurfData(bytes32 code, uint256 kindSel) internal view returns (uint256 value, bytes memory data) {
-        uint256 price = _price();
-        uint256 k = kindSel % 8;
-        MintPaymentKind kind =
-            k < 5 ? MintPaymentKind.DirectEth : (k < 7 ? MintPaymentKind.Combined : MintPaymentKind.Claimable);
-        value = k < 5 ? price + (k == 4 ? 0.002 ether : 0) : (k < 7 ? price / 2 : 0);
-        data = abi.encodeWithSignature("createSmurf(bytes32,uint8)", code, uint8(kind));
+    /// @notice Refer by an account ID written as decimal text: a registered ID, the caller's
+    ///         own, an unallocated one, or one past uint32 (which must resolve nothing).
+    function af_referById(uint256 a, uint256 idSel) external {
+        address p = _actor(a);
+        uint256 k = idSel % 4;
+        bytes32 code;
+        if (k == 0 || regIds.length == 0) code = _decimal(uint32(_tableLength() + idSel % 3));
+        else if (k == 1) code = bytes32("4294967296");
+        else code = _decimal(regIds[(idSel >> 2) % regIds.length]);
+        _call(43, p, AFFILIATE, 0, abi.encodeWithSignature("referPlayer(bytes32)", code), false);
     }
 
     // =====================================================================================
@@ -1063,12 +1033,10 @@ contract WalletIdTruthHandler is Test {
         if (ok && approved && _opsOf[id].length < 16) _opsOf[id].push(op);
     }
 
-    /// @dev An account to act for: a smurf, an actor's ID, a protocol account, or an
-    ///      unallocated ID.
+    /// @dev An account to act for: an actor's ID, a protocol account, or an unallocated ID.
     function _acctId(uint256 s) internal view returns (uint32 id) {
         uint256 k = s % 16;
         uint256 r = s >> 4;
-        if (k < 7 && smurfIds.length != 0) return smurfIds[r % smurfIds.length];
         if (k < 14) {
             id = _fwd(actors[r % actors.length]);
             if (id != 0) return id;
@@ -1077,9 +1045,9 @@ contract WalletIdTruthHandler is Test {
         return uint32(_tableLength() + r % 2);
     }
 
-    /// @dev A caller for account `id`: its payee (the key, or a smurf's owner), an operator
-    ///      approved for it, an operator of a smurf's owner (not authorized for the smurf), or a
-    ///      third party. Protocol contracts never act.
+    /// @dev A caller for account `id`: its payee, an operator approved for it, an operator of
+    ///      its owner-lane account (not authorized for it), or a third party. Protocol contracts
+    ///      never act.
     function _acctCaller(uint32 id, uint256 s) internal returns (address) {
         uint256 k = s % 8;
         uint256 r = s >> 3;
@@ -1102,9 +1070,8 @@ contract WalletIdTruthHandler is Test {
     }
 
     /// @dev One account-door call and its authorization bookkeeping. Expected authorization is
-    ///      read from storage (plan F1): the caller is the key, the smurf key derives from the
-    ///      caller and `id`, or `operatorApprovals[id][caller]` is set; `PAYEE_ONLY` doors take
-    ///      only the key or the smurf's owner. A success for an unallocated ID, or by an
+    ///      read from storage: the caller is the account's payee, or `operatorApprovals[id][caller]`
+    ///      is set; `PAYEE_ONLY` doors take only the payee. A success for an unallocated ID, or by an
     ///      unauthorized caller on an AUTH door, is a violation; an authorized caller refused with
     ///      the door's authorization error is a false reject (with F_CR).
     function _acctCall(
@@ -1122,12 +1089,12 @@ contract WalletIdTruthHandler is Test {
         _acctBook(action, caller, id, flags, st, ok, ret);
     }
 
-    /// @dev Bit 0: `id` allocated; bit 1: `caller` authorized for it; bit 2: it is a smurf.
+    /// @dev Bit 0: `id` allocated; bit 1: `caller` authorized for it.
     function _acctState(uint32 id, address caller, uint256 mode) internal view returns (uint256 st) {
         if (id == 0 || id >= _tableLength()) return 0;
         uint256 el = _element(id);
         bool auth = mode == PAYEE_ONLY ? caller == _payeeOfElement(el) : _authorized(id, caller);
-        st = 1 | (auth ? 2 : 0) | ((el >> 160) & LANE_MASK != 0 ? 4 : 0);
+        st = 1 | (auth ? 2 : 0);
     }
 
     function _acctBook(
@@ -1145,7 +1112,6 @@ contract WalletIdTruthHandler is Test {
                 if (unallocatedOks++ == 0) unallocatedOk = _acctNote(action, caller, id);
             } else if (st & 2 != 0) {
                 ++acctAuthorizedOks;
-                if (st & 4 != 0) ++acctSmurfOks;
             } else if (mode == GIFT) {
                 ++acctGifts;
             } else if (mode != OPEN) {
@@ -1364,17 +1330,11 @@ contract WalletIdTruthHandler is Test {
         return address(uint160(_element(id)));
     }
 
-    /// @dev The payee of a wallet-table element: its key, or for a smurf its owner's key.
+    /// @dev The payee of a wallet-table element: its key, or for an acquired account its
+    ///      lender's key.
     function _payeeOfElement(uint256 el) internal view returns (address) {
         uint32 ownerId = uint32((el >> 160) & LANE_MASK);
         return ownerId == 0 ? address(uint160(el)) : _keyOf(ownerId);
-    }
-
-
-
-
-    function _mintWord(address key) internal view returns (uint256) {
-        return uint256(vm.load(GAME, GameSlotKeys.mintPacked(key)));
     }
 
     function _fwd(address key) internal view returns (uint32) {
@@ -1385,13 +1345,14 @@ contract WalletIdTruthHandler is Test {
         return uint256(vm.load(GAME, bytes32(GameSlots.WALLETS)));
     }
 
-    /// @dev True when `id` is an allocated ID whose canonical pair agrees in both directions.
+    /// @dev True when `id` is an allocated ID: an ordinary account whose canonical pair agrees in
+    ///      both directions, or an acquired one (lender lane, former borrower's address kept).
     function _registered(uint32 id) internal view returns (bool) {
         if (id == 0 || id >= _tableLength()) return false;
         uint256 el = _element(id);
         uint32 owner = uint32(el >> 160);
         return owner == 0 ? _fwd(address(uint160(el))) == id
-            : address(uint160(el)) == address(0) && owner < id && uint32(_element(owner) >> 160) == 0;
+            : (owner == VAULT_ID || owner == SDGNRS_ID) && address(uint160(el)) != address(0);
     }
 
     function _referral(address k) internal view returns (uint256) { return _referralId(_fwd(k)); }
@@ -1408,7 +1369,7 @@ contract WalletIdTruthHandler is Test {
     function checkAll() external view {
         _checkRegistry();
         _checkKeys();
-        _checkSmurfs();
+        _checkAccounts();
         _checkDeityGroup();
         _checkCodes();
         _checkEarnings();
@@ -1427,7 +1388,7 @@ contract WalletIdTruthHandler is Test {
     /// @dev Canonical pair, one registration per ID, contiguous IDs, protocol constants.
     function _checkRegistry() internal view {
         uint256 n = regIds.length;
-        uint256 count = n + smurfIds.length;
+        uint256 count = n;
         if (_tableLength() != count + 1) _fail("REGISTRY", "table length != all allocations + 1", address(0), _tableLength(), count + 1);
         if (_element(0) != 0 || _fwd(address(0)) != 0) revert("REGISTRY: zero identity assigned");
         if (n < 3 || regOwners[0] != VAULT || regOwners[1] != SDGNRS || regOwners[2] != GNRUS) revert("REGISTRY: protocol IDs changed");
@@ -1436,13 +1397,10 @@ contract WalletIdTruthHandler is Test {
             uint32 id = regIds[i]; address owner = regOwners[i];
             if (id == 0 || id > count || seen[id]) revert("REGISTRY: duplicate or invalid ordinary allocation");
             seen[id] = true;
-            if (owner == address(0) || _keyOf(id) != owner || uint32(_element(id) >> 160) != 0) revert("REGISTRY: ordinary table mismatch");
-            if (_fwd(owner) != id) _fail("REGISTRY", "forward registry disagrees with table", owner, _fwd(owner), id);
-        }
-        for (uint256 i; i < smurfIds.length; ++i) {
-            uint32 id = smurfIds[i];
-            if (id == 0 || id > count || seen[id]) revert("REGISTRY: duplicate or invalid subaccount allocation");
-            seen[id] = true;
+            if (owner == address(0) || _keyOf(id) != owner) revert("REGISTRY: table address mismatch");
+            if (uint32(_element(id) >> 160) == 0 && _fwd(owner) != id) {
+                _fail("REGISTRY", "forward registry disagrees with table", owner, _fwd(owner), id);
+            }
         }
         for (uint256 id = 1; id <= count; ++id) if (!seen[id]) revert("REGISTRY: allocation gap");
     }
@@ -1456,8 +1414,7 @@ contract WalletIdTruthHandler is Test {
             if (id != 0) {
                 if (id >= len) _fail("KEYS", "forward ID past the table", k, id, len);
                 if (_keyOf(id) != k) _fail("KEYS", "element at the forward ID does not hold the key", k, uint160(_keyOf(id)), uint160(k));
-            } else if ((_mintWord(k) >> SMURF_FLAG_SHIFT) & 1 != 0) {
-                _fail("SMURFFLAG", "smurf flag on an unregistered key", k, 1, 0);
+                if (uint32(_element(id) >> 160) != 0) _fail("KEYS", "forward ID names an acquired account", k, id, 0);
             }
             _checkAccountRecords(k, id);
         }
@@ -1472,53 +1429,25 @@ contract WalletIdTruthHandler is Test {
         if (gid != id || (mayBet && id == 0)) _fail("QUESTS", "quest identity mismatch", k, gid, id);
     }
 
-    /// @dev Every allocated element: owner lane, zero subaccount address, smurf flag, `SmurfCreated`,
-    ///      and automatic main referral plus event-derived creation quotas.
-    function _checkSmurfs() internal view {
-        if (quotaViolations != 0) _fail("SMURFQUOTA", "invalid quota transition", address(0), quotaViolations, 0);
+    /// @dev Every allocated element: an owner lane of zero or a lender ID, the address kept, and
+    ///      the retired mint-word bits clear.
+    function _checkAccounts() internal view {
         uint256 len = _tableLength();
         for (uint32 id = 1; id < len; ++id) {
             uint256 mw = uint256(vm.load(GAME, GameSlotKeys.mintPacked(id)));
-            if (uint16(mw >> 224) != lifetimeSmurfs[id]) _fail("SMURFQUOTA", "lifetime count differs from events", address(0), uint16(mw >> 224), lifetimeSmurfs[id]);
-            if (uint16(mw >> 240) != smurfBase[id]) _fail("SMURFQUOTA", "base differs from grants", address(0), uint16(mw >> 240), smurfBase[id]);
+            if ((mw >> RETIRED_BIT) & 1 != 0 || mw >> 224 != 0) _fail("RETIRED", "retired mint-word bits set", _keyOf(id), mw, id);
             uint256 el = _element(id);
-            if ((el >> 160) & LANE_MASK == 0) _checkOrdinary(id, address(uint160(el)));
-            else _checkSmurf(id, el, len);
+            uint32 lane = uint32((el >> 160) & LANE_MASK);
+            if (lane != 0) {
+                if (lane != VAULT_ID && lane != SDGNRS_ID) _fail("LANE", "owner lane is not a lender", _keyOf(id), lane, id);
+                if (address(uint160(el)) == address(0)) _fail("LANE", "acquired account lost its address", address(0), id, 0);
+                if (_fwd(address(uint160(el))) == id) _fail("LANE", "seller still defaults to the acquired account", _keyOf(id), id, 0);
+            }
         }
-        for (uint256 i; i < smurfIds.length; ++i) {
-            if (smurfIds[i] >= len) _fail("SMURFEVENT", "SmurfCreated for an unallocated ID", address(0), smurfIds[i], len);
-        }
     }
 
-    function _checkOrdinary(uint32 id, address key) internal view {
-        if ((_mintWord(key) >> SMURF_FLAG_SHIFT) & 1 != 0) _fail("SMURFFLAG", "smurf flag on an ordinary wallet", key, id, 0);
-        if (smurfCreatedCount[id] != 0) _fail("SMURFEVENT", "SmurfCreated for an ordinary wallet", key, id, 0);
-    }
-
-    function _checkSmurf(uint32 id, uint256 el, uint256 len) internal view {
-        address key = address(uint160(el));
-        uint32 ownerId = uint32((el >> 160) & LANE_MASK);
-        if (ownerId >= len) _fail("SMURFLANE", "owner lane past the table", key, ownerId, len);
-        uint256 oel = _element(ownerId);
-        if ((oel >> 160) & LANE_MASK != 0) _fail("SMURFLANE", "owner lane points at a smurf", key, ownerId, id);
-        address ownerKey = address(uint160(oel));
-        if (ownerKey == address(0)) _fail("SMURFLANE", "owner lane points at an empty element", key, ownerId, id);
-        if (key != address(0)) _fail("SMURFLANE", "subaccount stores an address", key, uint160(key), 0);
-        if ((uint256(vm.load(GAME, GameSlotKeys.mintPacked(id))) >> SMURF_FLAG_SHIFT) & 1 == 0) _fail("SMURFFLAG", "smurf mint word lost bit 147", key, id, 1);
-        if (smurfCreatedCount[id] != 1) _fail("SMURFEVENT", "SmurfCreated count != 1", key, smurfCreatedCount[id], 1);
-        if (smurfCreatedOwner[id] != ownerId) _fail("SMURFEVENT", "SmurfCreated owner != owner lane", key, smurfCreatedOwner[id], ownerId);
-        _checkSmurfReferral(id, ownerId);
-        _checkAccountRecords(address(0), id);
-    }
-
-    /// @dev Every child is permanently referred by its creation-time main ID.
-    function _checkSmurfReferral(uint32 id, uint32 ownerId) internal view {
-        uint256 sw = _referralId(id);
-        uint256 expected = (uint256(1) << 32) | ownerId;
-        if (sw != expected) _fail("SMURFREF", "subaccount referral differs from main ID", address(0), sw, expected);
-    }
-
-    /// @dev At most one deity per main wallet (decision G5): the deity accounts' payees differ.
+    /// @dev No player wallet is the payee of two deity accounts. A lender may hold several
+    ///      acquired ones.
     function _checkDeityGroup() internal view {
         uint256 n = uint256(vm.load(GAME, bytes32(GameSlots.DEITY_PASS_IDS)));
         if (n > 64) n = 64;
@@ -1528,19 +1457,19 @@ contract WalletIdTruthHandler is Test {
             uint32 did = uint32(uint256(vm.load(GAME, bytes32(base + (i >> 3)))) >> ((i & 7) << 5));
             if (did == 0 || did >= _tableLength()) _fail("DEITYGROUP", "deity ID not allocated", address(0), did, i);
             mains[i] = _payeeOfElement(_element(did));
+            if (mains[i] == VAULT || mains[i] == SDGNRS) continue;
             for (uint256 j; j < i; ++j) {
-                if (mains[j] == mains[i]) _fail("DEITYGROUP", "two deities share a main wallet", mains[i], did, j);
+                if (mains[j] == mains[i]) _fail("DEITYGROUP", "two deities share a player wallet", mains[i], did, j);
             }
         }
     }
 
-    /// @dev Account doors: no success for an unauthorized caller or an unallocated ID, no
-    ///      authorization error for an authorized caller, and createSmurf's return is its event's ID.
+    /// @dev Account doors: no success for an unauthorized caller or an unallocated ID, and no
+    ///      authorization error for an authorized caller.
     function _checkAccountDoors() internal view {
         if (authViolations != 0) revert(string.concat("AUTH: unauthorized caller succeeded: ", authViolation));
         if (unallocatedOks != 0) revert(string.concat("AUTH: unallocated account ID succeeded: ", unallocatedOk));
         if (authFalseRejects != 0) revert(string.concat("AUTHREJECT: authorized caller refused: ", authFalseReject));
-        if (smurfReturnMismatch != 0) revert("SMURFEVENT: createSmurf returned an ID other than its SmurfCreated");
     }
 
     /// @dev The referrer ID a cache of `k`'s first hop must hold, from Game's canonical IDs.
@@ -1582,6 +1511,7 @@ contract WalletIdTruthHandler is Test {
 
     /// @dev Custom code info (protocol codes and every code the handler created).
     function _checkCodes() internal view {
+        if (badCodeOks != 0) _fail("AFFCODE", "a malformed custom code was registered", address(0), badCodeOks, 0);
         _checkCode(bytes32("VAULT"), VAULT, 1);
         _checkCode(bytes32("DGNRS"), SDGNRS, 2);
         for (uint256 i; i < codes.length; ++i) {
@@ -1740,7 +1670,7 @@ contract WalletIdTruthHandler is Test {
     // =====================================================================================
 
     function regCount() external view returns (uint256) {
-        return regIds.length + smurfIds.length;
+        return regIds.length;
     }
 
     function keyCount() external view returns (uint256) {
@@ -1765,10 +1695,6 @@ contract WalletIdTruthHandler is Test {
 
     function codeCount() external view returns (uint256) {
         return codes.length;
-    }
-
-    function smurfCount() external view returns (uint256) {
-        return smurfIds.length;
     }
 
     function seatCount() external view returns (uint256) {
@@ -1827,7 +1753,7 @@ contract WalletIdTruthHandler is Test {
         _names[40] = "prog_bigBuy";
         _names[41] = "prog_topUp";
         _names[42] = "prog_driveDayAligned";
-        _names[43] = "sm_create";
+        _names[43] = "af_referById";
         _names[44] = "ac_purchase";
         _names[45] = "ac_redeemFlip";
         _names[46] = "ac_claimWinnings";

@@ -264,7 +264,7 @@ contract GnrusAffiliatePurchaseTest is DeployProtocol {
         vm.deal(buyer, 1 ether);
         (,,,, uint256 price) = game.purchaseInfo_g1027();
         vm.prank(ContractAddresses.GNRUS);
-        affiliate.createAffiliateCode(bytes32("GNRUS_ZERO"), 0);
+        affiliate.createAffiliateCode(bytes32("GNRUSZERO"), 0);
         uint256 snap = vm.snapshotState();
         vm.prank(buyer);
         game.purchaseOrderFor{value: price}(0, 400, 0, bytes32("GNRUS"), MintPaymentKind.DirectEth, false);
@@ -274,7 +274,7 @@ contract GnrusAffiliatePurchaseTest is DeployProtocol {
         assertEq(coin.balanceOf(ContractAddresses.GNRUS), 0);
         vm.revertToState(snap);
         vm.prank(buyer);
-        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32("GNRUS_ZERO"), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32("GNRUSZERO"), MintPaymentKind.DirectEth, false);
         assertEq(withKickback - CoinflipStorage.read(address(coinflip), id, day + 1), 25,
             "one ticket: 1000 FLIP value * 25% affiliate reward * 10% kickback");
     }

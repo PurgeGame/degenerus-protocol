@@ -375,7 +375,8 @@ abstract contract DegenesisGasBase is DegenesisDeployProtocol {
 ///         wallet ID is searched against the bound word with the transcribed outcome, and the
 ///         production DegenesisOrderResolved events confirm every forced branch. Recipients
 ///         are fresh: synthetic never-touched IDs for the ID-keyed credits, and for sDGNRS a
-///         two-link smurf chain ending at a fresh payee address. Each suite measures:
+///         one-link owner lane ending at a fresh payee address (the payee walk's cold worst
+///         case). Each suite measures:
 ///         - the refused frame (allowance 0: prelude, first decode, refusal);
 ///         - the full chunk with the cohort close (the seventh close burns the inventory);
 ///         - one order with the close and the close alone (first-order marginal).
@@ -435,11 +436,9 @@ abstract contract DegenesisSettleGas is DegenesisGasBase {
         for (uint256 i; i < n; ++i) {
             uint32 id = _syntheticBase() + uint32(i);
             host.hostSparseWallet(id, address(uint160(0xD6E0000000 + i)));
-            // Every potential sDGNRS winner has the full two-link payee walk.
-            uint32 main = host.hostWallet(address(uint160(0xD6F0000000 + 2 * i)));
-            uint32 root = host.hostWallet(address(uint160(0xD6F0000000 + 2 * i + 1)));
-            host.hostOwner(id, main);
-            host.hostOwner(main, root);
+            // Every potential sDGNRS winner has the full one-link payee walk.
+            uint32 owner = host.hostWallet(address(uint160(0xD6F0000000 + i)));
+            host.hostOwner(id, owner);
             orderIds.push(id);
             host.hostOrder(c, i, id, _units(), 0);
         }

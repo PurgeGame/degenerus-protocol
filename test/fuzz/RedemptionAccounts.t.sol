@@ -9,18 +9,16 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @title RedemptionAccounts -- sDGNRS redemption claims by account ID, and the protocol self pulls
 /// @notice `claimRedemption(id, batch)`: `id == 0` is the caller
-///         (no Game `resolveAccount` call); any other ID must authorize the caller (the key, a
-///         smurf's owner or an approved operator), else `Unauthorized`; an unallocated ID reverts
-///         Game `E`. The claim is deleted under the account's ID and paid to its payee (terminal ETH
-///         push, open-batch unwind) or credited to its ID (live parked claim). Smurfs never burn, so
-///         they hold no claim (`NoClaim`). sDGNRS and GNRUS pull their own Game claimable with
-///         `claimWinnings(0)`.
+///         (no Game `resolveAccount` call); any other ID must authorize the caller (the key or an
+///         approved operator), else `Unauthorized`; an unallocated ID reverts Game `E`. The claim
+///         is deleted under the account's ID and paid to its payee (terminal ETH push, open-batch
+///         unwind) or credited to its ID (live parked claim). An account that never burned holds no
+///         claim (`NoClaim`). sDGNRS and GNRUS pull their own Game claimable with `claimWinnings(0)`.
 contract RedemptionAccountsTest is RedemptionFixture {
 
     address internal operator = address(0x0FE7A70);
@@ -29,7 +27,6 @@ contract RedemptionAccountsTest is RedemptionFixture {
 
     function setUp() public override {
         super.setUp();
-        _grantSmurfBase(alice, 1);
         aliceId = game.walletIdOf_g3120(alice);
         vm.prank(alice);
         game.setOperatorApproval(0, operator, true);
@@ -37,15 +34,6 @@ contract RedemptionAccountsTest is RedemptionFixture {
 
     function _walletCount() internal view returns (uint32) {
         return uint32(uint256(vm.load(address(game), bytes32(GameSlots.WALLETS))));
-    }
-
-    function _createSmurf(address o) internal returns (uint32 sid) {
-        (,,,, uint256 price) = game.purchaseInfo_g1027();
-        vm.deal(o, o.balance + price);
-        vm.prank(o);
-        sid = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        (address key, address payee,) = game.resolveAccount_g7029(sid, o);
-        require(key == address(0) && payee == o, "fixture: account owner");
     }
 
     /// @dev Strip sDGNRS's ETH and stETH custody so a live claim's legs refuse; returns what to restore.
@@ -129,11 +117,13 @@ contract RedemptionAccountsTest is RedemptionFixture {
     }
 
     /// @notice X reverts Unauthorized on a closed and an open batch, an unallocated ID reverts E, and
-    ///         a smurf holds no claim (`NoClaim` for its owner on either batch); A's claims survive.
-    function test_Stranger_Unauthorized_UnallocatedE_SmurfNoClaim() public {
-        uint32 smurfId = _createSmurf(alice);
-        vm.prank(alice);
-        game.setOperatorApproval(smurfId, operator, true);
+    ///         an account that never burned holds no claim (`NoClaim` for its wallet and its
+    ///         operator on either batch); A's claims survive.
+    function test_Stranger_Unauthorized_UnallocatedE_NonBurnerNoClaim() public {
+        address other = address(0x07E4);
+        uint32 otherId = _giveWalletId(other);
+        vm.prank(other);
+        game.setOperatorApproval(otherId, operator, true);
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 closed = _resolveLive(100);
         uint32 open = _openBatchId();
@@ -151,14 +141,14 @@ contract RedemptionAccountsTest is RedemptionFixture {
         vm.prank(stranger);
         sdgnrs.claimRedemption(_walletCount(), closed);
         vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice);
-        sdgnrs.claimRedemption(smurfId, closed);
+        vm.prank(other);
+        sdgnrs.claimRedemption(otherId, closed);
         vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice);
-        sdgnrs.claimRedemption(smurfId, open);
+        vm.prank(other);
+        sdgnrs.claimRedemption(otherId, open);
         vm.expectRevert(sDGNRS.NoClaim.selector);
         vm.prank(operator);
-        sdgnrs.claimRedemption(smurfId, closed);
+        sdgnrs.claimRedemption(otherId, closed);
 
         assertGt(_claimTokens(alice, closed), 0, "A's closed claim intact");
         assertGt(_claimTokens(alice, open), 0, "A's open claim intact");

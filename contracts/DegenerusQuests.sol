@@ -2682,11 +2682,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice The two gates the parimutuel growth market applies to a bet. Read-only —
     ///         no quest ledger writes.
     /// @dev earnsReward = recordGrowthBet's own eligibility (level quest or active
-    ///      afking). mayBet = that, or mintPacked_ participation fields with the curse
-    ///      counter and smurf quota masked out. Registration, third-party curses, base
-    ///      grants and creating a child do not establish this main's own participation.
-    ///      Paying doors register the account before writing its mint history, so mayBet
-    ///      implies a nonzero ID.
+    ///      afking). mayBet = that, or any bit of PARTICIPATION_MASK set in the account's
+    ///      mint word. Registration and third-party curses do not establish the account's own
+    ///      participation. Paying doors register the account before writing its mint history,
+    ///      so mayBet implies a nonzero ID.
     /// @param playerId The account to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
@@ -2703,13 +2702,16 @@ contract DegenerusQuests is IDegenerusQuests {
         earnsReward =
             _levelQuestEligible(lvl, mintData) ||
             _questsStorage().questPlayerState[id].afkingSince != 0;
-        mayBet =
-            earnsReward ||
-            (mintData &
-                ((uint256(1) << BitPackingLib.SMURF_COUNT_SHIFT) - 1) &
-                ~(BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT)) !=
-            0;
+        mayBet = earnsReward || mintData & PARTICIPATION_MASK != 0;
     }
+
+    /// @dev Mint-word fields only the account's own purchases and passes write: bits 0-223 (last
+    ///      level through LEVEL_UNITS) less the curse counter (203-207) and the unused bit 147.
+    ///      Bits 224-255 are unused and excluded.
+    uint256 private constant PARTICIPATION_MASK =
+        ((uint256(1) << (BitPackingLib.LEVEL_UNITS_SHIFT + 16)) - 1)
+            & ~(BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT)
+            & ~(uint256(1) << 147);
 
     /// @notice Credit the growth-bet participation quest for a player.
     /// @dev Access: PARIMUTUEL only. Eligibility is the level quest's gate, or an active

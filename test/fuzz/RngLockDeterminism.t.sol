@@ -192,6 +192,16 @@ contract RngLockDeterminism is DeployProtocol {
     //   attempted perturbation, INCLUDING in the revert case).
     uint256 constant N_PERTURB_ACTIONS = 12;
 
+    /// @dev An eight-letter affiliate code derived from the seed.
+    function _seedCode(uint256 seed) internal pure returns (bytes32) {
+        bytes memory letters = new bytes(8);
+        for (uint256 i; i < 8; ++i) {
+            letters[i] = bytes1(uint8(0x41 + seed % 26));
+            seed /= 26;
+        }
+        return bytes32(letters);
+    }
+
     function _perturb(uint256 seed) internal {
         uint256 cls = seed % N_PERTURB_ACTIONS;
         address actor = address(uint160(uint256(keccak256(abi.encode("perturb-actor", seed)))));
@@ -237,7 +247,7 @@ contract RngLockDeterminism is DeployProtocol {
             try coin.approve(spender, amt) {} catch { return; }
         } else if (cls == 6) {
             vm.prank(actor);
-            try affiliate.createAffiliateCode(bytes32(seed), uint8((seed >> 48) % 50)) {} catch { return; }
+            try affiliate.createAffiliateCode(_seedCode(seed), uint8((seed >> 48) % 50)) {} catch { return; }
         } else if (cls == 7) {
             vm.prank(address(admin));
             try game.rngLocked() returns (bool) {} catch { return; }

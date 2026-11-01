@@ -11,14 +11,12 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title Craps account doors against the deployed protocol
 /// @notice The parts of the account rule only the real Game, FLIP and Quests can vouch for: a
-///         smurf made by `createSmurf` is resolved by the Game's key derivation, its bets and
-///         passes are keyed by the smurf's ID, its FLIP burns come from the owner's balance, its
-///         newcomer rate reads the smurf key's own mint word, and operator approvals are the
-///         Game's per-ID approvals.
+///         wallet's account is resolved by the Game, its bets and passes are keyed by its ID, an
+///         operator acting for it burns the account key's FLIP, its newcomer rate reads the
+///         account's own mint word, and operator approvals are the Game's per-ID approvals.
 contract CrapsAccountsProtocolTest is DeployProtocol {
     uint32 internal constant BOARD = 5 << 27;
     uint32 internal constant BOARD_B = 2 | (1 << 3);
@@ -33,14 +31,14 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     address internal owner = makeAddr("pacct-owner");
     address internal wallet = makeAddr("pacct-wallet");
     address internal operator = makeAddr("pacct-operator");
-    address internal smurfOp = makeAddr("pacct-smurf-operator");
+    address internal other = makeAddr("pacct-other");
+    address internal otherOp = makeAddr("pacct-other-operator");
     address internal ownerOp = makeAddr("pacct-owner-operator");
     address internal stranger = makeAddr("pacct-stranger");
 
     uint32 internal ownerId;
     uint32 internal walletId;
-    uint32 internal smurfId;
-    uint32 internal smurf;
+    uint32 internal otherId;
     uint24 internal day;
     uint64 internal slot;
 
@@ -54,15 +52,14 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         ownerId = _giveWalletId(owner);
         walletId = _giveWalletId(wallet);
         _giveWalletId(stranger);
-        for (uint256 i; i < 4; ++i) {
-            _mint([owner, wallet, operator, stranger][i], 10_000_000);
+        otherId = _giveWalletId(other);
+        for (uint256 i; i < 5; ++i) {
+            _mint([owner, wallet, operator, stranger, other][i], 10_000_000);
         }
-        _grantSmurfBase(owner, 1);
-        (smurfId, smurf) = _createSmurf(owner);
         vm.prank(wallet);
         game.setOperatorApproval(0, operator, true);
-        vm.prank(owner);
-        game.setOperatorApproval(smurfId, smurfOp, true);
+        vm.prank(other);
+        game.setOperatorApproval(otherId, otherOp, true);
         vm.prank(owner);
         game.setOperatorApproval(0, ownerOp, true);
 
@@ -78,17 +75,6 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     function _mint(address who, uint256 amount) internal {
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame_g152734(who, amount);
-    }
-
-    function _createSmurf(address o) internal returns (uint32 id, uint32 account) {
-        (,,,, uint256 price) = game.purchaseInfo_g1027();
-        vm.deal(o, o.balance + price);
-        vm.prank(o);
-        id = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        bool authorized;
-        (,, authorized) = game.resolveAccount_g7029(id, o);
-        account = id;
-        assertTrue(authorized, "fixture: the owner may act for its smurf");
     }
 
     function _unallocated() internal view returns (uint32) {
@@ -142,37 +128,40 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
 
     // ── tests ────────────────────────────────────────────────────────────────
 
-    function test_aSmurfOwnerBetsForTheSmurfFromTheOwnersFlip() public {
-        uint256 ownerBefore = coin.balanceOf(owner);
+    function test_anOperatorBetsForTheAccountFromTheAccountsFlip() public {
+        uint256 otherBefore = coin.balanceOf(other);
+        uint256 opBefore = coin.balanceOf(otherOp);
         vm.recordLogs();
         vm.startStateDiffRecording();
-        vm.prank(owner);
-        uint256 betId = crapsBattle.enterBattle(smurfId, slot, BOARD, 1);
+        vm.prank(otherOp);
+        uint256 betId = crapsBattle.enterBattle(otherId, slot, BOARD, 1);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 resolveAt, bytes memory resolveArgs) = _call(acc, address(game), RESOLVE_ACCOUNT);
         assertTrue(resolveAt != type(uint256).max, "the Game resolved the account");
         (uint32 rid, address rcaller) = abi.decode(resolveArgs, (uint32, address));
-        assertEq(rid, smurfId);
-        assertEq(rcaller, owner);
+        assertEq(rid, otherId);
+        assertEq(rcaller, otherOp);
         (uint256 burnAt, bytes memory burnArgs) = _call(acc, address(coin), BURN_FOR_CRAPS);
         assertTrue(burnAt != type(uint256).max, "FLIP burned");
         (address target, uint32 burnId, uint256 grossAndFlags) = abi.decode(burnArgs, (address, uint32, uint256));
-        assertEq(target, owner, "the burn comes from the owner");
-        assertEq(burnId, smurfId, "the burn carries the smurf's ID");
-        assertEq(ownerBefore - coin.balanceOf(owner), grossAndFlags >> 8, "the owner's FLIP paid the entry");
+        assertEq(target, other, "the burn comes from the account's key");
+        assertEq(burnId, otherId, "the burn carries the account's ID");
+        assertEq(otherBefore - coin.balanceOf(other), grossAndFlags >> 8, "the account's FLIP paid the entry");
+        assertEq(coin.balanceOf(otherOp), opBefore, "the operator paid nothing");
         (uint256 questAt, bytes memory questArgs) = _call(acc, address(quests), RECORD_CRAPS);
         assertTrue(questAt != type(uint256).max, "Quests heard the action");
         (uint32 questId,) = abi.decode(questArgs, (uint32, uint8));
-        assertEq(questId, smurfId, "the quest goes to the smurf");
+        assertEq(questId, otherId, "the quest goes to the account");
 
         (uint32 slipId, uint256 slipBet) = _slipOwner(logs);
-        assertEq(slipId, smurfId, "CrapsSlipPlaced names the smurf");
+        assertEq(slipId, otherId, "CrapsSlipPlaced names the account");
         assertEq(slipBet, betId);
-        assertEq(uint32(crapsBattle.betWordOf(betId)), smurfId, "the bet is the smurf's");
-        assertEq(crapsBattle.preferredBoardOf(smurfId), BOARD, "the board is the smurf's");
+        assertEq(uint32(crapsBattle.betWordOf(betId)), otherId, "the bet is the account's");
+        assertEq(crapsBattle.preferredBoardOf(otherId), BOARD, "the board is the account's");
         assertEq(crapsBattle.preferredBoardOf(ownerId), 0);
+        assertEq(crapsBattle.preferredBoardOf(0), 0);
     }
 
     function test_operatorsActForTheAccountTheyAreApprovedFor() public {
@@ -184,33 +173,33 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         assertLt(coin.balanceOf(wallet), walletBefore, "the wallet's FLIP paid");
         assertEq(coin.balanceOf(operator), operatorBefore, "the operator paid nothing");
 
-        uint256 ownerBefore = coin.balanceOf(owner);
-        vm.prank(smurfOp);
-        betId = crapsBattle.enterBattle(smurfId, slot, BOARD, 1);
-        assertEq(uint32(crapsBattle.betWordOf(betId)), smurfId, "the smurf operator's bet is the smurf's");
-        assertLt(coin.balanceOf(owner), ownerBefore, "a smurf's operator spends the owner's FLIP");
+        uint256 otherBefore = coin.balanceOf(other);
+        vm.prank(otherOp);
+        betId = crapsBattle.enterBattle(otherId, slot, BOARD, 1);
+        assertEq(uint32(crapsBattle.betWordOf(betId)), otherId, "the other operator's bet is its account's");
+        assertLt(coin.balanceOf(other), otherBefore, "an operator spends the account's FLIP");
     }
 
     function test_unauthorizedAndUnallocatedAccountsRevert() public {
-        address[3] memory refused = [stranger, ownerOp, operator];
+        address[4] memory refused = [stranger, ownerOp, operator, owner];
         uint24 tomorrow = day + 1;
         for (uint256 i; i < refused.length; ++i) {
             address who = refused[i];
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.NotApproved.selector);
-            crapsBattle.enterBattle(smurfId, slot, BOARD, 1);
+            crapsBattle.enterBattle(otherId, slot, BOARD, 1);
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.NotApproved.selector);
-            crapsBattle.setPreferredBoard(smurfId, BOARD);
+            crapsBattle.setPreferredBoard(otherId, BOARD);
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.NotApproved.selector);
-            crapsBattle.buyFutureCrapsDays(smurfId, tomorrow, 1, false, BOARD);
+            crapsBattle.buyFutureCrapsDays(otherId, tomorrow, 1, false, BOARD);
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.NotApproved.selector);
-            JackpotBattle(address(crapsBattle)).convertNormalToHigh(smurfId, 1);
+            JackpotBattle(address(crapsBattle)).convertNormalToHigh(otherId, 1);
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.NotApproved.selector);
-            JackpotBattle(address(crapsBattle)).upgradeReservedDay(smurfId, tomorrow);
+            JackpotBattle(address(crapsBattle)).upgradeReservedDay(otherId, tomorrow);
         }
         uint32 unallocated = _unallocated();
         vm.prank(owner);
@@ -224,63 +213,63 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         JackpotBattle(address(crapsBattle)).convertNormalToHigh(unallocated, 1);
     }
 
-    /// @dev The newcomer rate reads the ACCOUNT key's real mint word: a smurf's own history
-    ///      prices the smurf's entries even though the owner pays them.
-    function test_theNewcomerRateReadsTheSmurfKeysRealMintWord() public {
-        // An established smurf key with a newcomer owner.
-        _setMintHistory(smurf, 1, 3);
+    /// @dev The newcomer rate reads the ACCOUNT key's real mint word: an account's own history
+    ///      prices its entries even though an operator places them.
+    function test_theNewcomerRateReadsTheAccountKeysRealMintWord() public {
+        // An established account acted for by its operator, beside a newcomer wallet.
+        _setMintHistory(otherId, 1, 3);
         _setMintHistory(ownerId, 0, 0);
-        uint256 before = coin.balanceOf(owner);
-        vm.prank(owner);
-        crapsBattle.enterBattle(smurfId, slot, BOARD, 1);
-        uint256 base = before - coin.balanceOf(owner);
+        uint256 before = coin.balanceOf(other);
+        vm.prank(otherOp);
+        crapsBattle.enterBattle(otherId, slot, BOARD, 1);
+        uint256 base = before - coin.balanceOf(other);
         before = coin.balanceOf(owner);
         vm.prank(owner);
         crapsBattle.enterBattle(0, slot, BOARD, 1);
-        assertEq(before - coin.balanceOf(owner), base + base / 20, "the newcomer owner's own entry pays the premium");
+        assertEq(before - coin.balanceOf(owner), base + base / 20, "the newcomer wallet's own entry pays the premium");
 
-        // Swap: a newcomer smurf key with an established owner.
-        _setMintHistory(smurf, 0, 0);
+        // Swap: a newcomer account acted for by its operator, beside an established wallet.
+        _setMintHistory(otherId, 0, 0);
         _setMintHistory(ownerId, 1, 3);
-        before = coin.balanceOf(owner);
-        vm.prank(owner);
-        crapsBattle.enterBattle(smurfId, slot, BOARD, 1);
-        assertEq(before - coin.balanceOf(owner), base + base / 20, "the newcomer smurf's entry pays the premium");
+        before = coin.balanceOf(other);
+        vm.prank(otherOp);
+        crapsBattle.enterBattle(otherId, slot, BOARD, 1);
+        assertEq(before - coin.balanceOf(other), base + base / 20, "the newcomer account's entry pays the premium");
         before = coin.balanceOf(owner);
         vm.prank(owner);
         crapsBattle.enterBattle(0, slot, BOARD, 1);
-        assertEq(before - coin.balanceOf(owner), base, "the established owner's own entry pays the base");
+        assertEq(before - coin.balanceOf(owner), base, "the established wallet's own entry pays the base");
     }
 
-    function test_vaultCompByIdChargesTheLaneForTheSmurfKey() public {
-        uint256 ownerBefore = coin.balanceOf(owner);
-        uint256 normalsBefore = uint32(_idWord(smurfId));
-        uint256 code = uint256(smurfId) | (uint256(4) << 160) | (uint256(2) << 200);
+    function test_vaultCompByIdChargesTheLaneForTheAccountKey() public {
+        uint256 otherBefore = coin.balanceOf(other);
+        uint256 normalsBefore = uint32(_idWord(otherId));
+        uint256 code = uint256(otherId) | (uint256(4) << 160) | (uint256(2) << 200);
         vm.recordLogs();
         vm.prank(ContractAddresses.VAULT);
         uint256 charged = crapsBattle.vaultComp(code);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertGt(charged, 0);
-        assertEq(uint32(_idWord(smurfId)) - normalsBefore, 2, "two normal passes banked on the smurf's ID");
+        assertEq(uint32(_idWord(otherId)) - normalsBefore, 2, "two normal passes banked on the account's ID");
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(coin) || logs[i].topics.length != 2 || logs[i].topics[0] != COMP_SPENT) continue;
-            assertEq(uint32(uint256(logs[i].topics[1])), smurfId, "CrapsCompSpent names the smurf key");
+            assertEq(uint32(uint256(logs[i].topics[1])), otherId, "CrapsCompSpent names the account key");
             assertEq(abi.decode(logs[i].data, (uint256)), charged);
             ++seen;
         }
         assertEq(seen, 1, "one comp burn");
 
-        // A future day comps a seat on the smurf's ID.
+        // A future day comps a seat on the account's ID.
         uint24 tomorrow = day + 1;
-        code = uint256(smurfId) | (uint256(2) << 160) | (uint256(tomorrow) << 176) | (uint256(1) << 200);
+        code = uint256(otherId) | (uint256(2) << 160) | (uint256(tomorrow) << 176) | (uint256(1) << 200);
         vm.recordLogs();
         vm.prank(ContractAddresses.VAULT);
         crapsBattle.vaultComp(code);
         (uint32 slipId, uint256 betId) = _slipOwner(vm.getRecordedLogs());
-        assertEq(slipId, smurfId);
-        assertEq(uint32(crapsBattle.betWordOf(betId)), smurfId);
-        assertEq(coin.balanceOf(owner), ownerBefore, "a comp spends no wallet's FLIP");
+        assertEq(slipId, otherId);
+        assertEq(uint32(crapsBattle.betWordOf(betId)), otherId);
+        assertEq(coin.balanceOf(other), otherBefore, "a comp spends no wallet's FLIP");
 
         vm.prank(ContractAddresses.VAULT);
         vm.expectRevert(GAME_E);
@@ -291,68 +280,68 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         crapsBattle.vaultComp(uint256(unallocated) | (uint256(4) << 160) | (uint256(2) << 200));
     }
 
-    function test_passDoorsBySmurfIdWriteNoAddressWord() public {
+    function test_passDoorsByIdWriteNoAddressWord() public {
         uint24 tomorrow = day + 1;
-        uint256 smurfBefore = _idWord(smurfId);
+        uint256 otherWordBefore = _idWord(otherId);
         vm.startPrank(ContractAddresses.GAME);
-        crapsBattle.creditPasses(smurfId, uint32(CrapsPriceLib.HIGH_EV), 0);
-        crapsBattle.deliverPasses(smurfId, 1, 0);
+        crapsBattle.creditPasses(otherId, uint32(CrapsPriceLib.HIGH_EV), 0);
+        crapsBattle.deliverPasses(otherId, 1, 0);
         vm.stopPrank();
         uint256 ownerIdWord = _idWord(ownerId);
 
-        vm.prank(owner);
-        JackpotBattle(address(crapsBattle)).convertNormalToHigh(smurfId, 1);
-        vm.prank(owner);
-        JackpotBattle(address(crapsBattle)).upgradeReservedDay(smurfId, tomorrow);
-        uint256 w = _idWord(smurfId);
-        assertEq(uint32(w >> 32), uint32(smurfBefore >> 32), "the converted high was spent on the upgrade");
-        assertEq(uint32(w), uint32(smurfBefore) + 1, "the day's normal pass banked back to the smurf");
-        assertEq(_idWord(ownerId), ownerIdWord, "the owner's credits did not move");
-        uint256 seat = crapsBattle.daySeatNumberOfId(tomorrow, smurfId);
+        vm.prank(otherOp);
+        JackpotBattle(address(crapsBattle)).convertNormalToHigh(otherId, 1);
+        vm.prank(otherOp);
+        JackpotBattle(address(crapsBattle)).upgradeReservedDay(otherId, tomorrow);
+        uint256 w = _idWord(otherId);
+        assertEq(uint32(w >> 32), uint32(otherWordBefore >> 32), "the converted high was spent on the upgrade");
+        assertEq(uint32(w), uint32(otherWordBefore) + 1, "the day's normal pass banked back to the account");
+        assertEq(_idWord(ownerId), ownerIdWord, "the other account's credits did not move");
+        uint256 seat = crapsBattle.daySeatNumberOfId(tomorrow, otherId);
         assertGt(seat, 0);
         uint256 betId = ((uint256(tomorrow) * 8) << 64) | seat;
-        assertEq(uint32(crapsBattle.betWordOf(betId)), smurfId, "upgrading preserves the ticket owner");
-        assertEq(crapsBattle.betWordOf(betId) & DAY_HIGH_MASK, DAY_HIGH_MASK, "the smurf's day is high");
+        assertEq(uint32(crapsBattle.betWordOf(betId)), otherId, "upgrading preserves the ticket owner");
+        assertEq(crapsBattle.betWordOf(betId) & DAY_HIGH_MASK, DAY_HIGH_MASK, "the account's day is high");
     }
 
     function test_boardSavesAndAmendmentsFollowTheAccount() public {
-        vm.prank(owner);
-        crapsBattle.setPreferredBoard(smurfId, BOARD);
+        vm.prank(otherOp);
+        crapsBattle.setPreferredBoard(otherId, BOARD);
         vm.prank(operator);
         crapsBattle.setPreferredBoard(walletId, BOARD_B);
-        assertEq(crapsBattle.preferredBoardOf(smurfId), BOARD);
+        assertEq(crapsBattle.preferredBoardOf(otherId), BOARD);
         assertEq(crapsBattle.preferredBoardOf(walletId), BOARD_B);
 
-        vm.prank(owner);
-        uint256 betId = crapsBattle.enterBattle(smurfId, slot, BOARD, 1);
+        vm.prank(otherOp);
+        uint256 betId = crapsBattle.enterBattle(otherId, slot, BOARD, 1);
         vm.prank(owner);
         vm.expectRevert(CrapsBattleStorage.NotYourBet.selector);
         crapsBattle.amendSlip(0, betId, BOARD_B);
         vm.prank(owner);
         vm.expectRevert(CrapsBattleStorage.NotYourBet.selector);
         crapsBattle.amendSlip(ownerId, betId, BOARD_B);
-        vm.prank(smurfOp);
-        crapsBattle.amendSlip(smurfId, betId, BOARD_B);
-        assertEq(crapsBattle.betOf(betId).chips, BOARD_B, "the smurf's operator amended the smurf's slip");
-        assertEq(crapsBattle.preferredBoardOf(smurfId), BOARD_B);
+        vm.prank(otherOp);
+        crapsBattle.amendSlip(otherId, betId, BOARD_B);
+        assertEq(crapsBattle.betOf(betId).chips, BOARD_B, "the operator amended the account's slip");
+        assertEq(crapsBattle.preferredBoardOf(otherId), BOARD_B);
     }
 
-    function test_aSmurfJoinsABonusWindowOnTheOwnersFlip() public {
+    function test_anAccountJoinsABonusWindowOnItsOwnFlip() public {
         uint256 word = uint256(keccak256("pacct craps day"));
         RecyclingState.seedDailyWord(address(game), day, word);
         assertEq(crapsBattle.dailyWordAt(day), word, "fixture: the day word lands where the table reads it");
         vm.prank(ContractAddresses.GAME);
         crapsBattle.openBonusDay();
 
-        uint256 ownerBefore = coin.balanceOf(owner);
+        uint256 otherBefore = coin.balanceOf(other);
         vm.recordLogs();
-        vm.prank(owner);
-        uint256 betId = crapsBattle.throwCraps(smurfId, 1, BOARD, 1);
+        vm.prank(otherOp);
+        uint256 betId = crapsBattle.throwCraps(otherId, 1, BOARD, 1);
         (uint32 slipId,) = _slipOwner(vm.getRecordedLogs());
-        assertEq(slipId, smurfId);
-        assertEq(uint32(crapsBattle.betWordOf(betId)), smurfId);
-        assertLt(coin.balanceOf(owner), ownerBefore, "the owner paid");
-        assertTrue(crapsBattle.seatedInId(uint64(uint256(day) * 8 + 2), smurfId), "the smurf holds the window seat");
-        assertFalse(crapsBattle.seatedIn(uint64(uint256(day) * 8 + 2), owner), "the owner does not");
+        assertEq(slipId, otherId);
+        assertEq(uint32(crapsBattle.betWordOf(betId)), otherId);
+        assertLt(coin.balanceOf(other), otherBefore, "the account paid");
+        assertTrue(crapsBattle.seatedInId(uint64(uint256(day) * 8 + 2), otherId), "the account holds the window seat");
+        assertFalse(crapsBattle.seatedIn(uint64(uint256(day) * 8 + 2), owner), "another wallet does not");
     }
 }

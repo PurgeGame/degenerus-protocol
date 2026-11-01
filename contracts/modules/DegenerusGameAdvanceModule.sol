@@ -355,12 +355,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         while (i < count) {
             uint32 id = _loanDueAt(due, i);
             uint256 loan = _loans[id];
-            uint256 family = uint8(loan >> LOAN_FAMILY_SHIFT);
-            if (!MineFlipGas.canRun(
-                meter,
-                GasBounds.LOAN_SEIZE_BASE + family * GasBounds.LOAN_SEIZE_SUB + GasBounds.LOAN_SEIZE_DEITY,
-                GasBounds.LOAN_SEIZE_TAIL
-            )) return (i, false);
+            if (!MineFlipGas.canRun(meter, GasBounds.LOAN_SEIZE, GasBounds.LOAN_SEIZE_TAIL)) return (i, false);
             ++i;
             if (!_autoRepayLoan(id, loan)) _seizeLoan(id, uint32(uint8(loan >> LOAN_LENDER_SHIFT)));
             result.progressed = true;
@@ -403,11 +398,9 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     /// @dev A borrower whose own claimable plus AFKing funding covers what repaying would cost now
     ///      (the full term at its due level; the manual repayment price at a game over that comes
     ///      first) repays instead of defaulting: claimable first (keeping its 1-wei sentinel), then
-    ///      AFKing. An account already acquired by a lender is seized. Both legs sit
-    ///      inside claimablePool and move to the lender's claimable, so the pool is unchanged.
+    ///      AFKing. Both legs sit inside claimablePool and move to the lender's claimable, so the
+    ///      pool is unchanged.
     function _autoRepayLoan(uint32 id, uint256 loan) private returns (bool) {
-        uint256 element = _walletElement(id);
-        if (_acquiredRoot(id, element) != 0) return false;
         uint256 owed = _loanOwedAt(loan, level);
         uint256 packed = balancesPacked[id];
         uint256 claimable = uint128(packed);
@@ -420,13 +413,12 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         _loans[id] = LOAN_RETAINED;
         if (fromClaim != 0) emit ClaimableSpent(id, fromClaim, claimable - fromClaim, MintPaymentKind.Internal, owed);
         if (fromAfking != 0) emit AfkingSpent(id, fromAfking);
-        emit LoanRepaid(id, _payee(element), owed);
+        emit LoanRepaid(id, address(uint160(_walletElement(id))), owed);
         return true;
     }
 
-    /// @dev The sale's ownership write, the borrower wallet's sDGNRS burn and default-ID clear
-    ///      for a main, the family's AFKing stop, and the deity pass following its account. A
-    ///      smurf already seized on its own keeps its lender and its pass.
+    /// @dev The sale's ownership write, the borrower wallet's sDGNRS burn and default-ID clear,
+    ///      the account's AFKing stop, and the deity pass following its account.
     function _seizeLoan(uint32 id, uint32 lender) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameGameOverModule.seizeLoan.selector, id, lender)
@@ -666,8 +658,12 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
 
         // --- Time-based future take (batched) ---
         {
-            uint32 purchaseAge = day > psd ? day - psd : 0;
-            uint256 bps = _nextToFutureBps(purchaseAge, purchaseLevel);
+            // Funding age: an early closure (ages 0-1) consolidates on its latch day; a seal-latched
+            // closure consolidates one logical day later, so ages above 1 step back a day (a
+            // day-0 seal reads as age 1, the same shelf).
+            uint32 skimAge = day > psd ? day - psd : 0;
+            if (skimAge > 1) --skimAge;
+            uint256 bps = _nextToFutureBps(skimAge, purchaseLevel);
             if (purchaseLevel % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
 
             uint256 lastPool = _levelPrizePool(purchaseLevel - 1);
@@ -908,7 +904,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
 
     /// @dev Base next-to-future skim for consolidation, in BPS, before the ratio adjustment,
     ///      overshoot surcharge, additive random, variance and 80% cap. `purchaseAge` is the
-    ///      purchase phase's age in days at consolidation; a first-day fill settles at age 1.
+    ///      funding age, the purchase age at which the closure latched; a first-day fill is age 1.
     ///      Levels after genesis bank more the faster they fill: 45% at ages 0-1, 35% at age 2,
     ///      30% at age 3. The skim then slides from the age-3 value to 15% at age 8 and rises to
     ///      45% at the purchase timeout, capped at 100%. Every step but the 15% trough adds the

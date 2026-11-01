@@ -20,9 +20,9 @@ contract AffiliateIdentitySeeder is DegenerusGameStorage {
 contract AffiliateIdentityTest is DeployProtocol {
     uint256 constant CAP = 3_000_000_000;
     uint32 constant VAULT_ID = 1;
-    bytes32 constant A = bytes32("ID_A");
-    bytes32 constant B = bytes32("ID_B");
-    bytes32 constant C = bytes32("ID_C");
+    bytes32 constant A = bytes32("IDA");
+    bytes32 constant B = bytes32("IDB");
+    bytes32 constant C = bytes32("IDC");
     address a = address(0xA11);
     address b = address(0xB11);
     address c = address(0xC11);
@@ -102,7 +102,7 @@ contract AffiliateIdentityTest is DeployProtocol {
 
     function test_DefaultCodeFirstUseRegistersOnlyIdentityAndAliasesShareIt() public {
         address fresh = address(0xD11);
-        bytes32 aliasCode = bytes32("DEFAULT_ALIAS");
+        bytes32 aliasCode = bytes32("DEFAULTALIAS");
         bytes32 defaultCode = bytes32(uint256(uint160(fresh)));
         assertEq(_id(fresh), 0);
         vm.recordLogs();
@@ -131,7 +131,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.prank(a); game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, B, MintPaymentKind.DirectEth, false);
         assertEq(_id(a), original);
         address fresh = address(0xD11);
-        bytes32 freshCode = bytes32("TICKET_FIRST");
+        bytes32 freshCode = bytes32("TICKETFIRST");
         vm.deal(fresh, 1 ether);
         vm.prank(fresh); game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint32 ticketId = _id(fresh);
@@ -144,13 +144,13 @@ contract AffiliateIdentityTest is DeployProtocol {
     function test_CapAllowsLastIdExistingAliasesAndAtomicFailure() public {
         address lastOwner = address(0xD11);
         address rejected = address(0xE11);
-        bytes32 lastCode = bytes32("LAST_ID");
-        bytes32 rejectedCode = bytes32("REJECTED_ID");
+        bytes32 lastCode = bytes32("LASTID");
+        bytes32 rejectedCode = bytes32("REJECTEDID");
         _length(CAP - 1);
         vm.prank(lastOwner); affiliate.createAffiliateCode(lastCode, 9);
         assertEq(_id(lastOwner), CAP);
-        vm.prank(lastOwner); affiliate.createAffiliateCode(bytes32("LAST_ALIAS"), 25);
-        vm.prank(a); affiliate.createAffiliateCode(bytes32("EXISTING_ALIAS"), 0);
+        vm.prank(lastOwner); affiliate.createAffiliateCode(bytes32("LASTALIAS"), 25);
+        vm.prank(a); affiliate.createAffiliateCode(bytes32("EXISTINGALIAS"), 0);
         vm.prank(c); affiliate.referPlayer(bytes32(uint256(uint160(lastOwner))));
         assertEq(_id(lastOwner), CAP);
         vm.expectRevert(bytes4(keccak256("E()")));
@@ -238,7 +238,7 @@ contract AffiliateIdentityTest is DeployProtocol {
     function test_CustomCreationCapturesPermanentLinksWithoutLaterCodeWrites() public {
         vm.prank(a); affiliate.referPlayer(B);
         vm.prank(b); affiliate.referPlayer(C);
-        bytes32 code = bytes32("CACHED_AT_CREATION");
+        bytes32 code = bytes32("CACHEDATCREATION");
         vm.prank(a); affiliate.createAffiliateCode(code, 15);
         uint256 beforeWord = _codeWord(code);
         assertEq(uint32(beforeWord), _id(a));
@@ -303,19 +303,19 @@ contract AffiliateIdentityTest is DeployProtocol {
     function test_CustomCreationRegistersWithoutTicketsAndPreservesAliasConfiguration() public {
         address fresh = address(0xD11);
         vm.recordLogs();
-        vm.prank(fresh); affiliate.createAffiliateCode(bytes32("NEW_CUSTOM"), 4);
+        vm.prank(fresh); affiliate.createAffiliateCode(bytes32("NEWCUSTOM"), 4);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 entry = keccak256("EntriesQueued(uint32,uint24,uint32)");
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != entry);
         uint32 id = _id(fresh);
         assertGt(id, 0);
         assertEq(game.entriesOwedView(1, fresh), 0);
-        vm.prank(fresh); affiliate.createAffiliateCode(bytes32("NEW_ALIAS"), 25);
+        vm.prank(fresh); affiliate.createAffiliateCode(bytes32("NEWALIAS"), 25);
         assertEq(_id(fresh), id);
-        (address owner, uint32 ownerId, uint8 kickback) = affiliate.affiliateCode(bytes32("NEW_CUSTOM"));
+        (address owner, uint32 ownerId, uint8 kickback) = affiliate.affiliateCode(bytes32("NEWCUSTOM"));
         assertEq(owner, fresh); assertEq(ownerId, id); assertEq(kickback, 4);
-        (owner, ownerId, kickback) = affiliate.affiliateCode(bytes32("NEW_ALIAS"));
+        (owner, ownerId, kickback) = affiliate.affiliateCode(bytes32("NEWALIAS"));
         assertEq(owner, fresh); assertEq(ownerId, id); assertEq(kickback, 25);
-        assertEq(uint32(_codeWord(bytes32("NEW_CUSTOM"))), id);
+        assertEq(uint32(_codeWord(bytes32("NEWCUSTOM"))), id);
     }
 }

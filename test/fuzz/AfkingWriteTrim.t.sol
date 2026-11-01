@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -38,11 +37,11 @@ contract WriteTrimSeeder is DegenerusGameStorage {
     }
 }
 
-/// @notice A loan seizure stops the seized account's AFKing run and, for a main, every smurf's,
-///         by walking the main's stored smurf list: each stopped run keeps its lane, marked for
-///         removal, until the next preparation pass removes it. The daily stage no longer polls
-///         acquisition.
-contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
+/// @notice A loan seizure stops the seized account's AFKing run: the stopped run keeps its lane,
+///         marked for removal, until the next preparation pass removes it. Other runs are
+///         untouched, and the seller cannot restart the acquired account. The daily stage no
+///         longer polls acquisition.
+contract AfkingLiquidationTest is RedemptionCloseTools {
     address private seller;
     uint32 private root;
     bytes private gameRuntime;
@@ -51,9 +50,8 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
 
     function setUp() public {
         _deployProtocol();
-        seller = makeAddr("family-seller");
+        seller = makeAddr("liquidation-seller");
         root = _giveWalletId(seller);
-        _grantSmurfBase(seller, 16);
         vm.deal(seller, 1_000 ether);
         vm.deal(address(game), 10_000 ether);
         gameRuntime = address(game).code;
@@ -69,12 +67,6 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         vm.etch(address(game), seeder.code);
         WriteTrimSeeder(address(game)).seed(id, entries);
         vm.etch(address(game), gameRuntime);
-    }
-
-    function _child() private returns (uint32 id) {
-        uint256 price = game.mintPrice();
-        vm.prank(seller);
-        id = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
     }
 
     function _sub(uint32 id, bool tickets) private {
@@ -93,7 +85,7 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         return f.member && f.removalPending && !f.active;
     }
 
-    /// @dev Borrow against `id` and default at the next level.
+    /// @dev `seller` borrows against `id` and defaults at the next level.
     function _sale(uint32 id) private {
         uint24 due = game.currentLvl() + 1;
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due, type(uint256).max);
@@ -112,66 +104,46 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         vm.etch(address(game), gameRuntime);
     }
 
-    function test_SmurfListRecordsEveryCreationAcrossWords() public {
-        uint32[] memory made = new uint32[](11);
-        for (uint256 i; i < made.length; ++i) made[i] = _child();
-        uint32[] memory listed = lens.smurfsOf(address(game), root);
-        assertEq(listed.length, made.length, "list length is the lifetime smurf count");
-        for (uint256 i; i < made.length; ++i) assertEq(listed[i], made[i], "creation order");
-        assertEq(lens.smurfsOf(address(game), made[0]).length, 0, "a smurf owns no list");
-    }
-
-    function test_MainSaleStopsOwnAndEverySmurfSubscription() public {
+    function test_SaleStopsTheAccountsSubscription() public {
         _sub(root, false);
-        // A borrowing main has at most five smurfs, so the walk fits one list word.
-        uint32[] memory kids = new uint32[](5);
-        for (uint256 i; i < kids.length; ++i) kids[i] = _child();
-        // Active box and ticket runs, one cancelled (removed at once), one never subscribed.
-        _sub(kids[0], false);
-        _sub(kids[1], true);
-        _sub(kids[3], false);
-        _sub(kids[2], false);
-        vm.prank(seller);
-        game.subscribe(kids[2], false, 0, 0);
         uint256 members = game.subscriberSetLength();
-        assertFalse(lens.subInfoFullById(address(game), kids[2]).member, "a cancel leaves no record");
 
         _sale(root);
 
-        assertTrue(_stopped(root), "main's own run stopped");
-        assertTrue(_stopped(kids[0]) && _stopped(kids[1]) && _stopped(kids[3]), "every live smurf run stopped");
-        assertFalse(lens.subInfoFullById(address(game), kids[2]).member, "the cancelled smurf stays out");
-        assertFalse(lens.subInfoFullById(address(game), kids[4]).member, "the never-subscribed smurf stays out");
-        assertEq(game.subscriberSetLength(), members, "stopped lanes stay for the next preparation pass");
-        // Acquired family members cannot restart.
+        assertEq(game.acquiredBuyer(root), 2, "fixture: acquired");
+        assertTrue(_stopped(root), "the sold account's run stopped");
+        assertEq(game.subscriberSetLength(), members, "the stopped lane stays for the next preparation pass");
+        // The seller cannot restart the acquired account.
         vm.prank(seller);
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
-        game.subscribe(kids[0], false, 1, 0);
+        game.subscribe(root, false, 1, 0);
     }
 
-    function test_ChildSaleStopsOnlyThatChild() public {
-        _sub(root, false);
-        uint32 a = _child();
-        uint32 b = _child();
-        _sub(a, false);
-        _sub(b, true);
-        _seed(a, 400);
-
-        _sale(a);
-
-        assertTrue(_stopped(a), "sold child's run stopped");
-        assertTrue(_active(b), "sibling untouched");
-        assertTrue(_active(root), "owner untouched");
-
-        // A later main sale walks past the already-stopped child.
-        _seed(root, 400);
+    function test_SaleWithoutARunLeavesNoRecord() public {
+        uint256 members = game.subscriberSetLength();
         _sale(root);
-        assertTrue(_stopped(b));
-        assertTrue(_stopped(root));
+        assertFalse(lens.subInfoFullById(address(game), root).member, "a never-subscribed account stays out");
+        assertEq(game.subscriberSetLength(), members);
+    }
+
+    function test_SaleOfOneAccountLeavesAnotherWalletsRun() public {
+        address other = makeAddr("liquidation-other");
+        uint32 otherId = _giveWalletId(other);
+        uint256 seat = _grantSeat(other);
+        vm.deal(other, 5 ether);
+        vm.prank(other);
+        game.subscribe{value: 2 ether}(otherId, true, 1, seat);
+        _sub(root, false);
+        _seed(otherId, 400);
+
+        _sale(root);
+
+        assertTrue(_stopped(root), "the sold account's run stopped");
+        assertTrue(_active(otherId), "the other account is untouched");
     }
 
     function test_OutsiderWithItsOwnFundingSurvivesTheSale() public {
-        address outsider = makeAddr("family-outsider");
+        address outsider = makeAddr("liquidation-outsider");
         uint256 seat = _grantSeat(outsider);
         vm.deal(outsider, 5 ether);
         vm.prank(outsider);

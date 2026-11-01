@@ -45,12 +45,12 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     address internal constant OWN_D = address(0xB00D);
     address internal constant OWN_S = address(0xB005);
     address internal constant OWN_G = ContractAddresses.GNRUS;
-    bytes32 internal constant CODE_A = bytes32("BOOT_A");
-    bytes32 internal constant CODE_B = bytes32("BOOT_B");
-    bytes32 internal constant CODE_C = bytes32("BOOT_C");
-    bytes32 internal constant CODE_D = bytes32("BOOT_D");
-    bytes32 internal constant CODE_S = bytes32("BOOT_S");
-    bytes32 internal constant CODE_G = bytes32("BOOT_G");
+    bytes32 internal constant CODE_A = bytes32("BOOTA");
+    bytes32 internal constant CODE_B = bytes32("BOOTB");
+    bytes32 internal constant CODE_C = bytes32("BOOTC");
+    bytes32 internal constant CODE_D = bytes32("BOOTD");
+    bytes32 internal constant CODE_S = bytes32("BOOTS");
+    bytes32 internal constant CODE_G = bytes32("BOOTG");
     uint8 internal constant KICK_A = 10;
     uint8 internal constant KICK_B = 0;
     uint8 internal constant KICK_C = 25;
@@ -613,7 +613,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     function test_CodeInfoIsOneSlotWithFieldOffsets() public {
         address up = makeAddr("infoUpline");
         address owner = makeAddr("infoOwner");
-        bytes32 code = bytes32("INFO_CODE");
+        bytes32 code = bytes32("INFOCODE");
         _buy(up, bytes32(0));
         assertEq(_refWord(up), 1, "upline locked to VAULT");
         _refer(owner, _dflt(up));
@@ -634,7 +634,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     function test_StorageRootsMatchTheViews() public {
         address o = makeAddr("rootOwner");
         address b = makeAddr("rootBuyer");
-        bytes32 code = bytes32("ROOT_CODE");
+        bytes32 code = bytes32("ROOTCODE");
         _create(o, code, 0);
         _refer(b, code);
         uint32 oid = _id(o);
@@ -697,30 +697,44 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     // 4. Custom-code range
     // =====================================================================
 
-    function test_CustomCodeRangeStartsAtTwoPow192() public {
+    function test_CustomCodeShapeBoundaries() public {
         address who = makeAddr("rangeOwner");
-        bytes32[4] memory bad =
-            [bytes32(uint256(1) << 160), bytes32((uint256(1) << 192) - 1), bytes32(0), bytes32(uint256(1))];
-        for (uint256 i; i < 4; ++i) {
-            vm.expectRevert(DegenerusAffiliate.Zero.selector);
+        bytes32[6] memory bad = [
+            bytes32(uint256(1) << 160),
+            bytes32((uint256(1) << 192) - 1),
+            bytes32(0),
+            bytes32(uint256(1)),
+            bytes32(uint256(1) << 192),
+            bytes32("123")
+        ];
+        for (uint256 i; i < 6; ++i) {
+            vm.expectRevert(DegenerusAffiliate.InvalidCode.selector);
             vm.prank(who);
             affiliate.createAffiliateCode(bad[i], 0);
         }
         assertEq(_id(who), 0, "a refused creation registers nobody");
-        _create(who, bytes32(uint256(1) << 192), 3);
+        _create(who, bytes32("A"), 3);
         _create(who, bytes32("ALICE"), 4);
         uint32 id = _id(who);
         assertGt(id, 0);
         // An unreferred owner's first hop is not yet permanent, so nothing is cached.
-        _assertInfo(bytes32(uint256(1) << 192), id, 3, 0, 0, 0);
+        _assertInfo(bytes32("A"), id, 3, 0, 0, 0);
         assertEq(_info(bytes32("ALICE")).ownerId, id);
     }
 
-    function testFuzz_CodesBelowCustomRangeRevert(uint256 raw) public {
-        bytes32 code = bytes32(bound(raw, 0, (uint256(1) << 192) - 1));
-        vm.expectRevert(DegenerusAffiliate.Zero.selector);
+    function testFuzz_NonLeftAlignedCodesRevert(uint256 raw) public {
+        bytes32 code = bytes32(bound(raw, 0, (uint256(1) << 248) - 1));
+        vm.expectRevert(DegenerusAffiliate.InvalidCode.selector);
         vm.prank(makeAddr("rangeFuzz"));
         affiliate.createAffiliateCode(code, 0);
+    }
+
+    function _fuzzCode(uint256 r) internal pure returns (bytes32) {
+        bytes memory b = new bytes(12);
+        for (uint256 i; i < 12; ++i) {
+            b[i] = bytes1(uint8(0x41 + uint256(keccak256(abi.encode("FZ", r, i))) % 26));
+        }
+        return bytes32(b);
     }
 
     // =====================================================================
@@ -833,7 +847,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_SelfReferralOwnCustomCodeOnPurchaseLocks() public {
         address o = makeAddr("selfCustom");
-        bytes32 code = bytes32("SELF_CUSTOM");
+        bytes32 code = bytes32("SELFCUSTOM");
         _create(o, code, 20);
         uint32 oid = _id(o);
         vm.recordLogs();
@@ -846,7 +860,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_SelfReferralOwnCustomCodeWithoutSenderIdLocks() public {
         address o = makeAddr("selfLink");
-        bytes32 code = bytes32("SELF_LINK");
+        bytes32 code = bytes32("SELFLINK");
         _create(o, code, 5);
         // Whale's link-only touch passes senderId 0; the self check decodes the owner's address.
         _pay(0, code, o, 0, 1);
@@ -856,7 +870,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_SelfReferralReferPlayerOwnCustomCodeReverts() public {
         address o = makeAddr("selfRefer");
-        bytes32 code = bytes32("SELF_REFER");
+        bytes32 code = bytes32("SELFREFER");
         _create(o, code, 5);
         vm.expectRevert(DegenerusAffiliate.UnknownCode.selector);
         _refer(o, code);
@@ -865,7 +879,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_SelfReferralThroughDeityLinkTouchLocks() public {
         address o = makeAddr("selfDeity");
-        bytes32 code = bytes32("SELF_DEITY");
+        bytes32 code = bytes32("SELFDEITY");
         _create(o, code, 0);
         vm.deal(o, 200 ether);
         vm.prank(o);
@@ -1091,18 +1105,18 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         owner = makeAddr("cOwner");
         buyer = makeAddr("cBuyer");
         _buy(u2, bytes32(0));
-        _create(u2, bytes32("C_U2"), 0);
-        _refer(u1, bytes32("C_U2"));
-        _create(u1, bytes32("C_U1"), 0);
-        _create(owner, bytes32("C_OWNER"), 0);
-        _refer(owner, bytes32("C_U1"));
-        _refer(buyer, bytes32("C_OWNER"));
-        assertEq(_info(bytes32("C_OWNER")).flags, 0, "owner code carries no cache");
+        _create(u2, bytes32("CU2"), 0);
+        _refer(u1, bytes32("CU2"));
+        _create(u1, bytes32("CU1"), 0);
+        _create(owner, bytes32("COWNER"), 0);
+        _refer(owner, bytes32("CU1"));
+        _refer(buyer, bytes32("COWNER"));
+        assertEq(_info(bytes32("COWNER")).flags, 0, "owner code carries no cache");
     }
 
     function test_UplineCacheFillsOnFirstWinThenSkipsExtsload() public {
         (address owner, address u1, address u2, address buyer) = _customChain();
-        bytes32 code = bytes32("C_OWNER");
+        bytes32 code = bytes32("COWNER");
         uint32 oid = _id(owner);
         uint24 lvl = 3;
 
@@ -1141,7 +1155,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_CustomCodeOwnerMissDecodesOncePerHop() public {
         (, , address u2, address buyer) = _customChain();
-        uint32 s = _senderFor(bytes32("C_OWNER"), 2, 8_000_000);
+        uint32 s = _senderFor(bytes32("COWNER"), 2, 8_000_000);
         vm.startStateDiffRecording();
         (uint32 w,,) = _payCombined(bytes32(0), buyer, s, 4, 4000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
@@ -1249,7 +1263,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_PurchasePairsBuyerKickbackWithOwnerCredit() public {
         address o = makeAddr("pairOwner");
-        bytes32 code = bytes32("PAIR_CODE");
+        bytes32 code = bytes32("PAIRCODE");
         _create(o, code, 20);
         uint32 oid = _id(o);
         address b = makeAddr("pairBuyer");
@@ -1277,7 +1291,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     function test_PurchasePairPaysUplineWinnerById() public {
         address up = makeAddr("pairUp");
         address o = makeAddr("pairOwner2");
-        bytes32 code = bytes32("PAIR_UP");
+        bytes32 code = bytes32("PAIRUP");
         _buy(up, bytes32(0));
         _refer(o, _dflt(up));
         _create(o, code, 0);
@@ -1327,13 +1341,13 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _buy(u2, bytes32(0));
         _refer(u1, _dflt(u2));
         _refer(a, _dflt(u1));
-        _create(a, bytes32("CL_A"), 0);
+        _create(a, bytes32("CLA"), 0);
     }
 
     function test_ClaimReferredSplitsByIds() public {
         (address a, address u1, address u2) = _claimChain();
         address s = makeAddr("clSub");
-        _refer(s, bytes32("CL_A"));
+        _refer(s, bytes32("CLA"));
         _seedBase(_giveWalletId(s), 1400);
         vm.startStateDiffRecording();
         _claim(s);
@@ -1349,8 +1363,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     function test_ClaimMutualReferralSkipsTheSubUpline() public {
         address a = makeAddr("muA");
         address s = makeAddr("muSub");
-        _create(a, bytes32("MU_A"), 0);
-        _refer(s, bytes32("MU_A"));
+        _create(a, bytes32("MUA"), 0);
+        _refer(s, bytes32("MUA"));
         _refer(a, _dflt(s));
         uint32 sid = _giveWalletId(s);
         _seedBase(sid, 1400);
@@ -1384,7 +1398,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         (address a, address u1, address u2) = _claimChain();
         address s1 = makeAddr("mixA");
         address s2 = makeAddr("mixB");
-        _refer(s1, bytes32("CL_A"));
+        _refer(s1, bytes32("CLA"));
         _seedBase(_giveWalletId(s1), 1400);
         _seedBase(_giveWalletId(s2), 1400);
         uint32[] memory subs = new uint32[](2);
@@ -1405,7 +1419,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     function test_ClaimDuplicateSubDrainsOnce() public {
         (address a, address u1, address u2) = _claimChain();
         address s = makeAddr("dupSub");
-        _refer(s, bytes32("CL_A"));
+        _refer(s, bytes32("CLA"));
         _seedBase(_giveWalletId(s), 1400);
         uint32[] memory subs = new uint32[](2);
         subs[0] = _id(s);
@@ -1441,8 +1455,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         address o2 = makeAddr("vwOwner2");
         address z = makeAddr("vwCustom");
         _refer(o2, _dflt(o));
-        _create(o2, bytes32("VW_CUSTOM"), 3);
-        _refer(z, bytes32("VW_CUSTOM"));
+        _create(o2, bytes32("VWCUSTOM"), 3);
+        _refer(z, bytes32("VWCUSTOM"));
         _assertIds(z, _id(o2), _id(o), 1);
         assertEq(affiliate.getReferrer(z), o2);
 
@@ -1523,12 +1537,12 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _giveWalletId(up);
         _pay(0, bytes32(0), up, 0, 1); // locked without booking any earnings
         _refer(o1, _dflt(up));
-        _create(o1, bytes32("V_O1"), 12);
+        _create(o1, bytes32("VO1"), 12);
         _giveWalletId(o2);
-        _create(o3, bytes32("V_O3"), 0);
-        _refer(o3, bytes32("V_O1"));
+        _create(o3, bytes32("VO3"), 0);
+        _refer(o3, bytes32("VO1"));
         address[3] memory owners = [o1, o2, o3];
-        bytes32[3] memory codes = [bytes32("V_O1"), _dflt(o2), bytes32("V_O3")];
+        bytes32[3] memory codes = [bytes32("VO1"), _dflt(o2), bytes32("VO3")];
         for (uint256 step; step < 36; ++step) {
             uint256 k = step % 3;
             uint24 lvl = uint24(1 + step / 6); // Production levels advance monotonically.
@@ -1576,7 +1590,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         address o = makeAddr("evOwner");
         address p = makeAddr("evPlayer");
         address l = makeAddr("evLocked");
-        bytes32 code = bytes32("EV_CODE");
+        bytes32 code = bytes32("EVCODE");
         vm.recordLogs();
         _create(o, code, 0);
         uint32 oid = _id(o);
@@ -1619,12 +1633,12 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         address unreg = makeAddr("acUnreg");
         _assertCodeView(_dflt(unreg), unreg, 0, 0);
         address o = makeAddr("acOwner");
-        _create(o, bytes32("AC_CUSTOM"), 9);
+        _create(o, bytes32("ACCUSTOM"), 9);
         uint32 oid = _id(o);
-        _assertCodeView(bytes32("AC_CUSTOM"), o, oid, 9);
+        _assertCodeView(bytes32("ACCUSTOM"), o, oid, 9);
         assertEq(_keyOf(oid), o);
         _assertCodeView(CODE_A, OWN_A, _id(OWN_A), KICK_A);
-        _assertCodeView(bytes32("AC_UNKNOWN"), address(0), 0, 0);
+        _assertCodeView(bytes32("ACUNKNOWN"), address(0), 0, 0);
         _refer(makeAddr("acMaterialize"), CODE_A);
         _assertCodeView(CODE_A, OWN_A, _id(OWN_A), KICK_A);
     }
@@ -1679,7 +1693,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             vm.prank(actor);
             try affiliate.referPlayer(code) {} catch {}
         } else if (op == 1) {
-            bytes32 fresh = keccak256(abi.encode("FZ", r)) | bytes32(uint256(1) << 255);
+            bytes32 fresh = _fuzzCode(r);
             vm.prank(actor);
             try affiliate.createAffiliateCode(fresh, uint8((r >> 64) % 26)) {
                 if (n < pool.length) pool[n++] = fresh;
@@ -1727,11 +1741,11 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _buy(u2, bytes32(0));
         _refer(u1, _dflt(u2));
         _refer(a, _dflt(u1));
-        _create(a, bytes32("DY_A"), 0);
+        _create(a, bytes32("DYA"), 0);
         vm.deal(buyer, 200 ether);
         vm.startStateDiffRecording();
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 100 ether}(0, 3, bytes32("DY_A"));
+        game.purchaseDeityPass{value: 100 ether}(0, 3, bytes32("DYA"));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_calls(acc, address(game), address(affiliate), affiliate.referrerIdsById.selector).length, 1);
         assertEq(_calls(acc, address(game), address(affiliate), affiliate.getReferrer.selector).length, 0);

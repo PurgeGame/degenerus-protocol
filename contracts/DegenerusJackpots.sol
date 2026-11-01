@@ -482,7 +482,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         return bafConsolationOfId(degenerusGame.walletIdOf_g3120(player), lvl);
     }
 
-    /// @notice Claimable consolation of an account, including a subaccount.
+    /// @notice Claimable consolation of an account.
     function bafConsolationOfId(uint32 playerId, uint24 lvl) public view returns (uint256) {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) return 0;

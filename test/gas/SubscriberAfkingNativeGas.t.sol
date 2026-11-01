@@ -4,7 +4,6 @@ pragma solidity 0.8.38;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -119,31 +118,13 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _setPrizePools(1_000 ether, 10_000 ether);
     }
 
-    // Fixture-only ownership transition; the loan tests exercise the real seizure itself.
-    function acquireForTest(address player, bool child) external {
+    /// @dev Fixture for a seizure: the ownership transition, then the cancel `runLoanSeizureWork`
+    ///      runs right after it. The loan tests exercise the real seizure itself.
+    function liquidateForTest(address player) external {
         uint32 id = _walletIdOf(player);
-        if (child) {
-            uint32 parent = _seedWallet(address(0xAC0123));
-            wallets[id] = uint256(parent) << 160;
-            id = parent;
-        }
-        wallets[id] |= uint256(SDGNRS_WALLET_ID) << 160;
-    }
-    /// @dev Fixture for a seizure: the ownership transition, then the cancel `runLoanSeizureWork` runs
-    ///      right after it (a main seizure also stops its smurfs; `child` makes `player` the seized
-    ///      main's only smurf).
-    function liquidateForTest(address player, bool child) external {
-        uint32 id = _walletIdOf(player);
-        if (child) {
-            uint32 parent = _seedWallet(address(0xAC0123));
-            wallets[id] = uint256(parent) << 160;
-            mintPacked_[parent] += uint256(1) << BitPackingLib.SMURF_COUNT_SHIFT;
-            _smurfWords[parent][0] = id;
-            id = parent;
-        }
         wallets[id] |= uint256(SDGNRS_WALLET_ID) << 160;
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSignature("cancelLiquidatedSubscriptions(uint32,bool)", id, child)
+            abi.encodeWithSignature("cancelLiquidatedSubscription(uint32)", id)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
@@ -219,29 +200,24 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
     }
     function test_AcquiredSubscriptionsStopBeforeAnyFurtherFundingDebit() public {
-        uint256 base = vm.snapshotState();
-        for (uint8 mode; mode < 2; ++mode) {
-            host.prepare(false);
-            host.add(PLAYER, 0);
-            // Own sale (0) and main sale with the smurf (1) stop at liquidation.
-            host.liquidateForTest(PLAYER, mode == 1);
-            uint256 fundingBefore = game.afkingFundingOf(PLAYER);
-            uint256 claimableBefore = host.claimableOf(PLAYER);
-            // The pass admits each member only with SUBSCRIBER_ITEM_GAS + SUBSCRIBER_TAIL_GAS left
-            // (1.95M at the 1.7M item bound); after the empty box section a 2M budget no longer
-            // reaches the ticket-section member, so the caller budget is 4M.
-            MineFlipGas.Result memory result = host.subWork{gas: 4_000_000}(4_000_000);
-            uint256 used = _lastGas();
-            emit log_named_uint("acquired_subscriber_cleanup_gas", used);
-            assertTrue(result.progressed, "the cleanup progresses");
-            assertTrue(result.done, "the pass completes");
-            assertEq(host.memberCount(), 0, "the acquired member is removed");
-            assertEq(game.afkingFundingOf(PLAYER), fundingBefore, "no further funding debit");
-            assertEq(host.claimableOf(PLAYER), claimableBefore, "no claimable debit");
-            assertEq(host.pendingEntries(PLAYER, 5), 0, "no entries bought");
-            assertLe(used, GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS, "cleanup within the item bound");
-            assertTrue(vm.revertToState(base));
-        }
+        host.prepare(false);
+        host.add(PLAYER, 0);
+        host.liquidateForTest(PLAYER);
+        uint256 fundingBefore = game.afkingFundingOf(PLAYER);
+        uint256 claimableBefore = host.claimableOf(PLAYER);
+        // The pass admits each member only with SUBSCRIBER_ITEM_GAS + SUBSCRIBER_TAIL_GAS left
+        // (1.95M at the 1.7M item bound); after the empty box section a 2M budget no longer
+        // reaches the ticket-section member, so the caller budget is 4M.
+        MineFlipGas.Result memory result = host.subWork{gas: 4_000_000}(4_000_000);
+        uint256 used = _lastGas();
+        emit log_named_uint("acquired_subscriber_cleanup_gas", used);
+        assertTrue(result.progressed, "the cleanup progresses");
+        assertTrue(result.done, "the pass completes");
+        assertEq(host.memberCount(), 0, "the acquired member is removed");
+        assertEq(game.afkingFundingOf(PLAYER), fundingBefore, "no further funding debit");
+        assertEq(host.claimableOf(PLAYER), claimableBefore, "no claimable debit");
+        assertEq(host.pendingEntries(PLAYER, 5), 0, "no entries bought");
+        assertLe(used, GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS, "cleanup within the item bound");
     }
 
     function test_AcquisitionDoesNotOrphanPreviouslyPaidBox() public {
@@ -252,7 +228,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertGt(bought, opened);
         assertEq(host.pendingBoxes(), 1);
         uint256 fundingBefore = game.afkingFundingOf(PLAYER);
-        host.liquidateForTest(PLAYER, true);
+        host.liquidateForTest(PLAYER);
         host.publishForOpen();
         assertEq(host.openWork(12_000_000).rewardBasis, 1, "acquisition cannot discard the paid box");
         assertEq(host.pendingBoxes(), 0);

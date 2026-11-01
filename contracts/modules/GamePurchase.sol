@@ -29,7 +29,7 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {RECORD_KIND_BUY} from "../interfaces/ICoinflip.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
-import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./DegenerusGameMintStreakUtils.sol";
+import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {GamePurchaseBoon} from "./GamePurchaseBoon.sol";
@@ -267,7 +267,7 @@ abstract contract GamePurchase is
     ///         is the `ethValue` parameter rather than `msg.value`. Callers: the facade's foil
     ///         purchase, which funds the ticket/lootbox leg with the fresh ETH it carved while
     ///         the buyer's msg.value is in flight (that msg.value is ignored here — only
-    ///         ethValue is spent), and createSmurf's one ticket.
+    ///         ethValue is spent).
     /// @param payerId Ledger the claimable/AFKing legs debit (0 = the buyer's own).
     function _purchaseWith(
         uint32 buyerId,
@@ -287,76 +287,6 @@ abstract contract GamePurchase is
             ethValue,
             payerId
         );
-    }
-
-    /// @notice Create a smurf account owned and referred by the caller and buy
-    ///         it one whole ticket paid by the caller (body of Game.createSmurf).
-    /// @dev The caller must have an ordinary wallet ID. Resolve its referral, allocate the
-    ///      subaccount with only its owner ID and smurf flag, refer it through the owner, then buy its
-    ///      ticket. Admission uses the ticket quote. Payment uses the owner's fresh ETH,
-    ///      claimable and AFKing balances according to payKind; overpay credits the owner.
-    ///      Ticket history and quest progress belong to the new account.
-    /// @param affiliateCode Referral code applied to the owner if its referral is unset.
-    /// @param payKind How the owner funds the ticket.
-    /// @return smurfId The new account's wallet ID.
-    function _createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
-        internal
-        returns (uint32 smurfId)
-    {
-        uint32 ownerId = _requireWalletId(msg.sender);
-        uint256 mintWord = _smurfMain(ownerId);
-        // An open loan fixes the family its seizure walks.
-        if (address(uint160(_walletElement(ownerId))) != msg.sender || uint96(_loans[ownerId]) != 0) revert E();
-        uint256 score = _playerActivityScore(ownerId, _effectiveQuestStreak(ownerId));
-        uint16 created = uint16(mintWord >> BitPackingLib.SMURF_COUNT_SHIFT);
-        if (created == type(uint16).max || created >= uint256(uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT)) + score / SMURF_SCORE_PER_CREATION) {
-            revert SmurfCreationLimitReached();
-        }
-        // Reserve this ID's lifetime slot before stateful external calls; failures undo it.
-        mintPacked_[ownerId] = BitPackingLib.setPacked(
-            mintWord, BitPackingLib.SMURF_COUNT_SHIFT, BitPackingLib.MASK_16, uint256(created) + 1
-        );
-        affiliate.payAffiliate(0, affiliateCode, ownerId, level + 1, true, 0);
-        uint256 ticketCost = PriceLookupLib.priceForLevel(_activeTicketLevel());
-
-        uint256 position = wallets.length;
-        if (position > PAID_ADMISSION_WALLETS && ticketCost < PAID_ADMISSION_MIN_SPEND) revert E();
-        if (position > type(uint32).max) revert E();
-        smurfId = uint32(position);
-        wallets.push(uint256(ownerId) << 160);
-        mintPacked_[smurfId] = uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT;
-        balancesPacked[smurfId] = 1; // the unbacked claimable sentinel, as _registerWallet seeds it
-        // Append to the owner's smurf list at index `created` (its pre-increment count).
-        _smurfWords[ownerId][created >> 3] |= uint256(smurfId) << ((created & 7) * 32);
-        emit SmurfCreated(ownerId, smurfId);
-
-        affiliate.referSmurf(ownerId, smurfId);
-
-        uint256 fresh = payKind == MintPaymentKind.Claimable
-            ? 0
-            : (msg.value < ticketCost ? msg.value : ticketCost);
-        if (msg.value > fresh) _creditAfkingValue(ownerId, msg.value - fresh);
-        _purchaseWith(smurfId, 4 * QTY_SCALE, 0, bytes32(0), payKind, fresh, ownerId);
-    }
-
-    /// @dev Only an allocated ordinary main can create children or receive grants.
-    ///      Acquired roots and smurfs have a nonzero parent and cannot qualify.
-    function _smurfMain(uint32 id) private view returns (uint256 mintWord) {
-        _requireAllocated(id);
-        uint256 element = _walletElement(id);
-        mintWord = mintPacked_[id];
-        if (uint160(element) == 0 || uint32(element >> 160) != 0
-            || (mintWord >> BitPackingLib.SMURF_FLAG_SHIFT) & 1 != 0) revert E();
-    }
-
-    /// @notice Permanently raise this main ID's base allowance; never resets its lifetime count.
-    function _raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) internal {
-        if (!IDegenerusVaultOwner(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert OnlyVault();
-        uint256 mintWord = _smurfMain(mainId);
-        uint16 previous = uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT);
-        if (newBase <= previous) revert InvalidSmurfBaseIncrease();
-        mintPacked_[mainId] = BitPackingLib.setPacked(mintWord, BitPackingLib.SMURF_BASE_SHIFT, BitPackingLib.MASK_16, newBase);
-        emit SmurfBaseAllowanceRaised(mainId, previous, newBase);
     }
 
     /// @notice Redeem FLIP for current-jackpot tickets — allowed only inside the jackpot window.
@@ -488,10 +418,10 @@ abstract contract GamePurchase is
 
     /// @notice Borrow against the account's far-future tickets (levels `dueLevel + 2` and up),
     ///         due when the game enters `dueLevel`. Only the owner. Unrepaid by then, the lender
-    ///         takes the account as a sale does: a main with its family, burning the borrower
+    ///         takes the account as a sale does, burning the borrower
     ///         wallet's native sDGNRS. A game that ends first with VRF alive settles the loan the
     ///         same way before the ending's draw, repaying at the price `clearDebtNow` would charge then.
-    ///         A main with more than five smurfs cannot borrow; smurfs can. Credits the non-ticket
+    ///         Only an ordinary account can borrow. Credits the non-ticket
     ///         principal to the account's prepaid AFKing balance; no ETH or stETH leaves the Game.
     ///         New loans close 48 hours after the last completed day (deployment before the first),
     ///         until another day completes. Repayment and settlement remain available.
@@ -505,14 +435,9 @@ abstract contract GamePurchase is
         uint256 element = _walletElement(id);
         address borrower = _payee(element);
         if (borrower != msg.sender) revert NotApproved();
-        if (id <= GNRUS_WALLET_ID || _isAcquired(id) || uint96(_loans[id]) != 0) revert E();
+        if (id <= GNRUS_WALLET_ID || uint32(element >> 160) != 0 || uint96(_loans[id]) != 0) revert E();
         if (gameOver || _livenessTriggered()
             || block.timestamp >= uint256(lastDailyCompletedAt) + LOAN_LATE_WINDOW) revert E();
-        uint256 family = 1;
-        if (uint32(element >> 160) == 0) {
-            family += uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
-            if (family > LOAN_MAX_SMURFS + 1) revert E();
-        }
         uint24 lvl = level;
         uint24 buyLevel = _activeTicketLevel();
         if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(buyLevel) + LOAN_HORIZON_LEVELS) revert E();
@@ -527,7 +452,7 @@ abstract contract GamePurchase is
         uint256 index = _loansDueCount[dueLevel]++;
         _setLoanDueAt(dueLevel, index, id);
         _loans[id] = principal | (uint256(lender) << LOAN_LENDER_SHIFT) | (uint256(lvl) << LOAN_START_SHIFT)
-            | (uint256(dueLevel) << LOAN_DUE_SHIFT) | (index << LOAN_INDEX_SHIFT) | (family << LOAN_FAMILY_SHIFT);
+            | (uint256(dueLevel) << LOAN_DUE_SHIFT) | (index << LOAN_INDEX_SHIFT);
         _debitLender(lender, principal);
         claimablePool -= uint128(principal);
         if (ticketWei != 0) {
@@ -587,41 +512,35 @@ abstract contract GamePurchase is
         if (amount > fromClaim) emit AfkingSpent(lender, amount - fromClaim);
     }
 
-    event AccountSwept(uint32 indexed accountId, uint32 indexed mainId, uint256 ethValue, uint256 flipAmount);
+    event AccountSwept(uint32 indexed accountId, uint32 indexed lenderId, uint256 ethValue, uint256 flipAmount);
 
-    /// @notice Repeatable collection of subaccount balances into their current main's reserves.
-    /// @dev No recipient override or external ETH payout. A normal smurf keeps its live prepaid
-    ///      funding; acquired accounts and ended-game smurfs also consolidate prepaid ETH.
+    /// @notice Repeatable collection of acquired accounts' claimable and prepaid balances into
+    ///         their lender's claimable.
+    /// @dev No recipient override or external ETH payout; claimablePool is unchanged. Each
+    ///      account keeps its 1-wei claimable sentinel.
     function _sweepAccounts(uint32[] calldata ids) internal returns (uint256 ethCollected, uint256 flipCollected) {
         if (ids.length > 32 || _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
         for (uint256 i; i < ids.length; ++i) {
             uint32 id = ids[i];
             _requireAllocated(id);
-            uint256 element = _walletElement(id);
-            if (uint32(element >> 160) == 0) revert E();
-            uint32 mainId = _ownerWalletId(id);
-            if (mainId != SDGNRS_WALLET_ID) {
+            uint32 lender = uint32(_walletElement(id) >> 160);
+            if (lender == 0) revert E();
+            if (lender != SDGNRS_WALLET_ID) {
                 (, , bool authorized) = _account(id, msg.sender);
                 if (!authorized) revert NotApproved();
             }
-            bool acquired = _acquiredRoot(id, element) != 0;
             uint256 packed = balancesPacked[id];
             uint256 amount = uint128(packed);
             amount = amount > 1 ? amount - 1 : 0;
-            uint256 prepaid = acquired || gameOver ? packed >> 128 : 0;
+            uint256 prepaid = packed >> 128;
             if (amount + prepaid != 0) {
                 balancesPacked[id] = packed - amount - (prepaid << 128);
-                _creditClaimableLogged(mainId, amount + prepaid);
-                // Preserve the source account's cashout rule when an ordinary owner extracts
-                // its winnings. No ETH leaves the Game and claimablePool is unchanged.
-                if (!acquired && amount != 0) {
-                    _maybeCurse(id);
-                }
+                _creditClaimableLogged(lender, amount + prepaid);
             }
             uint256 flipAmount = coinflip.sweepAccountCoinflips(id);
             ethCollected += amount + prepaid;
             flipCollected += flipAmount;
-            emit AccountSwept(id, mainId, amount + prepaid, flipAmount);
+            emit AccountSwept(id, lender, amount + prepaid, flipAmount);
         }
     }
 
@@ -726,7 +645,7 @@ abstract contract GamePurchase is
     /// @dev Core purchase body. `quote` is the caller's same-frame _purchaseCostInputs snapshot
     ///      (no external call sits between that read and this frame, so the values cannot have
     ///      changed). `payerId` is the ledger the claimable/AFKing legs debit: the buyer's own
-    ///      (0 = the buyer), or a smurf's owner on its creation ticket.
+    ///      (0 = the buyer), or a separate funding account named by an adapter purchase.
     function _purchaseForWithCached(
         uint32 buyerId,
         uint256 entryQuantityScaled,
@@ -786,7 +705,7 @@ abstract contract GamePurchase is
         if (quote.ticketCost != 0) emit EntriesBought(buyerId, entryQuantityScaled, quote.ticketCost);
 
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
-        // explicit-value ticket-buy slice for Foil purchases and smurf creation).
+        // explicit-value ticket-buy slice for Foil purchases).
         uint256 remainingEth = ethValue;
         // Lootbox-leg claimable + afking drawn here (c.lootboxPoolDraw); folded with the ticket
         // leg's draw into one claimablePool decrement below.
@@ -1004,7 +923,7 @@ abstract contract GamePurchase is
 
     function _accrueAdapterDegenesisCredit(uint32, uint256, uint32) internal virtual {}
 
-    /// @dev Ordinary purchases, including smurf creation, retain their credit behavior.
+    /// @dev Ordinary purchases retain their credit behavior.
     function _accruePurchaseDegenesisCredit(uint32 buyerId, uint256 cost) internal virtual {
         _accrueDegenesisCredit(buyerId, cost);
     }
@@ -1073,7 +992,7 @@ abstract contract GamePurchase is
             // before anything else in this purchase loads the buyer's mint word.
             buyerId = _registerCallerAccount(buyerId, costWei);
             // Token debits round up: a fractional ticket price must not undercharge. The FLIP
-            // burns from the account's payee (the owner for a smurf).
+            // burns from the account's payee.
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4) + QTY_SCALE - 1) /
                 QTY_SCALE;
             _coinReceive(_payee(_walletElement(buyerId)), coinCost);

@@ -95,12 +95,17 @@ contract FuturepoolSkimTest is DeployProtocol {
     // =========================================================================
     //  Integration: production mineFlip requests real mock VRF and emits
     //  the actual skim. Literal expected base rates catch caller-side age offsets.
+    //  The seeded age is the consolidation age; above 1 the skim reads one day less
+    //  (the funding age of a seal-latched closure).
     // =========================================================================
-    function test_fullPipeline_day8Trough() public { _checkTransitionSkim(8, 5, 1500); }
-    function test_fullPipeline_day30EndpointWithBonus() public { _checkTransitionSkim(30, 15, 4600); }
-    function test_fullPipeline_day3PlateauWithBonus() public { _checkTransitionSkim(3, 15, 3100); }
+    function test_fullPipeline_day8Trough() public { _checkTransitionSkim(9, 5, 1500); }
+    function test_fullPipeline_day30EndpointWithBonus() public { _checkTransitionSkim(31, 15, 4600); }
+    function test_fullPipeline_day3PlateauWithBonus() public { _checkTransitionSkim(4, 15, 3100); }
+    function test_fullPipeline_day2ShelfWithBonus() public { _checkTransitionSkim(3, 15, 3600); }
+    function test_fullPipeline_day1SealShelfWithBonus() public { _checkTransitionSkim(2, 15, 4600); }
     function test_fullPipeline_day1FillShelfWithBonus() public { _checkTransitionSkim(1, 15, 4600); }
-    function test_fullPipeline_genesisKeepsOffset() public { _checkTransitionSkim(21, 1, 1300); }
+    function test_fullPipeline_day0FillShelfWithBonus() public { _checkTransitionSkim(0, 15, 4600); }
+    function test_fullPipeline_genesisKeepsOffset() public { _checkTransitionSkim(22, 1, 1300); }
 
     function _checkTransitionSkim(uint24 age, uint24 incomingLevel, uint256 expectedBase) private {
         vm.warp(block.timestamp + 500 days);
@@ -140,7 +145,7 @@ contract FuturepoolSkimTest is DeployProtocol {
                 uint256 draw = (variance % range + uint256(keccak256(abi.encode(uint256(80), word))) % range) / 2;
                 uint256 expected = nominal + draw - halfWidth;
                 if (expected > nextBefore * 80 / 100) expected = nextBefore * 80 / 100;
-                assertEq(take, expected, "live consolidation uses the unshifted purchase age");
+                assertEq(take, expected, "live consolidation uses the funding age");
                 assertEq(insurance, nextBefore / 100, "transition insurance stays at 1%");
                 return;
             }
@@ -155,8 +160,8 @@ contract FuturepoolSkimTest is DeployProtocol {
 
     // =========================================================================
     //  PURE-MATH _nextToFutureBps tests via SkimHarness.
-    //  Purchase ages, including the level-0 exception, use the same unshifted
-    //  input as the production consolidation call.
+    //  Inputs are funding ages, as the production consolidation call passes them,
+    //  including for the level-0 exception.
     // =========================================================================
 
     function test_nextToFutureBps_acceleratedBreakpoints() public view {

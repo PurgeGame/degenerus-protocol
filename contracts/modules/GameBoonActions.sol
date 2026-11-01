@@ -774,8 +774,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     ///      to any one recipient over the game's lifetime. The menu uses the preceding day's
     ///      finalized RNG, so it can be previewed one game day before issuance. The deity side is
     ///      authorized under the account rule; the recipient is a third party that must already
-    ///      hold an ID. Self boons are compared by ID (a deity may boon its owner or the owner's
-    ///      other smurfs).
+    ///      hold an ID. Self boons are compared by ID.
     /// @param deityId The deity account issuing the boon (0 = caller)
     /// @param recipientId The account receiving the boon (nonzero, allocated)
     /// @param slot The slot index (0-2) to use

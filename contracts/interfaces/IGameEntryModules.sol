@@ -5,7 +5,6 @@ import {MintPaymentKind} from "./IDegenerusGame.sol";
 
 interface IGamePurchaseModule {
     function purchase(uint32 buyerId, uint256 entryQuantityScaled, uint256 boxOrder, bytes32 affiliateCode, MintPaymentKind payKind) external payable;
-    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind) external payable returns (uint32);
     function redeemFlip(uint32 id, uint256 entryQuantityScaled) external;
     function withdrawAfkingFunding(uint32 id, uint256 amount) external;
     function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external;

@@ -46,7 +46,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     address private constant U2 = address(0xB002);
     address private constant U1 = address(0xB001);
     address private constant OWNER = address(0xB000);
-    bytes32 private constant CUSTOM = bytes32("PHASE_E_CODE");
+    bytes32 private constant CUSTOM = bytes32("PHASEECODE");
     bytes32 private constant ROLL_TAG = keccak256("affiliate-payout-roll-v1");
     uint32 private constant BOARD = 3 | (uint32(3) << 9) | (uint32(1) << 12);
     uint32 private constant BOARD2 = 2 | (uint32(3) << 6) | (uint32(2) << 15);

@@ -6,7 +6,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {WWXRP} from "../../contracts/WWXRP.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 contract WwxrpClaimableTest is DeployProtocol {
     address private alice = address(0xA11CE);
@@ -51,22 +50,18 @@ contract WwxrpClaimableTest is DeployProtocol {
         assertEq(game.walletIdOf_g3120(bob), 0);
     }
 
-    function test_SmurfAndOwnerBalancesStaySeparateOperatorCannotRedirectWithdrawal() public {
-        _grantSmurfBase(alice, 1);
-        (,,,, uint256 price) = game.purchaseInfo_g1027();
-        vm.deal(alice, price);
-        vm.prank(alice);
-        uint32 smurf = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        _credit(aliceId, 10);
-        _credit(smurf, 70);
+    function test_AccountBalancesStaySeparateOperatorCannotRedirectWithdrawal() public {
+        uint32 bobId = _giveWalletId(bob);
+        _credit(aliceId, 70);
+        _credit(bobId, 10);
         vm.expectRevert(WWXRP.NotApproved.selector);
-        vm.prank(bob); wwxrp.withdraw(smurf, 0);
-        vm.prank(alice); game.setOperatorApproval(smurf, bob, true);
-        vm.prank(bob); wwxrp.withdraw(smurf, 0);
+        vm.prank(bob); wwxrp.withdraw(aliceId, 0);
+        vm.prank(alice); game.setOperatorApproval(aliceId, bob, true);
+        vm.prank(bob); wwxrp.withdraw(aliceId, 0);
         assertEq(wwxrp.balanceOf(alice), 70);
         assertEq(wwxrp.balanceOf(bob), 0);
-        assertEq(wwxrp.claimable(smurf), 0);
-        assertEq(wwxrp.claimable(aliceId), 10);
+        assertEq(wwxrp.claimable(aliceId), 0);
+        assertEq(wwxrp.claimable(bobId), 10);
     }
 
     function test_DrawSpendsClaimableBeforeHeldAndRollsBackOnShortfall() public {

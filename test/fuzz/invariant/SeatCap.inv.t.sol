@@ -40,13 +40,9 @@ contract SeatCapInvariant is DeployProtocol {
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, vaultOp, true),
             0
         )), 0), (bytes));
-        // Wallets 0..4 start registered, each holding its pass's free seat; wallets 0 and 1
-        // own a smurf. Wallets 5..9 start unregistered.
+        // Wallets 0..4 start registered, each holding its pass's free seat. Wallets 5..9 start
+        // unregistered.
         for (uint256 i; i < 5; ++i) handler.passPurchase(i);
-        for (uint256 i; i < 5; ++i) _grantSmurfBase(handler.wallets(i), 8);
-        handler.createSmurf(0);
-        handler.createSmurf(1);
-        require(handler.smurfIds(1) != 0, "fixture: two smurfs");
         targetContract(address(handler));
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: _selectors()}));
         _finishSubscriptionWindow();
@@ -117,7 +113,7 @@ contract SeatCapInvariant is DeployProtocol {
         assertGt(vm.envOr(_counterKey("SEATCAP_VMINTS"), uint256(0)), 0, "vacuous: the vault never minted a seat");
         assertGt(vm.envOr(_counterKey("SEATCAP_CRANKS"), uint256(0)), 0, "vacuous: driveDay never cranked the engine");
         for (uint256 a; a < n; ++a) {
-            if (a == 10) continue; // A_MINE, see above
+            if (a == 9) continue; // A_MINE, see above
             assertGt(
                 vm.envOr(string.concat(_counterKey("SEATCAP_OK_"), vm.toString(a)), uint256(0)),
                 0,
@@ -149,10 +145,9 @@ contract SeatCapInvariant is DeployProtocol {
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](22);
+        s = new bytes4[](21);
         uint256 i;
         for (uint256 w; w < 2; ++w) s[i++] = SeatCapHandler.passPurchase.selector;
-        s[i++] = SeatCapHandler.createSmurf.selector;
         s[i++] = SeatCapHandler.approveOperator.selector;
         for (uint256 w; w < 2; ++w) s[i++] = SeatCapHandler.vaultMint.selector;
         for (uint256 w; w < 2; ++w) s[i++] = SeatCapHandler.fastForward.selector;
@@ -162,7 +157,7 @@ contract SeatCapInvariant is DeployProtocol {
         for (uint256 w; w < 2; ++w) s[i++] = SeatCapHandler.transferSeat.selector;
         for (uint256 w; w < 3; ++w) s[i++] = SeatCapHandler.driveDay.selector;
         s[i++] = SeatCapHandler.mineFlip.selector;
-        require(i == 22, "selector table size");
+        require(i == 21, "selector table size");
     }
 
     // ═════════════════════════ scripted campaigns ═════════════════════════
@@ -170,22 +165,18 @@ contract SeatCapInvariant is DeployProtocol {
     /// @notice Reach the cap, pause VAULT through its real operator, run later daily passes,
     ///         then resume. The retained entry never permits an extra seat mint.
     function test_scriptedCampaignVaultPauseCannotExceedCap() public {
-        // setUp: wallets 0..4 hold their pass seats; smurfs at account indices 10 and 11.
+        // setUp: wallets 0..4 hold their pass seats.
         _ok();
         assertEq(afkingSubToken.freeClaims(), 5, "five free seats from setUp");
-        handler.approveOperator(10 | (uint256(1) << 48)); // wallet 0 approves op for its smurf
-        assertTrue(handler.opApproved(handler.smurfIds(0)), "op approved for the smurf");
-        handler.passPurchase(10); // the smurf's pass seat goes to wallet 0
-        _ok();
-        assertEq(handler.seatCount(handler.wallets(0)), 2, "wallet 0 holds its seat and the smurf's");
-        for (uint256 i; i < 4; ++i) {
-            handler.subscribe(i | (uint256(1) << 56)); // wallets 0..3 start runs on their seats
+        handler.approveOperator(0 | (uint256(1) << 48)); // wallet 0 approves op
+        assertTrue(handler.opApproved(game.walletIdOf_g3120(handler.wallets(0))), "op approved for wallet 0");
+        for (uint256 i; i < 5; ++i) {
+            // Wallets 0..4 start runs on their seats; op starts wallet 0's.
+            handler.subscribe(i | (uint256(1) << 56));
             _ok();
         }
-        handler.subscribe(10 | (uint256(1) << 56)); // op starts the smurf's run on the owner's seat
-        _ok();
         assertEq(handler.gInsertions(), 5, "five non-exempt runs entered the set");
-        assertEq(handler.seatCount(handler.wallets(0)), 0, "both of wallet 0's seats burned");
+        assertEq(handler.seatCount(handler.wallets(0)), 0, "wallet 0's seat burned");
         handler.subscribe(1 | (uint256(4) << 56)); // wallet 1 cancels (its entry leaves the set)
         handler.underfund(2); // wallet 2 loses its funding
         _ok();

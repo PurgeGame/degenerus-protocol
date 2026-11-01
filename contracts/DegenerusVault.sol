@@ -533,7 +533,7 @@ contract DegenerusVault {
     /// @dev When enabled, the game routes an account liquidation to the vault as buyer when sDGNRS
     ///      cannot fund it, spending the vault's game-side ETH — claimable first, then prepaid afking
     ///      (staged via playerAction calling Game.depositAfkingFunding) — down to `floorWei`. The vault
-    ///      owns the purchased account family and receives its later proceeds. This commits
+    ///      owns the purchased account and receives its later proceeds. This commits
     ///      DGVE backing at the same quote sDGNRS pays, so it is
     ///      vault-owner gated.
     /// @param enabled Whether the vault acts as liquidation buyer-of-last-resort.

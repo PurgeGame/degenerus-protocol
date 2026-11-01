@@ -20,7 +20,7 @@ import {PlayerQuestView} from "../../contracts/interfaces/IDegenerusQuests.sol";
 ///         because no real payout lands one on demand; the FLIP-redemption window and the Vault
 ///         operator case also write one storage word each, noted where they do.
 contract DegenesisCredit is DegenesisFixture {
-    bytes32 internal constant AFF_CODE = bytes32(uint256(keccak256("degenesis-credit-aff")));
+    bytes32 internal constant AFF_CODE = bytes32("DEGENESISAFF");
     address internal constant AFF_OWNER = address(0xA11F00);
     address internal constant REFERRED = address(0xB0B0B0);
 

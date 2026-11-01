@@ -51,12 +51,16 @@ contract ResolutionCleanupGasTest is DeployProtocol {
         vm.store(address(game), bytes32(0), bytes32((state & ~(uint256(0xffffff) << 24))
             | (uint256(game.currentDayView_g542950()) << 24) | (uint256(1) << 192)));
         uint256 resolveGas;
-        // The miner preserves one-field finalization per transaction.
-        for (uint256 i; i < 5; ++i) {
+        // One call settles every closed field its allowance admits; a tighter allowance resumes.
+        uint256 calls;
+        for (; calls < 5 && !game.rngComplete(); ++calls) {
             game.mineRun(0);
-            resolveGas += vm.lastCallGas().gasTotalUsed;
+            uint256 used = vm.lastCallGas().gasTotalUsed;
+            assertLt(used, 10_000_000, "mineFlip transaction exceeds the per-chunk bound");
+            resolveGas += used;
         }
-        assertTrue(game.rngComplete(), "five fields must drain in five transactions");
+        assertTrue(game.rngComplete(), "five fields must drain within five transactions");
+        emit log_named_uint(string.concat(label, "-mineFlip-calls"), calls);
         emit log_named_uint(string.concat(label, "-arm-execution-gas"), armGas);
         emit log_named_uint(string.concat(label, "-mineFlip-execution-gas"), resolveGas);
     }

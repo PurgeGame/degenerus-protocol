@@ -588,8 +588,7 @@ contract DegenesisAdmissionCeilings is DegenesisGasBase {
         assertLt(GasBounds.DEGENESIS_DAY_CLOSE + GasBounds.DAILY_PHASE_TAIL + 250_000, CEILING, "Degenesis day close");
         assertLt(GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS, CEILING, "sDGNRS whale buy and top-up");
         assertLt(MineFlipAdmission.terminalLoanFirstUnit(), CEILING, "game over's loan checkpoint");
-        assertLt(GasBounds.LOAN_SEIZE_BASE + 6 * GasBounds.LOAN_SEIZE_SUB + GasBounds.LOAN_SEIZE_DEITY
-            + GasBounds.LOAN_SEIZE_TAIL, CEILING, "level loan checkpoint");
+        assertLt(GasBounds.LOAN_SEIZE + GasBounds.LOAN_SEIZE_TAIL, CEILING, "level loan checkpoint");
         assertLt(GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL, CEILING, "battle draw incl. zero-award seal");
         // The documented exception: the rare 100-box human entry, under the 16.7M ceiling.
         assertLt(GasBounds.HUMAN_ENTRY_GAS + 100 * GasBounds.HUMAN_BOX_GAS + GasBounds.HUMAN_TAIL_GAS, 16_700_000,

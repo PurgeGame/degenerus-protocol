@@ -17,11 +17,9 @@ contract TicketQueueOwnerOracleTest is Test {
         _root(1, VAULT);
         _root(2, SDGNRS);
         _root(4, SELLER);
-        // Queue a child of the seller without inventing a forward address entry for it.
-        _word(5, uint256(4) << 160);
         bytes32 queue = keccak256(abi.encode(uint256(TQ.queueKey(LEVEL)), TQ.QUEUE));
         vm.store(HOST, queue, bytes32(uint256(1) | uint256(LEVEL) << 32));
-        vm.store(HOST, keccak256(abi.encode(queue)), bytes32(uint256(5)));
+        vm.store(HOST, keccak256(abi.encode(queue)), bytes32(uint256(4)));
     }
 
     function _word(uint32 id, uint256 word) private {
@@ -35,13 +33,13 @@ contract TicketQueueOwnerOracleTest is Test {
 
     function checkQueue() external view { TQ.assertQueue(HOST, LEVEL); }
 
-    function test_OrdinaryChildAndRootMetadata() public {
+    function test_OrdinaryAccountWithMetadata() public {
         _word(4, uint256(uint160(SELLER)) | uint256(123) << 192);
         this.checkQueue();
         assertEq(TQ.ownerAt(HOST, LEVEL, LEVEL, 0), SELLER);
     }
 
-    function test_AcquiredFamilyAndSellerReregistration() public {
+    function test_AcquiredAccountAndSellerReregistration() public {
         for (uint32 buyer = 1; buyer <= 2; ++buyer) {
             _word(4, uint256(uint160(SELLER)) | uint256(buyer) << 160);
             vm.store(HOST, keccak256(abi.encode(SELLER, TQ.MINT)), bytes32(uint256(4) << 32));
@@ -59,9 +57,9 @@ contract TicketQueueOwnerOracleTest is Test {
         this.checkQueue();
     }
 
-    function test_RejectsChildCycle() public {
-        _word(5, uint256(5) << 160);
-        vm.expectRevert("invalid subaccount owner");
+    function test_RejectsKeylessWordWithAccountLink() public {
+        _word(4, uint256(4) << 160);
+        vm.expectRevert("owner root missing key");
         this.checkQueue();
     }
 

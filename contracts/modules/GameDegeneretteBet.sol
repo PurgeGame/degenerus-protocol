@@ -112,7 +112,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
     /// @notice Places a Degenerette bet with one chosen symbol and a generated ticket.
     /// @dev Each spin resolves independently from the bet's lootbox RNG index word.
     ///      The bet always belongs to account `id` (0 = caller). Funding source: a caller
-    ///      authorized for the account (its payee — the key or a smurf's owner — or an approved
+    ///      authorized for the account (its payee or an approved
     ///      operator) spends the account's funds: fresh ETH from the caller, the claimable
     ///      shortfall from the account's ledger, FLIP burned from the account's payee, quest to
     ///      the account. Any other caller funds the bet itself — a permissionless gift (the

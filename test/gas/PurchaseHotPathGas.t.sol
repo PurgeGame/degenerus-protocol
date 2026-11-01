@@ -47,7 +47,7 @@ contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
 contract PurchaseHotPathGasTest is DeployProtocol {
     address internal constant BUYER = address(0xB071);
     address internal constant REFERRER = address(0xAFF1);
-    bytes32 internal constant CODE = bytes32("PURCHASE_GAS");
+    bytes32 internal constant CODE = bytes32("PURCHASEGAS");
 
     function setUp() public {
         _deployProtocol();

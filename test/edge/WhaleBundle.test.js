@@ -462,7 +462,7 @@ describe("WhaleBundle", function () {
         .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       expect(await game.currentLvl()).to.equal(0n);
-      // deityPassRefundable should be set since level == 0
+      // The recorded price is refunded only on a deterministic stall ending below level 10.
     });
   });
 

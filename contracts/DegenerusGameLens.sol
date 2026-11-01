@@ -106,57 +106,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint32 lenderId;
         uint24 startLevel;
         uint24 dueLevel;
-        uint8 family;
         uint256 owed;
-    }
-
-    struct SmurfCreationInfo {
-        uint32 mainId;
-        uint256 currentScore;
-        uint16 createdLifetime;
-        uint16 baseAllowance;
-        uint16 scoreAllowance;
-        uint16 allowance;
-        uint16 remaining;
-        bool eligibleMain;
-    }
-
-    /// @notice Main ID's lifetime quota, including admin base and current score capacity.
-    /// @dev Capacity is not purchase readiness: payment and liveness guards still apply.
-    function smurfCreationInfo(address game, uint32 mainId) external view returns (SmurfCreationInfo memory info) {
-        info.mainId = mainId;
-        uint256 base;
-        assembly { base := wallets.slot }
-        if (mainId == 0 || mainId >= _sload(game, bytes32(base))) return info;
-        uint256 element = _sload(game, bytes32(uint256(keccak256(abi.encode(base))) + mainId));
-        assembly { base := mintPacked_.slot }
-        uint256 mintWord = _sload(game, _mapSlot(uint256(mainId), base));
-        info.createdLifetime = uint16(mintWord >> BitPackingLib.SMURF_COUNT_SHIFT);
-        info.baseAllowance = uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT);
-        info.allowance = info.baseAllowance;
-        info.eligibleMain = uint160(element) != 0 && uint32(element >> 160) == 0
-            && (mintWord >> BitPackingLib.SMURF_FLAG_SHIFT) & 1 == 0;
-        if (!info.eligibleMain) return info;
-        info.currentScore = IDegenerusGameLensSource(game).playerActivityScoreById(mainId);
-        info.scoreAllowance = uint16(info.currentScore / SMURF_SCORE_PER_CREATION);
-        uint256 total = uint256(info.baseAllowance) + info.scoreAllowance;
-        info.allowance = total > type(uint16).max ? type(uint16).max : uint16(total);
-        if (info.allowance > info.createdLifetime) info.remaining = info.allowance - info.createdLifetime;
-    }
-
-    /// @notice Every smurf ID `mainId` has created, in creation order.
-    function smurfsOf(address game, uint32 mainId) external view returns (uint32[] memory ids) {
-        uint256 base;
-        assembly { base := mintPacked_.slot }
-        uint256 count = uint16(_sload(game, _mapSlot(uint256(mainId), base)) >> BitPackingLib.SMURF_COUNT_SHIFT);
-        assembly { base := _smurfWords.slot }
-        uint256 inner = uint256(_mapSlot(uint256(mainId), base));
-        ids = new uint32[](count);
-        uint256 word;
-        for (uint256 i; i < count; ++i) {
-            if (i & 7 == 0) word = _sload(game, _mapSlot(i >> 3, inner));
-            ids[i] = uint32(word >> ((i & 7) * 32));
-        }
     }
 
     /// @notice Registered deity by owner-list index (genesis first, then paid, in order).
@@ -352,7 +302,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return uint32(_sload(game, _mapSlot(player, base)));
     }
 
-    /// @dev Account key of wallet-table element `id`; zero for id 0 or beyond the table.
+    /// @dev Mirror of Game `_payee` for `id`: an ordinary account's key, or an acquired account's
+    ///      lender key (one owner link). Zero for id 0 or beyond the table.
     function _walletAddress(address game, uint32 id) private view returns (address) {
         if (id == 0) return address(0);
         uint256 base;
@@ -361,8 +312,6 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 table = uint256(keccak256(abi.encode(base)));
         uint256 element = _sload(game, bytes32(table + id));
         uint32 ownerId = uint32(element >> 160);
-        if (ownerId != 0) element = _sload(game, bytes32(table + ownerId));
-        ownerId = uint32(element >> 160);
         if (ownerId != 0) element = _sload(game, bytes32(table + ownerId));
         return address(uint160(element));
     }
@@ -846,12 +795,12 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return _walletId(game, player);
     }
 
-    /// @notice Wallet owning an ID; zero for an unallocated or zero ID.
+    /// @notice Payee wallet of an ID (the lender for an acquired account); zero for an unallocated or zero ID.
     function walletOfId(address game, uint32 id) external view returns (address) {
         return _walletAddress(game, id);
     }
 
-    /// @notice Raw account metadata and mint word. An acquired root retains the seller wallet and names its buyer ID; use walletOfId for the current payee.
+    /// @notice Raw account metadata and mint word. An acquired account retains the former borrower wallet and names its lender ID; use walletOfId for the current payee.
     function accountInfo(address game, uint32 id) external view returns (address wallet, uint32 ownerId, uint256 mintWord, uint64 halfPasses) {
         uint256 tableRoot;
         uint256 mintRoot;
@@ -944,7 +893,6 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         info.lenderId = uint8(loan >> LOAN_LENDER_SHIFT);
         info.startLevel = uint24(loan >> LOAN_START_SHIFT);
         info.dueLevel = uint24(loan >> LOAN_DUE_SHIFT);
-        info.family = uint8(loan >> LOAN_FAMILY_SHIFT);
         uint256 o;
         assembly { o := level.offset }
         uint256 lvl = uint24(_levelWord(game) >> (o << 3));
@@ -983,23 +931,14 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return lane & 0x80000000 == 0 ? 0 : lane;
     }
 
-    /// @dev Account-level borrow gates: allocated, not acquired, no open loan, and a main's
-    ///      lifetime smurf count within the cap.
+    /// @dev Account-level borrow gates: allocated, ordinary (not acquired) and no open loan.
     function _borrowableMirror(address game, uint32 id) private view returns (bool) {
         uint256 base;
         assembly { base := wallets.slot }
         if (id == 0 || id >= _sload(game, bytes32(base))) return false;
-        uint256 table = uint256(keccak256(abi.encode(base)));
-        uint256 element = _sload(game, bytes32(table + id));
-        uint32 parent = uint32(element >> 160);
-        if (parent != 0 && (uint160(element) != 0 || uint32(_sload(game, bytes32(table + parent)) >> 160) != 0)) {
-            return false;
-        }
+        if (uint32(_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + id)) >> 160) != 0) return false;
         assembly { base := _loans.slot }
-        if (uint96(_sload(game, _mapSlot(uint256(id), base))) != 0) return false;
-        if (parent != 0) return true;
-        assembly { base := mintPacked_.slot }
-        return uint16(_sload(game, _mapSlot(uint256(id), base)) >> BitPackingLib.SMURF_COUNT_SHIFT) <= LOAN_MAX_SMURFS;
+        return uint96(_sload(game, _mapSlot(uint256(id), base))) == 0;
     }
 
     /// @dev Mirror of _resolveLender over extsload.

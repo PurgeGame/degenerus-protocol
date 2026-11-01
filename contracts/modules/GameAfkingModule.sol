@@ -45,7 +45,7 @@ import {IStETH} from "../interfaces/IStETH.sol";
 /// @notice Minimal AFKing Subscription Token surface for subscribe: a new run burns one seat.
 interface ISeatToken {
     /// @notice GAME-only: burn seat `seatId`, which `holder` must hold. `holder` is the
-    ///         subscriber's payee (the owner for a smurf). Called before the run is written.
+    ///         subscriber's payee. Called before the run is written.
     /// @custom:reverts OnlyGame If the caller is not GAME.
     /// @custom:reverts InvalidToken If `seatId` does not exist or is not held by `holder`.
     function consumeSeat(address holder, uint256 seatId) external;
@@ -166,7 +166,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /// @dev Lock create/change/cancel from the day boundary through preparation, RNG and all
     ///      AFKing opens. Outside that window, mode changes may safely relocate IDs.
     /// @dev Authorization is checked ONCE here under the account rule (`_resolveAccount`:
-    ///      the caller is the account's payee — its key or a smurf's owner — or an operator
+    ///      the caller is the account's payee or an operator
     ///      approved for its ID). Authorization is NEVER re-checked at process-time.
     /// @dev A new run burns seat `seatId` of the subscriber's payee through the token's
     ///      Game-only `consumeSeat`, before the run is written; it starts only after today's
@@ -206,7 +206,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         // The account rule: the caller for id 0, else an account the caller may act for.
         uint32 subId = _resolveAccountId(id);
         if (dailyQuantity != 0) subId = _registerCallerAccount(subId, msg.value);
-        // The self shorthand names the caller's own ordinary main (a main sale clears the
+        // The self shorthand names the caller's own ordinary account (seizure clears the
         // address's ID), so only an explicit ID can name an acquired account.
         if (id != 0 && _isAcquired(subId)) revert NotApproved();
         // The permanent protocol entries stay at box positions 0 (Vault) and 1 (sDGNRS).
@@ -566,30 +566,14 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         );
     }
 
-    /// @notice Stop the AFKing runs a loan seizure hands to its lender: the seized account's own
-    ///         and, for a main, every smurf's. Reached only by GameOverModule's `seizeLoan`
-    ///         delegatecall, after the ownership write.
-    /// @dev Walks the main's append-only smurf list (`_smurfWords`, length = lifetime
-    ///      smurf count (`SMURF_COUNT_SHIFT`)). Each stopped run hands its streak back to Quests now and keeps its
-    ///      lane, marked for removal: a box it already paid still opens in order, and the next
-    ///      preparation pass removes it before buying. Until then its earned days stay
-    ///      settleable.
+    /// @notice Stop the AFKing run a loan seizure hands to its lender. Reached only by
+    ///         GameOverModule's `seizeLoan` delegatecall, after the ownership write.
+    /// @dev The stopped run hands its streak back to Quests now and keeps its lane, marked for
+    ///      removal: a box it already paid still opens in order, and the next preparation pass
+    ///      removes it before buying. Until then its earned days stay settleable.
     /// @param id The seized account.
-    /// @param mainSale True when `id` was an ordinary main (its smurfs transfer with it).
-    function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external {
+    function cancelLiquidatedSubscription(uint32 id) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        _cancelAcquiredSubscription(id);
-        if (!mainSale) return;
-        uint256 count = uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
-        mapping(uint256 => uint256) storage words = _smurfWords[id];
-        uint256 word;
-        for (uint256 i; i < count; ++i) {
-            if (i & 7 == 0) word = words[i >> 3];
-            _cancelAcquiredSubscription(uint32(word >> ((i & 7) * 32)));
-        }
-    }
-
-    function _cancelAcquiredSubscription(uint32 id) private {
         (uint256 lane, uint256 position1) = _subLaneOf(id);
         if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
         _finalizeAfking(id, lane);
@@ -1092,8 +1076,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     ///         are immune (the sole immunity), the smite path caps at a 10-point (5-stack)
     ///         ceiling below the 20-point counter cap, and the protocol accounts are skipped (the
     ///         redemption-snapshot reason). Self-smite is allowed — harmless, since the counter
-    ///         only lowers the score. The pass NFT sits at the deity account's main wallet, so
-    ///         the main wallet smites.
+    ///         only lowers the score. The pass NFT sits at the deity account's payee wallet, so
+    ///         the payee smites.
     /// @param smiteeId The account receiving the stack (0 = caller; otherwise allocated).
     function smite(uint256 deityId, uint32 smiteeId) external {
         if (

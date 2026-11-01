@@ -246,13 +246,11 @@ library MineFlipGasBounds {
     uint256 internal constant REDEMPTION_BOX_UNIT = 1 ether;
     // Maximum boxes per redemption order.
     uint256 internal constant REDEMPTION_BOXES_MAX = 20;
-    // Loan/list reads, ownership and main-ID writes, sDGNRS burn, deletion and event.
-    // Cold full six-account deity family: 471.7k vs BASE + 6 x SUB + DEITY = 600k.
-    uint256 internal constant LOAN_SEIZE_BASE = 160_000;
-    // Per family account: active-run finalization with Quests call and walk reads.
-    uint256 internal constant LOAN_SEIZE_SUB = 50_000;
-    // One deity per family: full 32-symbol scan and cold DeityPass.seize.
-    uint256 internal constant LOAN_SEIZE_DEITY = 140_000;
+    // One loan settlement: list and loan reads, the auto-repay check, ownership and default-ID
+    // writes, native sDGNRS burn, AFKing-run finalization with its Quests call, the 32-symbol
+    // deity scan with a cold DeityPass.seize, loan deletion and event.
+    // Cold account with a run, a symbol-31 deity and sDGNRS: 194.1k vs LOAN_SEIZE + TAIL = 260k.
+    uint256 internal constant LOAN_SEIZE = 200_000;
     // Cursor and pending-flag writes, game over's loan cursor, event and return.
     uint256 internal constant LOAN_SEIZE_TAIL = 60_000;
     // Game over's loan scan: one due level's cold count read and step.

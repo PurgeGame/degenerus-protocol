@@ -35,7 +35,7 @@ describe("Whale bulk commission", function () {
         await hre.network.provider.send("hardhat_setStorageAt", [
           address, "0x0", hre.ethers.toBeHex((slot & ~mask) | (BigInt(level) << 96n), 32),
         ]);
-        const code = hre.ethers.encodeBytes32String("bulk-referral");
+        const code = hre.ethers.encodeBytes32String("BULKREFERRAL");
         await affiliate.connect(alice).createAffiliateCode(code, 25);
         const price = hre.ethers.parseEther(level <= 3 ? "2.4" : "4") * BigInt(quantity);
         await game.connect(bob).purchaseWhalePass(0, quantity, code, { value: price });
@@ -51,7 +51,7 @@ describe("Whale bulk commission", function () {
   for (const freshPercent of [0n, 50n]) {
     it(`keeps recycled bulk funding at 5% with ${freshPercent}% fresh ETH`, async function () {
       const { game, affiliate, alice, bob } = await loadFixture(deployFullProtocol);
-      const code = hre.ethers.encodeBytes32String("mixed-bulk");
+      const code = hre.ethers.encodeBytes32String("MIXEDBULK");
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       const price = hre.ethers.parseEther("12");
       const fresh = price * freshPercent / 100n;

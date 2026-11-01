@@ -94,19 +94,6 @@ contract GnrusDonationsTest is DeployProtocol {
         _unchangedFunds();
     }
 
-    function test_smurfOwnerDonationUsesCallerMainNotSuppliedSmurfCode() public {
-        uint32 donor = _giveWalletId(DONOR);
-        _grantSmurfBase(DONOR, 2);
-        vm.prank(DONOR);
-        uint32 child = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        uint256 beforeScore = affiliate.affiliateScore(4, donor);
-        _buy(price, bytes32(uint256(child)));
-        assertEq(affiliate.affiliateScore(4, donor) - beforeScore, 200);
-        assertEq(affiliate.affiliateScore(4, child), 0);
-        assertEq(game.walletIdOf_g3120(DONOR), donor);
-        _unchangedFunds();
-    }
-
     function test_acquiredFormerOwnerRegistersFreshDonorAccount() public {
         uint32 oldId = _giveWalletId(DONOR);
         host.acquired(DONOR, oldId, 2); // Canonical post-seizure ownership/registry state.

@@ -306,7 +306,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///      whose ID the Game looks up (`allocate` registers a paying caller).
     ///      Any other `id` is resolved by the Game, which reverts for an unallocated ID, and the
     ///      caller must be authorized for it. Game state follows the account; burns come from
-    ///      the payee (a smurf's owner, otherwise the key).
+    ///      the payee (an acquired account's lender, otherwise the key).
     /// @return payee The address the door's FLIP burns come from.
     /// @return word The pass/preference word with the ID added in memory for the door.
     function _door(uint32 id, bool allocate) private returns (address payee, uint256 word) {

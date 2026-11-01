@@ -15,10 +15,6 @@ contract GlamsterdamGame is GameActions, GameFacade, GamePurchase, GameMiner, Ga
         _purchase(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind);
     }
 
-    function _gameCreateSmurf(bytes32 affiliateCode, MintPaymentKind payKind) internal override returns (uint32) {
-        return _createSmurf(affiliateCode, payKind);
-    }
-
     function _gameRedeemFlip(uint32 id, uint256 entryQuantityScaled) internal override {
         _redeemFlip(id, entryQuantityScaled);
     }
@@ -69,9 +65,6 @@ contract GlamsterdamGame is GameActions, GameFacade, GamePurchase, GameMiner, Ga
 
     function _gameIssueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) internal override {
         _issueDeityBoon(deityId, recipientId, slot);
-    }
-    function _gameRaiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) internal override {
-        _raiseSmurfBaseAllowance(mainId, newBase);
     }
     function _gameDrainAffiliateBases(uint256 ids, uint256 uplines) internal override returns (uint256, uint256, uint256) {
         return _actionDrainAffiliateBases(ids, uplines);

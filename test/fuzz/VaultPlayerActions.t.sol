@@ -232,7 +232,7 @@ contract VaultPlayerActionsTest is SeatFixture {
     }
 
     function test_addressKeyedAffiliateCodeBelongsToVault() public {
-        bytes32 code = bytes32("VAULT_ACTIONS");
+        bytes32 code = bytes32("VAULTACTIONS");
         _act(address(affiliate), abi.encodeCall(affiliate.createAffiliateCode, (code, 10)));
         (address codeOwner, uint32 id, uint8 kickback) = affiliate.affiliateCode(code);
         assertEq(codeOwner, address(vault));

@@ -80,34 +80,25 @@ interface IFlipTombstone {
 contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     event LoanSeized(uint32 indexed accountId, uint32 indexed lenderId);
 
+    /// @notice Hand a defaulted borrower's account to its lender. Borrowing admits only ordinary
+    ///         accounts, so `id`'s key is the borrower wallet: burn its native sDGNRS, clear its
+    ///         current default ID, write the lender's ID into the owner lane, stop the account's
+    ///         AFKing run and move its deity pass to the lender.
     function seizeLoan(uint32 id, uint32 lender) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        uint256 element = _walletElement(id);
-        address seller = _payee(element);
-        bool main = uint32(element >> 160) == 0;
-        if (main) {
-            dgnrs.burnForLiquidation(seller);
-            walletIds[seller] &= uint64(type(uint32).max) << 32;
-        }
         uint256 slot = _walletSlot(id);
+        uint256 element;
+        assembly ("memory-safe") { element := sload(slot) }
+        address seller = address(uint160(element));
+        dgnrs.burnForLiquidation(seller);
+        walletIds[seller] &= uint64(type(uint32).max) << 32;
         uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(lender) << 160) | uint160(seller);
         assembly ("memory-safe") { sstore(slot, acquired) }
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, main)
+            abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscription.selector, id)
         );
         if (!ok) { assembly ("memory-safe") { revert(add(data, 32), mload(data)) } }
-        address to = lender == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
-        _seizeDeityPass(id, to);
-        if (main) {
-            uint256 smurfs = uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
-            mapping(uint256 => uint256) storage words = _smurfWords[id];
-            uint256 word;
-            for (uint256 k; k < smurfs; ++k) {
-                if (k & 7 == 0) word = words[k >> 3];
-                uint32 smurf = uint32(word >> ((k & 7) * 32));
-                if (uint160(_walletElement(smurf)) == 0) _seizeDeityPass(smurf, to);
-            }
-        }
+        _seizeDeityPass(id, lender == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS);
         _loans[id] = LOAN_RETAINED;
         emit LoanSeized(id, lender);
     }
@@ -186,7 +177,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     IFlipTombstone private constant flip =
         IFlipTombstone(ContractAddresses.COIN);
 
-    /// @notice Refund cap per deity pass for early game over (levels 0-9)
+    /// @notice Refund cap per deity pass on a deterministic (VRF-dead) ending at levels 0-9
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
         20 ether;
 
@@ -202,8 +193,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         address indexed current
     );
 
-    /// @dev Deity-pass early-gameover refunds, as one aggregate. `totalRefunded` bounds
-    ///      the refund credits exactly, without a separate refund event per holder.
+    /// @dev Deity-pass refunds of the deterministic ending below level 10, as one aggregate.
+    ///      `totalRefunded` bounds the refund credits exactly, without a separate refund event
+    ///      per holder.
     event DeityPassRefundsSettled(uint256 totalRefunded);
 
     /// @notice The Vault's Degenesis budget and sDGNRS's whole AFKing balance left claimablePool
@@ -530,8 +522,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      day completed, or a VRF request unanswered, for 14 days). Sets terminal gameOver flag.
     ///
     ///      Distribution logic:
-    ///      - If game ended early (levels 0-9): refund of the price paid (capped at 20 ETH) per deity pass,
-    ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
+    ///      - Deterministic ending at levels 0-9 only: refund of the price paid (capped at 20 ETH) per
+    ///        deity pass, FIFO by purchase order, budget-capped to available funds minus claimablePool.
+    ///        A normal ending refunds nothing; its distributable balance goes to the terminal tickets
     ///      - Normal ending: everything to the terminal level's ticket cohort by the terminal jackpot
     ///      - Deterministic (VRF-dead) ending: no draw; the remainder is
     ///        fixed as the pot every terminal-level ticket claims from (claimDeadVrf)
@@ -585,10 +578,11 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // balance. The open batch is not closed; its claims unwind at the game-over price.
         if (dead) dgnrs.resolveTerminalRedemptions();
 
-        // Deity pass refunds (levels 0-9): refund each owner what they paid, capped at the flat
-        // DEITY_PASS_EARLY_GAMEOVER_REFUND so a boon-discounted deity (paid < 20 ETH) never refunds
-        // more than it paid, then clamped to the remaining distributable budget (FIFO).
-        if (lvl < 10) {
+        // Deity pass refunds (deterministic ending, levels 0-9 only): refund each owner what they
+        // paid, capped at the flat DEITY_PASS_EARLY_GAMEOVER_REFUND so a boon-discounted deity
+        // (paid < 20 ETH) never refunds more than it paid, then clamped to the remaining
+        // distributable budget (FIFO). A normal ending skips this block.
+        if (dead && lvl < 10) {
             uint256 ownerCount = _deityCount();
             uint256 budget = preRefundAvailable;
             uint256 totalRefunded;

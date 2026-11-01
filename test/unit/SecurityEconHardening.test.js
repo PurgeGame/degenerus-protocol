@@ -188,11 +188,12 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // Deity pass early-gameover refund — price-paid model (c4d48008)
+  // Deity pass refund on the deterministic stall ending — price-paid model (c4d48008)
   //
   // The contract tracks `deityPassPricePaid[buyer]` (a uint96 = the ETH price the
   // buyer paid; `purchaseDeityPass`) and refunds `min(deityPassPricePaid[owner], 20e18)`
-  // per owner at an early gameover (level < 10), then clamps to the remaining
+  // per owner on the deterministic stall ending below level 10 (these fixtures idle past the
+  // 14-day hard stall; a normal purchase-timeout ending refunds nothing), then clamps to the remaining
   // budget FIFO (`_handleGameOverDrain`). There is no per-buyer purchase counter
   // and no "refund clears the count" step — the boon-ownership gate is the
   // HAS_DEITY_PASS bit, and the refund cap is the price-paid value above. A

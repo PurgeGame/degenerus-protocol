@@ -145,10 +145,10 @@ async function deployBootstrapAffiliate() {
   return deployFullProtocol({
     affiliateBootstrap: [
       [alice.address, bob.address],
-      [toBytes32("BOOT_A"), toBytes32("BOOT_B")],
+      [toBytes32("BOOTA"), toBytes32("BOOTB")],
       [7, 12],
       [bob.address, carol.address],
-      [toBytes32("BOOT_A"), toBytes32("BOOT_A")],
+      [toBytes32("BOOTA"), toBytes32("BOOTA")],
     ],
   });
 }
@@ -214,8 +214,8 @@ describe("DegenerusAffiliate", function () {
 
     it("seeds pre-known affiliate codes passed to constructor", async function () {
       const { affiliate: affiliateBootstrapped, game, alice, bob } = await loadFixture(deployBootstrapAffiliate);
-      const codeA = toBytes32("BOOT_A");
-      const codeB = toBytes32("BOOT_B");
+      const codeA = toBytes32("BOOTA");
+      const codeB = toBytes32("BOOTB");
       expect(await game.walletIdOf_g3120(alice.address)).to.not.equal(0n);
       expect(await game.walletIdOf_g3120(bob.address)).to.not.equal(0n);
 
@@ -232,7 +232,7 @@ describe("DegenerusAffiliate", function () {
       const factory = await hre.ethers.getContractFactory("DegenerusAffiliate");
 
       await expect(
-        factory.deploy([alice.address], [toBytes32("BOOT_LEN_1")], [], [], [])
+        factory.deploy([alice.address], [toBytes32("BOOTLEN1")], [], [], [])
       ).to.be.revertedWithCustomError(affiliate, "Insufficient");
     });
 
@@ -278,20 +278,47 @@ describe("DegenerusAffiliate", function () {
       expect(ev.args.senderId).to.equal(await game.walletIdOf_g3120(alice.address));
     });
 
-    it("reverts with Zero when code is bytes32(0)", async function () {
+    it("reverts with InvalidCode when code is bytes32(0)", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       await expect(
         affiliate.connect(alice).createAffiliateCode(ZERO_BYTES32, 0)
-      ).to.be.revertedWithCustomError(affiliate, "Zero");
+      ).to.be.revertedWithCustomError(affiliate, "InvalidCode");
     });
 
-    it("reverts with Zero when code is REF_CODE_LOCKED sentinel (bytes32(1))", async function () {
+    it("reverts with InvalidCode when code is REF_CODE_LOCKED sentinel (bytes32(1))", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       const lockedSentinel =
         "0x0000000000000000000000000000000000000000000000000000000000000001";
       await expect(
         affiliate.connect(alice).createAffiliateCode(lockedSentinel, 0)
-      ).to.be.revertedWithCustomError(affiliate, "Zero");
+      ).to.be.revertedWithCustomError(affiliate, "InvalidCode");
+    });
+
+    it("reverts with InvalidCode for lowercase, symbol, digit-only and interior-zero codes", async function () {
+      const { affiliate, alice } = await loadFixture(deployFullProtocol);
+      const bad = [
+        toBytes32("alice"),
+        toBytes32("ALICE_1"),
+        toBytes32("ALICE-1"),
+        toBytes32("ALICE 1"),
+        toBytes32("12345"),
+        "0x" + "41" + "00" + "42" + "00".repeat(29),
+        "0x" + "00" + "41" + "00".repeat(30),
+      ];
+      for (const code of bad) {
+        await expect(
+          affiliate.connect(alice).createAffiliateCode(code, 0)
+        ).to.be.revertedWithCustomError(affiliate, "InvalidCode");
+      }
+    });
+
+    it("accepts a single letter, a 32-character code and letter-digit mixes", async function () {
+      const { affiliate, alice } = await loadFixture(deployFullProtocol);
+      for (const text of ["A", "A".repeat(32), "A1", "1A", "9Z9"]) {
+        const code = hre.ethers.zeroPadBytes(hre.ethers.toUtf8Bytes(text), 32);
+        await affiliate.connect(alice).createAffiliateCode(code, 0);
+        expect((await affiliate.affiliateCode(code)).owner).to.equal(alice.address);
+      }
     });
 
     it("reverts with CodeTaken when code is already taken", async function () {

@@ -116,9 +116,9 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         assertTrue(game.gameOver(), "terminal ending must be latched");
         assertTrue(_terminalPaid(), "all terminal payout checkpoints must complete");
         assertEq(winners, 305, "all terminal draw slots must execute");
-        assertEq(refunds, 600 ether, "30 paid refunds; genesis has no refund basis");
+        assertEq(refunds, 0, "a normal ending refunds no deity pass, paid or genesis");
         assertEq(rngApplied, 0, "the payout runs on the recorded terminal word");
-        assertApproxEqAbs(awarded, 4400 ether, 305, "the terminal cohort receives the pot after refunds");
+        assertApproxEqAbs(awarded, 5000 ether, 305, "the terminal cohort receives the whole distributable pot");
     }
 
     function _terminalPaid() private view returns (bool) {
@@ -197,7 +197,7 @@ contract AdvanceColdTerminalRecorded is ColdTerminalFixture {
         return false;
     }
 
-    function test_ColdTerminalWithAllRefundsAndAwards() public {
+    function test_ColdTerminalWithPaidDeitiesAndAwards() public {
         _check();
     }
 }
@@ -208,7 +208,7 @@ contract AdvanceColdTerminalFresh is ColdTerminalFixture {
         return true;
     }
 
-    function test_ColdTerminalWithFreshWordRefundsAndAwards() public {
+    function test_ColdTerminalWithFreshWordPaidDeitiesAndAwards() public {
         _check();
     }
 }
@@ -224,7 +224,7 @@ contract AdvanceColdTerminalFreshLongGap is ColdTerminalFixture {
         return 60;
     }
 
-    function test_ColdTerminalAfterLongGapRefundsAndAwards() public {
+    function test_ColdTerminalAfterLongGapPaidDeitiesAndAwards() public {
         _check();
     }
 }

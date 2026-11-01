@@ -41,18 +41,19 @@ enum MintPaymentKind {
 ///      Ticket purchases stay open in both phases. gameOver() is terminal.
 ///
 ///      ACCOUNTS. Every player entry point names the account it acts for by wallet ID, never by
-///      address. An account is an ordinary wallet or a smurf (an extra account a wallet created
-///      with `createSmurf`; it stores an owner ID and has no address). The account rule:
+///      address. An account is ordinary (a registered wallet address) or acquired (an account a
+///      Vault or sDGNRS loan seizure took over: it keeps its former borrower's address as key and
+///      stores the lender's reserved ID as owner). The account rule:
 ///      - `id == 0` is the caller. The forward wallet registry supplies the caller's ID.
 ///      - Any other `id` must be allocated (`0 < id < wallets.length`), else `E`.
-///      - Authorized entry points require the caller to be the account's key, the owner of a
-///        smurf account, or an operator approved for that ID (`setOperatorApproval`), else
+///      - Authorized entry points require the caller to be the account's payee, or an operator
+///        approved for that ordinary ID (`setOperatorApproval`), else
 ///        `NotApproved`. Permissionless doors (claims that only credit the account) skip the
 ///        check. Gift doors (Degenerette bets) treat an unauthorized caller as a gift funder.
 ///      - Game state (ledgers, quests, mint history, pricing, events) follows the account.
 ///      - Value paid out (ETH, stETH, FLIP, WWXRP, DGNRS, sDGNRS, seat and deity NFTs) goes to the
-///        account's PAYEE: the caller for `id == 0`, the key of an ordinary wallet, or the owner's
-///        key for a smurf. Tokens pulled or burned from a player's wallet come from the payee.
+///        account's PAYEE: the caller for `id == 0`, the key of an ordinary wallet, or the lender
+///        for an acquired account. Tokens pulled or burned from a player's wallet come from the payee.
 ///      - Third-party recipients (deity-boon recipient, AFKing deposit beneficiary) are IDs
 ///        that must already exist: 0 or an unallocated ID reverts `E`.
 interface IDegenerusGame {
@@ -64,13 +65,11 @@ interface IDegenerusGame {
     function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external;
     /// @notice Repay an open loan before its due level; excess ETH funds the account's AFKing.
     function clearDebtNow(uint32 id) external payable;
-    /// @notice Sweep up to 32 owned subaccounts into their current main accounts.
-    /// @dev Permissionless only for sDGNRS-owned accounts; otherwise each source requires its
-    ///      payee or approved operator. Moves claimable ETH internally (retaining 1 wei), and
-    ///      settled FLIP to the payee. Acquired accounts (and, after game over, every swept
-    ///      account) also surrender prepaid AFKing; acquired accounts, once caught up and
-    ///      unfrozen, also surrender coinflip carry. Ordinary smurfs keep live AFKing
-    ///      funding and auto-rebuy; moving their ETH applies their normal cashout curse.
+    /// @notice Sweep up to 32 acquired accounts into their lender's claimable.
+    /// @dev Permissionless only for sDGNRS-owned accounts; Vault-owned accounts require the
+    ///      Vault as caller. Each id must be acquired. Moves claimable ETH (retaining 1 wei) and
+    ///      prepaid AFKing internally, and settled FLIP to the lender; once caught up and
+    ///      unfrozen, an account also surrenders coinflip carry. Closed after the final sweep.
     ///      Repeat for later awards or a coinflip backlog. Does not resolve unclaimed prizes.
     function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
 
@@ -85,9 +84,9 @@ interface IDegenerusGame {
     function walletIdOf_g3120(address player) external view returns (uint32);
 
     /// @notice Resolve an allocated account's payee and caller authorization.
-    /// @dev Ordinary accounts return their address as `key`; subaccounts return zero.
-    ///      Subaccounts store an owner ID, resolved to an ordinary wallet for payouts.
-    ///      Authorization is the current payee, or an operator approval on an unsold account.
+    /// @dev `key` is the registering address (an acquired account's former borrower); `payee`
+    ///      is the key for an ordinary account and the lender for an acquired one.
+    ///      Authorization is the current payee, or an operator approval on an ordinary account.
     ///      Authorization failure returns false; zero or unallocated IDs revert E.
     function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
@@ -95,7 +94,7 @@ interface IDegenerusGame {
     /// @notice Approve or revoke `operator` for account `id` (game-wide delegated control).
     /// @dev `id == 0` is the caller's own account, which must already hold an ID (approving pays
     ///      nothing, so it never registers). A nonzero `id` must be allocated and the caller must be
-    ///      its key or, for a smurf, its owner: operators cannot approve operators. Approvals are
+    ///      its payee: operators cannot approve operators. Approvals are
     ///      keyed `operatorApprovals[id][operator]`; the operator stays an address because it is a
     ///      real caller. Emits `OperatorApproval(uint32 indexed id, address indexed operator, bool)`.
     /// @param id Account to manage (0 = caller).
@@ -103,40 +102,8 @@ interface IDegenerusGame {
     /// @param approved True to approve, false to revoke.
     /// @custom:reverts ZeroAddress If `operator` is the zero address.
     /// @custom:reverts E If `id == 0` and the caller has no ID, or `id` is unallocated.
-    /// @custom:reverts NotApproved If the caller is neither the key nor the smurf's owner.
+    /// @custom:reverts NotApproved If the caller is not the account's payee.
     function setOperatorApproval(uint32 id, address operator, bool approved) external;
-
-    /// @notice Create a smurf account owned and referred by the caller and buy it
-    ///         one ticket, all in one call.
-    /// @dev Owner = `msg.sender`, which must already hold an ordinary wallet ID. Steps, atomically:
-    ///      Lifetime creations must be below the main ID's admin base + floor(current main score / 120).
-    ///      Only ordinary mains create children. The packed count/base remain on that ID after liquidation; new IDs start at zero.
-    ///      1. Resolve the owner's referral exactly as a purchase does: an unset referral is set
-    ///         from `affiliateCode`, or locked to no referrer for a blank or invalid code; a set
-    ///         referral ignores the code.
-    ///      2. Allocate the next ID, storing only `ownerId << 160` in its wallet-table element.
-    ///         Set the account's mint-word smurf flag and emit `SmurfCreated(ownerId, smurfId)`.
-    ///      3. Permanently refer the smurf through the current main ID with zero kickback.
-    ///      4. Buy exactly one whole ticket (400 scaled units, no boxes) for the smurf at the
-    ///         current price. The owner pays: fresh `msg.value` first, then the owner's claimable
-    ///         and AFKing balances as `payKind` allows, exactly as `purchaseOrderFor` spends a buyer's.
-    ///         Fresh ETH above the price credits the owner's AFKing balance. The ticket, mint
-    ///         history and quest progress belong to the smurf.
-    ///      Past PAID_ADMISSION_WALLETS the allocation is admitted only when the ticket price is
-    ///      at least PAID_ADMISSION_MIN_SPEND (`quotedSpend` = the ticket price).
-    /// @param affiliateCode Referral code applied to the owner if its referral is unset.
-    /// @param payKind How the owner funds the ticket (DirectEth, Claimable or Combined).
-    /// @return smurfId The new account's wallet ID.
-    /// @custom:reverts E If the caller has no ordinary main, has an open loan, or paid admission
-    ///                 refuses allocation.
-    /// @custom:reverts SmurfCreationLimitReached If all base-plus-score creation slots are consumed.
-    /// @custom:reverts (purchaseOrderFor) Every applicable revert of a one-ticket purchase by the owner (
-    ///                 liveness/game over, insufficient payment).
-    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
-        external payable returns (uint32 smurfId);
-    /// @notice Vault-owner-only permanent increase to a registered main ID's base (0..65535).
-    /// @dev Strictly increasing absolute value; preserves lifetime count and all other mint fields.
-    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
 
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
     function extsload_g2807007(bytes32 slot) external view returns (bytes32 value);
@@ -269,17 +236,16 @@ interface IDegenerusGame {
         bool deityPassAvailable
     );
 
-    /// @notice Deity boon menu for an account, including a subaccount.
+    /// @notice Deity boon menu for an account.
     function deityBoonDataById(uint32 deityId) external view returns (
         uint256 dailySeed, uint24 day, uint8 usedMask, bool decimatorOpen, bool deityPassAvailable
     );
 
     /// @notice Issue a deity boon from deity account `deityId` to account `recipientId`.
     /// @dev Authorized (account rule): `deityId == 0` is the caller; otherwise the caller must be the
-    ///      deity account's key, its owner (smurf deity) or an approved operator. The deity account
-    ///      must hold HAS_DEITY_PASS. The recipient is a third party: an existing ID, never 0. Self
-    ///      boons are compared by ID; a deity may boon its owner or its owner's other smurfs (no
-    ///      smurf-specific limit). Boon state is written for the recipient ID; no value moves.
+    ///      deity account's payee or an approved operator. The deity account must hold
+    ///      HAS_DEITY_PASS. The recipient is a third party: an existing ID, never 0. Self
+    ///      boons are compared by ID. Boon state is written for the recipient ID; no value moves.
     /// @param deityId Deity account issuing the boon (0 = caller).
     /// @param recipientId Recipient account (nonzero, allocated).
     /// @param slot Slot index (0-2).
@@ -357,7 +323,7 @@ interface IDegenerusGame {
     /// @notice Pay the sDGNRS leg of an all-time record claim and name the record's payee.
     /// @dev COINFLIP only. Pays the claim's accrued record-pool share at 1/500 scale
     ///      from the sDGNRS reward pool to the payee Game resolves for `id` (the wallet's own
-    ///      address, or the owner's for a smurf). `payee` is returned on
+    ///      address, or the lender's for an acquired account). `payee` is returned on
     ///      every call, including `shareBps == 0`, an empty pool and a zero payout: Coinflip
     ///      calls this on every record ratchet and mints the record trophy to `payee`.
     ///      Coinflip passes only nonzero IDs (its callers hold them).
@@ -436,8 +402,8 @@ interface IDegenerusGame {
     function degenesisCreditOf(address player) external view returns (uint256 credit);
 
     /// @notice Place single-symbol Degenerette bets for account `id`.
-    /// @dev Gift door. `id == 0` is the caller. When the caller is authorized for `id` (key, smurf
-    ///      owner or approved operator) the account funds the bet: fresh ETH from the caller, the
+    /// @dev Gift door. `id == 0` is the caller. When the caller is authorized for `id` (payee or
+    ///      approved operator) the account funds the bet: fresh ETH from the caller, the
     ///      claimable shortfall from the account's ledger, FLIP burned from the account's payee,
     ///      and the quest credit goes to the account. Any other caller makes a permissionless
     ///      gift: the caller funds the whole bet itself (its own ETH, claimable or FLIP; the
@@ -494,9 +460,9 @@ interface IDegenerusGame {
         external view returns (uint32[] memory tickets);
 
     /// @notice Purchase a deity pass for a specific symbol (0-31) for account `id`.
-    /// @dev Authorized (account rule). One deity per main wallet: the main of an account is its
-    ///      payee (the owner for a smurf, itself otherwise), and the purchase reverts when any
-    ///      existing deity's main equals the buyer's main (a scan of at most 32 deity IDs). The
+    /// @dev Authorized (account rule). One deity per payee wallet: an account's payee is the lender for an acquired
+    ///      account and its key otherwise, and the purchase reverts when any existing deity's payee
+    ///      equals the buyer's payee (a scan of at most 32 deity IDs). The
     ///      buying account keeps HAS_DEITY_PASS and every deity behaviour (perpetual tickets, boons
     ///      issued as that deity, refunds by its ID); the soulbound pass NFT, the buyer's DGNRS
     ///      reward and the free-tranche seat go to the payee. Funding and refunds as `purchaseOrderFor`.
@@ -505,7 +471,7 @@ interface IDegenerusGame {
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
     /// @custom:reverts NotApproved If the caller may not act for `id`.
     /// @custom:reverts E If `id` is unallocated.
-    /// @custom:reverts AlreadyOwnsDeityPass If the account, or any account with the same main
+    /// @custom:reverts AlreadyOwnsDeityPass If the account, or any account with the same payee
     ///                 wallet, already holds a deity pass.
     function purchaseDeityPass(
         uint32 id,
@@ -536,8 +502,7 @@ interface IDegenerusGame {
     function hasDeityPass(address player) external view returns (bool);
 
     /// @notice Get raw bit-packed mint data for a player.
-    /// @dev Address convenience view of ID-keyed mint history. Bits 224..239 count lifetime smurfs; 240..255 hold the admin base;
-    ///      bit 147 is the smurf flag (set once by `createSmurf`).
+    /// @dev Address convenience view of ID-keyed mint history. Bit 147 and bits 224..255 are unused.
     /// @param player Player address to query.
     /// @return Raw packed uint256 containing mint counts, streak, pass status.
     function mintPackedFor(address player) external view returns (uint256);
@@ -553,8 +518,8 @@ interface IDegenerusGame {
     ///      Authorized (account rule). Tickets, boxes, mint history, quests and pricing are the
     ///      account's. Fresh ETH comes from the caller; the claimable and AFKing legs spend the
     ///      account's own balances. Fresh ETH above the cost credits the payer's AFKing balance:
-    ///      the account's ID when the caller is the account, else the caller's existing ID (a
-    ///      smurf's owner gets its own refund). Box and pass payouts go to the account's payee.
+    ///      the account's ID when the caller is the account, else the caller's existing ID (an
+    ///      operator gets its own refund). Box and pass payouts go to the account's payee.
     /// @param id Account receiving the purchases (0 = caller).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     /// @param boxOrder Packed box order (0 to skip): [quantity:7][kind:2][customUnits:21];
@@ -677,7 +642,7 @@ interface IDegenerusGame {
 
     /// @notice Withdraw `amount` of account `id`'s prepaid AFKing ETH.
     /// @dev Authorized (account rule). Debits the account's bucket and pays the account's payee
-    ///      (the caller for `id == 0` or a smurf's owner; an operator's withdrawal for an ordinary
+    ///      (the caller for `id == 0` or an acquired account's lender; an operator's withdrawal for an ordinary
     ///      wallet pays that wallet), ETH first with a stETH fallback. `amount == 0` is a no-op.
     /// @param id Account whose bucket is debited (0 = caller).
     /// @param amount ETH amount (wei) to withdraw.
@@ -731,7 +696,7 @@ interface IDegenerusGame {
     ///         or cancel (dailyQuantity == 0) for account `id`.
     /// @dev Authorized (account rule), checked once here and never at process time.
     ///      Seats: a NEW run (no live run: never subscribed, cancelled or expired) burns seat
-    ///      `seatId`, which must be held by the subscriber's payee (the owner for a smurf): Game
+    ///      `seatId`, which must be held by the subscriber's payee: Game
     ///      calls `AFKING_SUB_TOKEN.consumeSeat(payee, seatId)` before it writes the run. A new
     ///      run starts only after today's subscriber pass completed; its first purchase and first
     ///      credited day are tomorrow. Changing a live run, a cancel, and the exempt VAULT/SDGNRS
@@ -815,8 +780,8 @@ interface IDegenerusGame {
     function decurse(uint32 id) external;
 
     /// @notice Deity-gated smite: add a saturating curse stack to account `smiteeId` for 200 FLIP.
-    /// @dev The caller must own deity pass `deityId` (the NFT sits at the deity account's main
-    ///      wallet, so the main wallet smites) and pays 200 FLIP from its own wallet. Self-smite
+    /// @dev The caller must own deity pass `deityId` (the NFT sits at the deity account's payee
+    ///      wallet, so the payee smites) and pays 200 FLIP from its own wallet. Self-smite
     ///      is allowed. Active afkers and the protocol accounts (VAULT, SDGNRS, GNRUS) are immune.
     /// @param deityId The smiting deity's pass ID (caller must hold it).
     /// @param smiteeId The account receiving the curse stack (0 = caller; otherwise allocated).

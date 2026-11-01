@@ -343,15 +343,10 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         // subscriber's floor. Both execute through their production callers.
         _success("foil-ticket-and-floor-hook", cast[0], address(game), game.mintPrice() * 11,
             abi.encodeCall(game.purchaseOrderFor, (id, uint256(400), uint256(0), bytes32(0), MintPaymentKind.DirectEth, true)));
-        _success("raise-smurf-base", ContractAddresses.OWNER_GOVERNANCE, address(game), 0,
-            abi.encodeCall(game.raiseSmurfBaseAllowance, (id, uint16(2))));
-        (bool created, bytes memory smurfResult) = _ctx("create-smurf", false, cast[0], address(game), game.mintPrice(),
-            abi.encodeCall(game.createSmurf, (bytes32(0), MintPaymentKind.DirectEth)));
-        require(created, "create-smurf");
-        uint32 smurfId = abi.decode(smurfResult, (uint32));
-        GameFunding.credit(smurfId, 0.1 ether);
-        uint32[] memory children = new uint32[](1); children[0] = smurfId;
-        _success("sweep-accounts", cast[0], address(game), 0, abi.encodeCall(game.sweepAccounts, (children)));
+        // Only lender-acquired accounts are swept: the owner's sweep of its ordinary account reverts.
+        uint32[] memory own = new uint32[](1); own[0] = id;
+        (bool swept,) = _ctx("sweep-ordinary-revert", false, cast[0], address(game), 0, abi.encodeCall(game.sweepAccounts, (own)));
+        assertFalse(swept);
         _success("withdraw-afking", cast[0], address(game), 0,
             abi.encodeCall(game.withdrawAfkingFunding, (id, uint256(0.1 ether))));
         (bool denied,) = _ctx("unauthorized-hook", false, cast[2], address(game), 0, abi.encodeCall(game.registerWallet_g9539, (cast[2], true)));

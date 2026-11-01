@@ -11,6 +11,8 @@ import {DegenerusDeityPass} from "../../contracts/DegenerusDeityPass.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Etched over the Game: fund lenders, seed collateral, end the game, or jump to a due level
 ///      and arm its seizure exactly as `prepareRequestBoundary` does.
@@ -49,6 +51,14 @@ contract SeizureSeeder is DegenerusGameStorage {
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
+    /// @dev The production worker under an explicit budget word; returns the cursor it left.
+    function seizeWith(uint256 budget) external returns (uint32) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSignature("runLoanSeizureWork(uint256)", budget)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return loanSeizeCursor;
+    }
 }
 
 /// @notice Loan seizure runs on schedule inside the mining engine: the transition request that
@@ -78,7 +88,6 @@ contract LoanSeizureTest is DeployProtocol {
         vm.deal(buyer, 50_000 ether);
         vm.deal(address(game), 100_000 ether);
         root = _giveWalletId(borrower);
-        _grantSmurfBase(borrower, 8);
         gameRuntime = address(game).code;
         seeder = address(new SeizureSeeder());
         lens = new DegenerusGameLens();
@@ -109,12 +118,6 @@ contract LoanSeizureTest is DeployProtocol {
         principal = q.principal;
         vm.prank(who);
         game.borrow(id, due, type(uint256).max, principal);
-    }
-
-    function _child(address owner) private returns (uint32 id) {
-        uint256 price = game.mintPrice();
-        vm.prank(owner);
-        id = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
     }
 
     function _buyDeity(address owner, uint32 id, uint8 symbol) private {
@@ -281,6 +284,70 @@ contract LoanSeizureTest is DeployProtocol {
         for (uint256 i; i < n; ++i) assertEq(_payee(ids[i]), address(sdgnrs));
     }
 
+    // ---------------------------------------------------------------- admission bound
+
+    uint256 private constant CONTEXT_TAG = 1 << 255;
+    uint256 private constant FIRST_BIT = 1 << 224;
+
+    /// @dev The cursor the worker leaves under `budget`, with every state change rolled back.
+    function _cursorUnder(uint256 budget) private returns (uint32 cursor) {
+        uint256 snap = vm.snapshotState();
+        cursor = SeizureSeeder(address(game)).seizeWith(budget);
+        vm.revertToStateAndDelete(snap);
+    }
+
+    /// @dev Smallest allowance (with `flags` above it in the budget word) that settles a loan.
+    function _admissionThreshold(uint256 flags, uint256 lo, uint256 hi) private returns (uint256) {
+        assertEq(_cursorUnder(flags | lo), 0, "low end defers");
+        assertGt(_cursorUnder(flags | hi), 0, "high end admits");
+        while (hi - lo > 1) {
+            uint256 mid = (lo + hi) / 2;
+            if (_cursorUnder(flags | mid) == 0) lo = mid;
+            else hi = mid;
+        }
+        return hi;
+    }
+
+    /// @notice One liquidation is admitted exactly when the meter holds LOAN_SEIZE + LOAN_SEIZE_TAIL
+    ///         + CHECK_RESERVE (scaled by the calibration) above the worker's fixed entry cost; one
+    ///         gas less defers it with the cursor and pending flag intact, and the first-unit
+    ///         permission runs one loan regardless of the estimate.
+    function test_SeizureAdmissionBoundIsOneFixedUnit() public {
+        address other = makeAddr("admission-borrower");
+        uint32 second = _giveWalletId(other);
+        _seedLevel(second, 8, 400);
+        _borrow(borrower, root, 1);
+        _borrow(other, second, 1);
+        _enterDue(1);
+        _etch();
+        _cursorUnder(10_000_000); // warm the slots the search reads
+        uint256 unit = GasBounds.LOAN_SEIZE + GasBounds.LOAN_SEIZE_TAIL + MineFlipGas.CHECK_RESERVE;
+
+        uint256 raw = _admissionThreshold(0, 100_000, 400_000);
+        assertGe(raw, unit, "never admitted below the declared bound");
+        assertLe(raw - unit, 15_000, "only the worker's entry cost sits on top of the bound");
+        assertEq(_cursorUnder(raw - 1), 0, "one gas short defers the loan");
+        uint32 cursor = _cursorUnder(raw);
+        assertEq(cursor, 1, "the bound admits one loan, not two");
+
+        uint256 scaledFlags = CONTEXT_TAG | (uint256(20_000) << 192);
+        uint256 scaled = _admissionThreshold(scaledFlags, 300_000, 900_000);
+        assertApproxEqAbs(scaled - raw, unit, 200, "a 2x calibration doubles exactly the declared unit");
+
+        assertEq(_cursorUnder(CONTEXT_TAG | FIRST_BIT | (uint256(10_000) << 192) | 50_000), 1,
+            "the first unit runs below the estimate");
+
+        uint256 snap = vm.snapshotState();
+        SeizureSeeder(address(game)).seizeWith(raw - 1);
+        (bool on, uint32 left) = SeizureSeeder(address(game)).pending();
+        assertTrue(on, "a deferred loan keeps the batch pending");
+        assertEq(left, 0);
+        vm.revertToStateAndDelete(snap);
+        _unetch();
+        assertEq(_payee(root), borrower);
+        assertEq(_payee(second), other);
+    }
+
     // ---------------------------------------------------------------- terminal precedence
 
     /// @dev A pending batch still armed once the game is over was left by a VRF-dead ending (a
@@ -312,17 +379,22 @@ contract LoanSeizureTest is DeployProtocol {
         vm.prank(borrower); vm.expectRevert(bytes4(keccak256("NotApproved()"))); game.giveBoon(root, 2, 0);
     }
 
-    function test_DeitySmurfDefaultAloneMovesOnlyItsPass() public {
-        uint32 child = _child(borrower);
-        _buyDeity(borrower, child, 4);
-        assertEq(deityPass.ownerOf(4), borrower, "minted to the main wallet");
-        _seedLevel(child, 8, 400);
-        _borrow(borrower, child, 1);
+    function test_DeityDefaultMovesOnlyThatAccountsPass() public {
+        address other = makeAddr("seizure-other-deity");
+        vm.deal(other, 1_000 ether);
+        uint32 second = _giveWalletId(other);
+        _buyDeity(other, second, 4);
+        _buyDeity(borrower, root, 11);
+        _seedLevel(second, 8, 400);
+        _borrow(other, second, 1);
+        _setBalances(second, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
         game.mineRun(0);
         assertEq(deityPass.ownerOf(4), address(sdgnrs));
-        assertEq(_payee(root), borrower, "the main stays with its owner");
+        assertEq(deityPass.ownerOf(11), borrower, "another account's pass stays");
+        assertEq(_payee(root), borrower);
         assertEq(game.walletIdOf_g3120(borrower), root);
+        assertEq(game.walletIdOf_g3120(other), 0);
     }
 
     function test_DeityBoughtDuringLoanStillMoves() public {
@@ -334,26 +406,17 @@ contract LoanSeizureTest is DeployProtocol {
         assertEq(deityPass.ownerOf(10), address(sdgnrs));
     }
 
-    function test_DeityPassFollowsAccountToItsFinalLender() public {
-        uint32 child = _child(borrower);
-        _buyDeity(borrower, child, 5);
-        _seedLevel(child, 8, 400);
-        // The smurf borrows from sDGNRS, due second; the main from the Vault, due first.
-        _borrow(borrower, child, 2);
+    function test_DeityPassFollowsAccountToVaultLender() public {
+        _buyDeity(borrower, root, 5);
         _etch(); SeizureSeeder(address(game)).setClaimable(2, 1 ether); _unetch();
         _fund(1, 100 ether);
         vm.prank(ContractAddresses.CREATOR); OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 1 ether)), 0);
         _borrow(borrower, root, 1);
-        _setBalances(root, 0, 0);
-        _setBalances(child, 0, 0); // the deity purchase's change would otherwise repay
+        _setBalances(root, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
         game.mineRun(0);
-        assertEq(deityPass.ownerOf(5), address(vault), "the family and its pass went to the Vault");
-        _fund(2, 500 ether);
-        _enterDue(2);
-        game.mineRun(0);
-        assertEq(deityPass.ownerOf(5), address(sdgnrs), "the smurf's own default moves it on");
-        assertEq(game.acquiredBuyer(child), 2);
+        assertEq(deityPass.ownerOf(5), address(vault), "the pass went to the Vault with its account");
+        assertEq(game.acquiredBuyer(root), 1);
         vm.prank(ContractAddresses.CREATOR); vm.expectRevert(bytes4(keccak256("Soulbound()")));
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(deityPass), ContractAddresses.CREATOR, 5)), 0);
     }
@@ -458,22 +521,21 @@ contract LoanSeizureTest is DeployProtocol {
         assertEq(lenderAfter, lenderBefore);
     }
 
-    function test_SmurfAutoRepaysFromItsOwnBalancesOnly() public {
-        uint32 child = _child(borrower);
-        _seedLevel(child, 8, 400);
-        _borrow(borrower, child, 1);
-        uint256 owed = _owedAtDue(child);
-        // The main's money does not count: only the borrowing account's own slot.
-        _setBalances(root, owed * 10, owed * 10);
-        _setBalances(child, owed, 0);
+    function test_AutoRepayUsesOnlyTheBorrowingAccountsBalances() public {
+        address other = makeAddr("seizure-other-balances");
+        uint32 second = _giveWalletId(other);
+        _borrow(borrower, root, 1);
+        uint256 owed = _owedAtDue(root);
+        // Another account's money does not count: only the borrowing account's own slot.
+        _setBalances(second, owed * 10, owed * 10);
+        _setBalances(root, owed, 0);
         (uint256 seized, ) = _settleDue(1);
-        assertEq(seized, 1, "the smurf's own slot is one wei short (sentinel)");
-        assertEq(game.acquiredBuyer(child), 2);
-        assertEq(_payee(root), borrower, "the main is untouched");
+        assertEq(seized, 1, "the borrower's own slot is one wei short (sentinel)");
+        assertEq(game.acquiredBuyer(root), 2);
+        assertEq(_payee(second), other, "the other account is untouched");
 
-        uint32 second = _child(borrower);
         _seedLevel(second, 8, 400);
-        _borrow(borrower, second, 2);
+        _borrow(other, second, 2);
         _setBalances(second, _owedAtDue(second) + 1, 0);
         uint256 repaid;
         (seized, repaid) = _settleDue(2);
@@ -482,31 +544,6 @@ contract LoanSeizureTest is DeployProtocol {
         assertEq(game.acquiredBuyer(second), 0);
         (uint128 c, ) = lens.accountBalances(address(game), second);
         assertEq(c, 1, "sentinel kept");
-    }
-
-    function test_AcquiredBorrowerDefaultsEvenWhenItsBalancesCover() public {
-        uint32 child = _child(borrower);
-        _seedLevel(child, 8, 400);
-        // The smurf borrows from sDGNRS, due second; the main from the Vault, due first.
-        _borrow(borrower, child, 2);
-        _etch(); SeizureSeeder(address(game)).setClaimable(2, 1 ether); _unetch();
-        _fund(1, 100 ether);
-        vm.prank(ContractAddresses.CREATOR); OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 1 ether)), 0);
-        _borrow(borrower, root, 1);
-        (uint256 seized, ) = _settleDue(1);
-        assertEq(seized, 1);
-        assertEq(game.acquiredBuyer(child), 1, "the smurf went to the Vault with its main");
-        _fund(2, 500 ether);
-        uint256 owed = _owedAtDue(child);
-        _setBalances(child, owed * 3, owed * 3);
-        uint256 repaid;
-        (seized, repaid) = _settleDue(2);
-        assertEq(seized, 1, "Vault-owned money never repays the sDGNRS loan");
-        assertEq(repaid, 0);
-        assertEq(game.acquiredBuyer(child), 2);
-        (uint128 c, uint128 a) = lens.accountBalances(address(game), child);
-        assertEq(c, owed * 3);
-        assertEq(a, owed * 3);
     }
 
     function test_MixedDueListRepaysSomeAndSeizesOthers() public {

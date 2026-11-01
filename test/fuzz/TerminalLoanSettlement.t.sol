@@ -5,6 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -32,7 +33,7 @@ contract TerminalLoanSeeder is DegenerusGame {
     }
 
     /// @dev Push the purchase phase's start back past its 30-day deadline with the level still
-    ///      unfunded: the ending fires today. Fixture purchases (smurfs, a deity pass) would
+    ///      unfunded: the ending fires today. Fixture purchases (a deity pass) would
     ///      otherwise have filled the next pool past its target and rescued the level.
     function pastDeadline() external {
         purchaseStartDay = dailyIdx - 30;
@@ -69,6 +70,7 @@ abstract contract TerminalLoanBase is DeployProtocol {
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
     uint8 internal constant ACTION_TERMINAL = 1;
     uint8 internal constant STAGE_TERMINAL_LOANS = 20;
+    uint32 internal constant VAULT_ID = 1;
     uint32 internal constant SDGNRS_ID = 2;
     uint256 internal constant GO_LOAN_STEP_SHIFT = 64;
     uint256 internal constant GO_LOAN_INDEX_SHIFT = 72;
@@ -264,11 +266,17 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         _seedLevel(id, 102, 4_000);
     }
 
-    function _child(address owner) private returns (uint32 id) {
-        uint256 price = game.mintPrice();
-        vm.prank(owner);
-        id = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        _seedLevel(id, 60, 4_000);
+    /// @dev Borrow from the Vault: sDGNRS is left below the principal, the Vault funded and its
+    ///      fallback enabled, then sDGNRS is refunded for later borrowers.
+    function _borrowFromVault(address who, uint32 id, uint24 due) private returns (uint256 principal) {
+        (uint128 sdgnrsClaimable, ) = lens.accountBalances(address(game), SDGNRS_ID);
+        _setBalances(SDGNRS_ID, 1 ether, 0);
+        _fund(VAULT_ID, 1_000 ether);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+        vault.setLiquidationBuyFallback(true, 1 ether);
+        assertEq(lens.previewBorrow(address(game), id, due, type(uint256).max).lenderId, VAULT_ID);
+        principal = _borrow(who, id, due);
+        _setBalances(SDGNRS_ID, sdgnrsClaimable, 0);
     }
 
     function _decide() private {
@@ -297,22 +305,15 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         _borrow(bob, b, 3);
         uint256 owedB = _owedNow(b);
         _setBalances(b, owedB, 0);
-        // carol: a main with five smurfs, one holding a deity pass, defaults at due 30.
+        // carol: holds a deity pass on her account, defaults at due 30.
         uint32 c = _account(carol);
-        _grantSmurfBase(carol, 8);
-        uint32[] memory kids = new uint32[](5);
-        for (uint256 i; i < 5; ++i) kids[i] = _child(carol);
         vm.prank(carol);
-        game.purchaseDeityPass{value: 200 ether}(kids[4], 31, bytes32(0));
+        game.purchaseDeityPass{value: 200 ether}(c, 31, bytes32(0));
         _borrow(carol, c, 30);
         _setBalances(c, 0, 0);
-        // dave: a main due 4 whose smurf carries its own loan due 50; the main goes first.
+        // dave: borrows from the Vault, due 4, and defaults to it.
         uint32 d = _account(dave);
-        _grantSmurfBase(dave, 8);
-        uint32 dKid = _child(dave);
-        _borrow(dave, dKid, 50);
-        _setBalances(dKid, 1, 1_000 ether); // ample, but an acquired borrower always defaults
-        _borrow(dave, d, 4);
+        _borrowFromVault(dave, d, 4);
         _setBalances(d, 0, 0);
         // erin: the last level a loan can be due (level + 99).
         uint32 e = _account(erin);
@@ -352,11 +353,15 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         _assertSeized(logs, b, "bob defaults one wei short");
         assertEq(sdgnrs.balanceOf(bob), 0, "bob's native sDGNRS burned");
         assertEq(game.walletIdOf_g3120(bob), 0, "bob's default gameplay ID cleared");
-        _assertSeized(logs, c, "carol's main defaults");
-        for (uint256 i; i < 5; ++i) assertEq(_payee(kids[i]), address(sdgnrs), "carol's family moves with her");
+        _assertSeized(logs, c, "carol defaults");
         assertEq(deityPass.ownerOf(31), address(sdgnrs), "the deity pass follows its account");
-        _assertSeized(logs, d, "dave's main defaults");
-        _assertSeized(logs, dKid, "dave's smurf defaults to its own lender at its own due level");
+        (uint256 dSeized, uint256 dRepaid) = _countSettlements(logs, d);
+        assertEq(dSeized, 1, "dave defaults once");
+        assertEq(dRepaid, 0);
+        assertEq(_payee(d), address(vault), "the Vault takes dave's account");
+        assertEq(game.acquiredBuyer(d), VAULT_ID);
+        assertEq(game.walletIdOf_g3120(dave), 0, "dave's default gameplay ID cleared");
+        assertFalse(_open(d));
         _assertSeized(logs, e, "the horizon loan settles");
 
         // The 30-day final sweep remains reachable after settlement.
@@ -455,6 +460,9 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         uint32 a = _account(alice);
         uint256 principal = _borrow(alice, a, 3);
         _setBalances(a, 0, 0);
+        uint32 b = _account(bob);
+        uint256 vaultPrincipal = _borrowFromVault(bob, b, 3);
+        _setBalances(b, 0, 0);
         // A daily request goes out and is never answered.
         for (uint256 i; i < 256 && !game.rngLocked(); ++i) _mine(30_000_000);
         assertTrue(game.rngLocked(), "the day's request is out");
@@ -469,6 +477,11 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         assertEq(seized + repaid, 0, "loans stand");
         assertEq(_payee(a), alice, "the borrower keeps the account");
         assertEq(lens.loanOf(address(game), a).principal, principal, "the loan record stands");
+        (seized, repaid) = _countSettlements(logs, b);
+        assertEq(seized + repaid, 0, "the Vault's loan stands too");
+        assertEq(_payee(b), bob);
+        assertEq(lens.loanOf(address(game), b).principal, vaultPrincipal);
+        assertEq(lens.loanOf(address(game), b).lenderId, VAULT_ID);
     }
 
     // ---------------------------------------------------------------- VRF failing after the decision
@@ -479,7 +492,9 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         for (uint256 i; i < n; ++i) {
             address owner = makeAddr(string(abi.encode("late-death", i)));
             ids[i] = _account(owner);
-            _borrow(owner, ids[i], 6);
+            // The last borrower takes its loan from the Vault.
+            if (i == n - 1) _borrowFromVault(owner, ids[i], 6);
+            else _borrow(owner, ids[i], 6);
             _setBalances(ids[i], 0, 0);
         }
         // The day's request is in flight and young when the deadline ending is decided.
@@ -512,7 +527,10 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
             (uint256 seized, uint256 repaid) = _countSettlements(suffix, ids[i]);
             assertEq(seized + repaid, 0, "hard ending performs no further loan work");
             (seized, repaid) = _countSettlements(prefix, ids[i]);
-            if (seized != 0) assertEq(_payee(ids[i]), address(sdgnrs), "paid prefix ownership retained");
+            address lender = i == n - 1 ? address(vault) : address(sdgnrs);
+            if (seized != 0) assertEq(_payee(ids[i]), lender, "paid prefix ownership retained");
+            else assertEq(lens.loanOf(address(game), ids[i]).lenderId, i == n - 1 ? VAULT_ID : SDGNRS_ID,
+                "an unsettled loan keeps its lender");
         }
 
     }

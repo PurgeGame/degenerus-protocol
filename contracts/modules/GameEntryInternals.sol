@@ -6,15 +6,9 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {GameComponentCall} from "./GameComponentCall.sol";
 import {IGamePurchaseModule, IGameMinerModule, IGameBingoModule, IGameBetModule, IGameBoonActionsModule} from "../interfaces/IGameEntryModules.sol";
 
-import {IGameActionModule} from "../interfaces/IGameActionModule.sol";
-
 abstract contract GameEntryInternals is GameComponentCall {
     function _gamePurchase(uint32 buyerId, uint256 entryQuantityScaled, uint256 boxOrder, bytes32 affiliateCode, MintPaymentKind payKind) internal virtual {
         _componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.purchase.selector, buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind));
-    }
-
-    function _gameCreateSmurf(bytes32 affiliateCode, MintPaymentKind payKind) internal virtual returns (uint32) {
-        return abi.decode(_componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.createSmurf.selector, affiliateCode, payKind)), (uint32));
     }
 
     function _gameRedeemFlip(uint32 id, uint256 entryQuantityScaled) internal virtual {
@@ -67,9 +61,5 @@ abstract contract GameEntryInternals is GameComponentCall {
 
     function _gameIssueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) internal virtual {
         _componentDelegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSelector(IGameBoonActionsModule.giveBoon.selector, deityId, recipientId, slot));
-    }
-
-    function _gameRaiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) internal virtual {
-        _componentDelegate(ContractAddresses.GAME_ACTIONS_MODULE, abi.encodeWithSelector(IGameActionModule.raiseSmurfBaseAllowance.selector, mainId, newBase));
     }
 }

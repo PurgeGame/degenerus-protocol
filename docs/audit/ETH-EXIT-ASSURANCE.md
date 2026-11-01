@@ -144,7 +144,7 @@ The upstream credit families that must satisfy those premises are:
 | Degenesis reservation and split | The paid amount enters aggregate liability once; the cohort splits once; retained protocol balances are reclassifications of the reservation. | Degenesis solvency vectors and real split fixture. |
 | Loan repayment / automatic repayment / acquired-account sweeps | Lender credits must equal fresh ETH plus the debited source balances; sweeps only move existing value between account ledgers. | Independent loan ledger, terminal-loan conservation and mature composition. |
 | Purchase overpayment / AFKing funding | New funding credits must match received ETH or an explicitly debited existing balance. | AFKing helper and shortfall proofs; purchase/custody tests. |
-| Early-deity refunds / terminal and dead-VRF entitlements | Refunds and payout weights must fit the available terminal pot; entitlement records must be consumed before reuse. | Source tracing and terminal tests; aggregate post-game solvency alone is insufficient. |
+| Deterministic-ending deity refunds (below level 10) / terminal and dead-VRF entitlements | Refunds and payout weights must fit the available terminal pot; entitlement records must be consumed before reuse. | Source tracing and terminal tests; aggregate post-game solvency alone is insufficient. |
 | Protocol yield allocation | Only surplus beyond every counted obligation may be allocated, and credited shares plus retained yield must fit that surplus. | Production surplus-helper proof and earlier yield-solvency tests. |
 
 Specific gaps prevent promoting these results to a global proof:

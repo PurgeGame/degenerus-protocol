@@ -9,39 +9,23 @@ import {Vm} from "forge-std/Vm.sol";
 
 /// @dev Run with FOUNDRY_ISOLATE=true; each measured call executes against committed prior state.
 contract AccountIdentityGasTest is DeployProtocol {
-    address private owner;
     address private plain;
     address private operator;
-    address private freshOwner;
-    uint32 private smurfId;
     uint32 private plainId;
     uint256 private price;
 
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
-        owner = makeAddr("gas-owner");
         plain = makeAddr("gas-plain");
         operator = makeAddr("gas-operator");
-        freshOwner = makeAddr("gas-fresh-owner");
-        vm.deal(owner, 100 ether);
         vm.deal(plain, 100 ether);
         vm.deal(operator, 100 ether);
-        vm.deal(freshOwner, 100 ether);
         vm.deal(address(this), 100 ether);
-        _giveWalletId(owner);
         plainId = _giveWalletId(plain);
-        _giveWalletId(freshOwner);
-        _grantSmurfBase(owner, 2);
-        _grantSmurfBase(freshOwner, 1);
         price = game.mintPrice();
-        vm.prank(owner);
-        smurfId = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        vm.prank(owner);
-        game.setOperatorApproval(smurfId, operator, true);
         vm.prank(plain);
         game.setOperatorApproval(0, operator, true);
-        game.depositAfkingFunding{value: 3 ether}(smurfId);
         game.depositAfkingFunding{value: 3 ether}(plainId);
         RecyclingState.seedWriteBuffer(address(game), 1);
     }
@@ -51,18 +35,6 @@ contract AccountIdentityGasTest is DeployProtocol {
         emit log_named_uint(scenario, vm.snapshotGasLastCall("account-identity", scenario));
         emit log_named_uint(string.concat(scenario, "_gross"), used.gasTotalUsed);
         emit log_named_int(string.concat(scenario, "_refund_counter"), used.gasRefunded);
-    }
-
-    function test_Gas_CreateFirstSmurf() public {
-        vm.prank(freshOwner);
-        game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        _report("create_first_smurf");
-    }
-
-    function test_Gas_CreateAdditionalSmurf() public {
-        vm.prank(owner);
-        game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        _report("create_additional_smurf");
     }
 
     function test_Gas_PurchaseSelfByZero() public {
@@ -77,16 +49,10 @@ contract AccountIdentityGasTest is DeployProtocol {
         _report("purchase_self_id");
     }
 
-    function test_Gas_PurchaseSmurfByOwner() public {
-        vm.prank(owner);
-        game.purchaseOrderFor{value: price}(smurfId, 400, 0, 0, MintPaymentKind.DirectEth, false);
-        _report("purchase_smurf_owner");
-    }
-
-    function test_Gas_PurchaseSmurfByOperator() public {
+    function test_Gas_PurchaseByOperator() public {
         vm.prank(operator);
-        game.purchaseOrderFor{value: price}(smurfId, 400, 0, 0, MintPaymentKind.DirectEth, false);
-        _report("purchase_smurf_operator");
+        game.purchaseOrderFor{value: price}(plainId, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        _report("purchase_operator");
     }
 
     function test_Gas_BetSelfById() public {
@@ -95,16 +61,10 @@ contract AccountIdentityGasTest is DeployProtocol {
         _report("bet_self_id");
     }
 
-    function test_Gas_BetSmurfByOwner() public {
-        vm.prank(owner);
-        game.betDegenerette{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
-        _report("bet_smurf_owner");
-    }
-
-    function test_Gas_BetSmurfByOperator() public {
+    function test_Gas_BetByOperator() public {
         vm.prank(operator);
-        game.betDegenerette{value: 0.01 ether}(smurfId, 0, 0.01 ether, 1, 3);
-        _report("bet_smurf_operator");
+        game.betDegenerette{value: 0.01 ether}(plainId, 0, 0.01 ether, 1, 3);
+        _report("bet_operator");
     }
 
     function test_Gas_WithdrawSelfById() public {
@@ -113,16 +73,10 @@ contract AccountIdentityGasTest is DeployProtocol {
         _report("withdraw_self_id");
     }
 
-    function test_Gas_WithdrawSmurfByOwner() public {
-        vm.prank(owner);
-        game.withdrawAfkingFunding(smurfId, 1 ether);
-        _report("withdraw_smurf_owner");
-    }
-
-    function test_Gas_WithdrawSmurfByOperator() public {
+    function test_Gas_WithdrawByOperator() public {
         vm.prank(operator);
-        game.withdrawAfkingFunding(smurfId, 1 ether);
-        _report("withdraw_smurf_operator");
+        game.withdrawAfkingFunding(plainId, 1 ether);
+        _report("withdraw_operator");
     }
 
     function test_Gas_RecordPayoutPlain() public {
@@ -130,12 +84,5 @@ contract AccountIdentityGasTest is DeployProtocol {
         (, address payee) = game.payRecordSdgnrs(plainId, 100);
         _report("record_payout_plain");
         assertEq(payee, plain);
-    }
-
-    function test_Gas_RecordPayoutSmurf() public {
-        vm.prank(ContractAddresses.COINFLIP);
-        (, address payee) = game.payRecordSdgnrs(smurfId, 100);
-        _report("record_payout_smurf");
-        assertEq(payee, owner);
     }
 }

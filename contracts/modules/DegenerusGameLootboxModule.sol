@@ -1304,7 +1304,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     }
 
     /// @dev Credit DGNRS reward from the Lootbox pool to box owner `id`'s payee (its own key,
-    ///      or the owner's for a smurf). Resolve the payee only on the first token transfer.
+    ///      or the lender for an acquired account). Resolve the payee only on the first token transfer.
     /// @param acc Entry accumulator holding the owner ID and lazy token-recipient cache.
     /// @param amount Requested DGNRS amount to credit
     /// @return paid Actual DGNRS amount paid from pool

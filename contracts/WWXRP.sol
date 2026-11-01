@@ -130,7 +130,7 @@ interface IDrawGame {
     function walletIdOf_g3120(address player) external view returns (uint32);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
-    ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
+    ///         (its payee, or an operator approved for an ordinary account). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. `enterDraw` requires `authorized`.
     function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
@@ -316,7 +316,7 @@ contract WWXRP {
     error AlreadyClaimed();
 
     /// @notice Thrown when the caller may not act for the account: it is neither the account's
-    ///         key, a smurf's owner, nor an approved operator
+    ///         payee nor an approved operator
     error NotApproved();
 
     /*+======================================================================+
@@ -483,7 +483,7 @@ contract WWXRP {
     }
 
     /// @notice Earned WWXRP awaiting withdrawal or gameplay consumption, keyed by account ID.
-    /// @dev Unminted rewards are outside ERC20 totalSupply and never shared between subaccounts.
+    /// @dev Unminted rewards are outside ERC20 totalSupply and never shared between accounts.
     /// @dev Balance plus one; untouched zero is also empty. Economic cap is uint256.max-1.
     mapping(uint32 => uint256) private _claimable;
 
@@ -749,8 +749,8 @@ contract WWXRP {
     ///         During a level x99 the same burn also enters the century
     ///         BAF-incinerator draw for the upcoming x00 bracket.
     /// @dev Authorized: `id == 0` is the caller (no Game resolution call); any other
-    ///      ID needs Game `resolveAccount` to authorize the caller (the account's key,
-    ///      a smurf's owner or an approved operator). The WWXRP burns from the
+    ///      ID needs Game `resolveAccount` to authorize the caller (the account's
+    ///      payee or an approved operator). The WWXRP burns from the
     ///      account's payee; the activity score, the entry, the bucket and the boon
     ///      are the account's, keyed by its wallet ID. The entry pays, so a
     ///      first-time self entrant registers its Game wallet ID. Multiple burns per day

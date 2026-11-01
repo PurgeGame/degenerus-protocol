@@ -72,15 +72,7 @@ library TicketQueueStorage {
             uint256 word = uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(queue))) + i / 8)));
             uint32 id = uint32(word / (2 ** (32 * (i % 8))));
             require(id != 0 && id < count, "invalid owner ID");
-            uint256 ownerWord = _ownerWord(host, id);
-            uint32 parent = uint32(ownerWord >> 160);
-            if (uint160(ownerWord) == 0) {
-                // Children retain their original parent even after that root is sold.
-                require(parent != 0 && parent < count && parent != id, "invalid subaccount owner");
-                id = parent;
-                ownerWord = _ownerWord(host, parent);
-            }
-            _assertRootOwner(host, id, ownerWord, count);
+            _assertRootOwner(host, id, _ownerWord(host, id), count);
         }
     }
 
@@ -191,10 +183,8 @@ library TicketQueueStorage {
     }
     function ownerAt(address host, uint24 key, uint24, uint256 index) internal view returns (address) {
         uint256 word = _ownerWord(host, ownerIdAt(host, key, index));
-        uint32 parent = uint32(word >> 160);
-        if (parent != 0) word = _ownerWord(host, parent);
-        parent = uint32(word >> 160);
-        if (parent != 0) word = _ownerWord(host, parent);
+        uint32 lender = uint32(word >> 160);
+        if (lender != 0) word = _ownerWord(host, lender);
         return address(uint160(word));
     }
 }

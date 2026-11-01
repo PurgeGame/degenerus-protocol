@@ -8,6 +8,8 @@ contracts/modules/DegenerusGameDailyModule.sol
 contracts/modules/DegenerusGameEndgameModule.sol
 contracts/modules/DegenerusGameFoilPackModule.sol
 contracts/modules/DegenerusGamePassModule.sol
+# Actions-module ABI declaration read only by the interface and delegatecall checks; not imported by deployed code:
+contracts/interfaces/IGameActionModule.sol
 # Test-only sources and upstream implementations; retained as verification dependencies.
 contracts/mocks/
 contracts/test/

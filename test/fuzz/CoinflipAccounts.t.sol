@@ -14,15 +14,15 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title CoinflipAccounts -- Coinflip doors acting for an account by wallet ID (smurfs, operators, gifts)
-/// @notice O owns subaccount S; P is an operator O approved for S; X is a stranger.
-///         Coinflip state and stakes follow S's ID. FLIP burns and withdrawals use O's wallet;
-///         loss WWXRP credits stay claimable under S's ID. A deposit is
-///         direct (flip record, BAF draw entry, coinflip boon) only when the caller is the payee: a
-///         self deposit or a smurf's owner. An operator deposit and a gift are not direct; a gift
-///         burns the funder's FLIP, never spends the account's winnings and earns the funder's quest.
-///         Self actions make no Game `resolveAccount` call; an ID-addressed action makes one, and a
-///         subaccount actions use the supplied ID with no registration.
+/// @title CoinflipAccounts -- Coinflip doors acting for an account by wallet ID (keys, operators, gifts)
+/// @notice A is an ordinary account; P is an operator A approved on its ID; X is a stranger.
+///         Coinflip state and stakes follow A's ID. FLIP burns and withdrawals use A's wallet;
+///         loss WWXRP credits stay claimable under A's ID. A deposit is direct (flip record, BAF
+///         draw entry, coinflip boon) only when the caller is the payee: a self deposit or the
+///         key naming its own ID. An operator deposit and a gift are not direct; a gift burns the
+///         funder's FLIP, never spends the account's winnings and earns the funder's quest.
+///         Self actions make no Game `resolveAccount` call; an ID-addressed action makes one, and
+///         account actions use the supplied ID with no registration.
 contract CoinflipAccountsTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant VAULT = ContractAddresses.VAULT;
@@ -44,9 +44,10 @@ contract CoinflipAccountsTest is DeployProtocol {
     uint256 internal constant PAST_PAID_ADMISSION = 3_000_000_001;
     uint8 internal constant RECORD_KIND_FLIP = 0;
 
-    address internal owner;
-    uint32 internal ownerId;
-    uint32 internal smurfId;
+    address internal account;
+    uint32 internal accountId;
+    address internal other;
+    uint32 internal otherId;
     address internal stranger;
     address internal operator;
 
@@ -66,14 +67,14 @@ contract CoinflipAccountsTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        owner = makeAddr("cfa_owner");
-        ownerId = _giveWalletId(owner);
-        _grantSmurfBase(owner, 1);
-        (smurfId,) = _createSmurf(owner);
+        account = makeAddr("cfa_account_main");
+        accountId = _giveWalletId(account);
+        other = makeAddr("cfa_other");
+        otherId = _giveWalletId(other);
         stranger = makeAddr("cfa_stranger");
         operator = makeAddr("cfa_operator");
-        vm.prank(owner);
-        game.setOperatorApproval(smurfId, operator, true);
+        vm.prank(account);
+        game.setOperatorApproval(accountId, operator, true);
     }
 
     // =====================================================================
@@ -81,18 +82,6 @@ contract CoinflipAccountsTest is DeployProtocol {
     // =====================================================================
 
 
-
-    /// @dev `o` (which holds an ID) creates a smurf, paying the ticket in fresh ETH.
-    function _createSmurf(address o) internal returns (uint32 sid, uint32 skey) {
-        (,,,, uint256 price) = game.purchaseInfo_g1027();
-        vm.deal(o, price);
-        vm.prank(o);
-        sid = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        skey = sid;
-        (address key, address payee, bool authorized) = game.resolveAccount_g7029(sid, o);
-        require(key == address(0) && payee == o && authorized, "fixture: no key, owner payee and authority");
-        vm.deal(o, 0);
-    }
 
     function _today() internal view returns (uint24) {
         return game.currentDayView_g542950();
@@ -174,26 +163,26 @@ contract CoinflipAccountsTest is DeployProtocol {
         return (slot0 >> COINFLIP_TIER_SHIFT) & 0xFF;
     }
 
-    /// @dev Give S settled winnings in its own Coinflip state: a credited stake wins and the owner's
+    /// @dev Give A settled winnings in its own Coinflip state: a credited stake wins and the account's
     ///      zero-amount settle banks it into `claimableStored`. Returns the banked amount.
-    function _bankSmurfWinnings(uint256 credit) internal returns (uint256 bank) {
+    function _bankWinnings(uint256 credit) internal returns (uint256 bank) {
         uint24 d = _today();
         vm.prank(GAME);
-        coinflip.creditFlip_g317(smurfId, credit);
+        coinflip.creditFlip_g317(accountId, credit);
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
-        vm.prank(owner);
-        coinflip.playCoinflip(smurfId, 0);
+        vm.prank(account);
+        coinflip.playCoinflip(accountId, 0);
         _checkExpectedQuest();
-        bank = _claimableStored(smurfId);
-        require(bank > 0, "fixture: smurf winnings banked");
+        bank = _claimableStored(accountId);
+        require(bank > 0, "fixture: winnings banked");
     }
 
-    /// @dev Leave S an unsettled losing day (stake credited, then resolved as a loss).
-    function _pendingSmurfLoss() internal {
+    /// @dev Leave A an unsettled losing day (stake credited, then resolved as a loss).
+    function _pendingLoss() internal {
         uint24 d = _today();
         vm.prank(GAME);
-        coinflip.creditFlip_g317(smurfId, 300);
+        coinflip.creditFlip_g317(accountId, 300);
         _warpToDay(d + 1);
         _resolveDay(d + 1, false);
     }
@@ -220,60 +209,60 @@ contract CoinflipAccountsTest is DeployProtocol {
 
 
     // =====================================================================
-    //                 1. owner deposits for its smurf (direct)
+    //                 1. a key deposits through its own ID (direct)
     // =====================================================================
 
-    /// @notice O's deposit for S spends S's settled winnings first and burns O's wallet FLIP for the
-    ///         rest; the stake is S's, the quest is S's, and the deposit is direct: S's coinflip boon
-    ///         is spent and, on the armed day, the BAF draw entry carries S. Events name S's key.
-    function test_OwnerDepositForSmurf_ClaimableFirstThenOwnerWallet_Direct() public {
-        uint256 bank = _bankSmurfWinnings(400);
+    /// @notice A's deposit through its own ID spends A's settled winnings first and burns A's wallet
+    ///         FLIP for the rest; the stake and quest are A's, and the deposit is direct: A's
+    ///         coinflip boon is spent and, on the armed day, the BAF draw entry carries A.
+    function test_KeyDepositWithOwnId_ClaimableFirstThenWallet_Direct() public {
+        uint256 bank = _bankWinnings(400);
         uint256 amount = bank + 1_000;
-        _fundFlip(owner, 5_000);
-        _seedCoinflipBoon(smurfId, 3);
+        _fundFlip(account, 5_000);
+        _seedCoinflipBoon(accountId, 3);
         uint24 target = _today() + 1;
         vm.prank(GAME);
         coinflip.armBafDraw(target);
-        uint256 laneBefore = _lane(target, smurfId);
-        uint256 ownerLaneBefore = _lane(target, ownerId);
+        uint256 laneBefore = _lane(target, accountId);
+        uint256 otherLaneBefore = _lane(target, otherId);
 
-        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (smurfId, owner)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (accountId, account)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
-        _expectedQuestId = smurfId;
-        vm.expectCall(GAME, abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (smurfId)), 1);
-        vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 1_000), 1);
+        _expectedQuestId = accountId;
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.consumeCoinflipBoon_g2902, (accountId)), 1);
+        vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", account, 1_000), 1);
         vm.recordLogs();
-        vm.prank(owner);
-        coinflip.playCoinflip(smurfId, amount);
+        vm.prank(account);
+        coinflip.playCoinflip(accountId, amount);
         _checkExpectedQuest();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(_claimableStored(smurfId), 0, "the smurf's winnings funded the stake first");
-        assertEq(coin.balanceOf(owner), 4_000, "the owner's wallet paid only the remainder");
-        assertGe(_lane(target, smurfId) - laneBefore, amount + amount / 4, "stake on S with the 25% boon");
-        assertEq(_lane(target, ownerId), ownerLaneBefore, "nothing staked on the owner's lane");
-        assertEq(_coinflipBoonTier(smurfId), 0, "the smurf's coinflip boon was spent");
+        assertEq(_claimableStored(accountId), 0, "the account's winnings funded the stake first");
+        assertEq(coin.balanceOf(account), 4_000, "the account's wallet paid only the remainder");
+        assertGe(_lane(target, accountId) - laneBefore, amount + amount / 4, "stake on A with the 25% boon");
+        assertEq(_lane(target, otherId), otherLaneBefore, "nothing staked on another account's lane");
+        assertEq(_coinflipBoonTier(accountId), 0, "the account's coinflip boon was spent");
 
         (uint24 day, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(day, target);
         assertEq(count, 1, "the direct deposit entered the BAF draw");
         assertEq(total, amount, "draw weight is the raw principal");
         (uint32 eid,) = coinflip.bafDrawEntryAt(target, 0);
-        assertEq(eid, smurfId, "the draw entry carries S");
+        assertEq(eid, accountId, "the draw entry carries A");
         assertEq(_countFor(logs, address(coinflip), BAF_DRAW_ENTERED, bytes32(uint256(target))), 1);
-        assertEq(_countFor(logs, address(coinflip), DEPOSIT, bytes32(uint256(_fixtureId(smurfId)))), 1, "CoinflipDeposit names S's key");
-        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(smurfId))), 1, "claim state names S's key");
-        assertEq(_countFor(logs, address(coinflip), DEPOSIT, bytes32(uint256(_fixtureId(owner)))), 0);
+        assertEq(_countFor(logs, address(coinflip), DEPOSIT, bytes32(uint256(_fixtureId(accountId)))), 1, "CoinflipDeposit names A's key");
+        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(accountId))), 1, "claim state names A's key");
+        assertEq(_countFor(logs, address(coinflip), DEPOSIT, bytes32(uint256(_fixtureId(other)))), 0);
     }
 
-    /// @notice O's deposit for S can set the flip record: the record and its claim accrue to S, the
-    ///         trophy and the sDGNRS leg go to O (the payee), never to S's key.
-    function test_OwnerDepositForSmurf_ArmsFlipRecord_TrophyToOwner() public {
-        _fundFlip(owner, 300_000);
-        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector, smurfId), 1);
+    /// @notice A's deposit through its own ID can set the flip record: the record and its claim
+    ///         accrue to A, and the trophy and the sDGNRS leg go to A's wallet (the payee).
+    function test_KeyDepositWithOwnId_ArmsFlipRecord_TrophyToPayee() public {
+        _fundFlip(account, 300_000);
+        vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector, accountId), 1);
         vm.recordLogs();
-        vm.prank(owner);
-        coinflip.playCoinflip(smurfId, 200_000);
+        vm.prank(account);
+        coinflip.playCoinflip(accountId, 200_000);
         _checkExpectedQuest();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
@@ -282,84 +271,84 @@ contract CoinflipAccountsTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(coinflip) || logs[i].topics[0] != BIG_RECORD) continue;
             assertEq(uint8(uint256(logs[i].topics[1])), RECORD_KIND_FLIP);
-            assertEq(uint32(uint256(logs[i].topics[2])), smurfId, "the record accrues to S");
+            assertEq(uint32(uint256(logs[i].topics[2])), accountId, "the record accrues to A");
             seen = true;
         }
         assertTrue(seen, "BigRecordUpdated emitted");
-        assertEq(recordBounty.ownerOf(RECORD_KIND_FLIP), owner, "trophy to the payee");
+        assertEq(recordBounty.ownerOf(RECORD_KIND_FLIP), account, "trophy to the payee");
     }
 
     /// @notice A completed quest on an authorized deposit names the account key and its reward joins
     ///         the account's stake; on a gift it names the funding caller.
     function test_QuestCompleted_NamesAccountKey_OrGiftFunder() public {
         uint24 target = _today() + 1;
-        _readyFlipQuest(smurfId);
-        _fundFlip(owner, 10_000);
-        uint256 before = _lane(target, smurfId);
+        _readyFlipQuest(accountId);
+        _fundFlip(account, 10_000);
+        uint256 before = _lane(target, accountId);
         vm.recordLogs();
-        vm.prank(owner);
-        coinflip.playCoinflip(smurfId, 2_000);
+        vm.prank(account);
+        coinflip.playCoinflip(accountId, 2_000);
         _checkExpectedQuest();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 1, "quest names S's key");
-        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(owner)))), 0);
-        assertEq(_lane(target, smurfId) - before, 2_100, "quest reward joins S's stake");
+        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(accountId)))), 1, "quest names A's key");
+        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(other)))), 0);
+        assertEq(_lane(target, accountId) - before, 2_100, "quest reward joins A's stake");
 
         vm.prank(address(coinflip));
         uint32 funderId=game.registerWallet_g9539(stranger,true);
         _readyFlipQuest(funderId);
         _fundFlip(stranger, 10_000);
-        before = _lane(target, smurfId);
+        before = _lane(target, accountId);
         vm.recordLogs();
         vm.prank(stranger);
-        coinflip.playCoinflip(smurfId, 2_000);
+        coinflip.playCoinflip(accountId, 2_000);
         _checkExpectedQuest();
         logs = vm.getRecordedLogs();
         assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(stranger)))), 1, "a gift's quest names the funder");
-        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 0);
-        assertEq(_lane(target, smurfId) - before, 2_100, "the funder's quest reward joins S's stake");
+        assertEq(_countFor(logs, address(quests), QUEST_COMPLETED, bytes32(uint256(_fixtureId(accountId)))), 0);
+        assertEq(_lane(target, accountId) - before, 2_100, "the funder's quest reward joins A's stake");
         assertEq(_gameId(stranger), funderId);
     }
 
     // =====================================================================
-    //                       2. a stranger's gift to S
+    //                       2. a stranger's gift to A
     // =====================================================================
 
-    /// @notice X's deposit for S is a gift: X's FLIP pays the whole principal, S's banked winnings
-    ///         stay put, X registers and earns the quest, the stake is S's, and nothing direct
-    ///         happens (no boon, no draw entry, no record). S's pending loss mints WWXRP to O.
-    function test_StrangerGiftToSmurf_FunderPays_NotDirect_LossWwxrpToOwner() public {
-        uint256 bank = _bankSmurfWinnings(400);
-        _pendingSmurfLoss();
-        _seedCoinflipBoon(smurfId, 3);
+    /// @notice X's deposit for A is a gift: X's FLIP pays the whole principal, A's banked winnings
+    ///         stay put, X registers and earns the quest, the stake is A's, and nothing direct
+    ///         happens (no boon, no draw entry, no record). A's pending loss mints WWXRP to A.
+    function test_StrangerGiftToAccount_FunderPays_NotDirect_LossWwxrpToAccount() public {
+        uint256 bank = _bankWinnings(400);
+        _pendingLoss();
+        _seedCoinflipBoon(accountId, 3);
         uint24 target = _today() + 1;
         vm.prank(GAME);
         coinflip.armBafDraw(target);
         _fundFlip(stranger, 300_000);
         uint32 funderId = uint32(_walletCount());
-        uint256 laneBefore = _lane(target, smurfId);
-        uint256 ownerFlip = coin.balanceOf(owner);
-        uint256 ownerWwxrp = wwxrp.claimable(smurfId);
+        uint256 laneBefore = _lane(target, accountId);
+        uint256 accountFlip = coin.balanceOf(account);
+        uint256 accountWwxrp = wwxrp.claimable(accountId);
 
-        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (smurfId, stranger)), 1);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (accountId, stranger)), 1);
         vm.expectCall(GAME, abi.encodeCall(GameFacade.registerWallet_g9539, (stranger, true)), 1);
         _expectedQuestId = funderId;
-        vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip_g217.selector, smurfId), 0);
+        vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip_g217.selector, accountId), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.consumeCoinflipBoon_g2902.selector), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.payRecordSdgnrs.selector), 0);
         vm.prank(stranger);
-        coinflip.playCoinflip(smurfId, 250_000);
+        coinflip.playCoinflip(accountId, 250_000);
         _checkExpectedQuest();
 
         assertEq(coin.balanceOf(stranger), 50_000, "the funder paid the whole principal");
-        assertEq(coin.balanceOf(owner), ownerFlip, "the owner's wallet is untouched");
-        assertEq(_claimableStored(smurfId), bank, "a gift never spends the account's winnings");
-        assertEq(_lane(target, smurfId) - laneBefore, 250_000, "stake on S, no boon, no bonus");
-        assertEq(_coinflipBoonTier(smurfId), 3, "S's coinflip boon kept");
+        assertEq(coin.balanceOf(account), accountFlip, "the account's wallet is untouched");
+        assertEq(_claimableStored(accountId), bank, "a gift never spends the account's winnings");
+        assertEq(_lane(target, accountId) - laneBefore, 250_000, "stake on A, no boon, no bonus");
+        assertEq(_coinflipBoonTier(accountId), 3, "A's coinflip boon kept");
         (,, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 0, "a gift carries no draw weight");
         assertEq(coinflip.biggestFlipEver(), 0, "a gift cannot set the record");
-        assertGt(wwxrp.claimable(smurfId), ownerWwxrp, "S's loss consolation went to O");
+        assertGt(wwxrp.claimable(accountId), accountWwxrp, "A's loss consolation stayed under A's ID");
         assertEq(wwxrp.balanceOf(stranger), 0, "nothing to the funder");
         assertEq(_gameId(stranger), funderId, "the paying funder registered");
     }
@@ -400,27 +389,27 @@ contract CoinflipAccountsTest is DeployProtocol {
         assertEq(coinflip.biggestFlipEver(), 0, "an operator deposit cannot set the record");
     }
 
-    /// @notice P's deposit for S burns O's FLIP (the payee), quests as S, and is not direct.
-    function test_OperatorDepositForSmurf_BurnsOwnerFlip_NotDirect() public {
-        _fundFlip(owner, 300_000);
-        _seedCoinflipBoon(smurfId, 3);
+    /// @notice P's deposit for A burns A's FLIP (the payee), quests as A, and is not direct.
+    function test_OperatorDepositApprovedOnId_BurnsAccountFlip_NotDirect() public {
+        _fundFlip(account, 300_000);
+        _seedCoinflipBoon(accountId, 3);
         uint24 target = _today() + 1;
         vm.prank(GAME);
         coinflip.armBafDraw(target);
-        uint256 laneBefore = _lane(target, smurfId);
+        uint256 laneBefore = _lane(target, accountId);
 
-        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (smurfId, operator)), 1);
-        vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 250_000), 1);
-        _expectedQuestId = smurfId;
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (accountId, operator)), 1);
+        vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", account, 250_000), 1);
+        _expectedQuestId = accountId;
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.consumeCoinflipBoon_g2902.selector), 0);
         vm.prank(operator);
-        coinflip.playCoinflip(smurfId, 250_000);
+        coinflip.playCoinflip(accountId, 250_000);
         _checkExpectedQuest();
 
-        assertEq(coin.balanceOf(owner), 50_000, "the smurf's payee paid");
+        assertEq(coin.balanceOf(account), 50_000, "the account's payee paid");
         assertEq(coin.balanceOf(operator), 0);
-        assertEq(_lane(target, smurfId) - laneBefore, 250_000);
-        assertEq(_coinflipBoonTier(smurfId), 3);
+        assertEq(_lane(target, accountId) - laneBefore, 250_000);
+        assertEq(_coinflipBoonTier(accountId), 3);
         (,, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 0);
         assertEq(coinflip.biggestFlipEver(), 0);
@@ -431,17 +420,17 @@ contract CoinflipAccountsTest is DeployProtocol {
     // =====================================================================
 
     /// @notice An unallocated ID reverts the Game's E for any caller; a new wallet's self deposit
-    ///         allocates, and past paid admission it reverts E; deposits for S still work there.
+    ///         allocates, and past paid admission it reverts E; deposits for A still work there.
     function test_UnallocatedId_E_SelfAllocates_PastAdmissionE() public {
         _fundFlip(stranger, 10_000);
-        _fundFlip(owner, 10_000);
+        _fundFlip(account, 10_000);
         uint32 unallocated = uint32(_walletCount());
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(stranger);
         coinflip.playCoinflip(unallocated, 1_000);
         _checkExpectedQuest();
         vm.expectRevert(abi.encodeWithSignature("E()"));
-        vm.prank(owner);
+        vm.prank(account);
         coinflip.playCoinflip(unallocated, 1_000);
         _checkExpectedQuest();
         assertEq(coin.balanceOf(stranger), 10_000);
@@ -461,39 +450,39 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.prank(late);
         coinflip.playCoinflip(0, 1_000);
         _checkExpectedQuest();
-        vm.prank(owner);
-        coinflip.playCoinflip(smurfId, 1_000);
+        vm.prank(account);
+        coinflip.playCoinflip(accountId, 1_000);
         _checkExpectedQuest();
-        assertEq(coin.balanceOf(owner), 9_000, "the owner still deposits for S past admission");
+        assertEq(coin.balanceOf(account), 9_000, "the account still deposits for A past admission");
     }
 
-    /// @notice A zero-amount gift by X settles S's resolved days into S's state, mints nothing to X,
-    ///         registers nobody, and S's loss consolation goes to O.
-    function test_ZeroAmountGift_SettlesSmurf_MintsNothingToCaller() public {
+    /// @notice A zero-amount gift by X settles A's resolved days into A's state, mints nothing to X,
+    ///         registers nobody, and A's loss consolation stays under A's ID.
+    function test_ZeroAmountGift_SettlesAccount_MintsNothingToCaller() public {
         uint24 d = _today();
         vm.prank(GAME);
-        coinflip.creditFlip_g317(smurfId, 400);
+        coinflip.creditFlip_g317(accountId, 400);
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
-        uint256 payout = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
+        uint256 payout = coinflip.previewClaimCoinflipsById(_fixtureId(accountId));
         assertGt(payout, 0);
         vm.prank(GAME);
-        coinflip.creditFlip_g317(smurfId, 300);
+        coinflip.creditFlip_g317(accountId, 300);
         _warpToDay(d + 2);
         _resolveDay(d + 2, false);
-        uint256 ownerWwxrp = wwxrp.claimable(smurfId);
+        uint256 accountWwxrp = wwxrp.claimable(accountId);
 
         vm.expectCall(GAME, abi.encodeWithSelector(GameFacade.registerWallet_g9539.selector), 0);
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip_g217.selector), 0);
         vm.prank(stranger);
-        coinflip.playCoinflip(smurfId, 0);
+        coinflip.playCoinflip(accountId, 0);
         _checkExpectedQuest();
 
-        assertEq(_claimableStored(smurfId), payout, "S's win settled into S's state");
-        assertEq(_lastClaim(smurfId), d + 2, "both days walked");
+        assertEq(_claimableStored(accountId), payout, "A's win settled into A's state");
+        assertEq(_lastClaim(accountId), d + 2, "both days walked");
         assertEq(coin.balanceOf(stranger), 0, "nothing minted to the caller");
         assertEq(wwxrp.balanceOf(stranger), 0);
-        assertGt(wwxrp.claimable(smurfId), ownerWwxrp, "the loss consolation went to O");
+        assertGt(wwxrp.claimable(accountId), accountWwxrp, "the loss consolation stayed under A's ID");
         assertEq(_gameId(stranger), 0, "a zero-amount gift registers nobody");
     }
 
@@ -601,105 +590,105 @@ contract CoinflipAccountsTest is DeployProtocol {
     }
 
     // =====================================================================
-    //                    6. claims and settings for S
+    //                    6. claims and settings for A
     // =====================================================================
 
-    /// @notice X may not claim or configure S (`NotApproved`); O's and P's claims for S mint to O and
-    ///         the claim state is S's (event names S's key).
-    function test_SmurfClaims_OwnerAndOperatorMintToOwner_StrangerNotApproved() public {
+    /// @notice X may not claim or configure A (`NotApproved`); A's and P's claims for A mint to A's
+    ///         wallet and the claim state is A's (event names A's ID).
+    function test_AccountClaims_KeyAndOperatorMintToKey_StrangerNotApproved() public {
         uint24 d = _today();
-        _fundFlip(owner, 10_000);
-        vm.prank(owner);
-        coinflip.playCoinflip(smurfId, 1_000);
+        _fundFlip(account, 10_000);
+        vm.prank(account);
+        coinflip.playCoinflip(accountId, 1_000);
         _checkExpectedQuest();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
 
         vm.startPrank(stranger);
         vm.expectRevert(CoinflipCore.NotApproved.selector);
-        coinflip.claimCoinflips(smurfId, type(uint256).max);
+        coinflip.claimCoinflips(accountId, type(uint256).max);
         vm.expectRevert(CoinflipCore.NotApproved.selector);
-        coinflip.claimCoinflipCarry(smurfId, 1);
+        coinflip.claimCoinflipCarry(accountId, 1);
         vm.expectRevert(CoinflipCore.NotApproved.selector);
-        coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
+        coinflip.setCoinflipAutoRebuy(accountId, true, 0);
         vm.expectRevert(CoinflipCore.NotApproved.selector);
-        coinflip.setCoinflipAutoRebuy(smurfId, false, 0);
+        coinflip.setCoinflipAutoRebuy(accountId, false, 0);
         vm.expectRevert(CoinflipCore.NotApproved.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(smurfId, 0);
+        coinflip.setCoinflipAutoRebuyTakeProfit(accountId, 0);
         vm.stopPrank();
 
-        uint256 preview = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
+        uint256 preview = coinflip.previewClaimCoinflipsById(_fixtureId(accountId));
         assertGt(preview, 0);
-        uint256 ownerBefore = coin.balanceOf(owner);
-        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (smurfId, owner)), 1);
+        uint256 accountBefore = coin.balanceOf(account);
+        vm.expectCall(GAME, abi.encodeCall(GameFacade.resolveAccount_g7029, (accountId, account)), 1);
         vm.recordLogs();
-        vm.prank(owner);
-        uint256 got = coinflip.claimCoinflips(smurfId, type(uint256).max);
+        vm.prank(account);
+        uint256 got = coinflip.claimCoinflips(accountId, type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(got, preview);
-        assertEq(coin.balanceOf(owner) - ownerBefore, got, "O's claim for S minted to O");
-        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(smurfId))), 1, "claim state names S's key");
-        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(_gameId(owner)))), 0);
+        assertEq(coin.balanceOf(account) - accountBefore, got, "the key's claim minted to the key");
+        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(accountId))), 1, "claim state names A's key");
+        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(_gameId(other)))), 0);
 
         vm.prank(operator);
-        coinflip.playCoinflip(smurfId, 1_000);
+        coinflip.playCoinflip(accountId, 1_000);
         _checkExpectedQuest();
         _warpToDay(d + 2);
         _resolveDay(d + 2, true);
-        preview = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
+        preview = coinflip.previewClaimCoinflipsById(_fixtureId(accountId));
         assertGt(preview, 0);
-        ownerBefore = coin.balanceOf(owner);
+        accountBefore = coin.balanceOf(account);
         vm.prank(operator);
-        got = coinflip.claimCoinflips(smurfId, type(uint256).max);
+        got = coinflip.claimCoinflips(accountId, type(uint256).max);
         assertEq(got, preview);
-        assertEq(coin.balanceOf(owner) - ownerBefore, got, "P's claim for S minted to O");
+        assertEq(coin.balanceOf(account) - accountBefore, got, "P's claim for A minted to A");
         assertEq(coin.balanceOf(operator), 0, "nothing to the operator");
     }
 
-    /// @notice Auto-rebuy and the carry live in S's own Coinflip state; P's carry claim, P's
-    ///         take-profit and O's disable all act on S's key and every mint goes to O.
-    function test_SmurfAutoRebuyAndCarry_StateOnSmurfKey_PaysOwner() public {
+    /// @notice Auto-rebuy and the carry live in A's own Coinflip state; P's carry claim, P's
+    ///         take-profit and A's disable all act on A's ID and every mint goes to A's wallet.
+    function test_AccountAutoRebuyAndCarry_StateOnAccountId_PaysKey() public {
         // The deploy day opens with the previous flip day settled, as the daily engine leaves it.
         _resolveDay(_today() - 1, false);
         vm.recordLogs();
-        vm.prank(owner);
-        coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
+        vm.prank(account);
+        coinflip.setCoinflipAutoRebuy(accountId, true, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), TOGGLED, bytes32(uint256(smurfId))), 1, "toggle names the subaccount ID");
-        assertEq(_countFor(logs, address(coinflip), STOP_SET, bytes32(uint256(_fixtureId(smurfId)))), 1);
-        (bool enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
-        assertTrue(enabled, "S's state armed");
-        (enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(owner));
-        assertFalse(enabled, "O's own state untouched");
+        assertEq(_countFor(logs, address(coinflip), TOGGLED, bytes32(uint256(accountId))), 1, "toggle names the account ID");
+        assertEq(_countFor(logs, address(coinflip), STOP_SET, bytes32(uint256(_fixtureId(accountId)))), 1);
+        (bool enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(accountId));
+        assertTrue(enabled, "A's state armed");
+        (enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(other));
+        assertFalse(enabled, "another account's state untouched");
 
         uint24 d = _today();
-        _fundFlip(owner, 10_000);
-        vm.prank(owner);
-        coinflip.playCoinflip(smurfId, 1_000);
+        _fundFlip(account, 10_000);
+        vm.prank(account);
+        coinflip.playCoinflip(accountId, 1_000);
         _checkExpectedQuest();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
 
-        uint256 ownerBefore = coin.balanceOf(owner);
+        uint256 accountBefore = coin.balanceOf(account);
         vm.prank(operator);
-        uint256 claimed = coinflip.claimCoinflipCarry(smurfId, type(uint256).max);
+        uint256 claimed = coinflip.claimCoinflipCarry(accountId, type(uint256).max);
         assertGt(claimed, 1_000, "the winning carry paid out");
-        assertEq(coin.balanceOf(owner) - ownerBefore, claimed, "carry minted to O");
+        assertEq(coin.balanceOf(account) - accountBefore, claimed, "carry minted to A");
         assertEq(coin.balanceOf(operator), 0);
-        (,, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
+        (,, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(accountId));
         assertEq(carry, 0);
 
         vm.prank(operator);
-        coinflip.setCoinflipAutoRebuyTakeProfit(smurfId, 500);
-        (, uint256 stop,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
-        assertEq(stop, 500, "take profit on S's state");
+        coinflip.setCoinflipAutoRebuyTakeProfit(accountId, 500);
+        (, uint256 stop,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(accountId));
+        assertEq(stop, 500, "take profit on A's state");
 
         vm.recordLogs();
-        vm.prank(owner);
-        coinflip.setCoinflipAutoRebuy(smurfId, false, 0);
+        vm.prank(account);
+        coinflip.setCoinflipAutoRebuy(accountId, false, 0);
         logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), TOGGLED, bytes32(uint256(_fixtureId(smurfId)))), 1);
-        (enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
+        assertEq(_countFor(logs, address(coinflip), TOGGLED, bytes32(uint256(_fixtureId(accountId)))), 1);
+        (enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(accountId));
         assertFalse(enabled);
     }
 
@@ -714,28 +703,28 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectRevert(CoinflipCore.NotApproved.selector);
         coinflip.setCoinflipAutoRebuy(1, true, 0);
         vm.expectRevert(CoinflipCore.NotApproved.selector);
-        coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
+        coinflip.setCoinflipAutoRebuy(accountId, true, 0);
         vm.expectRevert(CoinflipCore.NotApproved.selector);
-        coinflip.setCoinflipAutoRebuy(ownerId, false, 0);
+        coinflip.setCoinflipAutoRebuy(otherId, false, 0);
         vm.stopPrank();
 
         uint24 d = _today();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
-        vm.prank(owner);
-        coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
+        vm.prank(account);
+        coinflip.setCoinflipAutoRebuy(accountId, true, 0);
         vm.expectRevert(CoinflipCore.AutoRebuyAlreadyEnabled.selector);
-        vm.prank(owner);
-        coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
+        vm.prank(account);
+        coinflip.setCoinflipAutoRebuy(accountId, true, 0);
 
         _warpToDay(d + 2);
         assertFalse(coinflip.flipResolvedToday(), "today's flip unresolved");
         vm.expectRevert(CoinflipCore.RngLocked.selector);
-        vm.prank(owner);
-        coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
+        vm.prank(account);
+        coinflip.setCoinflipAutoRebuy(accountId, true, 0);
         vm.expectRevert(CoinflipCore.RngLocked.selector);
         vm.prank(operator);
-        coinflip.setCoinflipAutoRebuy(smurfId, false, 0);
+        coinflip.setCoinflipAutoRebuy(accountId, false, 0);
     }
 
     // =====================================================================

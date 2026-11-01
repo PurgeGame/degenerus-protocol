@@ -74,8 +74,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @notice Thrown when the requested deity symbol has already been claimed by
     ///         another buyer.
     error SymbolTaken();
-    /// @notice Thrown when the buyer, or another account with the same main wallet, already
-    ///         holds a deity pass; only one per main wallet is permitted.
+    /// @notice Thrown when the buyer, or another account with the same payee wallet, already
+    ///         holds a deity pass; only one per payee wallet is permitted.
     error AlreadyOwnsDeityPass();
 
     // -------------------------------------------------------------------------
@@ -810,17 +810,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (symbolId >= 32) revert InvalidSymbol();
         if (symbolId == VAULT_DEITY_SYMBOL || symbolId == SDGNRS_DEITY_SYMBOL) revert SymbolTaken();
         if (deityBySymbol[symbolId] != 0) revert SymbolTaken();
-        // One deity per main wallet: the buyer's main is its payee (the owner for a smurf), and
-        // no existing deity (at most 32) may share it. The shared registration helper sets the
+        // One deity per payee wallet (the lender for an acquired account): no existing deity (at most 32) may share it. The shared registration helper sets the
         // buying account's own ownership bit.
         uint32 existingId = _resolveAccountId(buyerId);
         uint256 mp = mintPacked_[existingId];
         if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
         {
-            address main = existingId == 0 ? msg.sender : _payee(_walletElement(existingId));
+            address buyerPayee = existingId == 0 ? msg.sender : _payee(_walletElement(existingId));
             uint256 deities = _deityCount();
             for (uint256 i; i < deities; ++i) {
-                if (_payee(_walletElement(_deityIdAt(i))) == main) revert AlreadyOwnsDeityPass();
+                if (_payee(_walletElement(_deityIdAt(i))) == buyerPayee) revert AlreadyOwnsDeityPass();
             }
         }
 
@@ -868,8 +867,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint24 passLevel = level + 1;
 
-        // Record the price paid (caps the early-game-over refund). A buyer holds exactly one deity
-        // pass (the HAS_DEITY_PASS guard above blocks a second), so this is a plain assignment.
+        // Record the price paid (caps the deterministic-ending refund below level 10). A buyer holds
+        // exactly one deity pass (the HAS_DEITY_PASS guard above blocks a second), so this is a
+        // plain assignment.
         deityPassPricePaid[buyerId] = uint96(totalPrice);
         _accrueDegenesisCredit(buyerId, totalPrice);
 
@@ -1187,7 +1187,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev One-per-account-LIFETIME AFKing seat latch. The seat is a perk of BUYING a
     ///      pass, never of winning or being handed one, so this fires only where an
     ///      account pays for its own pass (whale/lazy/deity purchase); the seat mints to the
-    ///      account's payee (the owner for a smurf). Passes that arrive
+    ///      account's payee. Passes that arrive
     ///      any other way — the whale-pass claim and every `whalePassClaims` feeder behind
     ///      it, and a deity buyer's conferred affiliate pass — mint no seat. The seat
     ///      ARRIVES here: `mintSeatFor` mints it with deterministic default art the holder
@@ -1215,7 +1215,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
 /// @dev Minimal interface for the GAME-gated AFKing seat mint.
 interface IAFKingSeatMint {
-    /// @param to The pass-buying account's payee (its own key, or a smurf's owner), receiving a
+    /// @param to The pass-buying account's payee, receiving a
     ///        free-tranche seat (silent no-op once the 1,000-seat free tranche is exhausted).
     ///        The once-per-account latch (SEAT_CLAIMED) stays on the buying account's own word.
     function mintSeatFor(address to) external;
@@ -1223,8 +1223,8 @@ interface IAFKingSeatMint {
 
 /// @dev Minimal interface for minting deity pass ERC721 tokens.
 interface IDegenerusDeityPassMint {
-    /// @param to Recipient of the minted deity pass: the buying account's main wallet (its
-    ///        payee), never a smurf key.
+    /// @param to Recipient of the minted deity pass: the buying account's payee,
+    ///        never a former borrower's key.
     /// @param tokenId Token ID to mint (matches the deity symbol ID).
     function mint(address to, uint256 tokenId) external;
 }

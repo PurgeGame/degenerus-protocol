@@ -82,7 +82,7 @@ abstract contract GameBingo is DegenerusGameStorage {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
         // Bucket lanes hold wallet IDs; a caller with no ID owns no slot.
         uint32 playerId = _creditAccountId(id);
-        // A self claim pays the caller: its ID is its own ordinary main.
+        // A self claim pays the caller: its own ID is an ordinary account it controls.
         address payee = id == 0 ? msg.sender : _payee(_walletElement(playerId));
         // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is the gate —
@@ -154,7 +154,7 @@ abstract contract GameBingo is DegenerusGameStorage {
     function _claimAffiliateDgnrs(uint32 id) internal {
         // Permissionless: a settled claim only ever credits the affiliate, never the caller.
         uint32 playerId = id == 0 ? _walletIdOf(msg.sender) : _creditAccountId(id);
-        // A self claim pays the caller: its ID is its own ordinary main.
+        // A self claim pays the caller: its own ID is an ordinary account it controls.
         address payee = id == 0 ? msg.sender : _payee(_walletElement(playerId));
 
         uint24 currLevel = level;

@@ -15,8 +15,8 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///         drives the real engine with mock VRF and checks, at the DegenesisOrderResolved level,
 ///         that a cohort's orders resolve exactly as the reference computed from the inputs fixed
 ///         at its request: the stored lanes, frozen V and Q, and the word recorded for the bound
-///         day. Covered: activity inside the request window (Degenesis buys, ordinary boxes, smurf
-///         buys, AFKing subscribe, nudges, miner calls), the request on the last sale day and on
+///         day. Covered: activity inside the request window (Degenesis buys, ordinary boxes, buys
+///         for a further account, AFKing subscribe, nudges, miner calls), the request on the last sale day and on
 ///         the main-launch day, a VRF stall with an admin retry, a delayed logical request, later logical results
 ///         that overwrite the bound day's ring slot during a backlog, the pricing
 ///         being atomic with its request on every day of the week, and a mid-day word never
@@ -145,26 +145,24 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
 
     /// @notice Cohort 1 is priced and bound at the day-3 request. While that request is out the
     ///         players buy Degenesis boxes (they join cohort 2), buy ordinary boxes, buy for a
-    ///         smurf and a Degenesis box for it, try to subscribe to AFKing and to nudge the word
+    ///         further account and a Degenesis box for it, try to subscribe to AFKing and to nudge the word
     ///         (both refused while the window is open) and call the miner; after the word lands, more buys and miner calls from
     ///         other callers interleave with settlement. Every frozen input is byte-identical
     ///         until the word arrives, and every cohort-1 order resolves exactly as in the
     ///         undisturbed run and as the reference.
     function test_RequestWindowActivityChangesNoOutcome() public {
-        // A smurf owned by buyer 0, with credit of its own, set up before the request.
-        address main = buyers[0];
-        _grantSmurfBase(main, 1);
-        uint256 price = game.mintPrice();
+        // A further account with credit of its own, set up before the request.
+        address main = makeAddr("rv-window-account");
+        vm.deal(main, 100 ether);
+        uint32 extra = _giveWalletId(main);
         vm.prank(main);
-        uint32 smurf = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        vm.prank(main);
-        game.purchaseOrderFor{value: 4 ether}(smurf, 0, BoxOrderLib.boCustom(4 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 4 ether}(extra, 0, BoxOrderLib.boCustom(4 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         // A seat for the AFKing subscribe inside the window.
         uint256 seat = _grantSeat(buyers[1]);
 
         _placeOrdersOn(2, 45, 6 minutes);
         vm.prank(main);
-        game.purchaseDegenesisBox{value: 0.05 ether}(smurf, 0.05 ether);
+        game.purchaseDegenesisBox{value: 0.05 ether}(extra, 0.05 ether);
         uint256 n1 = _count(1);
         uint256 q = _refQ(1, _degPool());
 
@@ -192,9 +190,9 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
             if (i % 3 == 0) _earnCredit(buyers[(i + 2) % 5], 0.05 ether);
         }
         vm.prank(main);
-        game.purchaseOrderFor{value: 1 ether}(smurf, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchaseOrderFor{value: 1 ether}(extra, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         vm.prank(main);
-        game.purchaseDegenesisBox{value: 0.03 ether}(smurf, 0.03 ether);
+        game.purchaseDegenesisBox{value: 0.03 ether}(extra, 0.03 ether);
         // Subscribing is refused while the daily window is open.
         vm.prank(buyers[1]);
         vm.expectRevert(ERR_RNG_LOCKED);

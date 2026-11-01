@@ -122,8 +122,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     // Errors
     // =========================================================================
 
-    /// @notice The caller may not act for the account: it is neither the account's key, a
-    ///         smurf's owner, nor an approved operator.
+    /// @notice The caller may not act for the account: it is neither the account's payee nor an
+    ///         approved operator.
     error NotApproved();
 
     /// @notice No round is open for betting: outside the jackpot phase — game over
@@ -203,7 +203,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
 
     /// @notice Place account `id`'s growth bet for the open round.
     /// @dev Gated, not permissionless: the bet spends the account payee's FLIP, so only the
-    ///      account's key, a smurf's owner or an approved operator may place it (`id == 0` is the
+    ///      account's payee or an approved operator may place it (`id == 0` is the
     ///      caller, with no Game resolution call). One fixed-size bet per wallet per round —
     ///      there is no amount to choose and no averaging in, which is what makes the choice
     ///      to commit early against a thin book a real decision rather than a mechanical one.

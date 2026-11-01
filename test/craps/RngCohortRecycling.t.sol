@@ -70,6 +70,12 @@ contract CustomCohortRecyclingTest is CrapsPins {
         table.settleSlot(slot, WHOLE_FIELD);
         assertTrue(cohort.rngCohortComplete(index));
     }
+    /// @dev One read-worker unit: the first-progress permission runs one field, then the
+    ///      saturated calibration refuses a second.
+    function _readWorkFirstUnit(uint48 index) private returns (MineFlipGas.Result memory) {
+        vm.prank(ContractAddresses.GAME);
+        return JackpotBattle(address(table)).runCrapsReadWork(index, MineFlipGas.budget(0, type(uint32).max, true));
+    }
     function _pendingBit(uint48 index) private view returns (bool) {
         return uint256(game.slots(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & (uint256(1) << (250 + (index & 1))) != 0;
     }
@@ -84,11 +90,13 @@ contract CustomCohortRecyclingTest is CrapsPins {
         _setIndex(index);
         assertEq(table.closeBattle(b), index);
         _setWord(index, 0xB0B5);
-        _readWork(table, index);
+        _readWorkFirstUnit(index);
         assertTrue(table.battleOf(table.keyOfSlot(a)).finalized, "the read stage did not take the older field first");
+        assertFalse(table.battleOf(table.keyOfSlot(b)).finalized, "the first unit must stop at the field boundary");
         assertFalse(cohort.rngCohortComplete(index));
         assertTrue(_pendingBit(index), "first completed field cannot release the shared Game gate");
-        _readWork(table, index);
+        _readWorkFirstUnit(index);
+        assertTrue(table.battleOf(table.keyOfSlot(b)).finalized);
         assertTrue(cohort.rngCohortComplete(index));
         assertFalse(_pendingBit(index));
     }

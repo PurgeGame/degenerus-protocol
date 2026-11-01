@@ -149,7 +149,7 @@ Public paid deities retain their ordinary manual-gift rules.
 
 `deityPassIds` packs eight `uint32` wallet IDs per word (its length is the deity count, at most 32).
 `deityPassSales` is at Game storage slot 35, and `protocolBoonPools` and `protocolBoonEntries` are
-the fixed-array roots at slots 832 and 836 (pinned by `test/fuzz/StorageSlotPins.t.sol`).
+the fixed-array roots at slots 831 and 835 (pinned by `test/fuzz/StorageSlotPins.t.sol`).
 
 | Record | Fields | Bits |
 |---|---|---:|

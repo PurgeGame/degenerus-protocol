@@ -25,7 +25,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         (bool mayBet, bool earnsReward, uint32 gateId) = quests.marketBetGates(game.walletIdOf_g3120(PLAYER), lvl);
         assertEq(earnsReward, expectedReward);
         assertEq(gateId, pid, "the gate preserves the selected wallet ID");
-        uint256 gameplayFields = mintData & ((uint256(1) << BitPackingLib.SMURF_COUNT_SHIFT) - 1)
+        uint256 gameplayFields = mintData & ((uint256(1) << 224) - 1) & ~(uint256(1) << 147)
             & ~(uint256(31) << BitPackingLib.CURSE_COUNT_SHIFT);
         assertEq(mayBet, expectedReward || gameplayFields != 0);
     }

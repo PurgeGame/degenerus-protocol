@@ -52,7 +52,7 @@ contract LootboxCraps is Craps {
     uint256 internal constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a `uint256[2]` indexed by day parity — the
     ///      protocol's recorded DAILY word, retained separately from the shared live payload.
-    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 588;
+    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 587;
     uint256 internal constant RNG_DAY_TAGS_SLOT = 25;
     uint256 internal constant WALLET_IDS_SLOT = 61;
     /// @dev Slot of `lastDailyRequestWallDay` (bytes 27..29), hardcoded like the slots above.

@@ -7,7 +7,6 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Setup and phase-boundary helpers only. All account operations, subscription accrual,
@@ -91,7 +90,6 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         operator = makeAddr("audit-old-operator");
         vm.deal(borrower, 100 ether);
         root = _giveWalletId(borrower);
-        _grantSmurfBase(borrower, 4);
         host.collateral(root);
     }
 
@@ -170,42 +168,34 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         assertGt(game.afkingFundingOf(subscriber), 0, "own prepaid ETH survives");
     }
 
-    function test_OldOperatorAndOwnerCannotSpendSeizedMainOrChild() public {
-        uint256 price = game.mintPrice();
+    function test_OldOperatorAndOwnerCannotSpendSeizedAccount() public {
         vm.prank(borrower);
-        uint32 child = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        vm.startPrank(borrower);
         game.setOperatorApproval(root, operator, true);
-        game.setOperatorApproval(child, operator, true);
-        vm.stopPrank();
         _default(root);
-        uint32[2] memory ids = [root, child];
         address[2] memory callers = [borrower, operator];
-        for (uint256 i; i < ids.length; ++i) {
-            for (uint256 j; j < callers.length; ++j) {
-                (, address payee, bool authorized) = game.resolveAccount_g7029(ids[i], callers[j]);
-                assertEq(payee, address(sdgnrs));
-                assertFalse(authorized);
-                vm.startPrank(callers[j]);
-                vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
-                game.claimClaimable(ids[i]);
-                vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
-                game.withdrawAfkingFunding(ids[i], 1);
-                vm.expectRevert(bytes4(keccak256("NotApproved()")));
-                coinflip.setCoinflipAutoRebuy(ids[i], false, 0);
-                vm.expectRevert(bytes4(keccak256("NotApproved()")));
-                wwxrp.withdraw(ids[i], 0);
-                vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
-                game.setOperatorApproval(ids[i], callers[j], true);
-                vm.stopPrank();
-            }
+        for (uint256 j; j < callers.length; ++j) {
+            (, address payee, bool authorized) = game.resolveAccount_g7029(root, callers[j]);
+            assertEq(payee, address(sdgnrs));
+            assertFalse(authorized);
+            vm.startPrank(callers[j]);
+            vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+            game.claimClaimable(root);
+            vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+            game.withdrawAfkingFunding(root, 1);
+            vm.expectRevert(bytes4(keccak256("NotApproved()")));
+            coinflip.setCoinflipAutoRebuy(root, false, 0);
+            vm.expectRevert(bytes4(keccak256("NotApproved()")));
+            wwxrp.withdraw(root, 0);
+            vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+            game.setOperatorApproval(root, callers[j], true);
+            vm.stopPrank();
         }
         uint32 replacement = _giveWalletId(borrower);
         assertNotEq(replacement, root);
         (,, bool allowed) = game.resolveAccount_g7029(replacement, borrower);
-        assertTrue(allowed, "new main is usable");
+        assertTrue(allowed, "the new account is usable");
         (,, allowed) = game.resolveAccount_g7029(replacement, operator);
-        assertFalse(allowed, "old approval does not migrate to new main");
+        assertFalse(allowed, "old approval does not migrate to the new account");
     }
 
     function test_SeizedRunCannotChargeFormerOwnerOrBuyerStethApproval() public {
@@ -223,29 +213,26 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         assertEq(mockStETH.allowance(borrower, address(game)), type(uint256).max);
     }
 
-    function test_StandaloneSmurfDefaultPreservesMainAndSiblingAccess() public {
-        uint256 price = game.mintPrice();
-        vm.startPrank(borrower);
-        uint32 child = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        uint32 sibling = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
+    function test_SeizurePreservesTheSameOperatorsApprovalOnOtherAccounts() public {
+        address bystander = makeAddr("audit-approving-bystander");
+        vm.deal(bystander, 10 ether);
+        uint32 other = _giveWalletId(bystander);
+        vm.prank(borrower);
         game.setOperatorApproval(root, operator, true);
-        game.setOperatorApproval(child, operator, true);
-        game.setOperatorApproval(sibling, operator, true);
-        game.depositAfkingFunding{value: 1 ether}(sibling);
+        vm.startPrank(bystander);
+        game.setOperatorApproval(other, operator, true);
+        game.depositAfkingFunding{value: 1 ether}(other);
         vm.stopPrank();
-        host.collateral(child);
-        _default(child);
+        _default(root);
 
-        assertEq(game.walletIdOf_g3120(borrower), root, "main account remains current");
-        (,, bool allowed) = game.resolveAccount_g7029(child, operator);
-        assertFalse(allowed, "approval on seized child is dead");
-        (,, allowed) = game.resolveAccount_g7029(root, operator);
-        assertTrue(allowed, "unseized main approval survives");
-        (,, allowed) = game.resolveAccount_g7029(sibling, operator);
-        assertTrue(allowed, "unseized sibling approval survives");
-        uint256 before = borrower.balance;
+        (,, bool allowed) = game.resolveAccount_g7029(root, operator);
+        assertFalse(allowed, "approval on the seized account is dead");
+        (,, allowed) = game.resolveAccount_g7029(other, operator);
+        assertTrue(allowed, "approval on an unseized account survives");
+        uint256 before = bystander.balance;
         vm.prank(operator);
-        game.withdrawAfkingFunding(sibling, 1 ether);
-        assertEq(borrower.balance, before + 1 ether, "surviving approval still pays owner");
+        game.withdrawAfkingFunding(other, 1 ether);
+        assertEq(bystander.balance, before + 1 ether, "surviving approval still pays its owner");
     }
+
 }

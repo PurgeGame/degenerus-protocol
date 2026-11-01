@@ -8,7 +8,6 @@ import {DegenerusGameStorage} from "../../../contracts/storage/DegenerusGameStor
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
-import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {IStETH} from "../../../contracts/interfaces/IStETH.sol";
 import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
@@ -125,7 +124,6 @@ contract LoanAccountingHandler is Test {
     uint256 internal constant MIN_PRINCIPAL = 0.05 ether;
     uint256 internal constant SDGNRS_RESERVE = 1 ether;
     uint256 internal constant VAULT_FLOOR = 1 ether;
-    uint256 internal constant MAX_FAMILY = 6;
     uint256 internal constant TICKET_AFTER_DAYS = 20;
     uint256 internal constant MAX_DAYS_IN_PHASE = 28; // below the 30-day purchase deadline
     uint24 internal constant MAX_LEVEL = 100; // collateral stays inside one far-future ring cycle
@@ -139,23 +137,19 @@ contract LoanAccountingHandler is Test {
     uint8 internal constant OP_ADVANCE = 4;
     uint8 internal constant OP_SWEEP = 5;
     uint8 internal constant OP_CLAIM = 6;
-    uint8 internal constant OP_SMURF = 7;
-    uint8 internal constant OP_WARP = 8;
-    uint8 internal constant OP_MAIN = 9;
-    uint256 public constant N_OPS = 10;
-    /// @dev Random-phase weights: index = seed % 14.
-    bytes internal constant WEIGHTED = hex"0001010102030304040506070809";
+    uint8 internal constant OP_WARP = 7;
+    uint8 internal constant OP_ACCOUNT = 8;
+    uint256 public constant N_OPS = 9;
+    /// @dev Random-phase weights: index = seed % 13.
+    bytes internal constant WEIGHTED = hex"00010101020303040405060708";
     /// @dev Forced opening: seed, credit borrow, warp to day 20 exactly (still all credit), warp past it,
     ///      two late borrows, repay, cover one loan, then settle every remaining due level.
-    bytes internal constant PLAN = hex"000108010801010203040404";
+    bytes internal constant PLAN = hex"000107010701010203040404";
 
     struct Acct {
         uint32 id;
         uint8 actor;
-        bool smurf;
-        uint16 mainIdx;
-        uint8 smurfs; // lifetime smurfs created (mains)
-        uint32 seizedTo; // lender that took this account by its own default
+        uint32 seizedTo; // lender that took this account by its default
     }
 
     struct Loan {
@@ -173,7 +167,7 @@ contract LoanAccountingHandler is Test {
     }
 
     address[N_ACTORS] public actors;
-    uint256[N_ACTORS] internal liveMain; // acct index + 1, zero once seized
+    uint256[N_ACTORS] internal liveAccount; // acct index + 1, zero once seized
 
     Acct[] internal accts;
     mapping(uint256 => Loan) internal loans;
@@ -200,13 +194,11 @@ contract LoanAccountingHandler is Test {
     uint256 public ghost_day20Borrows; // purchase phase, exactly 20 days in: still all credit
     uint256 public ghost_jackpotBorrows;
     uint256 public ghost_vaultLoans;
-    uint256 public ghost_smurfLoans;
     uint256 public ghost_repays;
     uint256 public ghost_repaysFromClaimable;
     uint256 public ghost_autoRepays;
     uint256 public ghost_seizures;
-    uint256 public ghost_mainSeizures;
-    uint256 public ghost_orphanSeizures;
+    uint256 public ghost_ordinarySweepRejects;
     uint256 public ghost_chunkedSettles;
     uint256 public ghost_sweeps;
     uint256 public ghost_claims;
@@ -226,7 +218,7 @@ contract LoanAccountingHandler is Test {
         gameRuntime = address(game_).code;
     }
 
-    /// @dev Lenders, actors and the opening families; the ledger baseline is taken last.
+    /// @dev Lenders, actors and their accounts; the ledger baseline is taken last.
     function init() external {
         require(accts.length == 0);
         _credit(SDGNRS_ID, 8 ether); // runs dry within a few loans so the Vault lends too
@@ -239,11 +231,8 @@ contract LoanAccountingHandler is Test {
         purchaseStart = GameTimeLib.gameDayIndex();
         for (uint256 i; i < N_ACTORS; ++i) {
             actors[i] = address(uint160(0x10A40000 + i));
-            _newMain(i);
+            _newAccount(i);
         }
-        _createSmurf(0);
-        _createSmurf(0);
-        _createSmurf(1);
         for (uint32 l = VAULT_ID; l <= SDGNRS_ID; ++l) lenderBase[l] = _funds(l);
     }
 
@@ -262,12 +251,10 @@ contract LoanAccountingHandler is Test {
         else if (op == OP_ADVANCE) _advance(a, b, plan);
         else if (op == OP_SWEEP) _sweep(a, b);
         else if (op == OP_CLAIM) _claim(a, b);
-        else if (op == OP_SMURF) _createSmurf(a % N_ACTORS);
         else if (op == OP_WARP) _warp(a, plan);
-        else _maybeNewMain(a);
-        // Loan flows move ETH and obligations one-for-one; smurf creation buys a ticket and is
-        // covered by the solvency floor instead.
-        if (op != OP_SMURF && _surplus() != surplusBefore) _flag(4, "backing minus obligations drifted");
+        else _maybeNewAccount(a);
+        // Loan flows move ETH and obligations one-for-one.
+        if (_surplus() != surplusBefore) _flag(4, "backing minus obligations drifted");
     }
 
     // ------------------------------------------------------------------ actions
@@ -408,7 +395,6 @@ contract LoanAccountingHandler is Test {
         if (!jackpotPhase && GameTimeLib.gameDayIndex() == purchaseStart + TICKET_AFTER_DAYS) ++ghost_day20Borrows;
         if (jackpotPhase) ++ghost_jackpotBorrows;
         if (c.lender == VAULT_ID) ++ghost_vaultLoans;
-        if (accts[c.idx].smurf) ++ghost_smurfLoans;
     }
 
     function _repay(uint256 a, uint256 b, bool plan) internal {
@@ -456,9 +442,9 @@ contract LoanAccountingHandler is Test {
     }
 
     /// @dev Move the borrower's own balances around the full-term amount: cover it, stop one wei
-    ///      short, drain, or overfund. The plan covers a loan that cannot be orphaned first.
+    ///      short, drain, or overfund. The plan always covers.
     function _steer(uint256 a, uint256 b, bool plan) internal {
-        uint256 idx = plan ? _pickSafeOpen(a) : _pickOpen(a, false);
+        uint256 idx = _pickOpen(a, plan);
         if (idx == type(uint256).max || _lenderOf(idx) != 0) return;
         Loan memory l = loans[idx];
         uint32 id = accts[idx].id;
@@ -545,13 +531,10 @@ contract LoanAccountingHandler is Test {
                 receipts[l.lender] += full;
                 ++ghost_autoRepays;
             } else {
-                if (_lenderOf(idx) != 0) ++ghost_orphanSeizures;
+                if (_lenderOf(idx) != 0) _flag(5, "an acquired account held an open loan");
                 s[k].expect = s[k].pre;
                 accts[idx].seizedTo = l.lender;
-                if (!accts[idx].smurf) {
-                    liveMain[accts[idx].actor] = 0;
-                    ++ghost_mainSeizures;
-                }
+                liveAccount[accts[idx].actor] = 0;
                 ++ghost_seizures;
             }
             loans[idx].open = false;
@@ -568,7 +551,6 @@ contract LoanAccountingHandler is Test {
         if (_pending()) _flag(1, "settlement stage left pending");
         for (uint256 k; k < s.length; ++k) {
             if (lens.loanOf(address(game), s[k].id).principal != 0) _flag(1, "loan neither repaid nor seized at its due level");
-            // Final owner: a smurf auto-repaid ahead of its main's seizure still follows the main.
             if (game.acquiredBuyer(s[k].id) != _lenderOf(s[k].idx)) {
                 _flag(1, s[k].auto_ ? "covered loan was seized" : "uncovered loan was not seized to its lender");
             }
@@ -576,11 +558,12 @@ contract LoanAccountingHandler is Test {
             if (post.claim != s[k].expect.claim || post.afk != s[k].expect.afk) {
                 _flag(1, s[k].auto_ ? "auto-repay drew balances wrongly" : "seizure moved the account's balances");
             }
-            Acct memory ac = accts[s[k].idx];
-            if (!s[k].auto_ && !ac.smurf) {
-                address seller = actors[ac.actor];
-                if (game.walletIdOf_g3120(seller) == s[k].id) _flag(5, "main seizure kept the seller's default ID");
-                if (sdgnrsToken.balanceOf(seller) != 0) _flag(5, "main seizure left the seller's sDGNRS");
+            if (!s[k].auto_) {
+                address seller = actors[accts[s[k].idx].actor];
+                if (game.walletIdOf_g3120(seller) == s[k].id) _flag(5, "seizure kept the seller's default ID");
+                if (sdgnrsToken.balanceOf(seller) != 0) _flag(5, "seizure left the seller's sDGNRS");
+                (, , bool sellerAuth) = game.resolveAccount_g7029(s[k].id, seller);
+                if (sellerAuth) _flag(5, "seizure left the seller in control");
             }
         }
         for (uint32 l = VAULT_ID; l <= SDGNRS_ID; ++l) {
@@ -603,39 +586,43 @@ contract LoanAccountingHandler is Test {
         }
     }
 
+    /// @dev Sweep up to three distinct accounts one lender acquired; a quarter of the time, or with
+    ///      none acquired, check that an ordinary account's own wallet cannot sweep it.
     function _sweep(uint256 a, uint256 b) internal {
         uint256 n = accts.length;
+        bool ordinary = (b >> 16) % 4 == 0;
         uint256 first = type(uint256).max;
         for (uint256 k; k < n; ++k) {
             uint256 i = (a % n + k) % n;
-            if (accts[i].smurf || _lenderOf(i) != 0) {
+            if ((_lenderOf(i) == 0) == ordinary) {
                 first = i;
                 break;
             }
         }
-        if (first == type(uint256).max) return;
+        if (ordinary || first == type(uint256).max) {
+            if (first != type(uint256).max) _sweepOrdinary(first);
+            return;
+        }
         uint32 owner = _lenderOf(first);
-        uint32 creditTo = owner != 0 ? owner : accts[accts[first].mainIdx].id;
         uint32[] memory pick = new uint32[](3);
         uint256 count;
         Bal[] memory pre = new Bal[](3);
         uint256 total;
         for (uint256 k; k < n && count < 3; ++k) {
             uint256 i = (first + k * (1 + b % 3)) % n;
-            if (!(accts[i].smurf || _lenderOf(i) != 0) || _lenderOf(i) != owner) continue;
-            if (owner == 0 && accts[accts[i].mainIdx].id != creditTo) continue;
+            if (_lenderOf(i) != owner) continue;
             bool dup;
             for (uint256 j; j < count; ++j) if (pick[j] == accts[i].id) dup = true;
             if (dup) continue;
             pick[count] = accts[i].id;
             pre[count] = _bal(accts[i].id);
-            total += (pre[count].claim > 1 ? pre[count].claim - 1 : 0) + (owner != 0 ? pre[count].afk : 0);
+            total += (pre[count].claim > 1 ? pre[count].claim - 1 : 0) + pre[count].afk;
             ++count;
         }
         uint32[] memory ids = new uint32[](count);
         for (uint256 j; j < count; ++j) ids[j] = pick[j];
-        uint256 targetBefore = _bal(creditTo).claim;
-        uint256 lenderFunds = owner != 0 ? _funds(owner) : 0;
+        uint256 lenderFunds = _funds(owner);
+        uint256 targetBefore = _bal(owner).claim;
         bool ok;
         if (owner == VAULT_ID) {
             vm.prank(ContractAddresses.OWNER_GOVERNANCE);
@@ -645,25 +632,38 @@ contract LoanAccountingHandler is Test {
                 0
             ) {ok = true;} catch {}
         } else {
-            vm.prank(owner == SDGNRS_ID ? address(this) : actors[accts[first].actor]);
+            // sDGNRS collection is permissionless, including for the former borrower.
+            vm.prank((b >> 8) & 1 == 0 ? address(this) : actors[accts[first].actor]);
             try game.sweepAccounts(ids) {ok = true;} catch {}
         }
         if (!ok) {
             _flag(5, "authorized sweep reverted");
             return;
         }
-        if (_bal(creditTo).claim != targetBefore + total) _flag(owner != 0 ? 2 : 5, "sweep credited the owner wrongly");
+        if (_bal(owner).claim != targetBefore + total) _flag(2, "sweep credited the lender wrongly");
         for (uint256 j; j < count; ++j) {
             Bal memory post = _bal(ids[j]);
-            if (post.claim != (pre[j].claim > 1 ? 1 : pre[j].claim) || post.afk != (owner != 0 ? 0 : pre[j].afk)) {
+            if (post.claim != (pre[j].claim > 1 ? 1 : pre[j].claim) || post.afk != 0) {
                 _flag(5, "sweep left the wrong balances behind");
             }
         }
-        if (owner != 0) {
-            swept[owner] += total;
-            if (_funds(owner) != lenderFunds + total) _flag(2, "sweep moved lender funds by other than the swept amount");
-        }
+        swept[owner] += total;
+        if (_funds(owner) != lenderFunds + total) _flag(2, "sweep moved lender funds by other than the swept amount");
         ++ghost_sweeps;
+    }
+
+    function _sweepOrdinary(uint256 idx) internal {
+        uint32[] memory one = new uint32[](1);
+        one[0] = accts[idx].id;
+        Bal memory before = _bal(one[0]);
+        vm.prank(actors[accts[idx].actor]);
+        try game.sweepAccounts(one) {
+            _flag(5, "an ordinary account was swept");
+        } catch {
+            ++ghost_ordinarySweepRejects;
+        }
+        Bal memory after_ = _bal(one[0]);
+        if (after_.claim != before.claim || after_.afk != before.afk) _flag(5, "rejected sweep moved balances");
     }
 
     function _claim(uint256 a, uint256 b) internal {
@@ -686,25 +686,6 @@ contract LoanAccountingHandler is Test {
         }
     }
 
-    function _createSmurf(uint256 actor) internal {
-        uint256 m = liveMain[actor];
-        if (m == 0) return;
-        m -= 1;
-        if (accts[m].smurfs >= MAX_FAMILY) return;
-        address owner = actors[actor];
-        uint256 price = game.mintPrice();
-        vm.deal(owner, owner.balance + price);
-        vm.prank(owner);
-        try game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth) returns (uint32 id) {
-            if (loans[m].open) _flag(5, "main with an open loan created a smurf");
-            ++accts[m].smurfs;
-            accts.push(Acct(id, uint8(actor), true, uint16(m), 0, 0));
-            idxOf[id] = accts.length;
-        } catch {
-            if (loans[m].open) ++ghost_gateRejects;
-        }
-    }
-
     function _warp(uint256 a, bool plan) internal {
         uint256 daysIn = GameTimeLib.gameDayIndex() - purchaseStart;
         if (daysIn >= MAX_DAYS_IN_PHASE) return;
@@ -719,22 +700,21 @@ contract LoanAccountingHandler is Test {
         _unetch();
     }
 
-    function _maybeNewMain(uint256 a) internal {
+    /// @dev A wallet whose account was seized registers a fresh one.
+    function _maybeNewAccount(uint256 a) internal {
         uint256 actor = a % N_ACTORS;
-        if (liveMain[actor] == 0) _newMain(actor);
+        if (liveAccount[actor] == 0) _newAccount(actor);
     }
 
-    function _newMain(uint256 actor) internal {
+    function _newAccount(uint256 actor) internal {
         address who = actors[actor];
         vm.prank(ContractAddresses.AFFILIATE);
         uint32 id = game.registerWallet_g9539(who, true);
-        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        game.raiseSmurfBaseAllowance(id, 8);
         vm.prank(address(game));
         sdgnrsToken.transferFromPool_g106128(sDGNRS.Pool.Reward, who, 1e12);
-        accts.push(Acct(id, uint8(actor), false, uint16(accts.length), 0, 0));
+        accts.push(Acct(id, uint8(actor), 0));
         idxOf[id] = accts.length;
-        liveMain[actor] = accts.length;
+        liveAccount[actor] = accts.length;
     }
 
     // ------------------------------------------------------------------ spec model
@@ -769,17 +749,13 @@ contract LoanAccountingHandler is Test {
         return 0;
     }
 
-    /// @dev The lender that owns account `idx`: its own default, else its main's.
+    /// @dev The lender that acquired account `idx` by its default, or zero.
     function _lenderOf(uint256 idx) internal view returns (uint32) {
-        Acct storage ac = accts[idx];
-        if (ac.seizedTo != 0) return ac.seizedTo;
-        return ac.smurf ? accts[ac.mainIdx].seizedTo : 0;
+        return accts[idx].seizedTo;
     }
 
     function _borrowable(uint256 idx) internal view returns (bool) {
-        Acct storage ac = accts[idx];
-        if (_lenderOf(idx) != 0 || loans[idx].open) return false;
-        return ac.smurf || 1 + uint256(ac.smurfs) <= MAX_FAMILY;
+        return _lenderOf(idx) == 0 && !loans[idx].open;
     }
 
     function _pickBorrowable(uint256 a) internal view returns (uint256) {
@@ -797,18 +773,6 @@ contract LoanAccountingHandler is Test {
         for (uint256 k; k < n; ++k) {
             uint256 i = (a % n + k) % n;
             if (loans[i].open && (!ownedOnly || _lenderOf(i) == 0)) return i;
-        }
-        return type(uint256).max;
-    }
-
-    /// @dev An open loan whose account cannot be acquired before its own due level: a main, or a
-    ///      smurf whose main has no open loan.
-    function _pickSafeOpen(uint256 a) internal view returns (uint256) {
-        uint256 n = accts.length;
-        for (uint256 k; k < n; ++k) {
-            uint256 i = (a % n + k) % n;
-            if (!loans[i].open || _lenderOf(i) != 0) continue;
-            if (!accts[i].smurf || !loans[accts[i].mainIdx].open) return i;
         }
         return type(uint256).max;
     }

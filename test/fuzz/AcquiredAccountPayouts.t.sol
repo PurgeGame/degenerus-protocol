@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 
 import {Vm} from "forge-std/Vm.sol";
-import {SmurfFixture} from "./SmurfFixture.t.sol";
+import {AccountFixture} from "./AccountFixture.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {IDegenerusAffiliate} from "../../contracts/interfaces/IDegenerusAffiliate.sol";
@@ -14,19 +14,20 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
 
-/// @title SmurfPayouts -- every protocol payout for a smurf account reaches its owner
-/// @notice A smurf's state stays on the smurf (ledgers by ID, latches on its mint word), and every
-///         ETH send and token mint or transfer goes to its payee, the owner (G0, F-game spec item
-///         5). After each flow the smurf key holds no ETH, FLIP, WWXRP, sDGNRS, DGNRS, seat, deity
-///         pass or record trophy. Each edge is also run for an ordinary wallet, whose payout must
-///         still land on its own key.
+/// @title AcquiredAccountPayouts -- every protocol payout reaches the account's current payee
+/// @notice State stays on the account ID (ledgers by ID, latches on its mint word); every ETH send
+///         and token mint or transfer goes to its payee. An ordinary account's payee is its wallet;
+///         an account acquired by a production loan seizure pays its lender (Vault or sDGNRS) under
+///         that lender's destination rule: an sDGNRS pool award to sDGNRS itself burns, WWXRP and
+///         FLIP collect to the lender, and pending results created before the seizure settle to
+///         the lender afterwards. The seller receives nothing once the account is acquired.
 /// @dev Flows the public doors cannot reach on demand are driven the way existing suites drive
 ///      them: the box resolvers (human, AFKing, redemption, direct), the Degenerette ETH
 ///      box spin and the foil draw run through the harness's module delegatecall with seeded
 ///      words; bingo buckets, the level DGNRS allocation and claimable ETH are seeded through the
 ///      harness; the affiliate score is mocked. Claims, withdrawals, pass purchases and
 ///      Degenerette bets use the real doors.
-contract SmurfPayoutsTest is SmurfFixture {
+contract AcquiredAccountPayoutsTest is AccountFixture {
     uint256 private constant FOIL_READY = uint256(1) << 255;
     uint256 private constant FOIL_GENERATED_DAY_SHIFT = 184;
     uint256 private constant FOIL_LEVEL_SHIFT = 208;
@@ -38,6 +39,7 @@ contract SmurfPayoutsTest is SmurfFixture {
     bytes32 private constant FOIL_CCY_TAG = keccak256("foil-currency");
 
     uint8 private constant HERO = 3;
+    uint128 private constant PER_SPIN = 0.01 ether;
 
     enum Box {
         Human,
@@ -46,59 +48,45 @@ contract SmurfPayoutsTest is SmurfFixture {
         Direct
     }
 
-    address private owner;
-    uint32 private ownerId;
-    uint32 private smurfId;
+    address private seller;
+    uint32 private acquiredId;
     address private plain;
     uint32 private plainId;
     address private operator;
     address private stranger;
 
     function setUp() public {
-        _setUpSmurfFixture();
-        (owner, ownerId) = _wallet("smurf_owner");
-        _grantSmurfBase(owner, 1);
-        smurfId = _createSmurf(owner);
+        _setUpAccountFixture();
+        (seller, acquiredId) = _wallet("acquired_seller");
         (plain, plainId) = _wallet("plain_wallet");
         operator = makeAddr("operator");
         stranger = makeAddr("stranger");
         vm.deal(stranger, 100 ether);
     }
 
+    /// @dev Seize `acquiredId` for `lender` (seller approved `operator` beforehand); returns the
+    ///      lender contract.
+    function _seize(uint32 lender) private returns (address lenderAddr) {
+        vm.prank(seller);
+        game.setOperatorApproval(acquiredId, operator, true);
+        _acquire(seller, acquiredId, lender);
+        lenderAddr = _lenderAddress(lender);
+    }
+
+    /// @dev The sDGNRS that `logs` route to `payee`; for a non-sDGNRS payee its balance grew by
+    ///      exactly that. An award to sDGNRS itself burns.
+    function _dgnrsLanded(Vm.Log[] memory logs, address payee, uint256 before) private view returns (uint256 toPayee) {
+        toPayee = _poolTransfers(logs, payee);
+        if (payee != address(sdgnrs)) {
+            assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received every DGNRS");
+        }
+        assertEq(sdgnrs.balanceOf(seller), 0, "nothing to the seller");
+        assertEq(sdgnrs.balanceOf(stranger), 0, "the caller receives nothing");
+    }
+
     // =====================================================================
     // claimWinnings
     // =====================================================================
-
-    function test_ClaimWinnings_OwnerClaimsSmurfLedgerToOwner() public {
-        ext.x_creditClaimable(smurfId, 1 ether);
-        uint256 raw = _fixtureClaimable(smurfId);
-        uint256 ownerLedger = _fixtureClaimable(owner);
-        uint256 before = owner.balance;
-
-        vm.prank(owner);
-        game.claimClaimable(smurfId);
-
-        assertEq(owner.balance - before, raw - 1, "the owner received the smurf's winnings");
-        assertEq(_fixtureClaimable(smurfId), 1, "the smurf's ledger was debited to the sentinel");
-        assertEq(_fixtureClaimable(owner), ownerLedger, "the owner's own ledger is untouched");
-    }
-
-    function test_ClaimWinnings_OperatorForSmurfPaysOwner() public {
-        ext.x_creditClaimable(smurfId, 1 ether);
-        vm.prank(owner);
-        game.setOperatorApproval(smurfId, operator, true);
-        uint256 before = owner.balance;
-
-        vm.prank(operator);
-        game.claimWinnings(smurfId, 0.4 ether);
-        assertEq(owner.balance - before, 0.4 ether, "the partial claim paid the owner");
-
-        uint256 rest = _fixtureClaimable(smurfId) - 1;
-        vm.prank(operator);
-        game.claimClaimable(smurfId);
-        assertEq(owner.balance - before, 0.4 ether + rest, "the full claim paid the owner");
-        assertEq(operator.balance, 0, "the operator receives nothing");
-    }
 
     function test_ClaimWinnings_OrdinaryWalletIsPaidAtItsKey() public {
         ext.x_creditClaimable(plainId, 1 ether);
@@ -121,29 +109,6 @@ contract SmurfPayoutsTest is SmurfFixture {
     // withdrawAfkingFunding
     // =====================================================================
 
-    function test_WithdrawAfking_OwnerAndOperatorForSmurfPayOwner() public {
-        uint256 smurfBucket = _fixtureAfking(smurfId);
-        uint256 ownerBucket = _fixtureAfking(owner);
-        vm.prank(stranger);
-        game.depositAfkingFunding{value: 3 ether}(smurfId);
-        assertEq(_fixtureAfking(smurfId), smurfBucket + 3 ether, "the deposit credited the smurf by ID");
-        uint256 before = owner.balance;
-
-        vm.prank(owner);
-        game.withdrawAfkingFunding(smurfId, 1 ether);
-        assertEq(owner.balance - before, 1 ether, "the owner's withdrawal paid the owner");
-
-        vm.prank(owner);
-        game.setOperatorApproval(smurfId, operator, true);
-        vm.prank(operator);
-        game.withdrawAfkingFunding(smurfId, 2 ether);
-        assertEq(owner.balance - before, 3 ether, "the operator's withdrawal paid the owner");
-        assertEq(operator.balance, 0, "the operator receives nothing");
-
-        assertEq(_fixtureAfking(smurfId), smurfBucket, "the smurf's bucket was debited");
-        assertEq(_fixtureAfking(owner), ownerBucket, "the owner's own bucket is untouched");
-    }
-
     function test_WithdrawAfking_OrdinaryWalletIsPaidAtItsKey() public {
         vm.prank(stranger);
         game.depositAfkingFunding{value: 2 ether}(plainId);
@@ -165,24 +130,32 @@ contract SmurfPayoutsTest is SmurfFixture {
     // Bingo and affiliate DGNRS
     // =====================================================================
 
-    function test_BingoDgnrs_SmurfPaysOwner() public {
-        _bingo(smurfId, smurfId, owner);
-    }
-
     function test_BingoDgnrs_OrdinaryPaysKey() public {
-        _bingo(plainId, plainId, plain);
+        _bingo(plainId, plain);
     }
 
-    function test_AffiliateDgnrs_SmurfPaysOwner() public {
-        _affiliateDgnrs(smurfId, smurfId, owner);
+    function test_BingoDgnrs_AcquiredByVaultPaysVault() public {
+        _bingo(acquiredId, _seize(VAULT_ID));
+    }
+
+    function test_BingoDgnrs_AcquiredBySdgnrsBurns() public {
+        _bingo(acquiredId, _seize(SDGNRS_ID));
     }
 
     function test_AffiliateDgnrs_OrdinaryPaysKey() public {
-        _affiliateDgnrs(plainId, plainId, plain);
+        _affiliateDgnrs(plainId, plain);
+    }
+
+    function test_AffiliateDgnrs_AcquiredByVaultPaysVault() public {
+        _affiliateDgnrs(acquiredId, _seize(VAULT_ID));
+    }
+
+    function test_AffiliateDgnrs_AcquiredBySdgnrsBurns() public {
+        _affiliateDgnrs(acquiredId, _seize(SDGNRS_ID));
     }
 
     /// @dev A stranger settles the bingo of account `id`; the DGNRS leg lands on `payee`.
-    function _bingo(uint32 id, uint32 key, address payee) private {
+    function _bingo(uint32 id, address payee) private {
         uint24 lvl = 1;
         uint32[8] memory slots;
         for (uint256 c; c < 8; ++c) {
@@ -195,16 +168,13 @@ contract SmurfPayoutsTest is SmurfFixture {
         vm.recordLogs();
         vm.prank(stranger);
         game.claimBingo(id, lvl, 0, slots);
-        uint256 toPayee = _poolTransfers(vm.getRecordedLogs(), payee);
-
-        assertGt(toPayee, 0, "the bingo DGNRS leg paid");
-        assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received the bingo DGNRS");
-        assertEq(sdgnrs.balanceOf(stranger), 0, "the caller receives nothing");
+        uint256 toPayee = _dgnrsLanded(vm.getRecordedLogs(), payee, before);
+        assertGt(toPayee, 0, "the bingo DGNRS leg paid the payee");
     }
 
     /// @dev A stranger settles account `id`'s affiliate DGNRS (score mocked); the DGNRS lands on
     ///      `payee`.
-    function _affiliateDgnrs(uint32 id, uint32 key, address payee) private {
+    function _affiliateDgnrs(uint32 id, address payee) private {
         ext.x_setLevel(1);
         ext.x_setLevelDgnrs(1, 1_000_000 ether);
         uint256 score = 1_000;
@@ -218,28 +188,42 @@ contract SmurfPayoutsTest is SmurfFixture {
         vm.recordLogs();
         vm.prank(stranger);
         game.claimAffiliateDgnrs(id);
-        uint256 toPayee = _poolTransfers(vm.getRecordedLogs(), payee);
-
-        assertEq(toPayee, 100_000 ether, "allocation x score / total");
-        assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received the affiliate DGNRS");
-        assertEq(sdgnrs.balanceOf(stranger), 0, "the caller receives nothing");
+        uint256 toPayee = _dgnrsLanded(vm.getRecordedLogs(), payee, before);
+        assertEq(toPayee, 100_000 ether, "allocation x score / total, to the payee");
     }
 
     // =====================================================================
     // Foil WWXRP spin
     // =====================================================================
 
-    function test_FoilWwxrpSpin_SmurfPaysOwner() public {
-        _foilWwxrp(smurfId, smurfId, owner);
+    function test_FoilWwxrpSpin_OrdinaryPaysKey() public {
+        uint256 won = _foilWwxrp(plainId);
+        uint256 before = wwxrp.balanceOf(plain);
+        vm.prank(plain);
+        wwxrp.withdraw(0, 0);
+        assertEq(wwxrp.balanceOf(plain) - before, won, "the wallet withdraws its WWXRP");
     }
 
-    function test_FoilWwxrpSpin_OrdinaryPaysKey() public {
-        _foilWwxrp(plainId, plainId, plain);
+    function test_FoilWwxrpSpin_AcquiredByVaultCollectsToVault() public { _foilAcquired(VAULT_ID); }
+
+    function test_FoilWwxrpSpin_AcquiredBySdgnrsCollectsToSdgnrs() public { _foilAcquired(SDGNRS_ID); }
+
+    function _foilAcquired(uint32 lender) private {
+        address lenderAddr = _seize(lender);
+        uint256 won = _foilWwxrp(acquiredId);
+        vm.prank(seller);
+        vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
+        wwxrp.withdraw(acquiredId, 0);
+        uint256 before = wwxrp.balanceOf(lenderAddr);
+        vm.prank(stranger);
+        wwxrp.withdrawAcquired(acquiredId);
+        assertEq(wwxrp.balanceOf(lenderAddr) - before, won, "the spin's WWXRP collects to the lender");
+        assertEq(wwxrp.balanceOf(seller), 0, "nothing to the seller");
     }
 
     /// @dev Seed a ready score-4 pack for `id` and a draw whose currency roll lands in the WWXRP
-    ///      band (c >= 80); a stranger claims; the spin's WWXRP mints to `payee`.
-    function _foilWwxrp(uint32 id, uint32 key, address payee) private {
+    ///      band (c >= 80); a stranger claims; the spin's WWXRP credits the account's ledger.
+    function _foilWwxrp(uint32 id) private returns (uint256 won) {
         uint24 L = game.currentLvl() + 1;
         uint24 day = game.currentDayView_g542950();
         uint32 sel;
@@ -272,6 +256,7 @@ contract SmurfPayoutsTest is SmurfFixture {
                 continue;
             }
             paid = true;
+            won = wwxrp.claimable(id) - before;
             assertEq(wwxrp.balanceOf(stranger), 0, "the caller receives nothing");
         }
         assertTrue(paid, "fixture: a WWXRP-band spin paid");
@@ -281,44 +266,31 @@ contract SmurfPayoutsTest is SmurfFixture {
     // Boxes: human, AFKing, redemption, direct
     // =====================================================================
 
-    function test_HumanBox_SmurfPaysOwner() public {
-        _boxPays(Box.Human, smurfId, smurfId, owner, true);
-        _boxPays(Box.Human, smurfId, smurfId, owner, false);
+    function test_Boxes_OrdinaryPaysKey() public {
+        for (uint8 k; k < 4; ++k) {
+            _boxPays(Box(k), plainId, plain, true);
+            _boxPays(Box(k), plainId, plain, false);
+        }
     }
 
-    function test_HumanBox_OrdinaryPaysKey() public {
-        _boxPays(Box.Human, plainId, plainId, plain, true);
-        _boxPays(Box.Human, plainId, plainId, plain, false);
-    }
+    function test_Boxes_AcquiredByVaultPayVault() public { _boxesAcquired(VAULT_ID); }
 
-    function test_AfkingBox_SmurfPaysOwner() public {
-        _boxPays(Box.Afking, smurfId, smurfId, owner, true);
-        _boxPays(Box.Afking, smurfId, smurfId, owner, false);
-    }
+    function test_Boxes_AcquiredBySdgnrsBurn() public { _boxesAcquired(SDGNRS_ID); }
 
-    function test_AfkingBox_OrdinaryPaysKey() public {
-        _boxPays(Box.Afking, plainId, plainId, plain, true);
-        _boxPays(Box.Afking, plainId, plainId, plain, false);
-    }
-
-    function test_RedemptionBox_SmurfPaysOwner() public {
-        _boxPays(Box.Redemption, smurfId, smurfId, owner, true);
-        _boxPays(Box.Redemption, smurfId, smurfId, owner, false);
-    }
-
-    function test_RedemptionBox_OrdinaryPaysKey() public {
-        _boxPays(Box.Redemption, plainId, plainId, plain, true);
-        _boxPays(Box.Redemption, plainId, plainId, plain, false);
-    }
-
-    function test_DirectBox_SmurfPaysOwner() public {
-        _boxPays(Box.Direct, smurfId, smurfId, owner, true);
-        _boxPays(Box.Direct, smurfId, smurfId, owner, false);
-    }
-
-    function test_DirectBox_OrdinaryPaysKey() public {
-        _boxPays(Box.Direct, plainId, plainId, plain, true);
-        _boxPays(Box.Direct, plainId, plainId, plain, false);
+    /// @dev Every box kind resolved after the seizure pays DGNRS to the lender; the WWXRP leg sits
+    ///      on the account's ledger and collects to the lender.
+    function _boxesAcquired(uint32 lender) private {
+        address lenderAddr = _seize(lender);
+        for (uint8 k; k < 4; ++k) {
+            _boxPays(Box(k), acquiredId, lenderAddr, true);
+            _boxPays(Box(k), acquiredId, lenderAddr, false);
+        }
+        uint256 won = wwxrp.claimable(acquiredId);
+        assertGt(won, 0);
+        uint256 before = wwxrp.balanceOf(lenderAddr);
+        wwxrp.withdrawAcquired(acquiredId);
+        assertEq(wwxrp.balanceOf(lenderAddr) - before, won, "box WWXRP to the lender");
+        assertEq(wwxrp.balanceOf(seller), 0, "nothing to the seller");
     }
 
     function _assertBoxEventIds(Vm.Log[] memory logs, uint32 id) private view {
@@ -343,8 +315,8 @@ contract SmurfPayoutsTest is SmurfFixture {
     }
 
     /// @dev Resolve one box of `kind` for account `id` (key `key`) on the k-th seeded word.
-    function _openBox(Box kind, uint32 id, uint32 key, uint256 k) private {
-        uint256 word = uint256(keccak256(abi.encode("smurf_box", uint8(kind), k)));
+    function _openBox(Box kind, uint32 id, uint256 k) private {
+        uint256 word = uint256(keccak256(abi.encode("account_box", uint8(kind), k)));
         uint24 cur = game.currentLvl() + 1;
         address lootbox = ContractAddresses.GAME_LOOTBOX_MODULE;
         if (kind == Box.Human) {
@@ -382,26 +354,26 @@ contract SmurfPayoutsTest is SmurfFixture {
 
     /// @dev Open boxes of `kind` on successive words until one pays the wanted token (DGNRS when
     ///      `wantDgnrs`, else WWXRP), then check that every unit of it reached `payee`.
-    function _boxPays(Box kind, uint32 id, uint32 key, address payee, bool wantDgnrs) private {
+    function _boxPays(Box kind, uint32 id, address payee, bool wantDgnrs) private {
         bool paid;
         for (uint256 k; k < 400 && !paid; ++k) {
             uint256 snap = vm.snapshotState();
             uint256 d0 = sdgnrs.balanceOf(payee);
             uint256 w0 = wwxrp.claimable(id);
             vm.recordLogs();
-            _openBox(kind, id, key, k);
+            _openBox(kind, id, k);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             _assertBoxEventIds(logs, id);
-            uint256 dGain = sdgnrs.balanceOf(payee) - d0;
+            uint256 toPayee = _poolTransfers(logs, payee);
             uint256 wGain = wwxrp.claimable(id) - w0;
-            if (wantDgnrs ? dGain == 0 : wGain == 0) {
+            if (wantDgnrs ? toPayee == 0 : wGain == 0) {
                 vm.revertToState(snap);
                 continue;
             }
             paid = true;
-            uint256 toPayee = _poolTransfers(logs, payee);
-            assertEq(toPayee, dGain, "every DGNRS transfer of the box went to the payee");
-            }
+            assertEq(_dgnrsLanded(logs, payee, d0), toPayee);
+            assertEq(_poolTransfers(logs, seller), 0, "no DGNRS to the seller");
+        }
         assertTrue(paid, "fixture: a box paid the wanted token");
     }
 
@@ -409,24 +381,35 @@ contract SmurfPayoutsTest is SmurfFixture {
     // Degenerette: s>=7 DGNRS (ETH box spin and bet), record-bounty FLIP
     // =====================================================================
 
-    function test_DegeneretteBoxSpinTopScore_SmurfPaysOwner() public {
-        _boxSpinTopScore(smurfId, smurfId, owner);
-    }
-
     function test_DegeneretteBoxSpinTopScore_OrdinaryPaysKey() public {
-        _boxSpinTopScore(plainId, plainId, plain);
+        _boxSpinTopScore(plainId, plain);
     }
 
-    function test_DegeneretteBetTopScore_SmurfPaysOwner() public {
-        _betTopScore(owner, smurfId, smurfId, owner);
+    function test_DegeneretteBoxSpinTopScore_AcquiredByVault() public {
+        _boxSpinTopScore(acquiredId, _seize(VAULT_ID));
+    }
+
+    function test_DegeneretteBoxSpinTopScore_AcquiredBySdgnrs() public {
+        _boxSpinTopScore(acquiredId, _seize(SDGNRS_ID));
     }
 
     function test_DegeneretteBetTopScore_OrdinaryPaysKey() public {
-        _betTopScore(plain, 0, plainId, plain);
+        _openBetBuffer();
+        (uint64 betId, uint256 word, uint8 top) = _placeTopBet(plain, 0, plainId);
+        _settleTopBet(betId, word, top, plain);
     }
 
-    function test_DegeneretteRecordBounty_SmurfPaysOwner() public {
-        _recordBountyFlip(owner, smurfId, smurfId, owner);
+    /// @dev A bet placed by the seller before the seizure resolves afterwards: its award pays the
+    ///      lender.
+    function test_DegeneretteBetTopScore_PlacedBeforeSeizure_Vault() public { _pendingBet(VAULT_ID); }
+
+    function test_DegeneretteBetTopScore_PlacedBeforeSeizure_Sdgnrs() public { _pendingBet(SDGNRS_ID); }
+
+    function _pendingBet(uint32 lender) private {
+        _openBetBuffer();
+        (uint64 betId, uint256 word, uint8 top) = _placeTopBet(seller, acquiredId, acquiredId);
+        address lenderAddr = _seize(lender);
+        _settleTopBet(betId, word, top, lenderAddr);
     }
 
     function test_DegeneretteRecordBounty_OrdinaryPaysKey() public {
@@ -446,9 +429,9 @@ contract SmurfPayoutsTest is SmurfFixture {
     }
 
     /// @dev An ETH box spin scoring 7+ awards Reward-pool DGNRS to `payee`.
-    function _boxSpinTopScore(uint32 id, uint32 key, address payee) private {
+    function _boxSpinTopScore(uint32 id, address payee) private {
         _openBetBuffer(); // future-pool depth for the ETH leg
-        uint256 seed = uint256(keccak256("smurf_box_spin_top"));
+        uint256 seed = uint256(keccak256("account_box_spin_top"));
         uint8 s;
         for (uint256 i; i < 400_000; ++i) {
             s = _boxSpinScore(seed);
@@ -475,25 +458,24 @@ contract SmurfPayoutsTest is SmurfFixture {
         }
         assertTrue(spun, "the box spin resolved");
         assertEq(rewardPool - _poolBalance(IsDGNRS.Pool.Reward), expected, "the 7+ award left the Reward pool");
-        uint256 toPayee = _poolTransfers(logs, payee);
-        assertGe(toPayee, expected, "the 7+ award went to the payee");
-        assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received every DGNRS of the spin");
+        assertGe(_dgnrsLanded(logs, payee, before), expected, "the 7+ award went to the payee");
     }
 
-    /// @dev `caller` places a 25-spin ETH bet for account `accountId` (0 = self); a word with
-    ///      exactly one 7+ spin resolves it; the Reward-pool award reaches `payee`.
-    function _betTopScore(address caller, uint32 accountId, uint32 key, address payee) private {
-        _openBetBuffer();
-        uint128 perSpin = 0.01 ether;
+    /// @dev `caller` places a 25-spin ETH bet for account `accountId` (0 = self) and picks a word
+    ///      with exactly one 7+ spin.
+    function _placeTopBet(address caller, uint32 accountId, uint32 key)
+        private
+        returns (uint64 betId, uint256 word, uint8 top)
+    {
         uint8 spins = 25;
         vm.recordLogs();
         vm.prank(caller);
-        game.betDegenerette{value: uint256(perSpin) * spins}(accountId, 0, perSpin, spins, HERO);
-        (uint64 betId, uint32 betOwner) = _placedBetId(vm.getRecordedLogs());
-        assertEq(betOwner, _fixtureId(key), "the bet belongs to the account");
+        game.betDegenerette{value: uint256(PER_SPIN) * spins}(accountId, 0, PER_SPIN, spins, HERO);
+        uint32 betOwner;
+        (betId, betOwner) = _placedBetId(vm.getRecordedLogs());
+        assertEq(betOwner, key, "the bet belongs to the account");
 
-        uint256 word = uint256(keccak256("smurf_bet_top"));
-        uint8 top;
+        word = uint256(keccak256("account_bet_top"));
         for (uint256 tries; tries < 20_000; ++tries) {
             uint256 count;
             for (uint8 sp; sp < spins; ++sp) {
@@ -510,16 +492,18 @@ contract SmurfPayoutsTest is SmurfFixture {
             ++word;
         }
         assertGe(top, 7, "fixture: a word with one 7+ spin");
+    }
+
+    /// @dev Resolve the bet on `word`; the Reward-pool award reaches `payee`.
+    function _settleTopBet(uint64 betId, uint256 word, uint8 top, address payee) private {
         uint256 rewardPool = _poolBalance(IsDGNRS.Pool.Reward);
-        uint256 expected = (rewardPool * _dgnrsBps(top) * perSpin) / (10_000 * 1 ether);
+        uint256 expected = (rewardPool * _dgnrsBps(top) * PER_SPIN) / (10_000 * 1 ether);
         uint256 before = sdgnrs.balanceOf(payee);
 
         Vm.Log[] memory logs = _resolveBet(word, betId);
 
         assertEq(rewardPool - _poolBalance(IsDGNRS.Pool.Reward), expected, "the 7+ award left the Reward pool");
-        uint256 toPayee = _poolTransfers(logs, payee);
-        assertGe(toPayee, expected, "the 7+ award went to the payee");
-        assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received every DGNRS of the bet");
+        assertGe(_dgnrsLanded(logs, payee, before), expected, "the 7+ award went to the payee");
     }
 
     /// @dev Sum of record-bounty FLIP chain payouts (BoxSpin type 3) in `logs`.
@@ -551,7 +535,7 @@ contract SmurfPayoutsTest is SmurfFixture {
         for (uint256 k; k < 64 && !paid; ++k) {
             uint256 snap = vm.snapshotState();
             uint256 f0 = coin.balanceOf(payee);
-            Vm.Log[] memory logs = _resolveBet(uint256(keccak256(abi.encode("smurf_record", k))), betId);
+            Vm.Log[] memory logs = _resolveBet(uint256(keccak256(abi.encode("account_record", k))), betId);
             uint256 chain = _recordChainTotal(logs);
             if (chain == 0) {
                 vm.revertToState(snap); // the chain lost its survival flip: try another word
@@ -574,36 +558,6 @@ contract SmurfPayoutsTest is SmurfFixture {
         return (_fixtureMint(account) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1;
     }
 
-    function test_WhalePass_SmurfBuyerDgnrsAndSeatGoToOwner() public {
-        uint256 s0 = sdgnrs.balanceOf(owner);
-        uint256 seats0 = afkingSubToken.balanceOf(owner);
-        assertEq(_seatLatch(smurfId), 0, "fixture: smurf latch clear");
-        assertEq(_seatLatch(owner), 0, "fixture: owner latch clear");
-
-        vm.recordLogs();
-        vm.prank(owner);
-        game.purchaseWhalePass{value: 2.4 ether}(smurfId, 1, bytes32(0));
-        uint256 toOwner = _poolTransfers(vm.getRecordedLogs(), owner);
-
-        assertGt(toOwner, 0, "the minter DGNRS paid");
-
-        assertEq(sdgnrs.balanceOf(owner) - s0, toOwner, "the owner received the minter DGNRS");
-        assertEq(afkingSubToken.balanceOf(owner) - seats0, 1, "the smurf's free seat minted to the owner");
-        assertEq(_seatLatch(smurfId), 1, "SEAT_CLAIMED sits on the smurf's word");
-        assertEq(_seatLatch(owner), 0, "the owner's own latch is untouched");
-
-        // The owner's own first pass still earns the owner its own seat.
-        vm.prank(owner);
-        game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
-        assertEq(afkingSubToken.balanceOf(owner) - seats0, 2, "the owner's own pass minted a second seat");
-        assertEq(_seatLatch(owner), 1, "the owner's latch is set by its own pass");
-
-        // The smurf's latch holds: another pass for it mints no seat.
-        vm.prank(owner);
-        game.purchaseWhalePass{value: 2.4 ether}(smurfId, 1, bytes32(0));
-        assertEq(afkingSubToken.balanceOf(owner) - seats0, 2, "one free seat per account");
-    }
-
     function test_WhalePass_OrdinaryBuyerDgnrsAndSeatGoToKey() public {
         uint256 s0 = sdgnrs.balanceOf(plain);
         vm.recordLogs();
@@ -614,27 +568,6 @@ contract SmurfPayoutsTest is SmurfFixture {
         assertEq(sdgnrs.balanceOf(plain) - s0, toKey, "the wallet received the minter DGNRS");
         assertEq(afkingSubToken.balanceOf(plain), 1, "the free seat minted to the wallet");
         assertEq(_seatLatch(plain), 1, "SEAT_CLAIMED on the wallet's word");
-    }
-
-    function test_DeityPass_SmurfBuyerDgnrsNftAndSeatGoToOwner() public {
-        uint8 symbol = 3;
-        uint256 s0 = sdgnrs.balanceOf(owner);
-        uint256 seats0 = afkingSubToken.balanceOf(owner);
-
-        vm.recordLogs();
-        vm.prank(owner);
-        game.purchaseDeityPass{value: 30 ether}(smurfId, symbol, bytes32(0));
-        uint256 toOwner = _poolTransfers(vm.getRecordedLogs(), owner);
-
-        assertGt(toOwner, 0, "the deity buyer DGNRS paid");
-
-        assertEq(sdgnrs.balanceOf(owner) - s0, toOwner, "the owner received the buyer DGNRS");
-        assertEq(deityPass.ownerOf(symbol), owner, "the deity NFT minted to the owner");
-        assertEq(deityPass.balanceOf(owner), 1, "one pass at the owner");
-        assertTrue(_fixtureHasDeity(smurfId), "HAS_DEITY_PASS sits on the buying account");
-        assertFalse(_fixtureHasDeity(owner), "the owner's word carries no deity bit");
-        assertEq(afkingSubToken.balanceOf(owner) - seats0, 1, "the smurf's free seat minted to the owner");
-        assertEq(_seatLatch(smurfId), 1, "SEAT_CLAIMED sits on the smurf's word");
     }
 
     function test_DeityPass_OrdinaryBuyerDgnrsNftAndSeatGoToKey() public {

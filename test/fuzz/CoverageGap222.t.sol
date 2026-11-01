@@ -660,7 +660,7 @@ contract CoverageGap222 is DeployProtocol {
     // ====================================================================
 
     function test_gap_affiliate_createAffiliateCode_path() public {
-        bytes32 code = keccak256("my_affiliate_code");
+        bytes32 code = bytes32("MYAFFILIATECODE");
         vm.prank(buyer);
         (bool ok, ) = address(affiliate).call(
             abi.encodeWithSignature(

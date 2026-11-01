@@ -5,11 +5,10 @@ import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title SeatFixture — shared fixture for the seat suites on a real protocol deploy.
-/// @notice Seat grants, subscriptions by account ID, smurfs, operator approvals, day driving,
+/// @notice Seat grants, subscriptions by account ID, operator approvals, day driving,
 ///         eviction, cap filling, and raw reads of the Game's subscriber set (the packed `_subscribers`
 ///         lanes and the `_subMeta` reverse lookup, validated against the views in setUp).
 abstract contract SeatFixture is DeployProtocol {
@@ -157,13 +156,6 @@ abstract contract SeatFixture is DeployProtocol {
 
     // ─────────────────────────── accounts ───────────────────────────
 
-    function _createSmurf(address owner) internal returns (uint32 smurfId) {
-        uint256 price = game.mintPrice();
-        vm.deal(owner, owner.balance + price);
-        vm.prank(owner);
-        smurfId = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-    }
-
     /// @dev `caller` subscribes account `id` (0 = itself) in lootbox mode, quantity 1, naming
     ///      `seat`, with SUB_FUND attached.
     function _subscribe(address caller, uint32 id, uint256 seat) internal {
@@ -286,38 +278,6 @@ contract SeatConsumptionTest is SeatFixture {
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
         afkingSubToken.ownerOf(seat);
         assertTrue(_active(p), "run started");
-    }
-
-    function test_smurfSubscribeByOwnerBurnsTheOwnersSeat() public {
-        (address owner, uint256 seat) = _passBuyer("smurf-owner");
-        _grantSmurfBase(owner, 1);
-        uint32 smurfId = _createSmurf(owner);
-        uint256 l0 = _L();
-
-        _expectBurn(owner, seat);
-        _subscribe(owner, smurfId, seat);
-
-        assertTrue(_activeId(smurfId), "smurf run started");
-        assertTrue(_inSet(smurfId), "subaccount ID in the set");
-        assertEq(afkingSubToken.balanceOf(owner), 0, "owner's seat burned");
-        assertEq(_L(), l0 - 1);
-        assertFalse(_active(owner), "the owner's own account is not subscribed");
-    }
-
-    function test_smurfSubscribeByOperatorBurnsTheOwnersSeat() public {
-        (address owner, uint256 seat) = _passBuyer("smurf-owner-op");
-        _grantSmurfBase(owner, 1);
-        uint32 smurfId = _createSmurf(owner);
-        vm.prank(owner);
-        game.setOperatorApproval(smurfId, op, true);
-        assertEq(afkingSubToken.getApproved(seat), address(0), "no ERC721 approval");
-        assertFalse(afkingSubToken.isApprovedForAll(owner, op), "no ERC721 operator");
-
-        _expectBurn(owner, seat);
-        _subscribe(op, smurfId, seat);
-
-        assertTrue(_inSet(smurfId), "operator started the smurf's run");
-        assertEq(afkingSubToken.balanceOf(owner), 0, "owner's seat burned by the operator");
     }
 
     function test_operatorSubscribingAWalletBurnsItsSeatWithoutErc721Approval() public {

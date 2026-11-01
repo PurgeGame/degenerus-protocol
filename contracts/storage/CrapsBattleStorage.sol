@@ -91,8 +91,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice An action that pays nothing needs its wallet's existing Game wallet ID.
     error NoWalletId();
 
-    /// @notice The caller may not act for the named account: it is not the account's key, a
-    ///         smurf's owner or an approved operator.
+    /// @notice The caller may not act for the named account: it is not the account's payee or
+    ///         an approved operator.
     error NotApproved();
 
     /// @dev The protocol bodies' Game wallet IDs, reserved at Game construction.

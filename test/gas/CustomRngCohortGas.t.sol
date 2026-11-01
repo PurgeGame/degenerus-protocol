@@ -56,7 +56,8 @@ contract CustomRngCohortGasTest is DeployProtocol {
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled, "custom close requests its fresh session");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("cold deep high custom")) | 2);
-        game.mineRun(0); // Publication is required before any consumer uses the word.
+        // Publication and the seat batches that follow it share one mining call, so an unmetered
+        // publication call would drain the field; the first measured call publishes the word.
         (bytes32 key,,) = crapsBattle.customBattleOf(slot);
         uint256 maxGas;
         uint256 finalGas;

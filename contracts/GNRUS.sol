@@ -689,7 +689,7 @@ contract GNRUS {
         uint256 weight = sdgnrs.balanceOf(voter) / 1e12;
         if (weight == 0) revert VoteRejected(REJECT_ZERO_WEIGHT);
 
-        // Ordinary-wallet registration only; subaccounts cannot reuse the owner's token weight.
+        // Votes are keyed by the voter address's permanent wallet identity, registered if missing.
         if (voterId == 0) voterId = IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(voter);
         uint256 shift = (voterId % 5) * 48;
         _voterWord[voterId / 5] = (_voterWord[voterId / 5] & ~(uint256(type(uint48).max) << shift)) | ((word | bit) << shift);

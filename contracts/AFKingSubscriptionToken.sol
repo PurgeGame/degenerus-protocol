@@ -39,7 +39,7 @@ pragma solidity 0.8.38;
  *      - Mints: 2 construction seats — serial 1 to SDGNRS, serial 2 to the
  *        VAULT (default colors); a 1,000-seat FREE tranche minted to pass
  *        buyers when they buy (one per account for life, enforced by the
- *        game's SEAT_CLAIMED latch; a smurf's seat goes to its owner; past
+ *        game's SEAT_CLAIMED latch; the seat goes to the account's payee; past
  *        1,000 a pass confers no seat); and vault mints to any recipient via
  *        the vault's owner-gated afkingSeatMint, refused until the free
  *        tranche is gone and allowed only while live seats plus the game's
@@ -361,7 +361,7 @@ contract AFKingSubscriptionToken {
     ///      account's SEAT_CLAIMED latch before calling and mints only on the transition,
     ///      so this function mints whatever it is handed. The game never calls it for a
     ///      won or conferred pass, including a deity purchase's affiliate reward.
-    /// @param to The buying account's payee (its own key, or a smurf's owner)
+    /// @param to The buying account's payee
     /// @custom:reverts OnlyGame When the caller is not the GAME contract
     function mintSeatFor(address to) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();

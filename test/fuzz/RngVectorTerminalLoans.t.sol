@@ -9,7 +9,7 @@ import {TerminalLoanBase} from "./TerminalLoanSettlement.t.sol";
 /// @title RngVectorTerminalLoans -- the terminal word is requested only after every loan has
 ///        settled, and nothing about any loan moves while it is out
 /// @notice A VRF-alive game over with a mixed book (a borrower who repays at the current price, a
-///         defaulter, a smurf's loan). The ending is mined one call at a time. At the call that
+///         defaulter, a far-due loan). The ending is mined one call at a time. At the call that
 ///         sends the terminal request every loan is already settled and the settlement cursor is
 ///         clear. While the word is out every loan record, borrower balance and account owner
 ///         stays byte-identical and the borrow and repay doors stay shut; through the payout the

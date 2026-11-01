@@ -383,7 +383,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return _acquiredBuyer(id);
     }
 
-    /// @notice Collect subaccount ETH and settled FLIP for its current owner; only sDGNRS's are permissionless.
+    /// @notice Collect acquired accounts' ETH and settled FLIP for their lender; sDGNRS-held
+    ///         accounts are permissionless.
     function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected) {
         return _gameSweepAccounts(ids);
     }
@@ -434,15 +435,15 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
 
     /// @notice Approve or revoke `operator` for account `id` (0 = the caller's own account).
     /// @dev The caller's own account must already hold an ID. A nonzero `id` must be allocated
-    ///      and the caller must be its payee: the key itself or a smurf's owner (operators
-    ///      cannot approve operators).
+    ///      and the caller must be its payee: an ordinary account's key or an acquired
+    ///      account's lender (operators cannot approve operators).
     /// @custom:reverts ZeroAddress If operator is the zero address.
     function setOperatorApproval(uint32 id, address operator, bool approved) external {
         _gameSetOperatorApproval(id, operator, approved);
     }
 
     /// @notice Resolve account `id` for `caller`: its key, its payee and whether `caller` may
-    ///         act for it (the key, a smurf's owner, or an operator approved for `id`). Never
+    ///         act for it (its payee, or an operator approved for an ordinary `id`). Never
     ///         reverts on authorization.
     /// @custom:reverts E If `id == 0` or `id` is unallocated.
     function resolveAccount_g7029(uint32 id, address caller)
@@ -451,22 +452,6 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         returns (address key, address payee, bool authorized)
     {
         return _account(id, caller);
-    }
-
-    /// @notice Create a smurf account owned and referred by the caller and
-    ///         buy it one ticket, all in one call.
-    /// @return smurfId The new account's wallet ID.
-    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
-        external
-        payable
-        returns (uint32 smurfId)
-    {
-        return _gameCreateSmurf(affiliateCode, payKind);
-    }
-
-    /// @notice Vault-owner-only permanent increase to an ordinary main ID's base smurf allowance.
-    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external {
-        _gameRaiseSmurfBaseAllowance(mainId, newBase);
     }
 
     /*+======================================================================+
@@ -708,7 +693,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Purchase a deity pass for a specific symbol (0-31).
-    /// @dev One deity per main wallet (the payee); the pass NFT mints to that main wallet.
+    /// @dev One deity per payee wallet; the pass NFT mints to that payee.
     function purchaseDeityPass(uint32, uint8, bytes32) external payable {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data);
         if (!ok) _revertGameDelegate(data);

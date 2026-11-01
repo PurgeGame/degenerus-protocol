@@ -20,41 +20,40 @@ contract IdVoteAdminHarness is DegenerusAdmin {
 
 contract AccountIdOnlyTest is DeployProtocol {
     address private owner;
-    uint32 private ownerId;
+    address private other;
     uint32 private a;
     uint32 private b;
 
     function setUp() public {
         _deployProtocol();
         owner = makeAddr("id-only-owner");
-        ownerId = _giveWalletId(owner);
-        _grantSmurfBase(owner, 2);
+        other = makeAddr("id-only-other");
+        a = _giveWalletId(owner);
+        b = _giveWalletId(other);
         vm.deal(owner, 100 ether);
-        uint256 price = game.mintPrice();
-        vm.startPrank(owner);
-        a = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        b = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        vm.stopPrank();
+        vm.deal(other, 100 ether);
     }
 
-    function test_SubaccountsResolveTheirOwnerAndKeepHistorySeparate() public view {
+    function test_AccountsResolveTheirWalletAndKeepHistorySeparate() public view {
         uint256 base = uint256(keccak256(abi.encode(GameSlots.WALLETS)));
+        address[2] memory wallets = [owner, other];
         for (uint32 id = a; id <= b; ++id) {
+            address wallet = wallets[id - a];
             uint256 element = uint256(vm.load(address(game), bytes32(base + id)));
-            assertEq(uint160(element), 0);
-            assertEq(uint32(element >> 160), ownerId);
-            (address key, address payee, bool authorized) = game.resolveAccount_g7029(id, owner);
-            assertEq(key, address(0));
-            assertEq(payee, owner);
+            assertEq(address(uint160(element)), wallet);
+            assertEq(uint32(element >> 160), 0, "an ordinary account has no owner link");
+            (address key, address payee, bool authorized) = game.resolveAccount_g7029(id, wallet);
+            assertEq(key, wallet);
+            assertEq(payee, wallet);
             assertTrue(authorized);
             assertEq(game.mintPackedOfId_g5372(id) >> 224, 0);
+            assertEq(game.walletIdOf_g3120(wallet), id);
         }
-        assertEq(game.walletIdOf_g3120(owner), ownerId);
-        assertEq(game.mintPackedOfId_g5372(ownerId), (uint256(2) << 224) | (uint256(2) << 240),
-            "creating subaccounts changes only the owner's quota");
+        (,, bool cross) = game.resolveAccount_g7029(b, owner);
+        assertFalse(cross, "another wallet is a stranger");
     }
 
-    function test_PurchasesAuthorizeAndKeepSiblingHistorySeparate() public {
+    function test_PurchasesAuthorizeAndKeepNeighborHistorySeparate() public {
         uint256 beforeA = game.mintPackedOfId_g5372(a);
         uint256 beforeB = game.mintPackedOfId_g5372(b);
         uint256 price = game.mintPrice();
@@ -69,7 +68,9 @@ contract AccountIdOnlyTest is DeployProtocol {
         game.purchaseOrderFor{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
         assertNotEq(game.mintPackedOfId_g5372(a), beforeA);
         assertEq(game.mintPackedOfId_g5372(b), beforeB);
-        assertEq(game.mintPackedOfId_g5372(ownerId), (uint256(2) << 224) | (uint256(2) << 240));
+        vm.prank(operator);
+        vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+        game.purchaseOrderFor{value: price}(b, 400, 0, 0, MintPaymentKind.DirectEth, false);
         vm.prank(owner);
         game.setOperatorApproval(a, operator, false);
         vm.prank(operator);
@@ -97,6 +98,7 @@ contract AccountIdOnlyTest is DeployProtocol {
         wwxrp.withdraw(a, 0);
         assertEq(wwxrp.claimable(a), 0);
         assertEq(wwxrp.balanceOf(owner), 75 ether);
+        assertEq(wwxrp.balanceOf(other), 0);
     }
 
     function _voter(uint256 i) private returns (address voter, uint32 id) {

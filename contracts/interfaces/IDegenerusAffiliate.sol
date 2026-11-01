@@ -90,10 +90,6 @@ interface IDegenerusAffiliate {
         uint16 lbFreshScore
     ) external returns (uint32 winnerId, uint256 winnerCredit, uint256 playerKickback);
 
-    /// @notice Permanently refer a fresh smurf to its ordinary main's current gameplay ID.
-    /// @dev Game-only; main referral must be resolved, child referral unset. Zero kickback.
-    ///      Emits ReferralUpdated with the normalized ID word; no registration or value calls.
-    function referSmurf(uint32 ownerId, uint32 smurfId) external;
 
     /// @notice Settle a batch of afking subs on both sides: each sub's own reward and its affiliate
     ///         base to the upline chain.
@@ -175,6 +171,8 @@ interface IDegenerusAffiliate {
     function referrerIds(address player) external view returns (uint32 affiliate, uint32 upline1, uint32 upline2);
 
     /// @notice Register a referral code and its player kickback percentage.
+    /// @dev `code` is 1-32 characters of A-Z / 0-9 with at least one letter, left-aligned and
+    ///      zero-padded; anything else reverts `InvalidCode`.
     function createAffiliateCode(bytes32 code, uint8 kickbackPct) external;
 
     /// @notice Set the caller's referral code, subject to the referral lock.

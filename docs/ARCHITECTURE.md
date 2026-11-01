@@ -217,11 +217,11 @@ The ending, in order:
    manual-repayment price or seizing ([account loans](ACCOUNT-LOANS.md#settlement-at-game-over)), so a
    defaulted borrower's refunds and terminal awards accrue to its lender. The game-over path then
    requests its own terminal word.
-2. **Drain.** Terminal setup splits every Degenesis cohort, reserves existing claims and applicable
-   deity refunds (levels below 10), releases the Vault's Degenesis budget and sDGNRS AFKing funding
-   into the distributable total, sets `gameOver`, burns unallocated inventory and zeroes the prize
-   pools. Unfinished boxes and bets are abandoned; Craps cannot read a session word after the
-   terminal latch.
+2. **Drain.** Terminal setup splits every Degenesis cohort, reserves existing claims and, on the
+   deterministic ending below level 10 only, paid deity refunds, releases the Vault's Degenesis
+   budget and sDGNRS AFKing funding into the distributable total, sets `gameOver`, burns
+   unallocated inventory and zeroes the prize pools. Unfinished boxes and bets are abandoned;
+   Craps cannot read a session word after the terminal latch.
 3. **Payout.** With a terminal word, the entire remaining amount budgets the terminal ticket jackpot
    (fixed 152/104/48/1 geometry); unused allocations stay in the Game until the final sweep. A hard
    stall stops further loan settlement and issues no terminal request: the remainder is split

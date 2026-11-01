@@ -164,13 +164,6 @@
     },
     {
       "file": "DegenerusGameLens.sol",
-      "function": "smurfCreationInfo",
-      "expression": "keccak256(abi.encode(base))",
-      "class": "NON-RNG",
-      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
-    },
-    {
-      "file": "DegenerusGameLens.sol",
       "function": "deityOwnerAt",
       "expression": "keccak256(abi.encode(base))",
       "class": "NON-RNG",

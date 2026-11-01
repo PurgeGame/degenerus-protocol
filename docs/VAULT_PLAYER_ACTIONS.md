@@ -22,17 +22,16 @@ destination's normal authorization, so the Vault can also act for accounts it ow
 for. Claim proceeds follow the underlying account's payee rules. The transaction caller gains no
 power over unrelated IDs.
 
-Vault-owned smurfs use that same route: encode the smurf's explicit ID for purchases, account
-settings, bets and claims supported by the destination. `sweepAccounts` also collects proceeds from
-acquired account families. Ownership is checked at execution, including children that have been
-seized separately. Wallet-wide functions without an account-ID argument still act on the Vault
-wallet.
+Accounts the Vault acquired through loan seizure use that same route: encode the account's
+explicit ID for purchases, account settings, bets and claims supported by the destination.
+`sweepAccounts` also collects proceeds from acquired accounts. Ownership is checked at execution.
+Wallet-wide functions without an account-ID argument still act on the Vault wallet.
 
 ## Available actions
 
 | Target | Player actions reachable through `playerAction` |
 | --- | --- |
-| Game | Tickets, boxes, foil packs, FLIP tickets, Degenesis boxes, whale/lazy/deity pass purchases, Degenerette, mining, reverseFlip, decurse, smite, deity boons, smurf creation, operator approvals, acquired-account sweeps |
+| Game | Tickets, boxes, foil packs, FLIP tickets, Degenesis boxes, whale/lazy/deity pass purchases, Degenerette, mining, reverseFlip, decurse, smite, deity boons, operator approvals, acquired-account sweeps |
 | Game subscriptions and claims | AFKing pause/resume/quantity and funding; full/partial ETH claims or stETH-first claims; AFKing FLIP, Bingo, dead-VRF, foil matches, golden tickets, whale passes, affiliate DGNRS |
 | Coinflip / FLIP | Deposits, banked winnings, partial carry withdrawal, auto-rebuy and take-profit settings, decimator burns |
 | Craps | Boards, custom battle creation/entry/closing, slip amendments, bonus window/day entries, pass reservations, future days, normal-to-high conversion, reserved-day/window upgrades |
@@ -95,7 +94,7 @@ Destination restrictions that apply:
   eligibility are enforced at the destination.
 
 Controls that check `isVaultOwner(msg.sender)` are called **by the governance executor** at their
-own target address: Game thresholds/Thanos/smurf allowances/ETH-to-stETH staking, Craps creator
+own target address: Game thresholds/Thanos/ETH-to-stETH staking, Craps creator
 permissions, WWXRP mint scale/trusted minters, GNRUS charity/recovery controls, and Admin owner
 operations. Permissionless maintenance and cache/identity helpers can likewise be called externally
 without impersonating the Vault.

@@ -12,13 +12,14 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {GameSlots, GameSlotKeys, CrapsSlots} from "../../helpers/GameSlots.sol";
 import {GameFunding} from "../../helpers/GameFunding.sol";
 
-/// @title WalletIdTruth -- the suite-wide wallet-ID truth invariant (plan section 0), with accounts (plan F)
+/// @title WalletIdTruth -- the suite-wide wallet-ID truth invariant
 /// @notice One canonical registry and ID-keyed account state. After every handler call:
 ///         - ordinary forward-registry entries agree with wallet-table addresses;
 ///         - account IDs are contiguous, allocated once, and stored IDs reference live accounts;
-///         - subaccounts store only an ordinary owner ID, have their own mint flag and referral,
-///           and emit one SmurfCreated event;
-///         - at most one deity account belongs to a main wallet;
+///         - an owner lane is zero or a lender's reserved ID, and the retired mint-word bits
+///           stay clear;
+///         - custom affiliate codes are registered only in the uppercase alphanumeric form;
+///         - no player wallet is the payee of two deity accounts;
 ///         - authorized actions accept only owners or approved operators, except explicit gift
 ///           and permissionless credit doors; claims never allocate an account.
 /// @dev Campaign size: the repo `[invariant]` default (256 runs x 128 depth).
@@ -48,7 +49,6 @@ contract WalletIdTruthInvariant is DeployProtocol {
             if (i < 4) {
                 vm.prank(a);
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
-                _grantSmurfBase(a, 8);
             }
         }
         _driveDay(1);
@@ -86,15 +86,13 @@ contract WalletIdTruthInvariant is DeployProtocol {
                 vm.setEnv(sk, vm.toString(prior + handler.revCount(id, sels[j])));
             }
         }
-        _bump(_counterKey("WID_SMURFS"), handler.smurfCount());
         _bump(_counterKey("WID_ACCT_OK"), handler.acctAuthorizedOks());
-        _bump(_counterKey("WID_ACCT_SMURF_OK"), handler.acctSmurfOks());
+        _bump(_counterKey("WID_BAD_CODE_REJECT"), handler.badCodeRejects());
         _bump(_counterKey("WID_ACCT_REJECT"), handler.acctRejects());
         _bump(_counterKey("WID_ACCT_GIFT"), handler.acctGifts());
         console.log("WID_REPORT runs", runs);
-        console.log("WID_REPORT smurfs created (summed over runs)", vm.envOr(_counterKey("WID_SMURFS"), uint256(0)));
         console.log("WID_REPORT account doors: authorized ok", vm.envOr(_counterKey("WID_ACCT_OK"), uint256(0)));
-        console.log("WID_REPORT account doors: authorized ok for a smurf", vm.envOr(_counterKey("WID_ACCT_SMURF_OK"), uint256(0)));
+        console.log("WID_REPORT malformed custom codes refused", vm.envOr(_counterKey("WID_BAD_CODE_REJECT"), uint256(0)));
         console.log("WID_REPORT account doors: unauthorized refused", vm.envOr(_counterKey("WID_ACCT_REJECT"), uint256(0)));
         console.log("WID_REPORT account doors: gifts", vm.envOr(_counterKey("WID_ACCT_GIFT"), uint256(0)));
         console.log("WID_REPORT registrations (incl. setUp, summed over runs)", regs);
@@ -112,17 +110,15 @@ contract WalletIdTruthInvariant is DeployProtocol {
         _assertCoverage(runs, n);
     }
 
-    /// @dev Non-vacuity over the accumulated report. Measured over 257 default-profile runs: 307 smurfs,
-    ///      820 authorized account-door successes (284 for a smurf), 1,226 unauthorized refusals, 110 gifts,
-    ///      226 levels gained; every door in `oks` succeeded >= 50 times and every door in `regs` registered
-    ///      >= 50 wallet IDs (>= ~12 expected by run 64). Doors that never succeeded in that measurement are
-    ///      not required (their wallet-ID property is then only checked on reverted calls); the Degenesis
-    ///      box is one of them, since this timeline deploys after the sale.
+    /// @dev Non-vacuity over the accumulated report: authorized account-door successes, unauthorized
+    ///      refusals, gifts, refused malformed codes and levels gained; by run 64 every door in `oks` has
+    ///      succeeded and every door in `regs` has registered a wallet ID. Doors left out are not required
+    ///      (their wallet-ID property is then only checked on reverted calls); the Degenesis box is one of
+    ///      them, since this timeline deploys after the sale.
     function _assertCoverage(uint256 runs, uint256 n) internal view {
         if (runs < 16) return;
-        assertGt(vm.envOr(_counterKey("WID_SMURFS"), uint256(0)), 0, "vacuous: no smurf was ever created");
         assertGt(vm.envOr(_counterKey("WID_ACCT_OK"), uint256(0)), 0, "vacuous: no authorized account-door call succeeded");
-        assertGt(vm.envOr(_counterKey("WID_ACCT_SMURF_OK"), uint256(0)), 0, "vacuous: no account-door call for a smurf succeeded");
+        assertGt(vm.envOr(_counterKey("WID_BAD_CODE_REJECT"), uint256(0)), 0, "vacuous: no malformed custom code was tried");
         assertGt(vm.envOr(_counterKey("WID_ACCT_REJECT"), uint256(0)), 0, "vacuous: no unauthorized account-door call was refused");
         assertGt(vm.envOr(_counterKey("WID_ACCT_GIFT"), uint256(0)), 0, "vacuous: no account-door gift happened");
         assertGt(vm.envOr(_counterKey("WID_LEVELS"), uint256(0)), 0, "vacuous: no run ever gained a level");
@@ -206,7 +202,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         for (uint256 w; w < 2; ++w) s[i++] = WalletIdTruthHandler.prog_bigBuy.selector;
         s[i++] = WalletIdTruthHandler.prog_topUp.selector;
         for (uint256 w; w < 2; ++w) s[i++] = WalletIdTruthHandler.prog_driveDayAligned.selector;
-        for (uint256 w; w < 2; ++w) s[i++] = WalletIdTruthHandler.sm_create.selector;
+        for (uint256 w; w < 2; ++w) s[i++] = WalletIdTruthHandler.af_referById.selector;
         for (uint256 w; w < 3; ++w) s[i++] = WalletIdTruthHandler.ac_game.selector;
         for (uint256 w; w < 2; ++w) s[i++] = WalletIdTruthHandler.ac_coinflip.selector;
         for (uint256 w; w < 2; ++w) s[i++] = WalletIdTruthHandler.ac_ext.selector;
@@ -371,9 +367,6 @@ contract WalletIdTruthInvariant is DeployProtocol {
         _expectBreach("REGISTRY");
     }
 
-
-
-
     function test_oracleDetectsAnUnallocatedRedemptionRecipient() public {
         // Queue 0: one packed count at slot 7 bits 192..223, lanes at keccak(index / 2, 9).
         uint256 root = PeripheralSlots.SD_BATCH_PLAYERS;
@@ -401,83 +394,64 @@ contract WalletIdTruthInvariant is DeployProtocol {
     }
 
     // =====================================================================================
-    // Smurf accounts and the account rule (deterministic)
+    // Referrals, custom codes and the account rule (deterministic)
     // =====================================================================================
-
-    uint256 internal constant DIRECT_ETH = 0; // createSmurfFor kind selector: DirectEth at the ticket price
-
-    function _smurf(address owner) internal returns (uint32 sid, uint32 key) {
-        bool ok;
-        (ok, sid) = handler.createSmurfFor(owner, bytes32(0), DIRECT_ETH);
-        assertTrue(ok, "createSmurf");
-        key = sid;
-    }
 
     function _referralWord(address k) internal view returns (uint256) {
         return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(k), QaSlots.REFERRAL))));
     }
-    function _referralWord(uint32 k) internal view returns (uint256) {
-        return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(k), QaSlots.REFERRAL))));
-    }
 
-    /// @notice Creation with a blank code (owner already locked), an unregistered default code
-    ///         (its owner registers before the smurf's ID) and a registered default code: each
-    ///         smurf refers directly to its main ID, and the oracle holds.
-    function test_smurfCreationRefersToTheMain() public {
-        (, uint32 ka) = _smurf(seeded[0]);
-        assertEq(_referralWord(ka), (uint256(1) << 32) | game.walletIdOf_g3120(seeded[0]), "blank code: main ID");
-
-        address ownerB = seeded[4];
-        address codeOwner = address(0xC0DE0001);
-        _giveWalletId(ownerB);
-        _giveWalletId(seeded[5]);
-        _grantSmurfBase(ownerB, 1);
-        _grantSmurfBase(seeded[5], 1);
+    /// @notice A referral written as the referrer's account ID in decimal text stores the same
+    ///         tagged ID word as the default form, and the oracle holds.
+    function test_referralByDecimalIdStoresTheIdWord() public {
+        address p = seeded[4]; // unregistered until this test
+        uint32 ref = game.walletIdOf_g3120(seeded[0]);
+        vm.prank(p);
+        affiliate.referPlayer(bytes32(bytes(vm.toString(uint256(ref)))));
+        assertEq(_referralWord(p), (uint256(1) << 32) | ref, "decimal text refers to the account ID");
         handler.ingest();
-        (bool okB, uint32 b) = handler.createSmurfFor(ownerB, bytes32(uint256(uint160(codeOwner))), DIRECT_ETH);
-        assertTrue(okB, "createSmurf with an unregistered default code");
-        assertEq(game.walletIdOf_g3120(codeOwner), b - 1, "the code's owner registers just before the smurf");
-        uint32 kb = b;
-        assertEq(uint32(_referralWord(ownerB)), game.walletIdOf_g3120(codeOwner), "owner referred by the code");
-        assertEq(_referralWord(kb), (uint256(1) << 32) | game.walletIdOf_g3120(ownerB), "unregistered code: main ID");
-
-        (bool okC, uint32 c) = handler.createSmurfFor(seeded[5], bytes32(uint256(uint160(seeded[1]))), DIRECT_ETH);
-        assertTrue(okC, "createSmurf with a registered default code");
-        uint32 kc = c;
-        assertEq(uint32(_referralWord(kc)), game.walletIdOf_g3120(seeded[5]), "the smurf refers to its main");
-        assertEq(handler.smurfCount(), 3, "three SmurfCreated");
         handler.checkAll();
     }
 
-    /// @notice Every account door (actions 44..73) for a smurf, called by its owner, by an
-    ///         operator approved for the smurf, by an operator approved only for the owner, by a
-    ///         stranger, and for an unallocated ID: authorized callers act, unauthorized callers
-    ///         are refused except on gift and permissionless doors, nothing lands at the smurf
-    ///         key, and the oracle holds.
+    /// @notice Custom codes register only as uppercase A-Z/0-9 with a letter, left-aligned; the
+    ///         handler's malformed shapes are all refused.
+    function test_customCodesFollowTheCharacterRule() public {
+        for (uint256 s; s < 4; ++s) handler.af_createCode(1, s << 3, 0); // s % 8 == 0: malformed
+        assertEq(handler.badCodeRejects(), 4, "every malformed shape refused");
+        assertEq(handler.badCodeOks(), 0);
+        handler.af_createCode(1, 1, 0);
+        assertEq(handler.codeCount(), 1, "a valid code registers");
+        handler.checkAll();
+    }
+
+    /// @notice Every account door (actions 44..73) for an ordinary account, called by its owner,
+    ///         by an operator approved for it, by an operator approved only for another account,
+    ///         by a stranger, and for an unallocated ID: authorized callers act, unauthorized
+    ///         callers are refused except on gift and permissionless doors, and the oracle holds.
     function test_accountDoorsFollowTheAccountRule() public {
         address owner = seeded[0];
         address stranger = seeded[1];
         address ownerOp = seeded[2];
-        address smurfOp = seeded[3];
-        (uint32 sid, uint32 key) = _smurf(owner);
+        address otherOp = seeded[3];
         uint32 ownerId = game.walletIdOf_g3120(owner);
+        uint32 otherId = game.walletIdOf_g3120(stranger);
         assertTrue(handler.approveFor(ownerId, owner, ownerOp, true), "owner approves an operator for itself");
-        assertTrue(handler.approveFor(sid, owner, smurfOp, true), "owner approves an operator for its smurf");
-        assertFalse(handler.approveFor(sid, smurfOp, stranger, true), "an operator cannot approve");
-        assertFalse(handler.approveFor(sid, stranger, stranger, true), "a stranger cannot approve");
+        assertTrue(handler.approveFor(otherId, stranger, otherOp, true), "another wallet approves its own operator");
+        assertFalse(handler.approveFor(ownerId, ownerOp, stranger, true), "an operator cannot approve");
+        assertFalse(handler.approveFor(ownerId, stranger, stranger, true), "a stranger cannot approve");
         uint32 unallocated = uint32(handler.regCount() + 1);
         for (uint256 action = 44; action < 74; ++action) {
             (uint256 p1, uint256 p2) = _doorParams(action);
-            handler.actAs(action, sid, owner, p1, p2);
-            handler.actAs(action, sid, smurfOp, p1, p2);
-            handler.actAs(action, sid, ownerOp, p1, p2);
-            handler.actAs(action, sid, stranger, p1, p2);
+            handler.actAs(action, ownerId, owner, p1, p2);
+            handler.actAs(action, ownerId, ownerOp, p1, p2);
+            handler.actAs(action, ownerId, otherOp, p1, p2);
+            handler.actAs(action, ownerId, stranger, p1, p2);
             handler.actAs(action, unallocated, owner, p1, p2);
         }
         assertEq(handler.authViolations(), 0, handler.authViolation());
         assertEq(handler.unallocatedOks(), 0, handler.unallocatedOk());
         assertEq(handler.authFalseRejects(), 0, handler.authFalseReject());
-        // 26 authorized-only doors, each refused for the owner's operator and the stranger.
+        // 26 authorized-only doors, each refused for the other wallet's operator and the stranger.
         assertGe(handler.acctRejects(), 52, "unauthorized callers refused");
         assertGe(handler.acctGifts(), 2, "gift doors took the strangers' gifts");
         uint256[9] memory must = [uint256(44), 48, 50, 51, 54, 57, 59, 61, 65];
@@ -487,8 +461,6 @@ contract WalletIdTruthInvariant is DeployProtocol {
         for (uint256 action = 44; action < 74; ++action) {
             console.log(handler.actionName(action), handler.calls(action), handler.oks(action));
         }
-        console.log("authorized ok for the smurf", handler.acctSmurfOks());
-        assertEq(_referralWord(key), (uint256(1) << 32) | ownerId, "child refers to its main ID");
         handler.checkAll();
     }
 
@@ -506,67 +478,56 @@ contract WalletIdTruthInvariant is DeployProtocol {
     }
 
     // =====================================================================================
-    // Falsifiability: the smurf and account checks see their breaches
+    // Falsifiability: the account checks see their breaches
     // =====================================================================================
 
-    function test_oracleDetectsAClearedSmurfFlag() public {
-        (, uint32 key) = _smurf(seeded[0]);
-        bytes32 slot = GameSlotKeys.mintPacked(_fixtureId(key));
-        uint256 w = uint256(vm.load(address(game), slot));
-        assertEq((w >> 147) & 1, 1, "fixture: smurf flag set");
-        vm.store(address(game), slot, bytes32(w & ~(uint256(1) << 147)));
-        _expectBreach("SMURFFLAG");
+    function test_oracleDetectsARetiredMintBit() public {
+        bytes32 slot = GameSlotKeys.mintPacked(game.walletIdOf_g3120(seeded[0]));
+        vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) | (uint256(1) << 147)));
+        _expectBreach("RETIRED");
     }
 
-    function test_oracleDetectsAnOwnerLaneAtASmurf() public {
-        (uint32 a,) = _smurf(seeded[0]);
-        (uint32 b,) = _smurf(seeded[0]);
-        bytes32 slot = GameSlotKeys.walletElement(b);
+    function test_oracleDetectsARetiredHighMintBit() public {
+        bytes32 slot = GameSlotKeys.mintPacked(game.walletIdOf_g3120(seeded[0]));
+        vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) | (uint256(1) << 240)));
+        _expectBreach("RETIRED");
+    }
+
+    function test_oracleDetectsAnOwnerLaneThatIsNotALender() public {
+        address a = seeded[0];
+        uint32 id = game.walletIdOf_g3120(a);
+        bytes32 slot = GameSlotKeys.walletElement(id);
         uint256 el = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32((el & ~(uint256(type(uint32).max) << 160)) | (uint256(a) << 160)));
-        _expectBreach("SMURFLANE");
+        vm.store(address(game), slot, bytes32((el & ~(uint256(type(uint32).max) << 160)) | (uint256(7) << 160)));
+        vm.store(address(game), GameSlotKeys.walletId(a), bytes32(0));
+        _expectBreach("LANE");
     }
 
-
-
+    function test_oracleDetectsASellerStillDefaultingToAnAcquiredAccount() public {
+        uint32 id = game.walletIdOf_g3120(seeded[0]);
+        bytes32 slot = GameSlotKeys.walletElement(id);
+        uint256 el = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((el & ~(uint256(type(uint32).max) << 160)) | (uint256(2) << 160)));
+        _expectBreach("KEYS");
+    }
 
     function test_oracleDetectsAnUnauthorizedSuccess() public {
-        (uint32 sid, uint32 key) = _smurf(seeded[0]);
-        // A Game that authorizes everyone: Coinflip then lets a stranger act for the smurf.
+        uint32 id = game.walletIdOf_g3120(seeded[0]);
+        // A Game that authorizes everyone: Coinflip then lets a stranger act for the account.
         vm.mockCall(address(game), abi.encodeWithSignature("resolveAccount_g7029(uint32,address)"), abi.encode(address(0), seeded[0], true));
-        handler.actAs(57, sid, seeded[1], 0, 0);
+        handler.actAs(57, id, seeded[1], 0, 0);
         vm.clearMockedCalls();
         assertEq(handler.authViolations(), 1, "fixture: the stranger's auto-rebuy went through");
         _expectBreach("AUTH");
     }
 
-    function test_oracleDetectsAResetSmurfCount() public {
-        _smurf(seeded[0]);
-        bytes32 slot = GameSlotKeys.mintPacked(game.walletIdOf_g3120(seeded[0]));
-        vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) & ~(uint256(0xffff) << 224)));
-        _expectBreach("SMURFQUOTA");
-    }
-
-    function test_oracleDetectsAnUnloggedSmurfGrant() public {
-        bytes32 slot = GameSlotKeys.mintPacked(game.walletIdOf_g3120(seeded[0]));
-        vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) ^ (uint256(1) << 240)));
-        _expectBreach("SMURFQUOTA");
-    }
-
-    function test_oracleDetectsADivergentSmurfReferral() public {
-        (, uint32 key) = _smurf(seeded[0]);
-        uint256 forged = uint256(uint160(seeded[3])) | (uint256(game.walletIdOf_g3120(seeded[3])) << 160);
-        assertTrue(forged != _referralWord(seeded[0]), "fixture: a different referrer");
-        vm.store(address(affiliate), keccak256(abi.encode(_fixtureId(key), QaSlots.REFERRAL)), bytes32(forged));
-        _expectBreach("SMURFREF");
-    }
-
-    function test_oracleDetectsTwoDeitiesOfOneMainWallet() public {
+    function test_oracleDetectsTwoDeitiesOfOnePlayerWallet() public {
         bytes32 slot = bytes32(uint256(keccak256(abi.encode(GameSlots.DEITY_PASS_IDS))));
         uint256 w = uint256(vm.load(address(game), slot));
         assertEq(uint32(w), 1, "fixture: genesis deity VAULT");
         assertEq(uint32(w >> 32), 2, "fixture: genesis deity SDGNRS");
-        vm.store(address(game), slot, bytes32((w & ~(uint256(type(uint32).max) << 32)) | (uint256(1) << 32)));
+        uint256 id = game.walletIdOf_g3120(seeded[0]);
+        vm.store(address(game), slot, bytes32((w & ~uint256(type(uint64).max)) | id | (id << 32)));
         _expectBreach("DEITYGROUP");
     }
 

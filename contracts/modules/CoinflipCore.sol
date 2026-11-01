@@ -231,7 +231,7 @@ abstract contract CoinflipCore {
     /// @notice Thrown when an auto-rebuy action is attempted while today's flip is frozen for RNG.
     error RngLocked();
     /// @notice Thrown when the caller may not act for the account: it is neither the account's
-    ///         key, a smurf's owner, nor an approved operator.
+    ///         payee nor an approved operator.
     error NotApproved();
 
     /*+======================================================================+
@@ -476,14 +476,14 @@ abstract contract CoinflipCore {
 
     /// @notice Deposit FLIP into the daily coinflip system for account `id`.
     /// @dev The stake and its winnings belong to the account. An authorized caller (`id == 0`,
-    ///      the account's key, a smurf's owner or an approved operator) acts as the account: the
+    ///      the account's payee or an approved operator) acts as the account: the
     ///      deposit spends the account's settled winnings first and burns the account's payee's
     ///      wallet FLIP for the remainder, and the quest progress is the account's. Any other
     ///      caller makes a permissionless gift: it funds the whole stake from its own FLIP, earns
     ///      the quest itself, and never touches the account's winnings. Any completed quest's
     ///      reward joins the account's stake. The recycling bonus pays on the winnings leg only.
-    ///      Only the account's own hand (the caller is the payee: a self deposit or a smurf's
-    ///      owner) makes a direct deposit, which can set the flip record, enter the BAF draw and
+    ///      Only the account's own hand (the caller is the payee) makes a direct deposit, which
+    ///      can set the flip record, enter the BAF draw and
     ///      spend the account's coinflip boon.
     ///      Reverts StakeAboveDailyCap if the stake, with its bonuses, would exceed
     ///      STAKE_LANE_MAX whole FLIP on the target day.
@@ -1352,13 +1352,9 @@ abstract contract CoinflipCore {
         _setCoinflipAutoRebuy(key, payee, id, enabled, takeProfit);
     }
 
-    /// @notice Collect for the current payee after Game.sweepAccounts authorizes the source.
-    /// @dev Ordinary accounts retain auto-rebuy and its carry, just like claimCoinflips.
+    /// @notice Collect an acquired account's FLIP for its buyer after Game.sweepAccounts authorizes it.
     function sweepAccountCoinflips(uint32 id) external coinflipContext onlyDegenerusGameContract returns (uint256) {
-        uint32 buyer = degenerusGame.acquiredBuyer(id);
-        if (buyer != 0) return _claimAcquiredCoinflips(id, buyer);
-        (address key, address payee,) = degenerusGame.resolveAccount_g7029(id, address(this));
-        return _claimCoinflipsAmount(key, payee, id, type(uint256).max, true);
+        return _claimAcquiredCoinflips(id, degenerusGame.acquiredBuyer(id));
     }
 
     /// @dev An acquired account's FLIP to its buyer: ordinary settlement, including losses
@@ -2085,7 +2081,7 @@ abstract contract CoinflipCore {
     }
 
     /// @dev Account `id` for an authorized action: reverts NotApproved unless the caller is the
-    ///      account's key, a smurf's owner or an approved operator.
+    ///      account's payee or an approved operator.
     function _account(uint32 id) private view returns (address key, address payee) {
         bool authorized;
         (key, payee, authorized) = _resolve(id);

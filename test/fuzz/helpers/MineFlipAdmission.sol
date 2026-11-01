@@ -43,11 +43,10 @@ library MineFlipAdmission {
         return branch + GasBounds.DEGENESIS_BOON_GAS + GasBounds.DEGENESIS_TAIL_GAS + GasBounds.DEGENESIS_FLUSH_PER_CREDIT;
     }
 
-    /// @dev Game over's loan checkpoint: the terminal phase pre-check, one worst-family loan, one
+    /// @dev Game over's loan checkpoint: the terminal phase pre-check, one loan, one
     ///      due-level step and the loan tail.
     function terminalLoanFirstUnit() internal pure returns (uint256) {
-        return 100_000 + 150_000 + GasBounds.LOAN_SEIZE_BASE + 6 * GasBounds.LOAN_SEIZE_SUB
-            + GasBounds.LOAN_SEIZE_DEITY + GasBounds.LOAN_TERMINAL_LEVEL + GasBounds.LOAN_SEIZE_TAIL;
+        return 100_000 + 150_000 + GasBounds.LOAN_SEIZE + GasBounds.LOAN_TERMINAL_LEVEL + GasBounds.LOAN_SEIZE_TAIL;
     }
 
     /// @notice The declared first-unit bound of `action`, before the engine boundary and return.
@@ -83,8 +82,7 @@ library MineFlipAdmission {
             return b + 250_000 + GasBounds.TERMINAL_TAIL + GasBounds.DAILY_PHASE_TAIL;
         }
         if (action == SEIZE_LOANS) {
-            return GasBounds.LOAN_SEIZE_BASE + 6 * GasBounds.LOAN_SEIZE_SUB + GasBounds.LOAN_SEIZE_DEITY
-                + GasBounds.LOAN_SEIZE_TAIL;
+            return GasBounds.LOAN_SEIZE + GasBounds.LOAN_SEIZE_TAIL;
         }
         if (action == REDEMPTION) {
             return GasBounds.REDEMPTION_BASE_GAS + GasBounds.REDEMPTION_TAIL_GAS + GasBounds.REDEMPTION_RESOLVE_GAS;

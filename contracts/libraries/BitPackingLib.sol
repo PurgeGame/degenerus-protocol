@@ -38,15 +38,14 @@ pragma solidity 0.8.38;
  *      [120-143] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for lazy/whale passes (24 bits)
  *      [144-145] WHALE_PASS_TYPE_SHIFT       - Pass type (2 bits: 0=none, 1=lazy/10-lvl, 3=whale/100-lvl)
  *      [146]     SEAT_CLAIMED_SHIFT          - AFKing seat mint latch (1 bit)
- *      [147]     SMURF_FLAG_SHIFT            - Smurf account flag (1 bit; written only by createSmurf)
+ *      [147]     unused
  *      [148-171] MINT_STREAK_LAST_COMPLETED_SHIFT - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
  *      [172]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
  *      [173-196] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
  *      [197-202] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
  *      [203-207] CURSE_COUNT_SHIFT           - Cashout/smite curse counter (5 bits, capped at 20)
  *      [208-223] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
- *      [224-239] SMURF_COUNT_SHIFT           - Lifetime smurf creations (16 bits)
- *      [240-255] SMURF_BASE_SHIFT            - Admin-granted base allowance (16 bits)
+ *      [224-255] unused
  */
 library BitPackingLib {
     // -------------------------------------------------------------------------
@@ -100,10 +99,6 @@ library BitPackingLib {
     ///         caps the tranche at 1,000 but keeps no per-account record of its own.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 146;
 
-    /// @notice Subaccount flag (bit 147), set once by createSmurf on the ID-keyed mint word.
-    ///         The wallet table's owner-ID lane determines its payout recipient.
-    uint256 internal constant SMURF_FLAG_SHIFT = 147;
-
     /// @notice Bit position for last level credited for mint streak (bits 148-171)
     uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 148;
 
@@ -121,12 +116,6 @@ library BitPackingLib {
 
     /// @notice Bit position for level units count (bits 208-223)
     uint256 internal constant LEVEL_UNITS_SHIFT = 208;
-
-    /// @notice Lifetime successful smurf creations by this main ID (bits 224-239).
-    uint256 internal constant SMURF_COUNT_SHIFT = 224;
-
-    /// @notice Admin-granted base creation allowance, additive to score capacity (bits 240-255).
-    uint256 internal constant SMURF_BASE_SHIFT = 240;
 
     // -------------------------------------------------------------------------
     // Packing Functions

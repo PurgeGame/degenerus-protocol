@@ -11,11 +11,6 @@ abstract contract GamePurchaseEntries is GamePurchase {
         _purchase(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind);
     }
 
-    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind) external payable returns (uint32) {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        return _createSmurf(affiliateCode, payKind);
-    }
-
     function redeemFlip(uint32 id, uint256 entryQuantityScaled) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         _redeemFlip(id, entryQuantityScaled);

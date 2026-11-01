@@ -1002,17 +1002,9 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "_smurfWords",
-    "offset": 0,
-    "slot": 62,
-    "typeLabel": "mapping(uint32 => mapping(uint256 => uint256))"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
     "label": "_loans",
     "offset": 0,
-    "slot": 63,
+    "slot": 62,
     "typeLabel": "mapping(uint32 => uint256)"
   },
   {
@@ -1020,7 +1012,7 @@
     "encoding": "mapping",
     "label": "_loansDue",
     "offset": 0,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "mapping(uint24 => mapping(uint256 => uint256))"
   },
   {
@@ -1028,7 +1020,7 @@
     "encoding": "mapping",
     "label": "_loansDueCount",
     "offset": 0,
-    "slot": 65,
+    "slot": 64,
     "typeLabel": "mapping(uint24 => uint256)"
   },
   {
@@ -1036,7 +1028,7 @@
     "encoding": "inplace",
     "label": "degenesisWord",
     "offset": 0,
-    "slot": 66,
+    "slot": 65,
     "typeLabel": "uint256"
   },
   {
@@ -1044,7 +1036,7 @@
     "encoding": "mapping",
     "label": "degenesisDays",
     "offset": 0,
-    "slot": 67,
+    "slot": 66,
     "typeLabel": "mapping(uint256 => uint256)"
   },
   {
@@ -1052,7 +1044,7 @@
     "encoding": "mapping",
     "label": "degenesisOrders",
     "offset": 0,
-    "slot": 68,
+    "slot": 67,
     "typeLabel": "mapping(uint256 => uint256)"
   },
   {
@@ -1060,7 +1052,7 @@
     "encoding": "inplace",
     "label": "_redemptionReserveStored",
     "offset": 0,
-    "slot": 69,
+    "slot": 68,
     "typeLabel": "uint128"
   },
   {
@@ -1068,7 +1060,7 @@
     "encoding": "inplace",
     "label": "lvlTraitEntry",
     "offset": 0,
-    "slot": 70,
+    "slot": 69,
     "typeLabel": "uint256[256][2]"
   },
   {
@@ -1076,7 +1068,7 @@
     "encoding": "inplace",
     "label": "dailyHeroWagers",
     "offset": 0,
-    "slot": 582,
+    "slot": 581,
     "typeLabel": "uint256[3][2]"
   },
   {
@@ -1084,7 +1076,7 @@
     "encoding": "inplace",
     "label": "rngWordByDay",
     "offset": 0,
-    "slot": 588,
+    "slot": 587,
     "typeLabel": "uint256[2]"
   },
   {
@@ -1092,7 +1084,7 @@
     "encoding": "inplace",
     "label": "levelPrizePool",
     "offset": 0,
-    "slot": 590,
+    "slot": 589,
     "typeLabel": "uint256[4]"
   },
   {
@@ -1100,7 +1092,7 @@
     "encoding": "inplace",
     "label": "dailyFoilDraw",
     "offset": 0,
-    "slot": 594,
+    "slot": 593,
     "typeLabel": "uint256[2]"
   },
   {
@@ -1108,7 +1100,7 @@
     "encoding": "inplace",
     "label": "deityBySymbol",
     "offset": 0,
-    "slot": 596,
+    "slot": 595,
     "typeLabel": "uint256[32]"
   },
   {
@@ -1116,7 +1108,7 @@
     "encoding": "inplace",
     "label": "decBattleHeap",
     "offset": 0,
-    "slot": 628,
+    "slot": 627,
     "typeLabel": "uint256[200]"
   },
   {
@@ -1124,7 +1116,7 @@
     "encoding": "inplace",
     "label": "foilRecord",
     "offset": 0,
-    "slot": 828,
+    "slot": 827,
     "typeLabel": "mapping(uint32 => uint256)[4]"
   },
   {
@@ -1132,7 +1124,7 @@
     "encoding": "inplace",
     "label": "protocolBoonPools",
     "offset": 0,
-    "slot": 832,
+    "slot": 831,
     "typeLabel": "struct DegenerusGameStorage.ProtocolBoonPool[2][2]"
   },
   {
@@ -1140,7 +1132,7 @@
     "encoding": "inplace",
     "label": "protocolBoonEntries",
     "offset": 0,
-    "slot": 836,
+    "slot": 835,
     "typeLabel": "mapping(uint32 => struct DegenerusGameStorage.ProtocolBoonEntry)[2][2]"
   },
   {
@@ -1148,7 +1140,7 @@
     "encoding": "inplace",
     "label": "boxQueue",
     "offset": 0,
-    "slot": 840,
+    "slot": 839,
     "typeLabel": "uint256[][2]"
   },
   {
@@ -1156,7 +1148,7 @@
     "encoding": "inplace",
     "label": "foilQueue",
     "offset": 0,
-    "slot": 842,
+    "slot": 841,
     "typeLabel": "uint256[][2]"
   },
   {
@@ -1164,7 +1156,7 @@
     "encoding": "inplace",
     "label": "degeneretteQueue",
     "offset": 0,
-    "slot": 844,
+    "slot": 843,
     "typeLabel": "uint256[][2]"
   }
 ]

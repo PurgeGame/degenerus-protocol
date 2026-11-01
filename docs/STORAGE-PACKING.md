@@ -23,9 +23,8 @@ Source: [contracts/storage/DegenerusGameStorage.sol](../contracts/storage/Degene
 | `prizePoolsPacked` | 0–127; 128–255 | Next pool; future pool (`POOL_FUTURE_SHIFT`). |
 | `prizePoolPendingPacked` | 0–127; 128–254; 255 | Pending next; pending future; retained sentinel. |
 | `balancesPacked[id]` | 0–127; 128–255 | Claimable including the 1-wei sentinel; prepaid AFKing. |
-| `wallets[id]` | 0–159; 160–191; 192–255 | Payout/seller address; parent/buyer wallet ID; whale half-pass count. |
+| `wallets[id]` | 0–159; 160–191; 192–255 | Account key (an acquired account's former borrower); lender wallet ID once acquired, else zero; whale half-pass count. |
 | `walletIds[address]` | 0–31; 32–63 | Current gameplay account; immutable wallet identity. |
-| `_smurfWords[id][i/8]` | 32k–32k+31, k=i%8 | Eight child wallet IDs. |
 | `dailyTicketBudgetsPacked` | 0–7; 8–71; 72; 73; 74–143; 144–207; 208–255 | Reserved; daily entries; battle pending; retained; unused; early-bird entries; purchase entries. |
 | `gameOverStatePacked` | 0–47; 48–55; 56–63; 64–71; 72–103 | Terminal payout timestamp; jackpot paid; swept; loan-step offset; loan index (`GO_*`). |
 | `playerClaimWord[id]` | 0–24; 25–49; 50–73 | Even/odd bingo level+1 stamps; affiliate-claim level. |
@@ -38,7 +37,7 @@ Source: [contracts/storage/DegenerusGameStorage.sol](../contracts/storage/Degene
 | `ticketBufferLevels` | 0–23; 24–47 | Even/odd physical ticket buffer level tags. |
 | `rngDayTags` | 0–23; 24–47 | Absolute day tags for the two RNG slots. |
 | `centuryBonusUsed[id]` | 0–223; 224–255 | Used bonus value; level stamp. |
-| `_loans[id]` | 0–95; 96–103; 104–127; 128–151; 152–183; 184–191; 255 | Principal wei; lender ID; start level; due level; due-list index; family subscriptions; retained. |
+| `_loans[id]` | 0–95; 96–103; 104–127; 128–151; 152–183; 255 | Principal wei; lender ID; start level; due level; due-list index; retained. Bits 184–254 are unused. |
 | `_loansDue[due][i/8]` | 32k–32k+31, k=i%8 | Eight due account IDs. |
 | `degenesisActive` | 0–79; 80–159; 160–183; 184–215 | Q budget; paid sDGNRS; bound day; settlement cursor (`GA_*`). |
 | `degenesisDays[day]` | 0–47; 48–79; 80 | Volume in `DEGENESIS_UNIT`; order count; split flag. |
@@ -56,10 +55,10 @@ Source: [contracts/libraries/BitPackingLib.sol](../contracts/libraries/BitPackin
 | `mintPacked_[id]` | 72–95 | Last purchase day (`DAY_SHIFT`). |
 | `mintPacked_[id]` | 96–119 | Unit-tracking level (`LEVEL_UNITS_LEVEL_SHIFT`). |
 | `mintPacked_[id]` | 120–143 | Frozen-until level (`FROZEN_UNTIL_LEVEL_SHIFT`). |
-| `mintPacked_[id]` | 144–145; 146; 147 | Pass type; seat claimed; smurf flag. |
+| `mintPacked_[id]` | 144–145; 146; 147 | Pass type; seat claimed; unused. |
 | `mintPacked_[id]` | 148–171; 172 | Last streak-completed level; deity-pass flag. |
 | `mintPacked_[id]` | 173–196; 197–202; 203–207 | Affiliate bonus level; bonus points; curse count. |
-| `mintPacked_[id]` | 208–223; 224–239; 240–255 | Level units; lifetime smurf count; base smurf allowance. |
+| `mintPacked_[id]` | 208–223; 224–255 | Level units; unused. |
 
 ## Game RNG, queues and ticket buckets
 
@@ -377,27 +376,26 @@ harness declaring the production struct types, without changing production sourc
 | 59 | 0–255 | `decJackpotPlans` | `mapping(uint24 => struct DegenerusGameStorage.DecJackpotPlan)` |
 | 60 | 0–255 | `decGeneratedOwners` | `mapping(uint256 => uint32)` |
 | 61 | 0–255 | `walletIds` | `mapping(address => uint64)` |
-| 62 | 0–255 | `_smurfWords` | `mapping(uint32 => mapping(uint256 => uint256))` |
-| 63 | 0–255 | `_loans` | `mapping(uint32 => uint256)` |
-| 64 | 0–255 | `_loansDue` | `mapping(uint24 => mapping(uint256 => uint256))` |
-| 65 | 0–255 | `_loansDueCount` | `mapping(uint24 => uint256)` |
-| 66 | 0–255 | `degenesisWord` | `uint256` |
-| 67 | 0–255 | `degenesisDays` | `mapping(uint256 => uint256)` |
-| 68 | 0–255 | `degenesisOrders` | `mapping(uint256 => uint256)` |
-| 69 | 0–127 | `_redemptionReserveStored` | `uint128` |
-| 70 | root / multiple slots | `lvlTraitEntry` | `uint256[256][2]` |
-| 582 | root / multiple slots | `dailyHeroWagers` | `uint256[3][2]` |
-| 588 | root / multiple slots | `rngWordByDay` | `uint256[2]` |
-| 590 | root / multiple slots | `levelPrizePool` | `uint256[4]` |
-| 594 | root / multiple slots | `dailyFoilDraw` | `uint256[2]` |
-| 596 | root / multiple slots | `deityBySymbol` | `uint256[32]` |
-| 628 | root / multiple slots | `decBattleHeap` | `uint256[200]` |
-| 828 | root / multiple slots | `foilRecord` | `mapping(uint32 => uint256)[4]` |
-| 832 | root / multiple slots | `protocolBoonPools` | `struct DegenerusGameStorage.ProtocolBoonPool[2][2]` |
-| 836 | root / multiple slots | `protocolBoonEntries` | `mapping(uint32 => struct DegenerusGameStorage.ProtocolBoonEntry)[2][2]` |
-| 840 | root / multiple slots | `boxQueue` | `uint256[][2]` |
-| 842 | root / multiple slots | `foilQueue` | `uint256[][2]` |
-| 844 | root / multiple slots | `degeneretteQueue` | `uint256[][2]` |
+| 62 | 0–255 | `_loans` | `mapping(uint32 => uint256)` |
+| 63 | 0–255 | `_loansDue` | `mapping(uint24 => mapping(uint256 => uint256))` |
+| 64 | 0–255 | `_loansDueCount` | `mapping(uint24 => uint256)` |
+| 65 | 0–255 | `degenesisWord` | `uint256` |
+| 66 | 0–255 | `degenesisDays` | `mapping(uint256 => uint256)` |
+| 67 | 0–255 | `degenesisOrders` | `mapping(uint256 => uint256)` |
+| 68 | 0–127 | `_redemptionReserveStored` | `uint128` |
+| 69 | root / multiple slots | `lvlTraitEntry` | `uint256[256][2]` |
+| 581 | root / multiple slots | `dailyHeroWagers` | `uint256[3][2]` |
+| 587 | root / multiple slots | `rngWordByDay` | `uint256[2]` |
+| 589 | root / multiple slots | `levelPrizePool` | `uint256[4]` |
+| 593 | root / multiple slots | `dailyFoilDraw` | `uint256[2]` |
+| 595 | root / multiple slots | `deityBySymbol` | `uint256[32]` |
+| 627 | root / multiple slots | `decBattleHeap` | `uint256[200]` |
+| 827 | root / multiple slots | `foilRecord` | `mapping(uint32 => uint256)[4]` |
+| 831 | root / multiple slots | `protocolBoonPools` | `struct DegenerusGameStorage.ProtocolBoonPool[2][2]` |
+| 835 | root / multiple slots | `protocolBoonEntries` | `mapping(uint32 => struct DegenerusGameStorage.ProtocolBoonEntry)[2][2]` |
+| 839 | root / multiple slots | `boxQueue` | `uint256[][2]` |
+| 841 | root / multiple slots | `foilQueue` | `uint256[][2]` |
+| 843 | root / multiple slots | `degeneretteQueue` | `uint256[][2]` |
 
 #### struct DegenerusGameStorage.BoonPacked
 

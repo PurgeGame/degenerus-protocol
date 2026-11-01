@@ -2,21 +2,21 @@
 pragma solidity 0.8.38;
 
 import {Vm} from "forge-std/Vm.sol";
-import {SmurfFixture} from "./SmurfFixture.t.sol";
+import {AccountFixture} from "./AccountFixture.t.sol";
 import {IDegenerusQuests} from "../../contracts/interfaces/IDegenerusQuests.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteGiftByAccount -- the Degenerette door's gift and acting-for-an-account split
-/// @notice `betDegenerette(id, ...)` resolves account `id` against the caller (F-game spec item
-///         6). A caller not authorized for the account makes a gift: the caller's fresh ETH,
+/// @notice `betDegenerette(id, ...)` resolves account `id` against the caller. A caller not authorized for the account makes a gift: the caller's fresh ETH,
 ///         claimable and FLIP fund it, the caller earns the quest, the bet belongs to `id`, and the
 ///         recipient's stake boon is never read. A gift to an unallocated ID reverts `E`. A caller
-///         authorized for the account (a smurf's owner, an approved operator) acts for it: the
-///         account's claimable funds the shortfall, FLIP burns from the account's payee (the
-///         owner), the account earns the quest, and the account's boon is spent.
+///         authorized for the account (its wallet, or an operator approved for that ID) acts for
+///         it: the account's claimable funds the shortfall, FLIP burns from the account's payee,
+///         the account earns the quest, and the account's boon is spent. After a seizure the
+///         former wallet is a stranger to the account: its bet is a gift.
 /// @dev Boons are written straight into `boonPacked[id].slot1` (the DegeneretteBoonStake layout:
 ///      per-currency 24-bit lanes at 184 + 24 * currency, [day:21 | deity:1 | tier:2]).
-contract DegeneretteGiftByAccountTest is SmurfFixture {
+contract DegeneretteGiftByAccountTest is AccountFixture {
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;
     uint8 private constant HERO = 3;
@@ -26,7 +26,6 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
 
     address private owner;
     uint32 private ownerId;
-    uint32 private smurfId;
     address private recipient;
     uint32 private recipientId;
     address private giver;
@@ -34,10 +33,8 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     address private operator;
 
     function setUp() public {
-        _setUpSmurfFixture();
+        _setUpAccountFixture();
         (owner, ownerId) = _wallet("gift_owner");
-        _grantSmurfBase(owner, 1);
-        smurfId = _createSmurf(owner);
         (recipient, recipientId) = _wallet("gift_recipient");
         (giver, giverId) = _wallet("gift_giver");
         operator = makeAddr("gift_operator");
@@ -123,22 +120,22 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
         assertEq(_stakeUnits(bet), 0.01 ether / 1 gwei, "no boon boost on a gift");
     }
 
-    /// @dev A stranger's FLIP bet for a smurf: the stranger's FLIP burns, the owner's does not; the
-    ///      smurf's boon is untouched; the stranger earns the quest; the bet is the smurf's.
-    function test_StrangerFlipBetForSmurf_IsAGiftFundedByTheCaller() public {
-        _grantBoon(smurfId, CURRENCY_FLIP, 3);
-        uint256 boonLane = _lane(smurfId, CURRENCY_FLIP);
+    /// @dev A stranger's FLIP bet for an account: the stranger's FLIP burns, the account wallet's
+    ///      does not; the account's boon is untouched; the stranger earns the quest.
+    function test_StrangerFlipBetForAccount_IsAGiftFundedByTheCaller() public {
+        _grantBoon(ownerId, CURRENCY_FLIP, 3);
+        uint256 boonLane = _lane(ownerId, CURRENCY_FLIP);
         _fundFlip(giver, 10_000);
         _fundFlip(owner, 10_000);
 
-        _expectQuest(giverId, smurfId);
-        (uint256 bet, uint32 betOwner) = _bet(giver, smurfId, CURRENCY_FLIP, 1_000, 3, 0);
+        _expectQuest(giverId, ownerId);
+        (uint256 bet, uint32 betOwner) = _bet(giver, ownerId, CURRENCY_FLIP, 1_000, 3, 0);
 
-        assertEq(uint32(bet), smurfId, "the bet belongs to the smurf's ID");
-        assertEq(betOwner, _fixtureId(smurfId), "the placement event names the smurf key");
+        assertEq(uint32(bet), ownerId, "the bet belongs to the account's ID");
+        assertEq(betOwner, ownerId, "the placement event names the account");
         assertEq(coin.balanceOf(giver), 7_000, "the giver's FLIP burned");
-        assertEq(coin.balanceOf(owner), 10_000, "the owner's FLIP is untouched");
-        assertEq(_lane(smurfId, CURRENCY_FLIP), boonLane, "the smurf's boon is untouched");
+        assertEq(coin.balanceOf(owner), 10_000, "the account wallet's FLIP is untouched");
+        assertEq(_lane(ownerId, CURRENCY_FLIP), boonLane, "the account's boon is untouched");
         assertEq(_stakeUnits(bet), 1_000, "no boon boost on a gift");
     }
 
@@ -165,75 +162,107 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     // Acting for an account (not a gift)
     // ---------------------------------------------------------------------
 
-    /// @dev The owner's FLIP bet for its smurf: the owner's FLIP burns (payee), the smurf earns the
-    ///      quest, and the smurf's boon is spent on the bet.
-    function test_OwnerFlipBetForSmurf_BurnsOwnerFlipAndSpendsSmurfBoon() public {
-        _grantBoon(smurfId, CURRENCY_FLIP, 3);
+    /// @dev The wallet's FLIP bet naming its own ID: its FLIP burns, it earns the quest, and its
+    ///      boon is spent on the bet.
+    function test_WalletFlipBetForOwnId_BurnsItsFlipAndSpendsItsBoon() public {
+        _grantBoon(ownerId, CURRENCY_FLIP, 3);
         _fundFlip(owner, 10_000);
 
-        _expectQuest(smurfId, ownerId);
-        (uint256 bet, uint32 betOwner) = _bet(owner, smurfId, CURRENCY_FLIP, 1_000, 3, 0);
+        _expectQuest(ownerId, giverId);
+        (uint256 bet, uint32 betOwner) = _bet(owner, ownerId, CURRENCY_FLIP, 1_000, 3, 0);
 
-        assertEq(uint32(bet), smurfId, "the bet belongs to the smurf's ID");
-        assertEq(betOwner, _fixtureId(smurfId), "the placement event names the smurf key");
-        assertEq(coin.balanceOf(owner), 7_000, "the owner's FLIP burned");
-        assertEq(_lane(smurfId, CURRENCY_FLIP) & 3, 0, "the smurf's boon was spent");
+        assertEq(uint32(bet), ownerId, "the bet belongs to the account's ID");
+        assertEq(betOwner, ownerId, "the placement event names the account");
+        assertEq(coin.balanceOf(owner), 7_000, "the wallet's FLIP burned");
+        assertEq(_lane(ownerId, CURRENCY_FLIP) & 3, 0, "the account's boon was spent");
         assertGt(_stakeUnits(bet), 1_000, "the boon boosted the packed stake");
     }
 
-    /// @dev The owner's ETH bet for its smurf with no fresh ETH: the smurf's claimable funds it,
-    ///      the owner's ledger does not; the smurf earns the quest; the smurf's ETH boon is spent.
-    function test_OwnerEthBetForSmurf_SmurfClaimableFundsIt() public {
-        _grantBoon(smurfId, CURRENCY_ETH, 1);
-        ext.x_creditClaimable(smurfId, 1 ether);
+    /// @dev An operator's ETH bet for the account with no fresh ETH: the account's claimable funds
+    ///      it, the operator's ledger does not; the account earns the quest; its ETH boon is spent.
+    function test_OperatorEthBetForAccount_AccountClaimableFundsIt() public {
+        _giveWalletId(operator);
+        uint32 operatorId = game.walletIdOf_g3120(operator);
+        vm.prank(owner);
+        game.setOperatorApproval(ownerId, operator, true);
+        _grantBoon(ownerId, CURRENCY_ETH, 1);
         ext.x_creditClaimable(ownerId, 1 ether);
-        uint256 smurfClaimable = _fixtureClaimable(smurfId);
-        uint256 ownerClaimable = _fixtureClaimable(owner);
-        uint256 ownerEth = owner.balance;
+        ext.x_creditClaimable(operatorId, 1 ether);
+        uint256 accountClaimable = _fixtureClaimable(ownerId);
+        uint256 operatorClaimable = _fixtureClaimable(operatorId);
+        uint256 operatorEth = operator.balance;
 
-        _expectQuest(smurfId, ownerId);
-        (uint256 bet,) = _bet(owner, smurfId, CURRENCY_ETH, 0.01 ether, 4, 0);
+        _expectQuest(ownerId, operatorId);
+        (uint256 bet,) = _bet(operator, ownerId, CURRENCY_ETH, 0.01 ether, 4, 0);
 
-        assertEq(uint32(bet), smurfId, "the bet belongs to the smurf's ID");
-        assertEq(smurfClaimable - _fixtureClaimable(smurfId), 0.04 ether, "the smurf's claimable funded it");
-        assertEq(_fixtureClaimable(owner), ownerClaimable, "the owner's claimable is untouched");
-        assertEq(owner.balance, ownerEth, "no fresh ETH moved");
-        assertEq(_lane(smurfId, CURRENCY_ETH) & 3, 0, "the smurf's boon was spent");
+        assertEq(uint32(bet), ownerId, "the bet belongs to the account's ID");
+        assertEq(accountClaimable - _fixtureClaimable(ownerId), 0.04 ether, "the account's claimable funded it");
+        assertEq(_fixtureClaimable(operatorId), operatorClaimable, "the operator's claimable is untouched");
+        assertEq(operator.balance, operatorEth, "no fresh ETH moved");
+        assertEq(_lane(ownerId, CURRENCY_ETH) & 3, 0, "the account's boon was spent");
         assertGt(_stakeUnits(bet), 0.01 ether / 1 gwei, "the boon boosted the packed stake");
     }
 
-    /// @dev An operator approved for the smurf acts for it: FLIP burns from the owner (the
-    ///      payee), never from the operator, and the smurf earns the quest.
-    function test_OperatorFlipBetForSmurf_BurnsFromThePayee() public {
+    /// @dev An operator approved for the account acts for it: FLIP burns from the payee, never
+    ///      from the operator, and the account earns the quest.
+    function test_OperatorFlipBetForAccount_BurnsFromThePayee() public {
         vm.prank(owner);
-        game.setOperatorApproval(smurfId, operator, true);
+        game.setOperatorApproval(ownerId, operator, true);
         _fundFlip(owner, 10_000);
         _fundFlip(operator, 10_000);
 
-        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette_g3.selector, smurfId), 1);
-        (uint256 bet,) = _bet(operator, smurfId, CURRENCY_FLIP, 500, 2, 0);
+        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette_g3.selector, ownerId), 1);
+        (uint256 bet,) = _bet(operator, ownerId, CURRENCY_FLIP, 500, 2, 0);
 
-        assertEq(uint32(bet), smurfId, "the bet belongs to the smurf's ID");
-        assertEq(coin.balanceOf(owner), 9_000, "the owner's FLIP burned");
+        assertEq(uint32(bet), ownerId, "the bet belongs to the account's ID");
+        assertEq(coin.balanceOf(owner), 9_000, "the payee's FLIP burned");
         assertEq(coin.balanceOf(operator), 10_000, "the operator's FLIP is untouched");
     }
 
-    /// @dev An operator approved on the OWNER's ID is a stranger to the smurf: its bet for the
-    ///      smurf is a gift it funds itself.
-    function test_OwnerIdOperatorBetForSmurf_IsAGift() public {
+    /// @dev Approvals are per account ID: an operator of one account betting for another makes a
+    ///      gift it funds itself.
+    function test_OperatorOfAnotherAccount_BetIsAGift() public {
         vm.prank(owner);
         game.setOperatorApproval(0, operator, true);
-        _fundFlip(owner, 10_000);
+        _fundFlip(recipient, 10_000);
         _fundFlip(operator, 10_000);
-        _grantBoon(smurfId, CURRENCY_FLIP, 2);
-        uint256 boonLane = _lane(smurfId, CURRENCY_FLIP);
+        _grantBoon(recipientId, CURRENCY_FLIP, 2);
+        uint256 boonLane = _lane(recipientId, CURRENCY_FLIP);
 
-        (uint256 bet,) = _bet(operator, smurfId, CURRENCY_FLIP, 500, 2, 0);
+        (uint256 bet,) = _bet(operator, recipientId, CURRENCY_FLIP, 500, 2, 0);
 
-        assertEq(uint32(bet), smurfId, "the bet belongs to the smurf's ID");
+        assertEq(uint32(bet), recipientId, "the bet belongs to the recipient's ID");
         assertEq(coin.balanceOf(operator), 9_000, "the gifting operator's FLIP burned");
-        assertEq(coin.balanceOf(owner), 10_000, "the owner's FLIP is untouched");
-        assertEq(_lane(smurfId, CURRENCY_FLIP), boonLane, "the smurf's boon is untouched");
+        assertEq(coin.balanceOf(recipient), 10_000, "the recipient's FLIP is untouched");
+        assertEq(_lane(recipientId, CURRENCY_FLIP), boonLane, "the recipient's boon is untouched");
         assertGt(game.walletIdOf_g3120(operator), 0, "the gifting operator registered as the funder");
+    }
+
+    // ---------------------------------------------------------------------
+    // After seizure
+    // ---------------------------------------------------------------------
+
+    function test_SellerBetAfterVaultSeizure_IsAGift() public { _sellerGift(VAULT_ID); }
+
+    function test_SellerBetAfterSdgnrsSeizure_IsAGift() public { _sellerGift(SDGNRS_ID); }
+
+    /// @dev The former wallet's bet for the seized account is a gift funded by the seller; the
+    ///      lender's FLIP and the account's boon are untouched.
+    function _sellerGift(uint32 lender) private {
+        _acquire(owner, ownerId, lender);
+        _openBetBuffer();
+        address lenderAddr = _lenderAddress(lender);
+        _grantBoon(ownerId, CURRENCY_FLIP, 2);
+        uint256 boonLane = _lane(ownerId, CURRENCY_FLIP);
+        _fundFlip(owner, 10_000);
+        uint256 lenderFlip = coin.balanceOf(lenderAddr);
+
+        (uint256 bet,) = _bet(owner, ownerId, CURRENCY_FLIP, 500, 2, 0);
+
+        assertEq(uint32(bet), ownerId, "the bet belongs to the acquired account");
+        assertEq(coin.balanceOf(owner), 9_000, "the seller funded the gift");
+        assertEq(coin.balanceOf(lenderAddr), lenderFlip, "the lender's FLIP is untouched");
+        assertEq(_lane(ownerId, CURRENCY_FLIP), boonLane, "the account's boon is untouched");
+        assertTrue(game.walletIdOf_g3120(owner) != ownerId, "the seller funds from a fresh account");
     }
 }

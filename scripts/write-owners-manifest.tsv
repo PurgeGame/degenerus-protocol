@@ -70,7 +70,6 @@ OWNER	_loans	modules/GamePurchase.sol	Borrow writes the packed loan; repay repla
 OWNER	_loansDueCount	modules/GamePurchase.sol	borrow increments and repay decrements the due level's open-loan count (sole writer); settlement only reads it and leaves the count behind.
 OWNER	_pendingBoxCount	modules/GameAfkingModule.sol	runSubscriberWork batches stamped-box increments; the monotonic opener decrements each paid obligation exactly once
 OWNER	_sdgnrsBonusLevel	modules/GameAfkingModule.sol	runSubscriberWork latches the level at which SDGNRS's bonus box fired; sole writer
-OWNER	_smurfWords	modules/GamePurchase.sol	createSmurf appends each new smurf ID to its owner's append-only list (sole writer); the list length is the owner's SMURF_COUNT. A main's loan seizure (GameAfkingModule.cancelLiquidatedSubscriptions, AdvanceModule._seizeLoan) only reads it.
 OWNER	_subBoxCount	modules/GameAfkingModule.sol	Box-section membership maintained by insert, mode change and same-section removal
 OWNER	_subCursor	modules/GameAfkingModule.sol	runSubscriberWork persists the advanced chunk cursor; the crank resets it once per day
 OWNER	_subCursor	modules/GameMiner.sol	Internalized component retains the reviewed writer role: Miner resets the subscriber cursor only when beginning a new pinned preparation day; AFKing owns batch advancement.
@@ -182,7 +181,6 @@ OWNER	mintPacked_	modules/DegenerusGameBoonModule.sol	_creditActivity bumps LEVE
 OWNER	mintPacked_	modules/DegenerusGameMintStreakUtils.sol	_recordMintData/_recordMintStreakForLevel/_applyCurseStack/_clearCurse and _playerActivityScoreCachedAt: mint-data field mutators inherited by modules; cached scoring writes only affiliate bits beside durable purchase history after a STATICCALL
 OWNER	mintPacked_	modules/DegenerusGameWhaleModule.sol	purchaseWhalePass/purchaseDeityPass write the pass fields from the entry read; _grantSeatCoin sets SEAT_CLAIMED last in the function so no later whole-word write clobbers it
 OWNER	mintPacked_	modules/GameBoonActions.sol	Internalized component retains the reviewed writer role: _creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated
-OWNER	mintPacked_	modules/GamePurchase.sol	createSmurf initializes the fresh child flag and increments the main ID lifetime count in bits 224..239; raiseSmurfBaseAllowance writes only bits 240..255; both preserve neighboring fields before stateful external calls
 OWNER	operatorApprovals	modules/GameActions.sol	Player-controlled operator permission mapping; cannot authorize mutation of committed RNG inputs.
 OWNER	phaseTransitionActive	modules/DegenerusGameAdvanceModule.sol	_endPhase sets; advanceGame clears at transition close; sole writer
 OWNER	prizePoolFrozen	modules/DegenerusGameAdvanceModule.sol	_freezePool/_unfreezePool own the freeze; unfreeze folds pending into live

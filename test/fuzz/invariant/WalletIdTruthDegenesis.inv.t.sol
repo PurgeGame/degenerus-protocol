@@ -42,7 +42,6 @@ contract WalletIdTruthDegenesisWeek is WalletIdTruthInvariant, DegenesisWeekOpen
             if (i < 4) {
                 vm.prank(a);
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
-                _grantSmurfBase(a, 8);
             }
         }
         _driveDay(1);

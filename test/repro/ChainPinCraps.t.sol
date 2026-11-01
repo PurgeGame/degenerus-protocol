@@ -616,7 +616,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         assertEq(sdgnrsId, 2);
     }
 
-    /// @dev F6 / A-F8: every allocated winner id (protocol, main, smurf) has a nonzero payee, and
+    /// @dev F6 / A-F8: every allocated winner id (protocol and ordinary) has a nonzero payee, and
     ///      the dice-run record path (`armDiceRunRecord` -> `payRecordSdgnrs` -> `recordSet`) takes
     ///      it. A zero id reverts, which is why the producer must never pass one.
     function test_F6_everyAllocatedWinnerTakesTheDiceRunRecord() public {
@@ -626,11 +626,8 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         _giveWalletId(m1);
         _giveWalletId(m2);
         _giveWalletId(m3);
-        _grantSmurfBase(m1, 2);
-        vm.deal(m1, 10 ether);
-        (,,,, uint256 price) = game.purchaseInfo_g1027();
-        vm.prank(m1);
-        game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
+        _giveWalletId(makeAddr("pin-main-4"));
+        _giveWalletId(makeAddr("pin-main-5"));
 
         uint32 n;
         for (uint32 id = 1;; ++id) {

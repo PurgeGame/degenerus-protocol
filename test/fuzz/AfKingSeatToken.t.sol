@@ -11,7 +11,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title AfKingSeatToken — integration tests for the AFKing seat ERC721 on a real deploy:
 ///        the pass-purchase seat latch (whale module -> mintPacked_ SEAT_CLAIMED, read back
-///        through mintPackedFor; per account, a smurf's seat minted to its owner), immediate
+///        through mintPackedFor; per account, the seat minted to the account's payee), immediate
 ///        buyer minting, the subscribe seat burn, the vault mint and restyle surface, the
 ///        cancel removal, and the RNG freeze window. The token sits at the
 ///        predicted AFKING_SUB_TOKEN address; SDGNRS holds serial 1 and the vault serial 2.
@@ -188,30 +188,35 @@ contract AfKingSeatToken is SeatFixture {
         );
     }
 
-    /// @notice M13: the latch is per account. A smurf's pass mints its seat to the owner (the
-    ///         payee) and latches SEAT_CLAIMED on the smurf's word; the owner's own first pass
-    ///         still mints the owner a second free seat.
-    function testSmurfPassSeatGoesToTheOwnerWithAPerAccountLatch() public {
-        address owner = makeAddr("smurf-pass-owner");
-        vm.deal(owner, 10 ether);
-        // The owner registers through a plain ticket purchase (no pass, no seat).
-        vm.prank(owner);
+    /// @notice The latch is per account. An operator's pass for another account mints the seat to
+    ///         that account's payee and latches SEAT_CLAIMED on its word; the operator's own first
+    ///         pass still mints the operator a free seat.
+    function testOperatorPassSeatGoesToThePayeeWithAPerAccountLatch() public {
+        address operator = makeAddr("pass-operator");
+        address holder = makeAddr("pass-holder");
+        vm.deal(operator, 10 ether);
+        vm.deal(holder, 10 ether);
+        // Both register through a plain ticket purchase (no pass, no seat).
+        vm.prank(operator);
         game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        assertEq(afkingSubToken.balanceOf(owner), 0);
-        _grantSmurfBase(owner, 1);
-        uint32 smurfId = _createSmurf(owner);
+        vm.prank(holder);
+        game.purchaseOrderFor{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        uint32 holderId = game.walletIdOf_g3120(holder);
+        vm.prank(holder);
+        game.setOperatorApproval(holderId, operator, true);
 
-        vm.prank(owner);
-        game.purchaseLazyPass{value: 0.24 ether}(smurfId, bytes32(0));
-        assertEq(afkingSubToken.balanceOf(owner), 1, "the smurf's seat mints to the owner");
-        assertEq((game.mintPackedOfId_g5372(smurfId) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1, 1, "subaccount latch");
-        assertFalse(_isEligible(owner), "owner's own latch untouched");
+        vm.prank(operator);
+        game.purchaseLazyPass{value: 0.24 ether}(holderId, bytes32(0));
+        assertEq(afkingSubToken.balanceOf(holder), 1, "the account's seat mints to its payee");
+        assertEq(afkingSubToken.balanceOf(operator), 0, "nothing to the operator");
+        assertEq((game.mintPackedOfId_g5372(holderId) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1, 1, "the account's latch");
+        assertFalse(_isEligible(operator), "the operator's own latch untouched");
         assertEq(afkingSubToken.freeClaims(), 1);
 
-        vm.prank(owner);
+        vm.prank(operator);
         game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
-        assertEq(afkingSubToken.balanceOf(owner), 2, "owner's own pass mints a second free seat");
-        assertTrue(_isEligible(owner), "owner latched now");
+        assertEq(afkingSubToken.balanceOf(operator), 1, "the operator's own pass mints its free seat");
+        assertTrue(_isEligible(operator), "the operator latched now");
         assertEq(afkingSubToken.freeClaims(), 2);
     }
 

@@ -16,7 +16,6 @@ import {TerminalLoanBase} from "./TerminalLoanSettlement.t.sol";
 ///         account's balances stay where they were; every loan settles exactly once; and the
 ///         ending then pays out with the Game still covering every obligation.
 contract TerminalLoanConservationTest is TerminalLoanBase {
-    uint32 internal constant VAULT_ID = 1;
 
     function setUp() public {
         _deployProtocol();

@@ -23,7 +23,7 @@ contract BoundedDeityPurchaseGasTest is BoundedDeployProtocol, BoundedGasProbe {
 }
 
 contract BoundedDeitySeizureGasTest is LoanSeizureGasBase, BoundedGasProbe {
-    function setUp() public { _setUpCase(5, true, true, true); }
+    function setUp() public { _setUpCase(true, true, true); }
     function test_G4_LastSymbolSeizure() public {
         _etch();
         _measureBounded("G4_seize_symbol31", address(game), address(this), 0,

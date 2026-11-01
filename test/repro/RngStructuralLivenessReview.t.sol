@@ -40,7 +40,6 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
     bytes32 private constant SPIN = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
     address private owner;
     uint32 private root;
-    uint32 private child;
 
     function setUp() public {
         _deployProtocol();
@@ -49,11 +48,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         _idle();
         owner = address(new RngReviewRejectEther());
         root = _giveWalletId(owner);
-        _grantSmurfBase(owner, 1);
         vm.deal(owner, 100 ether);
-        uint256 price = game.mintPrice();
-        vm.prank(owner);
-        child = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
         vm.prank(address(game));
         coin.mintForGame_g152734(owner, 100_000);
     }
@@ -121,30 +116,33 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
             coinflip.coinflipAmountById(id), wwxrp.claimable(id), coin.balanceOf(owner), sdgnrs.balanceOf(owner)));
     }
 
-    function testFuzz_RejectingSmurfPayeeAndGasPartitionKeepTheSameResults(uint256 word) public {
-        _queue(owner, child, 100);
-        _queue(owner, child, 100);
+    function testFuzz_RejectingPayeeAndGasPartitionKeepTheSameResults(uint256 word) public {
+        _queue(owner, root, 100);
+        _queue(owner, root, 100);
         _requestMidday(word);
         uint256 snapshot = vm.snapshotState();
         (bytes32 transcript, uint256 bets, uint256 fullCalls) = _drain(1 << 24, address(0xCA11));
         assertEq(bets, 4);
-        bytes32 balances = _balances(child);
+        bytes32 balances = _balances(root);
         assertTrue(vm.revertToStateAndDelete(snapshot));
         (bytes32 splitTranscript, uint256 splitBets, uint256 splitCalls) = _drain(4_600_000, address(0xCA12));
         assertEq(splitBets, 4);
         assertGt(splitCalls, fullCalls, "the comparison must actually partition work differently");
         assertEq(splitTranscript, transcript, "caller and gas partition cannot choose outcomes");
-        assertEq(_balances(child), balances, "same account and token rewards");
+        assertEq(_balances(root), balances, "same account and token rewards");
     }
 
     function test_ShorterReusedCohortDoesNotReplayRetainedEntries() public {
+        address filler = makeAddr("rng-review-filler");
+        vm.deal(filler, 100 ether);
+        uint32 fillerId = _giveWalletId(filler);
         for (uint256 cycle; cycle < 3; ++cycle) {
             uint256 count = cycle == 0 ? 100 : 1;
-            _queue(owner, child, count);
-            if (cycle == 0) _queue(owner, child, count);
+            _queue(owner, root, count);
+            if (cycle == 0) _queue(owner, root, count);
             // Keep the request above the threshold without enlarging the tested order.
-            vm.prank(owner);
-            game.purchaseOrderFor{value: 1.1 ether}(root, 0, BoxOrderLib.boCustom(1.1 ether), 0, MintPaymentKind.DirectEth, false);
+            vm.prank(filler);
+            game.purchaseOrderFor{value: 1.1 ether}(fillerId, 0, BoxOrderLib.boCustom(1.1 ether), 0, MintPaymentKind.DirectEth, false);
             uint48 write = RecyclingState.writeBuffer(address(game));
             uint256 expected = cycle == 0 ? 4 : 2;
             assertEq(RecyclingState.betCount(address(game), write), expected);
@@ -154,18 +152,14 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         }
     }
 
-    function test_MiddaySeizurePreservesQueuedFamilyAndLaterRequests() public {
+    function test_MiddaySeizurePreservesQueuedWorkAndLaterRequests() public {
         address seller = makeAddr("rng-review-seller");
         vm.deal(seller, 100 ether);
         uint32 sellerRoot = _giveWalletId(seller);
-        _grantSmurfBase(seller, 1);
-        uint256 price = game.mintPrice();
-        vm.prank(seller);
-        uint32 sellerChild = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
         vm.prank(address(game)); coin.mintForGame_g152734(seller, 100_000);
         // A real whale purchase gives the root far-future inventory and a positive loan quote.
         vm.prank(seller); game.purchaseWhalePass{value: 2.4 ether}(sellerRoot, 1, 0);
-        _queue(seller, sellerChild, 100);
+        _queue(seller, sellerRoot, 100);
         GameFunding.credit(2, 100 ether);
         _requestMidday(0x5101D);
         uint256 snapshot = vm.snapshotState();
@@ -180,7 +174,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         vm.etch(address(game), address(new RngReviewSeizer()).code);
         RngReviewSeizer(address(game)).seizeDueInPlace(due);
         vm.etch(address(game), runtime);
-        (, address payee, bool authorized) = game.resolveAccount_g7029(sellerChild, seller);
+        (, address payee, bool authorized) = game.resolveAccount_g7029(sellerRoot, seller);
         assertEq(payee, address(sdgnrs));
         assertFalse(authorized);
         assertEq(game.walletIdOf_g3120(seller), 0);

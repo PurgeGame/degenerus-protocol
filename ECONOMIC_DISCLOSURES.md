@@ -193,13 +193,15 @@ obligations retain their specified protections.
 
 - **VRF-alive ending (purchase timeout).** The game-over path settles every outstanding loan, then
   requests its own terminal word after liveness freezes purchases and latches the terminal cohort.
-  After existing claims and applicable paid-deity refunds are reserved, the whole distributable pool
-  goes to the terminal level's ticket jackpot.
+  After existing claims are reserved, the whole distributable pool goes to the terminal level's
+  ticket jackpot. This ending refunds no deity pass; a deity holder can still win terminal ticket
+  prizes through its tickets.
 - **Deterministic dead-VRF ending.** Fourteen days without a completed daily session, or a request
   whose word is still not in use 14 days after it was sent (including a terminal request), takes
   this path even if the coordinator would still answer. This path starts no new loan settlement,
-  terminal request or jackpot draw; earlier loan settlements remain effective: after claims and
-  deity refunds are reserved, the remaining pool is shared across the terminal level's tickets
+  terminal request or jackpot draw; earlier loan settlements remain effective: after claims are reserved and, below
+  level 10, paid deity passes are refunded (the lesser of the price paid and 20 ETH, in purchase
+  order, within the available funds), the remaining pool is shared across the terminal level's tickets
   through `claimDeadVrf`.
 - **Final sweep.** **30 days after terminal payout completes** (`GO_TIME`, stamped when the terminal
   jackpot finishes or the hard-stall pot is fixed), the Vault, sDGNRS and GNRUS receive their own

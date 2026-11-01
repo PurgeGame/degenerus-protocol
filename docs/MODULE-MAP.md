@@ -52,7 +52,6 @@ Deployment aliases: `GAME`.
 | `clearDebtNow(uint32)` (`0x23e87f7e`) | [GameFacade.clearDebtNow](../contracts/modules/GameFacade.sol) | [Eip170Purchase](#eip170purchase).`clearDebtNow` |
 | `consumeCoinflipBoon_g2902(uint32)` (`0x000af7d3`) | [GameFacade.consumeCoinflipBoon_g2902](../contracts/modules/GameFacade.sol) | None |
 | `consumeDecimatorBoon(uint32)` (`0x19c5bdb1`) | [GameFacade.consumeDecimatorBoon](../contracts/modules/GameFacade.sol) | [Eip170Boon](#eip170boon).`consumeDecimatorBoon` |
-| `createSmurf(bytes32,uint8)` (`0xf4824be2`) | [GameFacade.createSmurf](../contracts/modules/GameFacade.sol) | [Eip170Purchase](#eip170purchase).`createSmurf` |
 | `creditMiddayRng(address,uint256)` (`0xc319ce1a`) | [GameFacade.creditMiddayRng](../contracts/modules/GameFacade.sol) | [Eip170MinerRng](#eip170minerrng).`creditMiddayRng` |
 | `creditRedemptionDirect(uint32,uint256)` (`0xca0519e7`) | [GameFacade.creditRedemptionDirect](../contracts/modules/GameFacade.sol) | [Eip170Lootbox](#eip170lootbox).`creditRedemptionDirect` |
 | `currentDayView_g542950()` (`0x000002ea`) | [GameFacade.currentDayView_g542950](../contracts/modules/GameFacade.sol) | None |
@@ -116,7 +115,6 @@ Deployment aliases: `GAME`.
 | `purchaseLazyPass(uint32,bytes32)` (`0x0811f604`) | [GameFacade.purchaseLazyPass](../contracts/modules/GameFacade.sol) | [Eip170Whale](#eip170whale).`purchaseLazyPass` |
 | `purchaseOrderFor(uint32,uint256,uint256,bytes32,uint8,bool)` (`0x0049ad2f`) | [GameFacade.purchaseOrderFor](../contracts/modules/GameFacade.sol) | [Eip170DegenesisFoil](#eip170degenesisfoil).`purchaseWithFoil`; [Eip170Purchase](#eip170purchase).`purchase` |
 | `purchaseWhalePass(uint32,uint256,bytes32)` (`0x9e2dbae4`) | [GameFacade.purchaseWhalePass](../contracts/modules/GameFacade.sol) | [Eip170Whale](#eip170whale).`purchaseWhalePass` |
-| `raiseSmurfBaseAllowance(uint32,uint16)` (`0x9f244a6f`) | [GameFacade.raiseSmurfBaseAllowance](../contracts/modules/GameFacade.sol) | [Eip170Actions](#eip170actions).`raiseSmurfBaseAllowance` |
 | `rawFulfillRandomWords(uint256,uint256[])` (`0x1fe543e3`) | [GameFacade.rawFulfillRandomWords](../contracts/modules/GameFacade.sol) | None |
 | `recordAfkingSecondary_g3316(uint32,uint16)` (`0x204154c4`) | [GameFacade.recordAfkingSecondary_g3316](../contracts/modules/GameFacade.sol) | [Eip170Actions](#eip170actions).`recordAfkingSecondary_g3316` |
 | `recordDecBurn_g1271(uint32,uint24,uint256,uint256,uint32)` (`0x205fb9a2`) | [GameFacade.recordDecBurn_g1271](../contracts/modules/GameFacade.sol) | [Eip170Decimator](#eip170decimator).`recordDecBurn_g1271` |
@@ -177,7 +175,6 @@ Deployment aliases: `GAME_ACTIONS_MODULE, GAME_BINGO_MODULE`.
 | `floorAfkingStreakBase(uint32,uint16)` (`0x49e92b29`) | [GameActionEntries.floorAfkingStreakBase](../contracts/modules/GameActionEntries.sol) | None |
 | `gameOver()` (`0xbdb337d1`) | Compiler-generated getter | None |
 | `payRecordSdgnrs(uint32,uint256)` (`0x207400a5`) | [GameActionEntries.payRecordSdgnrs](../contracts/modules/GameActionEntries.sol) | None |
-| `raiseSmurfBaseAllowance(uint32,uint16)` (`0x9f244a6f`) | [GameAllowanceEntries.raiseSmurfBaseAllowance](../contracts/modules/GameAllowanceEntries.sol) | None |
 | `recordAfkingSecondary_g3316(uint32,uint16)` (`0x204154c4`) | [GameActionEntries.recordAfkingSecondary_g3316](../contracts/modules/GameActionEntries.sol) | None |
 | `registerWalletIdentity(address)` (`0x78b5a06a`) | [GameActionEntries.registerWalletIdentity](../contracts/modules/GameActionEntries.sol) | None |
 | `registerWallet_g9539(address,bool)` (`0x0007480c`) | [GameActionEntries.registerWallet_g9539](../contracts/modules/GameActionEntries.sol) | None |
@@ -195,7 +192,6 @@ Deployment aliases: `GAME_PURCHASE_MODULE`.
 | `boonPacked(uint32)` (`0x401fe997`) | Compiler-generated getter | None |
 | `borrow(uint32,uint24,uint256,uint256)` (`0x03604169`) | [GamePurchaseEntries.borrow](../contracts/modules/GamePurchaseEntries.sol) | None |
 | `clearDebtNow(uint32)` (`0x23e87f7e`) | [GamePurchaseEntries.clearDebtNow](../contracts/modules/GamePurchaseEntries.sol) | None |
-| `createSmurf(bytes32,uint8)` (`0xf4824be2`) | [GamePurchaseEntries.createSmurf](../contracts/modules/GamePurchaseEntries.sol) | None |
 | `gameOver()` (`0xbdb337d1`) | Compiler-generated getter | None |
 | `purchase(uint32,uint256,uint256,bytes32,uint8)` (`0x291c59d0`) | [GamePurchaseEntries.purchase](../contracts/modules/GamePurchaseEntries.sol) | None |
 | `redeemFlip(uint32,uint256)` (`0x377a4803`) | [GamePurchaseEntries.redeemFlip](../contracts/modules/GamePurchaseEntries.sol) | None |
@@ -362,7 +358,7 @@ Deployment aliases: `GAME_AFKING_MODULE`.
 | External entry (selector) | Implementing function | Direct delegate destinations |
 | --- | --- | --- |
 | `boonPacked(uint32)` (`0x401fe997`) | Compiler-generated getter | None |
-| `cancelLiquidatedSubscriptions(uint32,bool)` (`0x5c6ad7eb`) | [GameAfkingModule.cancelLiquidatedSubscriptions](../contracts/modules/GameAfkingModule.sol) | None |
+| `cancelLiquidatedSubscription(uint32)` (`0x64ee6175`) | [GameAfkingModule.cancelLiquidatedSubscription](../contracts/modules/GameAfkingModule.sol) | None |
 | `claimAfkingFlip(uint32[])` (`0xaadb9666`) | [GameAfkingModule.claimAfkingFlip](../contracts/modules/GameAfkingModule.sol) | None |
 | `decurse(uint32)` (`0x778b5824`) | [GameAfkingModule.decurse](../contracts/modules/GameAfkingModule.sol) | None |
 | `gameOver()` (`0xbdb337d1`) | Compiler-generated getter | None |
@@ -385,7 +381,7 @@ Deployment aliases: `GAME_GAMEOVER_MODULE`.
 | `gameOver()` (`0xbdb337d1`) | Compiler-generated getter | None |
 | `initVrf(address,uint256,bytes32)` (`0xc7cd0e48`) | [DegenerusGameGameOverModule.initVrf](../contracts/modules/DegenerusGameGameOverModule.sol) | None |
 | `runGameOverAdvance(uint24,uint24,uint256)` (`0x431a2267`) | [DegenerusGameGameOverModule.runGameOverAdvance](../contracts/modules/DegenerusGameGameOverModule.sol) | [Eip170DegenesisFoil](#eip170degenesisfoil).`splitDegenesis`; [Eip170TicketFoil](#eip170ticketfoil).`runTicketWork_g1150` |
-| `seizeLoan(uint32,uint32)` (`0xdedfd2e3`) | [DegenerusGameGameOverModule.seizeLoan](../contracts/modules/DegenerusGameGameOverModule.sol) | [Eip170Afking](#eip170afking).`cancelLiquidatedSubscriptions` |
+| `seizeLoan(uint32,uint32)` (`0xdedfd2e3`) | [DegenerusGameGameOverModule.seizeLoan](../contracts/modules/DegenerusGameGameOverModule.sol) | [Eip170Afking](#eip170afking).`cancelLiquidatedSubscription` |
 | `setThanosLevel(uint24,uint8)` (`0x6b20479b`) | [DegenerusGameGameOverModule.setThanosLevel](../contracts/modules/DegenerusGameGameOverModule.sol) | None |
 | `updateVrfCoordinatorAndSub(address,uint256,bytes32,uint32)` (`0x6c812791`) | [DegenerusGameGameOverModule.updateVrfCoordinatorAndSub](../contracts/modules/DegenerusGameGameOverModule.sol) | None |
 
@@ -604,7 +600,6 @@ Deployment aliases: `AFFILIATE`.
 | `payAffiliate(uint256,bytes32,uint32,uint256,bool,uint16)` (`0xbfbadbc7`) | [DegenerusAffiliate.payAffiliate](../contracts/DegenerusAffiliate.sol) | None |
 | `payAffiliateCombined_g3742656(bytes32,uint32,uint256,uint256,uint256,uint256,uint256,uint16)` (`0x00000005`) | [DegenerusAffiliate.payAffiliateCombined_g3742656](../contracts/DegenerusAffiliate.sol) | None |
 | `referPlayer(bytes32)` (`0xfb0b2610`) | [DegenerusAffiliate.referPlayer](../contracts/DegenerusAffiliate.sol) | None |
-| `referSmurf(uint32,uint32)` (`0xf3eb67cc`) | [DegenerusAffiliate.referSmurf](../contracts/DegenerusAffiliate.sol) | None |
 | `referrerIds(address)` (`0x06bb8ae6`) | [DegenerusAffiliate.referrerIds](../contracts/DegenerusAffiliate.sol) | None |
 | `referrerIdsById(uint32)` (`0xd7668d88`) | [DegenerusAffiliate.referrerIdsById](../contracts/DegenerusAffiliate.sol) | None |
 | `totalAffiliateScore(uint24)` (`0x2bc165f4`) | [DegenerusAffiliate.totalAffiliateScore](../contracts/DegenerusAffiliate.sol) | None |
@@ -1036,8 +1031,6 @@ Deployment aliases: `optional reader/renderer`.
 | `protocolBoonPool(address,address,uint24)` (`0xf8e3adf9`) | [DegenerusGameLens.protocolBoonPool](../contracts/DegenerusGameLens.sol) | None |
 | `protocolBoonQuote(address,address,uint256)` (`0xf4a91043`) | [DegenerusGameLens.protocolBoonQuote](../contracts/DegenerusGameLens.sol) | None |
 | `protocolBoonQuoteById(address,uint32,uint256)` (`0xf7deb3a9`) | [DegenerusGameLens.protocolBoonQuoteById](../contracts/DegenerusGameLens.sol) | None |
-| `smurfCreationInfo(address,uint32)` (`0x65435796`) | [DegenerusGameLens.smurfCreationInfo](../contracts/DegenerusGameLens.sol) | None |
-| `smurfsOf(address,uint32)` (`0xa3b9325d`) | [DegenerusGameLens.smurfsOf](../contracts/DegenerusGameLens.sol) | None |
 | `subInfoFull(address,address)` (`0x13cc169c`) | [DegenerusGameLens.subInfoFull](../contracts/DegenerusGameLens.sol) | None |
 | `subInfoFullById(address,uint32)` (`0xdc58db5e`) | [DegenerusGameLens.subInfoFullById](../contracts/DegenerusGameLens.sol) | None |
 | `walletIdOf(address,address)` (`0xbc27d0bd`) | [DegenerusGameLens.walletIdOf](../contracts/DegenerusGameLens.sol) | None |

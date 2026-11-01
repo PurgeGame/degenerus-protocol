@@ -28,7 +28,7 @@ interface IFlipCoin {
     /// @dev The paid-craps twin. Takes the price with action flags in its low byte and hands back
     ///      the one-hot craps-boon tier consumed by this burn (0 on every burn that consumed none).
     ///      The FLIP burn stays on `target`'s address, which is the account's PAYEE (the caller
-    ///      for a self door, a smurf's owner, or an ordinary account's own key); `id` is the
+    ///      for a self door, an ordinary account's own key, or an acquired account's lender); `id` is the
     ///      account's nonzero wallet ID, obtained by the table before the bet body, which keys
     ///      the craps boon lane and the craps quest. A comp burn ignores `id`.
     function burnCoinForCraps_g292454(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 boonMask);
@@ -53,7 +53,7 @@ interface IGameCraps {
     function mintPackedOfId_g5372(uint32 id) external view returns (uint256);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
-    ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
+    ///         (its payee, or an operator approved for an ordinary account). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. Player doors require `authorized`;
     ///         `vaultComp` uses only the payee.
     function resolveAccount_g7029(uint32 id, address caller)

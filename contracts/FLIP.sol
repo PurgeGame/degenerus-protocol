@@ -143,8 +143,8 @@ contract FLIP {
     /// @notice Decimator burn attempted outside an active decimator window.
     error NotDecimatorWindow();
 
-    /// @notice The caller may not act for the account: it is neither the account's key, a
-    ///         smurf's owner, nor an approved operator.
+    /// @notice The caller may not act for the account: it is neither the account's payee nor an
+    ///         approved operator.
     error NotApproved();
 
     /// @notice Supply values exceed uint128 bounds.
@@ -657,7 +657,7 @@ contract FLIP {
     ///      THE FULL GROSS IS ALWAYS BURNED. The boon is not a discount and pays nothing here: it
     ///      is carried back to the table as a one-hot mask and boosts only that slip's BANKROLL
     ///      RETURN when it settles, so nothing is credited until a run actually comes home.
-    /// @param player The buying account's payee, whose FLIP is burned (a smurf's owner for a smurf).
+    /// @param player The buying account's payee, whose FLIP is burned.
     /// @param id The buying account's wallet ID, which the table holds before the burn: it keys
     ///        the craps boon lane and the quest credit.
     /// @param grossAndFlags The encoded price: (whole FLIP << 8) | action flags.
@@ -761,7 +761,7 @@ contract FLIP {
     ///         account `id`.
     /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
     ///      `id == 0` is the caller; any other ID needs Game `resolveAccount` to authorize the
-    ///      caller (the account's key, a smurf's owner or an approved operator). The FLIP burns
+    ///      caller (the account's payee or an approved operator). The FLIP burns
     ///      from the account's payee (wallet balance, then the payee's settled coinflip winnings);
     ///      the quest, boon, activity multiplier and entry are the account's.
     ///      Quest and boon bonuses add chips before the degen and entry-day multipliers.

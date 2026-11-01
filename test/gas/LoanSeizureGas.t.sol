@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -55,18 +54,21 @@ contract SeizureGasSeeder is DegenerusGameStorage {
     }
 }
 
-/// @notice Cold cost of one loan seizure, the stage's per-loan admission estimate. Every account
-///         is built and the level armed in setUp, so the measured call reads each slot cold.
+/// @notice Cold cost of one loan settlement against its fixed admission bound
+///         (`LOAN_SEIZE + LOAN_SEIZE_TAIL`). Every account is built and the level armed in setUp,
+///         so the measured call reads each slot cold. Measured under the repository's Osaka gas
+///         schedule only. The heaviest seizure is an account with an
+///         active AFKing run, a deity pass on the last symbol the registry scan reaches and a
+///         native sDGNRS balance to burn.
 abstract contract LoanSeizureGasBase is DeployProtocol {
     address internal borrower;
     uint32 internal root;
-    uint256 internal family;
     bytes internal gameRuntime;
     address internal seeder;
     DegenerusGameLens internal lens;
 
-    function _setUpCase(uint256 smurfs, bool subscribed, bool deity, bool holdsSdgnrs) internal {
-        _setUpCase(smurfs, subscribed, deity, holdsSdgnrs, false);
+    function _setUpCase(bool subscribed, bool deity, bool holdsSdgnrs) internal {
+        _setUpCase(subscribed, deity, holdsSdgnrs, false);
     }
 
     function _setUpBase() internal {
@@ -76,7 +78,6 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         vm.deal(borrower, 1_000 ether);
         vm.deal(address(game), 10_000 ether);
         root = _giveWalletId(borrower);
-        _grantSmurfBase(borrower, 8);
         gameRuntime = address(game).code;
         seeder = address(new SeizureGasSeeder());
         lens = new DegenerusGameLens();
@@ -86,20 +87,13 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
     }
 
     /// @dev `terminal` leaves level 1 unentered: game over settles the loan instead.
-    function _setUpCase(uint256 smurfs, bool subscribed, bool deity, bool holdsSdgnrs, bool terminal) internal {
+    function _setUpCase(bool subscribed, bool deity, bool holdsSdgnrs, bool terminal) internal {
         _setUpBase();
         if (subscribed) _sub(root);
-        uint32 lastChild;
-        for (uint256 i; i < smurfs; ++i) {
-            uint256 price = game.mintPrice();
-            vm.prank(borrower);
-            lastChild = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-            if (subscribed) _sub(lastChild);
-        }
         if (deity) {
             vm.prank(borrower);
             // Symbol 31 is the last the seizure's registry scan reaches: its worst case.
-            game.purchaseDeityPass{value: 200 ether}(smurfs == 0 ? root : lastChild, 31, bytes32(0));
+            game.purchaseDeityPass{value: 200 ether}(root, 31, bytes32(0));
         }
         if (holdsSdgnrs) {
             vm.prank(address(game));
@@ -108,7 +102,6 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         vm.prank(borrower);
         game.borrow(root, 1, type(uint256).max, q.principal);
-        family = lens.loanOf(address(game), root).family;
         // One wei short of the repayment price (a one-level term costs its full term both at the
         // due level and at a game over before it): the auto-repay check reads everything, then defaults.
         DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), root);
@@ -143,45 +136,48 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         emit log_named_uint(label, used);
         (, address payee, ) = game.resolveAccount_g7029(root, address(0));
         assertEq(payee, expectedPayee, expectedPayee == borrower ? "auto-repaid" : "seized");
-        uint256 bound = MineFlipGasBounds.LOAN_SEIZE_BASE + family * MineFlipGasBounds.LOAN_SEIZE_SUB
-            + MineFlipGasBounds.LOAN_SEIZE_DEITY + MineFlipGasBounds.LOAN_SEIZE_TAIL;
+        uint256 bound = MineFlipGasBounds.LOAN_SEIZE + MineFlipGasBounds.LOAN_SEIZE_TAIL;
         emit log_named_uint("admission_bound", bound);
         assertLe(used, bound, "the admission estimate covers the cold seizure");
     }
 }
 
 contract LoanSeizureGasLone is LoanSeizureGasBase {
-    function setUp() public { _setUpCase(0, false, false, false); }
+    function setUp() public { _setUpCase(false, false, false); }
     function test_Gas_SeizeLoneAccount() public { _measure("seize_lone_cold"); }
 }
 
-contract LoanSeizureGasMainSdgnrs is LoanSeizureGasBase {
-    function setUp() public { _setUpCase(0, true, false, true); }
-    function test_Gas_SeizeMainWithRunAndSdgnrs() public { _measure("seize_main_run_sdgnrs_cold"); }
-}
-
-contract LoanSeizureGasFamily is LoanSeizureGasBase {
-    function setUp() public { _setUpCase(5, true, false, true); }
-    function test_Gas_SeizeMainWithFiveSubscribedSmurfs() public { _measure("seize_main_5_smurfs_6_runs_cold"); }
+contract LoanSeizureGasRunSdgnrs is LoanSeizureGasBase {
+    function setUp() public { _setUpCase(true, false, true); }
+    function test_Gas_SeizeAccountWithRunAndSdgnrs() public { _measure("seize_run_sdgnrs_cold"); }
 }
 
 contract LoanSeizureGasWorst is LoanSeizureGasBase {
-    function setUp() public { _setUpCase(5, true, true, true); }
-    function test_Gas_SeizeWorstFamilyWithDeitySmurf() public { _measure("seize_worst_family_deity_cold"); }
+    function setUp() public { _setUpCase(true, true, true); }
+
+    /// @dev The heaviest seizure: run cancellation, cold deity transfer on symbol 31 and the
+    ///      native sDGNRS burn. The fixed bound keeps at least 15% headroom over it.
+    function test_Gas_SeizeWorstAccountRunDeitySdgnrs() public {
+        uint256 used = _measure("seize_run_deity_sdgnrs_cold");
+        assertEq(deityPass.ownerOf(31), address(sdgnrs), "the deity pass follows the account");
+        assertEq(sdgnrs.balanceOf(borrower), 0, "the borrower's native sDGNRS is burned");
+        assertLe(used * 115 / 100, MineFlipGasBounds.LOAN_SEIZE + MineFlipGasBounds.LOAN_SEIZE_TAIL,
+            "admission margin");
+    }
 }
 
 /// @notice A borrower whose balances cover the full-term amount repays at the due level instead.
 contract LoanAutoRepayGas is LoanSeizureGasBase {
     function setUp() public {
-        _setUpCase(5, true, true, true);
+        _setUpCase(true, true, true);
         _setBalances(root, 1, 100 ether);
     }
-    function test_Gas_AutoRepayWorstFamily() public { _measureAs("auto_repay_worst_family_cold", borrower); }
+    function test_Gas_AutoRepayWorstAccount() public { _measureAs("auto_repay_worst_cold", borrower); }
 }
 
 /// @notice Game over's loan checkpoint through the full engine stack, cold: the decision ran in
-///         setUp (the purchase deadline, VRF alive), so the measured call settles the worst six-account deity
-///         family and scans every later due level in one transaction.
+///         setUp (the purchase deadline, VRF alive), so the measured call settles the worst
+///         account and scans every later due level in one transaction.
 abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
     uint256 private constant GO_LOAN_STEP_SHIFT = 64;
 
@@ -210,16 +206,15 @@ abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
 
 contract LoanTerminalGasWorst is LoanTerminalGasBase {
     function setUp() public {
-        _setUpCase(5, true, true, true, true);
+        _setUpCase(true, true, true, true);
         _decideTerminal();
     }
 
-    function test_Gas_TerminalWorstFamilyAndFullScan() public {
-        uint256 used = _measureTerminal("terminal_worst_family_and_99_level_scan_cold");
+    function test_Gas_TerminalWorstAccountAndFullScan() public {
+        uint256 used = _measureTerminal("terminal_worst_account_and_99_level_scan_cold");
         (, address payee, ) = game.resolveAccount_g7029(root, address(0));
         assertEq(payee, address(sdgnrs), "seized");
-        uint256 bound = MineFlipGasBounds.LOAN_SEIZE_BASE + family * MineFlipGasBounds.LOAN_SEIZE_SUB
-            + MineFlipGasBounds.LOAN_SEIZE_DEITY + 99 * MineFlipGasBounds.LOAN_TERMINAL_LEVEL
+        uint256 bound = MineFlipGasBounds.LOAN_SEIZE + 99 * MineFlipGasBounds.LOAN_TERMINAL_LEVEL
             + MineFlipGasBounds.LOAN_SEIZE_TAIL;
         emit log_named_uint("admission_bound_plus_scan", bound);
         assertLe(used, bound + MineFlipGasBounds.ENGINE_BOUNDARY + MineFlipGasBounds.ENGINE_RETURN,
@@ -244,7 +239,7 @@ contract LoanTerminalGasEmptyScan is LoanTerminalGasBase {
 
 /// @notice Player-paid entry points, for the record.
 contract LoanEntryGas is LoanSeizureGasBase {
-    function setUp() public { _setUpCase(0, false, false, false); }
+    function setUp() public { _setUpCase(false, false, false); }
 
     function test_Gas_BorrowAndRepay() public {
         address other = makeAddr("gas-other");

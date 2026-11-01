@@ -41,7 +41,6 @@ library OwnerActions {
             return selector == GameFacade.setLootboxRngThreshold.selector
                 || selector == GameFacade.setMiddayMaxBasefee.selector
                 || selector == GameFacade.setThanosLevel.selector
-                || selector == GameFacade.raiseSmurfBaseAllowance.selector
                 || selector == GameFacade.adminStakeEthForStEth.selector;
         }
         if (target == ContractAddresses.WWXRP) {

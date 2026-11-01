@@ -29,7 +29,6 @@ contract DegenerusGameMintModule is GamePurchase {
         _purchaseWith(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, payerId);
     }
     /// @dev Foil supplies payer 0; only restricted Degenesis spending supplies the Vault payer.
-    ///      Ordinary Vault-funded smurf creation uses GamePurchase directly.
     function _accruePurchaseDegenesisCredit(uint32, uint256) internal override {}
 
     function _accrueAdapterDegenesisCredit(uint32 buyerId, uint256 cost, uint32 payerId) internal override {

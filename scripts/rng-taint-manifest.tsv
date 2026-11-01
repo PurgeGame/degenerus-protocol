@@ -38,8 +38,6 @@ CLASS	kind	subject	function	file	rationale
 
 
 NOT-RNG	ARG	AffiliateEarningsLib.bonusScore	affiliateBonusPointsBest_g3878	DegenerusAffiliate.sol	Packed stake/affiliate storage; contains no RNG word.
-NOT-RNG	ARG	BitPackingLib.setPacked	_createSmurf	modules/GamePurchase.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy
-NOT-RNG	ARG	BitPackingLib.setPacked	_raiseSmurfBaseAllowance	modules/GamePurchase.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy
 PRODUCER	ARG	BoundedCall.callRemaining	_boundedVrfRequest	storage/DegenerusGameStorage.sol	Bounded VRF transport; only key/subscription/confirmation data leave; no previous outcome enters the request.
 CONSUMER-SEALED	ARG	ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall	_foilSpin	modules/DegenerusGameFoilCore.sol	delegatecall the box-spin resolver with the frozen seed and one selected hero symbol from the matched line, with all colors rerolled; no live input joins
 CONSUMER-SEALED	ARG	ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall	_localboxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	ETH-spin recirculation delegates to the same Box bundle with hash2(seed, BOX_RECIRC_TAG) and frozen score; allowEthSpin=false, no fresh entropy.

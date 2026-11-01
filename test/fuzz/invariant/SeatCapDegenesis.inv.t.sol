@@ -32,13 +32,9 @@ contract SeatCapDegenesis is SeatCapInvariant, DegenesisWeekOpening {
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, vaultOp, true),
             0
         )), 0), (bytes));
-        // Wallets 0..4 start registered, each holding its pass's free seat; wallets 0 and 1
-        // own a smurf. Wallets 5..9 start unregistered.
+        // Wallets 0..4 start registered, each holding its pass's free seat. Wallets 5..9 start
+        // unregistered.
         for (uint256 i; i < 5; ++i) handler.passPurchase(i);
-        for (uint256 i; i < 5; ++i) _grantSmurfBase(handler.wallets(i), 8);
-        handler.createSmurf(0);
-        handler.createSmurf(1);
-        require(handler.smurfIds(1) != 0, "fixture: two smurfs");
         targetContract(address(handler));
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: _selectors()}));
         _finishSubscriptionWindow();

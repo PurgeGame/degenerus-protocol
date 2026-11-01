@@ -37,7 +37,7 @@ contract BoundedPublicSeeder is DegenerusGameStorage, WalletSeed {
 contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
     address private constant PLAYER = address(0xA11CE);
     address private constant AFFILIATE = address(0xAFF1);
-    bytes32 private constant CODE = bytes32("bounded-affiliate");
+    bytes32 private constant CODE = bytes32("BOUNDEDAFFILIATE");
     uint32 private constant BOARD = 3 | (uint32(3) << 9) | (uint32(1) << 12);
     uint32 private playerId;
 

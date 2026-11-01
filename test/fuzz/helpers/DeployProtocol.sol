@@ -186,12 +186,6 @@ abstract contract DeployProtocol is Test {
         id = game.registerWallet_g9539(who, true);
     }
 
-    /// @dev Explicit fixture eligibility without changing player score or bypassing creation.
-    function _grantSmurfBase(address owner, uint16 base) internal {
-        uint32 mainId = game.walletIdOf_g3120(owner);
-        vm.prank(ContractAddresses.CREATOR);
-        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (mainId, base)), 0);
-    }
 
     function _fixtureId(address player) internal view returns (uint32) {
         return uint32(uint256(vm.load(address(game), GameSlotKeys.walletId(player))));

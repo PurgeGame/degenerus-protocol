@@ -438,31 +438,15 @@ contract DegenesisVaultSpend is DegenesisFixture {
         assertEq(sdgnrs.balanceOf(who), tokens);
     }
 
-    function test_SmurfGift_WhaleTokensReachCurrentPayee() public {
-        (address who, uint32 mainId) = _recipient();
-        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        game.raiseSmurfBaseAllowance(mainId, 1);
-        uint256 price = game.mintPrice();
-        vm.prank(who);
-        uint32 smurf = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        uint256 credit = _credit(smurf);
-        uint256 tokens = sdgnrs.balanceOf(who);
-        _spendFor(smurf, true, 1, 0, budget);
-        assertGt(sdgnrs.balanceOf(who), tokens, "smurf main receives token reward");
-        assertEq(_credit(smurf), credit);
-        _lastBox(smurf);
-    }
-
-    function test_VaultFundedSmurfAndFoil_RetainCredit() public {
-        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        game.raiseSmurfBaseAllowance(VAULT_ID, 1);
+    function test_VaultTicketEarnsNoCredit_FoilRetainsCredit() public {
         _seedClaimable(VAULT_ID, 1 ether);
+        uint256 vaultCredit = _credit(VAULT_ID);
+        uint256 price = game.mintPrice();
         vm.prank(address(vault));
-        uint32 smurf = game.createSmurf(bytes32(0), MintPaymentKind.Claimable);
-        assertEq(_credit(smurf), game.mintPrice() / 4, "ordinary Vault payer retains smurf credit");
+        game.purchaseOrderFor(0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        assertEq(_credit(VAULT_ID), vaultCredit, "a protocol body earns no credit");
         (address who, uint32 id) = _recipient();
         uint256 credit = _credit(id);
-        uint256 price = game.mintPrice();
         vm.prank(who);
         game.purchaseOrderFor{value: price * 11}(id, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         assertEq(_credit(id) - credit, price * 11 / 4, "Foil and adapter retain credit");

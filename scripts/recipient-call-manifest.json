@@ -1180,7 +1180,7 @@
     "scope": "DegenerusGameLens._borrowableMirror",
     "kind": "recipient-helper",
     "expression": "_sload(game, _mapSlot(uint256(id), base))",
-    "count": 2,
+    "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
@@ -1195,17 +1195,9 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens._borrowableMirror",
     "kind": "recipient-helper",
-    "expression": "_sload(game, bytes32(table + id))",
+    "expression": "_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + id))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusGameLens.sol",
-    "scope": "DegenerusGameLens._borrowableMirror",
-    "kind": "recipient-helper",
-    "expression": "_sload(game, bytes32(table + parent))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: view-only extsload of the account's wallet-table element (owner lane test); same pinned Game read helper as the other borrow-gate mirror reads. No value transfer."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -1372,7 +1364,7 @@
     "scope": "DegenerusGameLens._walletAddress",
     "kind": "recipient-helper",
     "expression": "_sload(game, bytes32(table + ownerId))",
-    "count": 2,
+    "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
@@ -1982,54 +1974,6 @@
     "expression": "IDegenerusGameLensSource(game).playerActivityScoreById(id)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/DegenerusGameLens.sol",
-    "scope": "DegenerusGameLens.smurfCreationInfo",
-    "kind": "external",
-    "expression": "IDegenerusGameLensSource(game).playerActivityScoreById(mainId)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/DegenerusGameLens.sol",
-    "scope": "DegenerusGameLens.smurfCreationInfo",
-    "kind": "recipient-helper",
-    "expression": "_sload(game, _mapSlot(uint256(mainId), base))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusGameLens.sol",
-    "scope": "DegenerusGameLens.smurfCreationInfo",
-    "kind": "recipient-helper",
-    "expression": "_sload(game, bytes32(base))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusGameLens.sol",
-    "scope": "DegenerusGameLens.smurfCreationInfo",
-    "kind": "recipient-helper",
-    "expression": "_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + mainId))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusGameLens.sol",
-    "scope": "DegenerusGameLens.smurfsOf",
-    "kind": "recipient-helper",
-    "expression": "_sload(game, _mapSlot(i >> 3, inner))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusGameLens.sol",
-    "scope": "DegenerusGameLens.smurfsOf",
-    "kind": "recipient-helper",
-    "expression": "_sload(game, _mapSlot(uint256(mainId), base))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -4956,7 +4900,7 @@
     "scope": "WalletTableLib.ownerOf",
     "kind": "external",
     "expression": "game.extsload_g2807007(bytes32(OWNERS_BASE + ownerId))",
-    "count": 2,
+    "count": 1,
     "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
   },
   {
@@ -5466,24 +5410,8 @@
   {
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.sweepAccountCoinflips",
-    "kind": "external",
-    "expression": "degenerusGame.resolveAccount_g7029(id, address(this))",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.sweepAccountCoinflips",
     "kind": "recipient-helper",
-    "expression": "_claimAcquiredCoinflips(id, buyer)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.sweepAccountCoinflips",
-    "kind": "recipient-helper",
-    "expression": "_claimCoinflipsAmount(key, payee, id, type(uint256).max, true)",
+    "expression": "_claimAcquiredCoinflips(id, degenerusGame.acquiredBuyer(id))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -7931,25 +7859,17 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule.seizeLoan",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, main) )",
+    "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscription.selector, id) )",
     "count": 1,
-    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
+    "review": "REVIEWED: seizure of one ordinary account; same target and reachability as before. The delegatecall stops only the seized account's AFKing run (single-account selector), and the deity pass moves to the fixed lender address (Vault or sDGNRS)."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule.seizeLoan",
     "kind": "recipient-helper",
-    "expression": "_seizeDeityPass(id, to)",
+    "expression": "_seizeDeityPass(id, lender == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS)",
     "count": 1,
-    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule.seizeLoan",
-    "kind": "recipient-helper",
-    "expression": "_seizeDeityPass(smurf, to)",
-    "count": 1,
-    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
+    "review": "REVIEWED: seizure of one ordinary account; same target and reachability as before. The delegatecall stops only the seized account's AFKing run (single-account selector), and the deity pass moves to the fixed lender address (Vault or sDGNRS)."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -9521,14 +9441,6 @@
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule._cancelAcquiredSubscription",
-    "kind": "recipient-helper",
-    "expression": "_finalizeAfking(id, lane)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol helper reaches the pinned quests.finalizeAfking site; the logical-day argument is gone (the handback anchors at the reward endpoint). No new user destination or value transfer; caller and recipient accounting remain the existing path."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._deliverAfkingBuy",
     "kind": "recipient-helper",
     "expression": "_playerActivityScoreCachedAt( element, uint32(_subStreakAt(lane, endpoint)), ticketTargetLevel, currentLevel )",
@@ -9681,19 +9593,11 @@
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule.cancelLiquidatedSubscriptions",
+    "scope": "GameAfkingModule.cancelLiquidatedSubscription",
     "kind": "recipient-helper",
-    "expression": "_cancelAcquiredSubscription(id)",
+    "expression": "_finalizeAfking(id, lane)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule.cancelLiquidatedSubscriptions",
-    "kind": "recipient-helper",
-    "expression": "_cancelAcquiredSubscription(uint32(word >> ((i & 7) * 32)))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: the former private cancel helper's body, now the seizure delegatecall target itself; reaches the pinned quests.finalizeAfking site with the reward-endpoint anchor. No new user destination or value transfer."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9846,14 +9750,6 @@
     "expression": "_settleBoth(subId)",
     "count": 2,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/GameAllowanceEntries.sol",
-    "scope": "GameAllowanceEntries.raiseSmurfBaseAllowance",
-    "kind": "recipient-helper",
-    "expression": "_raiseSmurfBaseAllowance(mainId, newBase)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Thin delegate-only component entry requires the Game storage context, then calls the shared action with the original parameters. Account/value/authentication checks remain in that shared action."
   },
   {
     "path": "contracts/modules/GameBetEntries.sol",
@@ -10249,14 +10145,6 @@
   },
   {
     "path": "contracts/modules/GameEntryInternals.sol",
-    "scope": "GameEntryInternals._gameCreateSmurf",
-    "kind": "recipient-helper",
-    "expression": "_componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.createSmurf.selector, affiliateCode, payKind))",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Default entry hook uses its named ContractAddresses component pin and interface selector. Exact result decoding and revert bubbling follow the shared delegate helper; the profile override removes only the call boundary."
-  },
-  {
-    "path": "contracts/modules/GameEntryInternals.sol",
     "scope": "GameEntryInternals._gameIssueDeityBoon",
     "kind": "recipient-helper",
     "expression": "_componentDelegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeWithSelector(IGameBoonActionsModule.giveBoon.selector, deityId, recipientId, slot))",
@@ -10292,14 +10180,6 @@
     "scope": "GameEntryInternals._gamePurchase",
     "kind": "recipient-helper",
     "expression": "_componentDelegate(ContractAddresses.GAME_PURCHASE_MODULE, abi.encodeWithSelector(IGamePurchaseModule.purchase.selector, buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind))",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Default entry hook uses its named ContractAddresses component pin and interface selector. Exact result decoding and revert bubbling follow the shared delegate helper; the profile override removes only the call boundary."
-  },
-  {
-    "path": "contracts/modules/GameEntryInternals.sol",
-    "scope": "GameEntryInternals._gameRaiseSmurfBaseAllowance",
-    "kind": "recipient-helper",
-    "expression": "_componentDelegate(ContractAddresses.GAME_ACTIONS_MODULE, abi.encodeWithSelector(IGameActionModule.raiseSmurfBaseAllowance.selector, mainId, newBase))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Default entry hook uses its named ContractAddresses component pin and interface selector. Exact result decoding and revert bubbling follow the shared delegate helper; the profile override removes only the call boundary."
   },
@@ -10537,14 +10417,6 @@
   },
   {
     "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.createSmurf",
-    "kind": "recipient-helper",
-    "expression": "_gameCreateSmurf(affiliateCode, payKind)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
-  },
-  {
-    "path": "contracts/modules/GameFacade.sol",
     "scope": "GameFacade.creditMiddayRng",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data)",
@@ -10756,14 +10628,6 @@
     "scope": "GameFacade.purchaseWhalePass",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
-  },
-  {
-    "path": "contracts/modules/GameFacade.sol",
-    "scope": "GameFacade.raiseSmurfBaseAllowance",
-    "kind": "recipient-helper",
-    "expression": "_gameRaiseSmurfBaseAllowance(mainId, newBase)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Player/authenticated facade route now enters its compile-time hook. Arguments and value/caller context are preserved by the default delegate helper; same-group shells call the shared action directly. Public facade validation remains before the hook."
   },
@@ -11089,46 +10953,6 @@
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._createSmurf",
-    "kind": "external",
-    "expression": "affiliate.payAffiliate(0, affiliateCode, ownerId, level + 1, true, 0)",
-    "count": 1,
-    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._createSmurf",
-    "kind": "external",
-    "expression": "affiliate.referSmurf(ownerId, smurfId)",
-    "count": 1,
-    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._createSmurf",
-    "kind": "recipient-helper",
-    "expression": "_effectiveQuestStreak(ownerId)",
-    "count": 1,
-    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._createSmurf",
-    "kind": "recipient-helper",
-    "expression": "_playerActivityScore(ownerId, _effectiveQuestStreak(ownerId))",
-    "count": 1,
-    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._createSmurf",
-    "kind": "recipient-helper",
-    "expression": "_purchaseWith(smurfId, 4 * QTY_SCALE, 0, bytes32(0), payKind, fresh, ownerId)",
-    "count": 1,
-    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._purchase",
     "kind": "recipient-helper",
     "expression": "_purchaseForAccount( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind )",
@@ -11222,14 +11046,6 @@
     "expression": "_purchaseForWith( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, payerId )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/GamePurchase.sol",
-    "scope": "GamePurchase._raiseSmurfBaseAllowance",
-    "kind": "external",
-    "expression": "IDegenerusVaultOwner(ContractAddresses.VAULT).isVaultOwner(msg.sender)",
-    "count": 1,
-    "review": "Fixed Vault view authorizes OWNER_GOVERNANCE; only a monotonic base increase on an ordinary main is permitted."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
@@ -11332,14 +11148,6 @@
     "scope": "GamePurchaseEntries.borrow",
     "kind": "recipient-helper",
     "expression": "_borrow(id, dueLevel, amount, minEthOut)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Thin delegate-only component entry requires the Game storage context, then calls the shared action with the original parameters. Account/value/authentication checks remain in that shared action."
-  },
-  {
-    "path": "contracts/modules/GamePurchaseEntries.sol",
-    "scope": "GamePurchaseEntries.createSmurf",
-    "kind": "recipient-helper",
-    "expression": "_createSmurf(affiliateCode, payKind)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Thin delegate-only component entry requires the Game storage context, then calls the shared action with the original parameters. Account/value/authentication checks remain in that shared action."
   },
@@ -11657,14 +11465,6 @@
   },
   {
     "path": "contracts/profiles/glamsterdam/GlamsterdamGame.sol",
-    "scope": "GlamsterdamGame._gameCreateSmurf",
-    "kind": "recipient-helper",
-    "expression": "_createSmurf(affiliateCode, payKind)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamGame.sol",
     "scope": "GlamsterdamGame._gameDrainAffiliateBases",
     "kind": "recipient-helper",
     "expression": "_actionDrainAffiliateBases(ids, uplines)",
@@ -11716,14 +11516,6 @@
     "scope": "GlamsterdamGame._gamePurchase",
     "kind": "recipient-helper",
     "expression": "_purchase(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
-  },
-  {
-    "path": "contracts/profiles/glamsterdam/GlamsterdamGame.sol",
-    "scope": "GlamsterdamGame._gameRaiseSmurfBaseAllowance",
-    "kind": "recipient-helper",
-    "expression": "_raiseSmurfBaseAllowance(mainId, newBase)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Compile-time shell override calls the shared component directly with identical arguments. It introduces no storage or dynamic recipient selection; constructor bootstrap is the same five affiliate arrays in the combined Coinflip profile."
   },

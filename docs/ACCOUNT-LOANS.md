@@ -3,14 +3,14 @@
 `Game.borrow(id, dueLevel, amount, minEthOut)` credits prepaid AFKing funding against the selected
 account's far-future
 tickets. The lender is sDGNRS, or the Vault when sDGNRS cannot fund the principal and the Vault
-owner has enabled fallback. Only the current owner can borrow. Protocol roots, already-acquired
+owner has enabled fallback. Only the account's own wallet can borrow, so every loan is on an
+ordinary account. Protocol roots, already-acquired
 accounts and accounts with an open loan are excluded, and borrowing closes once the game-over
 deadline, deadman or VRF failure fires. Borrowing works during the RNG lock: the quote reads no
 randomness, the account and its collateral tickets stay with the borrower (the non-ticket principal
 is
 credited, with any ticket part queued like a purchase), and a new loan is always due above the level
-being settled. A main account with more than five lifetime smurfs cannot borrow; smurfs can borrow
-whatever their family's size.
+being settled.
 
 New loans close at exactly 48 hours after the last completed daily session, whether the delay is
 VRF or unfinished processing, and reopen when another day completes. Receiving a VRF word or
@@ -37,8 +37,7 @@ randomness. The borrower takes any part of it: the principal is the quote capped
 loan that defaults is seized like a full one. The principal must be at least 0.05 ETH, and the
 AFKing
 credit at least `minEthOut` (the ABI name is retained). Only the account's own queued far-future
-entries count; created tickets
-and its children's entries contribute nothing. The non-ticket principal credits the borrowing
+entries count; created tickets contribute nothing. The non-ticket principal credits the borrowing
 account's AFKing balance; no ETH or stETH leaves
 the Game. The owner can withdraw it through `withdrawAfkingFunding`, which pays ETH with stETH
 fallback. Unspent credit remains available for purchases and automatic loan repayment.
@@ -49,7 +48,7 @@ level instead of AFKing credit. Those tickets are priced at that level and poole
 (90% next pool, 10% future pool), with no affiliate, quest or activity credit. The loan's
 principal, interest and repayment are unchanged: the borrower owes on the whole amount.
 Jackpot-phase loans are always all AFKing credit. The borrower keeps the account, its balances and
-its play while the loan is open, except that a main with an open loan cannot create smurfs.
+its play while the loan is open.
 
 ## Manual repayment
 
@@ -75,29 +74,26 @@ and be seized; both are within the rules. Each loan settles one of two ways.
 its prepaid AFKing funding covers the full-term amount `principal × (1 + 5%·T)` (the
 manual-repayment formula with every level used), that amount moves to the lender's claimable,
 claimable first and then AFKing. The loan closes with `LoanRepaid` (payer = the account's payee),
-and the borrower keeps everything else. Only that account's slot counts, never its main's or
-siblings'. Unspent principal credited at borrowing counts toward this automatic repayment;
-interest still needs additional funds. A borrower who prefers to default withdraws before X.
-An account already acquired by a lender (a smurf whose main was seized) is never auto-repaid.
+and the borrower keeps everything else. Only that account's slot counts. Unspent principal
+credited at borrowing counts toward this automatic repayment; interest still needs additional
+funds. A borrower who prefers to default withdraws before X.
 
-**Seizure.** Otherwise the lender takes the account:
+**Seizure.** Otherwise the lender takes the account. The account keeps its ID, tickets, records,
+history and referral relationships; its wallet-table element keeps the borrower's address as key
+and gains the lender's reserved ID in the owner lane, so the lender becomes its payee and every
+operator approval lapses.
 
-- A main takes its existing children, which keep their tickets and records. A child seized on its
-  own earlier keeps its own lender.
-- For a main, the borrower wallet's entire native sDGNRS balance is burned for no payout, and the
-  wallet's default gameplay ID is cleared. Redemption proceeds must be withdrawn before seizure
-  to keep them outside the seized account. Already-submitted redemption claims stay with the account.
-- The seized account's AFKing run stops, and for a main every smurf's run. Already-paid box stamps
-  still open, with rewards going to the lender.
-- A deity account's soulbound pass moves with it to the lender (a family holds at most one deity).
+- The borrower wallet's entire native sDGNRS balance is burned for no payout, and the wallet's
+  default gameplay ID is cleared; its permanent wallet identity is kept, and the wallet may later
+  register a fresh account. Redemption proceeds must be withdrawn before seizure to keep them
+  outside the seized account. Already-submitted redemption claims stay with the account.
+- The seized account's AFKing run stops. Already-paid box stamps still open, with rewards going to
+  the lender.
+- A deity account's soulbound pass moves with it to the lender.
   The Vault can smite or issue boons with an acquired pass through `playerAction`; the account's
-  perpetual tickets, symbol draws and any early-game-over refund accrue to the lender.
+  perpetual tickets, symbol draws and any deterministic-ending deity refund accrue to the lender.
 - Claimable ETH, prepaid AFKing funding and unclaimed rewards stay with the seized ID for the lender
   to collect.
-
-Main and smurf loans are independent. If a main is seized while its smurf's own loan is open, the
-former borrower can no longer repay that loan, and the smurf is seized to its own lender at its own
-due level.
 
 ## Settlement at game over
 
@@ -113,7 +109,7 @@ When the game-over decision is made, the ending is classified as a purchase time
   as it would at its due level. The level just entered first finishes its pending batch from its
   cursor; then each later due level is settled in ascending order, in list order within a level, up
   to the current level + 99. The deciding call only records the decision. Settlement then runs alone
-  in the following calls (`Advance` stage 20 per checkpoint). The terminal request, deity refunds,
+  in the following calls (`Advance` stage 20 per checkpoint). The terminal request, deterministic-ending deity refunds,
   `gameOver`, terminal burns and terminal awards all come after it, so a seized account's terminal
   awards belong to its lender. A coordinator refusal or missing word only changes which payout path
   runs. A hard stall that begins after the decision ends the settlement: loans already settled stay
@@ -124,8 +120,8 @@ When the game-over decision is made, the ending is classified as a purchase time
   stand, and the borrower keeps both the principal and the account. Nothing settles them later.
 
 Settlement must not block the ending. Borrowing closes when liveness fires and the level stops
-moving, so the work is fixed and finite. Each loan touches only its own record, its family (at most
-six accounts), the 32-entry deity registry and fixed protocol contracts, with no borrower-controlled
+moving, so the work is fixed and finite. Each loan touches only its own record and account, the
+32-entry deity registry and fixed protocol contracts, with no borrower-controlled
 call and no ETH payout. Each step below carries a no-revert obligation; the right column is the
 implementation's basis for it, to be verified against the source:
 
@@ -168,19 +164,17 @@ into the freed lane is unsettled too, so the cursor never passes an open loan.
   later gameplay can register a replacement. `walletIdentityOf_g8516(address)` is permanent and does
   not reset.
 - `resolveAccount_g7029(id, caller)` returns the key, the current payee and whether `caller` is
-  authorized. Raw wallet-table keys are historical metadata on acquired roots, not spending
+  authorized. Raw wallet-table keys are historical metadata on acquired accounts, not spending
   authority. `Lens.walletOfId` returns the current payee.
-- `acquiredBuyer(id)` returns the lender that seized the account (zero if not acquired). Child
-  ownership follows at most two links.
-- `sweepAccounts(ids)` accepts at most 32 subaccount IDs (smurfs or acquired accounts, never a main)
-  and pays each one's current owner. sDGNRS-owned IDs are permissionless; anything else needs the
-  current payee or an operator approved for that ID. The Vault sweeps through `Vault.playerAction`
-  calling `Game.sweepAccounts`. It moves available claimable ETH (keeping the 1-wei sentinel) into
-  the owner's main game balance without changing `claimablePool`. Acquired accounts, and every
-  account after game over, also move their prepaid funding. Settled FLIP goes to the payee. Acquired
-  accounts also give up their auto-rebuy carry once caught up and unfrozen. Collection stays
-  available for later awards, including terminal awards, until the final sweep; ordinary prize
-  resolution never traverses the family. Permissionless prize claims retain their own eligibility
+- `acquiredBuyer(id)` returns the lender that seized the account (zero if not acquired). Ownership
+  follows at most one link: an acquired account names its lender, and a lender root names no owner.
+- `sweepAccounts(ids)` accepts at most 32 acquired account IDs (any other ID reverts) and pays each
+  one's lender. sDGNRS-owned IDs are permissionless; Vault-owned IDs need the Vault as caller. The
+  Vault sweeps through `Vault.playerAction` calling `Game.sweepAccounts`. It moves available
+  claimable ETH (keeping the 1-wei sentinel) and prepaid funding into the lender's game claimable
+  without changing `claimablePool`. Settled FLIP goes to the lender, and the account gives up its
+  auto-rebuy carry once caught up and unfrozen. Collection stays available for later awards,
+  including terminal awards, until the final sweep. Permissionless prize claims retain their own eligibility
   and expiry rules; AFKing FLIP and whale-pass claims close at liveness. A sweep collects resulting
   ETH and FLIP credits, not tickets or tokens already delivered to the payee.
 - Swept ETH is usable by the lenders: sDGNRS counts its main game claimable as redemption backing;
@@ -202,10 +196,10 @@ again.
 
 ## Storage
 
-- `_loans` (slot 63): one word per account: principal (bits 0–95), lender ID (96–103), level at
-  borrowing (104–127), due level (128–151), list index (152–183), family size (184–191). A closed
+- `_loans` (slot 62): one word per account: principal (bits 0–95), lender ID (96–103), level at
+  borrowing (104–127), due level (128–151), list index (152–183). A closed
   loan is rewritten to bit 255 alone, so principal 0 means no open loan.
-- `_loansDue` (slot 64) and `_loansDueCount` (slot 65): each due level's account IDs, eight per
+- `_loansDue` (slot 63) and `_loansDueCount` (slot 64): each due level's account IDs, eight per
   word, and its count. Repayment swaps the last ID into the freed lane; settlement deletes the loan
   and leaves the list behind as history.
 - `loanSeizeCursor`: slot 4, bytes 16–19. The pending flag is bit 2 of `decimatorFlags` in slot 0,
@@ -220,12 +214,14 @@ again.
 - `test/fuzz/LoanSeizure.t.sol` drives real level transitions, chunked seizure, automatic repayment
   and deity passes.
 - `test/fuzz/TerminalLoanSettlement.t.sol` drives real endings: a deadline ending settling a mixed
-  book (repayment at the current price, below the full term; one wei short; a five-smurf family with
-  a deity pass, a main seized before its smurf's own loan, a loan due at the horizon) before its
+  book (repayment at the current price, below the full term; one wei short; an account with a
+  deity pass, a loan due at the horizon) before its
   terminal request, then the payout and the final sweep; chunked settlement around manual
   repayments; a hard stall at the decision leaving loans as they stand; an older request dying, or
   its word landing, mid-settlement; an empty book; a deadman landing on a part-settled pending
   batch; and a fuzzed book checked against an independent ledger.
 - `test/gas/LoanSeizureGas.t.sol` measures the cold per-loan seizure and automatic-repayment costs
-  against their admission bound, and the cold game-over checkpoint (the worst family, six live
-  AFKing runs and a deity pass, plus the full 99-level scan) through the full `mineRun` stack.
+  against their fixed admission bound (`LOAN_SEIZE + LOAN_SEIZE_TAIL`), the heaviest seizure (an
+  active AFKing run, a deity pass on symbol 31 and a native sDGNRS burn) with at least 15% headroom,
+  and the cold game-over checkpoint (that account plus the full 99-level scan) through the full
+  `mineRun` stack.

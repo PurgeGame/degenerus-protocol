@@ -25,7 +25,7 @@ import {
  *  - payAffiliate resolves default codes (first purchase, stored code recall)
  *  - Upline chains work through default codes
  *  - Default codes get 0% kickback
- *  - createAffiliateCode rejects address-range codes (collision guard)
+ *  - createAffiliateCode rejects address-range and non-compliant codes (collision guard)
  *  - Self-referral blocked for default codes
  *  - getReferrer resolves default codes
  */
@@ -141,7 +141,7 @@ describe("Default Referral Codes", function () {
       const addrCode = defaultCodeFor(alice.address);
       await expect(
         affiliate.connect(alice).createAffiliateCode(addrCode, 0)
-      ).to.be.revertedWithCustomError(affiliate, "Zero");
+      ).to.be.revertedWithCustomError(affiliate, "InvalidCode");
     });
 
     it("rejects any code where top 12 bytes are zero", async function () {
@@ -150,7 +150,7 @@ describe("Default Referral Codes", function () {
       const lowCode = "0x" + "0".repeat(24) + "ff".repeat(20);
       await expect(
         affiliate.connect(alice).createAffiliateCode(lowCode, 0)
-      ).to.be.revertedWithCustomError(affiliate, "Zero");
+      ).to.be.revertedWithCustomError(affiliate, "InvalidCode");
     });
 
     it("allows codes with nonzero high bytes (normal string codes)", async function () {

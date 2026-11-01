@@ -10,20 +10,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
-import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-/// @dev Registers a smurf of `owner` the way the mint module records one, without a purchase.
-contract SmurfHost is AfkingStethHost {
-    function makeSmurf(address owner) external returns (uint32 smurfId) {
-        uint32 ownerId = _seedWallet(owner);
-        smurfId = uint32(wallets.length);
-        wallets.push(uint256(ownerId) << 160);
-        mintPacked_[smurfId] = uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT;
-        balancesPacked[smurfId] = 1;
-        _smurfWords[ownerId][0] = smurfId;
-        mintPacked_[ownerId] = BitPackingLib.setPacked(
-            mintPacked_[ownerId], BitPackingLib.SMURF_COUNT_SHIFT, BitPackingLib.MASK_16, 1
-        );
+/// @dev Registers a wallet without a purchase.
+contract AccountStethHost is AfkingStethHost {
+    function seedWallet(address who) external returns (uint32 id) {
+        (id, ) = _registerWallet(who, 0);
     }
 }
 
@@ -42,7 +33,7 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
 
-    SmurfHost internal host;
+    AccountStethHost internal host;
     AdversarialAfkingSteth internal badToken;
     address internal constant PLAYER = address(0xA11CE);
     address internal constant NEXT = address(0xB0B);
@@ -53,8 +44,8 @@ contract AfkingStethFundingTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 2 days);
-        vm.etch(address(game), type(SmurfHost).runtimeCode);
-        host = SmurfHost(payable(address(game)));
+        vm.etch(address(game), type(AccountStethHost).runtimeCode);
+        host = AccountStethHost(payable(address(game)));
         vm.deal(address(game), 100 ether);
         host.prepare();
     }
@@ -188,26 +179,30 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertEq(coinflip.coinflipAmount(PLAYER), stakeBefore, "the unsettled day is forfeited");
     }
 
-    /// @notice A smurf's residual is pulled from its owner's stETH, the subscriber's payee.
-    function test_SmurfFallbackPullsFromTheOwner() public {
+    /// @notice An operator-started run pulls its residual from the account payee's stETH, never the
+    ///         operator's.
+    function test_OperatorRunFallbackPullsFromThePayee() public {
         host.subscriptionWindow();
-        uint32 smurfId = host.makeSmurf(PLAYER);
-        uint256 seat = _grantSeat(PLAYER);
+        uint32 id = host.seedWallet(PLAYER);
+        host.seedWallet(NEXT);
         vm.prank(PLAYER);
-        game.subscribe(smurfId, true, 1, seat);
+        game.setOperatorApproval(id, NEXT, true);
+        uint256 seat = _grantSeat(PLAYER);
+        vm.prank(NEXT);
+        game.subscribe(id, true, 1, seat);
         mockStETH.mint(PLAYER, 1 ether);
         mockStETH.mint(NEXT, 1 ether);
         _authorize(PLAYER, type(uint256).max);
         _authorize(NEXT, type(uint256).max);
         vm.warp(block.timestamp + 1 days);
         host.nextDay();
-        uint256 ownerShares = mockStETH.sharesOf(PLAYER);
+        uint256 payeeShares = mockStETH.sharesOf(PLAYER);
         _work();
-        assertLt(mockStETH.sharesOf(PLAYER), ownerShares, "the owner paid");
-        assertEq(mockStETH.sharesOf(NEXT), 1 ether, "no other holder is touched");
-        (, uint256 position1) = GameSlotKeys.subLane(address(game), smurfId);
-        assertGt(position1, 0, "the smurf stays subscribed");
-        assertEq(host.memberOf(PLAYER), 0, "the owner is not itself subscribed");
+        assertLt(mockStETH.sharesOf(PLAYER), payeeShares, "the payee paid");
+        assertEq(mockStETH.sharesOf(NEXT), 1 ether, "the operator is not touched");
+        (, uint256 position1) = GameSlotKeys.subLane(address(game), id);
+        assertGt(position1, 0, "the account stays subscribed");
+        assertEq(host.memberOf(NEXT), 0, "the operator is not itself subscribed");
     }
 
     function test_OnlyGameCanCallAtomicPull() public {

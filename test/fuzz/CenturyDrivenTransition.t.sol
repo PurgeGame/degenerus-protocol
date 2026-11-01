@@ -169,13 +169,15 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         );
 
         // Fund the first century big so the level-200 floor sits far above later
-        // ratchets: the century pool spills into futurePool at consolidation, and
-        // _endPhase reseeds _levelPrizePool(100) from 40% of futurePool, so the floor only
-        // towers over the post-reset ratchet when the century pool dwarfs that spill.
+        // ratchets: _endPhase reseeds _levelPrizePool(100) from 40% of futurePool, which
+        // already holds the century spill and Phase A's skims, and each later level adds
+        // its sDGNRS whale buy. The floor (2x the snapshot) grows by twice any added
+        // funding while the restart base grows by at most 40% of it, so a large seed keeps
+        // the level-199 ratchet well below the floor.
         // (The jackpot may run compressed — a target met this early legitimately
         // compresses the jackpot days, so _endPhase can reset _levelPrizePool(100)
         // within the same drive. The snapshot is the durable observable.)
-        _seedNextPool(10_000 ether);
+        _seedNextPool(30_000 ether);
         for (uint256 i = 0; i < 10 && game.currentLvl() < 100; i++) {
             _driveDay();
         }
@@ -184,7 +186,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         uint256 achieved = _centurySnapshot(100);
         assertGe(
             achieved,
-            10_000 ether,
+            30_000 ether,
             "transition must snapshot the achieved (funded) pool as the doubling base"
         );
 
@@ -212,8 +214,9 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         // --- Phase D: the curved floor governs the level-200 target ---
         // The 4% purchase drip recycles the century's future-pool spill into each level's next
         // pool, so an organic drive compounds the plain ratchet far past the century floor. Keep
-        // the future pool empty on every purchase day of this drive so the ratchet stays at
-        // bootstrap scale and the floor-vs-ratchet selection is what the assertions exercise.
+        // the future pool empty on every purchase day of this drive so the ratchet grows only by
+        // each level's own inflow and the floor-vs-ratchet selection is what the assertions
+        // exercise.
         for (uint256 day = 0; day < 1500; day++) {
             if (game.currentLvl() >= 199 && !_jackpotPhase() && !_rngLocked()) break;
             assertFalse(game.gameOver(), "game must not die during the drive");

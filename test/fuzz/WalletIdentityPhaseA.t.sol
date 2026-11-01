@@ -116,7 +116,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
     // ----- mintPacked_ codec -----
 
     function test_MintWordFieldsDisjointAndComplete() public pure {
-        uint256[17] memory masks = [
+        uint256[14] memory masks = [
             BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT,
@@ -125,22 +125,21 @@ contract WalletIdentityPhaseATest is DeployProtocol {
             BitPackingLib.MASK_24 << BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
             uint256(3) << BitPackingLib.WHALE_PASS_TYPE_SHIFT,
             uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT,
-            uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT,
             uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT,
             BitPackingLib.MASK_6 << BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT,
             BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT,
-            BitPackingLib.MASK_16 << BitPackingLib.LEVEL_UNITS_SHIFT,
-            BitPackingLib.MASK_16 << BitPackingLib.SMURF_COUNT_SHIFT,
-            BitPackingLib.MASK_16 << BitPackingLib.SMURF_BASE_SHIFT
+            BitPackingLib.MASK_16 << BitPackingLib.LEVEL_UNITS_SHIFT
         ];
+        uint256 unused = (uint256(1) << 147) | (type(uint256).max << 224);
         uint256 union;
         for (uint256 i; i < masks.length; ++i) {
             assertEq(union & masks[i], 0, "fields overlap");
             union |= masks[i];
         }
-        assertEq(union, type(uint256).max, "mint fields and smurf quota cover all 256 bits");
+        assertEq(union & unused, 0, "no field uses the unused bits");
+        assertEq(union | unused, type(uint256).max, "fields and unused bits cover all 256 bits");
         assertGe(BitPackingLib.MASK_5, 20, "curse cap fits");
         assertEq(BitPackingLib.MASK_24, type(uint24).max, "day is uint24");
     }

@@ -23,7 +23,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         for (uint256 i = _deityCount(); i < 32; ++i) {
             _seedDeity(address(uint160(0xDE170000 + i)));
         }
-        purchaseStartDay = day - 8; // accelerated skim trough; preserve the fixture's minimum-rate shape
+        purchaseStartDay = day - 9; // funding age 8, the skim trough; preserve the fixture's minimum-rate shape
         dailyIdx = day - 1;
         dailyComplete = true;
         lastDailyCompletedAt = uint48(block.timestamp - 1 days);

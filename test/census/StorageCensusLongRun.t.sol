@@ -112,7 +112,7 @@ contract StorageCensusLongRunTest is StorageCensus {
     }
 
     function _code(uint256 i) internal pure returns (bytes32) {
-        return bytes32(abi.encodePacked("CENSUS-AFF-", bytes1(uint8(0x30 + i))));
+        return bytes32(abi.encodePacked("CENSUSAFF", bytes1(uint8(0x30 + i))));
     }
 
     /// @dev Degenesis day c (index c + 1): buyers place one or two orders against their credit,

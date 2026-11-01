@@ -22,8 +22,9 @@ interface IAnyBalance {
 ///         BYSTANDER, CREATOR and the protocol contracts. Each call is a low-level call whose revert is
 ///         caught (the call is the try/catch), counted per action and per revert selector, and ignored.
 ///
-///         Two deviations from "raw", both to make a door reachable at all: the 4-value payKind enum
-///         is folded onto 0..4 (4 = out of range, must fail decode), and the gd_* companions derive
+///         Three deviations from "raw", all to make a door reachable at all: the 4-value payKind enum
+///         is folded onto 0..4 (4 = out of range, must fail decode), an affiliate code word is half the
+///         time folded into a well-formed code, and the gd_* companions derive
 ///         a real player's arguments from live state (own seat, own far-future level, open window,
 ///         nudge quote) so each door's success path is driven too; the raw door stays alongside.
 ///
@@ -481,7 +482,19 @@ contract AnyInputHandler is Test {
         _call(50, PARIMUTUEL, 0, abi.encodeWithSignature("placeBet(uint32,bool)", _id(pSeed), over));
     }
 
+    /// @dev A code is accepted only as 1-32 characters of A-Z/0-9 with a letter, so an arbitrary word
+    ///      is refused almost always. An even low bit folds the word into an eight-letter code so the
+    ///      accepting path is driven; an odd one passes the word through raw.
     function af_createCode(uint256 a, bytes32 code, uint8 kickback) external act(a) {
+        if (uint256(code) & 1 == 0) {
+            bytes memory letters = new bytes(8);
+            uint256 h = uint256(keccak256(abi.encode(code)));
+            for (uint256 i; i < 8; ++i) {
+                letters[i] = bytes1(uint8(0x41 + h % 26));
+                h /= 26;
+            }
+            code = bytes32(letters);
+        }
         _call(53, AFFILIATE, 0, abi.encodeWithSignature("createAffiliateCode(bytes32,uint8)", code, kickback));
     }
 

@@ -16,8 +16,9 @@ import {LoanAccountingHandler} from "../handlers/LoanAccountingHandler.sol";
 ///            active level, pooled 90/10;
 ///         4. canonical solvency holds, and no loan, funding, sweep or claim step moves
 ///            backing - obligations;
-///         5. owners, open loans and due lists match the model (main seizure takes the family, a
-///            smurf seized alone keeps its lender, one open loan per account, swap-and-pop lists).
+///         5. owners, open loans and due lists match the model (a seizure takes exactly the
+///            defaulted account and revokes its seller, only acquired accounts are swept, one open
+///            loan per account, swap-and-pop lists).
 ///         `afterInvariant` requires each run to have borrowed (on day 20 and after it), repaid,
 ///         auto-repaid and seized; the handler's fixed opening forces all of them.
 /// @dev Campaign size: the repo `[invariant]` default (256 runs x 128 depth).
@@ -79,22 +80,19 @@ contract LoanAccountingInvariant is DeployProtocol {
         _bump("LA_DAY20_BORROWS", handler.ghost_day20Borrows());
         _bump("LA_JACKPOT_BORROWS", handler.ghost_jackpotBorrows());
         _bump("LA_VAULT_LOANS", handler.ghost_vaultLoans());
-        _bump("LA_SMURF_LOANS", handler.ghost_smurfLoans());
         _bump("LA_REPAYS", handler.ghost_repays());
         _bump("LA_REPAYS_CLAIMABLE", handler.ghost_repaysFromClaimable());
         _bump("LA_AUTO_REPAYS", handler.ghost_autoRepays());
         _bump("LA_SEIZURES", handler.ghost_seizures());
-        _bump("LA_MAIN_SEIZURES", handler.ghost_mainSeizures());
-        _bump("LA_ORPHAN_SEIZURES", handler.ghost_orphanSeizures());
+        _bump("LA_ORDINARY_SWEEP_REJECTS", handler.ghost_ordinarySweepRejects());
         _bump("LA_CHUNKED", handler.ghost_chunkedSettles());
         _bump("LA_SWEEPS", handler.ghost_sweeps());
         _bump("LA_CLAIMS", handler.ghost_claims());
         _bump("LA_GATE_REJECTS", handler.ghost_gateRejects());
         _bump("LA_CLOSED", handler.ghost_closed());
-        string[18] memory keys = ["LA_RUNS", "LA_CALLS", "LA_BORROWS", "LA_TICKET_BORROWS", "LA_DAY20_BORROWS",
-            "LA_JACKPOT_BORROWS",
-            "LA_VAULT_LOANS", "LA_SMURF_LOANS", "LA_REPAYS", "LA_REPAYS_CLAIMABLE", "LA_AUTO_REPAYS", "LA_SEIZURES",
-            "LA_MAIN_SEIZURES", "LA_ORPHAN_SEIZURES", "LA_CHUNKED", "LA_SWEEPS", "LA_CLAIMS", "LA_GATE_REJECTS"];
+        string[16] memory keys = ["LA_RUNS", "LA_CALLS", "LA_BORROWS", "LA_TICKET_BORROWS", "LA_DAY20_BORROWS",
+            "LA_JACKPOT_BORROWS", "LA_VAULT_LOANS", "LA_REPAYS", "LA_REPAYS_CLAIMABLE", "LA_AUTO_REPAYS", "LA_SEIZURES",
+            "LA_ORDINARY_SWEEP_REJECTS", "LA_CHUNKED", "LA_SWEEPS", "LA_CLAIMS", "LA_GATE_REJECTS"];
         for (uint256 i; i < keys.length; ++i) {
             console.log(string.concat("LA_REPORT ", keys[i], "=", vm.toString(vm.envOr(keys[i], uint256(0)))));
         }

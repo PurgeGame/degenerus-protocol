@@ -185,8 +185,6 @@ abstract contract DegenerusGameStorage {
     ///      which would overflow at 65,535.
     uint16 internal constant ACTIVITY_SCORE_HARD_CAP_POINTS = 65_534;
 
-    uint256 internal constant SMURF_SCORE_PER_CREATION = 120;
-
     /// @dev Floor streak points for active pass holders (50 points).
     uint16 internal constant PASS_STREAK_FLOOR_POINTS = 50;
 
@@ -278,8 +276,6 @@ abstract contract DegenerusGameStorage {
     error OnlySelf();
     /// @notice Thrown when the caller is not the admin.
     error OnlyAdmin();
-    error SmurfCreationLimitReached();
-    error InvalidSmurfBaseIncrease();
     /// @notice Thrown when the caller is not the vault or the vault owner.
     error OnlyVault();
     /// @notice Thrown when the caller is not the sDGNRS contract.
@@ -760,11 +756,11 @@ abstract contract DegenerusGameStorage {
     ///      overwrites the selected lane after queue reuse.
     mapping(uint24 => uint256[]) internal ticketQueue;
 
-    /// @dev Wallet table: an ordinary account stores its payout address [0:160). A subaccount
-    ///      stores zero there and its ordinary owner's ID [160:192). Whale half-pass count
-    ///      occupies [192:256). Acquired roots retain the seller key and store buyer ID in
-    ///      the owner lane; children keep their parent. Element zero is unassigned. walletIds
-    ///      supplies the forward lookup for ordinary wallets only.
+    /// @dev Wallet table: an account stores its key (the registering address) in [0:160) and,
+    ///      once acquired by a loan seizure, its lender's reserved ID in the owner lane
+    ///      [160:192); ordinary accounts keep that lane zero. Whale half-pass count occupies
+    ///      [192:256). Element zero is unassigned. walletIds supplies the forward lookup for
+    ///      registered addresses.
     uint256[] internal wallets;
 
     /// @dev Scan frontier of the ticket drain in the queue named by ticketLevel (see
@@ -1723,13 +1719,7 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted exactly once per wallet ID, when the wallet is registered.
     event WalletRegistered(uint32 indexed id, address indexed owner);
 
-    /// @notice Emitted once per subaccount allocation.
-    /// @param ownerId The owning wallet's ID (the smurf's payee).
-    /// @param smurfId The smurf account's wallet ID.
-    event SmurfCreated(uint32 indexed ownerId, uint32 indexed smurfId);
-    event SmurfBaseAllowanceRaised(uint32 indexed mainId, uint16 previousBase, uint16 newBase);
-
-    /// @dev With createSmurf, the only writer of a wallet's identity. Returns the existing ID or allocates the
+    /// @dev The only allocator of wallet IDs. Returns the existing ID or allocates the
     ///      next table position, publishing both directions (the table element and walletIds)
     ///      and seeding the claimable sentinel in the same call. Existing mint history is returned;
     ///      a new account has none, so `word` stays zero.
@@ -1779,14 +1769,12 @@ abstract contract DegenerusGameStorage {
         assembly ("memory-safe") { element := sload(slot) }
     }
 
-    /// @dev Payout recipient for a wallet-table element: its own key, or for a smurf account the
-    ///      owner's key. Every ETH/stETH/token payout edge that holds an ID resolves through here.
-    ///      At most two links: child -> acquired main -> reserved protocol buyer.
-    ///      Only creation and liquidation write owner lanes; protocol roots cannot be sold.
+    /// @dev Payout recipient for a wallet-table element: an ordinary account's key, or for an
+    ///      acquired account its lender's key. Every ETH/stETH/token payout edge that holds an ID
+    ///      resolves through here. At most one link: only liquidation writes an owner lane, always
+    ///      a reserved protocol lender, and protocol roots cannot be sold.
     function _payee(uint256 element) internal view returns (address) {
-        uint256 owner = (element >> 160) & 0xffffffff;
-        if (owner != 0) element = _walletElement(uint32(owner));
-        owner = uint32(element >> 160);
+        uint256 owner = uint32(element >> 160);
         if (owner != 0) element = _walletElement(uint32(owner));
         return address(uint160(element));
     }
@@ -1804,9 +1792,9 @@ abstract contract DegenerusGameStorage {
         payee = _payee(element);
     }
 
-    /// @dev Resolve an allocated account's external owner and authorization. Ordinary
-    ///      accounts return their address as key; subaccounts have key zero. Ownership comes
-    ///      from the table's owner-ID lane; operators are approved for the selected ID only.
+    /// @dev Resolve an allocated account's external owner and authorization. The key is the
+    ///      registering address; an acquired account keeps its former borrower as key and pays
+    ///      its lender. Operators are approved for the selected ID only and lapse on acquisition.
     function _account(uint32 id, address caller)
         internal
         view
@@ -1816,7 +1804,7 @@ abstract contract DegenerusGameStorage {
         uint256 element = _walletElement(id);
         key = address(uint160(element));
         payee = _payee(element);
-        authorized = payee == caller || (_acquiredRoot(id, element) == 0 && operatorApprovals[id][caller]);
+        authorized = payee == caller || (uint32(element >> 160) == 0 && operatorApprovals[id][caller]);
     }
 
     /// @dev Resolve the self shorthand without allocating, or authorize an explicit account.
@@ -1828,8 +1816,8 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev `_resolveAccountId` plus the account's payee. The self shorthand pays the caller
-    ///      without a table read: a registered address's current ID is its own ordinary main
-    ///      (a main sale clears the address's ID), whose payee is that address.
+    ///      without a table read: a registered address's current ID is its own ordinary account
+    ///      (seizure clears the address's ID), whose payee is that address.
     function _resolveAccountPayee(uint32 id) internal view returns (uint32, address) {
         if (id == 0) return (_walletIdOf(msg.sender), msg.sender);
         (, address payee, bool authorized) = _account(id, msg.sender);
@@ -2902,9 +2890,9 @@ abstract contract DegenerusGameStorage {
     // Deity Pass (Perma Whale) Grants
     // =========================================================================
 
-    /// @dev ETH paid for a buyer's (single) deity pass, by wallet ID. The early-game-over refund
-    ///      is capped at this, so a boon-discounted deity that paid < 20 ETH refunds only what it
-    ///      actually paid. Ownership itself is tracked by the HAS_DEITY_PASS bit in mintPacked_.
+    /// @dev ETH paid for a buyer's (single) deity pass, by wallet ID. The deterministic-ending
+    ///      refund (levels 0-9 only) is capped at this, so a boon-discounted deity that paid < 20 ETH
+    ///      refunds only what it actually paid. Ownership itself is tracked by the HAS_DEITY_PASS bit in mintPacked_.
     mapping(uint32 => uint96) internal deityPassPricePaid;
 
     /// @dev Every soulbound deity, genesis and paid, in registration order, as wallet IDs packed
@@ -5003,18 +4991,13 @@ abstract contract DegenerusGameStorage {
     ///      Low 32 bits: current gameplay account. High 32: immutable wallet identity.
     mapping(address => uint64) internal walletIds;
 
-    /// @dev Smurf IDs by owning main ID, eight packed uint32 lanes per word (lane `i & 7` of word
-    ///      `i >> 3`). Append-only at `createSmurf`; the main's lifetime smurf count (`SMURF_COUNT_SHIFT`) in
-    ///      `mintPacked_` is the list length. A main's loan seizure walks it to stop the family's AFKing.
-    mapping(uint32 => mapping(uint256 => uint256)) internal _smurfWords;
-
     // =========================================================================
     // Account loans
     // =========================================================================
 
     /// @dev Open loan by account ID; zero means none. Packed: principal wei (bits 0-95),
     ///      lender wallet ID (96-103; Vault or sDGNRS), level at borrowing (104-127), due level (128-151),
-    ///      index in `_loansDue[due]` (152-183), subscriptions its seizure may cancel (184-191).
+    ///      index in `_loansDue[due]` (152-183).
     mapping(uint32 => uint256) internal _loans;
     /// @dev Account IDs due at each level, eight packed uint32 lanes per word.
     mapping(uint24 => mapping(uint256 => uint256)) internal _loansDue;
@@ -5026,7 +5009,6 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LOAN_MIN_PRINCIPAL = 0.05 ether;
     uint256 internal constant LOAN_INTEREST_BPS_PER_LEVEL = 500;
     uint256 internal constant LOAN_EARLY_FEE_BPS_PER_LEVEL = 100;
-    uint256 internal constant LOAN_MAX_SMURFS = 5;
     /// @dev Borrowing needs dueLevel + 2 <= the live ticket level + LOAN_HORIZON_LEVELS, and the
     ///      live ticket level is at most level + 1, so every open loan is due by
     ///      level + LOAN_HORIZON_LEVELS - 1. Game over settles exactly that range.
@@ -5039,7 +5021,6 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LOAN_START_SHIFT = 104;
     uint256 internal constant LOAN_DUE_SHIFT = 128;
     uint256 internal constant LOAN_INDEX_SHIFT = 152;
-    uint256 internal constant LOAN_FAMILY_SHIFT = 184;
 
     /// @dev What repaying `loan` costs while the game is at level `lvl` (at most its due level):
     ///      principal plus 5% per level used (at least one) plus 1% per unused level of the
@@ -5061,32 +5042,15 @@ abstract contract DegenerusGameStorage {
         _loansDue[due][i >> 3] = (word & ~(uint256(type(uint32).max) << shift)) | (uint256(id) << shift);
     }
 
-    /// @dev Ordinary main: address only; child: parent only; acquired root: seller + buyer.
-    ///      Children can have only one ordinary parent, so one parent read is sufficient.
-    function _acquiredRoot(uint32 id, uint256 element) internal view returns (uint32) {
-        uint32 parent = uint32(element >> 160);
-        if (parent == 0) return 0;
-        if (uint160(element) != 0) return id;
-        return uint32(_walletElement(parent) >> 160) == 0 ? 0 : parent;
-    }
-
+    /// @dev Ordinary account: address only. Acquired account: former borrower plus its lender's
+    ///      reserved ID in the owner lane.
     function _isAcquired(uint32 id) internal view returns (bool) {
-        return _acquiredRoot(id, _walletElement(id)) != 0;
+        return uint32(_walletElement(id) >> 160) != 0;
     }
 
+    /// @dev The lender holding an acquired account; zero for an ordinary one.
     function _acquiredBuyer(uint32 id) internal view returns (uint32) {
-        uint256 element = _walletElement(id);
-        uint32 root = _acquiredRoot(id, element);
-        if (root == 0) return 0;
-        if (root != id) element = _walletElement(root);
-        return uint32(element >> 160);
-    }
-
-    function _ownerWalletId(uint32 id) internal view returns (uint32) {
-        uint32 ownerId = uint32(_walletElement(id) >> 160);
-        if (ownerId == 0) return id;
-        uint32 parent = uint32(_walletElement(ownerId) >> 160);
-        return parent == 0 ? ownerId : parent;
+        return uint32(_walletElement(id) >> 160);
     }
 
     // =========================================================================

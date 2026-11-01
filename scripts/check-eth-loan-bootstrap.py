@@ -22,10 +22,13 @@ SOURCES = (
 # Current model inputs. The archived proof manifest retains its historical identity.
 # Reviewed 2026-10-29: loan credit retains custody and LOAN_LATE_WINDOW only restricts
 # eligibility; collateral rates, ticket awards and this principal upper bound are unchanged.
+# Reviewed 2026-11-01: player-created child accounts removed (one-link ownership, no loan
+# family field or child cap); loan quote, rates, prices and whale-pass awards are unchanged.
+# Reviewed 2026-11-01: Storage and WhaleModule refund comment text only; the loan model is unaffected.
 SOURCE_SHA256 = {
-    "contracts/storage/DegenerusGameStorage.sol": "59a9c997e11ac5b9999738ae0bb68f0427deaea7042bbad8e6fc4951eea3ca98",
+    "contracts/storage/DegenerusGameStorage.sol": "aedee457eb0d95e13e041eb26d5bc9bc5d73af22b20aaedf24fee25abecbe5d1",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
-    "contracts/modules/DegenerusGameWhaleModule.sol": "72eec7fd66aa48b7664be3ceceaec0d6698989147b61589a66bc00b748b76e01",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "3d3df97df5d8610c0aea2dd133e0f1fb262696a7e3eb1bc0a62d48f42b275b0f",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",
 }
 

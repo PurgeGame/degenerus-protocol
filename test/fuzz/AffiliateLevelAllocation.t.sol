@@ -20,8 +20,8 @@ contract AffiliateLevelAllocation is DeployProtocol {
     bytes32 private constant TOP_REWARD_SIG = keccak256("AffiliateDgnrsReward(address,uint24,uint256)");
     bytes32 private constant ALLOCATED_SIG = keccak256("LevelDgnrsAllocated(uint24,uint256)");
 
-    bytes32 private constant CODE_ALICE = bytes32("ALICE_L");
-    bytes32 private constant CODE_BOB = bytes32("BOB_L");
+    bytes32 private constant CODE_ALICE = bytes32("ALICEL");
+    bytes32 private constant CODE_BOB = bytes32("BOBL");
 
     address private alice;
     address private bob;

@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {Vm} from "forge-std/Vm.sol";
 import {console2} from "forge-std/console2.sol";
-import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TerminalLoanBase, TerminalLoanSeeder} from "./TerminalLoanSettlement.t.sol";
@@ -12,10 +11,10 @@ import {MineFlipAdmission} from "./helpers/MineFlipAdmission.sol";
 /// @title TerminalLoanAdmissionWalk -- a crowded loan book settled at game over, at minimum gas
 /// @notice A VRF-alive ending owes settlement of every open loan before its terminal request. The
 ///         book here is crowded: thirty loans due at one level (the scan's longest list) plus
-///         loans spread over the borrow horizon, families of one to six accounts, each borrower
-///         either covering the current repayment price exactly or one wei short. Every engine
-///         call gets exactly the loan checkpoint's admission (the phase pre-check, one worst-family
-///         loan, one due-level step and the loan tail, through the engine), or a random amount
+///         loans spread over the borrow horizon, each borrower either covering the current
+///         repayment price exactly or one wei short. Every engine call gets exactly the loan
+///         checkpoint's admission (the phase pre-check, one loan, one due-level step and the
+///         loan tail, through the engine), or a random amount
 ///         above it: each call must progress, no terminal request may go out while a loan is
 ///         open, and every loan settles exactly once. The ending then runs to its paid jackpot
 ///         at the terminal minimum.
@@ -45,22 +44,12 @@ contract TerminalLoanAdmissionWalk is TerminalLoanBase {
         _seedLevel(id, 102, 4_000);
     }
 
-    function _child(address owner) internal returns (uint32 id) {
-        uint256 price = game.mintPrice();
-        vm.prank(owner);
-        id = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
-        _seedLevel(id, 60, 4_000);
-    }
-
     function _book(uint256 seed) internal returns (uint256 n) {
         n = CROWDED + 10;
         for (uint256 i; i < n; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, i)));
             address owner = makeAddr(string(abi.encode("crowded-borrower", i)));
             uint32 id = _account(owner);
-            _grantSmurfBase(owner, 8);
-            uint256 children = i % 6 == 0 ? 5 : (r >> 8) % 3;
-            for (uint256 k; k < children; ++k) _child(owner);
             uint24 due = i < CROWDED ? 2 : uint24(3 + (r >> 16) % 98);
             _borrow(owner, id, due);
             uint256 owed = _owedNow(id);

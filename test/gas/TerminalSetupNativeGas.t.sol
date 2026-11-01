@@ -16,13 +16,13 @@ contract TerminalSetupNativeHost is DegenerusGame {
     }
 }
 
-/// @dev Original normal-ending fixture: 30 paid deity refunds and full trait
+/// @dev Normal-ending fixture: 30 paid deities (no refunds on a normal ending) and full trait
 /// buckets. The budget retains the bounded balance-read reserve and can admit
 /// later jackpot work. Native opcode/call traces separate setup from that work.
 contract TerminalSetupNativeGasTest is ColdTerminalFixture {
     function _fresh() internal pure override returns (bool) { return false; }
 
-    function test_NativeTerminalSetupThirtyRefunds() public {
+    function test_NativeTerminalSetupWithThirtyPaidDeities() public {
         assertFalse(game.gameOver(), "setup not yet run");
         vm.etch(address(game), type(TerminalSetupNativeHost).runtimeCode);
         TerminalSetupNativeHost host = TerminalSetupNativeHost(payable(address(game)));
@@ -42,7 +42,7 @@ contract TerminalSetupNativeGasTest is ColdTerminalFixture {
             if (logs[i].topics[0] == keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)")) ++winners;
         }
         assertTrue(game.gameOver(), "setup latches ending");
-        assertEq(refunds, 600 ether, "all 30 refunds executed");
+        assertEq(refunds, 0, "a normal ending refunds no deity pass");
         assertGt(winners, 0, "trace includes the separate jackpot worker");
         assertLt(used, 10_000_000, "combined setup and admitted draw fit");
         emit log_named_uint("terminal_setup_and_admitted_draw", used);

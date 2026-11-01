@@ -118,7 +118,7 @@ reservations inside `claimablePool`.
 | Loan repayment | `GamePurchase._repay` (`clearDebtNow`), `DegenerusGameAdvanceModule._autoRepayLoan` | Lender credited; fresh ETH enters `claimablePool`; auto-repayment is an internal move |
 | BAF reservation | `DegenerusGameJackpotDrawModule.runBafJackpot` (arm), `runBafAwards` (pay), `_releaseBafReserve` (residue) | The x0 consolidation moves the schedule's ETH term from `futurePool` into `claimablePool` and `jackpotWork.paid`; each group's credits reduce `paid`; the residue returns to the pending future pool |
 | Decimator reservation | Advance Decimator block; `DegenerusGameDecimatorModule` (`claimablePool += funding`, `_releaseToFuture`) | The sealed pool `P` moves from `futurePool` into `claimablePool`; generated funding `F` moves from `currentPrizePool`; winners consume the reservation; unused parts return to `futurePool` |
-| Account sweep | `GamePurchase._sweepAccounts` | Moves a subaccount's claimable into its owner's main balance; `claimablePool` unchanged |
+| Account sweep | `GamePurchase._sweepAccounts` | Moves an acquired account's claimable and prepaid funding into its lender's claimable; `claimablePool` unchanged |
 
 | Assertion | Test |
 | --- | --- |
@@ -156,7 +156,7 @@ obligation equation still holds until `gameOver` is set.
 | --- | --- | --- |
 | Decision (purchase timeout, VRF alive) | `DegenerusGameGameOverModule` terminal entry | Latches the terminal level; a staged BAF reservation releases its uncredited part (`if (jackpotWork.kind == 7) claimablePool −= jackpotWork.paid`) into the distributable total |
 | Purchase-timeout loan settlement (until a hard stall) | `DegenerusGameAdvanceModule._settleTerminalLoans` (stage 20) | Each loan repays at the current price (internal move) or is seized; no Game ETH moves |
-| Drain | `_handleGameOverDrain` | Splits all Degenesis cohorts (`splitDegenesis`); `available = custody − claimablePool`; credits deity refunds (levels below 10, `claimablePool += refunded`); releases `degenesisVaultBudget` and sDGNRS AFKing (`claimablePool −= both`, `DegenesisFundsReleased`); sets `gameOver`; burns unallocated GNRUS/sDGNRS inventory and clears `degenesisActive`; zeroes current/next/future, `yieldAccumulator` and the pending buffer |
+| Drain | `_handleGameOverDrain` | Splits all Degenesis cohorts (`splitDegenesis`); `available = custody − claimablePool`; on the deterministic ending only, credits deity refunds (levels below 10, `claimablePool += refunded`); a normal ending refunds nothing; releases `degenesisVaultBudget` and sDGNRS AFKing (`claimablePool −= both`, `DegenesisFundsReleased`); sets `gameOver`; burns unallocated GNRUS/sDGNRS inventory and clears `degenesisActive`; zeroes current/next/future, `yieldAccumulator` and the pending buffer |
 | Payout | `_startJackpotWork` / `_resumeTerminalPayout` (VRF alive) or `deadPot` + `claimDeadVrf` (hard stall) | `available = custody − claimablePool` goes to the terminal ticket jackpot, or is fixed as `deadPot` and credited to `claimablePool` claim by claim. Empty-bucket leftovers stay in custody for the final sweep |
 | Completion | `_finishTerminalPayout` | Sets `GO_JACKPOT_PAID` and `GO_TIME` |
 
@@ -174,8 +174,9 @@ The Game-held redemption reserve stays inside `claimablePool` through the drain;
 
 ## Terminal and post-game-over
 
-After `gameOver`, the obligation is `claimablePool` alone: deity refunds, earned claims, credited
-terminal awards, the redemption reserve and the protocol sinks' balances. The live pools are zero.
+After `gameOver`, the obligation is `claimablePool` alone: deity refunds (deterministic ending
+below level 10 only), earned claims, credited terminal awards, the redemption reserve and the
+protocol sinks' balances. The live pools are zero.
 The uncredited part of the terminal pot (an unfinished terminal jackpot or unclaimed `deadPot`) is
 custody above `claimablePool`, not a separate obligation.
 

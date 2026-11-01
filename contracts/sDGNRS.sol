@@ -62,7 +62,7 @@ interface IDegenerusGamePlayer {
     function gameOver() external view returns (bool);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
-    ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
+    ///         (its payee, or an operator approved for an ordinary account). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization.
     function resolveAccount_g7029(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
@@ -955,7 +955,7 @@ contract sDGNRS {
     //                          BURN (Public)
     // =====================================================================
 
-    /// @notice Forfeit the seller's entire native sDGNRS balance when its main account is liquidated.
+    /// @notice Forfeit the seller's entire native sDGNRS balance when its account is seized by a lender.
     /// @dev Game authenticates the seller. No payout, reserve, queue entry or ID link is created.
     ///      Already submitted redemptions are unaffected; wrapped DGNRS is not burned.
     function burnForLiquidation(address seller) external onlyGame {
@@ -1093,7 +1093,7 @@ contract sDGNRS {
     /// @notice Claim account `id`'s gambling-burn redemption in batch `batchId` once the game is over.
     /// @dev In a live game mineRun settles every redemption in batch order, so this is the
     ///      post-gameover door only, and it deletes the claim under the account's wallet ID. Only
-    ///      the account's key, a smurf's owner or an operator approved for the account on the GAME
+    ///      the account's payee or an operator approved for the account on the GAME
     ///      may call (`id == 0` is the caller); acquired-account claims are permissionless.
     ///      The payout is pushed straight to the
     ///      account's payee (ETH, with stETH covering any ETH shortfall) rather than credited to
