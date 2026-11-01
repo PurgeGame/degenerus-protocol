@@ -40,7 +40,7 @@ function extractBody(source, signature) {
 describe("Whole and scaled entry remainder storage", function () {
   this.timeout(30_000);
 
-  describe("`_queueEntries` body proof: writes ONLY whole tickets — rem byte carried unchanged from existing slot value (LBX-AR-06)", function () {
+  describe("`_queueEntries` body proof: writes ONLY whole tickets — rem byte carried unchanged from existing slot value", function () {
     it("[01a] `_queueEntries` body in `entry-owed codec` write packs `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` where `rem = uint8(packed)` from the PRE-existing slot value (no fractional accumulation)", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
       const body = extractBody(storage, "function _queueEntries(");

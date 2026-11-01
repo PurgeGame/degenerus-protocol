@@ -74,7 +74,7 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         );
     }
 
-    /// @notice The named v60 game-over composition regression (the gasceil shape, fixed 6d2c8d0c),
+    /// @notice The named game-over composition regression (the gasceil shape),
     ///         driven through the SAME reusable component. Pre-fix the first mineFlip ran
     ///         round1 + round2 + terminal-jackpot in ONE ~20M tx; the engine now splits the drain into
     ///         checkpoints, so every call at a realistic 10M allowance succeeds and game-over completes.

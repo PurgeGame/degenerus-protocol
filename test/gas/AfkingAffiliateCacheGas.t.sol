@@ -66,10 +66,6 @@ contract AfkingAffiliateCacheGasTest is DeployProtocol {
         vm.etch(address(game), type(AfkingAffiliateCacheHost).runtimeCode);
         host = AfkingAffiliateCacheHost(payable(address(game)));
         vm.deal(address(game), 1_000 ether);
-        if (vm.envOr("AFKING_UPDATE_USE_BASELINE", false)) {
-            string memory path = vm.envString("AFKING_UPDATE_BASELINE_FILE");
-            vm.etch(address(afkingModule), vm.parseJsonBytes(vm.readFile(path), ".runtime"));
-        }
     }
 
     function _measure(bool cacheHit) private {

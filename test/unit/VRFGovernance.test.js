@@ -20,7 +20,7 @@ import {
 } from "../helpers/testUtils.js";
 
 /**
- * VRF Governance Tests (M-02 Mitigation)
+ * VRF Governance Tests
  *
  * Tests the sDGNRS-holder governance system for emergency VRF coordinator swaps.
  * Covers: propose, vote, threshold decay, execute, kill, expiry,
@@ -504,7 +504,7 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 11. 1-Per-Address Active Proposal Limit (WAR-06 fix)
+  // 11. 1-Per-Address Active Proposal Limit
   // =========================================================================
   describe("1-per-address active proposal limit", function () {
     it("reverts with AlreadyHasActiveProposal when same address proposes twice", async function () {
@@ -747,7 +747,7 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 13. Kill condition (GOV-06 evidence)
+  // 13. Kill condition
   // =========================================================================
   describe("kill condition", function () {
     it("reject votes exceeding threshold kill the proposal", async function () {
@@ -801,7 +801,7 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 14. Execute with weight (GOV-05 evidence)
+  // 14. Execute with weight
   // =========================================================================
   describe("execute with approve weight", function () {
     it("approve votes exceeding threshold execute the proposal", async function () {
@@ -836,7 +836,7 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 15. Tie condition (GOV-05/GOV-06 mutual exclusion evidence)
+  // 15. Tie condition (mutual exclusion)
   // =========================================================================
   describe("tie condition", function () {
     it("equal approve and reject weights leave proposal Active (neither execute nor kill)", async function () {

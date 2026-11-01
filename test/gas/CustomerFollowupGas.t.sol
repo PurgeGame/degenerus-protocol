@@ -46,8 +46,7 @@ contract CustomerFollowupSeeder is DegenerusGameStorage {
 }
 
 /// @dev Run with FOUNDRY_ISOLATE=true. Gas is the cold external call, including
-///      downstream contracts. Optional baseline runtime JSON supports identical
-///      fixture runs without retaining a second copy of every production source.
+///      downstream contracts.
 contract CustomerFollowupGasTest is DeployProtocol {
     address private constant PLAYER = address(0xA11CE);
     uint32 private constant BOARD = 3 | (uint32(3) << 9) | (uint32(1) << 12);
@@ -58,17 +57,6 @@ contract CustomerFollowupGasTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.etch(address(crapsBattle), type(CrapsBattle).runtimeCode);
-        string memory path = vm.envOr("CUSTOMER_FOLLOWUP_BASELINE", string(""));
-        if (bytes(path).length != 0) {
-            string memory json = vm.readFile(path);
-            _restore(json, "Coinflip", address(coinflip));
-            _restore(json, "FLIP", address(coin));
-            _restore(json, "CrapsBattle", address(crapsBattle));
-            _restore(json, "DegenerusGameDegeneretteModule", address(degeneretteModule));
-            _restore(json, "DegenerusQuests", address(quests));
-            _restore(json, "DegenerusGame", address(game));
-            _restore(json, "WWXRP", address(wwxrp));
-        }
         trace = vm.envOr("CUSTOMER_STORAGE_TRACE", false);
         vm.warp(block.timestamp + 20 days);
         bytes memory code = address(game).code;
@@ -84,10 +72,6 @@ contract CustomerFollowupGasTest is DeployProtocol {
         vm.prank(address(game)); quests.rollDailyQuest(day, 123, false, false, false);
         RecyclingState.seedWriteBuffer(address(game), 1);
         _seedCrapsFixtureCursor(day);
-    }
-
-    function _restore(string memory json, string memory name, address target) private {
-        vm.etch(target, vm.parseJsonBytes(json, string.concat(".", name)));
     }
 
     function _begin() private { vm.recordLogs(); vm.startStateDiffRecording(); }

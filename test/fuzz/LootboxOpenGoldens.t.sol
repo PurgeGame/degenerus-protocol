@@ -10,9 +10,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxOpenGoldens -- one fixed word, every reward figure a box open reports
 /// @notice The box rewards are pure functions of the committed word: target level, ticket
-///         variance tier, large-box FLIP variance, DGNRS pool tier, and craps-pass rounding. Their formulas live in private functions no harness can call,
-///         and mutation v78 rewrote dozens of their operators without any foundry assertion
-///         noticing. Under a fixed word every figure is fixed, so this opens one order on one word
+///         variance tier, large-box FLIP variance, DGNRS pool tier, and craps-pass rounding. Their formulas live in private functions no harness can call.
+///         Under a fixed word every figure is fixed, so this opens one order on one word
 ///         and pins the exact figures it reports.
 contract LootboxOpenGoldens is DeployProtocol {
     address internal actor;

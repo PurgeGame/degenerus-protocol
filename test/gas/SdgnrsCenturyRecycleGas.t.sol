@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {BoundaryGasFixture, PhaseEndSeeder} from "./Lvl100PhaseEndAdvanceGas.t.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -22,13 +21,6 @@ contract RecycleSessionSeeder is DegenerusGame {
         _setRngComplete(false);
     }
 
-    function nativeDailyPhase(uint256 allowance) external returns (MineFlipGas.Result memory result) {
-        (bool ok, bytes memory returned) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase_g2582.selector, allowance));
-        if (!ok) assembly ("memory-safe") { revert(add(returned, 32), mload(returned)) }
-        result = abi.decode(returned, (MineFlipGas.Result));
-    }
-
     /// @dev Gross gas of one production daily-phase checkpoint (the century close) in isolation.
     function measuredDailyPhase(uint256 allowance) external returns (bool done, uint256 grossGas) {
         bytes memory data = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase_g2582.selector, allowance);
@@ -40,7 +32,7 @@ contract RecycleSessionSeeder is DegenerusGame {
     }
 }
 
-abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture, NativeGasExport {
+abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
     uint256 private constant RNG_WORD = uint256(keccak256("century-recycle-cold-close")) | 1;
     uint256 private constant REFILL_PERCENT = 25 + uint256(keccak256(abi.encode(
         uint256(26), RNG_WORD
@@ -134,15 +126,6 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture, NativeGasExport
         assertTrue(vm.revertToState(base));
         _coolProtocol();
         (bool closedAtMinimum,) = host.measuredDailyPhase(hi);
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(base));
-            string memory label = string.concat("century-close-", vm.toString(address(this)));
-            this.exportNativeFixture(string.concat(label, "-full"), address(this), address(host),
-                abi.encodeCall(host.nativeDailyPhase, (uint256(10_000_000))));
-            this.exportNativeFixture(string.concat(label, "-declined"), address(this), address(host),
-                abi.encodeCall(host.nativeDailyPhase, (uint256(1_000_000))));
-            host.measuredDailyPhase(hi);
-        }
         vm.etch(address(game), realCode);
         emit log_named_uint("century close branch alone, cold", branch);
         emit log_named_uint("declined checkpoint (frame, entry reads, return), cold", declined);

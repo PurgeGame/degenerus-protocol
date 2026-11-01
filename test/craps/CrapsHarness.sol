@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
-import {RngTags} from "../../contracts/libraries/RngTags.sol";
-import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -44,26 +42,10 @@ contract CrapsHarness is CrapsSeedViews, CrapsBattle {
         return _survived(seed, n, uint256(uint160(player)));
     }
 
-    /// @notice The battle-side board derivation, byte for byte as `_settlementOf` does it:
-    ///         unpack the named chips, then let the table's word scatter the complement to
-    ///         ten. A ticket places zero through seven, so the dice throw `10 - placed`.
-    function xResolveBoard(uint256 packed, uint256 boardStakeWei, uint256 word, address owner)
-        external
-        pure
-        returns (Craps.Bets memory board)
-    {
-        uint256 chipFlip = (boardStakeWei / 1) / 10;
-        uint256 placed;
-        (, placed) = _packChips(uint32(packed));
-        board = _boardFrom(packed, chipFlip);
-        // audit ed035463: the scatter draw has its own domain — `_hash3(word, SCATTER_TAG, owner)`.
-        _scatterInto(board, EntropyLib.hash3(RngTags.CRAPS_BOARD, word, uint256(uint160(owner))), chipFlip, 10 - placed);
-    }
-
     /// @notice `_settleSlip` — the whole multi-shooter run.
     /// @dev `boost` is the packed shooter-profit schedule the wrapper fixes before the seed
-    ///      exists (audit 484a5d60b). Zero is no schedule, which is what a custom table passes
-    ///      and what every pre-boost replay is equivalent to; `xShooterBoostTerms` below derives
+    ///      exists. Zero is no schedule, which is what a custom table passes;
+    ///      `xShooterBoostTerms` below derives
     ///      the scheduled-window value so the TypeScript port can be proven equal to BOTH halves.
     function xSettle(
         Craps.Bets memory b,

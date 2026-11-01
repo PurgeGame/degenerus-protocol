@@ -263,10 +263,10 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // far-future key space for every level 2..100 at deploy. _mintCeiling() here is
         // level(4)+1 = 5, and level 5's far-future pool (2 owners) is exactly the "latched
         // last purchase day's frozen next-level pool" the daily drain gate now mints inside
-        // the unified sweep BEFORE rngGate — one full budget per call, one thing per advance
+        // the unified sweep BEFORE the daily RNG step — one full budget per call, one thing per advance
         // (see runTicketWork_g1150's far-future continuation block). That first call resolves
         // the pool and returns early (STAGE_TICKETS_WORKING); the second call finds the gate
-        // clear and reaches rngGate, where the opening-day decimator burn fires.
+        // clear and reaches the daily RNG step, where the opening-day decimator burn fires.
         game.mineRun(0);
         game.mineRun(0);
         (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
@@ -286,7 +286,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // As in test_RealAdvanceGameReachesTheOpeningEntry: _mintCeiling() = level(99)+1 = 100,
         // and genesis queued VAULT+SDGNRS perpetual entries into level 100's far-future pool at
         // deploy. The first mineFlip() call mints that pool inside the daily drain gate and
-        // returns early; the second reaches rngGate and the opening-day decimator entry.
+        // returns early; the second reaches the daily RNG step and the opening-day decimator entry.
         game.mineRun(0);
         game.mineRun(0);
         (uint256 weight,) = harness.entry(100);

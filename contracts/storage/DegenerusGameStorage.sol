@@ -1861,16 +1861,20 @@ abstract contract DegenerusGameStorage {
         return _walletElement(id) >> HALF_PASS_SHIFT;
     }
 
-    /// @dev Credit half passes. The count is the element's top field, so a checked add makes an
-    ///      overflow revert instead of reaching the account-key or owner bits.
+    /// @dev Credit half passes. The count is the element's top field; it saturates at that
+    ///      field's maximum (payouts credit it inside the mining chain), so the add never
+    ///      reaches the account-key or owner bits.
     function _addHalfPasses(uint32 id, uint256 halfPasses) internal {
         // Element 0 must stay empty: an unregistered address claims against it.
         if (id == 0) revert E();
         uint256 slot = _walletSlot(id);
-        uint256 element;
-        assembly ("memory-safe") { element := sload(slot) }
-        element += halfPasses << HALF_PASS_SHIFT;
-        assembly ("memory-safe") { sstore(slot, element) }
+        assembly ("memory-safe") {
+            let element := sload(slot)
+            // Room left in the top field (HALF_PASS_SHIFT = 192): (2^64 - 1) - count.
+            let room := shr(192, not(element))
+            if gt(halfPasses, room) { halfPasses := room }
+            sstore(slot, add(element, shl(192, halfPasses)))
+        }
     }
 
     /// @dev Read and clear a wallet's half passes, keeping the account key and owner lane.
@@ -4605,20 +4609,22 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Uncreated weight: every queued entry and undrained foil pack of the terminal level,
     ///      in QTY_SCALE units (an entry is QTY_SCALE; a fractional remainder its fraction).
-    uint64 internal deadUncreated;
+    ///      At most three queues of 2^32 wallets, each owing < 2^39 units, plus foil packs: < 2^73.
+    uint80 internal deadUncreated;
 
-    /// @dev Created tickets: the terminal level's total trait-bucket occurrences.
+    /// @dev Created tickets: the terminal level's total trait-bucket occurrences (256 x 2^32).
     uint64 internal deadCreated;
 
     /// @dev The pot every terminal-level ticket shares, fixed when the dead ending pays out.
-    uint128 internal deadPot;
+    ///      It is part of the Game's ETH and stETH, below 2^90 wei.
+    uint96 internal deadPot;
 
-    /// @dev Total weight the pot divides by: deadCreated * QTY_SCALE + deadUncreated.
-    uint64 internal deadTotal;
+    /// @dev Total weight the pot divides by: deadCreated * QTY_SCALE + deadUncreated (< 2^74).
+    uint80 internal deadTotal;
 
     /// @dev Uncreated weight not yet claimed; each uncreated claim debits it, so claims can
     ///      never exceed what the tally counted.
-    uint64 internal deadUncreatedLeft;
+    uint80 internal deadUncreatedLeft;
 
     /// @dev Claimed bits for created tickets: key (trait << 64) | (occurrence >> 8), bit
     ///      occurrence & 255.

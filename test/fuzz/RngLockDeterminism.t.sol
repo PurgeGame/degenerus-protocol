@@ -174,19 +174,19 @@ contract RngLockDeterminism is DeployProtocol {
     // Perturbation action library
     // ────────────────────────────────────────────────────────────────────
 
-    // 9 legacy v43 classes (0..8) + 2 engine classes (9..10) + 1 v50 whale-pass-claim
+    // 9 base classes (0..8) + 2 engine classes (9..10) + 1 whale-pass-claim
     // class (11).
-    // cls 9 = game.mineRun(0) — the v55 unified router (the Δ3 doWork successor) fired
-    //   same-tx inside the locked window (RD-1..5): the advance-consume `cw +=
-    //   totalFlipReversals` (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
+    // cls 9 = game.mineRun(0) — the unified router fired
+    //   same-tx inside the locked window: the consumed word and the frozen nudge count
+    //   (`_nudgeCount()`) must not change.
     // cls 10 = game.mineRun{gas: 1.5M}(0) — a bounded-allowance engine step fired during
     //   rngLock: it stops at its first checkpoint (or waits for the word), and must never
     //   abort the lock nor alter the consumed VRF-derived output.
-    // cls 11 = GameFacade.claimWhalePass(player) — the v50 WHALE-04 freeze leg:
+    // cls 11 = GameFacade.claimWhalePass(player) — the whale-pass freeze leg:
     //   the deferred whale-pass materialization endpoint fired same-tx inside the
-    //   locked window. Per 334-WHALE04-FREEZE-PROOF.md §2, the far-future band
-    //   (lvl > currentLevel+5) REVERTS under rngLock at Storage:661, and the whole
-    //   call REVERTS under _livenessTriggered() at WhaleModule:1019 — the try/catch
+    //   locked window. The far-future band
+    //   (lvl > currentLevel+5) REVERTS under rngLock in `_queueEntries`, and the whole
+    //   call REVERTS under _livenessTriggered() in `claimWhalePass` — the try/catch
     //   absorbs the structurally-expected revert (the freeze proof's load-bearing
     //   property is byte-identity of the consumed word with vs. without the
     //   attempted perturbation, INCLUDING in the revert case).
@@ -247,7 +247,7 @@ contract RngLockDeterminism is DeployProtocol {
             vm.warp(block.timestamp + 1 days + 4 hours + 1);
             try game.mineRun(0) {} catch { return; }
         } else if (cls == 9) {
-            // v55 game-resident router (Δ3 doWork→mineFlip): fire the one-category router
+            // Game-resident router (mineFlip): fire the one-category router
             // same-tx inside the locked window. mineFlip routes advance → afking-box open by
             // priority; every leg targets a pinned ContractAddresses.* (GAME self-call /
             // LootboxModule delegatecall / COINFLIP) and the advance-consume reads only FROZEN
@@ -264,15 +264,14 @@ contract RngLockDeterminism is DeployProtocol {
             vm.prank(actor);
             try game.mineRun{gas: 1_500_000}(0) {} catch { return; }
         } else if (cls == 11) {
-            // v50 WHALE-04 freeze leg: the deferred whale-pass materialization endpoint
-            // fired same-tx inside the locked window. Per 334-WHALE04-FREEZE-PROOF.md §2,
-            // the far-future band (lvl > currentLevel+5) REVERTS under rngLock at
-            // Storage:661 and the whole call REVERTS under _livenessTriggered() at
-            // WhaleModule:1019. The try/catch absorbs that revert — the freeze proof's
+            // Whale-pass freeze leg: the deferred whale-pass materialization endpoint
+            // fired same-tx inside the locked window. The far-future band (lvl > currentLevel+5) REVERTS under rngLock in
+            // `_queueEntries` and the whole call REVERTS under _livenessTriggered() in
+            // `claimWhalePass`. The try/catch absorbs that revert — the freeze proof's
             // load-bearing property is byte-identity of the consumed per-index word with
             // vs. without the attempted perturbation, INCLUDING the structurally-expected
             // revert case. The claimant address derives from `actor` so the perturbation
-            // is permissionless-beneficiary-arg-correct (D-01: claimWhalePass is callable
+            // is permissionless-beneficiary-arg-correct (claimWhalePass is callable
             // with any address as the player arg).
             vm.prank(actor);
             try game.claimWhalePass(0) {} catch { return; }
@@ -280,9 +279,7 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Admin-only perturbation action library (FUZZ-02 admin set)
-    // From plan 05 EDGECASE contribution. Draws from ADMIN-AUDIT.md sec3
-    // R-01..R-22.
+    // Admin-only perturbation action library
     // ────────────────────────────────────────────────────────────────────
 
     function _perturbAdminOnly(uint256 seed) internal {
@@ -365,7 +362,7 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 8) {
-            // FLIP-lootbox surface removed in v47 (gamePurchaseFlipLootbox / openFlipLootBox
+            // FLIP-lootbox surface removed (gamePurchaseFlipLootbox / openFlipLootBox
             // deleted — terminal-paradox: unguardable FLIP→future-ticket path). No-op slot.
             return;
         }
@@ -400,15 +397,15 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 12) {
-            // auto-rebuy Vault wrapper removed (RM-02/RM-05); action slot is a no-op.
+            // auto-rebuy Vault wrapper removed; action slot is a no-op.
             return;
         }
         if (action == 13) {
-            // auto-rebuy take-profit Vault wrapper removed (RM-02/RM-05); no-op.
+            // auto-rebuy take-profit Vault wrapper removed; no-op.
             return;
         }
         if (action == 14) {
-            // afKing-mode Vault wrapper removed (RM-01/RM-05); no-op.
+            // afKing-mode Vault wrapper removed; no-op.
             return;
         }
         if (action == 15) {
@@ -559,7 +556,6 @@ contract RngLockDeterminism is DeployProtocol {
 
     // ════════════════════════════════════════════════════════════════════
     // sec12 -- StakedStonkRedemption (RNGLOCK-CATALOG sec12) -- V-184 CATASTROPHE
-    // From 301-04 MIXED-CLUSTER contribution.
     // ════════════════════════════════════════════════════════════════════
 
     function testFuzz_RngLockDeterminism_StakedStonkRedemption(
@@ -567,7 +563,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 perturbSeed,
         uint256 burnAmountSeed
     ) public {
-        // FLIPPED at v44.0: RNGLOCK-FIXREC.md sec103 -- V-184 sStonk cross-day re-roll CATASTROPHE -- D-43N-V44-HANDOFF-111 strict-assertion attestation; structural closure via per-day storage keying (304-SPEC §3 EDGE-07)
+        // Strict assertion: the sStonk cross-day re-roll is closed structurally via per-day storage keying.
         vm.assume(vrfWord > 1);
 
         // Burn on the day _completeDay just drew (the gate needs the current day's word recorded);
@@ -619,7 +615,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         if (perturbSeed % 7 == 0) {
             vm.prank(holder);
-            // v44 MIN_BURN_AMOUNT: minimum legal perturbation burn
+            // MIN_BURN_AMOUNT: minimum legal perturbation burn
             try sdgnrs.burn(1e18) returns (uint256, uint256, uint256) {} catch {}
         }
 
@@ -687,47 +683,39 @@ contract RngLockDeterminism is DeployProtocol {
 
 
     // ════════════════════════════════════════════════════════════════════
-    // TST-01 (v55 game-resident, was v49) -- the router same-tx FREEZE proofs
+    // The router same-tx FREEZE proofs
     //
-    // The advance-consume `cw = rngWordCurrent; cw += totalFlipReversals;
-    // _finalizeLootboxRng(cw)` (DegenerusGameAdvanceModule.sol:254-259) reads
-    // `totalFlipReversals` INSIDE the daily drain. ADV-04 / v45-vrf-freeze-invariant
-    // require that read to be FROZEN between the VRF request and the consume — even
-    // when the v55 unified router (game.mineRun, the Δ3 doWork successor) or the box-open
-    // clear (game.autoOpen, the standalone-autoBuy-escape successor) fires same-tx inside the
-    // locked window (RD-1..5).
+    // Nudges (`reverseFlip`) are frozen at the request and move only the coinflip:
+    // `_applyDailyRng` returns word + `_nudgeCount()` as the coin word, while the per-index
+    // lootbox word is derived from the delivered VRF word alone. A same-tx router or
+    // box-open call inside the locked window must leave both the nudge count and the
+    // consumed per-index word unchanged.
     //
     // The consumed VRF-derived output is captured as the per-index lootbox word
-    // `_lootboxRngWord(purchaseIndex)` — `_finalizeLootboxRng(cw)` writes exactly the
-    // (rngWordCurrent + totalFlipReversals) value into that slot, so the captured word
-    // DIRECTLY incorporates the frozen read (Pitfall 4: capture the value that depends
-    // on the nudge, never one independent of it).
+    // `_lootboxRngWord(purchaseIndex)`.
     // ════════════════════════════════════════════════════════════════════
 
-    uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5; // verified via forge inspect (VRFStallEdgeCases.t.sol:346)
-
     function _readTotalFlipReversals() internal view returns (uint256) {
-        // Slot 5 now packs totalFlipReversals (uint64, low) + lastVrfProcessedTimestamp
-        // (uint48, bytes 8-13). Mask to the low 64 bits.
+        // The frozen nudge count lives in the RNG flags word.
         return RecyclingState.nudgeCount(address(game));
     }
 
-    /// @dev Zero the reversals lane of slot 5, preserving the co-resident timestamp.
+    /// @dev Zero the frozen nudge count, preserving the rest of its word.
     function _zeroTotalFlipReversals() internal {
         RecyclingState.seedNudges(address(game), 0);
     }
 
     /// @dev Mint FLIP to `who` via the GAME-gated mintForGame_g152734 (the project idiom,
-    ///      AfKingConcurrency.t.sol:761) so they can pay the reverseFlip nudge cost.
+    ///      AfKingConcurrency.t.sol) so they can pay the reverseFlip nudge cost.
     function _fundFlip(address who, uint256 amount) internal {
         if (amount == 0) return;
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame_g152734(who, amount);
     }
 
-    /// @notice TST-01 — autoBuy-during-lock SAFE + the router same-tx freeze byte-identity,
+    /// @notice autoBuy-during-lock SAFE + the router same-tx freeze byte-identity,
     ///         proven NON-VACUOUS against the VRF word it consumes.
-    /// @dev Snapshot -> nudge totalFlipReversals nonzero PRE-lock (reverseFlip reverts under
+    /// @dev Snapshot -> raise the nudge count PRE-lock (reverseFlip reverts under
     ///      rngLock, so the move must happen before the boundary) -> advance to the VRF
     ///      boundary so rngLocked() is true -> fire doWork()/autoBuy(0) in the locked window
     ///      -> deliver the SAME word + capture the consumed per-index word -> revert ->
@@ -737,7 +725,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      and a different VRF word consumes a different one — the non-vacuity guard.
     function testFuzz_RngLockDeterminism_AutoBuyDuringLockSafe(uint256 seed) public {
         uint256 vrfWord = uint256(keccak256(abi.encode("tst01-autobuy-word", seed)));
-        // Bias the perturbation to the two v49 keeper classes (9 doWork / 10 autoBuy) so the
+        // Bias the perturbation to the two keeper classes (9 router / 10 bounded engine step) so the
         // router/autoBuy fires same-tx in the window; the freeze must hold for ANY seed though.
         uint256 perturbSeed = 9 + (seed % 2); // 9 or 10
 
@@ -754,7 +742,7 @@ contract RngLockDeterminism is DeployProtocol {
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
-        // Move totalFlipReversals nonzero PRE-lock (reverseFlip is RngLocked-gated). 1-3 nudges.
+        // Raise the nudge count PRE-lock (reverseFlip is RngLocked-gated). 1-3 nudges.
         uint256 nudges = 1 + (seed % 3);
         _fundFlip(buyer, 100_000 ether); // ample FLIP for the compounding nudge cost
         for (uint256 n = 0; n < nudges; n++) {
@@ -763,43 +751,43 @@ contract RngLockDeterminism is DeployProtocol {
             try game.reverseFlip(cost) {} catch { break; }
         }
         uint256 movedReversals = _readTotalFlipReversals();
-        // NON-VACUITY (A): the perturbation actually moved totalFlipReversals before the consume.
-        assertGt(movedReversals, 0, "TST-01 non-vacuity: reverseFlip must move _nudgeCount() pre-lock");
+        // NON-VACUITY (A): the perturbation actually raised the nudge count before the consume.
+        assertGt(movedReversals, 0, "non-vacuity: reverseFlip must move _nudgeCount() pre-lock");
 
         uint256 preLockSnap = _snapshotPreLock();
 
         // ---- perturbed run: doWork()/autoBuy(0) fires inside the locked window ----
         game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
-        assertTrue(game.rngLocked(), "TST-01: rngLock must engage at the VRF boundary");
-        assertTrue(reqId != 0, "TST-01: VRF request must be pending");
+        assertTrue(game.rngLocked(), "rngLock must engage at the VRF boundary");
+        assertTrue(reqId != 0, "VRF request must be pending");
         assertEq(
             _lootboxRngWord(purchaseIndex), 0,
-            "TST-01: per-index word must be 0 pre-VRF"
+            "per-index word must be 0 pre-VRF"
         );
 
         _perturb(perturbSeed); // cls 9 (doWork) or 10 (autoBuy(0)) — same-tx in the locked window
         // autoBuy-during-lock SAFE / advance-consume reads frozen state: the lock must NOT lift.
         assertTrue(
             game.rngLocked(),
-            "TST-01: keeper doWork/autoBuy in the locked window must not abort the freeze"
+            "keeper doWork/autoBuy in the locked window must not abort the freeze"
         );
         assertEq(
             _readTotalFlipReversals(), movedReversals,
-            "TST-01: the keeper perturbation must NOT move _nudgeCount() (frozen request->consume)"
+            "the keeper perturbation must NOT move _nudgeCount() (frozen request->consume)"
         );
 
         vm.recordLogs();
         _deliverMockVrf(reqId, vrfWord);
         uint256 perturbedWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertTrue(perturbedWord != 0, "TST-01: per-index word must be set post-VRF");
+        assertTrue(perturbedWord != 0, "per-index word must be set post-VRF");
 
         // ---- baseline run: SAME word, SAME reversals, NO perturbation ----
         _revertToPreLock(preLockSnap);
-        assertEq(_lootboxRngWord(purchaseIndex), 0, "TST-01: word must be 0 post-revert");
+        assertEq(_lootboxRngWord(purchaseIndex), 0, "word must be 0 post-revert");
         assertEq(
             _readTotalFlipReversals(), movedReversals,
-            "TST-01: reversals must survive the revert (part of the frozen pre-lock state)"
+            "reversals must survive the revert (part of the frozen pre-lock state)"
         );
         game.mineRun(0);
         uint256 baselineReqId = mockVRF.lastRequestId();
@@ -810,27 +798,27 @@ contract RngLockDeterminism is DeployProtocol {
         _assertVrfOutputByteIdentity(
             bytes32(perturbedWord),
             bytes32(baselineWord),
-            "TST-01: the advance-consumed per-index word must be byte-identical with vs without the same-tx keeper perturbation (ADV-04 freeze)"
+            "the advance-consumed per-index word must be byte-identical with vs without the same-tx keeper perturbation (freeze)"
         );
 
         // ---- (B) Nudges reach only the coinflip: a zero-reversals control consumes the SAME
         // word, and a different VRF word consumes a different one, so the oracle is not vacuous. ----
         _revertToPreLock(preLockSnap);
         _zeroTotalFlipReversals();
-        assertEq(_readTotalFlipReversals(), 0, "TST-01 control: reversals zeroed");
+        assertEq(_readTotalFlipReversals(), 0, "control: reversals zeroed");
         game.mineRun(0);
         uint256 controlReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
         uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertEq(controlWord, baselineWord, "TST-01: nudges never reach the consumed word");
+        assertEq(controlWord, baselineWord, "nudges never reach the consumed word");
         _revertToPreLock(preLockSnap);
         game.mineRun(0);
         uint256 otherReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(otherReqId, vrfWord ^ 2);
         uint256 otherWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertTrue(otherWord != baselineWord, "TST-01 non-vacuity: the consumed word follows the VRF word");
+        assertTrue(otherWord != baselineWord, "non-vacuity: the consumed word follows the VRF word");
     }
 
     /// @notice Storage slot for the `whalePassClaims` mapping (verified via
@@ -848,36 +836,32 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     /// @dev Reads `whalePassClaims[claimant]` from storage (slot 21) — the post-perturbation
-    ///      oracle that the structurally-expected rngLock revert (per WHALE-04 §2 far-future
+    ///      oracle that the structurally-expected rngLock revert (far-future
     ///      band) preserved the pending-claim accumulator untouched.
     function _readWhalePassClaims(address claimant) internal view returns (uint256) {
         return uint256(vm.load(address(game), GameSlotKeys.walletElement(game.walletIdOf_g3120(claimant)))) >> 192;
     }
 
-    /// @notice TST-01 freeze leg — `claimWhalePass()` during rngLock perturbs ZERO bytes of
+    /// @notice Freeze leg — `claimWhalePass()` during rngLock perturbs ZERO bytes of
     ///         the consumed per-index VRF-derived word.
     ///
-    /// Empirically re-attests WHALE-04 paper proof
-    /// (.planning/phases/334-spec-design-lock-mintdiv-reachability-proof-rngaudit-structu/334-WHALE04-FREEZE-PROOF.md):
-    /// the deferred whale-pass materialization (the v50.0 WHALE-01/02 box-open → claimWhalePass
+    /// The deferred whale-pass materialization (box-open → claimWhalePass
     /// split) is freeze-safe — calling `claimWhalePass()` inside the rngLock window does NOT
     /// alter the consumed per-index VRF-derived word.
-    /// Per D-TST01-01 the freeze-fuzz home is LOCKED to this file
-    /// (`test/fuzz/RngLockDeterminism.t.sol`); per D-TST01-02 the deep proof gates via
+    /// The deep proof gates via
     /// `FOUNDRY_PROFILE=deep` (10000 runs) while the default profile gets the routine sample.
     ///
     /// @dev Snapshot pre-lock -> pre-load `whalePassClaims[claimant] > 0` so the claim has
     ///      work to do (otherwise the perturbation is vacuous via the `halfPasses == 0`
-    ///      short-circuit at WhaleModule:1021) -> nudge `totalFlipReversals` nonzero PRE-lock
+    ///      short-circuit in `claimWhalePass`) -> raise the nudge count PRE-lock
     ///      (matches the AutoBuy template) ->
     ///      advance to the VRF boundary so `rngLocked()` is true -> fire `claimWhalePass()`
-    ///      in the locked window (try/catch — WHALE-04 §2 far-future band reverts at
-    ///      Storage:661 and the whole call reverts under `_livenessTriggered()` at
-    ///      WhaleModule:1019; the freeze proof must hold REGARDLESS of revert) -> deliver
+    ///      in the locked window (try/catch — the far-future band reverts and the
+    ///      whole call reverts under `_livenessTriggered()`; the freeze proof must hold REGARDLESS of revert) -> deliver
     ///      the SAME word + capture the consumed per-index word -> revert -> re-advance ->
     ///      re-deliver the SAME word WITHOUT the perturbation -> baseline. Byte-identity
     ///      proves the consumed read is frozen across the claimWhalePass perturbation.
-    ///      Guard (B): zeroing `totalFlipReversals` consumes the same word (nudges reach only
+    ///      Guard (B): zeroing the nudge count consumes the same word (nudges reach only
     ///      the coinflip), while a different VRF word consumes a different one, so the
     ///      byte-identity above did not pass vacuously.
     function testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe(uint256 seed) public {
@@ -899,19 +883,19 @@ contract RngLockDeterminism is DeployProtocol {
 
         // Pre-load whalePassClaims[claimant] > 0 so the perturbation reaches the rngLock-gated
         // body of claimWhalePass (vs. the halfPasses==0 revert in WhaleModule).
-        // The pre-load is direct storage write because the WHALE-01 O(1) box-open accumulator
+        // The pre-load is direct storage write because the O(1) box-open accumulator
         // path requires a deterministic BOON_WHALE_PASS roll on the box open; vm.store is the
-        // simpler, deterministic equivalent for the purposes of this freeze proof (per
-        // T-336-01-01: state-forging only pre-loads the perturbation source; the freeze
+        // simpler, deterministic equivalent for the purposes of this freeze proof
+        // (state-forging only pre-loads the perturbation source; the freeze
         // assertion is the consumed-word byte-identity oracle, which holds regardless).
         uint256 preloadedClaims = 1 + (seed % 5); // 1..5 half-passes
         _preloadWhalePassClaims(claimant, preloadedClaims);
         assertEq(
             _readWhalePassClaims(claimant), preloadedClaims,
-            "TST-01 claim: pre-load whalePassClaims[claimant] must take effect (vm.store oracle)"
+            "claim: pre-load whalePassClaims[claimant] must take effect (vm.store oracle)"
         );
 
-        // Move totalFlipReversals nonzero PRE-lock, the same shape as the AutoBuy template; (B)
+        // Raise the nudge count PRE-lock, the same shape as the AutoBuy template; (B)
         // shows the nudges never reach the consumed word and a different VRF word does.
         uint256 nudges = 1 + (seed % 3);
         _fundFlip(buyer, 100_000 ether); // ample FLIP for the compounding nudge cost
@@ -922,28 +906,28 @@ contract RngLockDeterminism is DeployProtocol {
         }
         uint256 movedReversals = _readTotalFlipReversals();
         // NON-VACUITY (A): the nudges are staged pre-lock.
-        assertGt(movedReversals, 0, "TST-01 claim non-vacuity: reverseFlip must move _nudgeCount() pre-lock");
+        assertGt(movedReversals, 0, "claim non-vacuity: reverseFlip must move _nudgeCount() pre-lock");
 
         uint256 preLockSnap = _snapshotPreLock();
 
         // ---- perturbed run: claimWhalePass() fires inside the locked window ----
         game.mineRun(0);
         uint256 reqId = mockVRF.lastRequestId();
-        assertTrue(game.rngLocked(), "TST-01 claim: rngLock must engage at the VRF boundary");
-        assertTrue(reqId != 0, "TST-01 claim: VRF request must be pending");
+        assertTrue(game.rngLocked(), "claim: rngLock must engage at the VRF boundary");
+        assertTrue(reqId != 0, "claim: VRF request must be pending");
         assertEq(
             _lootboxRngWord(purchaseIndex), 0,
-            "TST-01 claim: per-index word must be 0 pre-VRF"
+            "claim: per-index word must be 0 pre-VRF"
         );
 
-        // Snapshot of the would-be-frozen perturbation source pre-call, to re-attest §1+§2 of
-        // the WHALE-04 paper proof empirically: regardless of whether the call reverts on the
-        // far-future band (Storage:661) or under _livenessTriggered() (WhaleModule:1019), the
-        // pending-claim counter is UNTOUCHED across the locked-window call (§4 — claim is
-        // claimable-eventually).
+        // Snapshot of the would-be-frozen perturbation source pre-call, to re-attest
+        // empirically: regardless of whether the call reverts on the
+        // far-future band (`_queueEntries`) or under _livenessTriggered() (`claimWhalePass`), the
+        // pending-claim counter is UNTOUCHED across the locked-window call (the claim stays
+        // claimable).
         uint256 claimsBeforePerturb = _readWhalePassClaims(claimant);
 
-        // The claimWhalePass perturbation. Per WHALE-04 §2:
+        // The claimWhalePass perturbation:
         //   * far-future band (currentLevel+6..+100): _queueEntryRange:661 REVERTS RngLocked()
         //     before any write — the entire claim is rolled back atomically.
         //   * liveness backstop (covers the entire 100-level range): claimWhalePass:1019
@@ -957,36 +941,36 @@ contract RngLockDeterminism is DeployProtocol {
         // claimWhalePass-during-lock SAFE / advance-consume reads frozen state: the lock must NOT lift.
         assertTrue(
             game.rngLocked(),
-            "TST-01 claim: claimWhalePass in the locked window must not abort the freeze"
+            "claim: claimWhalePass in the locked window must not abort the freeze"
         );
         assertEq(
             _readTotalFlipReversals(), movedReversals,
-            "TST-01 claim: the claim perturbation must NOT move _nudgeCount() (frozen request->consume)"
+            "claim: the claim perturbation must NOT move _nudgeCount() (frozen request->consume)"
         );
-        // WHALE-04 §4 corollary: the pending-claim counter persists across the rngLock revert
-        // (no grant marooned). Either the revert at Storage:661 / WhaleModule:1019 rolled the
-        // zero-out at WhaleModule:1024 back, OR the call short-circuited before that line.
+        // Corollary: the pending-claim counter persists across the rngLock revert
+        // (no grant marooned). Either the revert in `_queueEntries` / `claimWhalePass` rolled the
+        // zero-out in `claimWhalePass` back, OR the call short-circuited before that line.
         // Either way: claims survive the locked-window perturbation attempt.
         assertEq(
             _readWhalePassClaims(claimant), claimsBeforePerturb,
-            "TST-01 claim: whalePassClaims[claimant] must survive the locked-window claim attempt (WHALE-04 sec4)"
+            "claim: whalePassClaims[claimant] must survive the locked-window claim attempt"
         );
 
         vm.recordLogs();
         _deliverMockVrf(reqId, vrfWord);
         uint256 perturbedWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertTrue(perturbedWord != 0, "TST-01 claim: per-index word must be set post-VRF");
+        assertTrue(perturbedWord != 0, "claim: per-index word must be set post-VRF");
 
         // ---- baseline run: SAME word, SAME reversals, NO perturbation ----
         _revertToPreLock(preLockSnap);
-        assertEq(_lootboxRngWord(purchaseIndex), 0, "TST-01 claim: word must be 0 post-revert");
+        assertEq(_lootboxRngWord(purchaseIndex), 0, "claim: word must be 0 post-revert");
         assertEq(
             _readTotalFlipReversals(), movedReversals,
-            "TST-01 claim: reversals must survive the revert (part of the frozen pre-lock state)"
+            "claim: reversals must survive the revert (part of the frozen pre-lock state)"
         );
         assertEq(
             _readWhalePassClaims(claimant), preloadedClaims,
-            "TST-01 claim: whalePassClaims pre-load must survive the revert (frozen pre-lock state)"
+            "claim: whalePassClaims pre-load must survive the revert (frozen pre-lock state)"
         );
         game.mineRun(0);
         uint256 baselineReqId = mockVRF.lastRequestId();
@@ -997,34 +981,34 @@ contract RngLockDeterminism is DeployProtocol {
         _assertVrfOutputByteIdentity(
             bytes32(perturbedWord),
             bytes32(baselineWord),
-            "TST-01 claim: the advance-consumed per-index word must be byte-identical with vs without the same-tx claimWhalePass perturbation (WHALE-04 freeze)"
+            "claim: the advance-consumed per-index word must be byte-identical with vs without the same-tx claimWhalePass perturbation (freeze)"
         );
 
         // ---- (B) Nudges reach only the coinflip: a zero-reversals control consumes the SAME
         // word, and a different VRF word consumes a different one, so the oracle is not vacuous. ----
-        // Per T-336-01-03 STRIDE row: ALWAYS _revertToPreLock(snapshotId) BEFORE re-staging the
-        // second env. The helper at lines 130-144 enforces revert-before-re-stage by construction.
+        // ALWAYS _revertToPreLock(snapshotId) BEFORE re-staging the
+        // second env. The helper enforces revert-before-re-stage by construction.
         _revertToPreLock(preLockSnap);
         _zeroTotalFlipReversals();
-        assertEq(_readTotalFlipReversals(), 0, "TST-01 claim control: reversals zeroed");
+        assertEq(_readTotalFlipReversals(), 0, "claim control: reversals zeroed");
         game.mineRun(0);
         uint256 controlReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
         uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertEq(controlWord, baselineWord, "TST-01 claim: nudges never reach the consumed word");
+        assertEq(controlWord, baselineWord, "claim: nudges never reach the consumed word");
         _revertToPreLock(preLockSnap);
         game.mineRun(0);
         uint256 otherReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(otherReqId, vrfWord ^ 2);
         uint256 otherWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
-        assertTrue(otherWord != baselineWord, "TST-01 claim non-vacuity: the consumed word follows the VRF word");
+        assertTrue(otherWord != baselineWord, "claim non-vacuity: the consumed word follows the VRF word");
     }
 
-    /// @notice TST-01 — no box opens during rngLock: boxesPending() is false and a keeper mineFlip
+    /// @notice No box opens during rngLock: boxesPending() is false and a keeper mineFlip
     ///         inside the locked window opens nothing and never aborts the lock.
-    /// @dev RD-3/RD-5: boxesPending() is rngLock-aware and the box stages are read consumers that
+    /// @dev boxesPending() is rngLock-aware and the box stages are read consumers that
     ///      the engine selects only once the daily lock has released.
     function testAutoOpenBlockedDuringRngLockNoOps() public {
         address buyer = makeAddr("tst01-autoopen-noop-buyer");
@@ -1045,7 +1029,7 @@ contract RngLockDeterminism is DeployProtocol {
         // boxesPending() is FALSE during rngLock (the router routes past the open leg).
         assertFalse(
             game.boxesPending(),
-            "autoOpen-noop: boxesPending() must be false during rngLock (RD-3)"
+            "autoOpen-noop: boxesPending() must be false during rngLock"
         );
 
         // The engine (the ONLY box-open entry) is safe during lock: with the word pending it
@@ -1100,7 +1084,7 @@ contract RngLockDeterminism is DeployProtocol {
         return cursor > pos;
     }
 
-    /// @notice TST-01 — no marooned boxes (no open during the lock + post-unlock engine open).
+    /// @notice No marooned boxes (no open during the lock + post-unlock engine open).
     /// @dev Two faithful sub-proofs, NO storage forging of the lock state:
     ///   (1) DURING a genuine daily rngLock: boxesPending()==false, a keeper mineFlip cannot open
     ///       the box, and the queued box is NOT consumed by the lock — it is preserved (openable)
@@ -1134,7 +1118,7 @@ contract RngLockDeterminism is DeployProtocol {
         // ---- (1) DURING a genuine daily rngLock: no box opens, the box is not consumed ----
         uint256 reqId = _advanceToVrfRequestBoundary();
         assertTrue(game.rngLocked(), "no-maroon: rngLock engaged");
-        assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
+        assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock");
         vm.prank(keeper);
         // The engine: must not abort the lock (box stages never run under it); it either finds
         // other work or waits on the word — any other failure is a bug.

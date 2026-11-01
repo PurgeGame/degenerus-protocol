@@ -7,10 +7,8 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title OpenBountyCarry — splitting an AFKing backlog across calls never out-earns one call
-/// @notice The knee bounty and its `_openBountyCarry` netting are gone (60d31f775 / 72fc06f6c):
-///         mineFlip now pays FLIP on the gas each call measured above its unpaid first
-///         MIN_REWARDED_GAS, priced on one clock. The two properties the carry existed for map
-///         onto that rule:
+/// @notice mineFlip pays FLIP on the gas each call measured above its unpaid first
+///         MIN_REWARDED_GAS, priced on one clock. Two properties follow from that rule:
 ///         (1) a backlog drained in several calls pays no more in aggregate than one call
 ///             draining it (each extra call forfeits another unpaid first million), and
 ///         (2) a genuinely separate chunk is still paid: every call measuring past the unpaid

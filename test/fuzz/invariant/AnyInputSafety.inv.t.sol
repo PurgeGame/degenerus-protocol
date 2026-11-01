@@ -492,8 +492,8 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _buildTracked() internal {
-        address[40] memory c = [
-            address(mockVRF), address(mockLINK), address(mockFeed), address(icons32), address(mintModule),
+        address[38] memory c = [
+            address(mockVRF), address(icons32), address(mintModule),
             address(ticketModule), address(minerModule), address(rngModule), address(jackpotDrawModule), address(advanceModule),
             address(whaleModule), address(jackpotModule), address(decimatorModule), address(gameOverModule), address(lootboxModule),
             address(boonModule), address(degeneretteModule), address(bingoModule), address(afkingModule), address(foilModule),

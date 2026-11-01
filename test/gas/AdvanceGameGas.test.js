@@ -656,19 +656,17 @@ describe("AdvanceGame Gas Benchmarks", function () {
   });
 
   // =========================================================================
-  // 16. Worst-Case Gas Benchmark (Post-Split)
+  // 16. Worst-Case Gas Benchmark
   //
-  // Theoretical worst case for _processDailyEth (daily two-call split):
+  // Theoretical worst case for the daily ETH distribution (_resumeEth in
+  // DegenerusGameJackpotModule, checkpointed in fixed award groups by _payEthQuadrant):
   //   Pool >= 200 ETH -> max scale 6.36x -> bucket counts 152/104/48/1 = 305
-  //   All 305 winners are unique addresses with autorebuy enabled.
-  //   Each winner: _randTraitTicket (SSTORE) + _payNormalBucket/_handleSoloBucketWinner
-  //   + _processAutoRebuy (_calcAutoRebuy + _queueEntries + pool writes) + event.
-  //   Call 1 processes largest(159) + solo(1) = 160 winners.
-  //   Call 2 processes mid(95) + small(50) = 145 winners.
-  //   Each call must stay under 16M gas.
+  //   All 305 winners are unique addresses.
+  //   Each winner: _drawBucketEntry + _creditClaimable + JackpotEthWin event.
+  //   Every checkpoint chunk must stay under 10M gas.
   //
-  // For purchase phase path: single call, 160 winners, _processDailyEth(SPLIT_NONE).
-  // For terminal path: single call, 305 winners, _processDailyEth(SPLIT_NONE).
+  // Purchase phase path: 160 winners (runDailyJackpot).
+  // Terminal path: 305 winners (runTerminalJackpotWork).
   //
   // Pool economics at level 0:
   //   Whale bundles at level 0 cost 2.4 ETH each (WHALE_BUNDLE_EARLY_PRICE).
@@ -680,7 +678,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   //   a single physical day with 100% pool distribution.
   // =========================================================================
 
-  describe("16. Worst-Case Gas Benchmark (Post-Split)", function () {
+  describe("16. Worst-Case Gas Benchmark", function () {
     this.timeout(1_200_000); // 20 minutes — 305 players need heavy setup
 
     /**
@@ -719,8 +717,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
       console.log(`      ${players.length} tickets purchased`);
 
-      // Auto-rebuy was removed in v46 (df4ef365); the recycle worst-case path is
-      // now the afking subscription system. enableAutoRebuy is retained as a
+      // The recycle worst-case path is the afking subscription system.
+      // enableAutoRebuy is retained as a
       // parameter for call-site compatibility but is a no-op here — the
       // worst-case advance gas is covered by the forge suites
       // (AdvanceGasCeilingFuzz / AdvanceStageWorstCaseGas).
@@ -786,7 +784,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       return byStage;
     }
 
-    it("SC-1: daily two-call split — 305 players, autorebuy, max-scale pool", async function () {
+    it("daily jackpot day — 305 players, autorebuy, max-scale pool", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice, bob, carol, dan, eve, others } = fixture;
 
@@ -798,13 +796,13 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Step 2: Fund pool — 5 buyers * 20 bundles * 2.4 ETH = 240 ETH total
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 
-      const byStage = await walkPostSplit(fixture, 305305n, "SC-1");
+      const byStage = await walkPostSplit(fixture, 305305n, "daily");
       recordGas("WC: Daily ETH heaviest chunk (stage=10)", byStage.get(10n).receipt);
       const jpPool = await game.currentPrizePoolView();
       console.log(`      Pool after jackpot: ${hre.ethers.formatEther(jpPool)} ETH`);
     });
 
-    it("SC-2a: purchase phase path — 160 winners, moderate pool", async function () {
+    it("purchase-phase jackpot: purchase phase path — 160 winners, moderate pool", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice, bob, carol, dan, eve, others } = fixture;
 
@@ -813,11 +811,11 @@ describe("AdvanceGame Gas Benchmarks", function () {
       );
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 
-      const byStage = await walkPostSplit(fixture, 160160n, "SC-2a");
+      const byStage = await walkPostSplit(fixture, 160160n, "purchase-phase");
       recordGas("WC: Early-Burn ETH heaviest chunk (stage=10)", byStage.get(10n).receipt);
     });
 
-    it("SC-2b: terminal jackpot path — 305 winners, no autorebuy, max pool", async function () {
+    it("terminal jackpot: terminal jackpot path — 305 winners, no autorebuy, max pool", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice, bob, carol, dan, eve, others } = fixture;
 
@@ -827,7 +825,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 
       // Turbo's only draw is also its final day: 100% pool distribution.
-      const byStage = await walkPostSplit(fixture, 777777n, "SC-2b");
+      const byStage = await walkPostSplit(fixture, 777777n, "terminal");
       recordGas("WC: Terminal Jackpot heaviest chunk (stage=10)", byStage.get(10n).receipt);
       recordGas("WC: Final day phase end chunk (stage=9)", byStage.get(9n).receipt);
     });

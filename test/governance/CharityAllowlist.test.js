@@ -20,24 +20,23 @@ import {
 
 // =====================================================================
 //  Module-level constants
-//  Pre-declared so plans 03b and 03c can append their describes
-//  (vote() reject codes, pickCharity reject codes, distribution math,
-//  gas guardrail) without touching this header block.
+//  Shared by the describes below (vote() reject codes, pickCharity reject codes,
+//  distribution math, gas guardrail).
 // =====================================================================
 
 const LOCKED_SLOTS = 3;
 const MAX_ACTIVE_SLOTS = 20;
 
-// vote() reject reasons (consumed by Plan 03b vote() describe — mirror contracts/GNRUS.sol)
+// vote() reject reasons (mirror contracts/GNRUS.sol)
 const REJECT_EMPTY_SLOT = 0;
 const REJECT_ALREADY_VOTED = 1;
 const REJECT_ZERO_WEIGHT = 2;
 
-// Distribution math (consumed by Plan 03c)
+// Distribution math
 const DISTRIBUTION_BPS = 200n;
 const BPS_DENOM = 10_000n;
 
-// Gas guardrail ceiling (consumed by Plan 03c — D-256-GAS-01)
+// Gas guardrail ceiling
 const PICK_CHARITY_CEILING_GAS = 700_000n;
 
 // =====================================================================
@@ -52,13 +51,13 @@ async function setCharityFromVaultOwner(charity, vaultOwner, slot, recipient) {
   return ownerAction(charity.connect(vaultOwner), "setCharity", [slot, recipient]);
 }
 
-describe("GNRUS Charity Allowlist (v33.0)", function () {
+describe("GNRUS Charity Allowlist", function () {
   after(function () {
     restoreAddresses();
   });
 
   // -------------------------------------------------------------------
-  //  Section 1: setCharity -- instant-apply branch (TST-01 instant-apply)
+  //  Section 1: setCharity -- instant-apply branch (instant-apply)
   // -------------------------------------------------------------------
   describe("setCharity -- instant-apply branch", function () {
     it("instant-apply on empty slot writes directly to currentSlate", async function () {
@@ -85,7 +84,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("instant-apply on locked slot 0 succeeds via first-fill", async function () {
-      // D-256-LOCKED-SLOT-01 first-fill path: slots 0/1/2 accept the FIRST setCharity
+      // First-fill path: slots 0/1/2 accept the FIRST setCharity
       // and become irrevocable; the locked-slot guard fires only on subsequent mutations.
       const { charity, deployer, recipient1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 0, recipient1.address);
@@ -114,7 +113,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("contract-recipient acceptance: setCharity to a contract address succeeds", async function () {
-      // D-256-CONTRACT-RECIPIENT-01 — Phase 254 deviation lock: the GNRUS contract
+      // The GNRUS contract
       // contains NO RecipientIsContract revert path. Setting a contract as the
       // charity recipient is a valid action (the owner of the contract can later
       // burn for proportional ETH/stETH). No `setCode` extension check exists.
@@ -125,7 +124,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section 2: setCharity -- queue branch (TST-01 queue)
+  //  Section 2: setCharity -- queue branch
   // -------------------------------------------------------------------
   describe("setCharity -- queue branch", function () {
     it("queue branch: filled slot replace writes to pending, currentSlate unchanged", async function () {
@@ -180,7 +179,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section 3: setCharity -- locked slots (D-256-LOCKED-SLOT-01)
+  //  Section 3: setCharity -- locked slots
   //  Parametric across slots 0/1/2 via a for-loop.
   // -------------------------------------------------------------------
   describe("setCharity -- locked slots (0/1/2)", function () {
@@ -203,8 +202,8 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     }
 
     it("voters CAN vote on locked slot 0 (locked-slot guard lives only in setCharity)", async function () {
-      // D-256-LOCKED-SLOT-01 positive case. The locked-slot guard is intentionally
-      // confined to setCharity (contracts/GNRUS.sol L375); castBallot(uint8) has no such
+      // Positive case: the locked-slot guard is intentionally
+      // confined to setCharity (`GNRUS.setCharity`); castBallot(uint8) has no such
       // restriction, so once a locked slot is filled it is a normal voting target.
       const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 0, recipient1.address);
@@ -214,8 +213,8 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("locked-slot guard fires before SlotAlreadyEmpty on filled locked slot remove", async function () {
-      // Confirms revert order: contracts/GNRUS.sol L375 (SlotLocked) executes BEFORE the
-      // L386 SlotAlreadyEmpty branch. Even though slot 0 is filled (so SlotAlreadyEmpty
+      // Confirms revert order: `GNRUS.setCharity` checks SlotLocked BEFORE the
+      // SlotAlreadyEmpty branch. Even though slot 0 is filled (so SlotAlreadyEmpty
       // could not fire on a remove anyway), this it-block locks the structural ordering
       // for any future refactor that might move the guards.
       const { charity, deployer, recipient1 } = await loadFixture(deployGNRUSFixture);
@@ -230,13 +229,12 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   //  Section 4: setCharity -- pending overwrite + cap (structural unreachability verdict)
   // -------------------------------------------------------------------
   describe("setCharity -- pending overwrite + cap (structural unreachability verdict)", function () {
-    // D-256-CANCEL-QUEUED-01 verdict: the branch at contracts/GNRUS.sol:382-391 (cancellation
+    // Verdict: the cancellation branch in `GNRUS.setCharity` (cancellation
     // path: currentSlate[slot] == 0 AND pendingEditSet[slot] == 1 AND recipient == 0) is
-    // structurally unreachable. pendingEditSet bit i is only set inside the queue branch (L405)
-    // which fires only when current != 0 (L380 else). Therefore (current == 0 AND pendingEditSet
+    // structurally unreachable. pendingEditSet bit i is only set inside the queue branch
+    // which fires only when current != 0 (the else branch). Therefore (current == 0 AND pendingEditSet
     // bit set) cannot be reached from any sequence of external calls. Disposition: defensive
-    // guard, no test path. Phase 257 audit cites this verdict and grep-proves unreachability as
-    // a SAFE row in AUDIT-02.
+    // guard, no test path.
 
     it("queue overwrite: setCharity(5, A) then setCharity(5, B) → only B in pending", async function () {
       const { charity, deployer, recipient1, recipient2, recipient3 } = await loadFixture(deployGNRUSFixture);
@@ -252,26 +250,24 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       expect(recipients[0]).to.equal(recipient3.address);
     });
 
-    // CapExceeded structural unreachability verdict (parallel to D-256-CANCEL-QUEUED-01):
-    //
-    // The check `_popcount32(_futureBitmapAfter(...)) > MAX_ACTIVE_SLOTS` (contracts/GNRUS.sol
-    // L394 + L402) can never fire from any external call sequence because:
+    // The 20-slot cap is structural (contracts/GNRUS.sol has no cap-exceeded branch to drive):
+    // `_popcount32(_flushedBitmap())` can never exceed MAX_ACTIVE_SLOTS from any external call
+    // sequence because:
     //
     // - currentActiveBitmap is only ever modified via `currentActiveBitmap | (1 << slot)` where
-    //   slot < 20 (L371 enforces), so bits 20-31 are structurally always 0.
+    //   slot < 20 (setCharity enforces), so bits 20-31 are structurally always 0.
     // - pendingEditSet is only ever modified via `pendingEditSet | (1 << slot)` where slot < 20,
     //   so bits 20-31 are structurally always 0.
-    // - _futureBitmapAfter (L416-444) iterates i = 0..19 and only modifies future bits 0-19.
+    // - _flushedBitmap iterates i = 0..19 and only modifies future bits 0-19.
     // - For bits NOT in pSet (i.e., i >= 20), future retains its currentActiveBitmap value
     //   (always 0).
     // - Therefore _popcount32(future) is mathematically capped at 20.
     //
-    // Disposition: defensive guard, no test path. The 20-slot fill smoke (next it-block) verifies
+    // Disposition: no cap check to test. The 20-slot fill smoke (next it-block) verifies
     // the cap is approached cleanly; no it-block attempts to drive the unreachable 21st-slot
-    // path. Per Blocker #2 resolution, attempting to forge `currentActiveBitmap > 0xFFFFF` via
+    // path. Attempting to forge `currentActiveBitmap > 0xFFFFF` via
     // hardhat_setStorageAt would test artificial state, not real reachability — explicitly
-    // forbidden. Phase 257 audit cites this verdict and grep-proves unreachability as a SAFE row
-    // in AUDIT-02.
+    // forbidden.
     it("20-slot fill via instant-apply succeeds; activeCount() == 20 and currentActiveBitmap == 0xFFFFF", async function () {
       const { charity, deployer, recipient1, recipient2, recipient3, others } =
         await loadFixture(deployGNRUSFixture);
@@ -296,7 +292,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section 5: setCharity -- edit-queue level-boundary semantics (TST-02)
+  //  Section 5: setCharity -- edit-queue level-boundary semantics
   // -------------------------------------------------------------------
   describe("setCharity -- edit-queue level-boundary semantics", function () {
     it("queued replace: level L pays OLD recipient; new recipient appears in slate only at L+1", async function () {
@@ -309,7 +305,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       await setCharityFromVaultOwner(charity, deployer, 5, recipient2.address);
 
       // Both voters cast for slot 5 — they observe slot 5 as filled (currentSlate[5] = recipient1
-      // until pickCharity flush, which now runs AFTER payout per FIX-01).
+      // until pickCharity flush, which runs AFTER payout).
       await charity.connect(voter1).castBallot(5);
       await charity.connect(voter2).castBallot(5);
 
@@ -347,7 +343,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       expect(flushed.args.slot).to.equal(5n);
       expect(flushed.args.recipient).to.equal(recipient2.address);
 
-      // lastWinningRecipient updated to recipient1 (FIX-02; written in the paid branch).
+      // lastWinningRecipient updated to recipient1 (written in the paid branch).
       expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
     });
 
@@ -403,11 +399,11 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section 6: vote(uint8 slot) (TST-03)
+  //  Section 6: vote(uint8 slot)
   //  Covers all 4 reject paths via reason codes, multi-slot independence
-  //  (D-256-MULTI-VOTE-01), hasVoted state, and revert order
-  //  (InvalidSlot fires before EMPTY_SLOT per contracts/GNRUS.sol:558-573).
-  //  The locked-slot vote positive case (D-256-LOCKED-SLOT-01) lives in
+  //  hasVoted state, and revert order
+  //  (InvalidSlot fires before EMPTY_SLOT per `GNRUS.castBallot`).
+  //  The locked-slot vote positive case lives in
   //  Section 3 only — keeping it out of Section 6 avoids duplication.
   // -------------------------------------------------------------------
   describe("vote(uint8 slot)", function () {
@@ -423,8 +419,8 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       expect(await charity.slotApproveWeight(0, 5)).to.equal(100n);
     });
 
-    it("multi-slot vote independence: voter1 votes slots 3, 5, 7 — full weight each (D-256-MULTI-VOTE-01)", async function () {
-      // D-256-MULTI-VOTE-01: a single voter casting on N slots in one level applies the FULL
+    it("multi-slot vote independence: voter1 votes slots 3, 5, 7 — full weight each", async function () {
+      // A single voter casting on N slots in one level applies the FULL
       // sDGNRS-derived weight to EACH slot independently (sum across slots = N * weight, NOT
       // weight / N). hasVoted is keyed per (level, voter, slot), not per (level, voter).
       const { charity, deployer, recipient1, recipient2, recipient3, voter1 } =
@@ -509,7 +505,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("VoteRejected(REJECT_EMPTY_SLOT) on slot never filled", async function () {
-      // Slot 7 is in-bounds (< 20) but currentSlate[7] == address(0); contracts/GNRUS.sol L563.
+      // Slot 7 is in-bounds (< 20) but currentSlate[7] == address(0); `GNRUS.castBallot`.
       const { charity, voter1 } = await loadFixture(deployGNRUSFixture);
       await expect(
         charity.connect(voter1).castBallot(7)
@@ -530,8 +526,8 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("VoteRejected(REJECT_ZERO_WEIGHT) on sub-1e12 sDGNRS balance (integer-floor path)", async function () {
-      // D-256-VOTE-REJECT-01: explicitly exercise the `weight = balanceOf / 1e12` integer
-      // floor at contracts/GNRUS.sol L572-573. A non-zero sub-1e12 balance flows past
+      // Explicitly exercise the `weight = balanceOf / 1e12` integer
+      // floor in `GNRUS.castBallot`. A non-zero sub-1e12 balance flows past
       // EMPTY_SLOT and ALREADY_VOTED checks and reverts at the weight comparison — proving
       // the floor is the actual gate (not a balance == 0 short-circuit).
       const { charity, deployer, recipient1, sdgnrs, gameAddress, others } =
@@ -550,7 +546,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("vote revert order: InvalidSlot fires before EMPTY_SLOT (slot=20, never-filled slate)", async function () {
-      // Verifies the explicit revert order at contracts/GNRUS.sol L560-563:
+      // Verifies the explicit revert order in `GNRUS.castBallot`:
       // bounds check (InvalidSlot) precedes the EMPTY_SLOT check. With slot=20 on a
       // pristine slate (no setCharity calls), both gates would semantically apply, but
       // only InvalidSlot is observable.
@@ -562,13 +558,13 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section NN: vote(uint8 slot) -- previous-winner block (FIX-02)
+  //  Section NN: vote(uint8 slot) -- previous-winner block
   //  Covers PreviousWinnerNotVotable across three semantic cases:
   //    (a) winner blocked at L+1 via the slot it occupied at L
   //    (b) queue-replace of the winning slot's recipient unblocks at L+1
   //    (c) skipped level retains the L-1 winner block
   // -------------------------------------------------------------------
-  describe("vote(uint8 slot) -- previous-winner block (FIX-02)", function () {
+  describe("vote(uint8 slot) -- previous-winner block", function () {
     it("(a) charity that won level L cannot be voted for at L+1 via the slot it occupied", async function () {
       const { charity, deployer, recipient1, voter1, voter2, gameAddress } =
         await loadFixture(deployGNRUSFixture);
@@ -644,16 +640,16 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section 7: pickCharity(uint24 level) (TST-04 + D-256-PICKCHARITY-REJECT-01 + D-256-TIEBREAK-01)
+  //  Section 7: pickCharity(uint24 level)
   //  Covers the no-op level guard (both the wrong-level call and the duplicate-resolve
   //  re-call, which the currentLevel monotonicity guard turns into a no-op rather than a
   //  revert — the sole caller is the daily advance),
   //  Unauthorized (onlyGame), idempotence ordering (currentLevel advance
   //  before flush+winner+distribution), single-active winner with distribution
-  //  math (DISTRIBUTION_BPS / BPS_DENOM), multi-vote winner, tie-break (D-256-
-  //  TIEBREAK-01 cases A and B), and all 3 LevelSkipped paths (A: zero active
+  //  math (DISTRIBUTION_BPS / BPS_DENOM), multi-vote winner, tie-break
+  //  (cases A and B), and all 3 LevelSkipped paths (A: zero active
   //  slots after flush; B: zero votes / bestSlot stays at 0xFF; C: 2% rounds
-  //  to zero via deterministic balanceOf storage write per Warning #5).
+  //  to zero via deterministic balanceOf storage write).
   // -------------------------------------------------------------------
   describe("pickCharity(uint24 level)", function () {
     it("a wrong-level call resolves nothing and does NOT revert", async function () {
@@ -746,7 +742,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       expect(ev.args.recipient).to.equal(recipient2.address);
     });
 
-    it("tie → lowest slot index wins (D-256-TIEBREAK-01 case A: 200 vs 100+100)", async function () {
+    it("tie → lowest slot index wins (200 vs 100+100)", async function () {
       // voter3 (200) votes slot 3; voter1 (100) + voter2 (100) vote slot 5.
       // Both slots end at weight 200 — strict `>` keeps bestSlot at the first slot scanned.
       const { charity, deployer, recipient1, recipient2, voter1, voter2, voter3, gameAddress } =
@@ -763,7 +759,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       expect(ev.args.recipient).to.equal(recipient1.address);
     });
 
-    it("4-way tie at slots 3, 5, 7, 11 → slot 3 wins (D-256-TIEBREAK-01 case B)", async function () {
+    it("4-way tie at slots 3, 5, 7, 11 → slot 3 wins", async function () {
       // Four fresh voters each weight 100; one vote per tied slot. Avoid voter3 (200 weight
       // would break the tie). Use others[7..10] and fund each with 100 sDGNRS via giveSDGNRS.
       const { charity, deployer, recipient1, recipient2, recipient3, others, sdgnrs, gameAddress } =
@@ -825,7 +821,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
     it("LevelSkipped path C: 2% rounds to zero (deterministic storage write — Warning #5)", async function () {
       // Drive distribution-rounds-to-zero by overwriting the contract's GNRUS balance via
-      // hardhat_setStorageAt. Storage layout per contracts/GNRUS.sol L144-147:
+      // hardhat_setStorageAt. Storage layout per `GNRUS.totalSupply` / `GNRUS.balanceOf`:
       //   slot 0 = totalSupply (uint256)
       //   slot 1 = balanceOf (mapping address => uint256)
       // For balanceOf[addr], slot index = keccak256(abi.encode(addr, uint256(1))).
@@ -862,20 +858,20 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section 8: post-gameover inertness (TST-06, D-256-POSTGAMEOVER-01)
+  //  Section 8: post-gameover inertness
   //
-  //  Two it-blocks per Blocker #3 resolution:
+  //  Two it-blocks:
   //    (a) GNRUS-side state assertion after burnAtGameOver — balanceOf zeroed,
   //        totalSupply decremented by the unallocated amount, finalized() == true.
   //    (b) Positive inertness smoke — setCharity and vote post-burnAtGameOver
-  //        do NOT revert. v33 contract has no `finalized` guard on these paths;
+  //        do NOT revert. The contract has no `finalized` guard on these paths;
   //        inertness comes from absence of game-side caller (the only pickCharity
-  //        caller — DegenerusGameAdvanceModule:1634 — stops at gameover), NOT from
+  //        caller — DegenerusGameAdvanceModule level-transition hook — stops at gameover), NOT from
   //        any contract-level guard. This test empirically verifies no revert path
-  //        was inadvertently introduced — satisfies ROADMAP SC-5 wording
-  //        ("subsequent calls to setCharity / vote either revert or are inert").
+  //        was inadvertently introduced ("subsequent calls to setCharity / vote either revert
+  //        or are inert").
   // -------------------------------------------------------------------
-  describe("post-gameover inertness (TST-06)", function () {
+  describe("post-gameover inertness", function () {
     it("after burnAtGameOver: balanceOf(charityAddress) == 0, totalSupply -= unallocated, finalized() == true", async function () {
       const { charity, charityAddress, gameAddress } = await loadFixture(deployGNRUSFixture);
 
@@ -893,12 +889,12 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("inertness smoke: setCharity and vote after burnAtGameOver do NOT revert (inert by absence)", async function () {
-      // v33 contract has no `finalized` guard on setCharity / vote / pickCharity. Inertness
-      // comes from absence of game-side caller (DegenerusGameAdvanceModule:1634 is the only
+      // The contract has no `finalized` guard on setCharity / vote / pickCharity. Inertness
+      // comes from absence of game-side caller (the DegenerusGameAdvanceModule level-transition hook is the only
       // pickCharity caller, and the game stops at gameover), NOT from contract-level guards.
       // This positive smoke empirically verifies no revert path was inadvertently introduced
-      // — satisfies ROADMAP SC-5 wording ("subsequent calls to setCharity / vote either revert
-      // or are inert"). Drives the chosen behavior (inert) for the test record.
+      // ("subsequent calls to setCharity / vote either revert or are inert"). Drives the chosen
+      // behavior (inert) for the test record.
       const { charity, deployer, recipient1, voter1, gameAddress } =
         await loadFixture(deployGNRUSFixture);
       const gameSigner = await impersonate(gameAddress);
@@ -917,15 +913,15 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   });
 
   // -------------------------------------------------------------------
-  //  Section 9: gas guardrail (D-256-GAS-01)
+  //  Section 9: gas guardrail
   //
   //  Single measurement: pickCharity full-slate worst case — 20 slots active +
   //  one vote per slot (all weighted) + 17 pending edits queued (slots 0/1/2 are
-  //  locked so cannot have pending edits). Theoretical ceiling derived inline in
-  //  256-03c-PLAN.md objective: ≈622k gas; ×1.1 buffer → CEILING = 700_000.
+  //  locked so cannot have pending edits). Theoretical ceiling ≈622k gas;
+  //  ×1.1 buffer → CEILING = 700_000.
   //  The gas log line lets future runs spot regressions before the ceiling is hit.
   // -------------------------------------------------------------------
-  describe("gas guardrail (D-256-GAS-01)", function () {
+  describe("gas guardrail", function () {
     it("pickCharity full-slate worst case: gasUsed < PICK_CHARITY_CEILING_GAS", async function () {
       const {
         charity,

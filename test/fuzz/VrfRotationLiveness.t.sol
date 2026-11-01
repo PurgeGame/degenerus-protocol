@@ -11,35 +11,34 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title VrfRotationLiveness -- VTST-02 liveness-after-rotation (proves VRF-02)
+/// @title VrfRotationLiveness -- liveness after VRF rotation
 /// @notice Proves the protocol stays LIVE after an emergency VRF coordinator/subscription
-///         rotation. The Phase 312 fix re-issues an in-flight request on the new coordinator
+///         rotation. The rotation re-issues an in-flight request on the new coordinator
 ///         (mid-day or daily) so the daily-drain advance gate, the mid-day request, and the
 ///         daily-takeover failsafe all stay reachable -- no permanent revert / ~120-day freeze /
 ///         forced premature game-over.
 ///
 ///         Liveness is proven by a POSITIVE outcome (the drain loop reaches
 ///         rngLocked()==false, the day word / index word is set, a re-issue actually fires
-///         on the NEW coordinator) -- never by a silent negative assertion. The OLD-bug
-///         failure mode was a revert (RngNotReady at the :271/:213 drain gate); under the bug
-///         these positive-outcome assertions fail naturally because the drain reverts.
+///         on the NEW coordinator) -- never by a silent negative assertion. A
+///         liveness failure would show as a revert (RngNotReady at the drain gate), which
+///         makes these positive-outcome assertions fail naturally.
 ///
 ///         Three rotation branches of updateVrfCoordinatorAndSub (GameOverModule) are
 ///         exercised, plus the daily-takeover failsafe (a stalled mid-day re-issue folded into
 ///         the daily word after MIDDAY_RNG_STALL_TIMEOUT):
-///           1. Mid-day in flight (LR_MID_DAY==1, :1726): re-issue lands in the reserved
-///              slot N via the mid-day fulfillment branch (:1803-1804).
-///           2. Daily in flight, rngWordCurrent==0 (:1733): re-issue fills rngWordCurrent
-///              via the daily branch (:1800), the new-day drain gate (:269/:271) unblocks.
-///           3. Daily already delivered (rngWordCurrent!=0, :1738) / nothing in flight
-///              (:1741): NO re-issue -- delivered word preserved, advance proceeds.
+///           1. Mid-day in flight (LR_MID_DAY==1): re-issue lands in the reserved
+///              slot N via the mid-day fulfillment branch.
+///           2. Daily in flight, rngWordCurrent==0: re-issue fills rngWordCurrent
+///              via the daily branch, the new-day drain gate unblocks.
+///           3. Daily already delivered (rngWordCurrent!=0) / nothing in flight:
+///              NO re-issue -- delivered word preserved, advance proceeds.
 ///
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
 ///         slot 34 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
 ///         slot 35 = lootboxRngWordByIndex mapping (_lootboxWord(i) at
 ///         keccak256(abi.encode(uint256(i), uint256(34)))),
 ///         slot 3 = rngWordCurrent, slot 0 packed = rngRequestTime at bit offset 64.
-///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationLiveness is DeployProtocol {
     /// @dev Storage slot constants (authoritative storage-layout, not the drifted analog).
     uint256 private constant SLOT_PACKED_0 = 0;
@@ -49,9 +48,10 @@ contract VrfRotationLiveness is DeployProtocol {
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 
-    /// @dev MIDDAY_RNG_STALL_TIMEOUT (AdvanceModule) and MIN_LINK_FOR_LOOTBOX_RNG.
+    /// @dev MIDDAY_RNG_STALL_TIMEOUT (AdvanceModule), and subscription funding above the mid-day
+    ///      native floor.
     uint48 private constant MIDDAY_RNG_STALL_TIMEOUT = 4 hours;
-    uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
+    uint96 private constant MIDDAY_SUB_FUNDING = 40 ether;
 
     /// @dev Last VRF request id fulfilled on the active coordinator; avoids double-fulfil
     ///      when the game reuses a stale rngWordCurrent across day boundaries.
@@ -100,8 +100,8 @@ contract VrfRotationLiveness is DeployProtocol {
 
     /// @dev The currently-active VRF coordinator. Starts as the deploy-time mockVRF and is
     ///      re-pointed by _rotateTo() so the drain/complete helpers fulfil on the live
-    ///      coordinator after a rotation (the analogs that fulfil on the stale mockVRF are
-    ///      the pre-fix regressions plan 313-05 migrates).
+    ///      coordinator after a rotation (a helper that fulfils on the stale mockVRF would
+    ///      target the wrong coordinator).
     MockVRFCoordinator private _activeVRF;
 
     /// @dev Resolve the active coordinator (defaults to deploy-time mockVRF before any rotation).
@@ -163,7 +163,7 @@ contract VrfRotationLiveness is DeployProtocol {
     /// @dev Drive the game into a mid-day RNG state where the mid-day request (mineFlip's
     ///      RequestMidday stage) succeeds AND its buffer swap sets LR_MID_DAY=1: complete two days so today's daily RNG is
     ///      recorded, make a lootbox purchase (pending ETH + a ticket-queue entry), fund the
-    ///      VRF subscription above MIN_LINK_FOR_LOOTBOX_RNG.
+    ///      VRF subscription above the mid-day native floor.
     function _setupForMidDayRng() internal {
         _completeDay(0xDEAD0001);
         vm.warp(block.timestamp + 1 days);
@@ -189,7 +189,7 @@ contract VrfRotationLiveness is DeployProtocol {
     /// @dev Deploy a freshly-funded 2nd MockVRFCoordinator and ADMIN-prank
     ///      updateVrfCoordinatorAndSub to repoint the game at it. Resets _lastFulfilledReqId
     ///      since the new mock has its own request counter. Funds the new subscription above
-    ///      MIN_LINK_FOR_LOOTBOX_RNG so a re-issued mid-day request's LINK precheck passes.
+    ///      the mid-day native floor so a re-issued mid-day request passes it.
     function _rotateTo() internal returns (MockVRFCoordinator newVRF) {
         newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
@@ -213,18 +213,16 @@ contract VrfRotationLiveness is DeployProtocol {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Task 1: rotation-branch liveness -- advance/drain stays reachable
+    // Rotation-branch liveness -- advance/drain stays reachable
     // ══════════════════════════════════════════════════════════════════════
 
     /// @notice Mid-day branch (LR_MID_DAY==1): after a mid-flight rotation + fulfilment on the
     ///         NEW coordinator, the re-issued word fills _lootboxWord(reservedIndex)
-    ///         (the :269 drain-gate input) and the daily flow drains to rngLocked()==false --
+    ///         (the drain-gate input) and the daily flow drains to rngLocked()==false --
     ///         no RngNotReady() permanent revert.
     function test_midDayRotation_liveness(uint256 vrfWord) public {
-        // The contract converts a delivered 0 word to 1 (AdvanceModule:1796), so assume nonzero
-        // for the exact mid-day-word equality. Also exclude 1: rngGate uses rngWord==1 as the
-        // "request new RNG" sentinel (AdvanceModule:298), so a daily word delivered as 1 in the
-        // subsequent _completeDay drain would livelock the day. Real 256-bit VRF words collide
+        // rawFulfillRandomWords ignores words below 2 (the request stays waiting), so assume
+        // vrfWord > 1 for the exact mid-day-word equality. Real 256-bit VRF words collide
         // with {0,1} only with cryptographically negligible probability.
         vm.assume(vrfWord != 0 && vrfWord != 1);
 
@@ -287,11 +285,10 @@ contract VrfRotationLiveness is DeployProtocol {
 
     /// @notice Daily branch (rngLockedFlag==true, rngWordCurrent==0): after a daily-in-flight
     ///         rotation + fulfilment on the NEW coordinator, the re-issued word fills
-    ///         rngWordCurrent so the :271 new-day drain gate unblocks; the day completes
+    ///         rngWordCurrent so the new-day drain gate unblocks; the day completes
     ///         (rngWordForDay(currentDay) != 0) -- no RngNotReady() revert.
     function test_dailyRotation_liveness(uint256 vrfWord) public {
-        // Exclude {0,1}: 0 is zero-guarded to 1, and rngWord==1 is the rngGate "request new RNG"
-        // sentinel (AdvanceModule:298) -- a daily word delivered as 1 livelocks the drain.
+        // Exclude {0,1}: rawFulfillRandomWords ignores them, so the daily request would stay waiting.
         vm.assume(vrfWord != 0 && vrfWord != 1);
 
         // Complete the first post-deploy day so the game is in steady state.
@@ -319,19 +316,18 @@ contract VrfRotationLiveness is DeployProtocol {
         _lastFulfilledReqId = newVRF.lastRequestId();
         assertTrue(_readRngWordCurrent() != 0, "re-issued daily word delivered into rngWordCurrent");
 
-        // POSITIVE liveness: drain the day to completion -- the :271 gate no longer reverts.
+        // POSITIVE liveness: drain the day to completion -- the drain gate no longer reverts.
         _drainUntilUnlocked(vrfWord);
         assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after daily rotation");
         assertTrue(game.rngWordForDay(uint24(day)) != 0, "day completes: rngWordForDay(currentDay) != 0");
     }
 
-    /// @notice Daily-already-delivered short-circuit (rngWordCurrent!=0 at :1738): if the daily
+    /// @notice Daily-already-delivered short-circuit (rngWordCurrent!=0): if the daily
     ///         word was delivered BEFORE the rotation, the rotation does NOT re-issue (new
     ///         coordinator lastRequestId()==0) and the delivered word is preserved; advance
     ///         proceeds and the day completes normally.
     function test_dailyAlreadyDelivered_shortCircuit(uint256 vrfWord) public {
-        // Exclude {0,1}: 0 is zero-guarded to 1, and rngWord==1 is the rngGate sentinel
-        // (AdvanceModule:298) -- a daily word delivered as 1 livelocks the drain.
+        // Exclude {0,1}: rawFulfillRandomWords ignores them, so the daily request would stay waiting.
         vm.assume(vrfWord != 0 && vrfWord != 1);
 
         _completeDay(0xDEAD0001);
@@ -362,7 +358,7 @@ contract VrfRotationLiveness is DeployProtocol {
         assertTrue(game.rngWordForDay(uint24(day)) != 0, "day completes with the pre-rotation delivered word");
     }
 
-    /// @notice Nothing-in-flight no-op (rngLocked()==false, LR_MID_DAY==0 at :1741): a rotation
+    /// @notice Nothing-in-flight no-op (rngLocked()==false, LR_MID_DAY==0): a rotation
     ///         from an unlocked steady state is a pure config repoint -- no re-issue on the new
     ///         coordinator -- and the next day advances without revert.
     function test_nothingInFlight_noOp() public {
@@ -384,7 +380,7 @@ contract VrfRotationLiveness is DeployProtocol {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Task 2: daily-takeover failsafe + mid-day request reachability
+    // Daily-takeover failsafe + mid-day request reachability
     // ══════════════════════════════════════════════════════════════════════
 
     /// @notice Stalled re-issue failsafe after rotation: if the NEW coordinator also stalls the
@@ -460,8 +456,7 @@ contract VrfRotationLiveness is DeployProtocol {
     ///         request through mineFlip on the new coordinator succeeds -- advances the index and
     ///         fires a request -- proving the request path is reachable post-rotation.
     function test_middayRequestReachableAfterRotation(uint256 vrfWord) public {
-        // Exclude {0,1}: 0 is zero-guarded to 1; rngWord==1 is the rngGate sentinel
-        // (AdvanceModule:298). Also exclude the value whose ^0xBEEF next-day word would be 1.
+        // Exclude {0,1}: rawFulfillRandomWords ignores them. Also exclude the value whose ^0xBEEF next-day word would be 1.
         vm.assume(vrfWord != 0 && vrfWord != 1);
         vm.assume((vrfWord ^ 0xBEEF) != 1);
 
@@ -481,11 +476,11 @@ contract VrfRotationLiveness is DeployProtocol {
         // --- Set up a fresh mid-day condition on the new coordinator. ---
         // Advance one more full day so today's daily RNG is recorded (the mid-day request's
         // _recordedDailyWord(currentDay)!=0 gate), then create pending lootbox ETH + a
-        // ticket-queue entry and fund the new subscription above MIN_LINK_FOR_LOOTBOX_RNG.
+        // ticket-queue entry and fund the new subscription above the mid-day native floor.
         vm.warp(block.timestamp + 1 days);
         uint256 nextDayWord = vrfWord ^ 0xBEEF;
         // Map both forbidden words to a safe value: 0 (XOR cancellation when vrfWord==0xBEEF)
-        // and 1 (the rngGate "request new RNG" sentinel at AdvanceModule:298) would stall the
+        // and 1 (RNG_WORD_WAITING; rawFulfillRandomWords ignores words below 2) would stall the
         // _completeDay drain and leave the game rngLocked().
         if (nextDayWord <= 1) nextDayWord = 2;
         _completeDay(nextDayWord);

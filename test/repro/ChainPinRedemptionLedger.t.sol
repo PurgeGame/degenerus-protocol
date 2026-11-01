@@ -180,8 +180,7 @@ contract ChainPinConsumerStage is DeployProtocol {
         _check(_seed(salt, _today(), oneIn), pending);
     }
 
-    /// @notice The exact state in which the only virtual predicate (`_pastDeadlineTriggered`, overridden only
-    ///         in the MintModule) matters: past the purchase deadline on a caught-up day with nothing
+    /// @notice The purchase-deadline boundary (`_purchaseDeadlineDay`): past the purchase deadline on a caught-up day with nothing
     ///         rescuing the level. The Game ends it; the selector must not offer stage 1.
     function test_pastDeadlineBoundaryAgreement() public {
         uint24 today = _today();

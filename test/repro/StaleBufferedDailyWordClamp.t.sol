@@ -11,7 +11,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @notice MECHANISM (AdvanceModule RNGREUSE guard, buffered arm):
 ///         A delivered daily word (rngWordCurrent) is public from its fulfillment tx, and flip
 ///         deposits stay open during the RNG lock targeting wallDay+1. Without the clamp, an
-///         advance on day D+1 routes the day-D-requested word through rngGate's gap path: day D
+///         advance on day D+1 routes the day-D-requested word through the daily RNG step's gap path: day D
 ///         is backfilled with a derived word and day D+1 consumes the RAW word — so a flip
 ///         deposited on day D after fulfillment (targeting D+1) would resolve against a word
 ///         already public at deposit time. The buffered clamp arm instead points the word at its

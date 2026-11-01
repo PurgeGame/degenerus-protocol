@@ -39,7 +39,7 @@ contract BoundedRedemptionGasTest is RedemptionFixture, BoundedGasProbe {
     function test_P1_ResolveAndSettleBatch() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _closeAsGame();
-        // Native replay must see the same real stage gate, not a Forge-only mock.
+        // The stage gate must be the real one, not a Forge-only mock.
         bytes memory original = address(game).code;
         vm.etch(address(game), type(BoundedRedemptionStageSeeder).runtimeCode);
         BoundedRedemptionStageSeeder(address(game)).seed();

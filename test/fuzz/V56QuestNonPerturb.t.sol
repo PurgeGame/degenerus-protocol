@@ -6,21 +6,21 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 
-/// @title V56QuestNonPerturb -- QST-04 (D-04): the v56 quest-core non-perturbation proof.
+/// @title V56QuestNonPerturb -- the quest-core non-perturbation proof.
 ///
-/// @notice Two properties of the shared DegenerusQuests core, now that the afking redesign added
-///         `beginAfking` + the `finalizeAfking` write entrypoint alongside the pre-existing
+/// @notice Two properties of the shared DegenerusQuests core, given that `beginAfking` + the
+///         `finalizeAfking` write entrypoint sit alongside the
 ///         manual/bingo/degenerette/boon callers:
 ///
 ///   (a) SLOT-1 STREAK-NEUTRAL + ACCESSIBLE during afking. While `afkingActive` is set (begun via
 ///       `beginAfking`), a quest completion of EITHER slot is streak-neutral — the compute-on-read
 ///       afking streak (off the Game-side Sub slot) owns the streak, so the manual `state.streak`
-///       must NOT advance (`DegenerusQuests._questComplete`: `if (!afking && (mask & CREDITED) == 0)`,
-///       :1751). The player's own random/manual slot stays FULLY ACCESSIBLE (the completion succeeds
+///       must NOT advance (`DegenerusQuests._questComplete` bumps `state.streak` only under `if (!afking)`).
+///       The player's own random/manual slot stays FULLY ACCESSIBLE (the completion succeeds
 ///       and pays its `QUEST_RANDOM_REWARD`; only the streak bump is suppressed). For a NON-afking
 ///       player the same completion advances `state.streak` by 1 — the gate is `afkingActive`, not a
-///       global suppression. This keeps the C3-a non-funded streak dodge closed (a cheap slot-1
-///       completion can no longer hold a lapsed afking streak alive).
+///       global suppression. This keeps the non-funded streak dodge closed (a cheap slot-1
+///       completion cannot hold a lapsed afking streak alive).
 ///
 ///   (b) CROSS-CALLER BYTE-IDENTITY. `awardQuestStreakBonus` + the manual quest-reward callers produce
 ///       a byte-identical PlayerQuestState for a TARGET player whether or not OTHER players hold afking
@@ -142,7 +142,7 @@ contract V56QuestNonPerturb is DeployProtocol {
 
     /// @notice The decisive control pair: the SAME slot-0 completion advances the streak for a
     ///         non-afking player but is neutral for an afking player — proving the gate is exactly
-    ///         `afkingActive` (the C3-a non-funded streak dodge stays closed).
+    ///         `afkingActive` (the non-funded streak dodge stays closed).
     function testStreakNeutralIsGatedByAfkingActiveOnly() public {
         uint32 day = _rollDay(17);
 
@@ -234,16 +234,16 @@ contract V56QuestNonPerturb is DeployProtocol {
         assertEq(lastActiveA, uint24(day), "non-vacuity: the slot-0 completion bumped lastActiveDay");
     }
 
-    /// @notice O1 single-credit: a completed LOOTBOX quest credits its reward exactly once. In the v56
-    ///         fix the lootbox-quest reward is RETURNED to the caller (credited once there) and is NOT
+    /// @notice O1 single-credit: a completed LOOTBOX quest credits its reward exactly once. The
+    ///         lootbox-quest reward is RETURNED to the caller (credited once there) and is NOT
     ///         internally creditFlipped — so the handler returns the single QUEST_RANDOM_REWARD and the
     ///         player's accrued flip balance does NOT move by the lootbox reward inside the handler (no
     ///         internal double-credit). Holds identically whether or not afking siblings are present.
     function testO1LootboxSingleCreditAcrossTwoWorlds() public {
         address target = makeAddr("o1_target");
         address other = makeAddr("o1_other");
-        // The quest-type table has grown since this fixture pinned day 4 (craps quests joined the
-        // roll), so the day whose slot-1 draw is LOOTBOX is searched for rather than hard-coded:
+        // The day whose slot-1 draw is LOOTBOX is searched for rather than hard-coded, since the
+        // quest-type table (including craps quests) determines the roll:
         // the property under test is about the O1 credit path, not about which day rolls it.
         uint32 day = _rollDayWithSlot1(QT_LOOTBOX);
         {

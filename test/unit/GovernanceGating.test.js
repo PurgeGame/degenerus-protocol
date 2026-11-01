@@ -113,14 +113,14 @@ async function advanceGameOneDay(game, caller, mockVRF) {
   throw new Error("miner chain did not seal the target day and finish its read consumers");
 }
 
-describe("Governance & Gating (Phase 43)", function () {
+describe("Governance & Gating", function () {
   after(() => restoreAddresses());
 
   // ===========================================================================
-  // ADMIN-01: onlyOwner in DegenerusAdmin requires >50.1% DGVE
+  // onlyOwner in DegenerusAdmin requires >50.1% DGVE
   // ===========================================================================
-  describe("ADMIN-01: Admin onlyOwner requires >50.1% DGVE", function () {
-    // setLootboxRngThreshold and stakeGameEthToStEth moved from Admin to Game in Phase 146.
+  describe("Admin onlyOwner requires >50.1% DGVE", function () {
+    // setLootboxRngThreshold lives on Game, not Admin.
     // swapGameEthForStEth remains on Admin and uses the same onlyOwner modifier.
     it("deployer (100% DGVE) passes onlyOwner", async function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
@@ -194,9 +194,9 @@ describe("Governance & Gating (Phase 43)", function () {
   });
 
   // ===========================================================================
-  // ADMIN-02: onlyVaultOwner in DegenerusVault requires >50.1% DGVE
+  // onlyVaultOwner in DegenerusVault requires >50.1% DGVE
   // ===========================================================================
-  describe("ADMIN-02: Vault onlyVaultOwner requires >50.1% DGVE", function () {
+  describe("Vault onlyVaultOwner requires >50.1% DGVE", function () {
     it("deployer (100% DGVE) passes onlyVaultOwner", async function () {
       const { vault, deployer, game } = await loadFixture(deployFullProtocol);
       const tx = ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("mineRun", [0]), 0]);
@@ -254,9 +254,9 @@ describe("Governance & Gating (Phase 43)", function () {
   });
 
   // ===========================================================================
-  // ADMIN-03: shutdownVrf() reverts for non-GAME callers
+  // shutdownVrf() reverts for non-GAME callers
   // ===========================================================================
-  describe("ADMIN-03: shutdownVrf() only callable by GAME", function () {
+  describe("shutdownVrf() only callable by GAME", function () {
     it("reverts with NotAuthorized when called by deployer", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       await expect(
@@ -301,9 +301,9 @@ describe("Governance & Gating (Phase 43)", function () {
 
 
   // ===========================================================================
-  // ADMIN-05: shutdownVrf() silently succeeds when subscriptionId is already 0
+  // shutdownVrf() silently succeeds when subscriptionId is already 0
   // ===========================================================================
-  describe("ADMIN-05: shutdownVrf() no-op when subscriptionId is 0", function () {
+  describe("shutdownVrf() no-op when subscriptionId is 0", function () {
     it("silently succeeds on second call (subscriptionId already 0)", async function () {
       const { admin, game } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
@@ -333,8 +333,9 @@ describe("Governance & Gating (Phase 43)", function () {
   });
 
   // ===========================================================================
+  // shutdownVrf() try/catch resilience
   // ===========================================================================
-  describe("ADMIN-06: shutdownVrf() try/catch resilience", function () {
+  describe("shutdownVrf() try/catch resilience", function () {
     it("completes even if coordinator cancelSubscription has already been called", async function () {
       const { admin, game, mockVRF } = await loadFixture(deployFullProtocol);
       const subId = await admin.subscriptionId();

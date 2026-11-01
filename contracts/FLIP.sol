@@ -425,9 +425,8 @@ contract FLIP {
     /// @param amount The amount to mint (0 decimals).
     function _mint(address to, uint256 amount) internal {
         if (to == address(0)) revert ZeroAddress();
-        uint128 amount128 = _toUint128(amount);
         if (to == ContractAddresses.VAULT) {
-            _addVaultAllowance(amount128);
+            _addVaultAllowance(amount > type(uint128).max ? type(uint128).max : uint128(amount));
             emit VaultEscrowRecorded(address(0), amount);
             return;
         }
@@ -438,7 +437,11 @@ contract FLIP {
             coinflip.creditSdgnrsBacking(amount);
             return;
         }
-        _supply.totalSupply += amount128;
+        // Payouts settle inside the mining chain, so a mint stops at the uint128 supply ceiling
+        // instead of reverting; any part above it is not created.
+        uint256 headroom = type(uint128).max - _supply.totalSupply;
+        if (amount > headroom) amount = headroom;
+        _supply.totalSupply += uint128(amount);
         balanceOf[to] += amount;
         emit Transfer(address(0), to, amount);
     }
@@ -611,9 +614,11 @@ contract FLIP {
         if (amount128 > allowanceVault) revert Insufficient();
         unchecked {
             _supply.vaultAllowance = allowanceVault - amount128;
-            _supply.totalSupply += amount128;
-            balanceOf[to] += amount;
         }
+        // Checked: the balances must keep summing to totalSupply, which burns on the mining
+        // chain rely on. Only this Vault call can hit the ceiling, and it reverts alone.
+        _supply.totalSupply += amount128;
+        balanceOf[to] += amount;
         emit VaultAllowanceSpent(address(this), amount);
         emit Transfer(address(0), to, amount);
     }
@@ -712,7 +717,9 @@ contract FLIP {
     /// @custom:reverts OnlyGame If the caller is not the craps table.
     function creditCrapsComps_g37225(uint256 amount) external {
         if (msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
-        uint128 lane = _toUint128(uint256(_crapsCompAllowance) + amount);
+        // Battle completion runs inside the mining chain: the lane saturates instead of reverting.
+        uint256 sum = uint256(_crapsCompAllowance) + amount;
+        uint128 lane = sum > type(uint128).max ? type(uint128).max : uint128(sum);
         _crapsCompAllowance = lane;
         emit CrapsCompsAccrued(amount, lane);
     }

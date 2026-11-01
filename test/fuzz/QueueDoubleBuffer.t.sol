@@ -105,7 +105,7 @@ contract QueueHarness is DegenerusGameAdvanceModule, WalletSeed {
     // }
 }
 
-/// @title QueueDoubleBufferTest -- Proves write-key and read-key buffer isolation (QUEUE-01, QUEUE-02).
+/// @title QueueDoubleBufferTest -- Proves write-key and read-key buffer isolation.
 contract QueueDoubleBufferTest is Test {
     QueueHarness harness;
     address constant ALICE = address(0xA11CE);
@@ -303,7 +303,7 @@ contract QueueDoubleBufferTest is Test {
     }
 }
 
-/// @title MidDaySwapTest -- Proves mid-day swap threshold and jackpot conditions (QUEUE-04).
+/// @title MidDaySwapTest -- Proves mid-day swap threshold and jackpot conditions.
 contract MidDaySwapTest is Test {
     QueueHarness harness;
     address constant ALICE = address(0xA11CE);

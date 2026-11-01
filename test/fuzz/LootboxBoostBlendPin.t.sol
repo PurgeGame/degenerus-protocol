@@ -11,8 +11,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @title LootboxBoostBlendPin -- the boost lane of a box entry belongs to its own purchase
 /// @notice A lootbox boon lifts ONE purchase's spend. Every purchase is its own queue entry, so
 ///         the entry that consumed the boon carries its lift as a fraction of its own spend, and
-///         a later purchase neither inherits that lift nor erases it. Pinned because the v78
-///         mutation campaign showed the boost write had no test on it.
+///         a later purchase neither inherits that lift nor erases it.
 contract LootboxBoostBlendPin is DeployProtocol {
     using BoxOrderLib for uint256;
 

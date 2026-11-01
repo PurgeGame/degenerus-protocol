@@ -361,11 +361,11 @@ harness declaring the production struct types, without changing production sourc
 | 48 | 56–87 | `deadTallyFoilIdx` | `uint32` |
 | 48 | 88–95 | `deadTallyStage` | `uint8` |
 | 48 | 96–111 | `deadTraitCount` | `uint16` |
-| 48 | 112–175 | `deadUncreated` | `uint64` |
-| 48 | 176–239 | `deadCreated` | `uint64` |
-| 49 | 0–127 | `deadPot` | `uint128` |
-| 49 | 128–191 | `deadTotal` | `uint64` |
-| 49 | 192–255 | `deadUncreatedLeft` | `uint64` |
+| 48 | 112–191 | `deadUncreated` | `uint80` |
+| 48 | 192–255 | `deadCreated` | `uint64` |
+| 49 | 0–95 | `deadPot` | `uint96` |
+| 49 | 96–175 | `deadTotal` | `uint80` |
+| 49 | 176–255 | `deadUncreatedLeft` | `uint80` |
 | 50 | 0–255 | `deadClaimed` | `mapping(uint256 => uint256)` |
 | 51 | 0–255 | `decBattleQueue` | `uint256` |
 | 52 | root / multiple slots | `traitBucketLive` | `uint256[2]` |

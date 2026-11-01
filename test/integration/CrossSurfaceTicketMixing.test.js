@@ -103,7 +103,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
     restoreAddresses();
   });
 
-  describe("TST-CLEAN-03 — `JackpotTicketWin` entries-basis emit regression", function () {
+  describe("`JackpotTicketWin` entries-basis emit regression", function () {
     it("[03a] there are exactly 2 `emit JackpotTicketWin` sites and none multiply the 4th (ticketCount) arg by QTY_SCALE", function () {
       const src = jackpotAwardSource();
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
@@ -190,9 +190,9 @@ describe("Cross-surface ticket events and remainder preservation", function () {
 
   });
 
-  describe("TST-CROSS-01 — cross-surface `rem`-byte regression (live-state `entriesOwedPacked` read, D-278-TST-CROSS-DEPTH-01)", function () {
+  describe("cross-surface `rem`-byte regression (live-state `entriesOwedPacked` read)", function () {
     // -----------------------------------------------------------------------
-    // PRIMARY ASSERTION (D-278-TST-CROSS-DEPTH-01): a live-state raw
+    // PRIMARY ASSERTION: a live-state raw
     // `provider.getStorage` read of the genuinely-shared
     // `entriesOwedPacked[wk][buyer]` slot, driven full-stack through mineFlip, the
     // only box-opening door (purchase -> mid-day request stage -> VRF fulfill ->
@@ -275,7 +275,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
       return { ...fallback, wk: BigInt(lvl), viewWhole, matched: false };
     }
 
-    it("[CROSS-01a] live-state: a freshly-deployed player's `entriesOwedPacked` slot reads `rem == 0` (baseline snapshot via raw provider.getStorage)", async function () {
+    it("live-state: a freshly-deployed player's `entriesOwedPacked` slot reads `rem == 0` (baseline snapshot via raw provider.getStorage)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
@@ -304,7 +304,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
       ).to.equal(0n);
     });
 
-    it("[CROSS-01b] live-state: opening the box full-stack through mineFlip leaves the shared `entriesOwedPacked` `rem` byte at 0 (whole-ticket path never writes rem)", async function () {
+    it("live-state: opening the box full-stack through mineFlip leaves the shared `entriesOwedPacked` `rem` byte at 0 (whole-ticket path never writes rem)", async function () {
       const fixture = await loadFixture(readyDailyFixture);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
@@ -362,13 +362,13 @@ describe("Cross-surface ticket events and remainder preservation", function () {
 
 
 
-    it("[CROSS-01e] live-state: opening the box full-stack through mineFlip delivers owed-entries == the entries basis (~4x the pre-fix whole count) at the roll level", async function () {
+    it("live-state: opening the box full-stack through mineFlip delivers owed-entries == the entries basis (~4x the pre-fix whole count) at the roll level", async function () {
       const fixture = await loadFixture(readyDailyFixture);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
       const index = await reachOpenableLootbox(fixture);
 
-      // Fresh fixture: alice has 0 owed-entries everywhere (proven by [CROSS-01a]).
+      // Fresh fixture: alice has 0 owed-entries everywhere (proven by the baseline live-state test above).
       // Pin before == 0 across the plausible target-level band so the post-open owed
       // at whichever level the roll lands on IS the full delta.
       const baseLevel = BigInt(await game.currentLvl()) + 1n;

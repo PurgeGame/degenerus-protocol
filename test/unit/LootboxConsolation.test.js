@@ -21,10 +21,10 @@ async function deployTester() {
   return tester;
 }
 
-describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
+describe("LootboxConsolation", function () {
   this.timeout(120_000);
 
-  describe("TST-WX-01 — cold-bust trigger predicate", function () {
+  describe("cold-bust trigger predicate", function () {
     it("[01a] tester confirms cold-bust math: scaledPre ∈ (0, 100) AND Bernoulli loses ⇒ whole=0, roundedUp=false", async function () {
       const tester = await deployTester();
       // Cold-bust scenarios: scaledPre in {1, 47, 50, 99}, seed forces
@@ -79,7 +79,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
 
   });
 
-  describe("TST-WX-02 — non-trigger predicate matrix", function () {
+  describe("non-trigger predicate matrix", function () {
     it("[02a] whole >= 1 case: scaledPre=100..200 + frac=0 ⇒ whole >= 1, no consolation", async function () {
       const tester = await deployTester();
       // Whole multiples never trigger consolation regardless of seed.
@@ -99,7 +99,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // Box-order rework: `_queueEntries` moved out of the per-roll
       // `_settleLootboxRoll` into `_flushBoxAcc`, which flushes the accumulated
       // per-level tallies ONCE per entry (reached unconditionally for every
-      // caller — manual openBox + both auto-resolve callers — its own
+      // caller — manual resolveHumanBoxOrder + both auto-resolve callers — its own
       // `if (whole != 0)` per-lane guard absorbs an all-cold-bust entry).
       const callLine =
         "_queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
@@ -191,7 +191,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     });
   });
 
-  describe("TST-WX-03 — magnitude assertion (`_boxWwxrpStake`: 500 WWXRP per ETH, floored at one whole token)", function () {
+  describe("magnitude assertion (`_boxWwxrpStake`: 500 WWXRP per ETH, floored at one whole token)", function () {
     it("[03a] tester mirror scales at 500 WWXRP per ETH — 5 WWXRP per 0.01 ETH of roll value", async function () {
       const tester = await deployTester();
       for (const [eth, expected] of [
@@ -252,22 +252,21 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
 
   });
 
-  describe("TST-WX-04 — behavioral cold-bust gate coverage (deployed-contract; the gate CR-01 got wrong)", function () {
+  describe("behavioral cold-bust gate coverage (deployed-contract)", function () {
     // The `LootboxBernoulliTester.coldBustConsolationFires` mirror runs the
     // production Bernoulli collapse + the `payColdBustConsolation && whole == 0`
     // gate exactly as `_resolveLootboxCommon` ships it. Each test drives it with
     // the literal `payColdBustConsolation` value the corresponding caller passes.
     //
     // FIXTURE-COVERAGE NOTE: a pure end-to-end fixture driving the real
-    // `openFlipLootBox` entry point to a deterministic `whole == 0` ticket-path
+    // `resolveHumanBoxOrder` path to a deterministic `whole == 0` ticket-path
     // cold-bust is infeasible with the current harness — it requires VRF rigging
     // to force the per-resolution seed's bits[224..255] slice, which the
     // `reachOpenableLootbox` lifecycle helper (test/gas/LootboxOpenGas.test.js)
-    // does not support (the documented LBX-02 fixture-coverage gap). The closest
-    // behavioral coverage the harness supports is this deployed-contract mirror
-    // of the gating decision, driven with the four callers' real flag values —
+    // does not support. The closest behavioral coverage the harness supports is this
+    // deployed-contract mirror of the gating decision, driven with the four callers' real flag values —
     // it exercises the exact `payColdBustConsolation && whole == 0` branch that
-    // CR-01 mis-gated onto `emitLootboxEvent`.
+    // would break if the gate were mis-wired onto `emitLootboxEvent`.
     //
     // The cold-bust seed forces `uint32(seed >> 224) % 100 == 99`, a losing slice
     // for every `frac < 100` — so `scaledPre ∈ (0, 100)` Bernoulli-collapses to
@@ -275,14 +274,10 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     const COLD_BUST_SEED = BigInt(99) << 224n;
     const WARM_SEED = 0n; // slice == 0 — wins for every frac >= 1
 
-    // [04a] openFlipLootBox cold-bust — REMOVED (v47): the FLIP-lootbox manual
-    // caller `openFlipLootBox` was removed (terminal-paradox closure). This case
-    // exercised the gate decision with payColdBustConsolation=true on behalf of that
-    // removed caller; the identical gate decision for the surviving manual caller
-    // (openBox, also payColdBustConsolation=true) is covered by [04b], so no
-    // coverage is lost. Removed-by-design, not skipped.
+    // The manual caller (`resolveHumanBoxOrder`) passes payColdBustConsolation=true; that gate decision is
+    // covered by [04b].
 
-    it("[04b] openBox cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
+    it("[04b] resolveHumanBoxOrder cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
       const tester = await deployTester();
       for (const scaledPre of [1, 47, 50, 99]) {
         const fires = await tester.coldBustConsolationFires(
@@ -292,12 +287,12 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         );
         expect(
           fires,
-          `openBox cold-bust at scaledPre=${scaledPre} must PAY the consolation`
+          `resolveHumanBoxOrder cold-bust at scaledPre=${scaledPre} must PAY the consolation`
         ).to.equal(true);
       }
     });
 
-    it("[04c] auto-resolve cold-bust stays SILENT — payColdBustConsolation=false ⇒ never fires (D-277-AR-SILENT-01)", async function () {
+    it("[04c] auto-resolve cold-bust stays SILENT — payColdBustConsolation=false ⇒ never fires", async function () {
       const tester = await deployTester();
       // Direct recirculation passes
       // payColdBustConsolation = false — cold-bust must stay silent for them.

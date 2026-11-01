@@ -3,9 +3,6 @@ pragma solidity 0.8.38;
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
-// Permanently skipped historical cases were retired in the test review.
-// See docs/TESTING.md for replacement suites and remaining coverage limits.
-
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -17,60 +14,43 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-// CURRENT ENGINE (60d31f775 / 72fc06f6c): the two-category router below is retired. `mineFlip()`
-//      (DegenerusGameMinerModule) selects one action at a time from storage, composes as many as its
-//      allowance admits, and credits the caller ONCE per call, after the loop, on measured gas above
-//      an unpaid first MIN_REWARDED_GAS. The no-stacking proof is unchanged in form: count the
-//      keeper's creditFlip_g317 per call (exactly one on a paid call, zero on NoWork). The source attest
-//      now targets the engine module. The history below is kept for the requirement IDs.
-/// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
-///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip_g317 double-pay disposition.
+/// @title KeeperRouterOneCategory -- the engine credits its keeper once per call, never stacks bounties,
+///        and is inert (reverts `NoWork()`) when idle.
 ///
-/// @notice The v55 router (`game.mineRun(0)`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
-///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
-///         There are exactly TWO router categories — advance (the buy folded into mineFlip's required-path
-///         STAGE, so it rides the advance bounty) and the box open (afking boxes first, then human boxes with
-///         the leftover budget — one combined open bounty). The else-if XOR is the mitigation
-///         for bounty-stacking; the single CEI-last `creditFlip_g317(msg.sender, total)`
-///         (GameAfkingModule.sol:1014-1016) is the mitigation for a composed reentrant double-pay. Security
-///         is the HARD FLOOR.
+/// @notice `game.mineRun(0)` reaches `GameMiner._mineFlip` (contracts/modules/GameMiner.sol) through
+///         `GameMinerEntries.mineRun`. `_mineFlip` selects one action at a time from storage
+///         (`_nextMinerAction`), composes as many as the allowance admits in one bounded dispatch loop,
+///         and after the loop and the gas measurement credits the caller once with a single
+///         `coinflip.creditFlip_g317`. The first `MineFlipGas.MIN_REWARDED_GAS` of every call is unpaid.
+///         With nothing to do the call reverts `NoWork()`.
 ///
-///   D-02 (no-stacking proven by COUNTING `creditFlip_g317`, NOT exact amounts): each `mineFlip()` tx fires
-///   EXACTLY ONE `coinflip.creditFlip_g317` across both category branches (advance / open), ZERO on the
-///   `bountyEarned==0` skip (the sweep-pending gameover advance, or an ineligible keeper's advance, runs
-///   the category but credits nothing, still no revert), and ZERO + `revert NoWork()` when there is no
-///   work — BOTH O(1) predicates empty, OR a post-gameover idle crank with no final sweep pending. The count is taken via the
-///   recipient-isolated `_countFor(logs, keeper)` oracle (topics[1] == keeper) so a
-///   box-owner's / player's winnings credit can never inflate or mask the router bounty count. Asserting
-///   COUNT (==1 / ==0) across both branches IS the proof the else early-return can never credit two
-///   categories in one tx.
+///   Credit count (proven by COUNTING `creditFlip_g317` per recipient, not exact amounts; the count is
+///   `_countFor(logs, keeper)`, so a box owner's or player's winnings credit cannot inflate or mask it):
+///   - testAdvanceBranchCreditsExactlyOnce: the day's request call credits the keeper at most once; the
+///     next call applies the day's word, measures past the unpaid first million and credits exactly once.
+///   - testMintFlipOpensHumanBoxAndPaysBounty: a call that opens a delivered cohort's human boxes (the
+///     HumanBoxes action) credits the keeper exactly once.
+///   - testNoWorkRevertsAndCreditsNothing: with the advance not due and no box pending, the call reverts
+///     `NoWork()` and emits no credit.
+///   - testGameoverIdleCrankRevertsNoWork: after game over with the final payout made and no 30-day sweep
+///     due, the call reverts `NoWork()` and emits no credit.
 ///
-///   D-01 (reentrancy is STRUCTURAL, NO attacker harness): `mineFlip` pays only minted FLIP CREDIT, makes
-///   NO ETH push, and every external call in every leg targets either a self-call
-///   (`IGameRouter(address(this))`), the pinned `coinflip` immutable, or a pinned
-///   `ContractAddresses.GAME_LOOTBOX_MODULE` delegatecall (the afking + human box-open legs — both
-///   pull-only: no callee on those paths hands control to player code). There is no untrusted call to
-///   re-enter through, so a synthetic reentrant attacker has no hook. The disposition is satisfied by a
-///   comment-stripped source grep-attestation: (a) the single `creditFlip_g317(msg.sender, total)`
-///   occurrence (==1, CEI-last), and (b) ZERO low-level ETH-push primitives in the mineFlip legs (the
-///   module pushes no ETH at all — funding withdraw moved to DegenerusGame). NO attacker/reentrant mock
-///   exists in this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
-///   interacts with trusted contracts.").
+///   Source attestation (testMintFlipReentrancyStructurallySafeSourceAttest, on comment-stripped
+///   `contracts/modules/GameMiner.sol` and `contracts/modules/GameAfkingModule.sol`):
+///   - `_mineFlip` has one bounded dispatch loop that reselects from storage on every iteration, and one
+///     no-progress exit after it;
+///   - GameMiner.sol has exactly one `creditFlip_g317(` site, placed after that exit and after the gas
+///     measurement (the last external effect); GameAfkingModule.sol has none (`creditFlip_g317(minerId,`);
+///   - every worker target is a pinned `ContractAddresses.*` address, reached through one external
+///     `call` site and one `delegatecall` site;
+///   - neither file contains `.call{value:`, `.transfer(` or `.send(`: the engine pays only minted FLIP
+///     credit and pushes no ETH, so there is no player hook to re-enter through.
 ///
-///   D-03 (box stages): box opens run only inside `mineFlip()`, as ordered read-consumer stages — AFKING
-///   boxes first, then HUMAN boxes — and the call pays the keeper once, on its measured gas
-///   (testMintFlipOpensHumanBoxAndPaysBounty).
-///
-/// @dev The five call-site deltas applied (D-351-01):
-///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineRun(0)` (all sites).
-///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE — driven via a new-day mineFlip()
-///      + the `_settleGame` VRF drain; the standalone `autoBuy(count)` has NO successor.
-///   Δ5 views: `afKing.subscriberCount()`/`autoBuyProgress()` -> read `_subscribers.length`/`_subCursor` via
-///      vm.load (RE-DERIVED slots).
-///   Two runtime traps cleared: AFKING_SRC repointed from the deleted standalone-contract path to
-///   "contracts/modules/GameAfkingModule.sol" (the deleted file THROWS at runtime under vm.readFile) +
-///   every grepped token re-derived for the relocated mineFlip body.
-///   Pinned slots RE-DERIVED via `forge inspect storage DegenerusGame`. Zero contracts/*.sol mutation.
+/// @dev Call-site notes:
+///   Keeper entry: `game.mineRun(0)`; `paidMine()` runs it from the keeper at a 1 gwei basefee, because
+///   the reward is zero at basefee 0.
+///   Settling: `_settleGame` drives `mineRun` and delivers the mock VRF word until `advanceDue()` is
+///   false and the game is not locked.
 contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
     // creditFlip_g317-count oracle (recipient-isolated)
@@ -82,10 +62,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `solc --storage-layout` on the working tree after
-    // the V62 lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/
-    // Distress shifted later slots down. The prior _subOf=62 / _subscribers=64 / lootbox 36/37/22
-    // pins are now stale; corrected to the authoritative values below.)
+    // Game-resident storage slots (from GameSlots, the compiled storage layout)
     // -------------------------------------------------------------------------
 
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here)
@@ -105,17 +82,16 @@ contract KeeperRouterOneCategory is DeployProtocol {
     uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN; a real first-deposit human box
 
     // -------------------------------------------------------------------------
-    // Source path for the comment-stripped grep attestation (REPOINTED: the standalone AfKing.sol is
-    // deleted -> vm.readFile would THROW at runtime; the rewarded router now lives in GameAfkingModule).
+    // Source paths for the comment-stripped grep attestation
     // -------------------------------------------------------------------------
 
     string private constant AFKING_SRC = "contracts/modules/GameAfkingModule.sol";
-    /// @dev The single permissionless engine (60d31f775): one dispatcher, one credit site.
+    /// @dev The single permissionless engine: one dispatcher, one credit site.
     string private constant MINER_SRC = "contracts/modules/GameMiner.sol";
 
     bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
     /// @dev Distinct human-box owners in the rewarded open test: enough opens that the call
-    ///      measures past the unpaid first MIN_REWARDED_GAS (72fc06f6c).
+    ///      measures past the unpaid first MIN_REWARDED_GAS.
     uint256 private constant PAID_BOX_OWNERS = 24;
 
     address private keeper;
@@ -136,7 +112,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until
-    ///      `advanceDue()` is false and we are not locked. (PATTERNS §"Settle-to-clean-state VRF drain".)
+    ///      `advanceDue()` is false and we are not locked.
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
@@ -173,15 +149,14 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — D-02 one-category creditFlip_g317 COUNT across both branches + skip + NoWork
+    // One-category creditFlip_g317 COUNT across both branches + skip + NoWork
     // =========================================================================
 
-    /// @notice ADVANCE branch: a new day's processing is ONE engine call composing many actions
+    /// @notice ADVANCE: a new day's processing is ONE engine call composing many actions
     ///         (publish, tickets, the day's word, the daily phase, the read consumers), and it credits
-    ///         the keeper EXACTLY ONCE. The one-category router is gone (60d31f775): the engine selects
-    ///         one action at a time from storage and pays once per call, CEI-last, on the call's measured
-    ///         gas above an unpaid first MIN_REWARDED_GAS (72fc06f6c). Composing actions therefore cannot
-    ///         stack bounties.
+    ///         the keeper EXACTLY ONCE: the engine pays once per call, last, on the call's measured gas
+    ///         above the unpaid first MIN_REWARDED_GAS. Composing actions therefore cannot stack
+    ///         bounties.
     function paidMine() external {
         require(msg.sender == address(this), "paid mine self-call");
         // Isolation starts a new transaction at this adapter; set BASEFEE inside it.
@@ -248,7 +223,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
 
-        // Latch gameOver; GO_TIME stays 0, so _finalSweepPending() is false — no sweep due.
+        // Latch gameOver; GO_TIME stays 0, so no final sweep is due.
         _latchGameOver();
         assertTrue(game.gameOver(), "pre: gameOver latched");
 
@@ -283,7 +258,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertFalse(game.advanceDue(), "pre: still not due after the table settled");
         vm.recordLogs();
         vm.prank(keeper);
-        vm.expectRevert(bytes4(keccak256("NoWork()"))); // GameAfkingModule.NoWork()
+        vm.expectRevert(bytes4(keccak256("NoWork()"))); // GameMiner.NoWork()
         game.mineRun(0);
 
         // Nothing credited (the revert rolls back, but assert the count is zero regardless).
@@ -291,19 +266,18 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 — D-01 structural reentrancy attest + D-03 the rewarded human box stage
+    // Structural reentrancy attest + the rewarded human box stage
     // =========================================================================
 
     /// @notice Pin the single engine dispatcher, its single CEI-last keeper-credit site, its trusted
-    ///         worker targets, and the absence of ETH-push hooks. The v55 router functions in
-    ///         GameAfkingModule (`_runWork`/`_runAdvance`/`_runRngConsumers`/`_creditWorkBounty`) are gone:
-    ///         60d31f775 moved dispatch into DegenerusGameMinerModule.mineRun, which reselects one action
-    ///         from storage per iteration and credits once after the loop.
+    ///         worker targets, and the absence of ETH-push hooks. Dispatch lives in
+    ///         GameMiner._mineFlip, which reselects one action from storage per iteration and credits
+    ///         once after the loop.
     function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
         string memory miner = _stripComments(vm.readFile(MINER_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
         string memory dispatch = _extractFunctionBody(miner, "function _mineFlip(uint32 gasMultiplierBps) internal {");
-        assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
+        assertGt(bytes(dispatch).length, 0, "shared dispatcher extracted");
         assertEq(_countOccurrences(dispatch, "for (uint256 transitions; transitions < 32; ++transitions) {"), 1, "one bounded dispatch loop");
         assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender, meter);"), 1, "every dispatch reselects from storage");
         assertEq(_countOccurrences(dispatch, "coinflip.creditFlip_g317(minerId, reward);"), 1, "single credit in the dispatcher");
@@ -337,9 +311,9 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     /// @notice REWARDED via mineFlip: once a delivered cohort's human boxes are the engine's next work
-    ///         (the read-consumer HumanBoxes stage, 60d31f775), `mineFlip()` opens them and credits the
-    ///         keeper EXACTLY ONCE, on the call's measured gas above the unpaid first MIN_REWARDED_GAS
-    ///         (72fc06f6c). Enough distinct boxes are queued that the open measures past that million.
+    ///         (the read-consumer HumanBoxes stage), `mineFlip()` opens them and credits the
+    ///         keeper EXACTLY ONCE, on the call's measured gas above the unpaid first MIN_REWARDED_GAS.
+    ///         Enough distinct boxes are queued that the open measures past that million.
     function testMintFlipOpensHumanBoxAndPaysBounty() public {
         address[] memory owners = new address[](PAID_BOX_OWNERS);
 
@@ -573,7 +547,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         return uint32((block.timestamp - 82620) / 1 days);
     }
 
-    /// @dev Drive the per-sub buy STAGE for a NEW day (Δ4 successor to afKing.autoBuy): warp +1 day,
+    /// @dev Drive the per-sub buy STAGE for a NEW day warp +1 day,
     ///      settle so mineFlip's subscription stage stamps the funded set + the day word lands.
     function _runStageNewDay(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D);
@@ -613,7 +587,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @dev Latch the terminal gameOver public bool (byte 21 of SLOT 0) as a finished ending: the final
     ///      jackpot is paid (gameOverStatePacked slot 19, bit 48) and the gameover-time field stays 0, so
     ///      no 30-day sweep is due. Until the payout lands the engine still owes Terminal work
-    ///      (60d31f775 selector), so an unpaid latch would not be idle.
+    ///      selection, so an unpaid latch would not be idle.
     function _latchGameOver() internal {
         bytes32 slot = bytes32(uint256(0));
         uint256 packed = uint256(vm.load(address(game), slot));

@@ -3,20 +3,15 @@ pragma solidity 0.8.38;
 import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
-// Frozen pre-packing engine wrapper from 4071c79cc; do not update its header/seed derivation.
-
 import {Craps} from "../../contracts/Craps.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {CrapsCustomTerms} from "../../contracts/CrapsCustomTerms.sol";
 
-/// @title CrapsEngine
-/// @notice The table's stateless computations: custom-definition validation and two pure
-///         dice entry points. The table uses `settleRanked` to resolve runs.
-/// @dev Holds no storage, takes no constructor arguments, has no owner and no upgrade path.
-///      `CrapsBattle` reaches it by STATICCALL at the pinned `ContractAddresses.CRAPS_ENGINE`,
-///      which is what keeps the table itself under the EIP-170 ceiling: the engine's whole
-///      closure — board, scatter, shooter loop — compiles here and nowhere else. Anyone may call
-///      it; it can only compute. Custom validation also reads the close-time deadline against the clock.
+/// @title LegacyCrapsEngine
+/// @notice Test reference engine with the wide battle header: the owner field holds any
+///         160-bit salt. Tests use it to settle a seat under an arbitrary salt (for example an
+///         awarded entry's key) on the shared `Craps` slip code, and to check that the
+///         production engine's compact header decodes to the same runs.
 contract LegacyCrapsEngine is Craps, CrapsCustomTerms {
     /// @notice Validate and pack a custom table's immutable definition.
     function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256)

@@ -9,11 +9,11 @@ import {DGNRS} from "../../contracts/DGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title DgnrsWrapperPaths -- drives the DGNRS wrapper unwrap path and pins its exact balance
-///        deltas. Closes two gaps the v75 mutation campaign exposed (audit/mutation/FINDINGS-v75.md):
-///        (1) the sDGNRS:455-456 `wrapperTransferTo` survivor cluster — no test drove `unwrapTo`;
-///        (2) the wrapper-backing EQUALITY non-vacuity noted in audit/DGNRS-WRAPPER-BACKING-PROOF.md
-///        — the RedemptionInvariants net asserts only the `>=` safety direction because its handler
-///        never moves the wrapper balances. Here the paired decrement is exercised directly.
+///        deltas. Covers two paths:
+///        (1) the sDGNRS `wrapperTransferTo` path, driven through `unwrapTo`;
+///        (2) the wrapper-backing EQUALITY — the RedemptionInvariants net asserts only the `>=`
+///        safety direction because its handler never moves the wrapper balances. Here the paired
+///        decrement is exercised directly.
 /// @dev The VAULT holds VAULT_INITIAL (50B) DGNRS at deploy and is the only caller `unwrapTo`
 ///      accepts; RNG is unlocked at genesis, so `unwrapTo`'s other guards are satisfied.
 contract DgnrsWrapperPaths is DeployProtocol {
@@ -71,13 +71,13 @@ contract DgnrsWrapperPaths is DeployProtocol {
         // Left side: the wrapper token supply and the owner's holding both fall by amount.
         assertEq(dgnrs.totalSupply(), supplyBefore - amount, "DGNRS.totalSupply -= amount");
         assertEq(dgnrs.balanceOf(owner), ownerDgnrsBefore - amount, "owner DGNRS -= amount");
-        // Right side (sDGNRS:455-456): backing leaves the wrapper, recipient receives soulbound.
+        // Right side: backing leaves the wrapper, recipient receives soulbound.
         assertEq(
             sdgnrs.balanceOf(ContractAddresses.DGNRS),
             backingBefore - amount,
-            "wrapper backing -= amount (sDGNRS:455)"
+            "wrapper backing -= amount (sDGNRS)"
         );
-        assertEq(sdgnrs.balanceOf(recipient), recipBefore + amount, "recipient soulbound += amount (sDGNRS:456)");
+        assertEq(sdgnrs.balanceOf(recipient), recipBefore + amount, "recipient soulbound += amount (sDGNRS)");
         // Equality preserved: both sides fell equally, so the wrapper stays exactly backed.
         assertEq(
             sdgnrs.balanceOf(ContractAddresses.DGNRS),
@@ -89,9 +89,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
     /// @notice Post-game-over `DGNRS.burn` routes through `sDGNRS._deterministicBurnFrom`, the
     ///         deterministic-payout path the redemption fuzz never reaches (its handler
     ///         early-returns once `gameOver` is set). Asserts the supply/balance decrements
-    ///         (sDGNRS:686-687) and a nonzero ETH payout basis (sDGNRS:682, 697-711). This is the
-    ///         v75 682-701 survivor cluster — genuinely unasserted anywhere in the foundry suite,
-    ///         confirmed by re-verifying the 687 mutant survives even RedemptionEdgeCases at HEAD.
+    ///         and a nonzero ETH payout basis in sDGNRS's deterministic burn.
     function test_postGameOverDeterministicBurnDecrement() public {
         _reachGameOver();
 
@@ -103,18 +101,18 @@ contract DgnrsWrapperPaths is DeployProtocol {
         uint256 backingBefore = sdgnrs.balanceOf(ContractAddresses.DGNRS);
 
         // Unfunded burn: the deterministic path still runs its full body (basis calc at
-        // sDGNRS:682, supply/balance decrements at 686-687). No ETH moves, so no receiver
-        // dependency. The 682 basis mutation `- pending` → `/ pending` reverts on the zero
-        // divisor and is caught as an unexpected revert; 686/687 are caught by the deltas below.
+        // the payout-basis calc and the supply/balance decrements). No ETH moves, so no receiver
+        // dependency. The basis mutation `- pending` → `/ pending` reverts on the zero
+        // divisor and is caught as an unexpected revert; the decrement mutations are caught by the deltas below.
         vm.prank(owner);
         dgnrs.burn(amount);
 
         assertEq(dgnrs.totalSupply(), dgnrsSupplyBefore - amount, "DGNRS.totalSupply -= amount");
-        assertEq(sdgnrs.totalSupply(), sdgnrsSupplyBefore - amount, "sDGNRS._totalSupply -= amount (sDGNRS:687)");
+        assertEq(sdgnrs.totalSupply(), sdgnrsSupplyBefore - amount, "sDGNRS._totalSupply -= amount (sDGNRS)");
         assertEq(
             sdgnrs.balanceOf(ContractAddresses.DGNRS),
             backingBefore - amount,
-            "wrapper backing -= amount (sDGNRS:686)"
+            "wrapper backing -= amount (sDGNRS)"
         );
     }
 

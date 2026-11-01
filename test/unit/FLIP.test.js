@@ -409,10 +409,8 @@ describe("FLIP", function () {
       expect(await coin.balanceOf(alice.address)).to.equal(flip(4000));
     });
 
-    // mintForCoinflip removed in Phase 146 (merged into mintForGame_g152734, which now accepts COINFLIP + GAME)
+    // Coinflip mints go through mintForGame_g152734, which accepts COINFLIP + GAME callers.
   });
-
-  // creditCoin() removed from FLIP in Phase 146 ABI cleanup (dead function, zero callers)
 
   // ---------------------------------------------------------------------------
   // Mint to VAULT — escrows into the vault allowance
@@ -609,8 +607,8 @@ describe("FLIP", function () {
     });
   });
 
-  // creditFlip_g317() and creditFlipBatch() removed from FLIP in Phase 146 ABI cleanup
-  // (forwarding wrappers; callers now call coinflip.creditFlip_g317 / coinflip.creditFlipBatch directly)
+  // creditFlip_g317() and creditFlipBatch() are not on FLIP; callers call
+  // coinflip.creditFlip_g317 / coinflip.creditFlipBatch directly.
 
   // ---------------------------------------------------------------------------
   // View helpers — claimableCoin, balanceOfWithClaimable, etc.
@@ -618,7 +616,7 @@ describe("FLIP", function () {
 
   describe("view helpers", function () {
     // claimableCoin, previewClaimCoinflips, coinflipAmount, coinflipAutoRebuyInfo
-    // removed from FLIP in Phase 146 ABI cleanup (forwarding wrappers to coinflip)
+    // are not on FLIP; they live on coinflip.
 
     it("balanceOfWithClaimable returns at least the on-chain balance", async function () {
       const { coin, game, alice } = await getFixture();
@@ -641,9 +639,8 @@ describe("FLIP", function () {
     });
   });
 
-  // affiliateQuestReward, rollDailyQuest, notifyQuestMint, notifyQuestLootBox,
-  // notifyQuestDegenerette removed from FLIP — quest handling moved to
-  // DegenerusQuests.sol (v13.0 Phase 158.1)
+  // Quest handling (affiliateQuestReward, rollDailyQuest, notifyQuestMint, notifyQuestLootBox,
+  // notifyQuestDegenerette) lives in DegenerusQuests.sol, not FLIP.
 
   // ---------------------------------------------------------------------------
   // Supply invariants

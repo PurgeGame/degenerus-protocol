@@ -163,7 +163,7 @@ describe("CharityGameHooks", function () {
       await advanceToNextDay();
       await driveVRFCycle(game, deployer, mockVRF);
 
-      // Day 2: Second VRF cycle triggers the level transition via _finalizeRngRequest
+      // Day 2: Second VRF cycle triggers the level transition via prepareRequestBoundary
       // with isTicketJackpotDay=true, which calls charityResolve.pickCharity(lvl - 1)
       await advanceToNextDay();
       await driveVRFCycle(game, deployer, mockVRF);
@@ -214,7 +214,7 @@ describe("CharityGameHooks", function () {
         "Charity currentLevel should be 1 (pickCharity was called)");
     });
 
-    it("conservation: 2% distribution preserves totalSupplies and soulbound enforcement (TST-05)", async function () {
+    it("conservation: 2% distribution preserves totalSupplies and soulbound enforcement", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const {
         game, deployer, mockVRF,
@@ -253,7 +253,7 @@ describe("CharityGameHooks", function () {
       });
       await charity.connect(alice).castBallot(slot);
 
-      // DRIVE: REAL game flow -> DegenerusGameAdvanceModule:1634 -> charityResolve.pickCharity(0).
+      // DRIVE: REAL game flow -> DegenerusGameAdvanceModule (level-transition charity hook) -> charityResolve.pickCharity(0).
       // Tight deterministic driver mirrors the existing `charity.currentLevel increments from 0 to 1`
       // it-block above (Warning #6 resolution: NO 200-iteration polling loop in this test).
       const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 5)];
@@ -262,8 +262,8 @@ describe("CharityGameHooks", function () {
       // Day 1: First VRF cycle. Capture LevelResolved event tx-by-tx so we can pin
       // before/after blockTags around the pickCharity call. The level transition
       // actually fires here (purchases above 50-ETH bootstrap target trigger
-      // game.level: 0 -> 1, which calls charityResolve.pickCharity(0) at
-      // DegenerusGameAdvanceModule.sol:1634).
+      // game.level: 0 -> 1, which calls charityResolve.pickCharity(0) from
+      // the advance module).
       await advanceToNextDay();
       const day1Txs = await driveVRFCycleCapturing(game, deployer, mockVRF);
 
@@ -281,7 +281,7 @@ describe("CharityGameHooks", function () {
       expect(resolvedEvent).to.not.equal(null, "LevelResolved event must be emitted by real game flow");
       expect(resolvedTx).to.not.equal(null);
 
-      // EVENT ASSERTIONS: LevelResolved came from real game flow at DegenerusGameAdvanceModule.sol:1634.
+      // EVENT ASSERTIONS: LevelResolved came from real game flow (the advance module calling pickCharity).
       expect(resolvedEvent.args.level).to.equal(0);
       expect(resolvedEvent.args.slot).to.equal(slot, "Pre-populated slot 5 should win the winner-phase");
       expect(resolvedEvent.args.recipient).to.equal(dan.address, "Recipient must match setCharity address");
@@ -312,7 +312,7 @@ describe("CharityGameHooks", function () {
       // burned from sDGNRS supply. That is the only supply change allowed in the pinned block.
       const degenesisBurn = degenesisPoolBefore - degenesisPoolAfter;
 
-      // BALANCE-DELTA ASSERTIONS -- derived from the contract math at GNRUS.sol:660,670-671.
+      // BALANCE-DELTA ASSERTIONS -- derived from the contract math in `GNRUS.pickCharity`.
       const expectedDist = (gnrusUnallocBefore * 200n) / 10_000n;
       expect(expectedDist).to.equal(resolvedEvent.args.gnrusDistributed, "expectedDist mirrors LevelResolved arg");
       expect(danBalanceAfter).to.equal(danBalanceBefore + expectedDist);

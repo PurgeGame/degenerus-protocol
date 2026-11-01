@@ -16,7 +16,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title FFKeyHarness -- Exposes _tqFarFutureKey as a pure helper for the GASOPT-01 owed-slot math.
+/// @title FFKeyHarness -- Exposes _tqFarFutureKey as a pure helper for the owed-slot math.
 /// @dev Inherits DegenerusGameStorage solely to surface the far-future key derivation the seed helpers
 ///      key on. Zero behavioral coupling to the FROZEN subject.
 contract FFKeyHarness is DegenerusGameStorage {
@@ -30,8 +30,7 @@ contract FFKeyHarness is DegenerusGameStorage {
 /// reported execution gas and capped base fee, independently of the supplied gas limit.
 contract KeeperRewardRoutingSameResults is DeployProtocol {
     // -------------------------------------------------------------------------
-    // creditFlip_g317-count / amount oracle — the recipient-isolated DIFFERENTIAL instrument
-    // (PRESERVED VERBATIM: 351-04/05/08 port this topic-decode).
+    // creditFlip_g317-count / amount oracle — the recipient-isolated DIFFERENTIAL instrument.
     // -------------------------------------------------------------------------
 
     /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — emitted once per
@@ -76,8 +75,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @dev Settle the game to a clean state: complete the pending day-advance (drive mineFlip +
     ///      deliver the mock VRF word + drain the rngLock) until advanceDue() is false and we are not
-    ///      locked. PRESERVED VERBATIM — the donor VRF-drain helper (PATTERNS §"Settle-to-clean-state
-    ///      VRF drain"); 351-04/05/08 port this.
+    ///      locked. This is the settle-to-clean-state VRF-drain helper.
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
@@ -310,8 +308,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
 
-        // Latch the terminal gameOver flag (the public bool). GO_TIME stays 0, so _finalSweepPending()
-        // is false — the same result the real within-30-day / already-swept post-gameover states give.
+        // Latch the terminal gameOver flag (the public bool). GO_TIME stays 0, so no final sweep
+        // is due — the same result the real within-30-day / already-swept post-gameover states give.
         _latchGameOver();
         assertTrue(game.gameOver(), "pre: gameOver latched");
 
@@ -329,15 +327,15 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 — afkingSnapshot (the keeperSnapshot successor) + owedMap pointer-hoist same-results
+    // afkingSnapshot (the keeperSnapshot successor) + owedMap pointer-hoist same-results
     // =========================================================================
 
     /// @notice afkingSnapshot batched-read same-results: the batched read is VALUE-IDENTICAL to N
     ///         individual reads — `mintPriceWei == mintPrice()`, `rngLocked_ == rngLocked()`,
     ///         `claimables[i] == claimableWinningsOf(players[i])`, and
     ///         `afkingFundings[i] == afkingFundingOf(players[i])` element-by-element across N players with
-    ///         varied claimable + afking-funding balances. (afkingSnapshot is the v55 rename of
-    ///         keeperSnapshot — same batched-read role, with the added afkingFundings column.)
+    ///         varied claimable + afking-funding balances. (afkingSnapshot is the batched
+    ///         read, with the afkingFundings column.)
     function testAfkingSnapshotEqualsIndividualReads() public {
         // N players holding VARIED claimable + afking-funding balances (some zero, some non-zero, distinct).
         uint256 N = 6;
@@ -390,7 +388,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
 
-    /// @notice GASOPT-01 (per-entry owed drain) same-results: a MULTI-PLAYER far-future ticket backlog
+    /// @notice Per-entry owed drain same-results: a MULTI-PLAYER far-future ticket backlog
     ///         drains every player's owed to ZERO through the engine's ticket worker
     ///         (TicketModule `runTicketWork_g1150`, mineFlip's Tickets stage) on its far-future drain. A broken drain would skip / double-process a player, leaving
     ///         non-zero owed or mis-decrementing it; the
@@ -422,14 +420,14 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
             assertEq(
                 _owedPackedOf(L, players[i]),
                 0,
-                "GASOPT-01: each player's far-future owed drained to zero (owedMap hoist processed every player)"
+                "each player's far-future owed drained to zero (owedMap hoist processed every player)"
             );
         }
         // And the far-future queue for level L drained to zero (all addresses removed after processing).
         assertEq(
             _ffQueueLen(L),
             0,
-            "GASOPT-01: the multi-player far-future queue drained to zero (no stranded / double-processed player)"
+            "the multi-player far-future queue drained to zero (no stranded / double-processed player)"
         );
     }
 
@@ -488,7 +486,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding replaces
     ///      AfKing.depositFor). The deposit credits both the player bucket AND claimablePool in-contract,
-    ///      so SOLVENCY-01 stays balanced.
+    ///      so solvency stays balanced.
     function _fundAfking(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
@@ -501,7 +499,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         if (id == 0) id = _giveWalletId(who);
     }
 
-    // ---- claimable seeding (with the tandem claimablePool credit so SOLVENCY-01 stays balanced) ----
+    // ---- claimable seeding (with the tandem claimablePool credit so solvency stays balanced) ----
 
     function _claimableSlot(address who) internal view returns (bytes32) {
         return keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), BALANCES_PACKED_SLOT));
@@ -575,9 +573,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         TicketQueueStorage.seed(address(game), readKey, readKey & ~TICKET_SLOT_BIT, who, uint80(whole) * 4 << 8);
     }
 
-    /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 24 at c4d48008), preserving every other
-    ///      field in slot 0. The pre-PACK byte 26 is now ticketWriteSlot — poking it left
-    ///      ticketsFullyProcessed unchanged (advanceDue stayed false) AND flipped the read-slot.
+    /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 24), preserving every other
+    ///      field in slot 0. Byte 25 is ticketWriteSlot — poking it leaves
+    ///      ticketsFullyProcessed unchanged (advanceDue stays false) AND flips the read-slot.
     function _setTicketsFullyProcessed(bool v) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         uint256 mask = uint256(0xFF) << (24 * 8);

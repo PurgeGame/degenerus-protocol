@@ -101,6 +101,12 @@ jobs:
       - name: Recursive delegate storage layouts
         run: python3 scripts/layout/check_recursive_layout.py --out forge-out-production --report .audit-test-logs/foundry/recursive-layout.json
 
+      - name: Nested peripheral layouts and test slot pins
+        env:
+          FOUNDRY_CACHE_PATH: .foundry-cache-production
+          XA_PROBE_OUT: forge-out-xa-probe
+        run: python3 scripts/layout/check_peripheral_layouts.py forge-out-production
+
       # Run all source-drift gates, including the newer crank, randomness,
       # shared-storage, arithmetic and simulation parity registries.
       - name: Source-drift gates
@@ -137,11 +143,11 @@ jobs:
     timeout-minutes: 330
     strategy:
       fail-fast: false
-      # Each group has its own hosted VM. Start all seven so the long cold and
+      # Each group has its own hosted VM. Up to seven run at once so the long cold and
       # invariant campaigns do not wait behind unrelated fuzz compilations.
       max-parallel: 7
       matrix:
-        group: [repro-symbolic, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants-1, invariants-2, invariants-3, integration-gas]
+        group: [repro-symbolic, census, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants-1, invariants-2, invariants-3, integration-gas]
     steps:
       - uses: actions/checkout@v4
         with:

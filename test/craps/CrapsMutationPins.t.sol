@@ -23,7 +23,7 @@ contract PinHarness is CrapsViews {
     }
 }
 
-/// @title CrapsMutationPins -- the v78 mutation survivors, each pinned by the behaviour it changed
+/// @title CrapsMutationPins -- relational branch pins, each fixed by the behaviour it changes
 /// @notice Three relational mutants of CrapsBattle outlived the oracle: the gap slot between two
 ///         days resolving to a window instead of refusing, and a custom battle whose high lane is
 ///         the smallest legal multiple (2) reading it as "below two". Each is a real branch with

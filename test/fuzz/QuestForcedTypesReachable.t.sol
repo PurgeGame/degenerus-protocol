@@ -12,11 +12,11 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         players only through a gate:
 ///         - FOIL (type 4) is forced onto slot 1 on the first purchase day of
 ///           a level. Its gate must be observable when the daily roll runs,
-///           which happens early in the advance pass inside rngGate.
+///           which happens early in the advance pass inside the daily RNG step.
 ///         - DECIMATOR (type 5) is enabled while a decimator burn window is
 ///           open. The window is open while the stored level ends in 4 or 9;
 ///           the resolution level players burn into is that level + 1 (the
-///           basis FLIP uses at FLIP.sol:664), which is what the availability
+///           basis the decimator burn path uses, `lvl == level + 1` in `DegenerusGameDecimatorModule.recordDecBurn_g1271`), which is what the availability
 ///           rule is written against.
 ///
 /// @dev Drives real play from genesis with deterministic VRF words and samples
@@ -251,7 +251,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
     /// @notice The decimator quest reaches players while a burn window is open.
     ///         Availability is written against the resolution level (the level
     ///         burns key into), which is the stored level + 1 while a window is
-    ///         open -- the same basis FLIP uses at FLIP.sol:664.
+    ///         open -- the same basis `DegenerusGameDecimatorModule.recordDecBurn_g1271` uses (`lvl == level + 1`).
     function testDecimatorQuestRollsDuringBurnWindow() public {
         bool everOpen;
         for (uint256 d = 0; d < 200; d++) {

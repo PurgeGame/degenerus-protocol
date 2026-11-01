@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title CrapsOpenerFailOpen — the daily crank's bare call into the craps table cannot revert.
 ///
-/// @notice `DegenerusGameAdvanceModule.rngGate` calls `CrapsBattleCore.openBonusDay()` bare and
+/// @notice `DegenerusGameAdvanceModule.applyDailyWord_g1652` calls `CrapsBattleCore.openBonusDay()` bare and
 ///         unwrapped on the crank that applied the day's word. The liveness argument is that the
 ///         callee is revert-free past its `OnlyGame` gate: a missing word returns, a repeat call
 ///         returns, the seven-window draw is pure over constants, and the two protocol seats are

@@ -5,25 +5,15 @@ import {StorageCensusLongRunTest} from "../census/StorageCensusLongRun.t.sol";
 import {SolvencyObligations} from "../fuzz/helpers/SolvencyObligations.sol";
 import {console} from "forge-std/console.sol";
 
-/// @dev Run the same workload with each runtime set. Random recipients and quantities may
-/// change, but every transaction must conserve ETH and every checkpoint must retain backing
-/// and valid tagged queue boundaries. No ledger or entire storage contract is whitelisted.
+/// @dev Runs the census workload. Random recipients and quantities may change, but every
+/// transaction must conserve ETH and every checkpoint must retain backing and valid tagged queue
+/// boundaries. No ledger or entire storage contract is whitelisted.
 contract RngInvariantReplayTest is StorageCensusLongRunTest {
     address[] private holders;
     uint256 private invariantChecks;
 
     function setUp() public override {
         super.setUp();
-        string memory file = vm.envOr("OPT_RUNTIME_OVERRIDES", string(""));
-        if (bytes(file).length != 0) {
-            string memory variants = vm.readFile(file);
-            uint256 count = vm.parseJsonUint(variants, ".count");
-            for (uint256 i; i < count; ++i) {
-                string memory prefix = string.concat(".contracts[", vm.toString(i), "]");
-                vm.etch(vm.parseJsonAddress(variants, string.concat(prefix, ".target")),
-                    vm.parseJsonBytes(variants, string.concat(prefix, ".runtime")));
-            }
-        }
         for (uint256 i; i < cast.length; ++i) _holder(cast[i]);
         _holder(address(this)); _holder(CENSUS_KEEPER);
         _holder(address(game)); _holder(address(coin)); _holder(address(coinflip));
@@ -33,7 +23,7 @@ contract RngInvariantReplayTest is StorageCensusLongRunTest {
         _holder(address(afkingSubToken)); _holder(address(deityPass));
         _holder(address(parimutuel)); _holder(address(recordBounty));
         _holder(address(ownerGovernance)); _holder(address(admin));
-        _holder(address(mockStETH)); _holder(address(mockVRF)); _holder(address(mockLINK));
+        _holder(address(mockStETH)); _holder(address(mockVRF));
         _holder(address(0xC4A1)); _holder(address(0xC4A2));
         vm.fee(0);
     }

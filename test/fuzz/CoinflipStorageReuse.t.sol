@@ -31,6 +31,8 @@ contract CoinflipReuseHarness is CoinflipStakeSetter {
     function preview(uint32 id) external view returns (uint256, uint256) {
         return _viewClaimableCoin(playerState[id], id);
     }
+    function setFrontier(uint24 day) external { flipsClaimableDay = day; }
+    function setClaimCursor(uint32 id, uint24 day) external { playerState[id].lastClaim = day; }
     function stake(uint32 id, uint24 day) external view returns (uint256) { return _flipStake(day, id); }
     function ringWord(uint32 id, uint256 index) external view returns (uint256) { return coinflipStakeRing[id][index]; }
     function spillWord(uint32 id, uint24 page) external view returns (uint256) { return coinflipStakeOverflow[id][page]; }
@@ -162,6 +164,87 @@ contract CoinflipStorageReuseTest is Test {
         _resolve(day, 156);
         _settle(ID);
         _settle(ID);
+    }
+
+    function test_fingerprintWrapCannotDuplicateOrSelectAnotherPage() public {
+        _credit(ID, 7, 17);
+        _credit(ID, 112, 23);
+        // Same ring index AND same seven-bit fingerprint after 15 * 128 pages.
+        uint24 later = uint24((16 + 15 * 128) * 7);
+        _credit(ID, later, 31);
+        assertEq(r.stake(ID, 112), 23);
+        assertEq(r.stake(ID, later), 31);
+        r.setFrontier(later);
+        _credit(ID, later + 1, 43);
+        assertEq(r.stake(ID, later), 31);
+        assertEq(uint24(r.ringWord(ID, 1) >> 224), 2);
+    }
+
+    function test_allSevenExpiryAlignments() public {
+        for (uint24 alignment; alignment < 7; ++alignment) {
+            CoinflipReuseHarness x = new CoinflipReuseHarness();
+            uint24 oldDay = 7 + alignment;
+            x.credit(ID, oldDay, 7, false);
+            x.setFrontier(oldDay + 89);
+            x.credit(ID, oldDay + 105, 11, false);
+            assertEq(x.stake(ID, oldDay), 7, "old day still live");
+            assertEq(x.stake(ID, oldDay + 105), 11);
+            x.setFrontier(oldDay + 90);
+            x.credit(ID, oldDay + 106, 13, false);
+            assertEq(x.stake(ID, oldDay + 105), 11, "spill wins over now-dead ring");
+            assertEq(x.stake(ID, oldDay + 106), 13);
+        }
+    }
+
+    function test_maxAmountSaturatesAndManualReverts() public {
+        uint24 day = type(uint24).max;
+        _credit(ID, day, type(uint256).max);
+        _credit(ID, day, type(uint256).max);
+        vm.expectRevert(bytes4(keccak256("StakeAboveDailyCap()")));
+        r.credit(ID, day, 1, true);
+        assertEq(r.stake(ID, day), type(uint32).max);
+    }
+
+    /// @dev Normal resolution, stalls, and a permanent freeze with continued credits; each
+    ///      claim moves the cursor to the frontier.
+    function testFuzz_stalledResolutionMatchesAbsoluteLedger(uint256 seed) public {
+        uint24 frontier;
+        uint24 cursor;
+        for (uint24 day = 1; day <= 420; ++day) {
+            seed = uint256(keccak256(abi.encode(seed, day)));
+            if (day < 260 && seed % 5 != 0) {
+                frontier = day;
+                r.setFrontier(frontier);
+            }
+            _credit(ID, day + 1, seed & 0xffff);
+            if (seed % 13 == 0) {
+                uint24 start = frontier > 90 ? frontier - 90 : 0;
+                if (cursor > start) start = cursor;
+                for (uint24 d = start + 1; d <= frontier; ++d) {
+                    assertEq(r.stake(ID, d), oracle.stakes(ID, d), "live ledger");
+                }
+                cursor = frontier;
+                r.setClaimCursor(ID, cursor);
+            }
+        }
+    }
+
+    /// @dev The reference itself: implicit seeds pay once, and expired carry cannot ride a known result.
+    function test_referenceSeedsCarryExpiryAndRepeatedClaim() public {
+        CoinflipReuseReference ref = new CoinflipReuseReference();
+        ref.configure(1, 0, 0, 0, false, 0);
+        ref.resolve(1, 100);
+        (uint256 paid, uint256 baf,) = ref.settle(1, 0);
+        assertEq(paid, 400_000);
+        assertEq(baf, 400_000);
+        (paid,,) = ref.settle(1, 0);
+        assertEq(paid, 0);
+        ref.configure(ID, 1, 0, 1000, true, 0);
+        ref.resolve(92, 100);
+        (paid,,) = ref.settle(ID, 0);
+        (, uint256 carry,,,) = ref.positions(ID);
+        assertEq(paid, 0);
+        assertEq(carry, 0, "expired carry cannot ride a known result");
     }
 
     function test_zeroCreditsDoNotTouchAnyStakeSlot() public {

@@ -2,36 +2,19 @@
 pragma solidity 0.8.38;
 
 import {CrapsScheduledCursorTest} from "../craps/CrapsScheduledCursor.t.sol";
-import {NativeMeasuredGasExport} from "../helpers/NativeMeasuredGasExport.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {Vm} from "forge-std/Vm.sol";
 
 /// @dev The original scheduled-cursor fixtures: cold arming, fresh pass refunds,
 /// partial refund checkpoints and the last refund's cursor/return tail.
-contract CrapsMaintenanceNativeGasTest is CrapsScheduledCursorTest, NativeMeasuredGasExport {
+contract CrapsMaintenanceNativeGasTest is CrapsScheduledCursorTest {
     uint256 private constant ALLOWANCE = 900_000;
 
-    function _measureMaintenance(string memory label) private returns (MineFlipGas.Result memory result) {
-        uint256 snapshot = vm.snapshotState();
+    function _measureMaintenance() private returns (MineFlipGas.Result memory result) {
         vm.cool(address(craps));
-        vm.recordLogs();
         vm.prank(ContractAddresses.GAME);
         result = craps.runCrapsMaintenance_g10712{gas: ALLOWANCE}(ALLOWANCE);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
         assertTrue(result.progressed, "cold maintenance commits work");
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            uint256 post = vm.snapshotState();
-            assertTrue(vm.revertToState(snapshot));
-            vm.serializeUint(label, "workerAllowance", ALLOWANCE);
-            vm.serializeUint(label, "allowanceWord", 0);
-            this.exportNativeFixture(label, ContractAddresses.GAME, address(craps),
-                abi.encodeCall(craps.runCrapsMaintenance_g10712, (ALLOWANCE)));
-            assertTrue(vm.revertToState(post));
-            this.finalizeMeasuredFixture(label, abi.encode(result), logs);
-            vm.deleteStateSnapshot(post);
-        }
-        vm.deleteStateSnapshot(snapshot);
     }
 
     function test_NativeColdScheduledArm() public {
@@ -39,7 +22,7 @@ contract CrapsMaintenanceNativeGasTest is CrapsScheduledCursorTest, NativeMeasur
         vm.warp(vm.getBlockTimestamp() - ((vm.getBlockTimestamp() - 82_620) % 1 days) + 1);
         _openDay();
         vm.warp(vm.getBlockTimestamp() + 1 hours);
-        _measureMaintenance("craps-maintenance-arm");
+        _measureMaintenance();
         assertGt(craps.slotIndexOf(craps.minerSlot()), 0, "closed field registered");
     }
 
@@ -60,8 +43,7 @@ contract CrapsMaintenanceNativeGasTest is CrapsScheduledCursorTest, NativeMeasur
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
-        string memory label = string.concat("craps-refund-", high ? "high-" : "normal-", vm.toString(count));
-        _measureMaintenance(label);
+        _measureMaintenance();
         uint256 refunded;
         for (uint256 i; i < count; ++i) {
             (uint256 normal, uint256 higher) = craps.passCreditsOf(owners[i]);

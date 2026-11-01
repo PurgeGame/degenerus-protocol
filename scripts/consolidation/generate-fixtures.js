@@ -13,8 +13,6 @@ for (const [file, bounded, affiliate] of [
   const lines = [start, '        (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,',
     `            address[] memory players, bytes32[] memory refs) = ${affiliate};`];
   for (const row of DEPLOYMENTS) {
-    if (file === 'test/fuzz/helpers/DeployProtocol.sol' && row.key === 'VAULT')
-      lines.push('        _beforeProtocolSubscriptions();');
     const args = row.key === 'ICONS_32' ? 'false' : row.bootstrap ? 'owners, codes, kicks, players, refs' : '';
     const artifact = row.fixtureContract || row.contract;
     const creation = `${row.fixtureType}(payable(deployCode("${artifact}.sol:${artifact}", abi.encode(${args}))))`;

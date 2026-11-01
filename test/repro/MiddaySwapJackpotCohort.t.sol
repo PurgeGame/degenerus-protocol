@@ -71,7 +71,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         vm.deal(address(game), 10_000 ether);
         vm.deal(buyer, 200_000 ether);
         vm.deal(crank, 10 ether);
-        // Clear MIN_LINK_FOR_LOOTBOX_RNG (40 LINK). The admin ctor creates subId 1.
+        // Clear the mid-day native floor. The admin ctor creates subId 1.
         mockVRF.fundSubscription(1, 1_000 ether);
     }
 
@@ -782,7 +782,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     }
 
     /// @dev Cross the boundary WITHOUT fulfilling the outstanding mid-day word: the first
-    ///      advance runs the stalled-request promotion (or the rngGate re-fire), and only
+    ///      advance runs the stalled-request promotion (or the daily RNG re-fire), and only
     ///      then does the (new) request get its word and the day drain out.
     function _runPromotedCrossingDay() internal {
         simTime += 1 days + 1;

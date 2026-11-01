@@ -7,13 +7,13 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
 /// @dev Round-7 byte-identity gates.
 ///
-///      1. PriceLookupLib.priceForLevel restructure (LIBS-01/02): the reference body
+///      1. PriceLookupLib.priceForLevel restructure: the reference body
 ///         below is the PRE-round-7 implementation copied verbatim — the live library
 ///         must agree on the full uint24 domain (dense low range + cycle boundaries +
 ///         fuzz; both bodies depend only on `< 5` / `< 10` and `targetLevel % 100`,
 ///         so these cover every equivalence class).
 ///
-///      2. EntropyLib.hash2 (LIBS-03/04): each migrated call-site shape must
+///      2. EntropyLib.hash2: each migrated call-site shape must
 ///         hash the byte-identical preimage as the abi.encode/encodePacked idiom it
 ///         replaces — any divergence would change RNG-derived values.
 contract R7LibEquivalence is Test {

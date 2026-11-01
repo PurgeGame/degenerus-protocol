@@ -16,11 +16,10 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title DegeneretteFreezeResolutionTest -- Proves
-///        DGAS-05 same-results: the v47 Degenerette `resolveBets` write-batching
-///        is payout-IDENTICAL to the old per-spin behavior.
+/// @title DegeneretteFreezeResolutionTest -- Proves the Degenerette `resolveBets` write-batching
+///        is payout-IDENTICAL to per-spin behavior.
 ///
-/// @notice DGAS-05 (tests 4-7): the resolver accumulates ETH/FLIP
+/// @notice (tests 4-7): the resolver accumulates ETH/FLIP
 ///         payouts CROSS-BET into a `ResolveAcc` memory struct and flushes ONCE
 ///         per currency (one mint per currency, one claimable+claimablePool write,
 ///         one pool write, one box per betId). The HARD floor is "same results" —
@@ -32,8 +31,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         wei is surfaced as a real regression, never adjusted away.
 ///         - Tier-1 (additive): FLIP mint + ETH claimable + nested box WWXRP.
 ///         - Tier-2 (running-pool-local): the ETH cap binds on the IDENTICAL spin.
-///         - DGAS-03: lootbox-share summed PER betId (one box per bet).
-///         - DGAS-04: DGNRS award stays PER SPIN (reads poolBalance fresh).
+///         - lootbox-share summed PER betId (one box per bet).
+///         - DGNRS award stays PER SPIN (reads poolBalance fresh).
 ///
 /// @dev Deploys full 23-contract protocol via DeployProtocol. Uses vm.store to
 ///      inject freeze state and seed pending pools to a known value, then places
@@ -79,20 +78,20 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant BET_SURVIVAL_TAG = 12;
     uint256 private constant FLIP_ROUND_TAG = 11;
 
-    // --- DGAS-05 same-results constants ---
+    // --- same-results constants ---
 
     /// @dev claimablePool (uint128) lives in slot 1, byte 16.
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
     /// @dev FLIP.balanceOf mapping root slot.
     uint256 private constant FLIP_BALANCEOF_SLOT = 1;
 
-    /// @dev Degenerette bet currencies (DegeneretteModule:208-214).
+    /// @dev Degenerette bet currencies (`GameDegeneretteBet` currency constants).
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;
 
-    /// @dev ETH win pool cap: 10% of futurePool (DegeneretteModule:196).
+    /// @dev ETH win pool cap: 10% of futurePool (`ETH_WIN_CAP_BPS` in `DegenerusGameDegeneretteModule`).
     uint256 private constant ETH_WIN_CAP_BPS = 1_000;
-    /// @dev Per-currency minimum bets (DegeneretteModule:217-223).
+    /// @dev Per-currency minimum bets (`MIN_BET_ETH` / `MIN_BET_FLIP` in `GameDegeneretteBet`).
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
     uint256 private constant MIN_BET_FLIP = 100;
 
@@ -196,7 +195,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // DGAS-05 Test 4: Tier-1 additive equivalence (mixed-currency multi-bet batch)
+    // Test 4: Tier-1 additive equivalence (mixed-currency multi-bet batch)
     // =========================================================================
 
     /// @notice Prove the cross-bet flush is ADDITIVE — byte-identical to a per-spin
@@ -449,7 +448,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // DGAS-05 Test 5: Tier-2 ETH cap binds on the IDENTICAL spin (running-pool-local)
+    // Test 5: Tier-2 ETH cap binds on the IDENTICAL spin (running-pool-local)
     // =========================================================================
 
     /// @notice Prove the ETH cap binds on the IDENTICAL spin under batching vs the
@@ -537,7 +536,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // DGAS-05 Test 6: lootbox summed PER betId, never across bets
+    // Test 6: lootbox summed PER betId, never across bets
     // =========================================================================
 
     /// @notice Prove the lootbox-share is summed PER betId (one box per bet), never
@@ -614,7 +613,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // DGAS-05 Test 7: DGNRS award stays PER SPIN (not batched)
+    // Test 7: DGNRS award stays PER SPIN (not batched)
     // =========================================================================
 
     /// @notice Two independently replayed score-7 ETH spins must debit successively smaller
@@ -710,7 +709,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // 323 Task 2: post-game-over resolveBets liveness guard (insolvency repro closed)
+    // Post-game-over resolveBets liveness guard (insolvency repro closed)
     // =========================================================================
 
     /// @notice Prove the liveness guard (the read-consumer stage selector returns 0 once
@@ -805,7 +804,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // DGAS-05 Internal Helpers
+    // Internal Helpers
     // =========================================================================
 
     /// @dev Reward-pool percentages for the current composite score tiers S7/S8/S9.
@@ -820,8 +819,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @dev Place a Degenerette bet for `player` and return its betId (its queue position + 1
-    ///      within whichever index is currently active — index can change under
-    ///      `_setLootboxIndex`-style tests, so the id is read off the ACTIVE index, not a fixed 1).
+    ///      within whichever index is currently active — index can change as tests
+    ///      drive daily requests, so the id is read off the ACTIVE index, not a fixed 1).
     function _placeBet(uint8 currency, uint128 perTicket, uint8 spins, uint32 ticket)
         internal
         returns (uint64 betId)
@@ -1098,11 +1097,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///      (index 1) using the same derivation as _resolveBet. Returns
     ///      when a combination with >= 2 matches is found.
     ///
-    ///      v47 repair: the spin-0 result ticket is derived via
+    ///      The spin-0 result ticket is derived via
     ///      `DegenerusTraitUtils.packedTraitsDegenerette` (the Degenerette-specific
     ///      derivation _resolveBet uses) — NOT `packedTraitsFromSeed`
-    ///      (the mint derivation). Using the wrong derivation produced a "winning"
-    ///      ticket that the on-chain path never actually matched.
+    ///      (the mint derivation). Using the wrong derivation would produce a "winning"
+    ///      ticket that the on-chain path never actually matches.
     function _findWinningCombo(uint48 index) internal pure returns (uint32 customTraits, uint256 rngWord) {
         for (uint256 attempt; attempt < 1000; attempt++) {
             rngWord = uint256(keccak256(abi.encode("freeze_test_rng", attempt)));

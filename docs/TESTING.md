@@ -43,6 +43,8 @@ node scripts/check-deployment-sizes.js "$AUDIT_SCRATCH/production-out"
 CHECK_ARTIFACTS="$AUDIT_SCRATCH/production-out" bash scripts/layout/storage_layout_oracle.sh
 python3 scripts/layout/check_recursive_layout.py --out "$AUDIT_SCRATCH/production-out" \
   --report "$AUDIT_SCRATCH/recursive-layout.json"
+XA_PROBE_OUT="$AUDIT_SCRATCH/xa-probe-out" \
+  python3 scripts/layout/check_peripheral_layouts.py "$AUDIT_SCRATCH/production-out"
 node scripts/check-owner-actions.js "$AUDIT_SCRATCH/production-out"
 node scripts/check-owner-governance-layout.js "$AUDIT_SCRATCH/production-out"
 node scripts/check-vault-player-actions.js "$AUDIT_SCRATCH/production-out"

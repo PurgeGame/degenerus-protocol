@@ -23,7 +23,7 @@ contract AdvanceLiveness is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 100_000 ether);
-        // LINK floor for mid-day / craps requests (admin ctor creates subId 1)
+        // Native floor for mid-day / craps requests (admin ctor creates subId 1)
         mockVRF.fundSubscription(1, 1_000_000 ether);
 
         handler = new AdvanceLivenessHandler(game, mockVRF, 16);

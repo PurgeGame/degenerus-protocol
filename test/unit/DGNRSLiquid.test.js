@@ -261,8 +261,8 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       expect(ev.args.amount).to.equal(dgnrsUnits("500"));
     });
 
-    // Coverage gap: DELTA-L-01 — transfer to self
-    it("transfer to self does not change balance (DELTA-L-01)", async function () {
+    // Coverage gap: transfer to self
+    it("transfer to self does not change balance", async function () {
       const { dgnrs, deployer } = await loadFixture(deployFundedFullProtocol);
       const balBefore = await dgnrs.balanceOf(deployer.address);
       const amount = dgnrsUnits("1000");

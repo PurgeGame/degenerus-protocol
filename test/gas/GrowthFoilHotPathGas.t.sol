@@ -29,9 +29,7 @@ contract GrowthFoilGasSeeder is DegenerusGameStorage {
     }
 }
 
-/// @dev FOUNDRY_ISOLATE=true measures cold external calls. Set
-/// CUSTOMER_GROWTH_FOIL_BASELINE to a runtime JSON under contracts/ to compare
-/// identical scenarios against an archived Parimutuel/Quests/Foil/Game build.
+/// @dev FOUNDRY_ISOLATE=true measures cold external calls.
 abstract contract GrowthFoilFixture is DeployProtocol {
     address internal constant PLAYER = address(0xA11CE);
     uint24 internal constant DAY = 21;
@@ -42,14 +40,6 @@ abstract contract GrowthFoilFixture is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        string memory path = vm.envOr("CUSTOMER_GROWTH_FOIL_BASELINE", string(""));
-        if (bytes(path).length != 0) {
-            string memory json = vm.readFile(path);
-            vm.etch(address(parimutuel), vm.parseJsonBytes(json, ".DegenerusParimutuel"));
-            vm.etch(address(quests), vm.parseJsonBytes(json, ".DegenerusQuests"));
-            vm.etch(address(foilModule), vm.parseJsonBytes(json, ".DegenerusGameFoilPackModule"));
-            vm.etch(address(game), vm.parseJsonBytes(json, ".DegenerusGame"));
-        }
         vm.warp(block.timestamp + 20 days);
         _mintData(1);
         vm.deal(PLAYER, 1_000 ether);

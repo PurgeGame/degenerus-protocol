@@ -105,6 +105,11 @@ contract JackpotTableHarness is CrapsViews {
     function jackpotTerms(uint64 slot) external view returns (Window memory) { return _slotWindow(slot); }
     /// @dev Unopen a day, so the next lock detaches its battle to remainder seven of that day.
     function clearBoostBudget(uint24 day) external { _storeBudget(day, 0); }
+    /// @dev Set a battle's paid-seat count (the low 32 bits of its packed word).
+    function setPaidSeats(uint64 slot, uint32 paid) external {
+        bytes32 key = bytes32(uint256(slot));
+        _storeBattle(key, (_loadBattle(key) & ~uint256(type(uint32).max)) | paid);
+    }
 }
 
 /// @dev Only installed when a test explicitly replaces the dice outcome.
@@ -258,6 +263,16 @@ contract JackpotBattleTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         (,, uint256 remaining) = api.prepareJackpotBattle(7, 123);
         assertEq(remaining, 500);
+    }
+
+    /// @dev Paid and awarded seats share one 32-bit entrant lane, so a nearly full paid field
+    ///      receives only the awards that still fit.
+    function test_AwardSeatsNeverOverfillTheEntrantLane() public {
+        table.setPaidSeats(slot, type(uint32).max - 99);
+        _lock(100_000_000);
+        vm.prank(ContractAddresses.GAME);
+        (,, uint256 remaining) = api.prepareJackpotBattle(7, 123);
+        assertEq(remaining, 99, "awards fill the lane only up to 2^32 - 1");
     }
 
     function test_AppendRejectsMoreThanOneCheckpoint() public {

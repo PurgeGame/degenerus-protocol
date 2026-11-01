@@ -1,31 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// LootboxAutoResolveBernoulliEv.test.js — Phase 275 Wave 2 TST-LBX-AR-01
+// LootboxAutoResolveBernoulliEv.test.js — EV-neutrality of the auto-resolve Bernoulli round-up
 //
-// EV-neutrality via LootboxBernoulliTester direct-call is justified by D-275-HOIST-01:
-// the hoisted Bernoulli math is byte-identical between manual + auto-resolve branches,
-// so the v39 TST-WT EV-neutrality proof carries verbatim. Integration coverage of the
-// actual auto-resolve callers (Degenerette resolveLootboxDirect + resolveRedemptionLootbox) lands
-// in TST-LBX-AR-03 (silent cold-bust) and TST-LBX-AR-05 (rem-byte snapshot).
+// EV-neutrality via LootboxBernoulliTester direct-call is justified because the hoisted
+// Bernoulli math is byte-identical between manual + auto-resolve branches, so the
+// EV-neutrality proof in test/stat/LootboxBernoulliEv.test.js carries over. Integration
+// coverage of the actual auto-resolve callers (Degenerette resolveLootboxDirect +
+// resolveRedemptionLootbox) covers the silent cold-bust and rem-byte snapshot cases.
 //
 // Heavy-MC validation of the auto-resolve Bernoulli round-up at N=10K seeds per
 // scaledPre across the representative sample span {47, 99, 100, 147, 250, 1000,
-// 9999} per .planning/phases/275-.../275-CONTEXT.md. Requirement: TST-LBX-AR-01.
+// 9999}.
 //
-// PLACEMENT: stat/ per D-275-TST-PLACEMENT-01 (heavy-MC tier; wired into
-// `test:stat` npm script alongside the v39 LootboxBernoulliEv.test.js precedent).
+// PLACEMENT: stat/ (heavy-MC tier; wired into the `test:stat` npm script alongside
+// test/stat/LootboxBernoulliEv.test.js).
 //
-// TST-WT-DRIFT at `test/unit/LootboxWholeTicket.test.js` is the upstream drift
+// The structural drift test in `test/unit/LootboxWholeTicket.test.js` is the upstream drift
 // detector — this stat test ASSUMES the canonical Bernoulli pattern holds in
-// production (verified at Plan A Task 1 grep gate + post-Plan-A by the
-// TST-WT-DRIFT structural assertion that the slice sits in shared scope per
-// the hoist invariant).
-//
-// CROSS-CITES:
-//   - D-275-HOIST-01 (Bernoulli hoisted to shared scope; math byte-identical)
-//   - D-275-TST-PLACEMENT-01 (heavy-MC tier in stat/)
-//   - FINDINGS-v39.0.md §4 (a) EV-neutrality identity (carries verbatim)
-//   - Phase 274 TST-WT-01 precedent in test/stat/LootboxBernoulliEv.test.js
+// production (the drift test asserts that the slice sits in shared scope).
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -50,8 +42,8 @@ function makeRng(seedHex) {
   };
 }
 
-// JS replica of the Bernoulli math (mirrors v40 hoisted instruction sequence).
-// Drift caught by TST-WT-DRIFT (source-vs-tester) + per-loop spot-check below.
+// JS replica of the Bernoulli math (mirrors the hoisted instruction sequence).
+// Drift caught by the source-vs-tester drift test + per-loop spot-check below.
 function jsBernoulliWhole(scaledPre, seed) {
   const scaled = BigInt(scaledPre);
   let whole = scaled / TICKET_SCALE;
@@ -68,13 +60,13 @@ function jsBernoulliWhole(scaledPre, seed) {
   return { whole, roundedUp };
 }
 
-describe("LootboxAutoResolveBernoulliEv (stat-suite, heavy-MC) — TST-LBX-AR-01 EV-neutrality on auto-resolve paths at N=10K", function () {
+describe("LootboxAutoResolveBernoulliEv (stat-suite, heavy-MC) — EV-neutrality on auto-resolve paths at N=10K", function () {
   this.timeout(600_000);
 
-  describe("TST-LBX-AR-01 — EV-neutrality property on auto-resolve Bernoulli", function () {
+  describe("EV-neutrality property on auto-resolve Bernoulli", function () {
     // At N=10K i.i.d. samples, the variance of mean(whole) is bounded above by
     // 0.25/N; sigma of mean*100 is bounded above by 100*sqrt(0.25/10000) ≈ 0.5.
-    // CONTEXT.md acceptance: within ±0.5% of scaledPre — for scaledPre=100
+    // Acceptance: within ±0.5% of scaledPre — for scaledPre=100
     // that's ±0.5; for scaledPre=9999 that's ±49.995. Using ABSOLUTE bound of
     // 1.5 (3-sigma) for low scaledPre and 0.5% relative bound for higher.
     const N = 10_000;

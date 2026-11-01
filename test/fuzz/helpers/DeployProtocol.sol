@@ -53,14 +53,12 @@ import {GNRUS} from "../../../contracts/GNRUS.sol";
 // Mock contracts
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
-import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
-import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 import {GameSlots, GameSlotKeys} from "../../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 38 protocol contracts in setUp().
+/// @notice Deploys the 2 mocks and every protocol contract in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 ///         Deploy time: `_deployTimestamp()` (virtual). The default, DEPLOY_TS_LEGACY, is day index 9
 ///         (GameTimeLib.MAIN_LAUNCH_DAY): Degenesis is over at deploy and normal level-0 play starts
@@ -98,8 +96,6 @@ abstract contract DeployProtocol is Test {
     // Mocks
     MockVRFCoordinator public mockVRF;
     MockStETH public mockStETH;
-    MockLinkToken public mockLINK;
-    MockLinkEthFeed public mockFeed;
 
     // Protocol contracts
     Icons32Data public icons32;
@@ -322,20 +318,13 @@ abstract contract DeployProtocol is Test {
         _deployProtocol(true);
     }
 
-    /// @dev Replay fixtures install original runtimes before any cross-contract initialization.
-    function _beforeProtocolSubscriptions() internal virtual {}
-    function _beforeProtocolDeityInitialization() internal virtual {}
-
     /// @dev Genesis batching tests leave the one-time setup for the measured transaction.
     function _deployProtocol(bool initializeDeities) internal {
         vm.warp(_deployTimestamp());
 
-        // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 38 protocol contracts (nonces 5-42) ---
+        // --- Deploy 2 mocks (nonces 1-2), then the protocol from nonce 3 ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
-        mockLINK = new MockLinkToken();               // nonce 3
-        mockFeed = new MockLinkEthFeed(int256(0.004 ether)); // nonce 4
 
         // Order matches DEPLOY_ORDER in predictAddresses.js
 
@@ -366,7 +355,6 @@ abstract contract DeployProtocol is Test {
         affiliate = DegenerusAffiliate(payable(deployCode("Eip170Affiliate.sol:Eip170Affiliate", abi.encode(owners, codes, kicks, players, refs))));
         jackpots = DegenerusJackpots(payable(deployCode("DegenerusJackpots.sol:DegenerusJackpots", abi.encode())));
         deityPass = DegenerusDeityPass(payable(deployCode("DegenerusDeityPass.sol:DegenerusDeityPass", abi.encode())));
-        _beforeProtocolSubscriptions();
         vault = DegenerusVault(payable(deployCode("DegenerusVault.sol:DegenerusVault", abi.encode())));
         sdgnrs = sDGNRS(payable(deployCode("sDGNRS.sol:sDGNRS", abi.encode())));
         dgnrs = DGNRS(payable(deployCode("DGNRS.sol:DGNRS", abi.encode())));
@@ -391,7 +379,6 @@ abstract contract DeployProtocol is Test {
             _seedLogicalFixtureDay(fixtureDay);
             _seedCrapsFixtureCursor(fixtureDay);
         }
-        _beforeProtocolDeityInitialization();
         if (initializeDeities) game.initProtocolDeity();
     }
 

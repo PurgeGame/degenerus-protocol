@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {FSMHandler} from "../handlers/FSMHandler.sol";
 
-/// @title GameFSMInvariant -- Proves game FSM transitions are valid (FUZZ-03)
+/// @title GameFSMInvariant -- Proves game FSM transitions are valid
 /// @notice Asserts level monotonicity, gameOver terminality + terminal level freeze, VRF-progress
 ///         clock monotonicity, and bounded no-brick liveness.
 /// @dev The random walk alone never left level 0 (measured: 0 level-ups over 1,285 default-profile runs), so

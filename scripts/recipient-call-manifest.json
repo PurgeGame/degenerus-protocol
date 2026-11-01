@@ -4629,7 +4629,7 @@
     "kind": "external",
     "expression": "game.consumeCoinflipBoon_g2902(id)",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4637,7 +4637,7 @@
     "kind": "external",
     "expression": "game.currentLvl()",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4645,7 +4645,7 @@
     "kind": "external",
     "expression": "game.extsload_g2807007(bytes32(0))",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4653,7 +4653,7 @@
     "kind": "external",
     "expression": "game.playerActivityScoreCachedById_g975(id)",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4661,7 +4661,7 @@
     "kind": "recipient-helper",
     "expression": "_holdsWwxrpBoon(id)",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4757,7 +4757,7 @@
     "kind": "recipient-helper",
     "expression": "_enterDraw(id, payee, amount)",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4765,7 +4765,7 @@
     "kind": "recipient-helper",
     "expression": "_enterDraw(GNRUS_ID, ContractAddresses.GNRUS, amount)",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -4958,14 +4958,6 @@
     "expression": "game.extsload_g2807007(bytes32(OWNERS_BASE + ownerId))",
     "count": 2,
     "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
-  },
-  {
-    "path": "contracts/mocks/MockLinkToken.sol",
-    "scope": "MockLinkToken.transferAndCall",
-    "kind": "opcode-or-value",
-    "expression": "to.call( abi.encodeWithSignature( \"onTokenTransfer(address,uint256,bytes)\", msg.sender, value, data ) )",
-    "count": 1,
-    "review": "MOCK: test-only contract, outside deployment/chain reachability."
   },
   {
     "path": "contracts/mocks/MockVRFCoordinator.sol",
@@ -11277,7 +11269,7 @@
     "kind": "external",
     "expression": "IWwxrpGnrusDraw(ContractAddresses.WWXRP).enterDrawForGnrus()",
     "count": 1,
-    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. Both uint32 entry counters are checked before any write or Game call: a full counter refuses a player (ScoreOverflow) and skips GNRUS's entry, so the Game's request completes."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",

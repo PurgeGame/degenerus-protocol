@@ -220,6 +220,6 @@ describe("DegenerusAdmin", function () {
     });
   });
 
-  // stakeGameEthToStEth and setLootboxRngThreshold removed from Admin in Phase 146
-  // (now live directly on DegenerusGame with vault-owner access control)
+  // setLootboxRngThreshold is not on Admin; it lives directly on
+  // DegenerusGame with vault-owner access control.
 });

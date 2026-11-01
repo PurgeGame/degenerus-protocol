@@ -88,6 +88,21 @@ contract QuadrantWhalePassTest is Test {
             : uint64(2000) * 0x0001000100010001;
         uint16[4] memory bps = JackpotBucketLib.shareBpsByBucket(packed, uint8(entropy & 3));
         shares = JackpotBucketLib.bucketShares(ethBudget, bps, counts, solo);
+        // Orange King (Cards trait 174) moves budget toward the solo quadrant before conversion.
+        if (traits[2] == 174) {
+            if (solo != 2) {
+                uint256 moved = shares[2] / 2;
+                shares[2] -= moved;
+                shares[solo] += moved;
+            } else {
+                for (uint8 q; q < 4; ++q) {
+                    if (q == 2) continue;
+                    uint256 moved = shares[q] / 2;
+                    shares[q] -= moved;
+                    shares[2] += moved;
+                }
+            }
+        }
     }
 
     struct Expect {

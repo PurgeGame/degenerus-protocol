@@ -7,7 +7,7 @@ import {GameHandler} from "../handlers/GameHandler.sol";
 import {WhaleHandler} from "../handlers/WhaleHandler.sol";
 import {FlipSupplyProbe} from "../handlers/FlipSupplyProbe.sol";
 
-/// @title CoinSupplyInvariant -- Proves FLIP supply conservation (FUZZ-02 / COIN-01)
+/// @title CoinSupplyInvariant -- Proves FLIP supply conservation
 /// @notice The old `invariant_supplyConsistency` compared totalSupply()+vaultMintAllowance() to
 ///         supplyIncUncirculated(). Both sides read the SAME two Supply-struct fields
 ///         (supplyIncUncirculated() is DEFINED as totalSupply + vaultAllowance in FLIP.sol), so the

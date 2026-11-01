@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 266 STAT-01..03 — chi² uniformity over the 6 lootbox-resolution sub-roll
-// buckets after the lootbox-path entropy refactor (single-keccak per-resolution
+// LootboxEntropyDistribution.test.js -- chi² uniformity over the 6 lootbox-resolution sub-roll
+// buckets of the lootbox-path entropy derivation (single-keccak per-resolution
 // seed + inline bit-sliced reads).
 //
-// STAT-01: per-bucket chi² uniformity. Six describe blocks, one per sub-roll:
+// Part 1: per-bucket chi² uniformity. Six describe blocks, one per sub-roll:
 //          - rangeRoll        bits[0..15]    % 100   (_rollTargetLevel)
 //          - near-offset      bits[16..23]   % 5     (_rollTargetLevel)
 //          - far-offset       bits[24..39]   % 46    (_rollTargetLevel)
@@ -12,34 +12,26 @@
 //          - ticketVariance   bits[96..119]  % 10000 (_lootboxTicketCount)
 //          The DGNRS tier slice (bits[56..79] % 1000) and the boon roll
 //          (bits[120..151] % 1_000_000) are bit-disjoint from the above and
-//          covered by the same uniform-bit-slice argument; STAT-01 limits its
-//          empirical sweep to the 6 high-frequency sub-rolls per RESEARCH.md
-//          Pitfall 1 sample-budget calibration.
+//          covered by the same uniform-bit-slice argument; Part 1 limits its
+//          empirical sweep to the 6 high-frequency sub-rolls (sample-budget calibration).
 //
-// STAT-02: distribution-shape preserved. Pre-refactor (xorshift) and post-refactor
-//          (bit-sliced keccak) both produce uniform draws within α=0.05 chi²
-//          tolerance. The Phase 266 refactor only changes the entropy mixing
-//          mechanism — both the deleted xorshift and the new keccak slice are
-//          uniform per their respective uniformity proofs. STAT-02 is asserted
-//          by re-running 2 of the 6 STAT-01 buckets (`% 100` + `% 5`) under
-//          the same uniformity threshold.
+// Part 2: distribution shape. The bit-sliced keccak draws are uniform within α=0.05 chi²
+//          tolerance. Part 2 is asserted by re-running 2 of the 6 Part 1 buckets
+//          (`% 100` + `% 5`) under the same uniformity threshold.
 //
-// STAT-03: Phase 261/264 chi² infrastructure reuse — `makeRng`, `CHI2_CRIT_05`,
+// Part 3: chi² infrastructure reuse — `makeRng`, `CHI2_CRIT_05`,
 //          and `wilsonHilfertyZ` re-declared verbatim from
-//          test/stat/TraitDistribution.test.js (Phase 261 L48-56 / L87-90 /
-//          L97-100) and test/stat/PerPullLevelDistribution.test.js (Phase 264
-//          L78-102 carry). Reuse-existing-tooling discipline per Phase 266
-//          CONTEXT.md `<deferred>` "no new test infrastructure".
-//
-// Phase 266 audit baseline: v35.0 closure HEAD `5db8682b`.
+//          test/stat/TraitDistribution.test.js (L48-56 / L87-90 /
+//          L97-100) and test/stat/PerPullLevelDistribution.test.js
+//          (L78-102); no new test infrastructure.
 
 import { expect } from "chai";
 import hre from "hardhat";
 
 // ---------------------------------------------------------------------------
-// STAT-03 — Phase 261/264 chi² infrastructure reuse (verbatim re-declaration).
-// Source: test/stat/TraitDistribution.test.js L48-56 / L87-90 / L97-100 (origin).
-// Carry:  test/stat/PerPullLevelDistribution.test.js L78-102 (Phase 264).
+// Part 3 — chi² infrastructure reuse (verbatim re-declaration).
+// Source: test/stat/TraitDistribution.test.js L48-56 / L87-90 / L97-100.
+// Also:   test/stat/PerPullLevelDistribution.test.js L78-102.
 // ---------------------------------------------------------------------------
 
 function makeRng(seed) {
@@ -69,17 +61,17 @@ function wilsonHilfertyZ(chi2, df) {
 }
 
 // ===========================================================================
-// STAT-01 — chi² uniformity per sub-roll bucket
+// Part 1 — chi² uniformity per sub-roll bucket
 // ===========================================================================
 //
-// Phase 266 seed convention: 0xC036_NNNN family (distinct per bucket per
-// D-APPROVAL-04 cross-test isolation spirit). Each test draws `samples` 256-bit
+// Seed convention: 0xC036_NNNN family (distinct per bucket for cross-test
+// isolation). Each test draws `samples` 256-bit
 // words via `makeRng(seed)` and slices the on-chain bit range:
 //     uintK(seed >> shift) % modulus
 // where (K, shift, modulus) mirror the refactored consumer in
 // contracts/modules/DegenerusGameLootboxModule.sol.
 
-describe("STAT-01 — rangeRoll % 100 chi² uniformity", function () {
+describe("rangeRoll % 100 chi² uniformity", function () {
   it("rangeRoll over N=10000 is uniform via Wilson-Hilferty (df=99)", function () {
     const N = 10_000;
     const range = 100;
@@ -102,7 +94,7 @@ describe("STAT-01 — rangeRoll % 100 chi² uniformity", function () {
   });
 });
 
-describe("STAT-01 — near-offset % 5 chi² uniformity", function () {
+describe("near-offset % 5 chi² uniformity", function () {
   it("near-offset over N=5000 is uniform vs CHI2_CRIT_05[df=4]=9.488", function () {
     const N = 5_000;
     const range = 5;
@@ -125,7 +117,7 @@ describe("STAT-01 — near-offset % 5 chi² uniformity", function () {
   });
 });
 
-describe("STAT-01 — far-offset % 46 chi² uniformity", function () {
+describe("far-offset % 46 chi² uniformity", function () {
   it("far-offset over N=10000 is uniform via Wilson-Hilferty (df=45)", function () {
     const N = 10_000;
     const range = 46;
@@ -148,7 +140,7 @@ describe("STAT-01 — far-offset % 46 chi² uniformity", function () {
   });
 });
 
-describe("STAT-01 — pathRoll % 20 chi² uniformity", function () {
+describe("pathRoll % 20 chi² uniformity", function () {
   it("pathRoll over N=10000 is uniform via Wilson-Hilferty (df=19)", function () {
     const N = 10_000;
     const range = 20;
@@ -171,7 +163,7 @@ describe("STAT-01 — pathRoll % 20 chi² uniformity", function () {
   });
 });
 
-describe("STAT-01 — varianceRoll % 20 chi² uniformity", function () {
+describe("varianceRoll % 20 chi² uniformity", function () {
   it("varianceRoll over N=5000 is uniform via Wilson-Hilferty (df=19)", function () {
     const N = 5_000;
     const range = 20;
@@ -194,7 +186,7 @@ describe("STAT-01 — varianceRoll % 20 chi² uniformity", function () {
   });
 });
 
-describe("STAT-01 — ticketVariance % 10000 chi² uniformity", function () {
+describe("ticketVariance % 10000 chi² uniformity", function () {
   // Pitfall 1 calibration: marginal expected/bucket ~10 at N=100K; Wilson-Hilferty
   // for df=9999 keeps the false-positive rate at α=0.05.
   it("ticketVariance over N=100000 is uniform via Wilson-Hilferty (df=9999)", function () {
@@ -220,19 +212,14 @@ describe("STAT-01 — ticketVariance % 10000 chi² uniformity", function () {
 });
 
 // ===========================================================================
-// STAT-02 — distribution-shape preserved (uniformity-equivalence)
+// Part 2 — distribution shape (uniformity)
 // ===========================================================================
 //
-// Pre-refactor (EntropyLib.entropyStep XOR-shift) and post-refactor
-// (bit-sliced keccak) both produce uniform draws within α=0.05 chi² tolerance.
-// Per Phase 266 CONTEXT.md `<deferred>` "Behavioral-replay tests": specific
-// concrete winners diverge between pre- and post-refactor (different mixing),
-// but distribution SHAPE is preserved. STAT-02 asserts uniformity-equivalence
-// by re-running 2 of the 6 STAT-01 buckets under the same threshold — the
-// empirical proof that bit-sliced keccak is uniformly distributed (the
-// pre-refactor xorshift uniformity proof is carried in audit/FINDINGS-v35.0.md).
+// The bit-sliced keccak draws are uniform within α=0.05 chi² tolerance. Part 2
+// re-runs 2 of the 6 Part 1 buckets under the same threshold — the empirical
+// proof that bit-sliced keccak is uniformly distributed.
 
-describe("STAT-02 — distribution-shape preserved across the lootbox refactor", function () {
+describe("distribution-shape preserved across the lootbox refactor", function () {
   it("rangeRoll % 100 (post-refactor bit-slice) passes the same chi² threshold pre-refactor xorshift would", function () {
     const N = 10_000;
     const range = 100;
@@ -249,7 +236,7 @@ describe("STAT-02 — distribution-shape preserved across the lootbox refactor",
       chi2 += (d * d) / exp;
     }
     const z = wilsonHilfertyZ(chi2, 99);
-    expect(z, `STAT-02 % 100: Z = ${z.toFixed(3)} (chi² = ${chi2.toFixed(2)}, df=99)`).to.be.lt(1.645);
+    expect(z, `% 100: Z = ${z.toFixed(3)} (chi² = ${chi2.toFixed(2)}, df=99)`).to.be.lt(1.645);
   });
 
   it("near-offset % 5 (post-refactor bit-slice) passes the same chi² threshold pre-refactor xorshift would", function () {
@@ -268,20 +255,19 @@ describe("STAT-02 — distribution-shape preserved across the lootbox refactor",
       chi2 += (d * d) / exp;
     }
     const crit = CHI2_CRIT_05[4]; // 9.488
-    expect(chi2, `STAT-02 % 5: chi² = ${chi2.toFixed(2)} (df=4, critical=${crit})`).to.be.lt(crit);
+    expect(chi2, `% 5: chi² = ${chi2.toFixed(2)} (df=4, critical=${crit})`).to.be.lt(crit);
   });
 });
 
 // ===========================================================================
-// STAT-03 — Phase 261/264 chi² infrastructure reuse (verbatim re-declaration)
+// Part 3 — chi² infrastructure reuse (verbatim re-declaration)
 // ===========================================================================
 
-describe("STAT-03 — Phase 261/264 chi² infrastructure reuse", function () {
+describe("chi² infrastructure reuse", function () {
   it("re-declares makeRng / CHI2_CRIT_05 / wilsonHilfertyZ verbatim from origin", function () {
-    // Source: test/stat/TraitDistribution.test.js L48-56 / L87-90 / L97-100 (Phase 261 origin).
-    // Carry:  test/stat/PerPullLevelDistribution.test.js L78-102 (Phase 264).
-    // Phase 266 reuse-existing-tooling discipline: re-declared verbatim above —
-    // structural pin per CONTEXT.md `<deferred>` "no new test infrastructure".
+    // Source: test/stat/TraitDistribution.test.js L48-56 / L87-90 / L97-100.
+    // Also:   test/stat/PerPullLevelDistribution.test.js L78-102.
+    // Re-declared verbatim above; this is a structural pin.
     expect(typeof makeRng).to.equal("function");
     expect(typeof wilsonHilfertyZ).to.equal("function");
     expect(CHI2_CRIT_05[1]).to.equal(3.841);

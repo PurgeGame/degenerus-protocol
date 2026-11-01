@@ -5,22 +5,20 @@ import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title VrfWireOneShot — VTST-04: VRF wiring is one-shot (proves VRF-04 + VRF-05)
-/// @notice Phase 312 deliberately OMITTED the `initVrf` init-only runtime lock that the
-///         311 SPEC originally mandated (user-approved VRF-04 deviation, see
-///         312-01-SUMMARY Deviations §1). There is NO
+/// @title VrfWireOneShot — VRF wiring is one-shot
+/// @notice The contract deliberately has no `initVrf` init-only runtime lock. There is NO
 ///         `if (address(vrfCoordinator) != address(0)) revert E();` guard in the
 ///         contract — so this test does NOT assert any such init-lock revert (one would
 ///         fail). The one-shot property is proven in the form that ACTUALLY EXISTS:
 ///
-///         (1) Access-guard revert — the impl's `:503` (initVrf) /
-///             `:1717` (updateVrfCoordinatorAndSub) `msg.sender != ContractAddresses.ADMIN`
+///         (1) Access-guard revert — the impl's initVrf /
+///             updateVrfCoordinatorAndSub `msg.sender != ContractAddresses.ADMIN`
 ///             check rejects every non-ADMIN caller through the routed delegatecall reach
-///             (GameFacade.initVrf :308 / updateVrfCoordinatorAndSub :1874 ->
-///             delegatecall -> AdvanceModule impl -> ADMIN guard). This is the
+///             (GameFacade.initVrf / updateVrfCoordinatorAndSub ->
+///             delegatecall -> game-over module impl -> ADMIN guard). This is the
 ///             "second wire from an unauthorized caller reverts" provable shape.
 ///         (2) Structural one-shot attestation — DegenerusAdmin reaches `gameAdmin.initVrf`
-///             only from its constructor (:458) and exposes no post-construction forwarder,
+///             only from its constructor and exposes no post-construction forwarder,
 ///             so a second wire even from the ADMIN sender is topologically unreachable.
 ///
 ///         Models test/fuzz/CoverageGap222.t.sol:test_gap_game_vrf_admin_paths.
@@ -29,15 +27,15 @@ contract VrfWireOneShot is DeployProtocol {
         _deployProtocol();
     }
 
-    /// @notice A non-ADMIN caller's `initVrf` reverts via the impl `:503` ADMIN guard.
-    /// @dev Routed reach: GameFacade.initVrf (:308) delegatecalls the AdvanceModule
-    ///      impl (:498) whose `:503` `msg.sender != ContractAddresses.ADMIN` check rejects
+    /// @notice A non-ADMIN caller's `initVrf` reverts via the impl's ADMIN guard.
+    /// @dev Routed reach: GameFacade.initVrf delegatecalls the game-over module
+    ///      impl whose `msg.sender != ContractAddresses.ADMIN` check rejects
     ///      the call. `msg.sender` is preserved across delegatecall, so a freshly-made
     ///      non-admin actor (distinct from ContractAddresses.ADMIN) is genuinely rejected
     ///      by the guard — not a setup artifact. Low-level call + assertFalse(ok) so the
     ///      assertion is robust to the exact revert selector (the access guard reverts with
     ///      the contract's `E()` custom error). This is the access-guard form of "a second
-    ///      wire reverts" for any unauthorized caller (VRF-04).
+    ///      wire reverts" for any unauthorized caller.
     function test_nonAdminWireVrf_reverts() public {
         address nonAdmin = makeAddr("nonAdmin");
         // Sanity: the actor is NOT the privileged ADMIN, so the revert below is the
@@ -53,13 +51,13 @@ contract VrfWireOneShot is DeployProtocol {
                 keccak256("kh")
             )
         );
-        assertFalse(ok, "initVrf rejects non-ADMIN caller (the :503 guard)");
+        assertFalse(ok, "initVrf rejects non-ADMIN caller (the ADMIN guard)");
     }
 
-    /// @notice A non-ADMIN caller's `updateVrfCoordinatorAndSub` reverts (VRF-05 companion).
-    /// @dev The routed admin dispatch (GameFacade.updateVrfCoordinatorAndSub :1874 ->
-    ///      delegatecall -> AdvanceModule impl :1712) terminates at the same impl behind the
-    ///      `:1717` `msg.sender != ContractAddresses.ADMIN` guard. Proves the routed
+    /// @notice A non-ADMIN caller's `updateVrfCoordinatorAndSub` reverts.
+    /// @dev The routed admin dispatch (GameFacade.updateVrfCoordinatorAndSub ->
+    ///      delegatecall -> game-over module impl) terminates at the same impl behind the
+    ///      `msg.sender != ContractAddresses.ADMIN` guard. Proves the routed
     ///      coordinator-rotation entry is guarded against any non-ADMIN sender.
     function test_nonAdminUpdateVrf_reverts() public {
         address nonAdmin = makeAddr("nonAdmin");
@@ -76,12 +74,12 @@ contract VrfWireOneShot is DeployProtocol {
         );
         assertFalse(
             ok,
-            "updateVrfCoordinatorAndSub rejects non-ADMIN caller (the :1717 guard)"
+            "updateVrfCoordinatorAndSub rejects non-ADMIN caller (the ADMIN guard)"
         );
     }
 
     /// @notice The constructor wire ran exactly once at deploy.
-    /// @dev DegenerusAdmin's constructor (:445) calls gameAdmin.initVrf (:458), which sets
+    /// @dev DegenerusAdmin's constructor calls gameAdmin.initVrf, which sets
     ///      `lastVrfProcessedTimestamp`. A non-zero `lastVrfProcessed()` view confirms wiring
     ///      is in place, establishing that any further `initVrf` is the "second wire" the
     ///      access guard blocks for every non-ADMIN caller.
@@ -94,15 +92,15 @@ contract VrfWireOneShot is DeployProtocol {
 
     /// @notice Structural one-shot attestation: DegenerusAdmin reaches `initVrf` only from
     ///         its constructor — so a second wire even from the ADMIN sender is unreachable.
-    /// @dev This attests the user-approved VRF-04 deviation (NO init-only lock; one-shot by
-    ///      construction, per 312-01-SUMMARY Deviations §1). The access guard (the prior
+    /// @dev This attests that there is NO init-only lock and wiring is one-shot by
+    ///      construction. The access guard (the prior
     ///      tests) shows non-ADMIN callers are rejected; this shows the only authorized
     ///      caller (the DegenerusAdmin contract, ContractAddresses.ADMIN, via preserved
     ///      delegatecall `msg.sender`) can fire `initVrf` exactly once because it lives in the
     ///      constructor and DegenerusAdmin exposes no post-construction forwarder.
     ///
     ///      Form: read DegenerusAdmin.sol and assert the call site `gameAdmin.initVrf(`
-    ///      appears exactly once (the constructor at :458). The
+    ///      appears exactly once (the constructor). The
     ///      `interface ... { function initVrf(...) external; }` declaration uses a different
     ///      receiver and is NOT a `gameAdmin.initVrf(` call site, so the call-site count is the
     ///      load-bearing one-shot invariant.
@@ -119,7 +117,7 @@ contract VrfWireOneShot is DeployProtocol {
             assertEq(
                 _countOccurrences(src, "gameAdmin.initVrf("),
                 1,
-                "DegenerusAdmin calls initVrf exactly once (the constructor :458)"
+                "DegenerusAdmin calls initVrf exactly once (the constructor)"
             );
         } catch {
             // No silent equivalent fallback: a reverting read means the structural invariant

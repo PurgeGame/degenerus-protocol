@@ -11,9 +11,9 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title CoinflipCarryClaim — partial carry withdrawal while staying on auto-rebuy
 /// @notice Proves claimCoinflipCarry:
-///         1. PARTIAL  — settles resolved days first (win rolls into carry with the
-///                       recycle bonus), withdraws exactly `amount` as minted FLIP,
-///                       and the remainder keeps riding the next flip.
+///         1. PARTIAL  — settles resolved days first (win rolls into carry; the recycle
+///                       bonus joins the stake when the carry rides), withdraws
+///                       exactly `amount` as minted FLIP, and the remainder keeps riding the next flip.
 ///         2. CAP      — `amount` above the carry claims the whole carry and leaves
 ///                       auto-rebuy ENABLED (it is a withdrawal, not an exit).
 ///         3. ORDER    — a pending loss is settled BEFORE the withdrawal, so a wiped
@@ -23,7 +23,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///                       AutoRebuyNotEnabled for a player not on auto-rebuy.
 ///         5. TAKE-PROFIT — with autoRebuyStop = T, a win banks floor(payout/T)*T
 ///                       into claimableStored (claimCoinflips territory) and only
-///                       the remainder plus its recycle bonus rolls as carry;
+///                       the remainder rolls as carry;
 ///                       claimCoinflipCarry pays from the carry alone.
 contract CoinflipCarryClaim is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
@@ -95,13 +95,15 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
         coinflip.playCoinflip(playerId, stake);
     }
 
-    /// @dev Win payout for `stake` on day `epoch`, plus the capped recycle bonus the
-    ///      roll applies to the carry.
+    /// @dev Win payout for `stake` on day `epoch`; a just-formed carry carries no bonus.
     function _carryAfterWin(uint256 stake, uint24 epoch) internal view returns (uint256) {
         (uint16 r, ) = coinflip.getCoinflipDayResult(epoch);
-        uint256 payout = stake + (stake * uint256(r)) / 100;
-        uint256 bonus = (payout * 75) / 10_000;
-        return payout + bonus;
+        return stake + (stake * uint256(r)) / 100;
+    }
+
+    /// @dev Carry after a win on `epoch` that `carry` rides: the recycle bonus joins the stake.
+    function _carryAfterRide(uint256 carry, uint24 epoch) internal view returns (uint256) {
+        return _carryAfterWin(carry + (carry * 75) / 10_000, epoch);
     }
 
     function test_PartialClaimLeavesRemainderRolling() public {
@@ -128,7 +130,7 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
 
         // The remainder rides the next flip: a day-4 win compounds from the REDUCED carry.
         _resolveDay(4, true);
-        uint256 expectedNext = _carryAfterWin(expectedCarry - take, 4);
+        uint256 expectedNext = _carryAfterRide(expectedCarry - take, 4);
         vm.prank(player);
         coinflip.claimCoinflipCarry(0, 0); // settle-only probe (claims nothing)
         (, , uint256 carryNext, ) = coinflip.coinflipAutoRebuyInfo(player);
@@ -176,8 +178,7 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
         uint256 remainder = payout - reserved;
         assertGt(reserved, 0, "fixture must bank at least one chunk");
         assertGt(remainder, 0, "fixture must leave a rolling remainder");
-        uint256 bonus = (remainder * 75) / 10_000;
-        uint256 expectedCarry = remainder + bonus;
+        uint256 expectedCarry = remainder;
 
         vm.prank(player);
         uint256 claimed = coinflip.claimCoinflipCarry(0, type(uint256).max);
@@ -185,7 +186,7 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
         assertEq(
             claimed,
             expectedCarry,
-            "carry claim pays the remainder + its recycle bonus, never the reserved chunks"
+            "carry claim pays the remainder, never the reserved chunks"
         );
         (bool enabled, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertTrue(enabled, "still on auto-rebuy");

@@ -2,7 +2,6 @@
 pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -104,7 +103,7 @@ contract HumanOrderGasSeed is DegenerusGame {
     }
 }
 
-contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
+contract HumanOrderNativeGasTest is DeployProtocol {
     uint256 private constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
 
     address private constant PLAYER = address(0xB0A100);
@@ -143,8 +142,7 @@ contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
             for (uint256 w = 1; w <= 16; ++w) {
                 uint256 fixture = vm.snapshotState();
                 (uint256 execution, uint256 total, uint256 headroom) = this.freshCapCase(
-                    orders[i], uint256(keccak256(abi.encode("ev-open", w))),
-                    string.concat("human_fresh_", vm.toString(i), "_", vm.toString(w)));
+                    orders[i], uint256(keccak256(abi.encode("ev-open", w))));
                 if (execution > peakExec) peakExec = execution;
                 if (total > peakTotal) peakTotal = total;
                 if (headroom < minimumHeadroom) minimumHeadroom = headroom;
@@ -157,7 +155,7 @@ contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
     }
 
     /// @dev Each sweep case owns its temporary log and state-diff allocations.
-    function freshCapCase(uint256 input, uint256 word, string calldata label)
+    function freshCapCase(uint256 input, uint256 word)
         external returns (uint256 execution, uint256 total, uint256 headroom)
     {
         require(msg.sender == address(this), "fresh-cap self-call");
@@ -179,10 +177,6 @@ contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
         assertLe(measured, bound, "fresh-cap Osaka admission");
         assertLe(total, bound, "fresh-cap state-inclusive admission");
         headroom = bound - total;
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snap));
-            this.exportAtomic(label);
-        }
         assertTrue(vm.deleteStateSnapshot(snap));
     }
 
@@ -256,7 +250,6 @@ contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
         require(msg.sender == address(this), "cold-atomic self-call");
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
         host.seedOrder(PLAYER, input, word);
-        uint256 snapshot = vm.snapshotState();
         _cool();
         vm.recordLogs();
         uint256 beforeGas = gasleft();
@@ -268,18 +261,6 @@ contract HumanOrderNativeGasTest is DeployProtocol, NativeGasExport {
             (,,, uint256 ethShare) = abi.decode(entries[i].data, (uint64, uint256, uint256, uint256));
             if (ethShare != 0) ++ethWins;
         }
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            this.exportAtomic(string.concat("human-", vm.toString(input), "-", vm.toString(word)));
-        }
-        assertTrue(vm.deleteStateSnapshot(snapshot));
-    }
-
-    function exportAtomic(string calldata label) external {
-        require(msg.sender == address(this), "atomic export self-call");
-        HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
-        this.exportNativeFixture(label, address(this), address(host), abi.encodeCall(host.rawAtomic, ()));
-        host.rawAtomic{gas: 25_000_000}();
     }
 
     /// @dev Cold atomic gas of the same entry over `runs` independent committed words. Every

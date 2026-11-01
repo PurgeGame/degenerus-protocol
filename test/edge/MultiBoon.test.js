@@ -17,11 +17,10 @@ import {
 /**
  * Multi-category boon coexistence tests.
  *
- * Validates the behaviour introduced in commit 004a9065 which removed the
- * single-category exclusivity gate from _rollLootboxBoons.  Before that
- * commit, if a player had an active boon in category X, a lootbox roll
- * producing a boon in category Y was silently dropped.  Now every category
- * is stored independently and multiple categories coexist.
+ * Validates that a lootbox roll (rollBoxBoons) has no single-category exclusivity
+ * gate: if a player has an active boon in category X, a roll producing a boon in
+ * category Y is still delivered.  Every category is stored independently and
+ * multiple categories coexist.
  *
  * Key constraints for testing:
  *   - Each deity has three daily slots and a lifetime cap of ten gifts per recipient.
@@ -298,14 +297,13 @@ describe("Multi-category boon coexistence", function () {
     await settleRngDay(game, deployer, mockVRF, 9000n);
 
     // Now Bob has a deity boon. Open lootboxes via whale bundle purchases
-    // to trigger _rollLootboxBoons. Before the exclusivity removal, if the
-    // lootbox rolled a boon in a different category, it would be silently
-    // dropped. Now _applyBoon runs unconditionally.
+    // to trigger rollBoxBoons. A lootbox boon rolled in a different category
+    // is still delivered: _applyBoon runs unconditionally.
     for (let i = 0; i < 5; i++) {
       const tx = await game
         .connect(bob)
         .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
-      // Whale bundle succeeds -- _rollLootboxBoons runs without exclusivity gate
+      // Whale bundle succeeds -- rollBoxBoons runs without an exclusivity gate
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     }

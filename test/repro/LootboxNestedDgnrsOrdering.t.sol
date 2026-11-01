@@ -39,7 +39,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        // The mid-day request that commits the entry needs the subscription's LINK floor.
+        // The mid-day request that commits the entry needs the subscription's native floor.
         mockVRF.fundSubscription(1, 100e18);
         // Seal and finish the genesis read through the production lifecycle.
         // The golden nested-spin word is bound to physical write buffer 1.

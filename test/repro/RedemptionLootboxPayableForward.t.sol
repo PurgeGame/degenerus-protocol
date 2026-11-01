@@ -37,7 +37,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
     //                          CONSTANTS / SLOTS
     // =====================================================================
 
-    /// @dev balancesPacked (DegenerusGame) at slot 7 (v61 PACK fold). Low 128 bits = claimable.
+    /// @dev balancesPacked (DegenerusGame) at slot 7. Low 128 bits = claimable.
     uint256 internal constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
     /// @dev claimablePool in the upper 128 bits of slot 1.
     uint256 internal constant GAME_SLOT1 = 1;

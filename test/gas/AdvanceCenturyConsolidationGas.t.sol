@@ -16,7 +16,6 @@ import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {VaultHistorySeeder} from "./AdvanceNestedSettlementGas.t.sol";
@@ -399,7 +398,7 @@ contract CenturyNativeGasHost is DegenerusGame, WalletSeed, DegenerusGameRngUtil
     }
 }
 
-abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
+abstract contract CenturyConsolidationFixture is FreshWordLeg {
     uint256 internal constant CAP = 10_000_000;
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
@@ -735,12 +734,6 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, NativeGasExport {
         host.applyOnly{gas: 12_000_000}();
         VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used - 21_192, acc, address(game));
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snap));
-            string memory label = string.concat("century-apply-", vm.toString(address(this)), "-", vm.toString(used));
-            this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(host.applyOnly, ()));
-            host.applyOnly{gas: 12_000_000}();
-        }
         emit log_named_uint("osaka_gas_including_intrinsic", used);
         emit log_named_uint("glamsterdam_exec_gas_including_intrinsic", r.glamsterdamExec + 21_192);
         emit log_named_uint("glamsterdam_state_gas", r.stateGas);

@@ -18,7 +18,7 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 ///         The freeze rests on two facts that are asserted here rather than assumed:
 ///           * `rngWordCurrent` is written ONLY under `rngLockedFlag`
-///             (DegenerusGame.sol:2215), so the resolving word is never public while
+///             (`GameFacade.rawFulfillRandomWords`), so the resolving word is never public while
 ///             the lock is down; and
 ///           * every carry mutator, ON A POSITION THAT HOLDS A CARRY, reverts until today's
 ///             flip is APPLIED — which covers the whole span in which a word can be knowable
@@ -150,7 +150,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _resolveDay(3, true);
 
         uint256 payout = _payoutOf(stake, 3);
-        uint256 expectedCarry = payout + (payout * 75) / 10_000;
+        uint256 expectedCarry = payout;
 
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
@@ -186,7 +186,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _resolveDay(3, true);
 
         uint256 payout = _payoutOf(stake, 3);
-        uint256 expectedCarry = payout + (payout * 75) / 10_000;
+        uint256 expectedCarry = payout;
 
         _lockRng();
         vm.prank(player);
@@ -277,7 +277,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _warpToDay(4); // today unapplied: frozen, and the carry is staked on it
 
         uint256 payout = _payoutOf(stake, 3);
-        uint256 expectedCarry = payout + (payout * 75) / 10_000;
+        uint256 expectedCarry = payout;
 
         vm.prank(player);
         uint256 minted = coinflip.claimCoinflips(0, type(uint256).max);
@@ -293,9 +293,8 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     }
 
     /// With a take-profit the split is PRE-COMMITTED: floor(payout/T)*T banks — that slice was
-    /// never going to be bet on today, so it is free to leave — and only the remainder plus its
-    /// recycle bonus rides. The threshold itself is frozen, so nobody can read today's word and
-    /// then decide to bank more of what is already staked.
+    /// never going to be bet on today, so it is free to leave — and only the remainder rides. The threshold itself is frozen, so nobody can read today's
+    /// word and then decide to bank more of what is already staked.
     function test_OnlyThePreCommittedBankLeavesDuringTheFreeze() public {
         uint256 T = 50_000;
         uint256 stake = _enterRebuyWithStake(T);
@@ -305,7 +304,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         uint256 payout = _payoutOf(stake, 3);
         uint256 reserved = (payout / T) * T;
         uint256 rides = payout - reserved;
-        uint256 expectedCarry = rides + (rides * 75) / 10_000;
+        uint256 expectedCarry = rides;
         assertGt(reserved, 0, "precondition: a bank exists");
         assertGt(rides, 0, "precondition: and a slice rides");
 
@@ -338,7 +337,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         uint256 remainderOld = payout - reservedOld;
         assertGt(reservedOld, 0, "D: fixture must bank a chunk under the OLD value");
         assertGt(remainderOld, 0, "D: fixture must roll a remainder under the OLD value");
-        uint256 expectedCarry = remainderOld + (remainderOld * 75) / 10_000;
+        uint256 expectedCarry = remainderOld;
 
         // Re-split to "bank everything" AFTER day 3 already resolved.
         vm.prank(player);
@@ -364,7 +363,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
     /// reserved + rolled-remainder == payout, exactly, for any take-profit. The split is
     /// a partition of the payout: it can neither mint nor destroy FLIP. (The recycle
-    /// bonus is applied to the remainder AFTER the partition and is checked separately.)
+    /// bonus joins the stake only when the remainder rides a later day.)
     function testFuzz_TakeProfitSplitConservesPayout(uint96 takeProfitRaw) public {
         uint256 takeProfit = uint256(takeProfitRaw);
         vm.assume(takeProfit != 0);
@@ -378,14 +377,14 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         assertEq(reserved + remainder, payout, "E: partition must be exact");
         assertLt(remainder, takeProfit, "E: rolled remainder is always below one chunk");
 
-        uint256 expectedCarry = remainder + (remainder * 75) / 10_000;
+        uint256 expectedCarry = remainder;
 
         // Settle without extracting: a 0-amount carry claim walks the days only.
         vm.prank(player);
         coinflip.claimCoinflipCarry(0, 0);
 
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
-        assertEq(carry, expectedCarry, "E: remainder + its recycle bonus rolls");
+        assertEq(carry, expectedCarry, "E: the remainder rolls");
         assertEq(
             coinflip.previewClaimCoinflips(player),
             reserved,
@@ -533,8 +532,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         uint256 stake = _enterRebuyWithStake(7);
         _resolveDay(3, true);
         uint256 payout = _payoutOf(stake, 3);
-        // The unbanked remainder earns the same 75 bps rebuy credit as an ordinary exit.
-        uint256 expected = payout + ((payout % 7) * 75) / 10_000;
+        uint256 expected = payout;
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(0, false, type(uint256).max);
         (bool enabled,, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(player);

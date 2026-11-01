@@ -7,10 +7,10 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title AfKingSubscription -- the game-resident AFKing subscription acceptance properties: a seat is
-///        the only credential and a passless holder is processed with no eviction (AFSUB-02/03), subscribe
-///        charges no FLIP and buys nothing (AFSUB-01), a mineFlip whose advance runs the subscriber pass
-///        emits one creditFlip_g317 bounty (REW-02), and subscribe authorization follows the account rule
-///        while third parties may only add to a subscriber's own prepaid bucket (OPENE-04).
+///        the only credential and a passless holder is processed with no eviction, subscribe
+///        charges no FLIP and buys nothing, a mineFlip whose advance runs the subscriber pass
+///        emits one creditFlip_g317 bounty, and subscribe authorization follows the account rule
+///        while third parties may only add to a subscriber's own prepaid bucket.
 contract AfKingSubscription is DeployProtocol {
 
 
@@ -44,7 +44,7 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3a — Coin credential: no process-pass re-check, no crossing machinery
+    // Coin credential: no process-pass re-check, no crossing machinery
     // (the pass horizon + refresh/evict crossing branch does not exist — a seat is the only
     // credential, burned once when a new run starts)
     // =========================================================================
@@ -75,33 +75,31 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3b — AFSUB-01: no FLIP prepay window at subscribe; horizon-encoded only
+    // No FLIP prepay window at subscribe; horizon-encoded only
     // =========================================================================
 
-    /// @notice AFSUB-01: subscribe NEVER charges FLIP. A no-pass subscriber's FLIP balance is
-    ///         UNCHANGED across subscribe; their `validThroughLevel` is encoded as `_passHorizonOf`
-    ///         (zero for a no-pass subscriber).
+    /// @notice subscribe NEVER charges FLIP. A no-pass subscriber's FLIP balance is
+    ///         UNCHANGED across subscribe.
     function testSubscribeNoFlipChargeRegardlessOfPass() public {
-        // Formerly skipped (357-00d): the pass gate rejected a passless subscribe at every
-        // level. The AFKing Subscription Token credential resurrects this coverage — a passless,
-        // coin-holding subscriber is first-class. AFSUB-01 (no FLIP charge at subscribe)
-        // is the property under test; the coin gate charges nothing either.
+        // A passless, coin-holding subscriber is first-class (the AFKing Subscription Token
+        // credential admits it). The absence of a FLIP charge at subscribe is the property under
+        // test; the coin gate charges nothing either.
         address nopass = makeAddr("subscribe_nopass");
         uint256 seat = _grantSeat(nopass);
         _fundPool(nopass, 1 ether); // the deposit is ETH, not FLIP
         uint256 nopassBefore = coin.balanceOf(nopass); // == 0
         vm.prank(nopass);
         game.subscribe(0, true, 1, seat); // MUST NOT revert; charges no FLIP
-        assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no FLIP burned at subscribe (no pass)");
+        assertEq(coin.balanceOf(nopass), nopassBefore, "no FLIP burned at subscribe (no pass)");
         assertGt(_dailyQtyOf(nopass), 0, "passless coin-holder subscribed");
         assertEq(game.afkingFundingOf(nopass), 1 ether, "subscribe buys nothing");
     }
 
     // =========================================================================
-    // Task 3c — Single-creditFlip_g317 mineFlip bounty (REW-02 / PLACE-02)
+    // Single-creditFlip_g317 mineFlip bounty
     // =========================================================================
 
-    /// @notice REW-02 (PLACE-02 bounty folded into advance): the REWARDED entrypoint is the
+    /// @notice The bounty is folded into advance: the REWARDED entrypoint is the
     ///         parameterless `mineFlip()` router. A mineFlip() whose advance leg runs the buy STAGE
     ///         emits AT MOST ONE creditFlip_g317 to the caller (never per-item) — the one-bounty-per-tx
     ///         property. (The advance leg pays `unit·2·mult`; a `mult==0` gameover advance pays none.)
@@ -147,11 +145,11 @@ contract AfKingSubscription is DeployProtocol {
             assertLt(game.afkingFundingOf(subs[i]), 1 ether, "the call ran the buy STAGE for every subscriber");
         }
         assertGt(reward, 0, "nonvacuity: the call measured above the unpaid 1M at a nonzero base fee");
-        assertEq(credits, 1, "exactly one bounty creditFlip_g317 per mineFlip tx, never per item (REW-02)");
+        assertEq(credits, 1, "exactly one bounty creditFlip_g317 per mineFlip tx, never per item");
     }
 
     // =========================================================================
-    // Task 3d — account-rule subscribe auth and the prepaid bucket (OPENE-04)
+    // Account-rule subscribe auth and the prepaid bucket
     // =========================================================================
 
     /// @notice A caller that is neither the account's payee nor its approved operator cannot
@@ -198,7 +196,7 @@ contract AfKingSubscription is DeployProtocol {
     // =========================================================================
 
     /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE mineFlip() (no full settle) —
-    ///      the STAGE is strictly PRE-RNG so the crossing refresh/evict completes before rngGate and the
+    ///      the STAGE is strictly PRE-RNG so the crossing refresh/evict completes before the daily RNG step and the
     ///      stage is measured on its own. Subscribers must already be registered (subscribe blocks
     ///      during rngLock).
     function _runStageOnce() internal {

@@ -8,7 +8,7 @@ CENSUSTX summary, and every scenario a CENSUSMETA line (see test/census/StorageC
 Labels come from the compiled `storageLayout` in forge-out/ artifacts (Foundry's extra_output),
 falling back to scripts/layout/golden/*.json (root names only).
 
-Counting rules (.planning/STORAGE-REUSE-PHASE2.md §1): the census already collapses each
+Counting rules: the census already collapses each
 transaction to its start and end value, so a clear and rewrite in one transaction never appears.
 A "re-creation" is a CREATE of a slot that an earlier, different transaction of the same
 scenario CLEARED.
@@ -37,7 +37,7 @@ ACCOUNT_ARTIFACT = {
     "Vault": "DegenerusVault", "Quests": "DegenerusQuests", "AFKingToken": "AFKingSubscriptionToken",
     "DeityPass": "DegenerusDeityPass", "Parimutuel": "DegenerusParimutuel", "RecordBounty": "DegenerusRecordBounty",
     "OwnerGovernance": "DegenerusOwnerGovernance", "Admin": "DegenerusAdmin", "Icons32": "Icons32Data",
-    "MockStETH": "MockStETH", "MockVRF": "MockVRFCoordinator", "MockLINK": "MockLinkToken", "MockFeed": "MockLinkEthFeed",
+    "MockStETH": "MockStETH", "MockVRF": "MockVRFCoordinator",
 }
 GOLDEN_FALLBACK = {}
 WORD = 32

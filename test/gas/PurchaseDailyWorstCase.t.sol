@@ -54,7 +54,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         TQ.retireCompleted(address(this), s.lvl);
 
         // Purchase-phase day shape: day == dailyIdx + 1, the day's request locked with its word
-        // already recorded (rngGate returns it; no request, no subscriber stage), read slot
+        // already recorded (the daily RNG step returns it; no request, no subscriber stage), read slot
         // drained, no coin-ticket leg pending, no golden ticket, no hero wagers.
         level = s.lvl;
         purchaseStartDay = day - 10;

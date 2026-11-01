@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// LootboxBernoulliEv.test.js — Phase 274 Wave 2 TST-WT-01 + TST-WT-03 extended.
+// LootboxBernoulliEv.test.js — extended-N EV-neutrality and mod-100 uniformity.
 //
 // Heavy-weight statistical validation of the manual-path Bernoulli math at
 // scale N >= 50K seeds. The lighter N=10K version of these properties runs
@@ -10,19 +10,16 @@
 // run under default `npm test`).
 //
 // Properties verified at higher N:
-//   - TST-WT-01 (EV-neutrality, extended): mean(whole) * TICKET_SCALE within
+//   - EV-neutrality (extended): mean(whole) * TICKET_SCALE within
 //     1-sigma of scaledPre across the full representative span. At N=50K the
 //     sigma of mean(whole) * 100 is bounded above by 100 * sqrt(0.25/N) ≈
 //     0.224, so 3-sigma is ~0.67 — we use the tighter ±1 tolerance.
-//   - TST-WT-03 (mod-100 mod uniformity at higher resolution): chi² df=99 at
+//   - mod-100 uniformity at higher resolution: chi² df=99 at
 //     N=50K samples per scaledPre boundary.
 //
-// CROSS-CITES:
-//   - feedback_gas_worst_case.md (theoretical worst case derived FIRST: the
-//     mean estimator's standard error is the load-bearing analytical bound;
-//     empirical chi² is the secondary confirmation)
-//   - Phase 266 STAT-03 reuse-existing-tooling discipline (CHI2_CRIT_05 +
-//     wilsonHilfertyZ re-declared verbatim from TraitDistribution.test.js)
+// The mean estimator's standard error is the load-bearing analytical bound; empirical chi² is
+// the secondary confirmation. CHI2_CRIT_05 and wilsonHilfertyZ are re-declared verbatim from
+// TraitDistribution.test.js.
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -47,7 +44,7 @@ function makeRng(seedHex) {
   };
 }
 
-// JS replica of the Bernoulli math. Drift caught structurally by TST-WT-DRIFT
+// JS replica of the Bernoulli math. Drift caught structurally by the drift gate
 // in test/unit/LootboxWholeTicket.test.js (source-vs-tester) plus the spot
 // check inside this file (js-vs-chain).
 function jsBernoulliWhole(scaledPre, seed) {
@@ -71,10 +68,10 @@ function wilsonHilfertyZ(chi2, df) {
   return term / Math.sqrt(2 / (9 * df));
 }
 
-describe("LootboxBernoulliEv (stat-suite, heavy-MC) — TST-WT-01 + TST-WT-03 extended", function () {
+describe("LootboxBernoulliEv (stat-suite, heavy-MC) — EV-neutrality + seed-slice uniformity, extended", function () {
   this.timeout(300_000);
 
-  describe("TST-WT-01 extended — EV-neutrality at N=50K", function () {
+  describe("extended — EV-neutrality at N=50K", function () {
     // For each scaledPre, run 50K Bernoulli trials and assert mean*100 within
     // ±1 of scaledPre (analytical 3-sigma bound at N=50K).
     const N = 50_000;
@@ -113,7 +110,7 @@ describe("LootboxBernoulliEv (stat-suite, heavy-MC) — TST-WT-01 + TST-WT-03 ex
     });
   });
 
-  describe("TST-WT-03 extended — uint32(seed >> 224) % 100 uniformity chi² at N=50K, df=99", function () {
+  describe("extended — uint32(seed >> 224) % 100 uniformity chi² at N=50K, df=99", function () {
     it("mod-100 distribution matches theoretical p_b at chi²(df=99) Wilson-Hilferty Z < 1.645", async function () {
       const N = 50_000;
       const tester = await deployTester();

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {NativeFailureExport} from "../helpers/NativeFailureExport.sol";
+import {Test} from "forge-std/Test.sol";
 import {BoundedCall} from "../../contracts/libraries/BoundedCall.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
@@ -56,15 +56,15 @@ contract ForwardedCallHarness {
     }
 
     function probe(uint8 mode, uint256 supplied) external returns (bool, uint256) {
-        // Test-only child boundary: make exhaustion finite even when the fixture
-        // exporter itself runs with the very large Foundry transaction limit.
+        // Test-only child boundary: make exhaustion finite even under the very large
+        // Foundry transaction limit.
         (bool ok, bytes memory result) = address(this).call{gas: supplied}(abi.encodeCall(this.scenario, (mode)));
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
         return abi.decode(result, (bool, uint256));
     }
 }
 
-contract ForwardedCallTest is NativeFailureExport {
+contract ForwardedCallTest is Test {
     ForwardedCallHarness private harness;
     function setUp() public { harness = new ForwardedCallHarness(); }
 
@@ -100,15 +100,6 @@ contract ForwardedCallTest is NativeFailureExport {
         for (uint256 supplied = 400_000; supplied <= 2_000_000; supplied += 1_600_000) {
             (bool ok, uint256 retained) = harness.probe(4, supplied);
             assertFalse(ok); assertEq(retained, 1); assertEq(harness.prefix(), 2);
-        }
-    }
-
-    function test_NativeFixtures() public {
-        _nativeCheckedFixture("remaining-low", address(this), address(harness),
-            abi.encodeCall(harness.probe, (uint8(4), 400_000)));
-        for (uint8 mode; mode <= 6; ++mode) {
-            _nativeCheckedFixture(string.concat("remaining-", vm.toString(mode)), address(this), address(harness),
-                abi.encodeCall(harness.probe, (mode, 2_000_000)));
         }
     }
 }

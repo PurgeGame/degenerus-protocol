@@ -11,8 +11,8 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 /// @notice A box open announces each box's target level and whole-ticket roll in `LootBoxOpened`
 ///         and accumulates the tickets per level offset; the entry's flush then walks the
 ///         populated offsets with a six-step lowest-set-bit search and queues each level once.
-///         Mutation v78 broke one step of that walk (`scan & 0xF` to `scan * 0xF`) and survived:
-///         nothing had checked that the queued levels are the announced ones. Twenty boxes spread
+///         A broken step of that walk (`scan & 0xF` to `scan * 0xF`) would queue levels other than
+///         the announced ones. Twenty boxes spread
 ///         over the target band pin the walk lane by lane.
 contract LootboxTicketLanesFlush is DeployProtocol {
     address internal actor;

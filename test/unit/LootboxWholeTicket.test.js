@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// LootboxWholeTicket.test.js — Phase 274 Wave 2 TST-WT-01..07
+// LootboxWholeTicket.test.js — whole-ticket Bernoulli collapse in the lootbox ticket-queue path
 //
 // Whole-ticket Bernoulli collapse coverage. The contract under test is the
 // `DegenerusGameLootboxModule._resolveLootboxCommon` ticket-queue path inside the
@@ -15,39 +15,29 @@
 //      cold-bust WWXRP consolation; and (on every box path, gated only by !wasSpin)
 //      emits `LootBoxOpened`
 //
-// Phase 277 retired the `index != type(uint48).max` sentinel: the ticket-queue
-// path is unified (no per-branch duplication) and the `LootboxTicketRoll` event
-// is removed entirely. `LootBoxOpened.futureTickets` still carries the scaled
+// There is no `index != type(uint48).max` sentinel: the ticket-queue
+// path is unified (no per-branch duplication) and there is no `LootboxTicketRoll` event. `LootBoxOpened.futureTickets` still carries the scaled
 // pre-Bernoulli count, so off-chain consumers derive
 // `whole = (futureTickets / 100) + (roundedUp ? 1 : 0)`.
 //
 // TEST STRATEGY:
-//   - TST-WT-01 (EV-neutrality) + TST-WT-02 (boundaries) + TST-WT-03 (bit-slice
-//     independence) — directly invoke `LootboxBernoulliTester` (a stand-alone
+//   - EV-neutrality + boundaries + bit-slice independence — directly invoke `LootboxBernoulliTester` (a stand-alone
 //     `external pure` mirror of the manual-branch arithmetic). Pattern from
 //     `PriceLookupTester` / `JackpotSoloTester` / `TraitUtilsTester`.
 //     Drift-detection: a source-grep test asserts the production source contains
 //     the exact instruction sequence the tester mirrors — if the tester drifts
 //     from production, the grep test fails first.
-//   - TST-WT-03 (bit-slice gating) + TST-WT-04..07 (event emissions + field
-//     consistency + return-value preservation) — source-level structural
+//   - bit-slice gating + event emissions + field
+//     consistency + return-value preservation — source-level structural
 //     assertions on `contracts/modules/DegenerusGameLootboxModule.sol`. The
 //     manual-path branch and the production source bytes are the audit
 //     subjects; static-analysis is the appropriate proof technique for
 //     "function X never emits event Y from branch Z" properties in audit
-//     deliverables (D-274-NO-EVT-BREAK-01 G17/G18/G19 grep recipes set the
-//     precedent).
+//     deliverables.
 //
-// CROSS-CITES:
-//   - D-274-BIT-SLICE-01 (post-c21f833a supersession: uint32 / bits[224..255])
-//   - D-274-NO-EVT-BREAK-01 (LootBoxOpened.futureTickets + EntriesQueuedScaled
-//     semantics UNCHANGED; FlipLootOpen removed in v47 — FLIP-lootbox surface
-//     deleted, terminal-paradox closure)
-//   - feedback_rng_backward_trace.md (slice consumed only on manual paths;
-//     auto-resolve never reads bits[224..255])
-//   - feedback_rng_commitment_window.md (no player-controllable input mutates
-//     between VRF commit and lootbox open that affects bits[224..255]
-//     independently)
+// RNG notes: the slice is consumed only on manual paths (auto-resolve never reads
+// bits[224..255]); no player-controllable input mutates between VRF commit and
+// lootbox open that affects bits[224..255] independently.
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -135,8 +125,7 @@ function makeRng(seedHex) {
 }
 
 // Chi-square critical values at alpha = 0.05 (re-declared verbatim from
-// test/stat/TraitDistribution.test.js per Phase 266 STAT-03 reuse-existing-
-// tooling discipline).
+// test/stat/TraitDistribution.test.js).
 const CHI2_CRIT_05 = {
   1: 3.841,
   2: 5.991,
@@ -147,16 +136,16 @@ const CHI2_CRIT_05 = {
   7: 14.067,
 };
 
-// Wilson-Hilferty Z one-sided approximation for df > 7 (mirrors v36+ pattern).
+// Wilson-Hilferty Z one-sided approximation for df > 7 (same approximation as the other stat tests).
 function wilsonHilfertyZ(chi2, df) {
   const term = Math.cbrt(chi2 / df) - (1 - 2 / (9 * df));
   return term / Math.sqrt(2 / (9 * df));
 }
 
-describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
+describe("LootboxWholeTicket", function () {
   this.timeout(180_000);
 
-  describe("TST-WT-DRIFT — production source contains the canonical Bernoulli instruction sequence", function () {
+  describe("production source contains the canonical Bernoulli instruction sequence", function () {
     it("contracts/modules/DegenerusGameLootboxModule.sol contains the exact uint32(rollSeed >> 224) % uint32(QTY_SCALE) Bernoulli pattern", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
 
@@ -208,7 +197,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // The `index != type(uint48).max` sentinel gate must be fully retired.
       expect(
         source.includes("if (index != type(uint48).max)"),
-        "Phase 277 sentinel retirement: `if (index != type(uint48).max)` must not appear"
+        "sentinel retirement: `if (index != type(uint48).max)` must not appear"
       ).to.equal(false);
     });
 
@@ -221,7 +210,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-01 — EV-neutrality property at N >= 10K seeds", function () {
+  describe("EV-neutrality property at N >= 10K seeds", function () {
     // E[whole_post] * TICKET_SCALE == scaledPre EXACTLY by construction:
     //   E[whole_post] = whole_floor * P(fail) + (whole_floor + 1) * P(win)
     //                 = whole_floor + frac/100
@@ -253,7 +242,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         // To avoid hammering the RPC with 10K external calls, we use the JS
         // replica for the EV computation AND assert the replica==tester at a
         // hash-stratified subsample of 100 seeds inside this loop. Drift
-        // protection is layered: TST-WT-DRIFT (above) catches source-vs-tester
+        // protection is layered: the source-drift test (above) catches source-vs-tester
         // drift; the per-loop inline check catches js-vs-tester drift.
         const SAMPLE_VERIFY_EVERY = 100;
         for (let i = 0; i < N; i++) {
@@ -293,13 +282,13 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-02 — boundary cases at scaledPre ∈ {0, 1, 99, 100, 101, 199, 200}", function () {
+  describe("boundary cases at scaledPre ∈ {0, 1, 99, 100, 101, 199, 200}", function () {
     it("scaledPre=0 deterministically yields whole=0, roundedUp=false (frac==0 short-circuits)", async function () {
       const tester = await deployTester();
       // With scaledPre=0, frac=0, the gate `frac != 0` short-circuits; no Bernoulli
       // roll occurs regardless of seed. NOTE: in the production manual branch this
       // code is GUARDED by `if (futureTickets != 0)` so it never executes when
-      // scaledPre=0 — see TST-WT-04 / TST-WT-06(f) for the source-level proof.
+      // scaledPre=0 — see the source-level proofs in the event-emission tests below.
       // Here we exercise the math primitive directly.
       for (const seed of [0n, 1n, 1n << 224n, (1n << 232n) - 1n, 0xdeadbeefn]) {
         const [whole, roundedUp] = await tester.bernoulliWhole(0, seed);
@@ -402,7 +391,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-03 — bits[224..255] independence + unified-path gating", function () {
+  describe("bits[224..255] independence + unified-path gating", function () {
     it("[03-static] bits[224..255] is consumed exactly once inside the outer `if (scaledWholeTickets != 0)` guard (per-roll settle path)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Locate the unique reference to `rollSeed >> 224` and assert: (a) it appears
@@ -536,7 +525,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-04 — `EntriesQueued` (not `EntriesQueuedScaled`) on the unified ticket-queue path (Phase 277)", function () {
+  describe("`EntriesQueued` (not `EntriesQueuedScaled`) on the unified ticket-queue path", function () {
     it("the touched-lane ticket flush calls offset-based `_queueEntries` at one source site — `_queueEntriesScaled` no longer appears in LootboxModule", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `_queueEntries` write is a single source site inside `_flushBoxAcc`
@@ -590,7 +579,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-05 — `LootBoxOpened.futureTickets` scaled-preservation (D-274-NO-EVT-BREAK-01; FlipLootOpen removed in v47)", function () {
+  describe("`LootBoxOpened.futureTickets` scaled-preservation", function () {
     it("[05a] `_settleLootboxRoll` carries this roll's `scaledWholeTickets` (scaled) and the `LootBoxOpened` emit consumes the same scaled value", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `LootBoxOpened` emit must reference `scaledWholeTickets` (this roll's
@@ -649,16 +638,13 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    // [05c] FlipLootOpen scaled-tickets preservation — REMOVED (v47): the
-    // FLIP-lootbox manual caller `openFlipLootBox` and its `FlipLootOpen`
-    // emit were removed (terminal-paradox closure). The scaled-futureTickets
-    // preservation invariant for the surviving LootBoxOpened emit is covered by
-    // [05a]/[05b] above. Removed-by-design, not skipped — assert the symbols are
-    // gone from the source.
+    // [05c] There is no FLIP-lootbox caller `openFlipLootBox` or `FlipLootOpen` emit.
+    // The scaled-futureTickets preservation invariant for the LootBoxOpened emit is
+    // covered by [05a]/[05b] above.
 
   });
 
-  describe("TST-WT-06 — `LootboxTicketRoll` retired + sentinel retirement (Phase 277)", function () {
+  describe("`LootboxTicketRoll` retired + sentinel retirement", function () {
 
 
     it("[06b] the per-roll ticket accumulation sits inside the outer `if (scaledWholeTickets != 0)` guard with no `index`-conditional gate; the flush call exists", function () {
@@ -717,7 +703,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
 
   });
 
-  describe("TST-WT-07 — field-consistency invariants for the unified ticket-queue path", function () {
+  describe("field-consistency invariants for the unified ticket-queue path", function () {
 
 
     it("[07b] the `LootBoxOpened` emit threads the `index` parameter into the `lootboxIndex` slot", function () {

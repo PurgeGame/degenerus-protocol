@@ -12,8 +12,8 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title VRFCore -- Audit tests for VRF request/fulfillment correctness
-/// @notice Covers VRFC-01 (callback revert-safety + gas), VRFC-02 (requestId lifecycle),
-///         VRFC-03 (mutual exclusion), VRFC-04 (20h vault-owner retry).
+/// @notice Covers callback revert-safety + gas, requestId lifecycle,
+///         mutual exclusion, and the 20h vault-owner retry.
 contract VRFCore is DeployProtocol {
     VRFHandler public vrfHandler;
 
@@ -57,7 +57,7 @@ contract VRFCore is DeployProtocol {
     }
 
     /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 34, low 48 bits = LR_INDEX)
-    ///      (post V62 lootbox repack: was 35).
+    ///      (post lootbox repack: was 35).
     function _lootboxRngIndex() internal view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
@@ -191,7 +191,7 @@ contract VRFCore is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // VRFC-01: Callback Revert-Safety and Gas Budget
+    // Callback Revert-Safety and Gas Budget
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Callback never reverts on daily fulfillment with any fuzzed word.
@@ -383,7 +383,7 @@ contract VRFCore is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // VRFC-02: vrfRequestId Lifecycle
+    // vrfRequestId Lifecycle
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Daily request: vrfRequestId set on request, cleared after full processing.
@@ -565,7 +565,7 @@ contract VRFCore is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // VRFC-03: rngLockedFlag Mutual Exclusion
+    // rngLockedFlag Mutual Exclusion
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice During daily RNG (rngLockedFlag==true), no mid-day request can be selected: the
@@ -750,7 +750,7 @@ contract VRFCore is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // VRFC-04: 20h Vault-Owner Retry
+    // 20h Vault-Owner Retry
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice After exactly 20 hours, the vault owner's Admin call triggers the retry.
@@ -956,7 +956,7 @@ contract VRFCore is DeployProtocol {
         assertEq(_lootboxRngIndex(), indexAfterRequest, "Index unchanged after retry+fulfill");
     }
 
-    /// @notice VRF word from previous day's request: rngGate detects requestDay < day,
+    /// @notice VRF word from previous day's request: the daily RNG step detects requestDay < day,
     ///         redirects the stale word to lootbox via _finalizeLootboxRng, then processes
     ///         the day using a derived or sentinel word. The game may process the stale-day
     ///         and current-day inline without firing a fresh VRF request.
@@ -980,9 +980,9 @@ contract VRFCore is DeployProtocol {
         uint256 followingDayStart = _relTs(4 * 86400);
         vm.warp(followingDayStart);
 
-        // mineFlip on the following day: rngGate sees rngWordCurrent != 0 but requestDay < current day.
+        // mineFlip on the following day: the daily RNG step sees rngWordCurrent != 0 but requestDay < current day.
         // The game redirects the stale word to lootbox and processes both days inline.
-        // A new VRF request may or may not be fired depending on the contract's rngGate logic.
+        // A new VRF request may or may not be fired depending on the contract's daily RNG logic.
         game.mineRun(0);
 
         // Process until unlocked (may take multiple mineFlip calls for batched ticket work)

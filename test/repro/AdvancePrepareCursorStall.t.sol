@@ -8,47 +8,26 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title AdvancePrepareCursorStall — regression for the jackpot-phase mineFlip ticket-drain
-///        liveness stall (prepare-future-tickets shared-cursor clobber).
+/// @title AdvancePrepareCursorStall — a jackpot-phase current-level ticket drain that spans
+///        several transactions resumes from its persisted cursor and finishes the day.
 ///
 /// @notice TEST-ONLY. No contracts are touched by the test itself. It drives a real jackpot-phase
 ///         day with a large permissionless buyer cohort and asserts the current-level ticket drain
 ///         RESUMES correctly across transactions and finishes the day.
 ///
-///         BUG (pre-fix): `mineFlip` runs `_prepareFutureTickets(lvl)` before the current-level
-///         drain `_runProcessTicketBatch(lvl)` on every call. The two share ONE resume cursor
-///         (`ticketCursor`/`ticketLevel`). When the current drain spans multiple transactions (a
-///         cohort larger than one write budget), each next call's `_prepareFutureTickets` probes the
-///         empty future levels lvl+1..lvl+4; the empty-queue path of `processFutureTicketBatch`
-///         (MintModule:325-328) does `ticketCursor = 0; ticketLevel = 0`, erasing the in-flight
-///         current-level cursor. `runTicketWork_g1150(lvl)` then re-inits (MintModule:630-632) and
-///         rescans from index 0, re-skipping the already-minted prefix at 1 budget unit each. New
-///         progress per call decays 32, 29, 27, ... to zero once the skip prefix saturates the
-///         358-unit cold budget: the mint cursor plateaus below the cohort size, the tail never
-///         mints, `mineFlip` loops STAGE_TICKETS_WORKING, and the day never unlocks (only the
-///         120-day liveness game-over escapes). Purchase phase is unaffected — the pre-RNG gate
-///         (AdvanceModule:302) drains that level's queue before `_prepareFutureTickets` runs.
-///
-///         FIX: `_prepareFutureTickets` returns early (defers) while a current-level batch is
-///         in flight (`ticketLevel == lvl`), so the shared cursor is never reset mid-drain; future
-///         levels are processed after the current drain clears the marker.
-///
-///         CURRENT: `_prepareFutureTickets` and the near-window drain are one function,
-///         `runTicketWork_g1150`. There is no standalone future-ticket prep step — the
-///         far-future continuation (the private `_processFutureTicketBatch`, reachable only
-///         through `runTicketWork_g1150`) is structurally unreachable until the near-window loop
-///         has returned (idx >= total for every windowed level), so the shared cursor can never
-///         be clobbered mid-drain by construction. This test still exercises that invariant end
-///         to end via real `game.purchaseOrderFor`/`mineFlip` calls, so it needed no changes here.
+///         The drain is `runTicketWork_g1150` (`_drainQueue`), which keeps one resume cursor
+///         (`ticketCursor`/`ticketLevel`) and re-enters the same queue until it is drained, so a
+///         cohort larger than one write budget keeps its in-flight cursor between calls: each
+///         call continues from the persisted frontier instead of rescanning from index 0, and
+///         the mint cursor does not plateau below the cohort size.
 ///
 ///         The cohort is fed only by real permissionless `game.purchaseOrderFor` calls (no per-day buyer
-///         cap; per-address dedup at Storage:688). Jackpot-phase buys route to `level`
-///         (MintModule:1967); the daily RNG-request swap turns that write slot into the read slot
-///         the drain consumes. vm.store/vm.load touch ONLY test-side prize-pool seeding and
-///         read-only storage inspection — never the queue contents.
+///         cap). Jackpot-phase buys route to `level`; the daily RNG-request swap turns that write slot
+///         into the read slot the drain consumes. vm.store/vm.load touch ONLY test-side prize-pool
+///         seeding and read-only storage inspection — never the queue contents.
 ///
-///         Pre-fix this test FAILS (the drain wedges below N and the day never completes);
-///         post-fix it PASSES (the cohort fully materializes and the day proceeds).
+///         The test fails if the drain wedges below N and the day never completes, and passes when
+///         the cohort fully materializes and the day proceeds.
 ///
 ///         Run: forge test --match-path test/repro/AdvancePrepareCursorStall.t.sol -vv
 contract AdvancePrepareCursorStall is DeployProtocol {
@@ -113,7 +92,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         uint256 N = writeLen;
 
         // 3) Cross the wall-day. Advances first finish the previous word's consumers,
-        //    then request the daily word and swap write->read (_swapAndFreeze).
+        //    then request the daily word and swap write->read (_swapTicketSlot + _freezePool).
         vm.warp(block.timestamp + 1 days + 1);
         for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineRun(0);
         require(game.rngLocked(), "daily VRF request is in flight (word swapped in)");
@@ -159,7 +138,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
 
         // ---- Regression assertions: the cohort drains to completion, the day is not wedged ----
         // The read queue is deleted only when every entry has been materialized (idx >= total,
-        // MintModule finish paths), so an emptied queue proves the full cohort minted. The mint
+        // TicketModule `_drainQueue` completion), so an emptied queue proves the full cohort minted. The mint
         // cursor persisted a partial chunk's frontier (non-zero between calls) and the next call
         // resumed from it instead of rescanning from 0.
         assertTrue(drained, "current-level cohort fully materialized (read queue emptied)");

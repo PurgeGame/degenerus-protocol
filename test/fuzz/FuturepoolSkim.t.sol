@@ -4,18 +4,16 @@ pragma solidity 0.8.38;
 // Integration tests for the time-based future-take / skim block inside
 // DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots.
 //
-// Per Phase 222 D-01/D-02/D-03:
-//  - The skim is no longer an independently addressable function
-//    (inlined into consolidation in v20.0, commit d8dbd9e3).
-//    D-03 forbids re-extracting it.
-//  - D-02 requires tests exercise the full pipeline in the single test
-//    file (no splitting). Full-pipeline tests drive game.mineRun(0)
-//    through DeployProtocol so the consolidation flow runs end-to-end.
-//  - SkimHarness is retained (D-03 pattern) for the pure-math fuzz tests
-//    that exercise the _nextToFutureBps pure function and the packed-slot
-//    pool helpers. These are NOT full-pipeline tests, so retaining them
-//    in-file alongside the full-pipeline test does not violate D-02's
-//    no-splitting rule — everything relevant to the skim is in one file.
+// Design:
+//  - The skim is not an independently addressable function; it is inlined
+//    into consolidation.
+//  - Tests exercise the full pipeline in a single test file (no splitting).
+//    Full-pipeline tests drive game.mineRun(0) through DeployProtocol so the
+//    consolidation flow runs end-to-end.
+//  - SkimHarness serves the pure-math fuzz tests that exercise the
+//    _nextToFutureBps pure function and the packed-slot pool helpers. These
+//    are NOT full-pipeline tests; they sit in-file alongside the
+//    full-pipeline test so everything relevant to the skim is in one file.
 //
 // NOTE on coverage reachability: _consolidatePoolsAndRewardJackpots is
 // declared `private` on DegenerusGameAdvanceModule; a SkimHarness cannot
@@ -24,7 +22,7 @@ pragma solidity 0.8.38;
 // counters, purchaseStartDay offsets). This file drives mineFlip()
 // through DeployProtocol to exercise the consolidation flow from the
 // outside; direct consolidation invocation is not possible without a
-// contract visibility change that D-03 forbids.
+// contract visibility change.
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
@@ -55,10 +53,9 @@ contract SkimTransitionSeeder is DegenerusGame {
 }
 
 /// @title SkimHarness -- Exposes _nextToFutureBps pure helper and pool
-///        packed-slot getters for pure-math tests. Retained per D-03.
-///        The time-based-future-take wrapper that previously lived here
-///        is absent because the underlying function was inlined into
-///        _consolidatePoolsAndRewardJackpots in v20.0.
+///        packed-slot getters for pure-math tests.
+///        There is no time-based-future-take wrapper because the underlying
+///        function is inlined into _consolidatePoolsAndRewardJackpots.
 contract SkimHarness is DegenerusGameAdvanceModule {
     function exposed_setPrizePools(uint128 next, uint128 future) external {
         _setPrizePools(next, future);
@@ -81,7 +78,7 @@ contract SkimHarness is DegenerusGameAdvanceModule {
 ///        DeployProtocol so integration tests drive the real consolidation
 ///        flow via game.mineRun(0). Full-pipeline invariants relevant
 ///        to the skim (conservation, insurance, bps curve shape) live in
-///        this one file per D-02's "no splitting" rule.
+///        this one file.
 contract FuturepoolSkimTest is DeployProtocol {
     SkimHarness internal harness;
     address internal buyer;
@@ -102,6 +99,7 @@ contract FuturepoolSkimTest is DeployProtocol {
     function test_fullPipeline_day8Trough() public { _checkTransitionSkim(8, 5, 1500); }
     function test_fullPipeline_day30EndpointWithBonus() public { _checkTransitionSkim(30, 15, 4600); }
     function test_fullPipeline_day3PlateauWithBonus() public { _checkTransitionSkim(3, 15, 3100); }
+    function test_fullPipeline_day1FillShelfWithBonus() public { _checkTransitionSkim(1, 15, 4600); }
     function test_fullPipeline_genesisKeepsOffset() public { _checkTransitionSkim(21, 1, 1300); }
 
     function _checkTransitionSkim(uint24 age, uint24 incomingLevel, uint256 expectedBase) private {
@@ -162,8 +160,10 @@ contract FuturepoolSkimTest is DeployProtocol {
     // =========================================================================
 
     function test_nextToFutureBps_acceleratedBreakpoints() public view {
-        uint32[12] memory ages = [uint32(0), 2, 3, 4, 7, 8, 9, 19, 29, 30, 31, 100];
-        uint16[12] memory expected = [uint16(3000), 3000, 3000, 2700, 1800, 1500, 1636, 3000, 4363, 4500, 4636, 10000];
+        // Fast fills bank more: 45% at ages 0-1 and 35% at age 2 (previously 30% through age 3).
+        uint32[13] memory ages = [uint32(0), 1, 2, 3, 4, 7, 8, 9, 19, 29, 30, 31, 100];
+        uint16[13] memory expected =
+            [uint16(4500), 4500, 3500, 3000, 2700, 1800, 1500, 1636, 3000, 4363, 4500, 4636, 10000];
         for (uint256 i; i < ages.length; ++i) {
             assertEq(harness.exposed_nextToFutureBps(ages[i], 2), expected[i], "first accelerated level");
             assertEq(harness.exposed_nextToFutureBps(ages[i], 101), expected[i], "x01 is not genesis");
@@ -171,6 +171,9 @@ contract FuturepoolSkimTest is DeployProtocol {
     }
 
     function test_nextToFutureBps_retainsCenturyBonus() public view {
+        assertEq(harness.exposed_nextToFutureBps(1, 99), 5400, "day-1 shelf includes nine-point bonus");
+        assertEq(harness.exposed_nextToFutureBps(2, 99), 4400, "day-2 shelf includes nine-point bonus");
+        assertEq(harness.exposed_nextToFutureBps(2, 15), 3600, "day-2 shelf includes one-point bonus");
         assertEq(harness.exposed_nextToFutureBps(3, 99), 3900, "fast rate includes nine-point bonus");
         assertEq(harness.exposed_nextToFutureBps(4, 99), 3420, "bonus decays toward fixed trough");
         assertEq(harness.exposed_nextToFutureBps(8, 99), 1500, "trough stays fixed");
@@ -185,6 +188,18 @@ contract FuturepoolSkimTest is DeployProtocol {
         uint16[9] memory expected = [uint16(3000), 3000, 2870, 1431, 1300, 1421, 3000, 4190, 7620];
         for (uint256 i; i < ages.length; ++i) {
             assertEq(harness.exposed_nextToFutureBps(ages[i], 1), expected[i], "original genesis curve");
+        }
+    }
+
+    function testFuzz_nextToFutureBps_fastFillShelves(uint24 lvl) public view {
+        lvl = uint24(bound(lvl, 2, type(uint24).max));
+        uint256 bonus = (uint256(lvl % 100) / 10) * 100;
+        assertEq(harness.exposed_nextToFutureBps(0, lvl), 4500 + bonus, "age 0 takes the day-1 shelf");
+        assertEq(harness.exposed_nextToFutureBps(1, lvl), 4500 + bonus, "first-day fill settles at age 1");
+        assertEq(harness.exposed_nextToFutureBps(2, lvl), 3500 + bonus, "second-day fill");
+        assertEq(harness.exposed_nextToFutureBps(3, lvl), 3000 + bonus, "third-day fill");
+        for (uint32 age; age <= 3; ++age) {
+            assertEq(harness.exposed_nextToFutureBps(age, 1), 3000, "genesis keeps its own curve");
         }
     }
 

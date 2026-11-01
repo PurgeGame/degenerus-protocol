@@ -191,7 +191,9 @@ logical days directly. For levels after 0:
 
 | Purchase age | Base skim |
 | --- | --- |
-| Days 0–3 | 30% + level bonus |
+| Days 0–1 | 45% + level bonus |
+| Day 2 | 35% + level bonus |
+| Day 3 | 30% + level bonus |
 | Days 3–8 | Linear decline to 15% |
 | Days 8–30 | Linear rise to 45% + level bonus |
 
@@ -594,7 +596,16 @@ sampler consumes up to four of these lanes and caches the bucket's packed-word r
 padding redraw loads its source word through that cached root or from the header tail; the cache
 does not change entry weights or sampled order.
 
-Each ordinary jackpot-phase ETH quadrant can convert up to 25% of its original allocation to full
+On jackpot-phase ETH draws (ordinary and final days) without an active Decimator jackpot plan, an
+Orange King on the official board (Cards quadrant, orange, King: trait 174) moves budget toward the
+solo quadrant before pass conversion and payout rounding. When Cards is not solo, half of the Cards
+allocation moves to the solo quadrant; when Cards is solo, half of each other quadrant's allocation
+moves to Cards. Each transfer is the donor's allocation halved and rounded down, so an odd wei stays
+with the donor and the draw's total allocation is unchanged. The drawn trait alone triggers it, and
+empty buckets keep their usual unpaid handling. Purchase-phase daily, terminal, ticket and FLIP legs
+are unaffected.
+
+Each ordinary jackpot-phase ETH quadrant can convert up to 25% of its allocation to full
 whale passes at 4.5 ETH each (one per 18 ETH of the quadrant's share). The shares and budget-based
 ETH winner targets are calculated first. The quadrant's first ETH winner receives all of its passes,
 so the solo winner holds the solo ETH prize, its passes and any golden-ticket arm. The Jackpot

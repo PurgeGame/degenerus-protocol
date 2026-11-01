@@ -158,7 +158,7 @@ describe("DegenerusGame", function () {
       const aliceId = await giveWalletId(game, alice.address);
       await giveWalletId(game, bob.address);
       await game.connect(alice).setOperatorApproval(0, bob.address, true);
-      // Bob purchases tickets for Alice (a valid operator action via _resolvePlayer)
+      // Bob purchases tickets for Alice (a valid operator action via _resolveAccountId)
       const price = await game.mintPrice();
       await expect(
         game.connect(bob).purchaseOrderFor(
@@ -170,7 +170,7 @@ describe("DegenerusGame", function () {
 
     it("unapproved caller cannot act for another player", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
-      // Bob is NOT approved for Alice — _resolvePlayer reverts NotApproved
+      // Bob is NOT approved for Alice — _resolveAccountId reverts NotApproved
       const aliceId = await giveWalletId(game, alice.address);
       await giveWalletId(game, bob.address);
       const price = await game.mintPrice();
@@ -363,9 +363,9 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 6/7. Auto-rebuy toggle + take-profit — REMOVED (v46 batched legacy removal,
-  // df4ef365): setAutoRebuy / setAutoRebuyTakeProfit no longer exist; the
-  // afking subscription system (subscribe / beginAfking) replaced auto-rebuy.
+  // 6/7. Auto-rebuy toggle + take-profit — not part of the game ABI:
+  // setAutoRebuy / setAutoRebuyTakeProfit do not exist; the afking subscription
+  // system (subscribe / beginAfking) covers auto-rebuy.
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
@@ -488,7 +488,7 @@ describe("DegenerusGame", function () {
   describe("view functions", function () {
     // rngStalledForThreeDays, lootboxRngIndexView, lootboxRngThresholdView,
     // ethMintLevelCount, ethMintStreakCount, hasActiveLazyPass, autoRebuyEnabledFor,
-    // decimatorAutoRebuyEnabledFor, lootboxRngWord removed in Phase 146 ABI cleanup
+    // decimatorAutoRebuyEnabledFor, lootboxRngWord are not part of the game ABI
 
     it("currentDayView_g542950 returns a non-zero day", async function () {
       const { game } = await loadFixture(deployFullProtocol);
@@ -501,7 +501,7 @@ describe("DegenerusGame", function () {
       expect(await game.futurePrizePoolView()).to.equal(0n);
     });
 
-    // afKingModeFor view REMOVED (v46 legacy removal, df4ef365).
+    // There is no afKingModeFor view.
 
     it("playerActivityScore returns 0 for new player", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
@@ -558,8 +558,7 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 24/25. deactivateAfKingFromCoin / syncAfKingLazyPassFromCoin — REMOVED
-  // (v46 batched legacy removal, df4ef365). The coin-driven afking sync entry
-  // points no longer exist on the game contract.
+  // 24/25. deactivateAfKingFromCoin / syncAfKingLazyPassFromCoin — not part of
+  // the game contract: there are no coin-driven afking sync entry points.
   // ---------------------------------------------------------------------------
 });

@@ -12,8 +12,8 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title VRFPathHandler -- Invariant handler for VRF path lifecycle testing
 /// @notice Wraps purchase/mineFlip/VRF/coordinatorSwap/warp operations while
-///         tracking ghost variables for TEST-01 (lootbox index lifecycle),
-///         TEST-02 (stall-to-recovery state machine), and TEST-03 (sequential logical-day commitment).
+///         tracking ghost variables for the lootbox index lifecycle,
+///         the stall-to-recovery state machine, and sequential logical-day commitment.
 contract VRFPathHandler is Test {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
@@ -23,7 +23,7 @@ contract VRFPathHandler is Test {
     address[] public actors;
     address internal currentActor;
 
-    // --- Ghost variables: TEST-01 (lootbox buffer lifecycle) ---
+    // --- Ghost variables: lootbox buffer lifecycle ---
     // Two physical buffers (6d0e64b09): the "index" is the write-buffer selector (0/1). It flips
     // exactly once per committed request and never elsewhere; ghost_expectedIndex mirrors it.
     uint48 public ghost_expectedIndex;
@@ -33,14 +33,14 @@ contract VRFPathHandler is Test {
     uint256 public ghost_doubleIncrementCount;
     uint256 public ghost_orphanedIndices;
 
-    // --- Ghost variables: TEST-02 (stall-to-recovery state machine) ---
+    // --- Ghost variables: stall-to-recovery state machine ---
     uint256 public ghost_stallCount;
     uint256 public ghost_recoveryCount;
     uint256 public ghost_stateViolations;
     bool public ghost_swapPending;
     bool public ghost_livenessLatched;
 
-    // --- Ghost variables: TEST-03 (sequential logical-day commitment) ---
+    // --- Ghost variables: sequential logical-day commitment ---
     uint256 public ghost_maxResetDelay;
     uint256 public ghost_logicalDayViolations;
     uint48 public ghost_dayBeforeSwap;
@@ -58,8 +58,7 @@ contract VRFPathHandler is Test {
     uint256 public calls_requestMidday;
     uint256 public calls_warpTime;
 
-    /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
-    ///      (post V62 lootbox repack: was 35).
+    /// @dev The physical write-buffer tag (what the lootbox index now is), read through RecyclingState.writeBuffer.
     function _lootboxRngIndex() internal view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
@@ -76,7 +75,7 @@ contract VRFPathHandler is Test {
         return uint48(uint24(raw >> 24));
     }
 
-    /// @dev Read _lootboxWord(index) from storage (mapping at slot 34, post V62 repack: was 36).
+    /// @dev Read the lootbox word for the buffer `index` through RecyclingState.word (nonzero only for the published read buffer).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         return RecyclingState.word(address(game), index);
     }
@@ -197,7 +196,7 @@ contract VRFPathHandler is Test {
         }
         ghost_advances++;
 
-        // TEST-01: one committed request per call at most, flips only on a request.
+        // one committed request per call at most, flips only on a request.
         _noteRequests(indexBefore, reqBefore, unansweredBefore);
 
         // Normal index increments only for one fresh request; no missed reset creates a round.
@@ -242,7 +241,7 @@ contract VRFPathHandler is Test {
 
         uint48 indexAfter = _lootboxRngIndex();
 
-        // TEST-01: fulfillment words the pending index (daily: staged in rngWordCurrent;
+        // fulfillment words the pending index (daily: staged in rngWordCurrent;
         // mid-day: written to lootboxRngWordByIndex directly) but never allocates —
         // only a fresh request advances lootboxRngIndex.
         if (indexAfter != indexBefore) {
@@ -267,7 +266,7 @@ contract VRFPathHandler is Test {
             return;
         }
 
-        // TEST-01: same accounting as mineFlip.
+        // same accounting as mineFlip.
         _noteRequests(indexBefore, reqBefore, unansweredBefore);
     }
 
@@ -298,7 +297,7 @@ contract VRFPathHandler is Test {
         ghost_stallCount++;
         ghost_swapPending = true;
 
-        // TEST-02: the swap re-points config and re-issues any in-flight request but
+        // the swap re-points config and re-issues any in-flight request but
         // never flips the lock in either direction — a daily request in flight keeps
         // rngLocked=true until the re-issued word lands (freeze discipline: unlocking
         // early would open a player-action window inside the commitment span), and an
@@ -307,7 +306,7 @@ contract VRFPathHandler is Test {
             ghost_stateViolations++;
         }
 
-        // TEST-01: a swap re-issues any in-flight request as a retry; retries never
+        // a swap re-issues any in-flight request as a retry; retries never
         // advance lootboxRngIndex.
         if (_lootboxRngIndex() != indexBefore) {
             ghost_indexSkipViolations++;

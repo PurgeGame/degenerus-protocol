@@ -19,14 +19,12 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///         claim-time ticket grants and mint history.
 contract RngFreezeAndRemovalProofs is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage slot constants (DegenerusGame; RE-DERIVED via `solc --storage-layout` on the working
-    // tree after the Stage B Game-storage packing — lootboxRngPacked moved to 34,
-    // lootboxRngWordByIndex to 35, degeneretteBets to 38, degeneretteBetNonce to 39.)
+    // Storage slot constants come from GameSlots (pinned against the compiled layout by
+    // StorageSlotPins.t.sol).
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
+    /// @dev lootboxRngPacked slot.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
-    /// @dev lootboxRngWordByIndex mapping root slot.
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
     uint48 private constant INDEX = 1; // default lootboxRngIndex seeded in setUp
@@ -61,11 +59,11 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — SAFE-04: RNG-freeze intact under the crank
+    // RNG-freeze intact under the crank
     // =========================================================================
 
 
-    /// @notice SAFE-04 (boxes): a crank BEFORE the word lands cannot open the box — mineFlip's
+    /// @notice RNG freeze (boxes): a crank BEFORE the word lands cannot open the box — mineFlip's
     ///         human-box stage runs only on a published read-cohort word. After the word lands the
     ///         SAME crank opens the box (order marked processed). The box is queued on the write
     ///         buffer, which is then sealed as the read buffer the human-box stage walks.
@@ -80,7 +78,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
 
         // Finalize the box's index: a request seals idx as the read buffer (two physical buffers,
-        // 6d0e64b09: the write side flips to idx ^ 1) before its word lands, and park the open
+        // the write side flips to idx ^ 1) before its word lands, and park the open
         // frontier there.
         _sealBuffer(idx);
         assertEq(_activeLootboxIndex(), idx ^ 1, "LR_INDEX advanced; box index idx is now finalized");
@@ -113,11 +111,11 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @notice SAFE-04 (placement frozen): a degenerette placement made AFTER a word has landed
-    ///         never binds to the worded index. With two physical buffers (6d0e64b09) the worded
+    /// @notice RNG freeze (placement frozen): a degenerette placement made AFTER a word has landed
+    ///         never binds to the worded index. With two physical buffers the worded
     ///         index is always the read buffer and every placement binds to the unworded write
-    ///         buffer, so the old `_lootboxWord(index) != 0 -> RngNotReady` placement guard can no
-    ///         longer fire (it is structurally vacuous); the freeze it protected holds by
+    ///         buffer, so a `_lootboxWord(index) != 0 -> RngNotReady` placement guard could never
+    ///         fire (it is structurally vacuous); the freeze it protected holds by
     ///         construction and is asserted directly here. The crank relaxed RESOLVE, not
     ///         PLACEMENT — placement stays frozen as before.
     function testPlacementNeverBindsToAWordedIndex() public {
@@ -139,10 +137,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
 
     // =========================================================================
-    // Task 2 — REMOVE behavioral: ETH always to claimable + flat 75bps recycle
+    // ETH always to claimable + flat 75bps recycle
     // =========================================================================
 
-    /// @notice RM-02 behavioral: a winning degenerette ETH bet (resolved via the crank) credits
+    /// @notice Behavioral: a winning degenerette ETH bet (resolved via the crank) credits
     ///         the winner's claimable balance by EXACTLY the ETH payout — there is NO auto-rebuy
     ///         / ticket-conversion interception of winnings. The claimable delta IS the payout;
     ///         no portion is diverted into tickets. Drives the resolve through the crank so the
@@ -180,15 +178,14 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @notice RM-02 freeze-obligation retirement (deterministic credit, no VRF word): the same
+    /// @notice Deterministic credit, no VRF word: the same
     ///         winning bet + word resolves to the SAME claimable credit on two independent runs.
-    ///         The credit path consumes no entropy (the auto-rebuy roll that previously threaded
-    ///         the VRF word was removed; `_addClaimableEth` is now the 2-arg deterministic form).
+    ///         The credit path consumes no entropy (`_addClaimableEth` is the 2-arg deterministic form).
     ///         Determinism given the resolved outcome proves no entropy is mixed into the credit.
     function testEthCreditPathIsDeterministicNoVrfWord() public {
-        // Two independent winners on two FRESH indexes (so the freeze-window placement guard at
-        // DegeneretteModule:452 — which blocks placement once an index already has a word — does
-        // not reject the second placement). Both use the identical winning word/ticket/amount, so
+        // Two independent winners on two FRESH indexes (a placement binds to the unworded write
+        // buffer, never to an index that already has a word, so each winner needs its own index).
+        // Both use the identical winning word/ticket/amount, so
         // identical credit proves the credit step is deterministic (no VRF word threaded in).
         uint256 creditA = _resolveWinningBetForPlayerAtIndex(
             player,
@@ -208,12 +205,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
 
-    // testPassHorizonReadIsViewOnly DELETED (AFKing Subscription Token credential change): WHALE04-FREEZE-PROOF
-    // §5 pinned the AfKing crossing's `_passHorizonOf` in-context read as a NON-RNG-WINDOW,
-    // `view`-only (no-write) read on a frozen slot. The crossing branch (and `_passHorizonOf`
-    // itself) is deleted — subscribe's coin-balance check happens only at subscribe (which
-    // itself reverts under `rngLockedFlag`, so it can never run inside the window), and the
-    // process STAGE performs zero credential reads at all. No in-window read survives to pin.
+    // No in-window credential read exists to pin: subscribe's coin-balance check happens only at
+    // subscribe (which itself reverts under `rngLockedFlag`, so it can never run inside the window),
+    // and the process STAGE performs zero credential reads at all.
 
     /// @dev Grant `who` the permanent deity-pass bit (shift 184) in DegenerusGame.mintPacked_ (slot 9).
     function _grantDeityPass(address who) internal {
@@ -224,29 +218,26 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
     // =========================================================================
-    // v50.0 D-IMPL-02 — D-TST01-03 dedicated equivalence/grant-correctness oracle
+    // Deferred whale-pass claim: equivalence/grant-correctness oracle
     //
-    // Closes the deferral declared at lines 38-46 of this file (335-CONTEXT.md D-IMPL-02).
-    // Implements TST-01 D-TST01-03 (336-CONTEXT.md):
     //   (1) box-open pre-claim writes ONLY the O(1) whalePassClaims[player] += accumulator
-    //       (D-IMPL-01) — `mintPacked_[_walletIdOf(player)]` is UNCHANGED between pre-box-open and pre-claim;
+    //       — `mintPacked_[_walletIdOf(player)]` is UNCHANGED between pre-box-open and pre-claim;
     //   (2) post-claim, the future-window level grants land at exactly
     //       [currentLevel+1 .. currentLevel+100] — `frozenUntilLevel` advances to currentLevel+100
-    //       (per WhaleModule:1030-1034 + Storage:1127 `ticketStartLevel + 99` math, D-03);
+    //       (per `DegenerusGameWhaleModule.claimWhalePass` and the `ticketStartLevel + 99` math);
     //   (3) `_applyWhalePassStats` is applied at the claim-time anchor, NOT at box-open
-    //       (D-04) — `mintPacked_[_walletIdOf(player)]` DIFFERS between pre-claim and post-claim snapshots,
-    //       and `whalePassClaims[player]` resets to 0 (WHALE-02 consumed at claim).
+    //       — `mintPacked_[_walletIdOf(player)]` DIFFERS between pre-claim and post-claim snapshots,
+    //       and `whalePassClaims[player]` resets to 0 (consumed at claim).
     //
-    // Per D-05 (334-CONTEXT.md), the equivalence is byte-correct relative to the new claim-time
-    // semantics — NOT byte-identical to the OLD inline-mint shadow (which the v50.0 IMPL retired).
+    // The equivalence is byte-correct relative to the claim-time semantics.
     // =========================================================================
 
     /// @dev Storage slot for the `whalePassClaims` mapping (DegenerusGame slot 21; confirmed via
-    ///      `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage` and 336-01's same probe).
+    ///      `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage`).
 
     /// @dev BitPackingLib shifts used by `_applyWhalePassStats` (mirrored locally so the test
     ///      reads the SAME slot fields the contract writes). Verified against
-    ///      contracts/libraries/BitPackingLib.sol:48/51/63/66 at e756a6f3.
+    ///      the `*_SHIFT` constants in contracts/libraries/BitPackingLib.sol.
     uint256 private constant LAST_LEVEL_SHIFT = 0;
     uint256 private constant LEVEL_COUNT_SHIFT = 24;
     uint256 private constant FROZEN_UNTIL_LEVEL_SHIFT = 120;
@@ -272,9 +263,8 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @dev Force `whalePassClaims[player] = halfPasses` via direct storage write — simulates the
     ///      O(1) box-open accumulator landing exactly `halfPasses` (= 1 here) without driving the
-    ///      non-deterministic box-open boon-roll. This is the load-bearing simplification per the
-    ///      plan's <action> step 2 — the oracle still asserts live contract behavior on the claim
-    ///      side (the only path D-TST01-03 measures).
+    ///      non-deterministic box-open boon-roll. The oracle still asserts live contract behavior on the claim
+    ///      side (the path under test).
     function _forceWhalePassClaims(address who, uint256 halfPasses) internal {
         bytes32 slot = _whalePassClaimsSlot(who);
         uint256 element = uint256(vm.load(address(game), slot));
@@ -299,16 +289,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         whalePassType = uint8((packed >> WHALE_PASS_TYPE_SHIFT) & MASK_PASS_TYPE);
     }
 
-    /// @notice TST-01 D-TST01-03 — the deferred-claim roundtrip equivalence oracle.
+    /// @notice The deferred-claim roundtrip equivalence oracle.
     ///
-    /// Closes the deferral declared at lines 38-46 of this file (335-CONTEXT.md D-IMPL-02).
-    /// Implements D-TST01-03 (TST-01 D-TST01-03 dedicated equivalence/grant oracle):
-    /// (1) box-open pre-claim writes ONLY the O(1) whalePassClaims[player] += accumulator (D-IMPL-01);
-    /// (2) post-claim, the future-window level grants land at exactly [currentLevel+1 .. currentLevel+100] (D-03);
-    /// (3) _applyWhalePassStats is applied at the claim-time anchor, NOT at box-open (D-04).
+    /// (1) box-open pre-claim writes ONLY the O(1) whalePassClaims[player] += accumulator;
+    /// (2) post-claim, the future-window level grants land at exactly [currentLevel+1 .. currentLevel+100];
+    /// (3) _applyWhalePassStats is applied at the claim-time anchor, NOT at box-open.
     ///
-    /// Per D-05 (334-CONTEXT.md), equivalence is byte-correct relative to the new claim-time semantics —
-    /// not byte-identical to the OLD inline-mint shadow (which the v50.0 IMPL retired at e756a6f3).
+    /// Equivalence is byte-correct relative to the claim-time semantics.
     function testClaimWhalePassMaterializesFutureWindowAndAppliesStats() public {
         address claimant = makeAddr("tst01-d03-claim-equiv");
 
@@ -333,7 +320,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
 
         // -------------------------------------------------------------------
-        // Simulated box-open: per WHALE-01 (LootboxModule:1253), a whale-pass boon
+        // Simulated box-open: per the lootbox module's whale-pass boon branch, a whale-pass boon
         // on box-open writes ONLY `whalePassClaims[player] += 1` (the O(1) accumulator).
         // We forge that single SSTORE directly via vm.store so this oracle is decoupled
         // from the non-deterministic box-open boon-roll. The claim-side (the load-bearing
@@ -343,7 +330,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         _forceWhalePassClaims(claimant, halfPassesK);
 
         // -------------------------------------------------------------------
-        // D-IMPL-01 attestation: post-box-open / pre-claim, ONLY the O(1) accumulator
+        // Attestation: post-box-open / pre-claim, ONLY the O(1) accumulator
         // slot was touched — `mintPacked_[_walletIdOf(claimant)]` is byte-equal to its pre-box-open
         // snapshot. The accumulator carries the queued half-pass count.
         // -------------------------------------------------------------------
@@ -351,15 +338,15 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         assertEq(
             mintPackedPreClaim,
             mintPackedPreBoxOpen,
-            "D-IMPL-01: box-open writes ONLY the O(1) whalePassClaims accumulator - no mintPacked_ perturbation pre-claim"
+            "box-open writes ONLY the O(1) whalePassClaims accumulator - no mintPacked_ perturbation pre-claim"
         );
         assertEq(
             _readWhalePassClaims(claimant),
             halfPassesK,
-            "WHALE-01: O(1) accumulator carries the queued half-pass count into claim"
+            "O(1) accumulator carries the queued half-pass count into claim"
         );
 
-        // D-04 leg #1 (pre-claim): the `_applyWhalePassStats` writes have NOT landed yet.
+        // Pre-claim: the `_applyWhalePassStats` writes have NOT landed yet.
         // The same mintPacked_ word that proves "no perturbation" also proves "stats not yet
         // applied" — both share the byte-equal-to-zero baseline at the claim-time anchor.
         // Scoped to release locals before the post-claim path (avoid stack-too-deep).
@@ -370,51 +357,50 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
                 uint24 frozenUntilPre,
                 uint8 passTypePre
             ) = _decodeMintPacked(uint256(mintPackedPreClaim));
-            assertEq(lastLvlPre, 0, "D-04 pre-claim: lastLevel unchanged (stats NOT yet applied)");
-            assertEq(levelCountPre, 0, "D-04 pre-claim: levelCount unchanged (stats NOT yet applied)");
-            assertEq(frozenUntilPre, 0, "D-04 pre-claim: frozenUntilLevel unchanged (stats NOT yet applied)");
-            assertEq(passTypePre, 0, "D-04 pre-claim: whalePassType unchanged (stats NOT yet applied)");
+            assertEq(lastLvlPre, 0, "pre-claim: lastLevel unchanged (stats NOT yet applied)");
+            assertEq(levelCountPre, 0, "pre-claim: levelCount unchanged (stats NOT yet applied)");
+            assertEq(frozenUntilPre, 0, "pre-claim: frozenUntilLevel unchanged (stats NOT yet applied)");
+            assertEq(passTypePre, 0, "pre-claim: whalePassType unchanged (stats NOT yet applied)");
         }
 
         // -------------------------------------------------------------------
-        // Capture currentLevel AT THE CLAIM-TIME ANCHOR (per D-03). The contract reads
-        // this at WhaleModule:1030 — `uint24 startLevel = level + 1;` — and applies the
+        // Capture currentLevel AT THE CLAIM-TIME ANCHOR. The contract reads
+        // this in claimWhalePass — `uint24 startLevel = level + 1;` — and applies the
         // 100-level window to [startLevel .. startLevel+99] = [currentLevel+1 .. currentLevel+100].
         // -------------------------------------------------------------------
         uint24 currentLevel = game.currentLvl();
 
         // -------------------------------------------------------------------
-        // Execute the claim. The facade at DegenerusGame.sol:1864 calls
-        // `_resolvePlayer(player)` which enforces `msg.sender == player` OR
-        // `_requireApproved(player)` — so the claimant calls for themselves
-        // (the simplest non-operator path; tests the live entry, not just the
-        // WhaleModule internal). The credit is bound by the player arg, not msg.sender.
+        // Execute the claim. claimWhalePass is permissionless and resolves the account
+        // from its id argument (0 = the caller), so the claimant calls for themselves
+        // (the simplest path; tests the live entry, not just the
+        // WhaleModule internal). The credit goes to the resolved account.
         // -------------------------------------------------------------------
         vm.prank(claimant);
         game.claimWhalePass(0);
 
         // -------------------------------------------------------------------
-        // WHALE-02 attestation: the accumulator is consumed at claim (WhaleModule:1024).
+        // Attestation: the accumulator is consumed at claim (`_takeHalfPasses`).
         // -------------------------------------------------------------------
         assertEq(
             _readWhalePassClaims(claimant),
             0,
-            "WHALE-02: whalePassClaims[claimant] reset to 0 at claim (accumulator consumed)"
+            "whalePassClaims[claimant] reset to 0 at claim (accumulator consumed)"
         );
 
         // -------------------------------------------------------------------
-        // D-04 attestation (post-claim): `_applyWhalePassStats` ran AT claim-time.
+        // Post-claim: `_applyWhalePassStats` ran AT claim-time.
         // The mintPacked_ word MUST differ from the pre-claim snapshot.
         // -------------------------------------------------------------------
         bytes32 mintPackedPostClaim = vm.load(address(game), mintPackedSlot);
         assertTrue(
             mintPackedPostClaim != mintPackedPreClaim,
-            "D-04: `_applyWhalePassStats` applied AT claim-time - mintPacked_ DIFFERS from pre-claim snapshot"
+            "`_applyWhalePassStats` applied AT claim-time - mintPacked_ DIFFERS from pre-claim snapshot"
         );
 
         // -------------------------------------------------------------------
-        // D-03 attestation: the future-window grants land at exactly
-        // [currentLevel+1 .. currentLevel+100]. Storage:1127 sets
+        // Attestation: the future-window grants land at exactly
+        // [currentLevel+1 .. currentLevel+100]. `_applyWhalePassStats` sets
         // `targetFrozenLevel = ticketStartLevel + 99` with ticketStartLevel = currentLevel+1,
         // so the post-claim `frozenUntilLevel` is exactly currentLevel + 100. From a clean
         // baseline (frozenUntilPre == 0), the math also gives `levelCount` += 100.
@@ -432,22 +418,22 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             assertEq(
                 frozenUntilPost,
                 expectedFrozenUntil,
-                "D-03: frozenUntilLevel == currentLevel + 100 - future window [currentLevel+1 .. currentLevel+100] anchored at claim-time"
+                "frozenUntilLevel == currentLevel + 100 - future window [currentLevel+1 .. currentLevel+100] anchored at claim-time"
             );
             assertEq(
                 levelCountPost,
                 uint24(100),
-                "D-03: levelCount == 100 (delta from clean baseline; +100 the full window credit)"
+                "levelCount == 100 (delta from clean baseline; +100 the full window credit)"
             );
             assertEq(
                 lastLvlPost,
                 expectedFrozenUntil,
-                "D-03: lastLevel == newFrozenLevel (Storage:1163 mirrors lastLevel onto newFrozenLevel)"
+                "lastLevel == newFrozenLevel (`_applyWhalePassStats` mirrors lastLevel onto newFrozenLevel)"
             );
             assertEq(
                 passTypePost,
                 3,
-                "D-03: whalePassType set to 3 (100-level pass marker, Storage:1158)"
+                "whalePassType set to 3 (100-level pass marker)"
             );
         }
 
@@ -503,8 +489,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
     /// @dev Seal `index` as the read buffer (the write side flips to index ^ 1), mirroring a
-    ///      request's seal under two physical buffers (6d0e64b09) — the replacement for the old
-    ///      "advance LR_INDEX by one" step. Idempotent once a word was injected at `index`.
+    ///      request's seal under two physical buffers. Idempotent once a word was injected at `index`.
     function _sealBuffer(uint48 index) internal {
         if (RecyclingState.writeBuffer(address(game)) == index) {
             RecyclingState.latchQueueCounts(address(game));
@@ -588,7 +573,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         creditDelta = game.claimableWinningsOf(who) - pre;
     }
 
-    /// @dev Set the live daily lootboxRngIndex (low 48 bits of lootboxRngPacked slot 34).
+    /// @dev Set the live lootbox index (the physical write-buffer tag).
     function _setLootboxRngIndex(uint48 idx) internal {
         RecyclingState.seedWriteBuffer(address(game), idx);
     }

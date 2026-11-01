@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
-"""Check the Phase 2 nested layouts that the root-slot golden cannot describe."""
+"""Check the nested battle/sDGNRS layouts and the raw slot pins in test/helpers/PeripheralSlots.sol.
+
+The root-slot goldens cannot describe nested records or private peripheral fields; tests that
+write raw storage through PeripheralSlots rely on these values.
+"""
 import json
+import os
+import subprocess
 from pathlib import Path
 import sys
 
@@ -47,7 +53,7 @@ root = next(x for x in sd["storage"] if x["label"] == "_redemptionBatches")
 record = sd["types"][sd["types"][root["type"]].get("base", sd["types"][root["type"]].get("value"))]
 assert int(record["numberOfBytes"]) == 64
 assert [(m["label"], int(m["slot"]), m["offset"]) for m in record["members"]][-1] == ("id", 1, 28)
-print("Phase 2 layout: tagged five-word jackpot records, packed queue counts, pinned Craps roots, pinned sDGNRS roots")
+print("Nested layouts: five-word jackpot records, packed queue counts, pinned Craps roots, pinned sDGNRS roots")
 
 # Private peripheral fields and the full direct-array extent used by raw fixtures.
 import re
@@ -67,7 +73,9 @@ for constant, specification in expected_pins.items():
     else:
         data = layout(specification["contract"])
         if specification["contract"] == "DegenerusAffiliate" and not data["storage"]:
-            probe = json.loads((out / "XaLayout.sol" / "XaAffiliateLayout.json").read_text())["storageLayout"]
+            probe_out = Path(os.environ.get("XA_PROBE_OUT", str(out) + "-xa-probe"))
+            subprocess.check_call(["forge", "build", "test/helpers/XaLayout.sol", "--out", str(probe_out)])
+            probe = json.loads((probe_out / "XaLayout.sol" / "XaAffiliateLayout.json").read_text())["storageLayout"]
             record = probe["types"][probe["storage"][0]["type"]]
             row = next(r for r in record["members"] if r["label"] == specification["label"])
             root = int(json.loads(Path("scripts/consolidation/xa-namespaces.json").read_text())["affiliate"]["root"], 16)

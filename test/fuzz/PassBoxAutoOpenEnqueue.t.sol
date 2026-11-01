@@ -5,7 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
-/// @title PassBoxAutoOpenEnqueue — WHALE-01: pass-bundled lootboxes must enqueue for auto-open
+/// @title PassBoxAutoOpenEnqueue — pass-bundled lootboxes must enqueue for auto-open
 /// @notice Mint, afking-cover and pass-bundled lootboxes all append an entry to the
 ///         write buffer's box queue, which the mineFlip HumanBoxes stage settles in FIFO order.
 ///         A pass-bundled box recorded but NOT queued could be held closed by its owner
@@ -40,7 +40,7 @@ contract PassBoxAutoOpenEnqueue is DeployProtocol {
         assertEq(
             RecyclingState.boxCount(address(game), idx),
             before + 1,
-            "WHALE-01: the pass-bundled lootbox must be appended to the auto-open queue"
+            "the pass-bundled lootbox must be appended to the auto-open queue"
         );
         uint256 word = RecyclingState.boxEntry(address(game), idx, before);
         assertEq(word.boId(), game.walletIdOf_g3120(buyer), "the queued entry is the buyer's");

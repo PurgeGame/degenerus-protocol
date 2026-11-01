@@ -12,7 +12,7 @@ import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title BoxCreationHandler — drives every box-creating entrypoint for the FUZZ-04 box-queue invariant
+/// @title BoxCreationHandler — drives every box-creating entrypoint for the box-queue invariant
 /// @notice Every box purchase appends ONE complete entry to the write buffer's box queue, which
 ///         mineFlip()'s human-box stage settles in FIFO order from `boxCursor` once the buffer is
 ///         sealed and its word published. The creating entrypoints this handler drives:

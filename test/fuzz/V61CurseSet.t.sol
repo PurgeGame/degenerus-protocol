@@ -8,16 +8,16 @@ import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-/// @title V61CurseSet — TST-03 proof: the cashout-curse SET (+2 on a stale ghost-cashout), every exemption
+/// @title V61CurseSet — the cashout-curse SET (+2 on a stale ghost-cashout), every exemption
 ///        (by contrast), the curse*100-bps activity-score penalty (floored 0, across consumers + the public
 ///        view + a frozen snapshot), the min(2N, cap) stacking with cap saturation (no uint8 wrap), and the
 ///        same-day-second-claim sentinel revert.
 ///
-/// @notice The SET lives in GameAfkingModule.maybeCurse (delegatecall target from the Game's public
-///   claimWinnings, DegenerusGame.sol:1572): after a successful claim it adds a saturating +2 stack UNLESS a
+/// @notice The SET lives in GameAfkingClaims `_maybeCurse` (reached from the Game's public
+///   claimWinnings): after a successful claim it adds a saturating +2 stack UNLESS a
 ///   cheapest-first bail fires — infra (VAULT/SDGNRS/GNRUS), gameOver, a non-stale claim (lastEthDay + 5 >
 ///   _currentMintDay()), a deity-pass holder, a whale/lazy-pass holder (frozenUntilLevel >= level &&
-///   passType ∈ {1,3}), an active afker (_subOf[p].dailyQuantity != 0), or an already-capped counter
+///   passType ∈ {1,3}), a live AFKing member (`_isLiveMember`), or an already-capped counter
 ///   (CURSE_COUNT_CAP = 20). claimWinningsStethFirst (the vault-only path) NEVER calls maybeCurse.
 ///
 ///   Every exemption is proven BY CONTRAST: the exempt actor's curseCountOf stays 0 while an otherwise-
@@ -48,7 +48,7 @@ contract V61CurseSet is DeployProtocol {
     }
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
+    // Game-resident storage slots + mintPacked_ field shifts (BitPackingLib)
     // -------------------------------------------------------------------------
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // [afking:hi128 | claimable:lo128]
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ byte 16
@@ -157,7 +157,7 @@ contract V61CurseSet is DeployProtocol {
         assertEq(_cashoutCurseOf(makeAddr("whale_contrast")), 2, "contrast: pass-less stale claimant cursed +2");
     }
 
-    /// @notice An active afker (_subOf[p].dailyQuantity != 0) is exempt, while a non-subscribed equivalent
+    /// @notice A live AFKing member (`_isLiveMember`) is exempt, while a non-subscribed equivalent
     ///         stale claimant is cursed. The active afker is set up with a real funded subscription.
     function testActiveAfkerExemptByContrast() public {
         address afk = makeAddr("afker_exempt");

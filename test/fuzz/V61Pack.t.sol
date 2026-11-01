@@ -6,30 +6,30 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title V61Pack — TST-02 proof: the claimable/afking slot-packing accessors round-trip, never cross-bleed,
+/// @title V61Pack — the claimable/afking slot-packing accessors round-trip, never cross-bleed,
 ///        keep the claimablePool == Sigma(claimable + afking) identity, preserve the infra afking half during
 ///        the gameOver claimable-zeroing, and are value-identical to two independent counters.
 ///
-/// @notice The v61 PACK fold replaced two balance mappings with one `balancesPacked` (slot 7,
-///   `[afking:high128 | claimable:low128]`, DegenerusGameStorage.sol:418). Every read/write flows through the
+/// @notice Both balances live in one `balancesPacked` (slot 7,
+///   `[afking:high128 | claimable:low128]`, `DegenerusGameStorage.balancesPacked`). Every read/write flows through the
 ///   accessors `_claimableOf` / `_afkingOf` / `_creditClaimable` / `_debitClaimable` / `_creditAfkingValue` /
-///   `_debitAfking` (Storage:892-928). This file exercises that EXACT production accessor layer through the
+///   `_debitAfking`. This file exercises that EXACT production accessor layer through the
 ///   SettleClaimableShortfallTester (it inherits the canonical storage layout and runs the real accessor
 ///   bodies — its setters/getters are thin wrappers over `_credit*` / `_debit*` / `_*Of`).
 ///
-///   The NON-INTERFERENCE proofs read the RAW packed slot (slot 7, the 378-01 recalibration key) and split it
+///   The NON-INTERFERENCE proofs read the RAW packed slot (slot 7) and split it
 ///   in the test — so they prove the OTHER half is byte-identical at the storage level, not merely that the
 ///   read accessor returns the right value. Falsifiable: a cross-half bleed (e.g. a naive full-word `packed +=
 ///   amount << 128` that carried, or a debit that borrowed across bit 127) would move the untouched half and
 ///   fail the raw-slot assertion.
 ///
-///   The gameOver leg targets the EXACT call the final sweep makes (GameOverModule `_finalSweep`:205-207
-///   `_debitClaimable(VAULT/SDGNRS/GNRUS, owed)`): draining an infra address's claimable half must leave its
-///   afking high half intact (the sweep zeroes claimable but never the prepaid afking principal).
+///   The gameOver leg exercises the claimable-only debit (`_debitClaimable`) on the VAULT/SDGNRS/GNRUS addresses:
+///   draining an infra address's claimable half must leave its afking high half intact. (GameOverModule's
+///   final sweep debits both halves together through `_takeSinkBalance`; this leg pins the accessor.)
 ///
 /// @dev Test-only: ZERO contracts/*.sol mutation. Seeded-fuzz deterministic (foundry seed 0xdeadbeef).
 contract V61Pack is Test {
-    /// @dev balancesPacked mapping root (slot 7 per the 378-01 recalibration key). The tester inherits the
+    /// @dev balancesPacked mapping root (slot 7). The tester inherits the
     ///      canonical DegenerusGameStorage layout, so this is the same slot on the tester instance.
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED;
 
@@ -179,11 +179,10 @@ contract V61Pack is Test {
     // gameOver claimable-zeroing preserves the infra afking high halves
     // =========================================================================
 
-    /// @notice The gameOver final sweep zeroes each infra address's CLAIMABLE half via _debitClaimable
-    ///         (GameOverModule _finalSweep:205-207) — it must NOT touch the prepaid afking high half. Proven on
-    ///         the actual VAULT / SDGNRS / GNRUS addresses: seed both halves, run the sweep's exact accessor
-    ///         (drain the full claimable), and assert the afking high half survives byte-identical while the
-    ///         claimable low half is zeroed. Falsifiable: a sweep that zeroed the WHOLE word would drop afking.
+    /// @notice Zeroing an infra address's CLAIMABLE half via _debitClaimable must NOT touch the prepaid afking
+    ///         high half. Proven on the actual VAULT / SDGNRS / GNRUS addresses: seed both halves, drain the
+    ///         full claimable, and assert the afking high half survives byte-identical while the
+    ///         claimable low half is zeroed. Falsifiable: a debit that zeroed the WHOLE word would drop afking.
     function testGameOverZeroingPreservesInfraAfkingHalf() public {
         address[3] memory infra = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
         for (uint256 i; i < 3; i++) {
@@ -193,11 +192,11 @@ contract V61Pack is Test {
             t.setClaimable(a, claimableOwed);
             t.setAfking(a, afkingPrepaid);
 
-            // The sweep drains the FULL claimable owed for an infra sink (no sentinel — these are protocol
+            // Drain the FULL claimable for an infra address (no sentinel — these are protocol
             // addresses): _debitClaimable(a, owed). Reproduce via setClaimable(a, 0), which calls
             // _debitClaimable(a, current) internally.
             uint256 highBefore = _rawHigh(a);
-            t.setClaimable(a, 0); // zero the claimable half (the sweep's _debitClaimable op)
+            t.setClaimable(a, 0); // zero the claimable half (the _debitClaimable op)
 
             assertEq(_rawLow(a), 0, "sweep: claimable low half zeroed");
             assertEq(t.getClaimable(a), 0, "sweep: claimable accessor reads zero");

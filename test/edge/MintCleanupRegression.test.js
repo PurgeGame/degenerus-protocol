@@ -25,7 +25,7 @@ import {
   decodeCheckpointKey,
   ticketCheckpointTraits,
   seatedTicketReveals,
-} from "../helpers/raritySymbolBatchRef.mjs";
+} from "../helpers/ticketTraitsRef.mjs";
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
@@ -37,12 +37,11 @@ const TRAITS_GENERATED_V42_TOPIC_HASH =
 const TICKET_SLOT_BIT = 0x800000n;
 const TICKET_FAR_FUTURE_BIT = 0x400000n;
 
-// Multi-day drain handling: the v42 TraitsGenerated event drops the entropy
-// field, so the JS replay must resolve `entropyWord` per emission. The
-// "drain crossed day boundary — scenario invalid" guard considered at plan
-// time would have aborted the test the moment advanceGame() rolled to day
-// N+1 (empirical on the whale-bundle scenario at v42 HEAD); the more robust
-// approach used here looks up each emission's entropy from the live storage
+// Multi-day drain handling: the TraitsGenerated event carries no entropy
+// field, so the JS replay must resolve `entropyWord` per emission. A
+// "drain crossed day boundary — scenario invalid" guard would abort the test the
+// moment advanceGame() rolls to day N+1 (it does on the whale-bundle scenario);
+// the more robust approach used here looks up each emission's entropy from the live storage
 // source the contract actually used at emit time — different per path:
 //
 //   Path B (lvl=1, current-level via runTicketWork_g1150): entropy is
@@ -51,14 +50,13 @@ const TICKET_FAR_FUTURE_BIT = 0x400000n;
 //     not change while alice's ticket queue at lvl=1 drains, so a single
 //     post-drain read is sufficient for every Path B emission.
 //   Path A (lvl>=2, the whale-pass far-future span, drained only once its
-//     level's own last-purchase-day seal fires the private
-//     `_processFutureTicketBatch` continuation inside `runTicketWork_g1150` —
+//     level's own last-purchase-day seal lets `runTicketWork_g1150`
+//     (`_drainQueue`) take the far-future queue —
 //     not exercised by this fixture's single-day whale-bundle drain, so no
 //     Path A emissions are expected here; this entropy resolution is kept
 //     for whichever future scenario does progress far enough to reach it):
-//     entropy is the `rngWord` advanceGame() loaded via rngGate → either
-//     cached `rngWordByDay[day]` or freshly applied via _applyDailyRng
-//     (which writes rngWordByDay[day] = finalWord at L1808). Per-emission
+//     entropy is the day's recorded word, (`_applyDailyRng` -> `_recordDailyRng` ->
+//     `rngWordByDay[day & 1]`). Per-emission
 //     day is computed from the receipt block.timestamp using GameTimeLib's
 //     formula `(ts - 82620)/86400 - DEPLOY_DAY_BOUNDARY + 1`, where the
 //     dynamic DEPLOY_DAY_BOUNDARY is read from the deploy fixture.
@@ -206,11 +204,11 @@ async function drainViaAdvanceGame(game, caller, storage, deployDayBoundary, max
   return { events, reveals };
 }
 
-describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture", function () {
+describe("MintCleanupRegression — regression fixture", function () {
   this.timeout(900_000);
   after(() => restoreAddresses());
 
-  describe("TST-MINTCLN-01..04 — end-to-end whale-bundle multi-call drain via mineFlip()", function () {
+  describe("end-to-end whale-bundle multi-call drain via mineFlip()", function () {
     async function setupWhaleBundleAndDrain() {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, deployer, mockVRF, alice } = fixture;
@@ -244,7 +242,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       };
     }
 
-    it("TST-MINTCLN-03 anchor — whale-bundle drain emits TraitsGenerated at lvl=1 (Path B, inside the minted window) and does NOT emit at lvl>=2 (Path A, the whale pass's far-future span, frozen until its own level's last-purchase-day seal)", async function () {
+    it("anchor — whale-bundle drain emits TraitsGenerated at lvl=1 (Path B, inside the minted window) and does NOT emit at lvl>=2 (Path A, the whale pass's far-future span, frozen until its own level's last-purchase-day seal)", async function () {
       const { aliceEvents } = await setupWhaleBundleAndDrain();
 
       expect(aliceEvents.length).to.be.gte(
@@ -272,32 +270,31 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
         1,
         "Path B must emit at lvl=1 (current-level _processOneTicketEntry, inside the minted window)"
       );
-      // Post-boundary-shrink behavior: the whale pass's lvl>=2 span now exceeds
-      // _mintCeiling() (level=0 + 1) at purchase time, so it queues into the
-      // far-future key space and is NOT minted by this single-day drain — it
-      // only mints once its own level's last-purchase-day seal fires the
-      // private _processFutureTicketBatch continuation inside
-      // runTicketWork_g1150. This whale-bundle fixture never reaches that seal,
-      // so Path A must emit nothing here (see TST-MINTCLN-04 for the
-      // frozen-queue-key proof).
+      // The whale pass's lvl>=2 span exceeds _mintCeiling() (level=0 + 1) at
+      // purchase time, so it queues into the far-future key space and is NOT
+      // minted by this single-day drain — it only mints once its own level's
+      // last-purchase-day seal lets runTicketWork_g1150 take the far-future
+      // queue. This whale-bundle fixture never reaches that seal,
+      // so Path A must emit nothing here (see the storage-layout
+      // regression test below for the frozen-queue-key proof).
       expect(pathALevels.length).to.equal(
         0,
         "Path A (lvl>=2) must NOT emit within the whale-bundle's own drain — those entries are frozen in the far-future key space until their level's own last-purchase-day seal"
       );
     });
 
-    it("TST-MINTCLN-02 — each emission decodes to (walletId, baseKey, take) 3-tuple with baseKey low-32 = absolute offset + upper bits = (version/domain, lvl, queueIdx, walletId); event topic-hash matches v42 literal", async function () {
+    it("each emission decodes to (walletId, baseKey, take) 3-tuple with baseKey low-32 = absolute offset + upper bits = (version/domain, lvl, queueIdx, walletId); event topic-hash matches the expected literal", async function () {
       const { storage, aliceEvents } = await setupWhaleBundleAndDrain();
 
       const evtFragment = storage.interface.getEvent("TraitsGenerated");
       expect(evtFragment.inputs.length).to.equal(
         3,
-        "v42 TraitsGenerated must have exactly 3 ABI inputs"
+        "TraitsGenerated must have exactly 3 ABI inputs"
       );
       const fieldNames = evtFragment.inputs.map((i) => i.name).sort();
       expect(fieldNames).to.deep.equal(
         ["baseKey", "take", "walletId"],
-        "v42 TraitsGenerated field names must be exactly {walletId, baseKey, take}"
+        "TraitsGenerated field names must be exactly {walletId, baseKey, take}"
       );
 
       let topicMatchCount = 0;
@@ -318,11 +315,11 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       }
       expect(topicMatchCount).to.be.gte(
         1,
-        `at least one raw log must carry the v42 topic-hash ${TRAITS_GENERATED_V42_TOPIC_HASH}`
+        `at least one raw log must carry the TraitsGenerated topic-hash ${TRAITS_GENERATED_V42_TOPIC_HASH}`
       );
     });
 
-    it("TST-MINTCLN-01 — multi-call drain trait-multiset equivalence: versioned checkpoint JS replay reconstructs on-chain credited multiset trait-by-trait + cross-call seed separation evidence (pairwise-distinct keccak inputs)", async function () {
+    it("multi-call drain trait-multiset equivalence: versioned checkpoint JS replay reconstructs on-chain credited multiset trait-by-trait + cross-call seed separation evidence (pairwise-distinct keccak inputs)", async function () {
       const { fixture, aliceEvents, aliceReveals } = await setupWhaleBundleAndDrain();
       const { game, alice } = fixture;
 
@@ -394,7 +391,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
     });
   });
 
-  describe("TST-MINTCLN-04 — storage-layout regression at runtime", function () {
+  describe("storage-layout regression at runtime", function () {
     this.timeout(900_000);
 
     async function setupQueuedState() {
@@ -449,12 +446,12 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
         const owed = Number((packed >> 8n) & 0xFFFFFFFFn);
 
         console.log(
-          `[TST-MINTCLN-04 storage-slot lvl=${lvl} path=${path} rk=0x${rk.toString(16)} slot=${slot} packed=0x${packed.toString(16)} rem=${rem} owed=${owed}]`
+          `[storage-slot lvl=${lvl} path=${path} rk=0x${rk.toString(16)} slot=${slot} packed=0x${packed.toString(16)} rem=${rem} owed=${owed}]`
         );
 
         if (packed === 0n) {
           throw new Error(
-            `[TST-MINTCLN-04 lvl=${lvl} path=${path}] storage slot resolved to zero — likely wrong rk derivation; expected rk=0x${rk.toString(16)}`
+            `[lvl=${lvl} path=${path}] storage slot resolved to zero — likely wrong rk derivation; expected rk=0x${rk.toString(16)}`
           );
         }
         expect(packed).to.be.lessThan(

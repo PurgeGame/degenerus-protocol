@@ -24,7 +24,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 const ADVANCE_GAME_STAGE6_GAS_CEILING = 10_000_000;
 const STAGE_PURCHASE_DAILY = 6n;
 
-describe("SURF-06 — mineFlip STAGE_PURCHASE_DAILY gas under the 10M per-chunk ceiling", function () {
+describe("mineFlip STAGE_PURCHASE_DAILY gas under the 10M per-chunk ceiling", function () {
   this.timeout(300_000);
 
   it("stage-6 (STAGE_PURCHASE_DAILY) chunk stays under ADVANCE_GAME_STAGE6_GAS_CEILING (10M)", async function () {
@@ -53,14 +53,14 @@ describe("SURF-06 — mineFlip STAGE_PURCHASE_DAILY gas under the 10M per-chunk 
       // Fixed seed family {36266, 37266, ...} for cycles 0..4 keeps the
       // measured stage reproducible.
       const chunks = await walkNextDay(game, deployer, mockVRF, advanceModule,
-        BigInt(cycle * 1000 + 36266), `SURF-06 cycle ${cycle}`);
+        BigInt(cycle * 1000 + 36266), `cycle ${cycle}`);
       const daily = chunks.find((c) => c.stages.includes(STAGE_PURCHASE_DAILY));
       if (daily) stage6Gas = Number(daily.gasUsed);
     }
 
     expect(stage6Gas, "the fixture must execute STAGE_PURCHASE_DAILY").to.not.equal(null);
 
-    console.log(`[SURF-06 advance-gas] STAGE_PURCHASE_DAILY (stage-6) chunk gas = ${stage6Gas} (ceiling ${ADVANCE_GAME_STAGE6_GAS_CEILING})`);
+    console.log(`[advance-gas] STAGE_PURCHASE_DAILY (stage-6) chunk gas = ${stage6Gas} (ceiling ${ADVANCE_GAME_STAGE6_GAS_CEILING})`);
 
     // The only load-bearing bound: the purchase-daily chunk (measured at its own minimum
     // admission allowance, an upper bound on the chunk) stays under 10M.

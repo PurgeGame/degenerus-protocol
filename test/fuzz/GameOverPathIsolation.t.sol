@@ -16,8 +16,8 @@ contract NormalEndingDrainSeeder is DegenerusGame {
     }
 }
 
-/// @title GameOverBestEffortDrainTest -- Phase 232.1 D-05 revised semantics
-/// @notice D-05 (revised) claim: game-over path BEST-EFFORT drains queued
+/// @title GameOverBestEffortDrainTest -- game-over best-effort ticket drain
+/// @notice Claim: the game-over path BEST-EFFORT drains queued
 ///         tickets for terminal-jackpot eligibility, but fund release is
 ///         never blocked by drain failure. Two behaviours are tested:
 ///           (1) When the queue has tickets and the drain can complete:
@@ -25,8 +25,7 @@ contract NormalEndingDrainSeeder is DegenerusGame {
 ///               drained (TraitsGenerated emits observed).
 ///           (2) When the queue is empty: game-over finishes cleanly with
 ///               zero TraitsGenerated emits (vacuous / nothing to drain).
-///         The path-isolation claim (original D-05) that game-over NEVER
-///         runs the daily-drain body is superseded: game-over now opportunistically
+///         Game-over opportunistically
 ///         runs the ticket work (`runTicketWork_g1150`) via delegatecall to maximise terminal
 ///         jackpot eligibility. Catastrophic drain reverts (e.g., queue that
 ///         exceeds the block gas limit) are swallowed by the low-level
@@ -34,12 +33,12 @@ contract NormalEndingDrainSeeder is DegenerusGame {
 ///         the terminal drain regardless -- funds are never locked.
 ///
 /// @dev Instrumentation: vm.recordLogs() + topic filter on TraitsGenerated
-///      captures the entropy arguments fed to _raritySymbolBatch. A positive
+///      counts the drain's trait emissions (`_emitEntryTraits`). A positive
 ///      count proves the best-effort drain fired; zero count with an empty
 ///      queue proves the drain no-op is safe.
 contract GameOverBestEffortDrainTest is DeployProtocol {
     /// @dev Keccak topic-0 for the frozen TraitsGenerated(uint32 indexed walletId, uint256 baseKey,
-    ///      uint32 take) — the slimmed 3-arg event at DegenerusGameStorage:501. This test only
+    ///      uint32 take) — the slimmed 3-arg event in DegenerusGameStorage. This test only
     ///      COUNTS drain emissions (not the removed entropy field), so the count is faithful.
     bytes32 internal constant TOPIC_TRAITS_GENERATED =
         keccak256("TraitsGenerated(uint32,uint256,uint32)");
@@ -99,8 +98,8 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
     }
 
     // =========================================================================
-    // D-05 revised (a): game-over completes AND best-effort drain fires with
-    //                    queued tickets
+    // (a) game-over completes AND best-effort drain fires with
+    //     queued tickets
     // =========================================================================
 
     /// @notice Queue tickets, trigger liveness timeout, drive game-over.
@@ -152,8 +151,8 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
     }
 
     // =========================================================================
-    // D-05 revised (b): game-over completes cleanly with empty queue (no
-    //                    drain fires, vacuous safety preserved)
+    // (b) game-over completes cleanly with empty queue (no
+    //     drain fires, vacuous safety preserved)
     // =========================================================================
 
     /// @notice No explicit user purchases. Trigger game-over. Game-over MUST

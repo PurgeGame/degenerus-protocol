@@ -30,7 +30,7 @@ contract CrapsRngSeal is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 5_000_000 ether);
-        // The mid-day request mineFlip makes gates on the subscription's LINK; craps work needs >= 10.
+        // Fund the mock subscription above the mid-day request's native floor.
         mockVRF.fundSubscription(1, 100e18);
 
         handler = new CrapsRngSealHandler(game, mockVRF, coin, crapsBattle, 5);

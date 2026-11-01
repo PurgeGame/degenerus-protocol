@@ -14,7 +14,7 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title SolvencyActionHandler — widens the SOLVENCY-01 action space to the pass + box + Degenesis + claim
+/// @title SolvencyActionHandler — widens the solvency action space to the pass + box + Degenesis + claim
 ///        surfaces so the packed-balance Σ identity is fuzzed beyond the afking-only V61AfkingSpendHandler.
 /// @notice Drives, in a randomized sequence, the buyer surfaces that mutate claimablePool but were NOT under
 ///         the afking-spend identity: the whale pass, the lazy pass, the deity pass, the Degenesis box (a

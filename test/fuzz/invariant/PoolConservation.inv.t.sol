@@ -5,13 +5,13 @@ import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {PoolFlowHandler} from "../handlers/PoolFlowHandler.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title PoolConservation — FUZZ-05 (POOL-CONSERVATION) canonical always-on conservation invariant.
+/// @title PoolConservation — canonical always-on conservation invariant.
 ///
 /// @notice Builds the conservation oracle that the existing pool checks DO NOT assert (case (c) BUILD). The
 ///         four pool accessors already exist and `MultiLevel.inv.t.sol::invariant_poolSumConsistency` even READS
 ///         all four — but it asserts almost nothing (only `gameBalance >= claimablePool`; the other three pools
 ///         land in unused locals). `Composition.inv.t.sol::invariant_poolSolvency` sums the four pools but only
-///         catches `sum > balance` after the fact. Neither asserts the FUZZ-05 property: that the
+///         catches `sum > balance` after the fact. Neither asserts the property: that the
 ///         future->next->current / consolidation / skim / jackpot transfers CONSERVE the total and never mint
 ///         unbacked credit. This invariant asserts exactly that.
 ///
@@ -42,7 +42,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///         additionally drives the handler's advance action directly and asserts ghost_advances > 0 so a
 ///         transfer that silently minted unbacked credit could not hide behind a "nothing moved" green.
 ///
-///         FALSIFIABILITY. A focused test seeds the exact T-381-05-01 bug shape — a pool inflated WITHOUT any
+///         FALSIFIABILITY. A focused test seeds the exact bug shape — a pool inflated WITHOUT any
 ///         real ETH inflow (a transfer that mints unbacked credit) — by field-isolated vm.store-ing an
 ///         increment into futurePrizePool (slot 2 future half, bits 128-255) with NO matching balance/inflow, then asserts BOTH
 ///         the backing bound AND the conservation bound now register the break. Restoring the slot returns both
@@ -217,7 +217,7 @@ contract PoolConservation is DeployProtocol {
     // FALSIFIABILITY: a pool inflated with NO inflow breaks both conservation bounds
     // =========================================================================
 
-    /// @notice The T-381-05-01 bug shape the net catches: an internal transfer (consolidation/skim/jackpot)
+    /// @notice The bug shape the net catches: an internal transfer (consolidation/skim/jackpot)
     ///         that mints unbacked credit — inflating a pool total with NO matching real ETH inflow. We simulate
     ///         that by field-isolated vm.store-ing an increment into futurePrizePool (slot 2 future half, bits 128-255) WITHOUT
     ///         dealing any ETH or recording any inflow, then assert BOTH conservation bounds register the break:

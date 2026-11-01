@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 264 STAT-01 + STAT-02 + D-IMPL-01 boundary cross-validation harness.
+// PerPullLevelDistribution.test.js -- per-pull level distribution, trait rotation, and on-chain boundary cross-validation.
 //
-// STAT-01: per-pull level distribution chi² uniformity over [minLevel, maxLevel].
+// Level distribution: per-pull level distribution chi² uniformity over [minLevel, maxLevel].
 //          lvlPrime = minLevel + (uint256(keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, i))) % range)
-//          N = 200 calls × 50 pulls/call = 10_000 aggregated samples (D-IMPL-03).
+//          N = 200 calls × 50 pulls/call = 10_000 aggregated samples.
 //          Asserts chi² < CHI2_CRIT_05[range - 1] at α=0.05.
 //
-// STAT-02: per-trait share under deterministic `i % 4` rotation.
+// Trait rotation: per-trait share under deterministic `i % 4` rotation.
 //          The JS replica is degenerate (chi² ≈ 0 — exact 13/13/12/12 hits per
 //          trait per call, i.e. 50 = 13+13+12+12). The chi² record is
-//          informational; the substantive STAT-02 assertion is the boundary
+//          informational; the substantive assertion is the boundary
 //          harness emitted-traitId series matching the deterministic `i % 4`
-//          rotation on-chain (D-IMPL-01 confirms this implicitly via the
+//          rotation on-chain (confirmed implicitly via the
 //          per-i strict-shape check below).
 //
-// D-IMPL-01 boundary cross-validation: at fixed seeds, drive a real level-1
+// Boundary cross-validation: at fixed seeds, drive a real level-1
 //          daily VRF cycle. Level 1's trait-matched FLIP draw emits up to
 //          COIN_DRAW_SHARES=50 equal shares from pull indexes 0..cap-1, all
 //          at minted level 1. Assert their exact trait rotation and target
@@ -22,10 +22,9 @@
 //          JackpotBattle emits JackpotBattleRun from the unminted queue's
 //          walked field.
 //
-// STAT-04 Phase 261 infra reuse: `makeRng`, `CHI2_CRIT_05`, and `wilsonHilfertyZ`
-//          are re-declared verbatim from test/stat/TraitDistribution.test.js
-//          (Phase 261 L48-56, L87-90, L97-100). Cross-test seed isolation is
-//          maintained via distinct seed integers (D-APPROVAL-04 spirit).
+// Shared infra: `makeRng`, `CHI2_CRIT_05`, and `wilsonHilfertyZ`
+//          are re-declared verbatim from test/stat/TraitDistribution.test.js.
+//          Cross-test seed isolation is maintained via distinct seed integers.
 //
 // Heavy MC + boundary harness — runs ONLY under `npm run test:stat` (NOT
 // default `npm test`). Deterministic seeded keccak-counter PRNG; reproducibility
@@ -59,8 +58,8 @@ const FLIP_LEVEL_TAG = 59n;
 const PULLS_PER_CALL = 50; // Up to COIN_DRAW_SHARES=50 equal-share pull positions.
 
 // ---------------------------------------------------------------------------
-// STAT-04 Phase 261 infra reuse — re-declared verbatim from
-// test/stat/TraitDistribution.test.js (L48-56 / L87-90 / L97-100).
+// Shared infra -- re-declared verbatim from
+// test/stat/TraitDistribution.test.js.
 // ---------------------------------------------------------------------------
 
 function makeRng(seed) {
@@ -92,7 +91,7 @@ function wilsonHilfertyZ(chi2, df) {
 // ---------------------------------------------------------------------------
 // JS replica of the per-pull-level keccak in
 // contracts/modules/DegenerusGameJackpotModule.sol _awardDailyCoinToTraitWinners
-// (Phase 263 helper body, lines 1794-1796):
+// (helper body):
 //
 //   uint24 lvlPrime = minLevel + uint24(uint256(keccak256(
 //       abi.encode(randomWord, FLIP_LEVEL_TAG, i)
@@ -100,7 +99,7 @@ function wilsonHilfertyZ(chi2, df) {
 //
 // where range = uint24(maxLevel - minLevel + 1).
 //
-// Drift guard: the D-IMPL-01 boundary harness (describe block 4 below) asserts
+// Drift guard: the boundary harness (describe block 4 below) asserts
 // the JS replica produces the EXACT same lvl series as the on-chain
 // JackpotFlipWin.lvl emitted across the actual helper invocation under a
 // fixed VRF seed. JS-replica drift is structurally impossible without the
@@ -151,19 +150,19 @@ after(function () {
 });
 
 // ---------------------------------------------------------------------------
-// (1) STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity.
+// (1) Shared infrastructure + FLIP_LEVEL_TAG sanity.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// (2) STAT-01 — per-pull level distribution chi² uniformity over 10K samples.
+// (2) Per-pull level distribution chi² uniformity over 10K samples.
 // ---------------------------------------------------------------------------
 
-describe("STAT-01 — per-pull level distribution chi² uniformity over 10K samples", function () {
+describe("per-pull level distribution chi² uniformity over 10K samples", function () {
   this.timeout(60_000); // pure JS loop — sub-second on a modern machine
 
   // Two synthetic ranges test the sampler formula independently. Current
   // production calls use a one-level trait range; future levels use the queue walk.
-  // Each regime gets a distinct seed (D-APPROVAL-04 spirit; cross-test isolation).
+  // Each regime gets a distinct seed (cross-test isolation).
   const REGIMES = [
     {
       name: "synthetic range=4",
@@ -212,14 +211,14 @@ describe("STAT-01 — per-pull level distribution chi² uniformity over 10K samp
         `${r.name}: chi² = ${chi2.toFixed(3)} >= ${crit} (df=${r.range - 1}); observed=[${observed.join(",")}]`,
       ).to.be.true;
       console.log(
-        `      [STAT-01] ${r.name}: chi² = ${chi2.toFixed(3)} < ${crit} (df=${r.range - 1}); observed=[${observed.join(",")}]`,
+        `      ${r.name}: chi² = ${chi2.toFixed(3)} < ${crit} (df=${r.range - 1}); observed=[${observed.join(",")}]`,
       );
     });
   }
 });
 
 // ---------------------------------------------------------------------------
-// (3) STAT-02 — per-trait share under deterministic `i % 4` rotation.
+// (3) Per-trait share under deterministic `i % 4` rotation.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -324,15 +323,14 @@ async function harvestJackpotFlipWinByCall(receipts, jackpotInterface) {
 
 
 // ---------------------------------------------------------------------------
-// (4) D-IMPL-01 — current level-1 trait draw matches the JS trait rotation.
+// (4) Boundary harness -- current level-1 trait draw matches the JS trait rotation.
 // ---------------------------------------------------------------------------
 
-describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin traits at fixed seeds", function () {
+describe("current trait draw routes level 1 and rotates coin traits at fixed seeds", function () {
   this.timeout(900_000); // 15 min — heavy lifecycle drive across N seeds
 
-  // Distinct deterministic seeds per harness call (D-APPROVAL-04 spirit).
-  // ≥3 fixed seeds per the orchestrator's hard requirement and per the plan
-  // acceptance criterion `0xC012_010[123]n`.
+  // Distinct deterministic seeds per harness call: at least 3 fixed seeds
+  // (`0xC012_010[123]n`).
   const SEEDS = [
     0xC012_0101n,
     0xC012_0102n,

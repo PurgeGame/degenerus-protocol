@@ -10,11 +10,11 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title ActivityScorePointFloorTest -- proves the whole-point activity score's sole sub-point leg
 ///        (the quest streak) floors at `floor(questStreak/2)`, that this point-domain leg is the exact
-///        integer image of the retired `questStreak*50` bps leg, and that the manual quest streak and the
+///        integer image of the `questStreak*50` bps leg, and that the manual quest streak and the
 ///        live afking-run streak base feed the score through ONE exact integer path with afking-XOR-manual
 ///        exclusivity.
 ///
-/// @notice The score is now whole points end-to-end; the only place precision is intentionally dropped is
+/// @notice The score is whole points end-to-end; the only place precision is intentionally dropped is
 ///   the quest-streak leg (`bonusPoints += questStreak / 2`, DegenerusGameMintStreakUtils._playerActivityScoreAt).
 ///   A round-half-up policy (5 -> 3) or a 0.5-pt-granular representation would diverge from the floored value
 ///   asserted here, so each assertion fails-without the shipped floor.
@@ -58,11 +58,11 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — the quest-streak floor rule + the bps-equivalence identity
+    // The quest-streak floor rule + the bps-equivalence identity
     // =========================================================================
 
     /// @notice The point-domain quest-streak leg `floor(questStreak/2)` is the exact integer image of the
-    ///         retired bps leg `floor((questStreak*50)/100)` at every streak on the grid, and the floor drops
+    ///         bps leg `floor((questStreak*50)/100)` at every streak on the grid, and the floor drops
     ///         the trailing half-point at odd counts. Asserting `q/2` explicitly at the odd boundaries means a
     ///         round-half-up regression (5 -> 3, 7 -> 4) would fail this test — the floor is pinned, not merely
     ///         the identity.
@@ -71,7 +71,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             uint256(0), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 49, 50, 51, 100, 255, 1000, 32767
         ];
 
-        // D-02 identity: the point leg equals the integer hundredths of the old bps leg for every streak.
+        // Identity: the point leg equals the integer hundredths of the old bps leg for every streak.
         // Both are uint256 integer divisions, so bit-equality here is the whole equivalence claim.
         for (uint256 i; i < grid.length; i++) {
             uint256 q = grid[i];
@@ -159,7 +159,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 — the single exact integer streak path + afking-XOR-manual exclusivity
+    // The single exact integer streak path + afking-XOR-manual exclusivity
     // =========================================================================
 
     /// @notice The live run supplies the quest leg, then funding eviction hands the earned

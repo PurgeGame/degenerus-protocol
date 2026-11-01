@@ -40,7 +40,7 @@ const LEGACY_DEPLOY_OFFSET = 8 * 86400;
  * Flow:
  *   1. Take DEPLOY_DAY_BOUNDARY from the latest block (day index 1), then advance 8 days unless
  *      `degenesis` is set
- *   2. Deploy mock contracts (VRF, stETH, LINK)
+ *   2. Deploy mock contracts (VRF, stETH)
  *   3. Predict addresses for every protocol contract
  *   4. Patch ContractAddresses.sol + recompile (once per test run)
  *   5. Deploy every protocol contract in order
@@ -71,10 +71,6 @@ export async function deployFullProtocol({
   // --- Phase 1: Deploy mocks ---
   const mockVRF = await deploy("MockVRFCoordinator");
   const mockStETH = await deploy("MockStETH");
-  const mockLINK = await deploy("MockLinkToken");
-  const mockFeed = await deploy("MockLinkEthFeed", [
-    hre.ethers.parseEther("0.004"), // ~0.004 ETH per LINK
-  ]);
 
   // --- Phase 2: Predict protocol addresses ---
   const startingNonce = await deployer.getNonce();
@@ -171,8 +167,6 @@ export async function deployFullProtocol({
     // Mock external contracts
     mockVRF,
     mockStETH,
-    mockLINK,
-    mockFeed,
 
     // Protocol contracts (by ContractAddresses key)
     icons32: contracts.ICONS_32,
@@ -271,7 +265,7 @@ function getConstructorArgs(key, predicted, affiliateBootstrap, finalizeIcons) {
   if (key === "AF_KING") {
     // AfKing has a 3-arg constructor (subCostEthTarget, bountyEthTarget,
     // lootboxMin), all non-zero (each reverts on 0). Mirrors the foundry helper
-    // test/fuzz/helpers/DeployProtocol.sol:126. The args set immutables only and
+    // test/fuzz/helpers/DeployProtocol.sol. The args set immutables only and
     // make no cross-contract calls, so they do not affect the predicted address.
     return [5_000_000_000n, 885_000_000n, 10_000_000_000n];
   }

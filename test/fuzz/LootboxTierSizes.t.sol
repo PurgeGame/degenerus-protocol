@@ -32,8 +32,8 @@ contract RateViewer is DegenerusGame {
 /// @title LootboxTierSizes -- a medium box is five ticket prices and a large box twenty-five
 /// @notice A purchase picks ONE box type; the input decoder resolves a preset to the purchase
 ///         level's ticket price times its multiple (1x / 5x / 25x) and the entry stores that
-///         per-box value. Mutation v78 rewrote the medium size `price * 5` as `price - 5` and no
-///         foundry oracle noticed: the tier multiples were asserted nowhere. These buy each type
+///         per-box value. The tier multiples are pinned here (a medium size of `price - 5` instead of
+///         `price * 5` fails). These buy each type
 ///         as its own purchase, read the stored per-box values, then open the boxes and read the
 ///         sizes back off `LootBoxOpened`.
 contract LootboxTierSizes is DeployProtocol {

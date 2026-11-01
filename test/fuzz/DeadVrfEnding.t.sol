@@ -314,6 +314,27 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertEq(left, 0, "every uncreated unit claimed exactly once");
     }
 
+    /// @dev The uncreated weight can pass 64 bits (three queues of 2^32 wallets, each owing up to
+    ///      2^32 entries). The fixed totals keep that width: a claim divides by the true total
+    ///      and debits the remaining weight exactly.
+    function test_weightsPastSixtyFourBitsClaimExactly() public {
+        _seedHoldings();
+        _endGame();
+        (uint256 pot,,,,,) = _state();
+        uint80 total = uint80(1) << 72;
+        uint80 left = (uint80(1) << 64) + 2250;
+        _seeder().setDeadWeights(total, left);
+        _restore();
+
+        uint256[] memory one = new uint256[](1);
+        one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
+        game.claimDeadVrf(game.walletIdOf_g3120(dave), one);
+        assertEq(claimableBalance(game, dave), (pot * 450) / total, "dave: his weight over the full total");
+        (, uint256 totalAfter,,,, uint256 leftAfter) = _state();
+        assertEq(totalAfter, total, "the total keeps its width");
+        assertEq(leftAfter, left - 450, "the remaining weight is debited exactly");
+    }
+
     function test_SameStableOwnerClaimsThreeTerminalDomainsExactlyOnce() public {
         DeadVrfSeeder s = _seeder();
         s.seedDeadStall(LVL);

@@ -45,8 +45,8 @@ contract TLHumanBoxWorker is DegenerusGame {
 /// @notice Deploys all 23 contracts, drives the game through multiple level transitions, and
 ///         verifies that every ticket queuing path eventually results in processed tickets with
 ///         zero stranding. Tests the unified near/far boundary (> level + 5), FF drain at phase
-///         transition, _prepareFutureTickets processing read queues only (+1..+4), and the
-///         last-day jackpot routing fix (level+1 when rngLocked + jackpotCounter+step >= CAP).
+///         transition, `runTicketWork_g1150` processing read queues in its near window only, and the
+///         last-day jackpot routing (level+1 when rngLocked + jackpotCounter+step >= CAP).
 ///
 /// @dev Storage slots confirmed via `forge inspect DegenerusGame storage-layout`:
 ///      - Slot 0: [0:4]purchaseStartDay [4:8]dailyIdx [8:12]rngRequestTime [12:15]level
@@ -62,26 +62,26 @@ contract TLHumanBoxWorker is DegenerusGame {
 ///      - prizePoolsPacked: slot 2 ([future:128][next:128])
 ///
 /// @dev Requirement coverage:
-///      - SRC-01: testPurchasePhaseTicketsProcessed (purchase-phase → level+1)
-///      - SRC-02: testJackpotPhaseTicketsRouteToCurrentLevel (jackpot-phase → level)
-///      - SRC-03: testLastDayTicketsRouteToNextLevel (last-day override → level+1)
-///      - SRC-04: testLootboxNearRollTicketsProcessed (lootbox near roll → write key, processed)
-///      - SRC-05: testLootboxFarRollTicketsRouteToFF (lootbox far roll → FF key, drained at transition)
-///      - SRC-06: testWhalePassTicketsAcrossLevels (whale pass → 100 levels, near+FF routing)
-///      - EDGE-05: testConstructorFFTicketsDrain (constructor FF accumulate and drain one-per-transition)
-///      - EDGE-01: testBoundaryRoutingAtNonZeroLevel (level+5 routes to write key at non-zero level)
-///      - EDGE-02: testBoundaryRoutingAtNonZeroLevel (level+6 routes to FF key at non-zero level)
-///      - EDGE-03: testFFDrainOccursDuringPhaseTransition (FF drain timing: phaseTransitionActive only)
-///      - EDGE-04: testJackpotPhaseTicketsProcessedFromReadSlot (write->swap->read->processed pipeline)
-///      - EDGE-06: testLastDayTicketsRouteToNextLevel (SRC-03 covers last-day routing fix)
-///      - EDGE-07: testPrepareFutureTicketsRange (_prepareFutureTickets reads +1..+4 only, not FF)
-///      - EDGE-08: testFullLevelCycleAllQueuesDrained (all read-slot queues empty after full cycle)
-///      - EDGE-09: testWriteSlotSurvivesSwapAndFreeze (write-slot tickets survive swap, appear in read)
-///      - ZSA-01: testZeroStrandingAutoBuyAfterTransitions (read-key autoBuy across all processed levels)
-///      - ZSA-02: testZeroStrandingAutoBuyAfterTransitions (FF-key autoBuy across all levels in drain range)
-///      - ZSA-03: testMultiSourceZeroStrandingAutoBuy (4 transitions with multi-source buying, zero stranding)
-///      - RNG-03: testRngLockedBlocksFFPurchase, testRngLockedBlocksFFLootbox
-///      - RNG-04: testWriteSlotIsolationDuringRngLocked, testWriteSlotIsolationAcrossBufferStates
+///      - testPurchasePhaseTicketsProcessed (purchase-phase → level+1)
+///      - testJackpotPhaseTicketsRouteToCurrentLevel (jackpot-phase → level)
+///      - testLastDayTicketsRouteToNextLevel (last-day override → level+1)
+///      - testLootboxNearRollTicketsProcessed (lootbox near roll → write key, processed)
+///      - testLootboxFarRollTicketsRouteToFF (lootbox far roll → FF key, drained at transition)
+///      - testWhalePassTicketsAcrossLevels (whale pass → 100 levels, near+FF routing)
+///      - testConstructorFFTicketsDrain (constructor FF accumulate and drain one-per-transition)
+///      - testBoundaryRoutingAtNonZeroLevel (level+5 routes to write key at non-zero level)
+///      - testBoundaryRoutingAtNonZeroLevel (level+6 routes to FF key at non-zero level)
+///      - testFFDrainOccursDuringPhaseTransition (FF drain timing: phaseTransitionActive only)
+///      - testJackpotPhaseTicketsProcessedFromReadSlot (write->swap->read->processed pipeline)
+///      - testLastDayTicketsRouteToNextLevel (covers last-day routing fix)
+///      - testPrepareFutureTicketsRange (ticket work reads the near-window read queues only, not FF)
+///      - testFullLevelCycleAllQueuesDrained (all read-slot queues empty after full cycle)
+///      - testWriteSlotSurvivesSwapAndFreeze (write-slot tickets survive swap, appear in read)
+///      - testZeroStrandingAutoBuyAfterTransitions (read-key autoBuy across all processed levels)
+///      - testZeroStrandingAutoBuyAfterTransitions (FF-key autoBuy across all levels in drain range)
+///      - testMultiSourceZeroStrandingAutoBuy (4 transitions with multi-source buying, zero stranding)
+///      - testRngLockedBlocksFFPurchase, testRngLockedBlocksFFLootbox
+///      - testWriteSlotIsolationDuringRngLocked, testWriteSlotIsolationAcrossBufferStates
 contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
     // Storage slots (confirmed via forge inspect)
@@ -157,7 +157,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 1 [EDGE-05]: Constructor-queued FF tickets at levels 6+ drain to
+    // Test 1: Constructor-queued FF tickets at levels 6+ drain to
     //         zero as game advances past those levels. Proves "accumulate and
     //         drain one-per-transition" behavior.
     // =========================================================================
@@ -166,7 +166,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         drained after game advances past level 5. Levels 6,7,8,9,10 each have 2
     ///         entries before any transitions; after driving to level 5+ they are drained
     ///         while higher levels still retain their entries.
-    /// @dev EDGE-05: Constructor FF tickets at levels 6+ drain one-per-transition as game advances
+    /// @dev Constructor FF tickets at levels 6+ drain one-per-transition as game advances
     function testConstructorFFTicketsDrain() public {
         // Constructor pre-queues 2 addresses (sDGNRS + VAULT) per level 1-100.
         // At deployment the mint ceiling is level+1 = 1 (level+2 only once a
@@ -203,13 +203,13 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 2 [SRC-01]: Direct ETH purchases during purchase phase route to
+    // Test 2: Direct ETH purchases during purchase phase route to
     //         level+1 and are fully processed
     // =========================================================================
 
     /// @notice Buy tickets during purchase phase, verify they route to purchaseLevel (level+1)
     ///         and are processed to zero after mineFlip cycles.
-    /// @dev SRC-01: Purchase-phase tickets route to level+1 write key and drain to zero after transition
+    /// @dev Purchase-phase tickets route to level+1 write key and drain to zero after transition
     function test_MultiwordPurchasesDrainAndSamePlayersBuyAgain() public {
         uint24 key = _writeKeyForLevel(1);
         for (uint160 i; i < 19; ++i) {
@@ -274,7 +274,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Verify all read queues for early levels have at most 2 constructor-seeded entries.
         // Constructor pre-queues sDGNRS + VAULT per level. These may remain in the write-key
-        // space because _prepareFutureTickets processes from the read key while constructor
+        // space because ticket work processes from the read key while constructor
         // entries were placed in the write key. The swap timing during phase transitions
         // leaves them unreachable until the queue is next read. This is not stranding.
         for (uint24 lvl = 1; lvl <= uint24(finalLevel) - 1; lvl++) {
@@ -371,14 +371,14 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 7 [EDGE-09]: Write-slot tickets survive swapAndFreeze and appear
+    // Test 7: Write-slot tickets survive the daily swap and appear
     //         in read slot
     // =========================================================================
 
-    /// @notice Tickets bought during a day appear in the write slot. After _swapAndFreeze
-    ///         (triggered by RNG request), the write slot becomes the read slot. Verify
+    /// @notice Tickets bought during a day appear in the write slot. After the daily swap (_swapTicketSlot + _freezePool,
+    ///         run by the RNG request), the write slot becomes the read slot. Verify
     ///         the tickets are then processed from the read slot.
-    /// @dev EDGE-09: Write-slot tickets survive _swapAndFreeze and appear in read slot on next cycle
+    /// @dev Write-slot tickets survive the daily swap and appear in read slot on next cycle
     function testWriteSlotSurvivesSwapAndFreeze() public {
         // Buy tickets -> they go to write key for level 1
         _buyTickets(buyer1, 4000);
@@ -387,7 +387,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint24 wk = _writeKeyForLevel(1);
         assertGt(_queueLength(wk), 0, "Write key for level 1 should have entries after purchase");
 
-        // Drive game forward -- mineFlip triggers swapAndFreeze then processes
+        // Drive game forward -- mineFlip's daily request swaps and freezes, then processes
         _driveToLevel(2);
 
         // After full processing, both read and write queues for level 1 should be empty
@@ -396,13 +396,13 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 8 [EDGE-08]: Full lifecycle -- purchase, jackpot, transition, next
+    // Test 8: Full lifecycle -- purchase, jackpot, transition, next
     //         level. All read-slot queues empty after full level cycle.
     // =========================================================================
 
     /// @notice Drive a complete purchase->jackpot->transition->nextLevel cycle with multiple
     ///         buyers and verify all ticket queues involved are fully drained.
-    /// @dev EDGE-08: After full level cycle, all read-slot queues for processed levels are empty
+    /// @dev After full level cycle, all read-slot queues for processed levels are empty
     function testFullLevelCycleAllQueuesDrained() public {
         // Multiple buyers purchase during level 0
         _buyTickets(buyer1, 4000);
@@ -419,11 +419,11 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Check levels 1-3 (well below current level).
         // The read-slot queue for these levels should be zero.
-        // mineFlip processes the read slot (via _runProcessTicketBatch) and
+        // mineFlip processes the read slot (via runTicketWork_g1150) and
         // the read queue must be fully drained before jackpot/phase logic runs
         // (enforced by ticketsFullyProcessed gate).
         //
-        // We check both buffer sides since _swapAndFreeze has toggled multiple
+        // We check both buffer sides since the daily swap has toggled multiple
         // times by now. The read queue was drained BEFORE the swap; so either side
         // may have been the read key that was drained. Both should end up at zero
         // for levels well below current.
@@ -445,22 +445,22 @@ contract TicketLifecycleTest is DeployProtocol {
                 string.concat("Level ", _uint2str(lvl), " FF queue should be empty"));
         }
 
-        // For the concrete EDGE-08 check, verify the mineFlip read-processing gate:
+        // For the concrete check, verify the mineFlip read-processing gate:
         // at the CURRENT level, ticketsFullyProcessed should be true (gate passed).
         // We also verify that testFiveLevelIntegration (more comprehensive) covers the
         // broader stranding check.
     }
 
     // =========================================================================
-    // Test 9 [EDGE-07]: _prepareFutureTickets processes +1..+4 range (read
+    // Test 9: ticket work processes the near-window range (read
     //         queues only), NOT touching FF keys
     // =========================================================================
 
     /// @notice Verify that near-future tickets at levels purchaseLevel+1..+4 are processed
-    ///         by _prepareFutureTickets during daily mineFlip cycles. Also verify that
+    ///         by ticket work during daily mineFlip cycles. Also verify that
     ///         FF queue lengths for levels outside the +1..+4 range are NOT modified by
-    ///         _prepareFutureTickets (they are only drained by phase transition).
-    /// @dev EDGE-07: _prepareFutureTickets processes only read queues in +1..+4 range, not FF keys
+    ///         ticket work (they are only drained by phase transition).
+    /// @dev ticket work processes only read queues in the near window, not FF keys
     function testPrepareFutureTicketsRange() public {
         // Record FF queue lengths for levels 6-10 before driving
         // These should all be 2 (constructor-queued sDGNRS + VAULT)
@@ -477,12 +477,12 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 8000);
         _buyTickets(buyer2, 8000);
 
-        // Drive through multiple days at level 0 so _prepareFutureTickets runs
+        // Drive through multiple days at level 0 so ticket work runs
         // Only drive to level 2 (through one transition)
         _driveToLevel(2);
 
         // After level 1 transition, levels that were in the +1..+4 range should be processed
-        // During purchase phase at level 0, _prepareFutureTickets(purchaseLevel=1) processes
+        // During purchase phase at level 0, ticket work (purchaseLevel=1) processes
         // levels 2,3,4,5. During jackpot at level 0, it processes levels 1,2,3,4.
         for (uint24 lvl = 1; lvl <= 5; lvl++) {
             uint24 rk = _readKeyForLevel(lvl);
@@ -494,13 +494,13 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // The FF queue at level 6 was drained by the phase transition at level 1
         // (phase transition drains FF at purchaseLevel+4 = level+5 = 1+5 = 6).
-        // But levels 7-10 FF queues should NOT have been touched by _prepareFutureTickets.
+        // But levels 7-10 FF queues should NOT have been touched by ticket work.
         // They might be drained by phase transitions at higher levels, so check only levels
         // that are beyond what transitions would have drained.
         // At level 2: transition would drain FF at 2+5=7. So after reaching level 2:
         //   level 6 FF: drained by transition at level 1
         //   level 7 FF: drained by transition at level 2
-        //   level 8+ FF: should still be 2 (untouched by _prepareFutureTickets)
+        //   level 8+ FF: should still be 2 (untouched by ticket work)
         uint256 reached = game.currentLvl();
         // Check FF levels that are beyond the transition drain range
         for (uint24 lvl = uint24(reached) + 6; lvl <= 10; lvl++) {
@@ -525,9 +525,9 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Verify all processed levels have queues with at most the constructor-seeded
         // sDGNRS + VAULT entries (2 per level). These may remain in one key space because
-        // _prepareFutureTickets processes from the read key while constructor entries were
+        // ticket work processes from the read key while constructor entries were
         // placed in the write key, and the swap timing during phase transitions leaves them
-        // in the write-key space at the point _prepareFutureTickets runs. This is not ticket
+        // in the write-key space at the point ticket work runs. This is not ticket
         // stranding -- these are perpetual protocol participants that get processed when
         // the queue is next read at that level.
         for (uint24 lvl = 1; lvl <= uint24(reached) - 1; lvl++) {
@@ -552,7 +552,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 11 [SRC-02]: Jackpot-phase tickets route to current level (not
+    // Test 11: Jackpot-phase tickets route to current level (not
     //         level+1) and are fully processed after transition
     // =========================================================================
 
@@ -560,7 +560,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         not `level+1` as in purchase phase. This test drives the game into
     ///         jackpot phase, captures queue state before and after purchase, and
     ///         verifies the delta went to the current level's queue.
-    /// @dev SRC-02: Jackpot-phase tickets route to current level write key and drain to zero
+    /// @dev Jackpot-phase tickets route to current level write key and drain to zero
     function testJackpotPhaseTicketsRouteToCurrentLevel() public {
         // Drive to level 1 first to get past initial state
         _driveToLevel(2);
@@ -622,17 +622,17 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 12 [SRC-03]: Last-day tickets route to level+1 when rngLocked and
+    // Test 12: Last-day tickets route to level+1 when rngLocked and
     //         the next draw is the final jackpot day
     // =========================================================================
 
     /// @notice When rngLocked is true during the last jackpot day
-    ///         (turbo active or two standard draws completed), _processDirectPurchase
+    ///         (turbo active or two standard draws completed), _activeTicketLevel
     ///         routes tickets to level+1 instead of the normal jackpot-phase level.
     ///         This prevents ticket stranding since _endPhase breaks before _unlockRng.
     ///         Uses vm.store to force the exact state (rngLocked=true, jackpotPhaseFlag=true,
     ///         jackpotCounter=2) since this edge case is timing-fragile to trigger organically.
-    /// @dev SRC-03: Last-day tickets under the RNG lock route to level+1.
+    /// @dev Last-day tickets under the RNG lock route to level+1.
     function testLastDayTicketsRouteToNextLevel() public {
         // Drive to level 2 to establish game state
         _driveToLevel(3);
@@ -715,8 +715,8 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 13 [SRC-04]: Lootbox near roll (offset 0-4) queues tickets to write
-    //         key for a near-future level. Processed by _prepareFutureTickets.
+    // Test 13: Lootbox near roll (offset 0-4) queues tickets to write
+    //         key for a near-future level. Processed by ticket work.
     // =========================================================================
 
     /// @notice Purchase multiple lootboxes with buyer3 (not used by _driveToLevel), land the word,
@@ -724,7 +724,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         0 of the near band (the live mint level), so at least one near-roll ticket output is
     ///         deterministic. After transitions, verify buyer3's ticketsOwed at near-future levels
     ///         are fully processed to zero.
-    /// @dev SRC-04: Lootbox near roll queues to write key, processed by the ticket drain.
+    /// @dev Lootbox near roll queues to write key, processed by the ticket drain.
     ///      Engine migration: the per-index word map (`lootboxRngWordByIndex`) and the LR_INDEX
     ///      counter are gone. Boxes bind to one of two physical buffers (tag 0 or 1) and resolve on
     ///      the word of the session that seals that buffer, opened by the engine as a read
@@ -814,14 +814,14 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 14 [SRC-05]: Lootbox far roll (offset 5-50) queues tickets to FF key.
+    // Test 14: Lootbox far roll (offset 5-50) queues tickets to FF key.
     //         Drained at phase transition.
     // =========================================================================
 
     /// @notice Purchase many lootboxes with diverse entropy seeds, open all, and verify that
     ///         at least one far roll (offset 5-50) routes to the FF key. Then drive levels
     ///         forward and verify all FF queues for processed levels are drained.
-    /// @dev SRC-05: Lootbox far roll (offset 5-50) queues to FF key, drained at phase transition.
+    /// @dev Lootbox far roll (offset 5-50) queues to FF key, drained at phase transition.
     ///
     ///      Each purchase is its own queue entry; the sweep seeds each box off a per-entry root
     ///      word and the wallet ID, so independent far-roll trials come from distinct entries
@@ -880,14 +880,14 @@ contract TicketLifecycleTest is DeployProtocol {
                 break;
             }
         }
-        // SRC-05 requires proving a lootbox far roll actually reached an FF key.
-        assertTrue(anyFFGrowth, "SRC-05: at least one lootbox open must produce a far roll routed to FF key");
+        // requires proving a lootbox far roll actually reached an FF key.
+        assertTrue(anyFFGrowth, "at least one lootbox open must produce a far roll routed to FF key");
         // And the selected roll itself: buyer 0 now owes entries on a far-future key in the band.
         bool buyer0Far = false;
         for (uint24 lvl = 6; lvl <= 51 && !buyer0Far; lvl++) {
             if (_ticketsOwed(lvl | TICKET_FAR_FUTURE_BIT, lboxBuyers[0]) > 0) buyer0Far = true;
         }
-        assertTrue(buyer0Far, "SRC-05: the selected far roll queued buyer 0 on a far-future key");
+        assertTrue(buyer0Far, "the selected far roll queued buyer 0 on a far-future key");
 
         // Drive game forward enough to drain FF queues in the lootbox target range.
         _driveToLevel(8);
@@ -905,7 +905,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 15 [SRC-06]: Whale pass queues tickets at purchaseLevel through
+    // Test 15: Whale pass queues tickets at purchaseLevel through
     //         purchaseLevel+99. Near levels to write key, far levels to FF.
     // =========================================================================
 
@@ -913,7 +913,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         - Near-future write keys (levels 1-5) receive entries from whale pass
     ///         - FF keys (levels 6+) receive entries (whale buyer added to constructor entries)
     ///         - After level transitions, FF queues in the drain range are empty
-    /// @dev SRC-06: Whale pass queues tickets at purchaseLevel through purchaseLevel+99
+    /// @dev Whale pass queues tickets at purchaseLevel through purchaseLevel+99
     function testWhalePassTicketsAcrossLevels() public {
         assertEq(game.currentLvl(), 0, "Should start at level 0");
 
@@ -978,7 +978,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 15b [SRC-07]: claimWhalePass awards half-passes as whole-ticket
+    // Test 15b: claimWhalePass awards half-passes as whole-ticket
     //         chunks on strided levels; a materialized chunk spans all four
     //         trait quadrants.
     // =========================================================================
@@ -1035,7 +1035,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 15c [SRC-08]: budget-split materialization keeps the quadrant cycle
+    // Test 15c: budget-split materialization keeps the quadrant cycle
     //         aligned — every budget-limited take is a whole-ticket multiple,
     //         so a player whose owed spans several batch calls still
     //         materializes an equal count in all four quadrants.
@@ -1104,7 +1104,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 16 [EDGE-01, EDGE-02]: At a non-zero game level (3+), verify the
+    // Test 16: At a non-zero game level (3+), verify the
     //         near/far boundary: level+5 goes to write key, level+6 goes to FF.
     // =========================================================================
 
@@ -1112,8 +1112,8 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         At game level L: L+5 routes to write key (near-future, <= L+5);
     ///         L+6 routes to FF key (far-future, > L+5). Uses whale pass to
     ///         populate both ranges in a single purchase.
-    /// @dev EDGE-01: level+5 routes to write key at non-zero level.
-    ///      EDGE-02: level+6 routes to FF key at non-zero level.
+    /// @dev level+5 routes to write key at non-zero level.
+    ///      level+6 routes to FF key at non-zero level.
     function testBoundaryRoutingAtNonZeroLevel() public {
         // Drive to level 4 so the game is at level 3+
         _driveToLevel(4);
@@ -1130,23 +1130,23 @@ contract TicketLifecycleTest is DeployProtocol {
         // Buy 1 whale pass: queues tickets at levels (L+1) through (L+100).
         _buyWhalePass(buyer3, 1);
 
-        // EDGE-01: FF queue at L+1 should NOT have grown from whale pass
+        // FF queue at L+1 should NOT have grown from whale pass
         // (tickets at L+1 route to write key, not FF)
         assertEq(_ffQueueLength(uint24(L + 1)), ffNearBefore,
-            "EDGE-01: FF queue at L+1 should not grow (near-future, routed to write key)");
+            "FF queue at L+1 should not grow (near-future, routed to write key)");
 
         // Verify write key at L+1 has buyer3's tickets
         uint32 owedAtL1 = _ticketsOwed(_writeKeyForLevel(uint24(L + 1)), buyer3);
         assertGt(owedAtL1, 0,
-            "EDGE-01: buyer3 should have ticketsOwed at write key for L+1");
+            "buyer3 should have ticketsOwed at write key for L+1");
 
-        // EDGE-02: FF queue at L+3 should have grown from whale pass
+        // FF queue at L+3 should have grown from whale pass
         assertGt(_ffQueueLength(uint24(L + 3)), ffFarBefore,
-            "EDGE-02: FF queue at L+3 should grow (far-future, routed to FF key)");
+            "FF queue at L+3 should grow (far-future, routed to FF key)");
     }
 
     // =========================================================================
-    // Test 17 [EDGE-03]: FF drain occurs during phase transition
+    // Test 17: FF drain occurs during phase transition
     //         (phaseTransitionActive block), NOT during daily cycle processing.
     // =========================================================================
 
@@ -1154,7 +1154,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         (AdvanceModule lines 239-265), not during daily cycle processing.
     ///         Run daily cycles without triggering a transition, verify FF unchanged,
     ///         then trigger a transition and verify FF drains.
-    /// @dev EDGE-03: FF tickets drain during phase transition (phaseTransitionActive block),
+    /// @dev FF tickets drain during phase transition (phaseTransitionActive block),
     ///      not during daily cycle processing.
     function testFFDrainOccursDuringPhaseTransition() public {
         // Drive to level 2 to get past initial state
@@ -1196,11 +1196,11 @@ contract TicketLifecycleTest is DeployProtocol {
         assertEq(game.currentLvl(), L,
             "Game should still be at level L after low-pool daily cycles");
 
-        // EDGE-03 core assertion: FF queue at L+2 is UNCHANGED while the pool stays
+        // core assertion: FF queue at L+2 is UNCHANGED while the pool stays
         // below target, since lastPurchaseDay never latches and the mint ceiling
         // never extends past L+1.
         assertEq(_ffQueueLength(uint24(ffTarget)), ffBefore,
-            "EDGE-03: FF queue at L+2 must NOT drain before the last-purchase-day latch opens its window");
+            "FF queue at L+2 must NOT drain before the last-purchase-day latch opens its window");
 
         // Now push the pool high enough to latch lastPurchaseDay and drive the
         // transition. The latch immediately opens L+2's generation window
@@ -1214,11 +1214,11 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // After the latch + sweep: FF at L+2 should be drained.
         assertEq(_ffQueueLength(uint24(ffTarget)), 0,
-            "EDGE-03: FF queue at L+2 must be drained AFTER the latch's sweep");
+            "FF queue at L+2 must be drained AFTER the latch's sweep");
     }
 
     // =========================================================================
-    // Test 18 [EDGE-04]: Jackpot-phase tickets are processed through the
+    // Test 18: Jackpot-phase tickets are processed through the
     //         write->swap->read->process pipeline after level transition.
     // =========================================================================
 
@@ -1226,8 +1226,8 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         then drive through the level transition. After transition, verify
     ///         buyer3 has zero ticketsOwed at all key variants for level J,
     ///         proving the write->read->process pipeline worked.
-    /// @dev EDGE-04: Jackpot-phase tickets appear in read slot after _swapAndFreeze,
-    ///      processed by _runProcessTicketBatch(level).
+    /// @dev Jackpot-phase tickets appear in read slot after the daily swap,
+    ///      processed by runTicketWork_g1150.
     function testJackpotPhaseTicketsProcessedFromReadSlot() public {
         // Drive to level 2 to get past initial state
         _driveToLevel(2);
@@ -1259,7 +1259,7 @@ contract TicketLifecycleTest is DeployProtocol {
                 uint24 wk = _writeKeyForLevel(uint24(jackpotLevel));
                 uint32 owedWrite = _ticketsOwed(wk, buyer3);
                 assertTrue(owedWrite > 0,
-                    "EDGE-04: buyer3 should have ticketsOwed at write key for jackpot level");
+                    "buyer3 should have ticketsOwed at write key for jackpot level");
 
                 break;
             }
@@ -1278,13 +1278,13 @@ contract TicketLifecycleTest is DeployProtocol {
         assertTrue(foundJackpot, "Must enter jackpot phase during test");
 
         // Now drive well past the jackpot level to complete the transition and
-        // ensure full ticket processing. _runProcessTicketBatch processes in
+        // ensure full ticket processing. runTicketWork_g1150 processes in
         // batches, so multiple mineFlip calls may be needed across multiple days.
         _driveToLevel(jackpotLevel + 3);
         _flushAdvance();
         assertGt(game.currentLvl(), jackpotLevel, "Must advance past jackpot level");
 
-        // EDGE-04: ticket processing only runs at the current level, so
+        // ticket processing only runs at the current level, so
         // jackpot-phase entries at old level J persist in the double-buffer after
         // advancing past J. The write→queue pipeline is verified by the ticketsOwed
         // assertion above. Here we check that total entries across both keys don't
@@ -1294,29 +1294,29 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 totalEntries = _queueLength(_readKeyForLevel(jLvl))
             + _queueLength(_writeKeyForLevel(jLvl));
         assertLe(totalEntries, 5,
-            "EDGE-04: entries at jackpot level exceed expected count");
+            "entries at jackpot level exceed expected count");
 
         // Verify FF at jackpot level is empty (no far-future stranding)
         assertEq(_ffQueueLength(jLvl), 0,
-            "EDGE-04: FF queue at jackpot level must be empty");
+            "FF queue at jackpot level must be empty");
     }
 
-    // EDGE-06: Covered by testLastDayTicketsRouteToNextLevel (Test 12, SRC-03).
+    // Covered by testLastDayTicketsRouteToNextLevel (Test 12).
     // That test uses vm.store to force rngLocked + jackpotCounter=2 and verifies
     // tickets route to level+1. The vm.store approach is definitive because the
     // last-day state (rngLocked with two completed standard draws) is
     // timing-fragile to trigger organically.
 
     // =========================================================================
-    // Test 19 [ZSA-01, ZSA-02]: Systematic zero-stranding autoBuy after multiple
+    // Test 19: Systematic zero-stranding autoBuy after multiple
     //         level transitions. Read keys and FF keys for all processed levels
     //         must be empty.
     // =========================================================================
 
     /// @notice Drive through 5+ level transitions, then systematically autoBuy all
     ///         processed levels to verify zero stranding across read and FF key spaces.
-    /// @dev ZSA-01: After transitions, readKey.length == 0 for processed levels.
-    ///      ZSA-02: ffKey.length == 0 for levels in drain range.
+    /// @dev After transitions, readKey.length == 0 for processed levels.
+    ///      ffKey.length == 0 for levels in drain range.
     function testZeroStrandingAutoBuyAfterTransitions() public {
         // Drive to level 6 to complete several level transitions
         _driveToLevel(6);
@@ -1324,7 +1324,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 reached = game.currentLvl();
         assertGe(reached, 5, "Must complete at least 5 level transitions");
 
-        // ZSA-01 autoBuy: both key spaces should have at most 2 constructor-seeded entries.
+        // autoBuy: both key spaces should have at most 2 constructor-seeded entries.
         // Constructor pre-queues sDGNRS + VAULT per level. These may remain in the write-key
         // space due to swap timing during phase transitions. This is not stranding.
         for (uint24 lvl = 1; lvl <= uint24(reached) - 1; lvl++) {
@@ -1332,17 +1332,17 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256 lenSlotBit = _queueLength(lvl | TICKET_SLOT_BIT);
             assertLe(
                 lenPlain + lenSlotBit, 2,
-                string.concat("ZSA-01: Read queue not zero at level ", _uint2str(lvl))
+                string.concat("Read queue not zero at level ", _uint2str(lvl))
             );
         }
 
-        // ZSA-02 autoBuy: FF-key queue must be empty for all levels in drain range.
+        // autoBuy: FF-key queue must be empty for all levels in drain range.
         // The mint ceiling never exceeds level+2, so by the time the game reaches
         // `reached`, every FF pool up to `reached` must be minted and drained.
         for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(
                 _ffQueueLength(lvl), 0,
-                string.concat("ZSA-02: FF queue not zero at level ", _uint2str(lvl))
+                string.concat("FF queue not zero at level ", _uint2str(lvl))
             );
         }
 
@@ -1356,7 +1356,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 20 [ZSA-03]: Comprehensive multi-source zero-stranding autoBuy with
+    // Test 20: Comprehensive multi-source zero-stranding autoBuy with
     //         4 consecutive level transitions using direct purchase + whale
     //         bundle + lootbox ticket sources.
     // =========================================================================
@@ -1364,7 +1364,7 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @notice 4 consecutive transitions with continuous multi-source ticket buying
     ///         (direct purchase, whale pass, lootbox). After all transitions, verify
     ///         zero stranding across all key spaces for all processed levels.
-    /// @dev ZSA-03: 3+ consecutive transitions with multi-source buying yield zero
+    /// @dev 3+ consecutive transitions with multi-source buying yield zero
     ///      stranding across all key spaces.
     function testMultiSourceZeroStrandingAutoBuy() public {
         // The lootbox source buys from its own wallet: a whale pass records its 10% bonus box as
@@ -1405,38 +1405,38 @@ contract TicketLifecycleTest is DeployProtocol {
         _flushAdvance();
         uint256 reached = game.currentLvl();
         assertGe(reached, 4, "Must complete at least 4 level transitions");
-        assertGt(totalLanded, 0, "ZSA-03: the lootbox source was exercised");
+        assertGt(totalLanded, 0, "the lootbox source was exercised");
 
-        // ZSA-01 + ZSA-02: autoBuy all processed levels using the reusable helper
+        // autoBuy all processed levels using the reusable helper
         _assertZeroStranding(1, uint24(reached) - 1);
 
-        // ZSA-02 extended: FF drain range beyond the helper's autoBuy. The mint
+        // extended: FF drain range beyond the helper's autoBuy. The mint
         // ceiling never exceeds level+2, so by the time the game reaches `reached`,
         // every FF pool up to `reached` must be minted and drained.
         for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
-                string.concat("ZSA-02: FF not drained at level ", _uint2str(lvl)));
+                string.concat("FF not drained at level ", _uint2str(lvl)));
         }
 
-        // ZSA-03: multi-source verification -- buyer3 bought whale passes and lboxBuyer
+        // multi-source verification -- buyer3 bought whale passes and lboxBuyer
         // lootboxes at every level. Read-key queues being empty (via _assertZeroStranding) proves
         // all sources were processed. Additionally verify no stray FF entries at
         // levels guaranteed to have entered the mint window.
         for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
-                string.concat("ZSA-03: multi-source FF not zero at level ", _uint2str(lvl)));
+                string.concat("multi-source FF not zero at level ", _uint2str(lvl)));
         }
     }
 
     // =========================================================================
-    // Test 21 [RNG-03a]: rngLocked blocks FF key writes from whale pass
+    // Test 21: rngLocked blocks FF key writes from whale pass
     //         purchase (integration-level, full 23-contract deployment).
     // =========================================================================
 
     /// @notice With rngLockedFlag=true, a normal purchase() targeting near-future
     ///         (level+1) succeeds, but purchaseWhalePass (which spans 100 levels,
     ///         many > level+5) reverts with RngLocked() on the first FF level.
-    /// @dev RNG-03: rngLocked blocks FF key writes from permissionless purchase paths.
+    /// @dev rngLocked blocks FF key writes from permissionless purchase paths.
     function testRngLockedBlocksFFPurchase() public {
         // Drive to level 2 so purchaseLevel > 0 and game state is established
         _driveToLevel(3);
@@ -1479,13 +1479,13 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 22 [RNG-03b]: rngLocked blocks FF key writes from lootbox open
+    // Test 22: rngLocked blocks FF key writes from lootbox open
     //         when the resolved target level is far-future.
     // =========================================================================
 
     /// @notice Purchase lootboxes before locking, land their word, then set rngLocked and
     ///         attempt to open. The human-box worker's entry gate must no-op every open while locked.
-    /// @dev RNG-03: rngLocked blocks FF key writes from lootbox open paths.
+    /// @dev rngLocked blocks FF key writes from lootbox open paths.
     ///      The worker mineFlip dispatches for its HumanBoxes stage (runHumanBoxWork_g315) is gated on
     ///      the read-consumer stage, which rngLockedFlag closes: a locked call opens nothing and
     ///      reverts nothing, so it never reaches the deep near/far-future write-buffer routing.
@@ -1535,19 +1535,19 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256 rngWord = _lootboxRngWord(indices[i]);
             if (rngWord == 0) continue;
 
-            assertEq(game.rngConsumerStage_g379(), 0, "RNG-03b: the lock closes the read-consumer stage");
+            assertEq(game.rngConsumerStage_g379(), 0, "the lock closes the read-consumer stage");
             (uint256 opened, bool progressed) = _runHumanBoxWorker();
-            assertEq(opened, 0, "RNG-03b: the worker's entry gate must no-op every open while rngLocked");
-            assertFalse(progressed, "RNG-03b: the locked worker reports no progress");
+            assertEq(opened, 0, "the worker's entry gate must no-op every open while rngLocked");
+            assertFalse(progressed, "the locked worker reports no progress");
             checked++;
         }
 
-        assertGt(checked, 0, "RNG-03b: at least one lootbox index must be checked");
-        assertEq(_boxesOwed(indices[0], buyer3), validCount, "RNG-03b: the locked worker left every box unopened");
+        assertGt(checked, 0, "at least one lootbox index must be checked");
+        assertEq(_boxesOwed(indices[0], buyer3), validCount, "the locked worker left every box unopened");
     }
 
     // =========================================================================
-    // Test 23 [RNG-04a]: Purchase routing always writes to write slot, never
+    // Test 23: Purchase routing always writes to write slot, never
     //         read slot, even when rngLocked is true.
     // =========================================================================
 
@@ -1556,7 +1556,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         read key). This proves the double-buffer structural guarantee: new
     ///         purchases are invisible to jackpot resolution (which reads from
     ///         read key).
-    /// @dev RNG-04: Write-slot isolation during rngLocked state.
+    /// @dev Write-slot isolation during rngLocked state.
     function testWriteSlotIsolationDuringRngLocked() public {
         // Drive to level 2 so game state is established
         _driveToLevel(3);
@@ -1614,30 +1614,30 @@ contract TicketLifecycleTest is DeployProtocol {
         uint32 owedWriteL = _ticketsOwed(_writeKeyForLevel(lLvl), buyer3);
         uint32 owedWriteL1 = _ticketsOwed(_writeKeyForLevel(lPlus1), buyer3);
         assertTrue(owedWriteL + owedWriteL1 > 0,
-            "RNG-04a: buyer3 must have ticketsOwed at a write key after purchase");
+            "buyer3 must have ticketsOwed at a write key after purchase");
 
         // Check ticketsOwed: buyer3 must NOT have owed at any READ key
         uint32 owedReadL = _ticketsOwed(_readKeyForLevel(lLvl), buyer3);
         uint32 owedReadL1 = _ticketsOwed(_readKeyForLevel(lPlus1), buyer3);
         assertEq(owedReadL + owedReadL1, 0,
-            "RNG-04a: buyer3 must NOT have ticketsOwed at any read key");
+            "buyer3 must NOT have ticketsOwed at any read key");
 
         // Verify read-key queue lengths are UNCHANGED
         assertEq(_queueLength(_readKeyForLevel(lLvl)), readLenL,
-            "RNG-04a: Read queue for level L must not change");
+            "Read queue for level L must not change");
         assertEq(_queueLength(_readKeyForLevel(lPlus1)), readLenL1,
-            "RNG-04a: Read queue for level L+1 must not change");
+            "Read queue for level L+1 must not change");
     }
 
     // =========================================================================
-    // Test 24 [RNG-04b]: Write-slot isolation holds regardless of which
+    // Test 24: Write-slot isolation holds regardless of which
     //         physical buffer side (plain vs SLOT_BIT) is the write slot.
     // =========================================================================
 
     /// @notice Verify write-slot isolation at two different game levels where
     ///         ticketWriteSlot has been toggled. At each level: set rngLocked,
     ///         buy tickets, verify write key grew, verify read key unchanged.
-    /// @dev RNG-04: Write-slot isolation across both buffer configurations.
+    /// @dev Write-slot isolation across both buffer configurations.
     function testWriteSlotIsolationAcrossBufferStates() public {
         // === Round 1: Verify at level 2 ===
         _driveToLevel(3);
@@ -1670,9 +1670,9 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Verify isolation at round 1
         assertTrue(_queueLength(writeKey1) > 0,
-            "RNG-04b R1: Write-key queue must have entries after purchase");
+            "R1: Write-key queue must have entries after purchase");
         assertEq(_queueLength(readKey1), readBefore1,
-            "RNG-04b R1: Read-key queue must be unchanged");
+            "R1: Read-key queue must be unchanged");
 
         // Clear rngLocked for _driveToLevel to work (it skips buys when locked)
         _setRngLocked(false);
@@ -1709,9 +1709,9 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Verify isolation at round 2
         assertTrue(_queueLength(writeKey2) > 0,
-            "RNG-04b R2: Write-key queue must have entries after purchase");
+            "R2: Write-key queue must have entries after purchase");
         assertEq(_queueLength(readKey2), readBefore2,
-            "RNG-04b R2: Read-key queue must be unchanged");
+            "R2: Read-key queue must be unchanged");
 
         // Both rounds demonstrate write-slot isolation. If ws1 != ws2, we have
         // proven isolation on both physical buffer sides. If ws1 == ws2 (toggled
@@ -2114,7 +2114,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
     /// @notice Verify that daily RNG request is blocked while the read queue still has entries.
     ///         mineFlip must drain the read slot (ticketsFullyProcessed = true) before
-    ///         reaching rngGate. This test buys a large batch, then verifies mineFlip
+    ///         reaching the daily RNG step. This test buys a large batch, then verifies mineFlip
     ///         processes tickets (STAGE_TICKETS_WORKING) instead of requesting RNG.
     function testDailyRngBlockedByReadQueue() public {
         _driveToLevel(2);
@@ -2135,7 +2135,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Read rngLockedFlag before mineFlip (slot 0, offset 19 = bit 152)
         // The daily drain gate (AM:204-219) should process tickets and return
-        // before ever reaching rngGate.
+        // before ever reaching the daily RNG step.
         (bool ok, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         assertTrue(ok, "mineFlip should succeed (STAGE_TICKETS_WORKING)");
 
@@ -2190,7 +2190,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // One mineFlip with the read queue possibly still pending: it works the read queue in
         // stage order and reaches the mid-day request only if the cohort completes. It may also
-        // find nothing to do (threshold, LINK, timing); that is acceptable. The swap decision
+        // find nothing to do (threshold, native floor, timing); that is acceptable. The swap decision
         // is tested in testMidDaySwapSkipped_ReadNotDrained.
         (bool midOk, ) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         midOk;
@@ -2210,7 +2210,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // ==================== Internal Helpers ====================
 
     /// @notice AutoBuy levels fromLevel..toLevel and assert all read-slot and FF queues are zero.
-    /// @dev Covers ZSA-01 (read key autoBuy) and ZSA-02 (FF key autoBuy) requirements.
+    /// @dev Covers read-key autoBuy and FF-key autoBuy.
     ///      Checks the current read key for the queue autoBuy. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
@@ -2227,7 +2227,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
     function _assertZeroStranding(uint24 fromLevel, uint24 toLevel) internal view {
         for (uint24 lvl = fromLevel; lvl <= toLevel; lvl++) {
-            // ZSA-01: read key queue must be empty for processed levels.
+            // read key queue must be empty for processed levels.
             // Since writeSlot may have toggled multiple times since this level was active,
             // check both buffer sides. At least one MUST be zero (the one that was read
             // during processing). If neither is zero, tickets were stranded.
@@ -2235,12 +2235,12 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256 qSlot = _queueLength(lvl | TICKET_SLOT_BIT);
             assertTrue(
                 qPlain == 0 || qSlot == 0,
-                string.concat("ZSA-01: Neither buffer side drained at level ", _uint2str(lvl))
+                string.concat("Neither buffer side drained at level ", _uint2str(lvl))
             );
-            // ZSA-02: FF key queue must be empty for levels in drain range
+            // FF key queue must be empty for levels in drain range
             assertEq(
                 _ffQueueLength(lvl), 0,
-                string.concat("ZSA-02: FF queue not zero at level ", _uint2str(lvl))
+                string.concat("FF queue not zero at level ", _uint2str(lvl))
             );
         }
     }
@@ -2406,7 +2406,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      This replaces the removed per-index word map that tests used to poke.
     function _openWithMiddayWord(address requester, uint256 word) internal {
         uint256 subId = uint256(vm.load(address(game), bytes32(VRF_SUB_ID_SLOT)));
-        mockVRF.fundSubscription(subId, 100e18); // the mid-day path keeps a LINK floor
+        mockVRF.fundSubscription(subId, 100e18); // the mid-day path keeps a native floor
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(requester);
         game.mineRun(0); // the mid-day request: mineFlip is its only door

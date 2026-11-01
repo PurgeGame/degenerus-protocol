@@ -6,7 +6,7 @@ import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameA
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-/// @title AdvanceHarness -- Exposes drain-gate logic and freeze/queue helpers for mineFlip rewrite tests.
+/// @title AdvanceHarness -- Exposes the production ticket-slot swap, pool freeze and queue helpers.
 contract AdvanceHarness is DegenerusGameAdvanceModule, WalletSeed {
     // --- Freeze / Unfreeze ---
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
@@ -78,30 +78,9 @@ contract AdvanceHarness is DegenerusGameAdvanceModule, WalletSeed {
     function exposed_getPendingPools() external view returns (uint128 next, uint128 future) {
         return _getPendingPools();
     }
-
-    /// @dev Simulates the pre-RNG drain gate logic from mineFlip.
-    ///      Returns (shouldBounce, proceeded):
-    ///        - (true, false)  = read slot non-empty, caller should be bounced
-    ///        - (false, true)  = read slot empty or already processed, proceed to do{} block
-    function simulateDrainGate(uint24 purchaseLevel) external returns (bool shouldBounce, bool proceeded) {
-        if (!ticketsFullyProcessed) {
-            uint24 rk = _tqReadKey(purchaseLevel);
-            if (_ticketQueueLength(rk) > 0) {
-                // Read slot has entries -- would call _runProcessTicketBatch and bounce
-                return (true, false);
-            }
-            ticketsFullyProcessed = true;
-        }
-        return (false, true);
-    }
-
-    /// @dev Simulates the in-do{}-block flag set after _runProcessTicketBatch returns finished.
-    function simulateInCycleTicketDone() external {
-        ticketsFullyProcessed = true;
-    }
 }
 
-/// @title AdvanceGameRewriteTest -- Unit tests for ADV-01, ADV-02, ADV-03, and break-path freeze audit (SC-4).
+/// @title AdvanceGameRewriteTest -- Ticket-slot swap and pool freeze/unfreeze transitions.
 contract AdvanceGameRewriteTest is Test {
     AdvanceHarness harness;
     uint24 constant LEVEL = 5;
@@ -116,10 +95,10 @@ contract AdvanceGameRewriteTest is Test {
     }
 
     // =========================================================================
-    // ADV-01: Mid-day path does NOT activate freeze
+    // Mid-day path does NOT activate freeze
     // =========================================================================
 
-    /// @dev Mid-day swap uses _swapTicketSlot (not _swapAndFreeze), so freeze stays false.
+    /// @dev Mid-day swap uses _swapTicketSlot alone (the daily request also runs _freezePool), so freeze stays false.
     function test_midDay_noFreeze() public {
         // Start: ticketWriteSlot = 0, not frozen
         assertFalse(harness.getTicketWriteSlot());
@@ -131,90 +110,17 @@ contract AdvanceGameRewriteTest is Test {
         harness.pushToTicketQueue(wk, address(0xB0B));
         assertEq(harness.getQueueLength(wk), 2);
 
-        // Mid-day swap: uses _swapTicketSlot, NOT _swapAndFreeze
+        // Mid-day swap: uses _swapTicketSlot, NOT the swap-and-freeze pair
         harness.exposed_swapTicketSlot(LEVEL);
 
         // Freeze must NOT be activated
-        assertFalse(harness.getFrozen(), "ADV-01: mid-day swap must not activate freeze");
+        assertFalse(harness.getFrozen(), "mid-day swap must not activate freeze");
         // ticketsFullyProcessed reset by swap
         assertFalse(harness.getTicketsFullyProcessed(), "swap resets ticketsFullyProcessed");
     }
 
     // =========================================================================
-    // ADV-02: Daily drain gate blocks when read slot is non-empty
-    // =========================================================================
-
-    /// @dev When ticketsFullyProcessed == false and read slot has entries, drain gate bounces.
-    function test_dailyDrainGate_blocksWhenReadSlotNonEmpty() public {
-        harness.setTicketsFullyProcessed(false);
-
-        // Push entries to read slot (ticketWriteSlot=0, readKey = LEVEL | BIT)
-        uint24 rk = LEVEL | TICKET_SLOT_BIT;
-        harness.pushToTicketQueue(rk, address(0xA11CE));
-        assertEq(harness.getQueueLength(rk), 1, "read slot should have 1 entry");
-
-        // Drain gate should bounce
-        (bool shouldBounce, bool proceeded) = harness.simulateDrainGate(LEVEL);
-        assertTrue(shouldBounce, "ADV-02: should bounce when read slot non-empty");
-        assertFalse(proceeded, "should not proceed");
-        assertFalse(harness.getTicketsFullyProcessed(), "flag should still be false");
-    }
-
-    // =========================================================================
-    // ADV-02: Daily drain gate proceeds when read slot is empty
-    // =========================================================================
-
-    /// @dev When ticketsFullyProcessed == false and read slot is empty, gate sets flag and proceeds.
-    function test_dailyDrainGate_proceedsWhenReadSlotEmpty() public {
-        harness.setTicketsFullyProcessed(false);
-
-        // Read slot is empty (default)
-        uint24 rk = LEVEL | TICKET_SLOT_BIT;
-        assertEq(harness.getQueueLength(rk), 0, "read slot should be empty");
-
-        // Drain gate should proceed
-        (bool shouldBounce, bool proceeded) = harness.simulateDrainGate(LEVEL);
-        assertFalse(shouldBounce, "should not bounce when read slot empty");
-        assertTrue(proceeded, "should proceed");
-        assertTrue(harness.getTicketsFullyProcessed(), "ADV-02: flag should be true after empty drain");
-    }
-
-    // =========================================================================
-    // ADV-02: Daily drain gate skips when already processed
-    // =========================================================================
-
-    /// @dev When ticketsFullyProcessed == true, drain gate is a no-op.
-    function test_dailyDrainGate_skipsWhenAlreadyProcessed() public {
-        harness.setTicketsFullyProcessed(true);
-
-        // Even with entries in read slot, gate should skip
-        uint24 rk = LEVEL | TICKET_SLOT_BIT;
-        harness.pushToTicketQueue(rk, address(0xA11CE));
-
-        (bool shouldBounce, bool proceeded) = harness.simulateDrainGate(LEVEL);
-        assertFalse(shouldBounce, "should not bounce when already processed");
-        assertTrue(proceeded, "should proceed immediately");
-        assertTrue(harness.getTicketsFullyProcessed(), "flag should remain true");
-    }
-
-    // =========================================================================
-    // ADV-03: ticketsFullyProcessed set before jackpot logic
-    // =========================================================================
-
-    /// @dev After in-cycle ticket batch completes, flag is true before any jackpot/phase logic.
-    function test_ticketsProcessed_setBeforeJackpotLogic() public {
-        harness.setTicketsFullyProcessed(false);
-        assertFalse(harness.getTicketsFullyProcessed());
-
-        // Simulate: _runProcessTicketBatch returned finished inside do{} block
-        harness.simulateInCycleTicketDone();
-
-        assertTrue(harness.getTicketsFullyProcessed(),
-            "ADV-03: ticketsFullyProcessed must be true before jackpot/phase logic");
-    }
-
-    // =========================================================================
-    // SC-4: Break path — RNG requested keeps freeze active
+    // Break path — RNG requested keeps freeze active
     // =========================================================================
 
     /// @dev After _swapAndFreeze, prizePoolFrozen == true (STAGE_RNG_REQUESTED break path).
@@ -224,11 +130,11 @@ contract AdvanceGameRewriteTest is Test {
         harness.exposed_swapAndFreeze(LEVEL);
 
         assertTrue(harness.getFrozen(),
-            "SC-4: freeze must be active after _swapAndFreeze (STAGE_RNG_REQUESTED)");
+            "freeze must be active after _swapAndFreeze (STAGE_RNG_REQUESTED)");
     }
 
     // =========================================================================
-    // SC-4: Break path — purchase daily unfreezes
+    // Break path — purchase daily unfreezes
     // =========================================================================
 
     /// @dev _unfreezePool merges pending into live and clears flag (STAGE_PURCHASE_DAILY).
@@ -240,14 +146,14 @@ contract AdvanceGameRewriteTest is Test {
 
         harness.exposed_unfreezePool();
 
-        assertFalse(harness.getFrozen(), "SC-4: freeze must be cleared after unfreeze (STAGE_PURCHASE_DAILY)");
+        assertFalse(harness.getFrozen(), "freeze must be cleared after unfreeze (STAGE_PURCHASE_DAILY)");
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
         assertEq(next, 1100, "live next should include pending");
         assertEq(future, 2200, "live future should include pending");
     }
 
     // =========================================================================
-    // SC-4: Break path — jackpot phase ended unfreezes
+    // Break path — jackpot phase ended unfreezes
     // =========================================================================
 
     /// @dev _unfreezePool clears freeze at STAGE_JACKPOT_PHASE_ENDED break path.
@@ -259,14 +165,14 @@ contract AdvanceGameRewriteTest is Test {
 
         harness.exposed_unfreezePool();
 
-        assertFalse(harness.getFrozen(), "SC-4: freeze must be cleared at STAGE_JACKPOT_PHASE_ENDED");
+        assertFalse(harness.getFrozen(), "freeze must be cleared at STAGE_JACKPOT_PHASE_ENDED");
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
         assertEq(next, 6500, "live next should absorb all jackpot-day pending");
         assertEq(future, 13000, "live future should absorb all jackpot-day pending");
     }
 
     // =========================================================================
-    // SC-4: Break path — jackpot mid-phase freeze persists
+    // Break path — jackpot mid-phase freeze persists
     // =========================================================================
 
     /// @dev Freeze persists during STAGE_JACKPOT_COIN_TICKETS (no unfreeze call).
@@ -276,7 +182,7 @@ contract AdvanceGameRewriteTest is Test {
 
         // No unfreeze call -- simulates STAGE_JACKPOT_COIN_TICKETS break path
         assertTrue(harness.getFrozen(),
-            "SC-4/FREEZE-04: freeze must persist during mid-jackpot break paths");
+            "freeze must persist during mid-jackpot break paths");
 
         // Pending preserved
         (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();

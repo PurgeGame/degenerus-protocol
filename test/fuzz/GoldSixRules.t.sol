@@ -24,6 +24,9 @@ contract GoldSixHarness is DegenerusGameTicketModule, WalletSeed {
         deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(who);
         return (_walletKey(_traitDeity(trait)), _deityVirtualCount(trait, 100, _seedWallet(who)));
     }
+    function virtualCount(uint8 trait, uint256 len, uint32 deity) external pure returns (uint256) {
+        return _deityVirtualCount(trait, len, deity);
+    }
     function queue(address who, uint32 scaled) external { _queueEntriesScaled(_seedWallet(who), level, scaled); }
     function walletIdOf_g3120(address who) external view returns (uint32) { return _walletIdOf(who); }
     function commit(uint256 word) external {
@@ -162,6 +165,31 @@ contract GoldSixRulesTest is Test {
         (who, count) = h.deity(245, A); // silver six keeps normal deity treatment
         assertEq(who, A);
         assertEq(count, 1);
+    }
+    /// @dev Tiers by color: gold 1 (gold six 0), colors 5-6 len/100 floored at 1,
+    ///      colors 0-4 len/50 floored at 2; no deity, no virtual entries.
+    function testFuzzDeityVirtualCountTiers(uint8 trait, uint256 len, uint32 deity) public view {
+        len = bound(len, 0, 1 << 40);
+        uint256 color = (trait >> 3) & 7;
+        uint256 expected;
+        if (deity == 0 || trait == 253) expected = 0;
+        else if (color == 7) expected = 1;
+        else if (color >= 5) expected = len < 100 ? 1 : len / 100;
+        else expected = len < 100 ? 2 : len / 50;
+        assertEq(h.virtualCount(trait, len, deity), expected);
+    }
+    function testDeityVirtualCountTierEdges() public view {
+        uint8 common = 0;          // color 0
+        uint8 silver = 5 << 3;     // color 5
+        uint8 gold = 7 << 3;       // color 7, symbol 0
+        assertEq(h.virtualCount(common, 0, 1), 2);
+        assertEq(h.virtualCount(common, 149, 1), 2);
+        assertEq(h.virtualCount(common, 150, 1), 3);
+        assertEq(h.virtualCount(silver, 0, 1), 1);
+        assertEq(h.virtualCount(silver, 199, 1), 1);
+        assertEq(h.virtualCount(silver, 200, 1), 2);
+        assertEq(h.virtualCount(gold, 10_000, 1), 1);
+        assertEq(h.virtualCount(common, 10_000, 0), 0);
     }
     function testReplacementAndDailyKeepRates() public pure {
         uint256[8] memory picks;

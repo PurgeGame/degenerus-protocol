@@ -14,12 +14,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         resolve ONLY through the permissionless in-order sweep (`game.mineRun`, rewarded to the CALLER based on the walk-unit work actually done --
 ///         see KeeperFaucetResistance.t.sol and DegeneretteSweep.t.sol for that reward's own
 ///         faucet-safety and equivalence proofs), strictly in queue order. There is no per-id
-///         door: the flat ~1-FLIP "loser" reward, the >=3-successful-resolutions gate,
-///         `BatchAlreadyTaken`, and the zero-resolved `NoWork()` revert this file used to test all
-///         belonged to the removed `game.degeneretteResolve(players, betIds)` keeper-crank helper
-///         and have no replacement (confirmed absent from contracts/ by grep); the later
-///         `resolveDegeneretteBets(index, betIds)` cherry-pick door that superseded it is also
-///         gone, so a caller can no longer choose an arbitrary id list or its ordering -- only
+///         door, so a caller cannot choose an arbitrary id list or its ordering -- only
 ///         how much budget one sweep call spends before the walk stops.
 ///
 ///         What remains meaningful here: the cross-bet payout accumulator

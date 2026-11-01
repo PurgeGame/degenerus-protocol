@@ -34,7 +34,7 @@ contract DegradeDecimatorSealHarness is DegenerusGameDecimatorModule {
     function reserved() external view returns (uint256) { return claimablePool; }
 }
 
-/// @notice Daily-spine degrade (DAILY-3): a Decimator seal the session cannot take hands the pool
+/// @notice Daily-spine degrade: a Decimator seal the session cannot take hands the pool
 ///         back unsealed instead of reverting the last-purchase consolidation. The round keeps its
 ///         entries at phase 0, the pool stays with the caller, no entrant is paid and the RNG
 ///         session is untouched. Run: forge test --match-path test/repro/DegradeDecimatorSeal.t.sol -vv

@@ -41,9 +41,9 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("FLIP", function () {
-    // creditFlip_g317, creditFlipBatch, creditCoin removed from FLIP in Phase 146 ABI cleanup
+    // FLIP has no creditFlip_g317, creditFlipBatch, or creditCoin entry points
 
-    // rollDailyQuest removed from FLIP — moved to DegenerusQuests (v13.0)
+    // rollDailyQuest lives in DegenerusQuests, not FLIP
 
     it("mintForGame_g152734: reverts when called by alice (OnlyGame)", async function () {
       const { coin, alice, bob } = await loadFixture(deployFullProtocol);
@@ -102,8 +102,7 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
     });
 
-    // settleFlipModeChange REMOVED (v46 legacy removal, df4ef365): the flip-mode
-    // settlement entry point no longer exists on Coinflip.
+    // Coinflip has no settleFlipModeChange (flip-mode settlement) entry point.
   });
 
   // ---------------------------------------------------------------------------
@@ -282,8 +281,8 @@ describe("AccessControl", function () {
 
 
 
-    // stakeGameEthToStEth and setLootboxRngThreshold removed from Admin in Phase 146
-    // (now live directly on DegenerusGame with vault-owner access control)
+    // setLootboxRngThreshold is not on Admin; it lives on DegenerusGame with vault-owner
+    // access control. Excess-ETH staking has no external entry point (internal stakeExcessEth step).
   });
 
   // ---------------------------------------------------------------------------
@@ -416,7 +415,7 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
-    // coin.mintForCoinflip removed from FLIP in Phase 146 (merged into mintForGame_g152734)
+    // FLIP has no coin.mintForCoinflip (covered by mintForGame_g152734)
 
     it("coin.vaultMintTo reverts when called by alice (onlyVault → OnlyVault)", async function () {
       const { coin, alice } = await loadFixture(deployFullProtocol);

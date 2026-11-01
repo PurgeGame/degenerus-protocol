@@ -12,9 +12,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @notice mineFlip's human-box stage charges each entry against its gas budget (the caller's
 ///         allowance; each entry is admitted only while the remaining allowance covers its declared
 ///         bound), BREAKS when the next entry would not fit, and leaves `boxCursor` on it so the next
-///         call resumes at the same position. Mutation v78 rewrote both halves of that — never breaking on
-///         the budget, and never stopping the walk mid-cohort (which would carry the cursor past
-///         unopened entries) — and no foundry oracle noticed. Five wallets append one entry each to
+///         call resumes at the same position. A walk that never breaks on the budget, or never stops
+///         mid-cohort, would carry the cursor past unopened entries. Five wallets append one entry each to
 ///         one buffer; a two-step budget settles exactly one entry per call, the cursor alone marks
 ///         them settled (the stored entries never change), and completion waits for the last one.
 contract LootboxBudgetResume is DeployProtocol {

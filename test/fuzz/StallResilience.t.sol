@@ -9,7 +9,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title StallResilience -- Proves VRF stall -> coordinator swap -> resume cycle
-/// @notice Integration test for lootbox opens on a swap-reissued index (TEST-03). A stalled
+/// @notice Integration test for lootbox opens on a swap-reissued index. A stalled
 ///         request's late word finishes the day it was sent for. Gap-day backfill and coinflip
 ///         resolution across gap days no longer exist: a stall creates no logical days.
 contract StallResilience is DeployProtocol {
@@ -33,13 +33,12 @@ contract StallResilience is DeployProtocol {
         _finishReadConsumers();
     }
 
-    /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 34, low bits = LR_INDEX)
-    ///      (post V62 lootbox repack: was 35).
+    /// @dev The physical write-buffer tag (what the lootbox index now is), read through RecyclingState.writeBuffer.
     function _lootboxRngIndex() internal view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Read _lootboxWord(index) from storage (mapping at slot 34, post V62 repack: was 36).
+    /// @dev Read the lootbox word for the buffer `index` through RecyclingState.word (nonzero only for the published read buffer).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         return RecyclingState.word(address(game), index);
     }
@@ -80,7 +79,7 @@ contract StallResilience is DeployProtocol {
         }
     }
 
-    // ── TEST-03: Lootbox open after orphaned index backfill ─────────
+    // ── Lootbox open after orphaned index backfill ─────────
 
     /// @notice Proves the lootbox index reserved by a stalled daily request gets a word once
     ///         the swap-reissued request is answered, and the engine opens the box on that word.

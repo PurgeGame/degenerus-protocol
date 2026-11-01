@@ -117,7 +117,7 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
         return stake + (stake * uint256(r)) / 100;
     }
 
-    /// @dev Carry after a take-profit-0 win (recycle bonus included).
+    /// @dev Stake a carry brings to the next flip it rides: the carry plus its recycle bonus.
     function _roll(uint256 payout) internal pure returns (uint256) {
         return payout + (payout * 75) / 10_000;
     }
@@ -192,7 +192,7 @@ contract CoinflipCarryHindsight is DegenesisDeployProtocol {
         vm.prank(dormant);
         coinflip.claimCoinflips(0, 0);
         _assertCurrent(dormantId, "a settle-only call walks through 93, not to a chosen day");
-        uint256 expected = _roll(_payout(_roll(_payout(STAKE, 92)), 93));
+        uint256 expected = _payout(_roll(_payout(STAKE, 92)), 93);
         vm.prank(dormant);
         uint256 d = coinflip.claimCoinflipCarry(0, type(uint256).max);
         vm.prank(control);

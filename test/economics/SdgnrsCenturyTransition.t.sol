@@ -171,7 +171,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
     }
 
     function testRequestAndRetryDoNotRecycleBeforeCompletion() public {
-        // Completion also drains scheduled table cohorts, whose midday requests need LINK.
+        // Completion also drains scheduled table cohorts, whose midday requests need a funded subscription.
         mockVRF.fundSubscription(1, 1_000 ether);
         _prepareRequest(0);
         // The day-400 fixture must catch up scheduled table maintenance before requesting.

@@ -5,11 +5,11 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FlipRedeemWindow -- regression suite for the FLIP purchase-window gate in
-///        DegenerusGameMintModule._redeemFlipFor.
+///        GamePurchase._redeemFlipFor.
 ///
 /// @notice FLIP redemptions are blocked during an open/stalled purchase phase and allowed only
 ///         once a jackpot is locked in or live, so bonus tickets and prize ETH accrue to real-ETH
-///         buyers. The gate (MintModule:1102-1109): if the window is not open, revert when
+///         buyers. The `_redeemFlipFor` gate (reached through `redeemFlip`): if the window is not open, revert when
 ///         rngLockedFlag is set OR (purchase phase AND nextPrizePool <= _prizePoolTarget(level + 1),
 ///         the plain ratchet raised to a curved multiple of the previous century pool at x00
 ///         purchase levels);

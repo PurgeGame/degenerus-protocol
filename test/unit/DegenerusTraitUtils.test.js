@@ -3,7 +3,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 
 // ---------------------------------------------------------------------------
-// Fixture: deploy the test-only TraitUtilsTester harness (Plan 02 output).
+// Fixture: deploy the test-only TraitUtilsTester harness.
 // The harness exposes weightedColorBucket / traitFromWord / packedTraitsFromSeed
 // as external pure passthroughs to the internal-pure DegenerusTraitUtils library.
 // ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ function rndForScaled(scaled) {
 describe("DegenerusTraitUtils", function () {
 
   // =======================================================================
-  // TRAIT-05: weightedColorBucket boundary cases.
+  // weightedColorBucket boundary cases.
   // 16 assertions over scaled ∈ {0, 63, 64, 127, 128, 191, 192, 223, 224,
   // 239, 240, 247, 248, 253, 254, 255} with expected color tiers
   // {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7}.
@@ -61,7 +61,7 @@ describe("DegenerusTraitUtils", function () {
   });
 
   // =======================================================================
-  // TRAIT-06: traitFromWord bit-slice composition.
+  // traitFromWord bit-slice composition.
   // Proves the low 32 bits drive color (via weightedColorBucket) and the
   // high 32 bits drive symbol (via & 7) — the two axes are disjoint.
   // Output format: (color << 3) | symbol, so result >> 3 == color and
@@ -125,7 +125,7 @@ describe("DegenerusTraitUtils", function () {
   });
 
   // =======================================================================
-  // TRAIT-06: packedTraitsFromSeed byte-layout assertions.
+  // packedTraitsFromSeed byte-layout assertions.
   // Asserts quadrant flags 0/64/128/192 on the four packed bytes and that
   // the result fits in 32 bits.
   // =======================================================================

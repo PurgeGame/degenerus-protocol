@@ -3,7 +3,7 @@ pragma solidity 0.8.38;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // =============================================================================
-// MintModuleDivergenceAcrossSplit.t.sol -- TST-03 (D-TST03-01..03)
+// MintModuleDivergenceAcrossSplit.t.sol
 // -----------------------------------------------------------------------------
 // Caller gas may select WHICH checkpoint a ticket drain stops at, never an
 // OUTCOME. The ticket module materializes an owner's owed entries in solo runs
@@ -153,7 +153,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
             IDegenerusGameTicketModule.runTicketWork_g1150.selector, lvl, gasLimit == 0 ? gasleft() : gasLimit
         );
         (bool ok, bytes memory data) = gasLimit == 0 ? host.call(callData) : host.call{gas: gasLimit}(callData);
-        require(ok, "TST-03: runTicketWork_g1150 reverted");
+        require(ok, "runTicketWork_g1150 reverted");
         MineFlipGas.Result memory r = abi.decode(data, (MineFlipGas.Result));
         (finished, didWork) = (r.done, r.progressed);
     }
@@ -191,7 +191,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         private returns (bytes32 digest, uint256 totalTraits)
     {
         (bool finished,) = _callBatch(host, lvl, 0);
-        assertTrue(finished, "TST-03: one ample-gas call drains the whole cohort");
+        assertTrue(finished, "one ample-gas call drains the whole cohort");
         (digest, totalTraits) = _digestTraitBurnTicketForPlayer(host, lvl, player);
     }
 
@@ -208,19 +208,19 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
             bool didWork;
             (finished, didWork) = _callBatch(host, lvl, gasLimit);
             ++calls;
-            require(calls <= SPLIT_MAX_CALLS, "TST-03: split drive did not finish");
-            assertTrue(finished || didWork, "TST-03: every bounded call advances a checkpoint");
+            require(calls <= SPLIT_MAX_CALLS, "split drive did not finish");
+            assertTrue(finished || didWork, "every bounded call advances a checkpoint");
             if (!finished) {
                 uint32 offset = _soloOffset(host);
-                assertEq(offset % 16, 0, "TST-03: split stops on a 16-aligned checkpoint");
-                assertGt(offset, lastOffset, "TST-03: split checkpoint advances");
+                assertEq(offset % 16, 0, "split stops on a 16-aligned checkpoint");
+                assertGt(offset, lastOffset, "split checkpoint advances");
                 uint32 left = uint32(TicketQueueStorage.owed(host, rk, player) >> 8);
-                assertEq(uint256(left) + offset, owed, "TST-03: checkpoint conserves the owed balance");
+                assertEq(uint256(left) + offset, owed, "checkpoint conserves the owed balance");
                 lastOffset = offset;
             }
         }
-        assertEq(_soloOffset(host), 0, "TST-03: completed drain clears the solo checkpoint");
-        assertEq(TicketQueueStorage.owed(host, rk, player), 0, "TST-03: completed drain clears owed");
+        assertEq(_soloOffset(host), 0, "completed drain clears the solo checkpoint");
+        assertEq(TicketQueueStorage.owed(host, rk, player), 0, "completed drain clears owed");
         (digest, totalTraits) = _digestTraitBurnTicketForPlayer(host, lvl, player);
     }
 
@@ -232,12 +232,12 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != TOPIC_TRAITS_GENERATED) continue;
             (uint256 baseKey, uint32 take) = abi.decode(logs[i].data, (uint256, uint32));
             uint32 start = uint32(baseKey);
-            assertEq(start, next, "TST-03: each run resumes at the persisted checkpoint");
-            assertEq(start % 16, 0, "TST-03: each run starts on a 16-aligned checkpoint");
+            assertEq(start, next, "each run resumes at the persisted checkpoint");
+            assertEq(start % 16, 0, "each run starts on a 16-aligned checkpoint");
             next += take;
             ++runs;
         }
-        assertEq(next, owed, "TST-03: runs cover the owed balance exactly once");
+        assertEq(next, owed, "runs cover the owed balance exactly once");
     }
 
     /// @dev Seed once, snapshot, run both paths from the identical pre-state.
@@ -260,10 +260,10 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         emit log_named_uint("tst03_split_runs", runsB);
         emit log_named_uint("tst03_split_calls", callsB);
         // Contiguous reference: full TICKET_SOLO_MAX_ENTRIES (32) runs plus one tail run.
-        assertEq(runsA, (uint256(owed) + 31) / 32, "TST-03: contiguous path uses full 32-entry runs");
+        assertEq(runsA, (uint256(owed) + 31) / 32, "contiguous path uses full 32-entry runs");
         // A real split: more checkpoints than the contiguous path, across several calls.
-        assertGt(runsB, runsA, "TST-03: bounded gas must split the cohort at more checkpoints");
-        assertGt(callsB, 1, "TST-03: the split spans several worker calls");
+        assertGt(runsB, runsA, "bounded gas must split the cohort at more checkpoints");
+        assertGt(callsB, 1, "the split spans several worker calls");
     }
 
     // =========================================================================
@@ -277,14 +277,14 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         (bytes32 digestA, uint256 totalA, bytes32 digestB, uint256 totalB,) =
             _crossPath(player, ANCHOR_OWED, DETERMINISTIC_ENTROPY, 0);
 
-        // Non-vacuity guard (threat T-336-05-02): both paths credit the full owed allotment.
-        assertEq(totalA, uint256(ANCHOR_OWED), "TST-03 anchor: Path A must credit owed=300 traits in total (non-vacuity)");
-        assertEq(totalB, uint256(ANCHOR_OWED), "TST-03 anchor: Path B must credit owed=300 traits in total (non-vacuity)");
+        // Non-vacuity guard: both paths credit the full owed allotment.
+        assertEq(totalA, uint256(ANCHOR_OWED), "anchor: Path A must credit owed=300 traits in total (non-vacuity)");
+        assertEq(totalB, uint256(ANCHOR_OWED), "anchor: Path B must credit owed=300 traits in total (non-vacuity)");
 
         assertEq(
             digestA,
             digestB,
-            "TST-03 D-TST03-02: byte-identical trait derivation across gas-selected checkpoint splits"
+            "byte-identical trait derivation across gas-selected checkpoint splits"
         );
     }
 
@@ -303,13 +303,13 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         (bytes32 digestA, uint256 totalA, bytes32 digestB, uint256 totalB,) =
             _crossPath(player, owed, entropy, owed);
 
-        assertEq(totalA, uint256(owed), "TST-03 boundary fuzz: Path A must credit the fuzzed owed in total (non-vacuity)");
-        assertEq(totalB, uint256(owed), "TST-03 boundary fuzz: Path B must credit the fuzzed owed in total (non-vacuity)");
+        assertEq(totalA, uint256(owed), "boundary fuzz: Path A must credit the fuzzed owed in total (non-vacuity)");
+        assertEq(totalB, uint256(owed), "boundary fuzz: Path B must credit the fuzzed owed in total (non-vacuity)");
 
         assertEq(
             digestA,
             digestB,
-            "TST-03 D-TST03-01: byte-identical trait derivation across budget-slice splits (boundary fuzz)"
+            "byte-identical trait derivation across budget-slice splits (boundary fuzz)"
         );
     }
 }

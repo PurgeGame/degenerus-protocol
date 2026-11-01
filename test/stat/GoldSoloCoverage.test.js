@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 261 STAT-04 (gold coverage 100% on >=1-gold draws) + STAT-05 (multi-gold tie-break uniformity).
-// Tester-driven loops — production bytes invoked per sample (D-03 oracle for SOLO-1 helper).
+// Gold coverage (100% on >=1-gold draws) + multi-gold tie-break uniformity.
+// Tester-driven loops — production bytes invoked per sample.
 // Heavy MC — runs ONLY under `npm run test:stat`. Mirrors test/unit/JackpotSoloPicker.test.js
-// SOLO-08(c) shape, scaled to 100K samples per goldCount + adds the explicit >=1-gold
+// "multi-gold uniform distribution" shape, scaled to 100K samples per goldCount + adds the explicit >=1-gold
 // coverage record over a randomly-distributed goldCount sweep.
 //
 // ---------------------------------------------------------------------------
 // Architecture:
 //
-//   STAT-04 uses jsWeightedColorBucket (replicated inline, drift-guarded by
-//   Plan 01 D-03 boundary harness) to draw heavy-tail color bytes for each
+//   The coverage test uses jsWeightedColorBucket (replicated inline, drift-guarded by
+//   the boundary harness) to draw heavy-tail color bytes for each
 //   of the 4 quadrants. The draw is conditioned on >=1 gold (color==7) by
 //   resampling the entire colors[4] array on no-gold draws — this matches
-//   the STAT-04 wording ("over 100K draws with >=1 gold ... returns a gold
+//   the coverage claim ("over 100K draws with >=1 gold ... returns a gold
 //   quadrant in 100% of cases"). Each sample then calls the production
 //   pickSoloQuadrant(traits, entropy) via JackpotSoloTester and asserts the
 //   chosen quadrant carries color 7.
 //
-//   STAT-05 fixes goldCount ∈ {2, 3, 4} per case and asserts uniform
+//   The tie-break test fixes goldCount ∈ {2, 3, 4} per case and asserts uniform
 //   distribution over the gold quadrants via chi-squared at df = goldCount-1.
-//   Same shape as test/unit/JackpotSoloPicker.test.js SOLO-08(c) but
-//   PROMOTED to a STAT record with distinct seeds (`0xC010_0050 ^ goldCount`)
+//   Same shape as test/unit/JackpotSoloPicker.test.js (multi-gold uniform distribution) but
+//   with distinct seeds (`0xC010_0050 ^ goldCount`)
 //   and 100K samples per goldCount.
 // ---------------------------------------------------------------------------
 
@@ -52,7 +52,7 @@ function makeRng(seed) {
 }
 
 // JS replica of DegenerusTraitUtils.weightedColorBucket(uint32 rnd).
-// Drift guard: Plan 01 D-03 boundary harness asserts equality with the
+// Drift guard: the boundary harness asserts equality with the
 // production tester at every threshold edge (scaled ∈ {0, 63, 64, ..., 254,
 // 255}). If this replica drifts from the production thresholds, the boundary
 // harness FAILS FIRST.
@@ -69,23 +69,23 @@ function jsWeightedColorBucket(rnd) {
 }
 
 // Critical chi-squared values at alpha = 0.05 keyed by df.
-// STAT-05 uses df = goldCount - 1 ∈ {1, 2, 3} → {3.841, 5.991, 7.815}.
+// The tie-break test uses df = goldCount - 1 ∈ {1, 2, 3} → {3.841, 5.991, 7.815}.
 const CHI2_CRIT_05 = { 1: 3.841, 2: 5.991, 3: 7.815, 4: 9.488, 5: 11.070, 6: 12.592, 7: 14.067 };
 
 // ===========================================================================
-// STAT-04 — 100% gold coverage on >=1-gold draws.
+// Gold coverage — 100% on >=1-gold draws.
 // Over 100K random colors[4] arrays (heavy-tail sampled, conditioned on
 // >=1 gold) and random entropies, pickSoloQuadrant always returns a
 // quadrant whose trait carries color==7.
 // ===========================================================================
 
-describe("STAT-04 — 100% gold coverage on >=1-gold draws", function () {
+describe("100% gold coverage on >=1-gold draws", function () {
   this.timeout(300000); // 5 min budget — 100K tester calls
 
   it("over 100K random >=1-gold trait arrays + random entropies, pickSoloQuadrant always returns a gold (color==7) quadrant", async function () {
     const { tester } = await loadFixture(deployTester);
     const SAMPLES = 100_000;
-    // Distinct per-test seed (D-13 reproducibility). Hex literal 0xC010_0004.
+    // Distinct per-test seed (reproducibility). Hex literal 0xC010_0004.
     const rng = makeRng(0xC010_0004);
 
     let goldDraws = 0;
@@ -98,7 +98,7 @@ describe("STAT-04 — 100% gold coverage on >=1-gold draws", function () {
       const entropy = rng();
 
       // Sample 4 colors via heavy-tail. Resample the whole array if zero gold —
-      // the STAT-04 wording conditions on >=1 gold, not on a Bernoulli(1/128)
+      // the coverage claim conditions on >=1 gold, not on a Bernoulli(1/128)
       // marginal hit per quadrant, so resampling preserves the conditional
       // distribution unbiased.
       let colors;
@@ -123,7 +123,7 @@ describe("STAT-04 — 100% gold coverage on >=1-gold draws", function () {
 
       if (chosenColor !== 7) {
         throw new Error(
-          `STAT-04 failure at i=${i}: colors=[${colors.join(",")}] ` +
+          `failure at i=${i}: colors=[${colors.join(",")}] ` +
           `entropy=0x${entropy.toString(16)} chosenQuadrant=${chosenQuadrant} ` +
           `chosenColor=${chosenColor}`
         );
@@ -135,7 +135,7 @@ describe("STAT-04 — 100% gold coverage on >=1-gold draws", function () {
     // all SAMPLES draws hit a gold quadrant.
     expect(goldDraws).to.equal(SAMPLES);
     console.log(
-      `  STAT-04: ${SAMPLES} >=1-gold draws, gold-quadrant hit rate 100% ` +
+      `  ${SAMPLES} >=1-gold draws, gold-quadrant hit rate 100% ` +
       `(goldCount histogram: 1→${goldCountHistogram[1]} 2→${goldCountHistogram[2]} ` +
       `3→${goldCountHistogram[3]} 4→${goldCountHistogram[4]})`
     );
@@ -143,14 +143,14 @@ describe("STAT-04 — 100% gold coverage on >=1-gold draws", function () {
 });
 
 // ===========================================================================
-// STAT-05 — tie-break uniformity over 100K samples per goldCount ∈ {2, 3, 4}.
+// Tie-break uniformity over 100K samples per goldCount ∈ {2, 3, 4}.
 // For each goldCount, fix a colors[4] array placing gold in known positions
 // and sample 100K random entropies. Bucket the returned quadrant indices
 // by their position in goldQuads. Chi-squared at df = goldCount - 1 vs
 // uniform expected = SAMPLES / goldCount.
 // ===========================================================================
 
-describe("STAT-05 — tie-break uniformity over 100K samples per goldCount ∈ {2, 3, 4}", function () {
+describe("tie-break uniformity over 100K samples per goldCount ∈ {2, 3, 4}", function () {
   this.timeout(300000); // 5 min budget for the 3 sweeps in series
 
   // Fixtures — colors[4] with the listed quadrants carrying color 7.
@@ -166,7 +166,7 @@ describe("STAT-05 — tie-break uniformity over 100K samples per goldCount ∈ {
       const traits = traitsByColors(colors);
       const SAMPLES = 100_000;
       const counts = new Array(goldCount).fill(0);
-      // Distinct per-goldCount seed (D-13 reproducibility).
+      // Distinct per-goldCount seed (reproducibility).
       const rng = makeRng(0xC010_0050 ^ goldCount);
 
       for (let i = 0; i < SAMPLES; i++) {
@@ -175,7 +175,7 @@ describe("STAT-05 — tie-break uniformity over 100K samples per goldCount ∈ {
         const idx = goldQuads.indexOf(Number(result));
         if (idx < 0) {
           throw new Error(
-            `STAT-05 (goldCount=${goldCount}) returned non-gold quadrant ${result} ` +
+            `(goldCount=${goldCount}) returned non-gold quadrant ${result} ` +
             `for entropy=0x${entropy.toString(16)} colors=[${colors.join(",")}]`
           );
         }
@@ -191,12 +191,12 @@ describe("STAT-05 — tie-break uniformity over 100K samples per goldCount ∈ {
       const df = goldCount - 1;
       const crit = CHI2_CRIT_05[df];
       console.log(
-        `  STAT-05 goldCount=${goldCount}: chi²=${chi2.toFixed(3)} (crit=${crit} df=${df}) ` +
+        `  goldCount=${goldCount}: chi²=${chi2.toFixed(3)} (crit=${crit} df=${df}) ` +
         `counts=[${counts.join(",")}]`
       );
       expect(
         chi2,
-        `STAT-05 chi²=${chi2.toFixed(3)} >= ${crit} (df=${df}, goldCount=${goldCount}, counts=[${counts.join(",")}])`,
+        `chi²=${chi2.toFixed(3)} >= ${crit} (df=${df}, goldCount=${goldCount}, counts=[${counts.join(",")}])`,
       ).to.be.lessThan(crit);
     });
   }

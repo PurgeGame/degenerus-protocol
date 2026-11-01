@@ -43,7 +43,6 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///
 /// @dev Scaffold (setUp, slot constants, bet placement, RNG injection) is a faithful copy of
 ///      `DegeneretteResolveRepeg.t.sol`, which in turn copies `DegeneretteFreezeResolution.t.sol`.
-///      CROSS-CITE: .planning/PLAN-FLIP-ROUND-HUNDREDS.md §4.
 contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     // =========================================================================
     // Storage slot constants (confirmed via `forge inspect ... storage`)

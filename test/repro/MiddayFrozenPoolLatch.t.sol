@@ -59,7 +59,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         vm.deal(buyer, 200_000 ether);
         vm.deal(crank, 10 ether);
         vm.deal(lateBuyer, 100 ether);
-        // Clear MIN_LINK_FOR_LOOTBOX_RNG. The admin ctor creates subId 1.
+        // Clear the mid-day native floor. The admin ctor creates subId 1.
         mockVRF.fundSubscription(1, 1_000 ether);
     }
 

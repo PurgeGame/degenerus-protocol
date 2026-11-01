@@ -6,10 +6,10 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 
 // ============================================================================
-// RngLockRotationDeterminism.t.sol -- Phase 313 VTST-03 (proves VRF-03)
+// RngLockRotationDeterminism.t.sol -- freeze-invariant fuzz under VRF rotation
 // ----------------------------------------------------------------------------
-// Freeze-invariant fuzz UNDER ROTATION. Extends the v43 canonical harness
-// test/fuzz/RngLockDeterminism.t.sol (Phase 301): it reuses that harness'
+// Freeze-invariant fuzz UNDER ROTATION. Extends the canonical harness
+// test/fuzz/RngLockDeterminism.t.sol: it reuses that harness'
 // snapshot/revert + byte-identity-digest comparison shape
 // (_snapshotPreLock / _revertToPreLock / _assertVrfOutputByteIdentity) and the
 // perturbation discipline, applied here to the ROTATION perturbation.
@@ -27,17 +27,12 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 //     rotation.
 //   assertEq(digestA, digestB).
 //
-// Admin rotation is EXEMPT-class vs PLAYERS per v45-vrf-freeze-invariant
-// (311-SPEC section 3): the abandoned old word never enters any digest; the
+// Admin rotation is EXEMPT-class vs PLAYERS: the abandoned old word never enters any digest; the
 // re-issued word is the only word consumed this cycle. rotSeed fuzzes the
 // rotation newKeyHash/newSubId, which the freeze invariant requires NOT to
 // affect the VRF-derived output -- so any digest drift is a real violation.
 //
-// This is an ADDITIVE new file. It does NOT modify the v43 harness
-// test/fuzz/RngLockDeterminism.t.sol (plan 313-06 confirms that file PASSES).
-//
-// AGENT-COMMITTED test-tree commit per D-43N-TEST-COMMITS-AUTO-01.
-// ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01.
+// This file does not modify the harness test/fuzz/RngLockDeterminism.t.sol.
 // ============================================================================
 
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -48,7 +43,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title RngLockRotationDeterminism -- VTST-03 freeze-invariant fuzz under rotation.
+/// @title RngLockRotationDeterminism -- freeze-invariant fuzz under rotation.
 /// @notice Asserts byte-identical VRF-derived outputs between a rotation-perturbed
 ///         run and a no-rotation baseline given the SAME delivered VRF word.
 contract RngLockRotationDeterminism is DeployProtocol {
@@ -56,13 +51,13 @@ contract RngLockRotationDeterminism is DeployProtocol {
     // ────────────────────────────────────────────────────────────────────
     // Storage-slot constants (authoritative per `forge inspect DegenerusGame
     // storage-layout` -- slots 37/38, NOT the drifted 38/39 analog in
-    // LootboxRngLifecycle.t.sol). Mirrors the v43 RngLockDeterminism.t.sol
-    // header + VrfRotationLiveness.t.sol (313-02) slot constants.
+    // LootboxRngLifecycle.t.sol). Mirrors the RngLockDeterminism.t.sol
+    // header + VrfRotationLiveness.t.sol slot constants.
     // ────────────────────────────────────────────────────────────────────
     uint256 private constant SLOT_PACKED_0 = 0;
     uint256 private constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
-    uint256 private constant SLOT_LOOTBOX_RNG_INDEX = GameSlots.LOOTBOX_RNG_PACKED;          // post Stage B Game pack: was 35
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = GameSlots.RNG_DAY_TAGS;  // post Stage B Game pack: was 36
+    uint256 private constant SLOT_LOOTBOX_RNG_INDEX = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = GameSlots.RNG_DAY_TAGS;
 
     /// @dev Last VRF request id fulfilled on the ACTIVE coordinator; avoids
     ///      double-fulfil when the game reuses a stale rngWordCurrent across
@@ -83,9 +78,9 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Shared helpers -- ported VERBATIM (semantics) from the v43 harness
+    // Shared helpers -- ported VERBATIM (semantics) from the harness
     // RngLockDeterminism.t.sol (they are file-local there, so they cannot be
-    // imported) plus the 313-02 active-coordinator + NotTimeYet discipline.
+    // imported) plus the active-coordinator + NotTimeYet discipline.
     // ────────────────────────────────────────────────────────────────────
 
     /// @dev Resolve the active coordinator (deploy-time mockVRF before any rotation).
@@ -171,7 +166,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     /// @dev Advance state to a daily VRF-request boundary on the ACTIVE
-    ///      coordinator. Mirrors the v43 _advanceToVrfRequestBoundary, but uses
+    ///      coordinator. Mirrors _advanceToVrfRequestBoundary in RngLockDeterminism, but uses
     ///      _advanceTolerant + _coord so it works pre- and post-rotation.
     function _advanceToVrfRequestBoundary() internal returns (uint256 reqId) {
         vm.warp(block.timestamp + 1 days);
@@ -184,7 +179,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     /// @dev Fulfil `word` on the ACTIVE coordinator's `reqId` (if not already
-    ///      fulfilled), then drain the lock window. Mirrors the v43 _deliverMockVrf.
+    ///      fulfilled), then drain the lock window. Mirrors _deliverMockVrf in RngLockDeterminism.
     function _assertPreferredBoardFrozen() private {
         if (!game.rngLocked()) return;
         vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
@@ -232,7 +227,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Rotation-perturbation helpers (this file's specialization of the v43
+    // Rotation-perturbation helpers (this file's specialization of the
     // perturbation library: the perturbation IS the emergency rotation).
     // ────────────────────────────────────────────────────────────────────
 
@@ -272,7 +267,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
 
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224,
     ///      mask 0xFF) -- the mid-day-in-flight flag updateVrfCoordinatorAndSub
-    ///      reads at :1726 to take the mid-day re-issue branch.
+    ///      reads to take the mid-day re-issue branch.
     uint256 private constant LR_MID_DAY_BIT = 224;
 
     function _readMidDayFlag() internal view returns (uint256) {
@@ -284,7 +279,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///      request (mineFlip's RequestMidday stage) succeeds AND its buffer swap sets LR_MID_DAY=1:
     ///      complete two days so today's daily RNG is recorded, make a lootbox
     ///      purchase (pending ETH + a ticket-queue entry), fund the VRF
-    ///      subscription. Mirrors VrfRotationLiveness.t.sol (313-02) +
+    ///      subscription. Mirrors VrfRotationLiveness.t.sol +
     ///      LootboxRngLifecycle.t.sol _setupForMidDayRng.
     /// @dev The mid-day request through mineFlip, its only door. False (and no call) when the
     ///      request is not the engine's next action, so a run can be filtered.
@@ -352,7 +347,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Task 1: daily-branch rotation byte-identity (VTST-03 / VRF-03)
+    // Daily-branch rotation byte-identity
     // ══════════════════════════════════════════════════════════════════════
 
     /// @notice Daily branch: a coordinator rotation injected between a daily VRF
@@ -380,13 +375,13 @@ contract RngLockRotationDeterminism is DeployProtocol {
         _advanceTolerant();
         // Filter iterations where the daily request did not engage (e.g. the day
         // boundary produced no VRF request). Keeps the byte-identity assertion on
-        // the reachable common case (matches the v43 harness vm.assume filters).
+        // the reachable common case (matches the harness vm.assume filters).
         if (!game.rngLocked() || mockVRF.lastRequestId() == 0) {
             vm.assume(false);
         }
         if (_readRngWordCurrent() != 0) {
             // Daily word already delivered: the rngWordCurrent!=0 short-circuit
-            // would skip re-issue (covered by 313-02 liveness); not this digest's case.
+            // would skip re-issue (covered by the liveness test); not this digest's case.
             vm.assume(false);
         }
 
@@ -397,7 +392,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         _assertPreferredBoardFrozen();
         uint256 reissueReqId = newVRF.lastRequestId();
         // The re-issue must exist on the NEW coordinator -- deliver on it, NOT the
-        // abandoned old request (which the :1793 requestId guard rejects).
+        // abandoned old request (which the requestId guard rejects).
         if (reissueReqId == 0) {
             vm.assume(false);
         }
@@ -419,12 +414,12 @@ contract RngLockRotationDeterminism is DeployProtocol {
         _assertVrfOutputByteIdentity(
             digestA,
             digestB,
-            "Rotation daily byte-identity VTST-03 VRF-03"
+            "Rotation daily byte-identity"
         );
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Task 2: mid-day-branch rotation byte-identity (LR_INDEX frozen)
+    // Mid-day-branch rotation byte-identity (LR_INDEX frozen)
     // ══════════════════════════════════════════════════════════════════════
 
     /// @notice Mid-day branch (LR_MID_DAY==1): a coordinator rotation injected
@@ -433,7 +428,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///         reserved index N (LR_INDEX frozen across the window). Run A fires
     ///         the mid-day request via mineFlip, rotates mid-flight, and delivers vrfWord on the
     ///         NEW coordinator (the re-issued mid-day request lands in the
-    ///         preserved slot N via the :1804 mid-day write); Run B fires
+    ///         preserved slot N via the mid-day write); Run B fires
     ///         the same request and delivers the SAME vrfWord on the ORIGINAL
     ///         coordinator with no rotation. The reserved index N is identical
     ///         across runs and _lootboxWord(N) (== vrfWord) is
@@ -459,7 +454,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         }
         if (_readMidDayFlag() != 1) {
             // The request did not set the mid-day flag (preconditions not
-            // met for this iteration) -- filter, mirroring the v43 harness filters.
+            // met for this iteration) -- filter, mirroring the harness filters.
             vm.assume(false);
         }
         uint48 reservedIndexA = (_readLootboxRngIndex() ^ 1);
@@ -469,8 +464,8 @@ contract RngLockRotationDeterminism is DeployProtocol {
         }
 
         // Rotate while the mid-day request is in flight: the LR_MID_DAY==1 branch
-        // (:1726) re-issues on the new coordinator and PRESERVES LR_INDEX so the
-        // new word lands in the SAME reserved slot N (:1804).
+        // re-issues on the new coordinator and PRESERVES LR_INDEX so the
+        // new word lands in the SAME reserved slot N.
         _assertPreferredBoardFrozen();
         MockVRFCoordinator newVRF = _rotateMidWindow(rotSeed);
         _assertPreferredBoardFrozen();
@@ -486,7 +481,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         );
 
         // Deliver the SAME vrfWord on the NEW coordinator's re-issued request
-        // (NOT the abandoned old request, which the :1793 requestId guard rejects).
+        // (NOT the abandoned old request, which the requestId guard rejects).
         newVRF.fulfillRandomWords(reissueReqId, vrfWord);
         // The callback stores the word; advance publishes it before consumers run.
         assertEq(_readRngWordCurrent(), vrfWord, "rotation callback preserves the delivered word");
@@ -535,7 +530,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         _assertVrfOutputByteIdentity(
             digestA,
             digestB,
-            "Rotation mid-day byte-identity VTST-03 VRF-03"
+            "Rotation mid-day byte-identity"
         );
     }
 }

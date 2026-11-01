@@ -7,8 +7,8 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DeployCanary -- Validates every protocol and mock address against the patched constants
 /// @notice If any assertion fails, the nonce prediction or deploy order is wrong.
-/// @dev v55.0: the standalone AfKing was dissolved into DegenerusGame (GameAfkingModule);
-///      this canary now guards that the two new game-resident delegatecall modules land at
+/// @dev AfKing lives inside DegenerusGame (GameAfkingModule); this canary guards that the
+///      two game-resident bingo/afking delegatecall modules land at
 ///      their ContractAddresses constants. A deploy-order drift surfaces here as a LOUD
 ///      assertEq failure, not a silent delegatecall mis-dispatch (the GAME_AFKING_MODULE /
 ///      GAME_BINGO_MODULE compile-time constants the DegenerusGame stubs delegatecall into).
@@ -30,7 +30,7 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(lootboxModule), ContractAddresses.GAME_LOOTBOX_MODULE, "GAME_LOOTBOX_MODULE mismatch");
         assertEq(address(boonModule), ContractAddresses.GAME_BOON_MODULE, "GAME_BOON_MODULE mismatch");
         assertEq(address(degeneretteModule), ContractAddresses.GAME_DEGENERETTE_MODULE, "GAME_DEGENERETTE_MODULE mismatch");
-        // v55.0 game-resident modules (deploy nonce N+10 / N+11, right after degenerette):
+        // Game-resident modules (deploy nonce N+10 / N+11, right after degenerette):
         assertEq(address(bingoModule), ContractAddresses.GAME_BINGO_MODULE, "GAME_BINGO_MODULE mismatch");
         assertEq(address(afkingModule), ContractAddresses.GAME_AFKING_MODULE, "GAME_AFKING_MODULE mismatch");
         assertEq(address(coin), ContractAddresses.COIN, "COIN mismatch");

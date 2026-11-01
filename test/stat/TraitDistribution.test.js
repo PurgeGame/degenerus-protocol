@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 261 STAT-01/02/03 + D-03 boundary cross-validation harness.
+// Trait distribution statistics (color frequency, color x symbol independence, symbol
+// uniformity) plus a boundary cross-validation harness.
 // Heavy Monte Carlo — runs ONLY under `npm run test:stat` (NOT default `npm test`).
 // Deterministic seeded keccak-counter PRNG; reproducibility = exact replay on failure.
 //
 // ---------------------------------------------------------------------------
-// Architecture (D-03 hybrid oracle):
+// Architecture (hybrid oracle):
 //
 //   - The 1M-sample loops use `jsWeightedColorBucket`, a JS replica of
 //     `DegenerusTraitUtils.weightedColorBucket(uint32)`. A JS replica is
@@ -13,7 +14,7 @@
 //     suite from minutes into hours.
 //
 //   - The drift guard against the JS replica getting out of sync with the
-//     production thresholds is the D-03 boundary cross-validation harness:
+//     production thresholds is the boundary cross-validation harness:
 //     16 `it` blocks at every threshold edge in the production library
 //     (scaled ∈ {0, 63, 64, 127, 128, 191, 192, 223, 224, 239, 240, 247,
 //     248, 253, 254, 255}) assert `js == onChain == expected`. JS-replica
@@ -56,7 +57,7 @@ function makeRng(seed) {
 }
 
 // JS replica of DegenerusTraitUtils.weightedColorBucket(uint32 rnd).
-// Drift guard: D-03 boundary harness asserts equality with the production tester
+// Drift guard: the boundary harness asserts equality with the production tester
 // at every threshold value scaled ∈ {0, 63, 64, ..., 254, 255}. If this replica
 // drifts from the production thresholds, the boundary harness FAILS FIRST
 // — the bulk MC loops downstream cannot be wrong without the boundary harness
@@ -82,8 +83,8 @@ function jsSymbol(rnd64) {
 
 // Chi-squared critical values at alpha = 0.05, extended from
 // test/unit/JackpotSoloPicker.test.js (which only covered df 1..3).
-// STAT-01 / STAT-03 use df=7 (8 buckets - 1).
-// STAT-02 (color × symbol joint independence) uses df=49 — see jointChi2 below.
+// The color-frequency and symbol-uniformity tests use df=7 (8 buckets - 1).
+// The joint-independence test (color × symbol) uses df=49 — see jointChi2 below.
 const CHI2_CRIT_05 = {
   1: 3.841,  2: 5.991,  3: 7.815,  4: 9.488,
   5: 11.070, 6: 12.592, 7: 14.067,
@@ -100,18 +101,18 @@ function wilsonHilfertyZ(chi2, df) {
 }
 
 // ===========================================================================
-// STAT-01 — color frequency over 1M samples.
+// Color frequency over 1M samples.
 // Empirical chi-squared + per-bucket 3-sigma binomial bounds + ±0.1% absolute
 // tolerance against analytical heavy-tail spec
 // [25.000%, 25.000%, 25.000%, 12.500%, 6.250%, 3.125%, 2.344%, 0.781%].
 // ===========================================================================
 
-describe("STAT-01 — color frequency over 1M samples", function () {
+describe("color frequency over 1M samples", function () {
   this.timeout(180000);
 
   it("color buckets fall within 3-sigma binomial bounds at N=1_000_000", function () {
     const N = 1_000_000;
-    // Seed 0xC010_0001 — distinct per-test seed (D-03 reproducibility note).
+    // Seed 0xC010_0001 — distinct per-test seed for reproducibility.
     const rng = makeRng(0xC010_0001);
     const counts = new Array(8).fill(0);
 
@@ -148,24 +149,24 @@ describe("STAT-01 — color frequency over 1M samples", function () {
     }
     expect(
       chi2 < CHI2_CRIT_05[7],
-      `STAT-01 chi² = ${chi2.toFixed(3)} >= ${CHI2_CRIT_05[7]} (df=7) (counts=[${counts.join(",")}])`,
+      `chi² = ${chi2.toFixed(3)} >= ${CHI2_CRIT_05[7]} (df=7) (counts=[${counts.join(",")}])`,
     ).to.be.true;
   });
 });
 
 // ===========================================================================
-// STAT-02 — color × symbol joint independence over 1M samples.
+// Color × symbol joint independence over 1M samples.
 // Asserts that the color tier (low-32-bit-derived) and the symbol (high-32-bit
 // 3-bit slice) are statistically independent at alpha=0.05 via chi-squared
 // test of independence. df = (8-1)*(8-1) = 49 → Wilson-Hilferty Z one-sided.
 // ===========================================================================
 
-describe("STAT-02 — color × symbol joint independence over 1M samples", function () {
+describe("color × symbol joint independence over 1M samples", function () {
   this.timeout(240000);
 
   it("joint (color, symbol) chi² does not reject independence at alpha=0.05 (Wilson-Hilferty Z < 1.645)", function () {
     const N = 1_000_000;
-    // Seed 0xC010_0002 — distinct from STAT-01 to avoid sequence reuse.
+    // Seed 0xC010_0002 — distinct from the color-frequency seed to avoid sequence reuse.
     const rng = makeRng(0xC010_0002);
 
     const joint = Array.from({ length: 8 }, () => new Array(8).fill(0));
@@ -196,23 +197,23 @@ describe("STAT-02 — color × symbol joint independence over 1M samples", funct
     const z = wilsonHilfertyZ(chi2, 49);
     expect(
       z < 1.645,
-      `STAT-02 chi² = ${chi2.toFixed(3)}, Wilson-Hilferty Z = ${z.toFixed(3)} >= 1.645 (df=49)`,
+      `chi² = ${chi2.toFixed(3)}, Wilson-Hilferty Z = ${z.toFixed(3)} >= 1.645 (df=49)`,
     ).to.be.true;
   });
 });
 
 // ===========================================================================
-// STAT-03 — symbol uniformity over 1M samples.
+// Symbol uniformity over 1M samples.
 // Asserts that the symbol bits (uint8(rnd >> 32) & 7) are uniformly
 // distributed across the 8 symbol values via chi-squared at df=7.
 // ===========================================================================
 
-describe("STAT-03 — symbol uniformity over 1M samples", function () {
+describe("symbol uniformity over 1M samples", function () {
   this.timeout(180000);
 
   it("symbol distribution is uniform across 8 values (chi² < 14.067 at df=7)", function () {
     const N = 1_000_000;
-    // Seed 0xC010_0003 — distinct from STAT-01 / STAT-02.
+    // Seed 0xC010_0003 — distinct from the other two seeds.
     const rng = makeRng(0xC010_0003);
     const symCounts = new Array(8).fill(0);
 
@@ -231,13 +232,13 @@ describe("STAT-03 — symbol uniformity over 1M samples", function () {
 
     expect(
       chi2 < CHI2_CRIT_05[7],
-      `STAT-03 chi² = ${chi2.toFixed(3)} >= ${CHI2_CRIT_05[7]} (df=7) (counts=[${symCounts.join(",")}])`,
+      `chi² = ${chi2.toFixed(3)} >= ${CHI2_CRIT_05[7]} (df=7) (counts=[${symCounts.join(",")}])`,
     ).to.be.true;
   });
 });
 
 // ===========================================================================
-// D-03 — boundary cross-validation: JS-replica vs production tester.
+// Boundary cross-validation: JS-replica vs production tester.
 // 16 `it` blocks (one per boundary edge) assert that `jsWeightedColorBucket`
 // and `TraitUtilsTester.weightedColorBucket` both return the analytically-
 // expected color tier at every threshold value. This is the structural drift
@@ -245,7 +246,7 @@ describe("STAT-03 — symbol uniformity over 1M samples", function () {
 // the production thresholds, every affected boundary `it` fails first.
 // ===========================================================================
 
-describe("D-03 — boundary cross-validation: JS-replica vs production tester", function () {
+describe("boundary cross-validation: JS-replica vs production tester", function () {
   const BOUNDARIES = [
     [0, 0], [63, 0], [64, 1], [127, 1], [128, 2], [191, 2],
     [192, 3], [223, 3], [224, 4], [239, 4], [240, 5], [247, 5],

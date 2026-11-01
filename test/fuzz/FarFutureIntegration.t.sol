@@ -16,11 +16,11 @@ contract FFKeyComputer is DegenerusGameStorage {
     }
 }
 
-/// @title FarFutureIntegrationTest -- TEST-05: Multi-level lifecycle proving zero FF ticket stranding
+/// @title FarFutureIntegrationTest -- Multi-level lifecycle proving zero FF ticket stranding
 /// @notice Deploys the full 23-contract protocol via DeployProtocol, drives the game through
 ///         level transitions past level 8 (where constructor-deposited FF entries exist), and
-///         verifies that mineFlip's internal (private) `_processFutureTicketBatch` drains FF
-///         queues via `runTicketWork_g1150`'s lastPurchaseDay continuation.
+///         verifies that `runTicketWork_g1150` (`_drainQueue`) drains FF
+///         queues after the lastPurchaseDay latch.
 ///
 ///         The constructor pre-queues 16 sDGNRS + 16 vault tickets for levels 1-100.
 ///         At construction time (level=0), `_mintCeiling()` = level+1 = 1, so only level 1 is
@@ -29,8 +29,8 @@ contract FFKeyComputer is DegenerusGameStorage {
 ///         those levels. Unlike the near-window read side (which sweeps a live range every
 ///         advance), the far-future pool for level L+2 mints only once, one level at a time,
 ///         inside the sweep that follows level L's lastPurchaseDay latch — there is no
-///         standalone "process levels L+2..L+5" sweep function; `_processFutureTicketBatch` is
-///         private and reachable only through that continuation.
+///         standalone "process levels L+2..L+5" sweep function; the far-future queue is
+///         drained only through `runTicketWork_g1150`.
 ///
 ///         Key assertions:
 ///         1. Constructor pre-queues 2 unique addresses in FF key at levels 2+ (sDGNRS + VAULT)

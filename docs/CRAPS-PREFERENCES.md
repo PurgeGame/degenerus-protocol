@@ -120,7 +120,8 @@ level's ticket price, with a floor of 150,000 FLIP at levels 0–1 and 50,000 th
 gross allocation is `Added = floor(A * P / 8000)`. Its original floor is applied only to `A`.
 
 The request funds `floor(Added / 20)` into the high-roller reserve once and fixes `awardTarget =
-min(floor(A / 10000), 500)`. Awarded seats are part of this funding, not another payment on top.
+min(floor(A / 10000), 500)`, further capped so paid plus awarded seats fit the 32-bit entrant
+lane. Awarded seats are part of this funding, not another payment on top.
 Their target does not depend on either hidden roll or paid turnout. Warm-up/skipped-day detached
 rounds use the neutral price 8,000.
 

@@ -11,11 +11,11 @@ import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} fr
 
 /// @title DailyEthTicketLegEntries -- the purchase-phase daily jackpot's ticket leg delivers its figure
 /// @notice The daily ETH phase carves four percent of the future pool into a day slice; 75% of the
-///         slice is the ticket leg, and `_distributePoolBackedTickets` converts HALF of that leg
-///         into entries at the level's price, four per whole ticket, spread with equal entry
-///         counts over at most 96 winners, doubled at 40 and 160 ETH of entry value. Mutation v78 found no foundry assertion of that count
-///         (a `budget / bps` mutant collapsed the leg to zero entries and survived); this pins the
-///         delivered total against the arithmetic, winner by winner.
+///         slice is the ticket leg; `_startDailyEth` converts HALF of that leg
+///         into entries at the level's price and `runPurchaseDailyTickets` delivers them, four per whole ticket, spread with equal entry
+///         counts over at most 96 winners, doubled at 40 and 160 ETH of entry value. This pins the
+///         delivered total against the arithmetic, winner by winner (a `budget / bps` error
+///         would collapse the leg to zero entries).
 contract DailyEthTicketLegEntries is Test {
     GoldenTicketHarness internal h;
 

@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -18,15 +17,15 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// the actual generated-ticket score, cap count, settlement and 30M gas budget.
 /// The candidate search supplies a reproducible stress case, not an exhaustive
 /// upper bound over every possible ticket sequence.
-contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
+contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 34 (forge inspect DegenerusGame storageLayout, Stage-B POST); lootboxRngIndex is
+    /// @dev lootboxRngPacked at slot 34 (forge inspect DegenerusGame storageLayout); lootboxRngIndex is
     ///      the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // post Stage-B game-storage repack: was 35
-    /// @dev lootboxRngWordByIndex mapping root slot (uint48 index => word) (post Stage-B game-storage repack: was 36).
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    /// @dev lootboxRngWordByIndex mapping root slot (uint48 index => word).
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev prizePoolsPacked at slot 2 ([future:128 | next:128]).
     uint256 private constant PRIZE_POOLS_SLOT = GameSlots.PRIZE_POOLS_PACKED;
@@ -35,12 +34,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     // Worst-case / measurement constants
     // -------------------------------------------------------------------------
 
-    /// @dev v47 per-currency spin caps (DegeneretteModule:226-228). The ETH cap (25) is the
-    ///      structural spin-loop ceiling for the DSPIN-02 worst case — 2.5x the old 10-spin bound.
+    /// @dev Per-currency spin caps (`MAX_SPINS_ETH` / `MAX_SPINS_FLIP` in `GameDegeneretteBet`). The ETH cap (25) is the
+    ///      structural spin-loop ceiling for the 25-spin worst case — 2.5x the legacy 10-spin bound.
     uint8 internal constant MAX_SPINS_ETH = 25;
     uint8 internal constant MAX_SPINS_FLIP = 15;
 
-    /// @dev The Phase-319 GAS-01 reference spin count (the OLD MAX_SPINS_PER_BET). Kept so the
+    /// @dev The legacy 10-spin reference count (the former MAX_SPINS_PER_BET). Kept so the
     ///      per-1-spin-item marginal and the 10-vs-25 absorption comparison both have a stable
     ///      reference point. The sweep (`mineFlip`'s Degenerette stage) that resolves these bets
     ///      is the only door; these numbers are pure gas-shape measurements.
@@ -61,7 +60,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     uint256 private constant WORD_SEARCH_BUDGET = 2000;
 
     /// @dev PayoutCapped topic0 — emitted once per spin whose ETH share exceeds the 10% pool cap and
-    ///      flips into the lootbox branch (DegeneretteModule:759). A count of 10 proves all 10 spins
+    ///      flips into the lootbox branch (`DegenerusGameDegeneretteModule._distributePayout`). A count of 10 proves all 10 spins
     ///      drove a real lootbox materialization (the per-spin maximum branch).
     bytes32 private constant PAYOUT_CAPPED_SIG =
         keccak256("PayoutCapped(uint32,uint256,uint256)");
@@ -74,7 +73,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     uint256 private worstCaseWord;
     uint32 private worstCaseTicket;
 
-    /// @dev The DSPIN-02 25-spin worst-case (word, ticket): greedy ticket wins on all 25 spins.
+    /// @dev The 25-spin worst-case (word, ticket): greedy ticket wins on all 25 spins.
     uint256 private worstCaseWord25;
     uint32 private worstCaseTicket25;
 
@@ -98,17 +97,17 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         // payouts always credit the bet's owner), so no operator-approval dance is needed for
         // the cranker/keeper to resolve `player`'s bets.
 
-        // Pin the legacy 10-spin worst-case (Phase-319 reference).
+        // Pin the legacy 10-spin worst-case reference.
         (worstCaseWord, worstCaseTicket) = _findWorstCase(INDEX, LEGACY_WORST_SPINS);
-        // Pin the DSPIN-02 25-spin worst-case (all 25 spins win -> all 25 materialize a lootbox).
+        // Pin the 25-spin worst-case (all 25 spins win -> all 25 materialize a lootbox).
         (worstCaseWord25, worstCaseTicket25) = _findWorstCase(INDEX, MAX_SPINS_ETH);
     }
 
     // =========================================================================
-    // Test A — 10-spin all-match worst case (the GAS-01 fit-check)
+    // Test A — 10-spin all-match worst case (the fit-check)
     // =========================================================================
 
-    /// @notice GAS-01 worst-case-FIRST: a single sweep-resolved item with a `ticketCount == 10`
+    /// @notice Worst-case-FIRST: a single sweep-resolved item with a `ticketCount == 10`
     ///         bet where every spin wins ETH and flips into the lootbox branch (10 materializations).
     ///         Asserts the scenario IS the maximum (ticketCount == 10 AND all 10 spins materialized a
     ///         lootbox) BEFORE the measurement is trusted, and asserts the measured gas < 30M mainnet.
@@ -150,9 +149,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         // Non-vacuity: the bet was actually resolved (queue word zeroed), not silently skipped.
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "non-vacuity: worst-case bet resolved (word zeroed)");
 
-        // The headline GAS-01 assertion, per checkpoint: the worst case resolves inside the
+        // The headline assertion, per checkpoint: the worst case resolves inside the
         // admission the engine charges for it (the declared bound, itself far under 10M).
-        assertLe(stageGas, bound, "GAS-01: 10-spin all-match resolve stays inside its declared admission");
+        assertLe(stageGas, bound, "10-spin all-match resolve stays inside its declared admission");
         assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         emit log_named_uint("worst_case_resolve_bet_10spin_allmatch_gas", stageGas);
@@ -162,10 +161,10 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     }
 
     // =========================================================================
-    // Test B — per-1-spin-item MARGINAL (the Plan 05 calibration target)
+    // Test B — per-1-spin-item MARGINAL (the calibration target)
     // =========================================================================
 
-    /// @notice GAS-01: isolate the per-1-spin-item MARGINAL gas — the marginal cost of adding one
+    /// @notice Isolate the per-1-spin-item MARGINAL gas — the marginal cost of adding one
     ///         typical (1-spin) resolve item to the sweep (`mineFlip`'s Degenerette stage); this
     ///         is a pure gas-shape measurement. Measured by the loop-N-divide
     ///         micro-bench idiom: crank N independent 1-spin items in one batch and divide the
@@ -201,9 +200,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         // Re-measure the 10-spin worst case in this test's own state for an apples-to-apples compare.
         uint256 worstCaseGas = _measureTenSpinWorstCase();
 
-        // The per-1-spin marginal is materially below the 10-spin worst case (REW-03 under-reimburses
+        // The per-1-spin marginal is materially below the 10-spin worst case (the per-spin peg under-reimburses
         // big wins): a 1-spin item drives at most ONE lootbox materialization vs the worst case's ten,
-        // so the marginal must be a small fraction of the worst case (319-GAS-DERIVATION.md §1(e)).
+        // so the marginal must be a small fraction of the worst case.
         assertLt(
             perItemMarginal,
             worstCaseGas,
@@ -212,20 +211,20 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         assertLe(totalGas, declared, "the N-item stage stays inside the admissions its bets were charged");
         emit log_named_uint("declared_n_item_admission", declared);
 
-        // The calibration input Plan 05 reads from the test log.
+        // The calibration input, read from the test log.
         emit log_named_uint("per_1spin_item_resolve_marginal_gas", perItemMarginal);
         emit log_named_uint("per_1spin_item_resolve_batch_total_gas", totalGas);
         emit log_named_uint("worst_case_resolve_bet_10spin_allmatch_gas", worstCaseGas);
     }
 
     // =========================================================================
-    // DSPIN-02 Test C — 25-spin ETH worst case (DERIVE-THEN-MEASURE)
+    // Test C — 25-spin ETH worst case (DERIVE-THEN-MEASURE)
     // =========================================================================
 
-    /// @notice DSPIN-02 worst-case-FIRST. The v47 per-currency cap raises the ETH spin loop from
-    ///         10 (old MAX_SPINS_PER_BET) to MAX_SPINS_ETH = 25 — 2.5x the roll work. This test
+    /// @notice Worst-case-FIRST. The per-currency cap sets the ETH spin loop at
+    ///         up to MAX_SPINS_ETH = 25 — 2.5x the roll work. This test
     ///         proves the raised cap's worst case is ABSORBED (fits the 30M mainnet block gas limit),
-    ///         because the v47 write-batching replaces N per-spin storage writes with a SINGLE
+    ///         because the write-batching replaces N per-spin storage writes with a SINGLE
     ///         end-of-call flush (one mint per currency, one claimable+claimablePool write, one pool
     ///         write, one box per betId).
     ///
@@ -234,8 +233,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     ///             MAX_SPINS_ETH == 25 where EVERY spin (a) wins ETH (matches >= 2 -> payout > 0)
     ///             AND (b) flips into the lootbox-conversion branch (ethShare exceeds the 10%-of-pool
     ///             ETH_WIN_CAP_BPS cap), driving 25 PayoutCapped emits and ONE per-bet
-    ///             `_resolveLootboxDirect` materialization on the summed-per-bet lootbox share
-    ///             (DGAS-03: one box per betId, NOT 25 boxes). This is the per-spin maximum branch
+    ///             `resolveLootboxDirect` materialization on the summed-per-bet lootbox share
+    ///             (one box per betId, NOT 25 boxes). This is the per-spin maximum branch
     ///             (ETH-win + cap-flip) repeated to the structural cap.
     ///           - 2.5x the old 10-spin roll work (25 result-seed keccaks + 25 payout computations +
     ///             25 cap evaluations against the running-pool local).
@@ -271,7 +270,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         _advanceActiveIndexPast(idx);
 
         // assert-is-worst-case (1/2): ticketCount IS the structural ETH cap (25).
-        assertEq(DQ.spinCount(game.degeneretteBetInfo(idx, betId)), MAX_SPINS_ETH, "DSPIN-02: ticketCount == MAX_SPINS_ETH (25)");
+        assertEq(DQ.spinCount(game.degeneretteBetInfo(idx, betId)), MAX_SPINS_ETH, "ticketCount == MAX_SPINS_ETH (25)");
 
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
@@ -287,21 +286,21 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         // result tickets, so the worst case maximizes the winning+cap-flip count; we assert the loop
         // ran fully (25) and that the achieved cap-flip count equals the achieved winning-spin count
         // (every winning spin flips, the per-spin max branch) and is materially non-vacuous.
-        assertEq(spinResults, MAX_SPINS_ETH, "DSPIN-02: all 25 spins resolved (full loop; packed into the one DegeneretteResolved event)");
+        assertEq(spinResults, MAX_SPINS_ETH, "all 25 spins resolved (full loop; packed into the one DegeneretteResolved event)");
         uint8 winningSpins = _countWinningSpins(idx, word25, ticket25, MAX_SPINS_ETH);
         assertEq(
             lootboxFlips,
             uint256(winningSpins),
-            "DSPIN-02: every WINNING spin flipped into the lootbox branch (one PayoutCapped each)"
+            "every WINNING spin flipped into the lootbox branch (one PayoutCapped each)"
         );
-        assertGt(lootboxFlips, 0, "DSPIN-02 non-vacuity: at least one spin materialized the lootbox branch");
+        assertGt(lootboxFlips, 0, "non-vacuity: at least one spin materialized the lootbox branch");
 
         // Non-vacuity: the bet was actually resolved (queue word zeroed), not silently skipped.
         assertEq(game.degeneretteBetInfo(idx, betId), 0, "non-vacuity: 25-spin worst-case bet resolved (word zeroed)");
 
-        // Headline DSPIN-02 assertion, per checkpoint: the 25-spin worst case resolves inside the
+        // Headline assertion, per checkpoint: the 25-spin worst case resolves inside the
         // admission the engine charges for it (the declared bound, itself far under 10M).
-        assertLe(gasUsed, bound, "DSPIN-02: 25-spin all-match resolve stays inside its declared admission");
+        assertLe(gasUsed, bound, "25-spin all-match resolve stays inside its declared admission");
         assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         // Absorption: re-measure the legacy 10-spin worst case in this test's own state, and assert
@@ -310,7 +309,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         assertLt(
             gasUsed,
             (legacyGas * 5) / 2,
-            "DSPIN-02 absorption: 25-spin cost < 2.5x the 10-spin worst case (single-flush savings)"
+            "absorption: 25-spin cost < 2.5x the 10-spin worst case (single-flush savings)"
         );
 
         emit log_named_uint("worst_case_resolve_bet_25spin_allmatch_gas", gasUsed);
@@ -325,7 +324,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
     // per-index word/ticket instead, since some reuse the sweep more than once per test).
     // =========================================================================
 
-    /// @notice DSPIN-02 via the sweep: the same 25-spin all-match ETH worst case, resolved by
+    /// @notice Via the sweep: the same 25-spin all-match ETH worst case, resolved by
     ///         `mineFlip` once the index's word lands and the active lootbox index moves past
     ///         it (the sweep's own trigger condition — see DegeneretteSweep.t.sol `_landWord`).
     ///         Proves the automatic path absorbs the identical worst case, not just the manual one.
@@ -335,7 +334,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         _injectLootboxRngWord(INDEX, worstCaseWord25);
         _advanceActiveIndexPast(INDEX);
 
-        assertEq(_betTicketCount(betId), MAX_SPINS_ETH, "DSPIN-02 sweep: ticketCount == MAX_SPINS_ETH (25)");
+        assertEq(_betTicketCount(betId), MAX_SPINS_ETH, "sweep: ticketCount == MAX_SPINS_ETH (25)");
         uint256 bound = _ethStageBound(MAX_SPINS_ETH, game.degeneretteBetInfo(INDEX, betId));
 
         (uint256 callGas, uint256 gasUsed) = _crankResolve();
@@ -343,18 +342,18 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
         (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects(betIds);
-        assertEq(spinResults, MAX_SPINS_ETH, "DSPIN-02 sweep: all 25 spins resolved");
+        assertEq(spinResults, MAX_SPINS_ETH, "sweep: all 25 spins resolved");
         uint8 winningSpins = _countWinningSpins(INDEX, worstCaseWord25, worstCaseTicket25, MAX_SPINS_ETH);
         assertEq(
             lootboxFlips,
             uint256(winningSpins),
-            "DSPIN-02 sweep: every WINNING spin flipped into the lootbox branch"
+            "sweep: every WINNING spin flipped into the lootbox branch"
         );
-        assertGt(lootboxFlips, 0, "DSPIN-02 sweep non-vacuity: at least one spin materialized the lootbox branch");
+        assertGt(lootboxFlips, 0, "sweep non-vacuity: at least one spin materialized the lootbox branch");
 
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "non-vacuity: bet resolved via the sweep");
 
-        assertLe(gasUsed, bound, "DSPIN-02 sweep: 25-spin all-match resolve stays inside its declared admission");
+        assertLe(gasUsed, bound, "sweep: 25-spin all-match resolve stays inside its declared admission");
         assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         emit log_named_uint("worst_case_resolve_bet_25spin_allmatch_via_sweep_gas", gasUsed);
@@ -362,8 +361,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         emit log_named_uint("declared_25spin_admission", bound);
     }
 
-    /// @notice DSPIN-02 mixed-currency batch via the sweep: the same ETH-25 + FLIP-15 worst case
-    ///         as `testWorstCaseMixedCurrencyBatchGas`, but resolved automatically by `mineFlip`.
+    /// @notice Mixed-currency batch via the sweep: a MAX_SPINS_ETH (25) ETH bet plus
+    ///         a MAX_SPINS_FLIP (15) FLIP bet in one batch, resolved automatically by `mineFlip`.
     function testWorstCaseMixedCurrencyBatchGasViaSweep() public {
         uint128 flipPerTicket = 200; // FLIP has 0 decimals; minimum is 100 whole FLIP.
         _fundFlip(player, uint256(flipPerTicket) * MAX_SPINS_FLIP + 1);
@@ -389,7 +388,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         assertEq(game.degeneretteBetInfo(INDEX, ethBet), 0, "non-vacuity: ETH bet resolved via sweep");
         assertEq(game.degeneretteBetInfo(INDEX, flipBet), 0, "non-vacuity: FLIP bet resolved via sweep");
 
-        assertLe(gasUsed, bound, "DSPIN-02 sweep: max mixed-currency batch stays inside its declared admissions");
+        assertLe(gasUsed, bound, "sweep: max mixed-currency batch stays inside its declared admissions");
         assertLe(bound, 10_000_000, "the declared admissions fit one realistic chunk");
 
         emit log_named_uint("worst_case_mixed_currency_batch_via_sweep_gas", gasUsed);
@@ -474,7 +473,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
-    /// @dev Place the legacy 10-spin worst-case bet (Phase-319 reference).
+    /// @dev Place the legacy 10-spin worst-case bet reference.
     function _placeWorstCaseBet(address better) internal returns (uint64 betId) {
         betId = _placeWorstCaseBetN(better, LEGACY_WORST_SPINS, worstCaseTicket);
     }
@@ -604,19 +603,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         uint256 readSlot = uint256(vm.load(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT)));
         vm.store(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT),
             bytes32(readSlot & ~(uint256(type(uint32).max) << (GameSlots.DEGENERETTE_READ_COUNT_OFFSET * 8))));
-        uint256 emptySnap = vm.snapshotState();
         _cool();
         vm.prank(cranker);
         uint256 g = gasleft();
         game.mineRun(0);
         uint256 baseline = g - gasleft();
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(emptySnap));
-            this.exportNativeFixture(string.concat("degenerette-empty-", vm.toString(baseline)), cranker,
-                address(game), abi.encodeCall(game.mineRun, (0)));
-        }
         vm.revertToStateAndDelete(snap);
-        uint256 fullSnap = vm.snapshotState();
         _cool();
         vm.recordLogs();
         vm.prank(cranker);
@@ -624,13 +616,6 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         game.mineRun(0);
         gasUsed = g - gasleft();
         stageGas = gasUsed - baseline;
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(fullSnap));
-            this.exportNativeFixture(string.concat("degenerette-full-", vm.toString(gasUsed)), cranker,
-                address(game), abi.encodeCall(game.mineRun, (0)));
-            vm.recordLogs();
-            vm.prank(cranker); game.mineRun(0);
-        }
         emit log_named_uint("cold mineFlip gas", gasUsed);
         emit log_named_uint("Degenerette stage gas (mineFlip minus empty-queue baseline)", stageGas);
     }

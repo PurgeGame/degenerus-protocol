@@ -4,7 +4,6 @@ pragma solidity 0.8.38;
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -16,7 +15,7 @@ import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol
 ///         storage and account access are cold as in a fresh transaction. Winners' Coinflip stake
 ///         lanes are fresh (zero) unless the case says otherwise: a zero-to-nonzero lane write is
 ///         the per-winner worst case the runGrowthWork admission estimate must cover.
-contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
+contract ParimutuelSettlementGasTest is DeployProtocol {
     uint256 private constant WORKER_CALL_GAS = 16_700_000;
     uint256 private constant LARGE_WORKER_ALLOWANCE = 16_000_000;
     uint256 private constant MINER_CALL_GAS = 9_000_000;
@@ -106,19 +105,10 @@ contract ParimutuelSettlementGasTest is DeployProtocol, NativeGasExport {
     function _settleCold(uint256 allowance) private returns (uint256 used, MineFlipGas.Result memory r) {
         vm.cool(address(parimutuel));
         vm.cool(address(coinflip));
-        uint256 snapshot = vm.snapshotState();
         vm.prank(address(game));
         uint256 g0 = gasleft();
         r = parimutuel.runGrowthWork{gas: WORKER_CALL_GAS}(MineFlipGas.budget(allowance, 10_000, true));
         used = g0 - gasleft();
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            string memory label = string.concat("growth-", vm.toString(allowance), "-", vm.toString(used));
-            uint256 budget = MineFlipGas.budget(allowance, 10_000, true);
-            this.exportNativeFixture(label, address(game), address(parimutuel), abi.encodeCall(parimutuel.runGrowthWork, (budget)));
-            vm.prank(address(game));
-            parimutuel.runGrowthWork{gas: WORKER_CALL_GAS}(budget);
-        }
     }
 
     // ---------------------------------------------------------------- measurements

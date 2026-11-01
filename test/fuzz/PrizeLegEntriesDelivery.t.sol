@@ -34,7 +34,7 @@ contract PrizeLegHarness is DegenerusGameJackpotModule {
     }
 }
 
-/// @title PrizeLegEntriesDelivery -- FIX-04 deterministic value-correctness proof
+/// @title PrizeLegEntriesDelivery -- deterministic value-correctness proof
 /// @notice Both under-issue prize legs (Jackpot BAF roll, Lootbox roll) route their
 ///         post-Bernoulli whole-ticket count through the single canonical converter
 ///         `wholeTicketsToEntries(w) = w << 2` before queueing into the entries-
@@ -100,7 +100,7 @@ contract PrizeLegEntriesDelivery is Test {
     /// @notice For budgets that are an exact multiple of price, the prize-leg entries
     ///         (whole -> converter) equal the purchase/daily reference basis exactly;
     ///         for general budgets they differ by at most one sub-ticket (4 entries),
-    ///         the Bernoulli granularity. This pins FIX-04 uniform entries-per-ETH.
+    ///         the Bernoulli granularity. This pins uniform entries-per-ETH.
     function testEntriesBasisEquivalence() public view {
         // Exact-multiple budgets across every price tier: prize basis == reference basis.
         _assertExactMultiple(1 ether, 1); // intro tier 0.01 ETH

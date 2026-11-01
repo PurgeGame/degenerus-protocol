@@ -595,7 +595,7 @@ abstract contract CoinflipCore {
         if (fromClaimable != 0) {
             // Recycling bonus applies only to the rebet portion (not fresh money): the winnings
             // this deposit actually spent, never the wallet-funded remainder. An auto-rebuy
-            // player's carry earns its own bonus where it rolls, in _claimCoinflipsInternal.
+            // player's carry earns its own bonus when it rides a flip, in _claimCoinflipsInternal.
             creditedFlip += _recyclingBonus(fromClaimable);
         }
         // Direct deposits (the caller is the payee) can set the flip record and enter the BAF
@@ -869,7 +869,9 @@ abstract contract CoinflipCore {
             if (seeded) {
                 stake += _seedStake(uint24(cursor));
             }
-            stake += carry;
+            // A carry entering this day's stake rides its flip, so it earns the recycling bonus
+            // now. FLIP added for the day, and carry formed by the day's own win, earn none.
+            if (carry != 0) stake += carry + _recyclingBonus(carry);
 
             if (stake != 0) {
                 if (win) {
@@ -899,10 +901,7 @@ abstract contract CoinflipCore {
                         } else {
                             carry = payout;
                         }
-                        if (carry != 0) {
-                            carry += _recyclingBonus(carry);
-                            if (carry > type(uint128).max) carry = type(uint128).max;
-                        }
+                        if (carry > type(uint128).max) carry = type(uint128).max;
                     } else {
                         mintable += payout;
                     }
@@ -1943,7 +1942,9 @@ abstract contract CoinflipCore {
             if (seeded) {
                 stake += _seedStake(uint24(cursor));
             }
-            stake += carry;
+            // A carry entering this day's stake rides its flip, so it earns the recycling bonus
+            // now. FLIP added for the day, and carry formed by the day's own win, earn none.
+            if (carry != 0) stake += carry + _recyclingBonus(carry);
 
             if (stake != 0) {
                 if (win) {
@@ -1962,10 +1963,7 @@ abstract contract CoinflipCore {
                         } else {
                             carry = payout;
                         }
-                        if (carry != 0) {
-                            carry += _recyclingBonus(carry);
-                            if (carry > type(uint128).max) carry = type(uint128).max;
-                        }
+                        if (carry > type(uint128).max) carry = type(uint128).max;
                     } else {
                         mintable += payout;
                     }

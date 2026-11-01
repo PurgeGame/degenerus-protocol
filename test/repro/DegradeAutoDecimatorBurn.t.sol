@@ -10,7 +10,7 @@ import {Coinflip} from "../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
 
-/// @notice Daily-spine degrade (DAILY-2): the opening-day protocol Decimator entry skips the
+/// @notice Daily-spine degrade: the opening-day protocol Decimator entry skips the
 ///         window when the settled consume lands below the entry minimum, instead of handing the
 ///         battle an amount it refuses (which would revert `applyDailyWord_g1652` for every caller).
 /// @dev The seeded state is unreachable (the preview and the consume sum the same components);

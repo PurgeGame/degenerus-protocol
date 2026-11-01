@@ -147,11 +147,11 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
     /// @dev Every call in a test shares one transaction's access list; re-cool the protocol so
     ///      each swept call pays what a fresh keeper transaction pays.
     function _coolAll() internal {
-        address[22] memory accounts = [
+        address[21] memory accounts = [
             ContractAddresses.GAME, ContractAddresses.COIN, ContractAddresses.COINFLIP, ContractAddresses.VAULT,
             ContractAddresses.AFFILIATE, ContractAddresses.JACKPOTS, ContractAddresses.QUESTS, ContractAddresses.SDGNRS,
             ContractAddresses.DGNRS, ContractAddresses.ADMIN, ContractAddresses.WWXRP, ContractAddresses.STETH_TOKEN,
-            address(mockLINK), ContractAddresses.GNRUS, ContractAddresses.PARIMUTUEL, ContractAddresses.CRAPS,
+            ContractAddresses.GNRUS, ContractAddresses.PARIMUTUEL, ContractAddresses.CRAPS,
             ContractAddresses.CRAPS_ENGINE, ContractAddresses.JACKPOT_BATTLE, ContractAddresses.DEITY_PASS,
             ContractAddresses.AFKING_SUB_TOKEN, ContractAddresses.VRF_COORDINATOR, address(mockVRF)
         ];

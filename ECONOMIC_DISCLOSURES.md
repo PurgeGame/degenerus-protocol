@@ -158,6 +158,10 @@ Jackpot prize shapes (mechanics in [jackpot legs](docs/ARCHITECTURE-DETAILS.md#j
   converts to full whale passes at 4.5 ETH each, starting at 18 ETH; one fresh draw from the
   quadrant receives all its passes, the rest pays its normal ETH winners, and the pass cost goes to
   futurePrizePool. The passes are a longer-term participation claim, not a cash claim.
+- **Orange King.** On a jackpot-phase ETH draw without an active Decimator jackpot plan, an Orange
+  King drawn in Cards moves half of the Cards allocation to the solo quadrant, or, when Cards is
+  itself solo, half of each other quadrant's allocation to Cards. It applies before pass conversion
+  and rounding and does not change the draw's total.
 - **Daily ETH winner counts** scale with the budget in both phases: 32, 16 and 4 non-solo winners,
   doubling at 40, 160, 640, 2,560 and 10,240 ETH, up to 1,024, 512 and 128. Non-solo prizes are
   whole multiples of 0.1 ETH, so small budgets pay fewer winners, not smaller prizes; rounding goes

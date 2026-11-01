@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-// Phase 222 Plan 02 CRITICAL_GAP closure tests.
+// External-function coverage-gap closure tests.
 //
-// Each test in this file closes one or more CRITICAL_GAP rows from
-// .planning/phases/222-external-function-coverage-gap/222-01-COVERAGE-MATRIX.md
-// per Phase 222 D-13 (natural caller chain), D-14 (conditional-entry
-// branch hits), D-15 (reuse existing infrastructure where available).
+// Each test in this file covers one or more external functions that no other
+// test reaches, using a natural caller chain, hitting conditional-entry
+// branches, and reusing the shared deploy infrastructure.
 //
-// The assignment-to-row map lives in 222-02-GAP-TEST-ASSIGNMENTS.md.
 // Tests are grouped by target contract for readability; every test
 // reaches its target function via the production entry point (not a
 // direct handler-test call), and asserts on the observable effect —
@@ -41,14 +39,14 @@ contract CoverageGap222 is DeployProtocol {
     // ====================================================================
     //  SECTION A: DegenerusGame.sol — purchase* / claim* / mineFlip
     //             lifecycle tests. One lifecycle test exercises many
-    //             CRITICAL_GAP rows in a single natural caller chain.
+    //             external functions in a single natural caller chain.
     // ====================================================================
 
     /// @notice Drive a full purchase -> mineFlip() cycle.
     /// @dev Closes gaps: game.purchaseOrderFor, game.mineRun, game.currentDayView_g542950
     ///      (EXEMPT), game.purchaseInfo_g1027 (EXEMPT), initVrf (admin-path).
-    ///      D-14 target: the purchase flow takes the DirectEth branch
-    ///      of MintPaymentKind dispatch inside _purchaseFor.
+    ///      Conditional-branch target: the purchase flow takes the DirectEth branch
+    ///      of MintPaymentKind dispatch inside _processMintPayment.
     function test_gap_lifecycle_purchase_then_advanceGame() public {
         // Record initial level.
         (uint24 lvl0, bool inJackpot, , , uint256 price0) = game.purchaseInfo_g1027();
@@ -56,7 +54,7 @@ contract CoverageGap222 is DeployProtocol {
         // (the next level during the purchase phase), which is where entriesOwedView increments.
         uint24 targetLvl = inJackpot ? lvl0 : lvl0 + 1;
 
-        // D-13 natural caller chain: caller is buyer, entry is game.purchaseOrderFor.
+        // Natural caller chain: caller is buyer, entry is game.purchaseOrderFor.
         uint256 qty = 400;
         uint256 cost = (price0 * qty) / 400;
         uint32 ticketsBefore = game.entriesOwedView(targetLvl, buyer);
@@ -77,11 +75,11 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     /// @notice Exercise the redeemFlip path (Flip token mint).
-    /// @dev Closes gap: game.redeemFlip. D-13 natural caller: game.redeemFlip
+    /// @dev Closes gap: game.redeemFlip. Natural caller: game.redeemFlip
     ///      directly from an externally-owned buyer.
-    /// @dev D-14 conditional branch: redeemFlip dispatches to the MintModule
-    ///      via delegatecall with MintPaymentKind.Flip — exercises the
-    ///      non-trivial branch of `_purchaseFor`.
+    /// @dev Conditional branch: redeemFlip dispatches to the Purchase module
+    ///      via delegatecall (`_redeemFlipFor`) — exercises the
+    ///      non-ETH purchase branch.
     function test_gap_redeemFlip_path() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
@@ -118,7 +116,7 @@ contract CoverageGap222 is DeployProtocol {
 
     /// @notice Exercise claimWinnings when nothing to claim — expect revert or no-op.
     /// @dev Closes gaps: claimWinnings, claimWinningsStethFirst.
-    ///      D-14 conditional branch: zero-balance short-circuit path.
+    ///      Conditional branch: zero-balance short-circuit path.
     function test_gap_claimWinnings_zeroBalance() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
@@ -136,7 +134,7 @@ contract CoverageGap222 is DeployProtocol {
 
     /// @notice Exercise setLootboxRngThreshold (admin-gated) — expect revert from non-admin.
     /// @dev Closes gap: setLootboxRngThreshold.
-    ///      D-14 conditional branch: admin-check revert path.
+    ///      Conditional branch: admin-check revert path.
     function test_gap_setLootboxRngThreshold_nonAdmin_reverts() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
@@ -333,7 +331,7 @@ contract CoverageGap222 is DeployProtocol {
 
     /// @notice Exercise guarded mutators (onlyGame / onlyVault / etc.)
     /// via their external entry points. Each revert path exercises the
-    /// guard-check branch (D-14) — observable via selector dispatch.
+    /// guard-check branch — observable via selector dispatch.
     function test_gap_flipCoin_guarded_mutators() public {
         vm.prank(buyer);
         (bool o1, ) = address(coin).call(
@@ -908,7 +906,7 @@ contract CoverageGap222 is DeployProtocol {
     //  SECTION J: DegenerusVault.sol — vault-owner path guards.
     //             Every vault.gameXxx function is onlyVaultOwner-gated;
     //             calling from an ordinary EOA exercises the guard-revert
-    //             branch (D-14 target).
+    //             branch.
     // ====================================================================
 
     function test_gap_vault_erc20_guards() public {
@@ -1017,7 +1015,7 @@ contract CoverageGap222 is DeployProtocol {
 
     function test_gap_gnrus_setCharity_vote_paths() public {
         address charity = makeAddr("charity");
-        // setCharity(uint8,address) is vault-owner-gated (GNRUS:380) -> an arbitrary
+        // setCharity(uint8,address) is vault-owner-gated (`GNRUS.setCharity`) -> an arbitrary
         // caller is rejected with Unauthorized. (The frozen governance surface has no
         // `propose(address)`; slate management is the vault-owner setCharity entrypoint.)
         vm.prank(buyer);
@@ -1025,7 +1023,7 @@ contract CoverageGap222 is DeployProtocol {
             abi.encodeWithSignature("setCharity(uint8,address)", uint8(3), charity)
         );
         // castBallot(uint8) is permissionless but rejects an empty slot / a zero-weight voter
-        // (GNRUS:570-590). buyer holds no sDGNRS and slot 1 is empty at deploy -> rejected.
+        // (`GNRUS.castBallot`). buyer holds no sDGNRS and slot 1 is empty at deploy -> rejected.
         vm.prank(buyer);
         (bool o2, ) = address(gnrus).call(
             abi.encodeWithSignature("castBallot(uint8)", uint8(1))
@@ -1229,7 +1227,7 @@ contract CoverageGap222 is DeployProtocol {
     //             game.runTerminalJackpotWork / runDecimatorJackpot /
     //             runBafJackpot are self-call-guarded (msg.sender must be
     //             address(this) in delegatecall frame). An EOA call must
-    //             revert — exercises the guard branch (D-14).
+    //             revert — exercises the guard branch.
     // ====================================================================
 
     function test_gap_game_jackpot_selfCall_guards() public {
@@ -1295,10 +1293,8 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "payRecordSdgnrs rejected non-coinflip caller");
     }
 
-    // v47: game.openFlipLootBox removed (FLIP-lootbox surface deleted). The manual game.openBox
-    // door that this probe covered next is gone too (doors removal): boxes now open only through
-    // the in-order sweep, so the selector no longer exists to be access-controlled and the probe
-    // is dropped along with it.
+    // Boxes open only through the in-order sweep; there is no manual open door whose
+    // access control could be probed.
 
     function test_gap_game_degenerette_paths() public {
         vm.prank(buyer);
@@ -1369,10 +1365,8 @@ contract CoverageGap222 is DeployProtocol {
                 bytes32(0)
             )
         );
-        // v47: game.purchaseFlipLootbox removed (FLIP-lootbox surface deleted); its
-        // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
         // Whale pass (2.4 ETH) and deity pass (24 ETH) are underfunded by the 1 ETH
-        // send and still revert. The lazy pass (0.24 ETH benefit) now succeeds: the 0.76
+        // send and revert. The lazy pass (0.24 ETH benefit) succeeds: the 0.76
         // ETH overpay is credited to the payer's afking instead of reverting.
         assertFalse(o1, "purchaseWhalePass reverts when underfunded");
         assertTrue(o2, "purchaseLazyPass accepts overpay (excess -> afking)");

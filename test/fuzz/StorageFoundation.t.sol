@@ -93,7 +93,7 @@ contract StorageHarness is DegenerusGameAdvanceModule, WalletSeed {
         _tqAppend(key, _seedWallet(addr));
     }
 
-    // --- Consolidated tail-pack accessor (levelDgnrsPacked, post-v62 fold) ---
+    // --- Consolidated tail-pack accessor (levelDgnrsPacked) ---
     function exposed_getLevelDgnrs(uint24 lvl)
         external
         view
@@ -103,7 +103,7 @@ contract StorageHarness is DegenerusGameAdvanceModule, WalletSeed {
     }
 }
 
-/// @title StorageFoundationTest -- Unit tests for STOR-01 through STOR-04
+/// @title StorageFoundationTest -- Unit tests for field placement, pool packing and key encoding
 contract StorageFoundationTest is Test {
     StorageHarness harness;
 
@@ -118,7 +118,7 @@ contract StorageFoundationTest is Test {
     }
 
     // =====================================================================
-    // STOR-01: Field Placement Tests
+    // Field Placement Tests
     // =====================================================================
 
     /// @dev Verify ticketWriteSlot at Slot 0, offset 25; prizePoolFrozen at offset 26.
@@ -299,7 +299,7 @@ contract StorageFoundationTest is Test {
     }
 
     // =====================================================================
-    // STOR-02: Prize Pool Packing Round-Trip Tests
+    // Prize Pool Packing Round-Trip Tests
     // =====================================================================
 
     function testPrizePoolPackingZero() public {
@@ -338,7 +338,7 @@ contract StorageFoundationTest is Test {
     }
 
     // =====================================================================
-    // STOR-03: Pending Pool Packing Round-Trip Tests
+    // Pending Pool Packing Round-Trip Tests
     // =====================================================================
 
     function testPendingPoolPackingZero() public {
@@ -387,7 +387,7 @@ contract StorageFoundationTest is Test {
     }
 
     // =====================================================================
-    // STOR-04: Key Encoding Tests
+    // Key Encoding Tests
     // =====================================================================
 
     function testTicketSlotKeysDifferSlot0() public {

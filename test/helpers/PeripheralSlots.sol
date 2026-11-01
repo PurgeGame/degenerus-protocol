@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 import {QaSlots} from "./QaSlots.sol";
 
-/// @dev Compiler pins checked by scripts/check-storage-reuse-phase2-layout.py.
+/// @dev Compiler pins checked by scripts/layout/check_peripheral_layouts.py.
 library PeripheralSlots {
     uint256 internal constant SD_BATCHES = 10;
     uint256 internal constant SD_BATCH_PLAYERS = 8;

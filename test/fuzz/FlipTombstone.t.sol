@@ -6,13 +6,13 @@ import {FLIP} from "../../contracts/FLIP.sol";
 import {DegenerusVault} from "../../contracts/DegenerusVault.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title FlipTombstone — BTOMB-03: gameover FLIP tombstone signals ONLY in uncirculated supply
+/// @title FlipTombstone — gameover FLIP tombstone signals ONLY in uncirculated supply
 /// @notice Deterministic scenario tests against the APPLIED Phase-326 diff that drive every property
 ///         of `FLIP.tombstoneAtGameOver()` (the one-shot 1e18-wei VAULT-allowance flood) plus
 ///         the downstream DGVF pro-rata FLIP claim (`DegenerusVault.burnCoin`) against a flooded
 ///         allowance.
 ///
-///         Four properties (BTOMB-01/02 mechanic → BTOMB-03 non-distortion proof):
+///         Four properties (mechanic → non-distortion proof):
 ///         1. NON-CIRCULATING       — the flood does NOT change `totalSupply()` (circulating leg).
 ///         2. SIGNAL LOCALIZATION   — `vaultMintAllowance()` += EXACTLY 1e18 and
 ///                                    `supplyIncUncirculated()` += EXACTLY 1e18, while
@@ -28,7 +28,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///                                    `totalSupply()` unchanged but never claims against the 1e18
 ///                                    allowance would miss a downstream overflow).
 ///
-///         False-confidence guard (threat T-327-03-FC1/FC2/FC3): the one-shot test calls TWICE and
+///         False-confidence guard: the one-shot test calls TWICE and
 ///         asserts +EXACTLY 1e18 (not 2e18) with no revert; the boundary tests drive the existing
 ///         allowance to the uint128 boundary and prove both the exact-fit case AND saturation
 ///         past the cap (terminal setup never reverts on the allowance width); the

@@ -7,10 +7,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title SdgnrsConstructorAllocation -- pins the deploy-time supply split
 /// @notice The sDGNRS constructor allocates INITIAL_SUPPLY (1e24) across the creator (minted to
-///         the DGNRS wrapper) and five reward pools by fixed BPS. Nothing asserted these exact
-///         proportions, so every arithmetic mutation of the allocation math survived the v75
-///         mutation campaign (sDGNRS:385-397, see audit/mutation/FINDINGS-v75.md). This pins each
-///         slice against the frozen split so any change to the allocation arithmetic is caught.
+///         the DGNRS wrapper) and five reward pools by fixed BPS. This pins each
+///         slice against the frozen split (the sDGNRS constructor allocation) so any change to the allocation
+///         arithmetic is caught.
 /// @dev Reads a freshly deployed sDGNRS before any reward distribution moves the pools; the
 ///      DeployProtocol harness deploys sDGNRS with the constructor split intact.
 contract SdgnrsConstructorAllocation is DeployProtocol {

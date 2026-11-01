@@ -1,51 +1,37 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// JackpotTicketRollBernoulliEv.test.js — Phase 276 Wave 2 TST-JPT-BR-01
+// JackpotTicketRollBernoulliEv.test.js — EV-neutrality stat test for the jackpot ticket-roll Bernoulli
 //
 // EV-neutrality of the jackpot ticket-roll Bernoulli whole-ticket collapse.
 //
-// Plan A (c473867e) inlined a Bernoulli round-up into
-// `DegenerusGameJackpotModule._jackpotTicketRoll`: the scaled ticket count
+// `DegenerusGameJackpotModule._jackpotTicketRoll` has an inline Bernoulli round-up: the scaled ticket count
 // `quantityScaled` is collapsed to a whole-ticket count `whole`, with the
 // fractional part `frac` rounding up with probability `frac/TICKET_SCALE`
 // using bits[96..127] of the per-roll `entropy` word. EV-neutrality is the
-// identity `E[whole] * TICKET_SCALE == scaledTickets` — carried verbatim from
-// FINDINGS-v39.0.md §4 (a) (the lootbox whole-ticket EV-neutrality identity);
-// the jackpot inline Bernoulli is the same Bernoulli(frac/100) round-up, so
-// the §4 (a) proof carries to this surface unchanged.
+// identity `E[whole] * TICKET_SCALE == scaledTickets` (the same identity as the
+// lootbox whole-ticket EV-neutrality); the jackpot inline Bernoulli is the same
+// Bernoulli(frac/100) round-up, so the proof carries to this surface unchanged.
 //
 // EV-neutrality via `JackpotBernoulliTester.bernoulliWhole` direct-call is
-// justified by D-276-INLINE-01: the inline Bernoulli math in `_jackpotTicketRoll`
+// justified because the inline Bernoulli math in `_jackpotTicketRoll`
 // is byte-arithmetically identical to the tester (the tester substitutes `seed`
 // for the production `entropy` local; the predicate and the `>> 96` slice
 // offset are otherwise identical). That byte-identity is enforced by the
-// tester-vs-source drift gate in this same file (T-276B-01 mitigation):
+// tester-vs-source drift gate in this same file:
 // if production drifts from the tester, the drift gate fails BEFORE the stat
 // tests run. Integration coverage of the actual `_jackpotTicketRoll` caller
-// path lands in TST-JPT-BR-02 (silent cold-bust source-structural proof) and
-// the Plan A gas/storage artifacts (276-A-GAS-WORSTCASE.md / 276-A-STORAGE-LAYOUT-DIFF.md).
+// path is covered by the silent cold-bust source-structural proof.
 //
 // Heavy-MC validation at N=10K seeds per scaledTickets across the representative
-// sample span {47, 99, 100, 147, 250, 1000, 9999} per
-// .planning/phases/276-jackpotmodule-2216-baf-bernoulli-jpt-br/276-CONTEXT.md
-// `<specifics>` (≥10K sample size). Requirement: TST-JPT-BR-01.
+// sample span {47, 99, 100, 147, 250, 1000, 9999} (≥10K sample size).
 //
-// PLACEMENT: stat/ per the Phase 275 / D-275-TST-PLACEMENT-01 scheme (heavy-MC
-// tier; wired into the `test:stat` npm script alongside the Phase 275
-// LootboxAutoResolveBernoulliEv.test.js precedent). No test/jackpot/ directory
-// is created (does not exist on disk).
+// PLACEMENT: stat/ (heavy-MC tier; wired into the `test:stat` npm script alongside
+// test/stat/LootboxAutoResolveBernoulliEv.test.js).
 //
-// CROSS-CITES:
-//   - D-276-INLINE-01 (Bernoulli math inlined in _jackpotTicketRoll; tester mirrors it)
-//   - D-275-TST-PLACEMENT-01 (heavy-MC tier in stat/)
-//   - FINDINGS-v39.0.md §4 (a) EV-neutrality identity (carries verbatim)
-//   - Phase 275 TST-LBX-AR-01 precedent in test/stat/LootboxAutoResolveBernoulliEv.test.js
-//   - feedback_rng_backward_trace.md (per-roll entropy word evolved via
-//     EntropyLib.hash2(entropy, entropy) on _jackpotTicketRoll entry — unknown
-//     to the winner at jackpot-resolution VRF-commitment time)
-//   - feedback_rng_commitment_window.md (the winner cannot mutate the per-roll
-//     entropy once _jackpotTicketRoll is entered — bits[96..127] is derived
-//     from the already-evolved word)
+// Entropy notes: the per-roll entropy word is evolved via EntropyLib.hash2(entropy, entropy)
+// on _jackpotTicketRoll entry, so it is unknown to the winner at jackpot-resolution
+// VRF-commitment time, and the winner cannot mutate it once _jackpotTicketRoll is entered
+// (bits[96..127] is derived from the already-evolved word).
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -81,7 +67,7 @@ function makeRng(seedHex) {
   };
 }
 
-// JS replica of the jackpot inline Bernoulli math (mirrors the v40 _jackpotTicketRoll
+// JS replica of the jackpot inline Bernoulli math (mirrors the _jackpotTicketRoll
 // instruction sequence — slice offset >> 96). Drift caught by the source-vs-tester
 // gate below + the per-loop js/chain spot-check.
 function jsBernoulliWhole(scaledTickets, seed) {
@@ -100,10 +86,10 @@ function jsBernoulliWhole(scaledTickets, seed) {
   return { whole, roundedUp };
 }
 
-describe("JackpotTicketRollBernoulliEv (stat-suite, heavy-MC) — TST-JPT-BR-01 EV-neutrality on the jackpot ticket-roll Bernoulli at N=10K", function () {
+describe("JackpotTicketRollBernoulliEv (stat-suite, heavy-MC) — EV-neutrality on the jackpot ticket-roll Bernoulli at N=10K", function () {
   this.timeout(600_000);
 
-  // T-276B-01 mitigation: tester-vs-source drift gate. Runs first — if the
+  // Tester-vs-source drift gate. Runs first — if the
   // production inline predicate drifts from the JackpotBernoulliTester
   // passthrough, this fails BEFORE any stat test runs.
   describe("Tester-vs-source drift gate — JackpotBernoulliTester.bernoulliWhole is byte-arithmetically identical to the _jackpotTicketRoll inline Bernoulli (T-276B-01)", function () {
@@ -158,10 +144,10 @@ describe("JackpotTicketRollBernoulliEv (stat-suite, heavy-MC) — TST-JPT-BR-01 
     });
   });
 
-  describe("TST-JPT-BR-01 — EV-neutrality property on the jackpot ticket-roll Bernoulli", function () {
+  describe("EV-neutrality property on the jackpot ticket-roll Bernoulli", function () {
     // At N=10K i.i.d. samples, the variance of mean(whole) is bounded above by
     // 0.25/N; sigma of mean*100 is bounded above by 100*sqrt(0.25/10000) ≈ 0.5.
-    // CONTEXT.md acceptance: within ±0.5% of scaledTickets — for scaledTickets=100
+    // Acceptance: within ±0.5% of scaledTickets — for scaledTickets=100
     // that's ±0.5; for scaledTickets=9999 that's ±49.995. Using ABSOLUTE bound of
     // 1.5 (3-sigma) for low scaledTickets and 0.5% relative bound for higher.
     const N = 10_000;

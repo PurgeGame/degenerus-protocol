@@ -430,6 +430,8 @@ contract sDGNRS {
         // FLIP: the batch's share of the settled backing leaves it now and pays only on the
         // batch's synthetic flip win. Sized from the same settled read, so the clamp never binds.
         uint256 flipEscrow = (coinflip.redeemableFlipBacking() * tokens) / holderBase;
+        // The batch records its escrow in 96 bits; any share above that stays as backing.
+        if (flipEscrow > type(uint96).max) flipEscrow = type(uint96).max;
         if (flipEscrow != 0) flipEscrow = coinflip.withdrawRedeemedFlip(flipEscrow);
 
         // The escrow is exactly the open batch's tokens, so this cannot underflow.

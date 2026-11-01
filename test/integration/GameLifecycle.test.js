@@ -525,7 +525,7 @@ describe("GameLifecycle", function () {
   // ---------------------------------------------------------------------------
 
   describe("mint data tracking", function () {
-    // ethMintLastLevel, ethMintStreakCount, ethMintLevelCount views removed in Phase 146 ABI cleanup
+    // ethMintLastLevel, ethMintStreakCount, ethMintLevelCount views are not part of the ABI
   });
 
   // ---------------------------------------------------------------------------

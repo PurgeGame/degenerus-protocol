@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import "forge-std/Test.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
-/// @title FVRF-02: Arithmetic Property Symbolic Tests
+/// @title Arithmetic Property Symbolic Tests
 /// @notice Halmos bounded model checks for key arithmetic invariants.
 /// @dev Run with: halmos --contract ArithmeticSymbolicTest --solver-timeout-assertion 60
 contract ArithmeticSymbolicTest is Test {

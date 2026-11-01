@@ -10,11 +10,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @title CoinflipSeedWindow — the VAULT / sDGNRS deploy seed as a fixed day window
 /// @notice The seed is never written to a stake lane: the walks add SEED_FLIP_DAILY to a
 ///         recipient's stake on each of days 1..20 and on no other day.
-///         - REF-02 arithmetic: a vault claim and sDGNRS's settled backing equal the payout sum
+///         - arithmetic: a vault claim and sDGNRS's settled backing equal the payout sum
 ///           computed by hand from stake = lane + seed.
-///         - VIEW-01/02 coinflipAmount and the preview walk carry the seed for the recipients on
+///         - coinflipAmount and the preview walk carry the seed for the recipients on
 ///           window days only; no later day, including past x00 levels, is seeded.
-///         - ARM-01 the deploy window covers days 1..20 with no lane written and is announced once.
+///         - the deploy window covers days 1..20 with no lane written and is announced once.
 contract CoinflipSeedWindowTest is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant COIN = ContractAddresses.COIN;
@@ -103,7 +103,7 @@ contract CoinflipSeedWindowTest is DegenesisDeployProtocol {
     }
 
     // =====================================================================
-    //                    REF-02 — arithmetic reference
+    //                    arithmetic reference
     // =====================================================================
 
     /// @dev Credits land on days 3, 10 (seeded) and 22 (not); every resolved day pays
@@ -131,12 +131,12 @@ contract CoinflipSeedWindowTest is DegenesisDeployProtocol {
             if (win) vaultExpected += _payout(stake, d);
             else if (stake != 0) ++vaultLosses;
 
-            uint256 sStake = (lane[d] == 0 ? 0 : 9_876) + (d <= SEED_DAYS ? SEED : 0) + sdgnrsCarry;
+            uint256 sStake = (lane[d] == 0 ? 0 : 9_876) + (d <= SEED_DAYS ? SEED : 0) +
+                sdgnrsCarry + (sdgnrsCarry * 75) / 10_000;
             if (d <= SEED_DAYS) {
                 if (win) sdgnrsClaimable += _payout(sStake, d);
             } else if (win) {
                 sdgnrsCarry = _payout(sStake, d);
-                sdgnrsCarry += (sdgnrsCarry * 75) / 10_000;
             } else {
                 sdgnrsCarry = 0;
             }
@@ -155,13 +155,13 @@ contract CoinflipSeedWindowTest is DegenesisDeployProtocol {
         (bool enabled, uint256 stop, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertTrue(enabled, "sDGNRS auto-rebuy armed at epoch 20");
         assertEq(stop, 0);
-        assertEq(carry, sdgnrsCarry, "carry rolls lane + carry from day 21");
+        assertEq(carry, sdgnrsCarry, "carry rolls lane + carry (and its ride bonus) from day 21");
         uint256 sdgnrsStored = uint128(uint256(vm.load(address(coinflip), _stateSlot(SDGNRS))));
         assertEq(sdgnrsStored, sdgnrsClaimable, "seed-window wins fold into claimableStored");
     }
 
     // =====================================================================
-    //                    VIEW-01 / VIEW-02 — reads
+    //                    reads
     // =====================================================================
 
     function test_CoinflipAmountCarriesTheSeedForRecipientsOnWindowDaysOnly() public {
@@ -226,7 +226,7 @@ contract CoinflipSeedWindowTest is DegenesisDeployProtocol {
     }
 
     // =====================================================================
-    //                    ARM-01 — the deploy window
+    //                    the deploy window
     // =====================================================================
 
     function test_DeployOpensWindowOneThroughTwentyWithoutLaneWrites() public {

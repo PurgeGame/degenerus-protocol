@@ -12,28 +12,19 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title KeeperNonBrick -- the REVERT-FREE / NON-BRICK corpus, adapted to the v55 game-resident
-///        afking path (Phase 351, D-351-01). Proves the no-brick guarantee that survives D-348-04's
-///        REMOVAL of the per-slice try/catch valve: the funded process STAGE / box open is
-///        revert-free BY CONSTRUCTION (REVERT-01, class A); a solvency violation FAILS LOUD (the
+/// @title KeeperNonBrick -- the REVERT-FREE / NON-BRICK corpus for the game-resident
+///        afking path. Proves the no-brick guarantee in the absence of a per-slice try/catch valve:
+///        the funded process STAGE / box open is
+///        revert-free BY CONSTRUCTION (class A); a solvency violation FAILS LOUD (the
 ///        checked `claimablePool -=`, class B); the game-resident withdraw/cancel are un-brickable
 ///        under strict CEI.
 ///
-/// @notice D-351-02 REMOVED-SURFACE DROP (logged BY NAME for the 351-09 REGRESSION-BASELINE-v55 ledger):
-///   the v49 keeper batch-purchase per-slice try/catch isolation leg is GONE — the standalone AfKing
-///   batch-buy entrypoint (and its BatchBuy event) was v55 P5 dead-code (349.1) and has NO game-resident
-///   successor. The per-buy work folded into `mineFlip()`'s required-path Afking STAGE,
+/// @notice There is no keeper batch-purchase per-slice try/catch isolation leg — the game has no
+///   standalone AfKing batch-buy entrypoint (or BatchBuy event). The per-buy work lives in `mineFlip()`'s required-path Afking STAGE,
 ///   which is revert-free by construction (no valve to isolate a poisoned slice — a FUNDED, well-formed
 ///   slice can never poison the batch; an underfunded NORMAL sub is auto-paused/swap-popped, never
-///   reverted). The six dropped tests (no behavioral successor — recorded for the ledger):
-///     - testBatchPurchaseIsolatesFailingPlayerAndRefundsSlice
-///     - testFuzz_BatchPurchaseFailPositionRefundsAndCompletes
-///     - testBatchPurchaseGameOverRejectsWholeBatchAtEntry
-///     - testBatchPurchaseRejectsNonKeeperCaller
-///     - testKeeperBatchSkipsPoisonedMiddlePlayer
-///     - testFuzz_KeeperBatchPoisonPositionNeverBricks
-///   The reentrancy-rollback + un-brickable-cancel + reclaim/auto-pause-commit properties REFRAME onto
-///   the game-resident withdraw/cancel + the STAGE (D-351-01 renamed/relocated, NOT a removed surface).
+///   reverted). The reentrancy-rollback + un-brickable-cancel + reclaim/auto-pause-commit properties
+///   are asserted on the game-resident withdraw/cancel + the STAGE.
 ///
 /// @dev Builds on the DeployProtocol fixture (GameAfkingModule at GAME_AFKING_MODULE). Drives REAL
 ///      lootbox purchases through the public mint API; the per-sub buy is `mineFlip()`'s pre-RNG STAGE
@@ -57,7 +48,7 @@ contract KeeperNonBrick is DeployProtocol {
 
     // -------------------------------------------------------------------------
     // Storage slot constants (DegenerusGame; RE-DERIVED via `solc --storage-layout` on the working
-    // tree after the V62 lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Flip/
+    // tree after the lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Flip/
     // Purchase/Distress shifted later slots down (region-dependent). The prior 36/37/43/44/62/64/65
     // pins were stale; corrected to the authoritative values below.
     // -------------------------------------------------------------------------
@@ -71,8 +62,7 @@ contract KeeperNonBrick is DeployProtocol {
     /// @dev gameOver is bool at slot 0 offset 21 bytes = bit 168.
     uint256 private constant GAME_OVER_SHIFT = 168;
 
-    // Game-resident afking storage. The v61 fold removed the separate afkingFunding mapping; the
-    // afking balance is now the high 128 bits of balancesPacked (slot 7), claimable the low 128.
+    // Game-resident afking storage. The afking balance is the high 128 bits of balancesPacked (slot 6), claimable the low 128.
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = GameSlots.BALANCES_PACKED; // balancesPacked root; low 128 bits = claimable
@@ -84,7 +74,7 @@ contract KeeperNonBrick is DeployProtocol {
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     // -------------------------------------------------------------------------
-    // Afking reward peg mirror (the module's own FIXED constants, REW-03) — game storage, reusable as-is.
+    // Afking reward peg mirror (the module's own FIXED constants) — game storage, reusable as-is.
     // -------------------------------------------------------------------------
     uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
     uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
@@ -125,7 +115,7 @@ contract KeeperNonBrick is DeployProtocol {
     /// @notice REENTRANCY (reframed onto game-resident `withdrawAfkingFunding`): a malicious afking-funding
     ///         holder whose ETH-receive callback re-enters `withdrawAfkingFunding` to extract a SECOND payout
     ///         cannot double-spend. Under the game's strict CEI (effects — the funding debit + the tandem
-    ///         claimablePool release — execute BEFORE the `.call`, DegenerusGame.sol:1568-1571), the
+    ///         claimablePool release — execute BEFORE the `.call`, `GamePurchaseEntries.withdrawAfkingFunding`), the
     ///         re-entrant inner withdraw sees the zeroed funding and reverts; the attacker bubbles it, so
     ///         the outer `.call` sees failure, reverts TransferFailed(), and the WHOLE call unwinds. The attacker extracts
     ///         NOTHING — the per-frame debit can never be replayed.
@@ -171,9 +161,9 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `mineFlip()` (no full settle) — the
-    ///      STAGE runs strictly PRE-RNG (AdvanceModule:305-326), so the eviction/buy completes before
-    ///      rngGate and the stage is measured on its own. Subscribers must already be registered
-    ///      (subscribe blocks during rngLock). The 351-02 _runStageOnce pattern.
+    ///      STAGE runs strictly PRE-RNG (the advance's subscriber stage), so the eviction/buy completes before
+    ///      the daily RNG step and the stage is measured on its own. Subscribers must already be registered
+    ///      (subscribe blocks during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
         game.mineRun(0);
@@ -194,8 +184,8 @@ contract KeeperNonBrick is DeployProtocol {
         }
     }
 
-    /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning (the
-    ///      251-04 240-iter drain) — used before an afking box open so `mineFlip` reliably takes the OPEN leg.
+    /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning (a
+    ///      240-iteration drain) — used before an afking box open so `mineFlip` reliably takes the OPEN leg.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
@@ -248,8 +238,8 @@ contract KeeperNonBrick is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (SOLVENCY-01 stays balanced, the
-    ///      351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not underflow.
+    /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (solvency stays balanced)
+    ///      so a claimable-funded slice's `claimablePool -=` does not underflow.
     ///      `claimableWinnings` is `internal` (no getter) — read/write it via the RE-DERIVED mapping slot.
     function _setClaimable(address who, uint256 amount) internal {
         bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), uint256(CLAIMABLE_WINNINGS_SLOT)));
@@ -280,7 +270,7 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     /// @dev Force claimablePool (uint128 @ slot 1, byte 16) to an absolute value — used to manufacture the
-    ///      class-B SOLVENCY-01 underflow (pool < a player's afkingFunding).
+    ///      class-B solvency underflow (pool < a player's afkingFunding).
     function _setClaimablePool(uint256 value) internal {
         require(value <= type(uint128).max, "pool fits uint128");
         uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));

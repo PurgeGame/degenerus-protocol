@@ -39,7 +39,7 @@ contract DegradeWorkMismatchHarness is DegenerusGameJackpotModule {
     }
 }
 
-/// @notice Daily-spine degrade (DAILY-4a/b): a jackpotWork of another kind or level is retired and
+/// @notice Daily-spine degrade: a jackpotWork of another kind or level is retired and
 ///         the requested draw is priced fresh instead of reverting `JackpotWorkMismatch` on every
 ///         call. The seeded work is unreachable (each kind is created only inside the stage that
 ///         re-selects it), so it is written straight into the harness's storage.

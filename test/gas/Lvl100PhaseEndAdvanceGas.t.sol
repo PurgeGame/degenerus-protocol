@@ -34,7 +34,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 contract PhaseEndSeeder is DegenerusGame, BucketSeed {
     /// @notice The level-100 jackpot-phase-END pre-state, at every winner cap the leg can reach.
     /// @param lvl         the x00 level whose jackpot phase is closing
-    /// @param word        the day's recorded VRF word (non-zero -> rngGate returns it immediately)
+    /// @param word        the day's recorded VRF word (non-zero -> the daily RNG step returns it immediately)
     /// @param mainTraits  the 4 traits the ticket board draws, mirrored from the live roll
     /// @param base        disjoint address-space base for synthetic holders
     function seedPhaseEnd(

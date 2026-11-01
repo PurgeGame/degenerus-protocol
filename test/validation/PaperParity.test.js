@@ -1,8 +1,8 @@
 /**
  * Economic examples checked against deployed contracts and production libraries.
- * Literal-only arithmetic assertions were removed: they did not read production
- * constants and could stay green after the corresponding economics changed.
- * This suite checks the examples below, not every number in a historical paper.
+ * Assertions compare production reads (deployed contracts and libraries) against the
+ * paper's examples; a few arithmetic identities are checked on values read from production.
+ * This suite checks the examples below, not every number in the whitepaper.
  */
 
 import hre from "hardhat";
@@ -52,10 +52,10 @@ async function expectCharged(game, whaleModule, payer, send, eventName, priceFie
 // Test Suite
 // ---------------------------------------------------------------------------
 
-describe("Paper Parity (Phase 46)", function () {
+describe("Paper Parity", function () {
   after(restoreAddresses);
 
-  describe("PAR-01: PriceLookupLib price tiers", function () {
+  describe("PriceLookupLib price tiers", function () {
     // Expected prices for every tier boundary
     // Intro tiers (0-9)
     const introTierPrices = [
@@ -137,7 +137,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  describe("PAR-02: Ticket cost formula costWei = (priceWei * qty) / 400", function () {
+  describe("Ticket cost formula costWei = (priceWei * qty) / 400", function () {
     it("1 full ticket (qty=400) costs exactly priceWei", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
       const info = await game.purchaseInfo_g1027();
@@ -190,7 +190,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  describe("PAR-03: Prize pool split BPS", function () {
+  describe("Prize pool split BPS", function () {
     it("ticket purchase: 90% next pool, 10% future pool", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
       const info = await game.purchaseInfo_g1027();
@@ -249,7 +249,7 @@ describe("Paper Parity (Phase 46)", function () {
 
   });
 
-  describe("PAR-06: Activity score components and caps", function () {
+  describe("Activity score components and caps", function () {
 
     it("contract returns 0 for zero-address player", async function () {
       const { game } = await loadFixture(deployWithTester);
@@ -291,7 +291,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  describe("PAR-10: Whale bundle pricing", function () {
+  describe("Whale bundle pricing", function () {
     it("early price (levels 0-3): 2.4 ETH", async function () {
       // WHALE_BUNDLE_EARLY_PRICE = 2.4 ether
       const { game, alice, whaleModule } = await loadFixture(deployWithTester);
@@ -306,7 +306,7 @@ describe("Paper Parity (Phase 46)", function () {
 
   });
 
-  describe("PAR-11: Lazy pass pricing", function () {
+  describe("Lazy pass pricing", function () {
     it("flat 0.24 ETH at levels 0-2", async function () {
       // At level 0-2: benefitValue = 0.24 ether, totalPrice = 0.24 ether (no boon)
       const { game, alice, whaleModule } = await loadFixture(deployWithTester);
@@ -362,7 +362,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  describe("PAR-12: Deity pass T(n) pricing (24 + k*(k+1)/2 ETH)", function () {
+  describe("Deity pass T(n) pricing (24 + k*(k+1)/2 ETH)", function () {
     it("first deity pass (k=0): 24 ETH", async function () {
       const { game, alice, whaleModule } = await loadFixture(deployWithTester);
 
@@ -415,7 +415,7 @@ describe("Paper Parity (Phase 46)", function () {
 
   });
 
-  describe("PAR-16: Degenerette base payouts and ROI curve", function () {
+  describe("Degenerette base payouts and ROI curve", function () {
     let math;
     before(async function () {
       math = await degeneretteMathFixture();
@@ -447,7 +447,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  describe("PAR-17: Pass capital injection splits", function () {
+  describe("Pass capital injection splits", function () {
 
     it("whale bundle at level 0 actually splits 30/70", async function () {
       const { game, alice } = await loadFixture(deployWithTester);

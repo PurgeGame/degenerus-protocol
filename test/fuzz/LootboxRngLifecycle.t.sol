@@ -15,8 +15,8 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxRngLifecycle -- Audit tests for lootbox RNG index lifecycle
-/// @notice Covers LBOX-01 (index mutations), LBOX-02 (word writes), LBOX-03 (zero guards),
-///         LBOX-04 (entropy uniqueness), LBOX-05 (full lifecycle).
+/// @notice Covers index mutations, word writes, zero guards, entropy uniqueness,
+///         and the full lifecycle.
 contract LootboxRngLifecycle is DeployProtocol {
     VRFHandler public vrfHandler;
 
@@ -164,13 +164,12 @@ contract LootboxRngLifecycle is DeployProtocol {
         ts = block.timestamp;
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
-    ///      (post V62 lootbox repack: was 35).
+    /// @dev The physical write-buffer tag (what the lootbox index now is), read through RecyclingState.writeBuffer.
     function _readLootboxRngIndex() internal view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Read _lootboxWord(index) from storage (mapping at slot 34, post V62 repack: was 36).
+    /// @dev Read the lootbox word for the buffer `index` through RecyclingState.word (nonzero only for the published read buffer).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         return RecyclingState.word(address(game), index);
     }
@@ -221,14 +220,14 @@ contract LootboxRngLifecycle is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // LBOX-01: Index Mutation Correctness
+    // Index Mutation Correctness
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Fresh daily request increments lootboxRngIndex by exactly 1.
     function test_indexIncrementsOnFreshDaily() public {
         uint48 indexBefore = _readLootboxRngIndex();
 
-        // mineFlip triggers daily VRF request -> _finalizeRngRequest(isRetry=false) -> index++
+        // mineFlip triggers daily VRF request -> requestDailyRng_g8190 -> physical tag toggle
         game.mineRun(0);
 
         uint48 indexAfter = _readLootboxRngIndex();
@@ -318,7 +317,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // LBOX-02: Word-to-Index Correctness
+    // Word-to-Index Correctness
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Daily VRF fulfillment writes fuzzed word to _lootboxWord(index-1).
@@ -408,7 +407,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 storedWord = _publishedAt(vm.getRecordedLogs(), reservedIndex, reqId);
         assertTrue(storedWord != 0, "Stale redirect should store nonzero word at correct index");
 
-        // mineFlip on day 4: rngGate sees requestDay < day, redirects stale word
+        // mineFlip on day 4: the daily RNG step sees requestDay < day, redirects stale word
         // to lootbox via _finalizeLootboxRng. The game processes both days inline. When the
         // publishing call already completed the stale day (and may have opened a mid-day
         // request this harness never answers), there is nothing left for the stale request.
@@ -486,7 +485,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // LBOX-03: Zero-State Guards
+    // Zero-State Guards
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice A daily word of 0 never records as 0 or as the request sentinel 1.
@@ -577,7 +576,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // LBOX-04: Entropy Uniqueness
+    // Entropy Uniqueness
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Two different players purchasing at the same index produce different entropy.
@@ -705,7 +704,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // LBOX-05: Full Purchase-to-Open Lifecycle
+    // Full Purchase-to-Open Lifecycle
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Full daily lifecycle: purchase -> mineFlip -> VRF fulfill -> process -> the engine opens the box.

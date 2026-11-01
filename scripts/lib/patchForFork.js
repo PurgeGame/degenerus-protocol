@@ -6,10 +6,10 @@ import {
   computeDeployDayBoundary,
 } from "./predictAddresses.js";
 import { patchContractAddresses } from "./patchContractAddresses.js";
-import {
-  FOUNDRY_TEST_CONTRACT,
-  PROTOCOL_START_NONCE,
-} from "./patchForFoundry.js";
+import { FOUNDRY_TEST_CONTRACT } from "./patchForFoundry.js";
+
+// The fork fixture deploys no mocks: the protocol starts at the test contract's first nonce.
+export const FORK_PROTOCOL_START_NONCE = 1;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PINS_FILE = resolve(__dirname, "../../test/fork/ForkPins.sol");
@@ -17,7 +17,8 @@ const PINS_FILE = resolve(__dirname, "../../test/fork/ForkPins.sol");
 /**
  * Read the fork pins from test/fork/ForkPins.sol, the single source of truth shared with the
  * Solidity fixture (which re-checks every value against the compiled ContractAddresses).
- * @returns {{FORK_BLOCK:number, FORK_TIMESTAMP:number, STETH:string, LINK:string,
+ * @returns {{FORK_BLOCK:number, FORK_TIMESTAMP:number, STETH:string, VRF_COORDINATOR:string,
+ *   VRF_KEY_HASH:string}}
  */
 export function readForkPins(file = PINS_FILE) {
   const src = readFileSync(file, "utf8");
@@ -39,18 +40,16 @@ export function readForkPins(file = PINS_FILE) {
 }
 
 /**
- * Patch ContractAddresses.sol for the mainnet-fork suite (test/fork). Every protocol address is
- * predicted EXACTLY as patchForFoundry does (same test-contract deployer, the four mocks still
- * occupy nonces 1-4, protocol from nonce 5), so the fork deployment lands on the same addresses.
- * Only the external dependencies differ: STETH_TOKEN, LINK_TOKEN, VRF_COORDINATOR and
- * LINK_ETH_FEED point at the real mainnet contracts, VRF_KEY_HASH is a lane the real coordinator
- * has registered, and DEPLOY_DAY_BOUNDARY is derived from the pinned block's timestamp — the
- * fork keeps mainnet time (the fixture does not warp to 86400, which would put the real LINK/ETH
- * round in the future).
+ * Patch ContractAddresses.sol for the mainnet-fork suite (test/fork). Protocol addresses are
+ * predicted for the same test-contract deployer as patchForFoundry, starting at nonce 1 because
+ * the fork fixture deploys no mocks. The external dependencies differ: STETH_TOKEN and VRF_COORDINATOR point at the real
+ * mainnet contracts, VRF_KEY_HASH is a lane the real coordinator has registered, and
+ * DEPLOY_DAY_BOUNDARY is derived from the pinned block's timestamp: the fork keeps mainnet time
+ * (the fixture does not warp to 86400).
  */
 export function patchForFork() {
   const pins = readForkPins();
-  const predicted = predictAddresses(FOUNDRY_TEST_CONTRACT, PROTOCOL_START_NONCE);
+  const predicted = predictAddresses(FOUNDRY_TEST_CONTRACT, FORK_PROTOCOL_START_NONCE);
   const external = {
     STETH_TOKEN: pins.STETH,
     VRF_COORDINATOR: pins.VRF_COORDINATOR,

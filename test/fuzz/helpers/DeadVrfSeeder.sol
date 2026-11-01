@@ -70,6 +70,13 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         return (deadPot, deadTotal, deadCreated, deadUncreated, deadTraitCount, deadUncreatedLeft);
     }
 
+    /// @dev Replace the fixed totals with weights past 64 bits, as 2^32 wallets owing 2^32
+    ///      entries each would produce.
+    function setDeadWeights(uint80 total, uint80 left) external {
+        deadTotal = total;
+        deadUncreatedLeft = left;
+    }
+
     function sealedDay() external view returns (uint24) {
         return dailyIdx;
     }

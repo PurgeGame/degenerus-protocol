@@ -26,9 +26,7 @@
 // `dgnrsAmount > poolBalance` clamp. Collapsing after the clamp would truncate the pool
 // balance itself and leave dust permanently unpayable at the bottom of the pool.
 //
-// CROSS-CITES:
-//   - contracts/libraries/SigFigLib.sol
-//   - .planning/PLAN-FLIP-ROUND-HUNDREDS.md (the FLIP-side granule this mirrors)
+// See contracts/libraries/SigFigLib.sol (mirrors the FLIP-side granule).
 
 import { expect } from "chai";
 import fs from "node:fs";

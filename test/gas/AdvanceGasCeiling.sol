@@ -17,10 +17,10 @@ import {Vm} from "forge-std/Vm.sol";
 ///         Native gas suites separately verify each operation plus its return tail.
 
 /// @dev Seeder overlay: writes a worst-case mineFlip pre-state directly into the live game storage.
-///      Both entrypoints share one body so the named v60 game-over regression keeps the EXACT pre-state
-///      while Phase 384 / the fuzz can drive arbitrary reachable geometries through the same writes.
+///      Both entrypoints share one body so the named game-over regression keeps the EXACT pre-state
+///      while the fuzz can drive arbitrary reachable geometries through the same writes.
 contract GameSeeder is DegenerusGame, BucketSeed {
-    /// @notice Parameterized worst-case mineFlip seeder (the general seam Phase 384 calls).
+    /// @notice Parameterized worst-case mineFlip seeder (the general seam for fuzzing).
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped; a
     ///                     deeper level also means deeper trait buckets)
     /// @param rngWord      the word the winning buckets are seeded for; it answers the terminal request
@@ -99,8 +99,8 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         }
     }
 
-    /// @notice The v60 game-over composition pre-state (fixed 6d2c8d0c) — kept verbatim-equivalent so
-    ///         the named regression drives the EXACT historical worst case through the reusable loop.
+    /// @notice The game-over composition pre-state, kept verbatim-equivalent so
+    ///         the named regression drives the EXACT worst case through the reusable loop.
     function seedGameOverWorstCase(
         uint24 lvl,
         uint256 rngWord,

@@ -7,8 +7,8 @@ import {console} from "forge-std/console.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice The census's real lifecycle with paid mining and individually capped calls.
-/// @dev Run with FOUNDRY_ISOLATE=true. This is Foundry transaction-isolation evidence,
-/// not a paid Geth replay. Rewards stay in the real ledger throughout the whole run;
+/// @dev Run with FOUNDRY_ISOLATE=true. This is Foundry transaction-isolation evidence.
+/// Rewards stay in the real ledger throughout the whole run;
 /// no comparison removes them or resets the resulting state to a zero-fee reference.
 contract NativePaidLifecycleTest is StorageCensusLongRunTest {
     uint256 private constant TX_CAP = 16_777_216;

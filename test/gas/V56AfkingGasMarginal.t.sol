@@ -35,10 +35,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (forge inspect DegenerusGame storageLayout, v61)
+    // Game-resident storage slots (forge inspect DegenerusGame storageLayout)
     // -------------------------------------------------------------------------
 
-    // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
+    // RE-DERIVED via `solc --storage-layout` on the working tree after the lootbox repack — the
     // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;     // packed 85-bit lanes (slot holds the length)
@@ -77,18 +77,18 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @dev A multi-reset stall that remains inside the fourteen-day hard completion timeout.
     uint256 internal constant STALL_DAYS = 8;
 
-    /// @dev Informational v55/349.2 per-buy lootbox reference (~206k, the v55 measured marginal WITH the
-    ///      per-buy cross-contract storm) and the ~130-140k GAS-01 target band (the v56 deferred-settle win).
+    /// @dev Informational per-buy lootbox reference (~206k, the measured marginal WITH a
+    ///      per-buy cross-contract storm) and the ~130-140k target band (the deferred-settle win).
     ///      Reported as a comparison log, NOT a hard pin — the MEASURED number is the deliverable.
     uint256 internal constant V55_LOOTBOX_BUY_REF = 206_000;
     uint256 internal constant V56_LOOTBOX_TARGET_LO = 130_000;
     uint256 internal constant V56_LOOTBOX_TARGET_HI = 140_000;
 
-    /// @dev The old per-day ~262k purchaseWith reference (the heavyweight the v56 ticket minimal-write
+    /// @dev The per-day ~262k purchaseWith reference (the heavyweight the ticket minimal-write
     ///      primitive replaces). Reported as the structural-win comparison for the ticket marginal.
     uint256 internal constant V55_TICKET_PURCHASEWITH_REF = 262_000;
 
-    /// @dev D-09 regression-lock LOOSE ceilings — generous bounds over the measured v56 marginals (lootbox buy
+    /// @dev Regression-lock LOOSE ceilings — generous bounds over the measured marginals (lootbox buy
     ///      ~7k / ticket buy ~54k / afking open ~70-75k), NOT brittle exact pins. A FUTURE regression (a
     ///      re-introduced per-buy cross-contract storm ~206k, or a cold-ledger walk creeping into the open leg)
     ///      blows these; normal measurement variance stays well under. The gate is a ceiling, not an equality.
@@ -118,7 +118,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
 
     // =========================================================================
-    // (a) per-buy LOOTBOX marginal — a NON-settle-day STAGE (GAS-01)
+    // (a) per-buy LOOTBOX marginal — a NON-settle-day STAGE
     // =========================================================================
 
     /// @notice Measure the extra funded lootbox subscription against the current item reservation.
@@ -135,11 +135,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
         string memory band;
         if (perBuyLootbox <= V56_LOOTBOX_TARGET_HI) {
-            band = "AT or BELOW the ~130-140k GAS-01 target (deferred-settle win realized)";
+            band = "AT or BELOW the ~130-140k target (deferred-settle win realized)";
         } else if (perBuyLootbox < V55_LOOTBOX_BUY_REF) {
-            band = "BELOW the v55 ~206k reference (cheaper than v55), above the ~130-140k target band";
+            band = "BELOW the ~206k reference (cheaper than it), above the ~130-140k target band";
         } else {
-            band = "AT or ABOVE the v55 ~206k reference (measured AS-IS, the deliverable)";
+            band = "AT or ABOVE the ~206k reference (measured AS-IS, the deliverable)";
         }
         emit log_named_string("per_buy_lootbox_vs_refs", band);
 
@@ -152,7 +152,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (b) per-buy TICKET marginal — the new minimal-write primitive (GAS-01)
+    // (b) per-buy TICKET marginal — the new minimal-write primitive
     // =========================================================================
 
     /// @notice Measure the extra funded ticket subscription against the current item reservation.
@@ -209,7 +209,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (d) per-EVICT-finalize marginal — the heavier in-stage branch (GAS-03)
+    // (d) per-EVICT-finalize marginal — the heavier in-stage branch
     // =========================================================================
 
     /// @notice Measure one additional funding expiry, including its quest finalization.
@@ -292,7 +292,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (g) D-06 residual R1 — STAGE weight-model fidelity (level-cross / gap-resume per-iter <= weight)
+    // (g) residual R1 — STAGE weight-model fidelity (level-cross / gap-resume per-iter <= weight)
     // =========================================================================
 
     /// @notice Retained test name; the production worker now admits complete items from
@@ -437,12 +437,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (j) D-06 residual R4 — heaviest reachable per-iter state (re-measure the marginals at the heavy state)
+    // (j) residual R4 — heaviest reachable per-iter state (re-measure the marginals at the heavy state)
     // =========================================================================
 
     /// @notice Residual R4: the per-iter marginals come from the fixture's 5-ETH-sub + coin-seat states; the
     ///         true heaviest reachable per-iter state (max streak hand-back / funding-kill finalize) may exceed
-    ///         them. The v56 streak is compute-on-read (no per-iter streak SSTORE storm), so the heaviest per-iter
+    ///         them. The streak is compute-on-read (no per-iter streak SSTORE storm), so the heaviest per-iter
     ///         state is the funding-kill finalize (R1's evict branch) and the heaviest open (R3's mixed-day,
     ///         cold-SLOAD-per-box). This asserts the heaviest of {evict marginal, mixed-day open marginal} is
     ///         still a bounded O(1) per-iter cost (no marginal scales with player magnitude), so the
@@ -476,10 +476,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (k) LIVE-01 — the engine's box stages: drain + bound + afking-first + cursor-independence + selector-isolation
+    // (k) the engine's box stages: drain + bound + afking-first + cursor-independence + selector-isolation
     // =========================================================================
 
-    /// @notice LIVE-01 (a) afking-first ordering: with both backlogs populated, mineFlip's first action is the
+    /// @notice (a) afking-first ordering: with both backlogs populated, mineFlip's first action is the
     ///         AFKing stage, which drains the afking backlog before the human-box stage runs with the
     ///         remaining allowance.
     function testLive01AfkingFirstOrdering() public {
@@ -489,7 +489,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // AFKING backlog: a funded lootbox sub gets a stamped box.
         address afk = makeAddr("v_afk");
         uint256 seat = _grantSeat(afk);
-        _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
+        _fundPool(afk, 5 ether); // fund BEFORE subscribe
         vm.prank(afk);
         game.subscribe(0, false, 1, seat);
         _settleGame(0xA0F1 ^ 0xF00D);
@@ -511,25 +511,25 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 subOpenCursorBefore = _subOpenCursor();
 
         // One unbounded engine call: enough for BOTH the afking box AND the human box.
-        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Afking), "LIVE-01(a): the AFKing stage is the engine's next work");
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Afking), "the AFKing stage is the engine's next work");
         vm.recordLogs();
         vm.prank(makeAddr("v_opener"));
         game.mineRun(0);
-        assertEq(_minerFirstAction(vm.getRecordedLogs()), uint8(DegenerusGameStorage.MinerAction.Afking), "LIVE-01(a): afking-first -- the call opened with the AFKing stage");
+        assertEq(_minerFirstAction(vm.getRecordedLogs()), uint8(DegenerusGameStorage.MinerAction.Afking), "afking-first -- the call opened with the AFKing stage");
 
         // Afking-first: the afking box opened (no longer pending).
-        assertFalse(_isPending(afk), "LIVE-01(a): afking-first -- the afking box opened by the engine");
+        assertFalse(_isPending(afk), "afking-first -- the afking box opened by the engine");
         // The human leg ran with the REMAINING allowance: its cursor did not regress.
-        assertGe(_boxCursor(), boxCursorBefore, "LIVE-01(a): the human cursor advanced with the remaining allowance");
+        assertGe(_boxCursor(), boxCursorBefore, "the human cursor advanced with the remaining allowance");
         emit log_named_uint("live01a_sub_open_cursor_before", subOpenCursorBefore);
         emit log_named_uint("live01a_sub_open_cursor_after", _subOpenCursor());
         emit log_named_uint("live01a_box_cursor_before", boxCursorBefore);
         emit log_named_uint("live01a_box_cursor_after", _boxCursor());
     }
 
-    /// @notice LIVE-01 (b)+(c)+(d): repeated bounded mineFlip calls fully DRAIN a multi-box afking backlog with
+    /// @notice (b)+(c)+(d): repeated bounded mineFlip calls fully DRAIN a multi-box afking backlog with
     ///         BOTH cursors monotone-advancing (no stuck box), EACH mineFlip chunk < the EIP cap (bounded), and
-    ///         derived opened day monotone no-double-open (the skip at GameAfkingModule:1154). Uses tiny per-call
+    ///         derived opened day monotone no-double-open (the skip in the afking box-open pass). Uses tiny per-call
     ///         budgets so the drain genuinely spans multiple bounded calls.
     function testLive01DrainBothCursorsBoundedNoDoubleOpen() public {
         uint256 n = 8;
@@ -555,8 +555,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 gb = gasleft();
             (bool ok,) = address(game).call{gas: 1_500_000}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 g = gb - gasleft();
-            // LIVE-01(c): each bounded engine chunk stays under the EIP per-tx ceiling.
-            assertLt(g, EIP7825_TX_GAS_CAP, "LIVE-01(c): each bounded mineFlip chunk stays < 16,777,216");
+            // (c) each bounded engine chunk stays under the EIP per-tx ceiling.
+            assertLt(g, EIP7825_TX_GAS_CAP, "each bounded mineFlip chunk stays < 16,777,216");
             uint256 op = ok ? _openedCount(subs) - before : 0;
             totalOpened += op;
             if (op == 0) {
@@ -573,24 +573,24 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.stopPrank();
         totalOpened += _openedCount(subs) - beforeFinish;
 
-        // LIVE-01(b): the whole afking backlog DRAINED — every sub's box opened (no longer pending),
+        // (b) the whole afking backlog DRAINED — every sub's box opened (no longer pending),
         // no stuck box; the afking cursor advanced through the set.
         uint256 openedCount;
         for (uint256 i; i < n; ++i) {
             if (!_isPending(subs[i])) openedCount++;
         }
-        assertEq(openedCount, n, "LIVE-01(b): repeated bounded mineFlip calls fully drained the afking backlog (no stuck box)");
+        assertEq(openedCount, n, "repeated bounded mineFlip calls fully drained the afking backlog (no stuck box)");
 
-        // LIVE-01(d): a further engine call opens nothing on the drained backlog — no double-open.
+        // (d) a further engine call opens nothing on the drained backlog — no double-open.
         vm.prank(makeAddr("vd_reopen"));
         try game.mineRun(0) {} catch {}
         for (uint256 i; i < n; ++i) {
-            assertFalse(_isPending(subs[i]), "LIVE-01(d): re-running the engine on an already-drained backlog opens nothing (no double-open)");
+            assertFalse(_isPending(subs[i]), "re-running the engine on an already-drained backlog opens nothing (no double-open)");
         }
         emit log_named_uint("live01_total_opened", totalOpened);
     }
 
-    /// @notice LIVE-01 (e) selector isolation: the AFKing stage worker (runAfkingWork_g8553) runs on the Game's
+    /// @notice (e) selector isolation: the AFKing stage worker (runAfkingWork_g8553) runs on the Game's
     ///         storage ONLY through mineFlip's delegatecall. Calling it DIRECTLY on the GameAfkingModule
     ///         contract address operates on the MODULE's OWN storage — an empty _subscribers set — so it
     ///         cannot touch the Game's subscribers. The afking open is never a re-exposed standalone selector
@@ -601,7 +601,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _setupFundedSubs(AFKING_PADS, "vsel_pad_", 5 ether, false);
         address afk = makeAddr("vsel_afk");
         uint256 seat = _grantSeat(afk);
-        _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
+        _fundPool(afk, 5 ether); // fund BEFORE subscribe
         vm.prank(afk);
         game.subscribe(0, false, 1, seat);
         _stampNewDay(0xE0F1);
@@ -615,44 +615,44 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // module-local call returns or refuses, it must open no Game box.
         uint256 laneBefore = _laneOf(afk);
         try IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).runAfkingWork_g8553(1_000_000) returns (MineFlipGas.Result memory direct) {
-            assertEq(direct.rewardBasis, 0, "LIVE-01(e): direct runAfkingWork_g8553 on the module opens nothing (selector-isolated)");
+            assertEq(direct.rewardBasis, 0, "direct runAfkingWork_g8553 on the module opens nothing (selector-isolated)");
         } catch {}
         // The Game's afking box is UNTOUCHED by the direct module call (still pending, Sub word unchanged).
-        assertEq(_laneOf(afk), laneBefore, "LIVE-01(e): the Game's lane untouched by the direct module call");
-        assertTrue(_isPending(afk), "LIVE-01(e): the Game's afking box untouched by the direct module call");
+        assertEq(_laneOf(afk), laneBefore, "the Game's lane untouched by the direct module call");
+        assertTrue(_isPending(afk), "the Game's afking box untouched by the direct module call");
 
         // And the canonical path (the engine) DOES open it — the non-vacuity control.
         vm.prank(makeAddr("vsel_op"));
         game.mineRun(0);
-        assertFalse(_isPending(afk), "LIVE-01(e) control: the engine's AFKing stage DOES open the afking box");
+        assertFalse(_isPending(afk), "control: the engine's AFKing stage DOES open the afking box");
     }
 
     // =========================================================================
-    // (l) D-09 — GAS-01..04 marginal regression locks (re-assert against a recorded LOOSE ceiling)
+    // (l) marginal regression locks (re-assert against a recorded LOOSE ceiling)
     // =========================================================================
 
-    /// @notice D-09 regression locks: re-assert the GAS-01..04 per-buy / per-open marginals against a RECORDED
+    /// @notice Regression locks: re-assert the per-buy / per-open marginals against a RECORDED
     ///         LOOSE ceiling bound (a generous ceiling, NOT a brittle exact number) so a FUTURE regression
     ///         (e.g. a re-introduced per-buy cross-contract storm, or a cold-ledger walk creeping back into the
     ///         open leg) fails the gate while normal measurement variance passes. The bounds are deliberately
-    ///         loose multiples of the measured v56 marginals (lootbox/ticket buy, afking open).
+    ///         loose multiples of the measured marginals (lootbox/ticket buy, afking open).
     function testD09Gas0104RegressionLocks() public {
         uint256 snap = vm.snapshotState();
 
-        // GAS-01 per-buy lootbox marginal.
+        // Per-buy lootbox marginal.
         uint256 lN = _measureStageAdvanceGas(N_HI, "d9lbHi_", false, false);
         vm.revertToState(snap);
         uint256 lNm1 = _measureStageAdvanceGas(N_LO, "d9lbLo_", false, false);
         uint256 perBuyLootbox = lN - lNm1;
 
-        // GAS-01 per-buy ticket marginal (the minimal-write primitive).
+        // Per-buy ticket marginal (the minimal-write primitive).
         vm.revertToState(snap);
         uint256 tN = _measureStageAdvanceGas(N_HI, "d9tkHi_", true, false);
         vm.revertToState(snap);
         uint256 tNm1 = _measureStageAdvanceGas(N_LO, "d9tkLo_", true, false);
         uint256 perBuyTicket = tN - tNm1;
 
-        // GAS-01 per-open afking marginal. SHARED prefix (see testPerOpenMarginal) so the marginal is one real
+        // Per-open afking marginal. SHARED prefix (see testPerOpenMarginal) so the marginal is one real
         // box's open cost, not a seed-noisy difference of two unequal box-cost sums that could underflow here.
         vm.revertToState(snap);
         uint256 oN = _measureOpenLegGas(N_HI, "d9op_");
@@ -664,12 +664,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         emit log_named_uint("d09_per_buy_ticket_gas", perBuyTicket);
         emit log_named_uint("d09_per_open_gas", perOpen);
 
-        // The RECORDED LOOSE ceilings (generous bounds vs the measured v56 marginals: lootbox ~7k / ticket ~54k
-        // / open ~70-75k). A regression that re-introduces the v55 per-buy cross-contract storm (~206k lootbox)
+        // The RECORDED LOOSE ceilings (generous bounds vs the measured marginals: lootbox ~7k / ticket ~54k
+        // / open ~70-75k). A regression that re-introduces the per-buy cross-contract storm (~206k lootbox)
         // or a cold-ledger open walk would blow these; normal variance stays well under.
-        assertLt(perBuyLootbox, REG_LOCK_LOOTBOX_BUY_CEIL, "D-09: per-buy lootbox marginal under the recorded loose ceiling (no cross-contract storm regression)");
-        assertLt(perBuyTicket, REG_LOCK_TICKET_BUY_CEIL, "D-09: per-buy ticket marginal under the recorded loose ceiling (minimal-write primitive intact)");
-        assertLt(perOpen, REG_LOCK_OPEN_CEIL, "D-09: per-open afking marginal under the recorded loose ceiling (uniform O(1) open intact)");
+        assertLt(perBuyLootbox, REG_LOCK_LOOTBOX_BUY_CEIL, "per-buy lootbox marginal under the recorded loose ceiling (no cross-contract storm regression)");
+        assertLt(perBuyTicket, REG_LOCK_TICKET_BUY_CEIL, "per-buy ticket marginal under the recorded loose ceiling (minimal-write primitive intact)");
+        assertLt(perOpen, REG_LOCK_OPEN_CEIL, "per-open afking marginal under the recorded loose ceiling (uniform O(1) open intact)");
     }
 
     // =========================================================================
@@ -791,9 +791,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev Subscribe `n` fresh players as funded subs in the requested mode (lootbox = useTickets false /
     ///      ticket = useTickets true), seated with an AFKing Subscription Token so the coin gate at subscribe passes;
-    ///      funded via depositAfkingFunding so the STAGE :744 afkingFunding debit + :745 claimablePool debit
-    ///      land in tandem (SOLVENCY-01 balanced). The STAGE stamps/queues each into a warm Sub slot (GAS-01)
-    ///      + runs the v56 mode-agnostic in-slot accrue (no per-buy cross-contract storm — that is deferred
+    ///      funded via depositAfkingFunding so the STAGE afkingFunding debit + claimablePool debit
+    ///      land in tandem (solvency balanced). The STAGE stamps/queues each into a warm Sub slot
+    ///      + runs the mode-agnostic in-slot accrue (no per-buy cross-contract storm — that is deferred
     ///      to the settle day).
     function _setupFundedSubs(uint256 n, string memory prefix, uint256 poolEach, bool isTicket)
         internal
@@ -804,8 +804,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
             uint256 seat = _grantSeat(who);
-            // Fund BEFORE subscribe so the grounded NEW-run cover-buy is funded (D-12 — an unfunded start
-            // reverts MustPurchaseToBeginAfking).
+            // Fund BEFORE subscribe so the subscriber's prepaid afking balance covers its STAGE buys.
             _fundPool(who, poolEach);
             vm.prank(who);
             // self, mode = isTicket, qty 1, reinvest 0, self-funded
@@ -1009,7 +1008,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev Read the afking-open cursor `_subOpenCursor` (slot 56, byte 2, uint16) — the afking-side open
     ///      walk (mineFlip's AFKing stage, runAfkingWork_g8553). Distinct from the human boxCursor (byte 7) —
-    ///      LIVE-01 cursor independence.
+    ///      cursor independence.
     function _subOpenCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 16) & 0xFFFF;
     }
@@ -1052,7 +1051,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev The simulated day index the next advance stamps with — read in-context via the game's view
     ///      (`currentDayView_g542950()` == `_wallDayAt(block.timestamp)`, the exact `processDay` the STAGE
-    ///      stamps with, AdvanceModule:169). Used to align the warp onto a settle boundary.
+    ///      stamps with). Used to align the warp onto a settle boundary.
     function _logicalDay() internal view returns (uint32) {
         return game.currentDayView_g542950();
     }

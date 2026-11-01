@@ -11,8 +11,8 @@ import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePass
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-/// @dev The golden-ticket harness plus a read of the packed daily ticket budgets Phase 1 leaves
-///      for Phase 2.
+/// @dev The golden-ticket harness plus a read of the packed daily ticket budgets the ETH phase
+///      leaves for the ticket phase.
 contract DayShapeHarness is GoldenTicketHarness {
     function ticketBudgets() external view returns (uint256 dailyEntries) {
         return uint64(dailyTicketBudgetsPacked >> 8);
@@ -55,8 +55,8 @@ contract JackpotBattleHarness is DayShapeHarness {
 ///         reserved and no move on the future pool beyond any whale-pass conversion booked back.
 ///         The FINAL physical day (counter + step reaching the cap) pays 100% of the remaining
 ///         current pool: a fifth to tickets, the rest to ETH, and the current pool ends at zero.
-///         Mutation v78 found none of this asserted in foundry (the early-bird gate, its next
-///         credit and the final-day gate all survived); this reads the pool moves back.
+///         This reads the pool moves back (the early-bird gate, its next credit and the
+///         final-day gate).
 contract DailyJackpotDayShapes is Test {
     DayShapeHarness internal h;
 
@@ -67,7 +67,7 @@ contract DailyJackpotDayShapes is Test {
 
     // Mirrors the jackpot module's private `_dailyCurrentPoolBps` + the fixed 1/5 ticket carve
     // (DAILY_CURRENT_BPS_MIN/MAX and the "daily-current-bps" tag), so the day's ticket budget can
-    // be reconstructed exactly from the same inputs Phase 1 sees.
+    // be reconstructed exactly from the same inputs the ETH phase sees.
     uint16 private constant _BPS_MIN = 600;
     uint16 private constant _BPS_MAX = 1400;
     bytes32 private constant _BPS_TAG = keccak256("daily-current-bps");
@@ -119,7 +119,7 @@ contract DailyJackpotDayShapes is Test {
         }
     }
 
-    /// @dev Reproduces Phase 1's daily-ticket-budget arithmetic exactly, given the same
+    /// @dev Reproduces the ETH phase's daily-ticket-budget arithmetic exactly, given the same
     ///      (curPool, counter, word) inputs and whether the day is the level's final.
     function _expectedDailyTicketBudget(
         uint256 curPool,
@@ -166,7 +166,7 @@ contract DailyJackpotDayShapes is Test {
         uint256 earlyBird = (uint256(fut0) * 300) / 10_000;
         assertEq(uint256(fut0) + passEth - uint256(fut1), earlyBird, "the early-bird day takes exactly 3% of the future pool");
         assertGt(dailyEntries, 0, "the day's own ticket budget was priced");
-        // next gains the early-bird slice plus the day's ticket budget, which Phase 1 priced into
+        // next gains the early-bird slice plus the day's ticket budget, which the ETH phase priced into
         // `dailyEntries` at the next level (four entries per ticket price; one sub-ticket of slack).
         uint256 unit = PriceLookupLib.priceForLevel(LVL + 1) >> 2;
         uint256 gained = uint256(next1) - uint256(next0) - earlyBird;

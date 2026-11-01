@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {ForkDeployProtocol} from "./ForkDeployProtocol.sol";
 import {ForkPins} from "./ForkPins.sol";
@@ -27,7 +26,7 @@ interface ICoordinatorExtra {
 ///         slot, +183,600 per account created by a value call, +2,300 per value-bearing CALL inside the
 ///         frame, +100 per EXTCODESIZE/EXTCODECOPY inside the frame. Refunds are ignored (conservative).
 ///         Every budget must cover the Glamsterdam total.
-abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol, NativeGasExport {
+abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
     struct Probe {
         address sender;
         address target;
@@ -279,14 +278,6 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol, NativeGasExp
             assertTrue(r.ok, string.concat(name, ": call failed"));
             assertGe(budget, r.total, string.concat(name, ": budget below Glamsterdam total"));
         }
-        if (r.ok && bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            string memory label = string.concat("mainnet-budget-", vm.toString(keccak256(abi.encode(name, r))));
-            vm.serializeString(label, "calibrationName", name);
-            vm.serializeUint(label, "fixedCalleeBudget", budget);
-            vm.serializeBool(label, "enforceBudget", enforce);
-            vm.serializeUint(label, "osakaFrameGas", r.osaka);
-            this.exportNativeFixture(label, p.sender, p.target, p.value, p.data);
-        }
     }
 
     function _view(address sender, address target, bytes memory data) internal pure returns (Probe memory) {
@@ -311,29 +302,29 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
     // ------------------------------------------------------------------ stETH reads (50k)
 
     function test_a01_stethBalanceOfGame() public {
-        _run("stETH.balanceOf(Game, zero shares)  [Storage:1151]", 50_000,
+        _run("stETH.balanceOf(Game, zero shares)  [Storage._vrfYieldSurplus]", 50_000,
             _view(address(game), ForkPins.STETH, abi.encodeWithSignature("balanceOf(address)", address(game))), true, true);
         assertEq(lido.sharesOf(address(game)), 0, "fixture: Game holds no shares");
     }
 
     function test_a02_stethGetSharesByPooledEth() public {
-        _run("stETH.getSharesByPooledEth  [AfkingModule:447]", 50_000,
+        _run("stETH.getSharesByPooledEth  [GameAfkingModule.pullAfkingSteth]", 50_000,
             _view(address(game), ForkPins.STETH, abi.encodeWithSignature("getSharesByPooledEth(uint256)", 1 ether)), true, true);
     }
 
     function test_a03_stethGetPooledEthByShares() public {
-        _run("stETH.getPooledEthByShares  [AfkingModule:447]", 50_000,
+        _run("stETH.getPooledEthByShares  [GameAfkingModule.pullAfkingSteth]", 50_000,
             _view(address(game), ForkPins.STETH,
                 abi.encodeWithSignature("getPooledEthByShares(uint256)", playerShares)), true, true);
     }
 
     function test_a04_stethSharesOf() public {
-        _run("stETH.sharesOf(source)  [AfkingModule:447]", 50_000,
+        _run("stETH.sharesOf(source)  [GameAfkingModule.pullAfkingSteth]", 50_000,
             _view(address(game), ForkPins.STETH, abi.encodeWithSignature("sharesOf(address)", player)), true, true);
     }
 
     function test_a05_stethAllowance() public {
-        _run("stETH.allowance(source, Game)  [AfkingModule:418]", 50_000,
+        _run("stETH.allowance(source, Game)  [GameAfkingModule.pullAfkingSteth]", 50_000,
             _view(address(game), ForkPins.STETH,
                 abi.encodeWithSignature("allowance(address,address)", player, address(game))), true, true);
     }
@@ -341,14 +332,14 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
     // ------------------------------------------------------------------ Lido.submit (200k)
 
     function test_a06_stethSubmitFirstStake() public {
-        _run("stETH.submit{1 ether}, first stake (Game share slot created)  [AdvanceModule:1070]", 300_000,
+        _run("stETH.submit{1 ether}, first stake (Game share slot created)  [AdvanceModule.stakeExcessEth]", 300_000,
             _send(address(game), ForkPins.STETH, 1 ether, abi.encodeWithSignature("submit(address)", address(0))),
             true, true);
         assertEq(lido.sharesOf(address(game)), 0, "fixture: Game held no shares");
     }
 
     function test_a07_stethSubmitLargeFirstStake() public {
-        _run("stETH.submit{1000 ether}, first stake  [AdvanceModule:1070]", 300_000,
+        _run("stETH.submit{1000 ether}, first stake  [AdvanceModule.stakeExcessEth]", 300_000,
             _send(address(game), ForkPins.STETH, 1000 ether, abi.encodeWithSignature("submit(address)", address(0))),
             true, true);
     }
@@ -367,7 +358,7 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
     // ------------------------------------------------------------------ VRF coordinator
 
     function test_b01_vrfRequestFirst() public {
-        _run("VRF.requestRandomWords, first request of the subscription  [Storage:1158]", 500_000,
+        _run("VRF.requestRandomWords, first request of the subscription  [Storage._boundedVrfRequest]", 500_000,
             _send(address(game), ForkPins.VRF_COORDINATOR, 0, requestData), true, true);
     }
 
@@ -375,7 +366,7 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
         vm.prank(address(game));
         (bool ok,) = ForkPins.VRF_COORDINATOR.call(requestData);
         assertTrue(ok, "fixture: first request");
-        _run("VRF.requestRandomWords, second outstanding request  [Storage:1158]", 500_000,
+        _run("VRF.requestRandomWords, second outstanding request  [Storage._boundedVrfRequest]", 500_000,
             _send(address(game), ForkPins.VRF_COORDINATOR, 0, requestData), false, true);
     }
 
@@ -385,7 +376,7 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
     }
 
     function test_b04_vrfGetSubscriptionColdFirst() public {
-        _run("VRF.getSubscription, consumers=1  [Storage:1144]", 50_000,
+        _run("VRF.getSubscription, consumers=1  [Storage._vrfNativeBalance]", 50_000,
             _view(address(game), ForkPins.VRF_COORDINATOR,
                 abi.encodeWithSignature("getSubscription(uint256)", subId)),
             true, true);
@@ -414,7 +405,7 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
     // ------------------------------------------------------------------ shutdownVrf (800k) and its inner calls
 
     function test_d01_cancelSubscription() public {
-        _run("coordinator.cancelSubscription (LINK + native refund to a fresh Vault)  [Admin:1232]", 450_000,
+        _run("coordinator.cancelSubscription (native refund to a fresh Vault)  [DegenerusAdmin.shutdownVrf]", 450_000,
             _send(address(admin), ForkPins.VRF_COORDINATOR, 0,
                 abi.encodeWithSelector(ICoordinatorExtra.cancelSubscription.selector, subId, ContractAddresses.VAULT)),
             true, true);
@@ -425,17 +416,16 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
 
 
     function test_d04_shutdownWhole() public {
-        _run("Admin.shutdownVrf whole frame, cancel succeeds + Admin LINK swept  [GameOver:813]", 800_000,
+        _run("Admin.shutdownVrf whole frame, cancel succeeds  [DegenerusGameGameOverModule._shutdownVrf]", 800_000,
             _send(address(game), address(admin), 0, abi.encodeWithSignature("shutdownVrf()")), true, true);
     }
 
     function test_d05_shutdownWholeCancelRefused() public {
-        // Dead-VRF ending: an outstanding request makes cancel revert; the Admin still sweeps its LINK
-        // (the sweep creates the Vault's LINK slot).
+        // Dead-VRF ending: an outstanding request makes cancel revert; the shutdown still completes.
         vm.prank(address(game));
         (bool ok,) = ForkPins.VRF_COORDINATOR.call(requestData);
         assertTrue(ok, "fixture: outstanding request");
-        _run("Admin.shutdownVrf whole frame, cancel refused (pending request) + Admin LINK swept  [GameOver:813]",
+        _run("Admin.shutdownVrf whole frame, cancel refused (pending request)  [DegenerusGameGameOverModule._shutdownVrf]",
             800_000, _send(address(game), address(admin), 0, abi.encodeWithSignature("shutdownVrf()")), false, true);
     }
 
@@ -478,13 +468,13 @@ contract ForkGlamsterdamBudgetsAfkingTest is ForkGlamsterdamBudgetsBase {
     }
 
     function test_e01_afkingPullFrame() public {
-        _run("AFKing self-call pullAfkingSteth, whole frame, Game holds no shares  [AfkingModule:391]", 1_000_000,
+        _run("AFKing self-call pullAfkingSteth, whole frame, Game holds no shares  [GameAfkingModule.pullAfkingSteth]", 1_000_000,
             _send(address(game), address(game), 0, _pullData()), true, true);
         assertEq(lido.sharesOf(address(game)), 0, "fixture: Game held no shares");
     }
 
     function test_e02_transferSharesFromZeroShareGame() public {
-        _run("stETH.transferSharesFrom into a zero-share Game, finite allowance  [AfkingModule:422]", 300_000,
+        _run("stETH.transferSharesFrom into a zero-share Game, finite allowance  [GameAfkingModule.pullAfkingSteth]", 300_000,
             _send(address(game), ForkPins.STETH, 0,
                 abi.encodeWithSignature("transferSharesFrom(address,address,uint256)", player, address(game), pullShares)),
             true, true);

@@ -19,15 +19,14 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-// CURRENT ENGINE (60d31f775 / 72fc06f6c): the router below is retired. `mineFlip()` is the
+// ENGINE: `mineFlip()` is the
 //      single engine (DegenerusGameMinerModule); it pays once per call, CEI-last, in FLIP coinflip
 //      credit: (measured gas - unpaid first MIN_REWARDED_GAS) x min(basefee, cap) x (0.3x + 0.45x per
 //      30 minutes, x2 pass, x2 lock) at the ticket price. Bets resolve as the Degenerette read
 //      consumer of mineFlip. The guards read the measured gas and the pay from each
 //      call's MinerWork event and pin them to that formula; the self-keeper round trip is checked at
-//      the fixture's sub-1x multiplier, where it must stay net negative. The history below is kept for
-//      the requirement IDs.
-/// @title KeeperFaucetResistance -- Proves the v55.0 game-resident permissionless router
+//      the fixture's sub-1x multiplier, where it must stay net negative.
+/// @title KeeperFaucetResistance -- Proves the game-resident permissionless router
 ///        (`game.mineRun(0)` advance/open legs, including the queued-bet sweep) is faucet-bounded by three
 ///        caller-independent locks:
 ///        (1) the purchase-gate (an item must already be a real, purchased, RNG-ready bet/box/stamp),
@@ -35,12 +34,11 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///            work at the >=1 gwei market floor (never measured gas, never the peg ref), and
 ///        (3) the coinflip-credit illiquidity (creditFlip_g317 = pending stake, not liquid FLIP).
 ///
-/// @notice A self-keeper / Sybil round-trip is net-zero-or-negative across the v55 router legs: the
-///         `mineFlip()` open-leg pro-rated below-knee reward (`unit * min(opened, OPEN_KNEE) / OPEN_KNEE`,
-///         GameAfkingModule.sol:1003-1004), the advance-leg bounty (`unit * ADVANCE_RATIO_NUM * mult`,
-///         GameAfkingModule.sol:995 — the buy folded into mineFlip's STAGE, so the buy reward rides this
-///         advance bounty), and the bet-sweep share of the open bounty (credited at the work run), each valued
-///         at the 0.5-gwei peg, stay strictly below the REAL gas the identical work burns at every realistic
+/// @notice A self-keeper / Sybil round-trip is net-zero-or-negative across the router legs: the
+///         `mineFlip()` miner reward (the measured gas above an unpaid first `MineFlipGas.MIN_REWARDED_GAS`,
+///         priced at min(basefee, cap), see `GameMiner._mineFlip` / `_minerRewardTerms`; the buy is folded into
+///         mineFlip's STAGE, so the buy reward rides this same reward), and the bet-sweep share of the open
+///         bounty (credited at the work run), each valued at the 0.5-gwei initial cap, stay strictly below the REAL gas the identical work burns at every realistic
 ///         submission price (>= 1 gwei). The reward never reads gasleft()/tx.gasprice, so it cannot scale up
 ///         to chase a higher submission price, and the credit lands as illiquid coinflip stake (not liquid
 ///         FLIP), so it cannot be immediately round-tripped to a profit.
@@ -50,23 +48,21 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///         below-gate-unpaid / zero-reverts-NoWork shape, and the pre-RNG-word
 ///         block (an attempt before the word lands skips, no reward).
 ///
-/// @dev The five call-site deltas applied (D-351-01):
+/// @dev Call-site mapping from the older standalone keeper contract:
 ///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineRun(0)`.
 ///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE; the standalone autoBuy has NO
 ///      successor. The faucet BUY-leg round-trip reframes onto the ADVANCE-leg bounty (the buy reward rides
-///      `unit * ADVANCE_RATIO_NUM * mult`; there is NO separate flat-1.5x buy bounty in v55). The faucet
+///      the miner reward of `GameMiner._mineFlip`; there is NO separate flat-1.5x buy bounty). The faucet
 ///      OPEN-leg round-trip reframes onto the AFKING open leg (a STAGE-stamped afking box, opened only
 ///      by `mineFlip`'s afking stage). The reward is OBSERVED off the credit
 ///      delta (not modeled), so the guard holds for whatever the contract pegs.
 ///   Δ5 funding: `afKing.depositFor` -> `game.depositAfkingFunding`; `afKing.subscribe` -> `game.subscribe`;
-///      `afKing.BOUNTY_ETH_TARGET()` -> the module's hardcoded `BOUNTY_ETH_TARGET` constant (no game getter;
-///      it is no longer a deploy param); `SUB_COST_ETH_TARGET` is GONE (no subscribe-time FLIP charge).
-///   Pinned slots RE-DERIVED via `forge inspect storage DegenerusGame`. Zero contracts/*.sol mutation;
-///   test-only; FROZEN subject (453f8073) honored.
+///      `afKing.BOUNTY_ETH_TARGET()` has no successor (the reward is measured gas, not a flat unit); there is
+///      no `SUB_COST_ETH_TARGET` (no subscribe-time FLIP charge).
+///   Pinned slots are derived via `forge inspect storage DegenerusGame`.
 contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`; the old lootbox slots
-    // 37/38/19 and the AfKing-standalone SUBOF_SLOT=65 were WRONG).
+    // Storage slot constants (derived via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
 
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
@@ -77,7 +73,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
 
     // -------------------------------------------------------------------------
-    // Router reward peg mirror (the contract's own FIXED constants, REW-03)
+    // Router reward peg mirror (the contract's own FIXED constants)
     // -------------------------------------------------------------------------
 
     /// @dev FLIP per-ETH conversion unit (DegenerusGameStorage / Coinflip).
@@ -87,15 +83,15 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     uint48 private constant INDEX = 1; // default lootboxRngIndex seeded in setUp
 
-    /// @dev Lowest gas price the self-keeper round trip is checked at (see GAS-06).
+    /// @dev Lowest gas price the self-keeper round trip is checked at (see the bet-sweep round-trip test).
     uint256 private constant MIN_GAS_PRICE = 0.1 gwei;
 
     /// @dev A fixed RNG word for deterministic resolution (we craft tickets against its result).
     uint256 private constant FIXED_WORD = uint256(keccak256("crank_faucet_fixed_word"));
 
     // -------------------------------------------------------------------------
-    // Miner reward mirror (72fc06f6c). The v55 flat unit (BOUNTY_ETH_TARGET, ADVANCE_RATIO_NUM,
-    // OPEN_KNEE) is gone: mineFlip pays the call's measured gas above an unpaid first
+    // Miner reward mirror. There is no flat unit (BOUNTY_ETH_TARGET, ADVANCE_RATIO_NUM,
+    // OPEN_KNEE): mineFlip pays the call's measured gas above an unpaid first
     // MIN_REWARDED_GAS, at min(basefee, cap), times 0.3x + 0.45x per 30 minutes on one clock (the
     // later of the last accepted callback and the day reset; cap 0.5 gwei doubling per step, four
     // steps max), x2 for an active pass holder, x2 when the daily lock is held at call start, in FLIP
@@ -107,7 +103,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     uint256 private constant INITIAL_REWARD_BASEFEE_CAP = 0.5 gwei;
 
     // -------------------------------------------------------------------------
-    // Game-resident afking storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`).
+    // Game-resident afking storage-slot constants (derived via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
 
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
@@ -146,7 +142,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — Faucet round-trip <= 0, illiquidity, one-reward-per-item, pre-RNG-word block
+    // Faucet round-trip <= 0, illiquidity, one-reward-per-item, pre-RNG-word block
     // =========================================================================
 
     /// @notice One-reward-per-item: a bet is marked processed in its queue once the engine's
@@ -208,18 +204,18 @@ contract KeeperFaucetResistance is DeployProtocol {
         assertLt(
             rewardEthAtPeg,
             gasUsed * 1 gwei,
-            "WR-01 open hot corner: flat-per-tx reward-at-peg < real open gas at the 1 gwei floor"
+            "open hot corner: flat-per-tx reward-at-peg < real open gas at the 1 gwei floor"
         );
         assertLt(
             rewardEthAtPeg,
             gasUsed * 20 gwei,
-            "WR-01 open: round-trip strictly negative at a realistic 20 gwei submission price"
+            "open: round-trip strictly negative at a realistic 20 gwei submission price"
         );
     }
 
 
     /// @notice GUARD-the-guard / test-mirror sync: the advance reward mineFlip() actually credits equals
-    ///         the measured-gas formula (72fc06f6c) evaluated on the call's own MinerWork-reported gas.
+    ///         the measured-gas formula evaluated on the call's own MinerWork-reported gas.
     ///         This binds the mirror (unpaid first million, capped base fee, 0.3x base, lock doubling,
     ///         FLIP at the ticket price) to the deployed engine: a contract change without a re-sync
     ///         trips RED rather than the round-trip guards silently mis-pricing. Replaces the retired
@@ -266,7 +262,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     // =========================================================================
-    // GAS-06 bet-sweep bounty round trip
+    // Bet-sweep bounty round trip
     //
     // Queued bets resolve inside mineFlip's human-box sweep and earn its box-open bounty, credited
     // at the work each bet actually ran (never the worst-case budget price). A self-keeper who
@@ -275,7 +271,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // high-activity player's best case.
     // =========================================================================
 
-    /// @notice GAS-06: placing N bets and cranking them yourself costs more gas than the bounty is
+    /// @notice Placing N bets and cranking them yourself costs more gas than the bounty is
     ///         worth at the level price, down to MIN_GAS_PRICE, for every cheap shape at every
     ///         batch size one crank can resolve: ETH and FLIP minimums at 1 spin and at the maximum
     ///         spins, and an ETH minimum on a protocol-deity symbol whose two-day boon-draw ring is
@@ -473,7 +469,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     // -------------------------------------------------------------------------
-    // v55 router round-trip helpers (the afking open + advance bounty)
+    // Router round-trip helpers (the afking open + advance bounty)
     // -------------------------------------------------------------------------
 
     /// @dev The MinerWork(caller, firstAction, executionGas, flipReward) of a single mineFlip.

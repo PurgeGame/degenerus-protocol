@@ -10,13 +10,13 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @dev _currentRngWord() decodes rngWordCurrent in slot3; no extra readiness slot.
-/// @title RngWindowFreezeHandler — the FUZZ-02 RNG-FREEZE durable-invariant action handler.
+/// @title RngWindowFreezeHandler — the RNG-FREEZE durable-invariant action handler.
 ///
 /// @notice Promotes the scattered scenario freeze proofs (RngFreezeAndRemovalProofs placement/
 ///         resolve guards, V56FreezeSolvency stamped-day open, the RngIndexDrainOrdering ghost
 ///         binding) into ONE always-on fuzzed property: across any action sequence, no player-
 ///         controllable call taken WHILE THE VRF WINDOW IS OPEN mutates a storage slot the pending
-///         consumption reads. Built on the v45 north-star — trace BACKWARD from the daily/lootbox
+///         consumption reads. Method: trace BACKWARD from the daily/lootbox
 ///         consumer, ENUMERATE every in-window SLOAD (not only the VRF-derived seeds; the non-VRF
 ///         cursors read alongside the word are a distinct bug class), and assert byte-equality
 ///         across an isolated in-window player action.
@@ -29,16 +29,14 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///      steer any of them while the outcome is still unknown.
 ///
 ///      THE ENUMERATED IN-WINDOW SLOAD SET (the backward trace), with AUTHORITATIVE slots taken
-///      from 380-01-LAYOUT-KEY (c4d48008; the v61 PACK shift is region-dependent — these are the
-///      confirmed post-fold values, matching RngFreezeAndRemovalProofs 34/35 and V56FreezeSolvency
-///      10/34/35; NOT the stale VRFPathHandler 37/38 literals):
-///        (1) _recordedDailyWord(currentDay)         — slot 10  : the VRF-DERIVED day word the daily
+///      from the storage layout (GameSlots pins each slot against the compiled layout):
+///        (1) _recordedDailyWord(currentDay)         — rngWordByDay : the VRF-DERIVED day word the daily
 ///                                                          consumption resolves against.
-///        (2) _lootboxWord(index)     — slot 34  : reusable VRF-DERIVED lootbox payload.
-///        (3) lootboxRngPacked                 — slot 33  : the packed lootbox cursor — its low 48
+///        (2) _lootboxWord(index)     — rngWordCurrent : reusable VRF-DERIVED lootbox payload.
+///        (3) lootboxRngPacked                 — the packed lootbox cursor — its low 48
 ///                                                          bits (lootboxRngIndex) are the NON-VRF
 ///                                                          index the consumption reads ALONGSIDE
-///                                                          the word ([[feedback_rng_window_storage_read_freshness]]).
+///                                                          the word.
 ///        (4) dailyIdx                         — slot 0, byte 3 (uint24) : the NON-VRF day cursor
 ///                                                          the consumption keys against. Included
 ///                                                          precisely because it is NOT a seed —
@@ -46,7 +44,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///                                                          bug class.
 ///
 ///      ISOLATING THE EXEMPT MUTATOR. mineFlip is the heartbeat that LEGITIMATELY progresses the
-///      window (it is the v45-exempt mutator). To attribute a change to a PLAYER action rather than
+///      window (it is the exempt mutator). To attribute a change to a PLAYER action rather than
 ///      the heartbeat, every in-window player action snapshots the enumerated set immediately
 ///      BEFORE the call and immediately AFTER the call alone (no advance in between) — a frozen
 ///      slot must be byte-equal across the player action in isolation. ghost_frozenSlotMutations
@@ -64,23 +62,23 @@ contract RngWindowFreezeHandler is Test {
     MockVRFCoordinator public vrf;
 
     // -------------------------------------------------------------------------
-    // Authoritative c4d48008 storage layout (380-01-LAYOUT-KEY; confirmed against
-    // RngFreezeAndRemovalProofs + V56FreezeSolvency — NOT the stale VRFPath literals).
+    // Authoritative storage layout (confirmed against
+    // RngFreezeAndRemovalProofs + V56FreezeSolvency).
     // -------------------------------------------------------------------------
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) day word
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (post Stage B pack: was 35); low 48 bits = index cursor
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT; // reusable uint256 lootbox payload; ready bit 249 in packed slot 33
-    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 33
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT; // reusable uint256 lootbox payload; ready bit 249 in lootboxRngPacked
+    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of lootboxRngPacked
     uint256 private constant DAILY_IDX_BYTE_OFF = 3; // dailyIdx uint24 @ slot 0 byte 3
     uint256 private constant DAILY_IDX_MASK = 0xFFFFFF; // uint24
 
-    // Mid-day lootbox window fields (same 388-01-LAYOUT-KEY layout; slot-0 roots are the
+    // Mid-day lootbox window fields (slot-0 roots are the
     // StorageFoundation-canaried offsets).
     uint256 private constant RNG_REQUEST_TIME_BYTE_OFF = 6; // rngRequestTime uint48 @ slot 0 bytes 6-11
     uint256 private constant RNG_REQUEST_TIME_MASK = 0xFFFFFFFFFFFF; // uint48
     uint256 private constant RNG_LOCKED_FLAG_BYTE_OFF = 19; // bool rngLockedFlag @ slot 0 byte 19
     uint256 private constant TICKET_WRITE_SLOT_BYTE_OFF = 25; // bool ticketWriteSlot @ slot 0 byte 25
-    uint256 private constant LR_MID_DAY_SHIFT = 224; // LR_MID_DAY flag bits of slot 33
+    uint256 private constant LR_MID_DAY_SHIFT = 224; // LR_MID_DAY flag bits of lootboxRngPacked
     uint256 private constant LR_MID_DAY_MASK = 0xFF;
     uint256 private constant LR_THRESHOLD_SHIFT = 88; // lootboxRngThreshold (milli-ETH) bits 88..119
     uint256 private constant LR_THRESHOLD_MASK = 0xFFFFFFFF;
@@ -211,7 +209,7 @@ contract RngWindowFreezeHandler is Test {
         // daily request becomes due, then advances. Capped; intermediate non-daily (lootbox) requests are
         // fulfilled to keep progressing (they are NOT the window we measure — windowsOpened is recorded only
         // when rngLocked() is observed true after the advance). Time passing between days is the heartbeat's
-        // natural rhythm (the v45-exempt progression), not a player-attributable mutation.
+        // natural rhythm (the exempt progression), not a player-attributable mutation.
         for (uint256 i; i < 8 && !game.rngLocked(); i++) {
             _drainReadConsumers();
             vm.warp(block.timestamp + 1 days);
@@ -236,7 +234,7 @@ contract RngWindowFreezeHandler is Test {
     }
 
     // =========================================================================
-    // In-window action: degenerette placement (the SAFE-04 placement-guard surface)
+    // In-window action: degenerette placement (the placement-guard surface)
     // =========================================================================
 
     /// @notice Attempt a degenerette placement WHILE the window is open. The contract's freeze
@@ -387,10 +385,10 @@ contract RngWindowFreezeHandler is Test {
     // reusable lootboxRngWord payload, and the NEXT advance processes the ticket batch frozen (buffer
     // swap + LR_MID_DAY=1) at request time. The backward trace of that consumption gives the
     // enumerated mid-day SLOAD set:
-    //   (5)  LR_INDEX cursor            — slot 33 low 48 : where the pending word will land (-1).
-    //   (6)  _lootboxWord(N-1) — slot 34 payload   : the reserved landing leaf (0 until the
+    //   (5)  LR_INDEX cursor            — lootboxRngPacked low 48 : where the pending word will land (-1).
+    //   (6)  _lootboxWord(N-1) — rngWordCurrent payload   : the reserved landing leaf (0 until the
     //                                                      exempt fulfillment writes it).
-    //   (7)  LR_MID_DAY flag            — slot 33 bits 224.. : routes the frozen ticket batch.
+    //   (7)  LR_MID_DAY flag            — lootboxRngPacked bits 224.. : routes the frozen ticket batch.
     //   (8)  ticketWriteSlot            — slot 0 byte 25 : the read/write buffer selector frozen
     //                                                      by the request-time swap.
     //   (9)  vrfRequestId               — coordinator slot: the fulfillment's request-match gate.
@@ -703,7 +701,7 @@ contract RngWindowFreezeHandler is Test {
     }
 
     // =========================================================================
-    // Authoritative slot reads (vm.load against the 380-01-LAYOUT-KEY layout)
+    // Authoritative slot reads (vm.load against the storage layout)
     // =========================================================================
 
     function _dailyRingChanged() private view returns (bool) {

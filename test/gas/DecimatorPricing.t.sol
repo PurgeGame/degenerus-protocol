@@ -3,8 +3,6 @@ pragma solidity 0.8.38;
 
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
-import {NativeMeasuredGasExport} from "../helpers/NativeMeasuredGasExport.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {Test} from "forge-std/Test.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -13,7 +11,6 @@ import {Craps} from "../../contracts/Craps.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev A cold external frame around one engine run, as the module's run calls it.
 contract DecimatorEngineMeter {
@@ -60,7 +57,7 @@ contract DecimatorPricingRedemptionState {
     function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 }
 
-contract DecimatorPricingTest is NativeMeasuredGasExport {
+contract DecimatorPricingTest is Test {
     DecimatorBattleHarness private h;
     DecimatorPricingMeter private meter;
     uint256 private maxRunGas;
@@ -133,54 +130,13 @@ contract DecimatorPricingTest is NativeMeasuredGasExport {
 
     uint256 private maxOneRun;
     uint256 private maxOnePay;
-    mapping(uint256 => uint256) private nativeCaseMaximum;
-
-    function _nativeOperation() private view returns (uint256) {
-        DegenerusGameStorage.DecBattleRound memory round = h.roundOf(uint24(h.queue()));
-        if (round.phase == 1) return round.cursor == Sample.count(round.count) ? 2 : 1;
-        return round.paid == round.winners ? 4 : 3;
-    }
-
-    function _dumpNativeState(string memory path) private {
-        // Forge's first isolated dump can omit untouched constructor-backed
-        // fields. Materialize their exact values after the cold measurement;
-        // this preserves both the prestate and every observed storage write.
-        for (uint256 i; i <= GameSlots.DEGENERETTE_QUEUE + 1; ++i) {
-            bytes32 slot = bytes32(i);
-            vm.store(address(h), slot, vm.load(address(h), slot));
-        }
-        vm.etch(ContractAddresses.SDGNRS, ContractAddresses.SDGNRS.code);
-        vm.dumpState(path);
-    }
 
     function _measure(uint256 allowance) private returns (uint256 used) {
-        bool nativeExport = bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0;
-        uint256 caseKey = allowance | (nativeExport ? _nativeOperation() << 64 : 0);
         vm.cool(address(h));
         vm.cool(ContractAddresses.CRAPS_ENGINE);
-        uint256 snapshot = vm.snapshotState();
-        vm.recordLogs();
         MineFlipGas.Result memory result;
         (used, result) = meter.settle{gas: 15_000_000}(h, allowance);
-        Vm.Log[] memory coldLogs = vm.getRecordedLogs();
-        uint256 coldPost = vm.snapshotState();
         assertTrue(result.progressed, "one-item allowance admits its item");
-        if (nativeExport && used > nativeCaseMaximum[caseKey]) {
-            assertTrue(vm.revertToState(snapshot));
-            string memory label = string.concat("decimator-", vm.toString(caseKey >> 64), "-", vm.toString(allowance), "-", vm.toString(used));
-            vm.serializeUint(label, "workerAllowance", allowance);
-            vm.serializeUint(label, "allowanceWord", 0);
-            vm.serializeUint(label, "operation", caseKey >> 64); // run, rank, payment, finalization
-            vm.serializeUint(label, "osakaColdCallGas", used);
-            string memory prefix = string.concat(vm.envString("STORAGE_REUSE_EXPORT"), "/", label);
-            _dumpNativeState(string.concat(prefix, ".state.json"));
-            assertTrue(vm.revertToState(coldPost));
-            _dumpNativeState(string.concat(prefix, ".post.json"));
-            this.writeDumpFixture(label, address(meter), address(h), abi.encodeCall(h.runDecimatorWork, (allowance)), abi.encode(result), coldLogs);
-            nativeCaseMaximum[caseKey] = used;
-        }
-        vm.deleteStateSnapshot(snapshot);
-        vm.deleteStateSnapshot(coldPost);
     }
 
     /// @dev Settle with allowances that admit one sampled run, the

@@ -139,7 +139,7 @@ PRODUCER	rngWordCurrent	rawFulfillRandomWords	modules/GameFacade.sol	WRITE	One S
 PRODUCER	rngRequestDay	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngWordCurrent	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE
 EXEMPT-ADVANCE	_recordedDailyWord	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	exact tag authenticates processing word; public claims enforce the published-result frontier
-GATE	lootboxRngPacked	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	write-buffer Craps pending bit marks a closed window as request work; selects LINK floor and pending-value waiver, never a word
+GATE	lootboxRngPacked	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	write-buffer Craps pending bit marks a closed window as request work; selects native floor and pending-value waiver, never a word
 PRODUCER	rngRequestDay	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngWordCurrent	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WRITE
 EXEMPT-ADVANCE	_nudgeCount	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder adds the frozen receipt to the coinflip word only, logs and clears it; the recorded day word stays raw.

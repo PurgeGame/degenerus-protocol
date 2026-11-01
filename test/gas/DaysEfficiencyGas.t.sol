@@ -8,13 +8,11 @@ import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-/// @dev Same fixture on both revisions. Only the BAF calldata schema varies by environment:
-///      the day-keyed ABI is the default, DAYSEFF_NEW_ABI=false selects the legacy selectors.
+/// @dev Gas of the day-keyed BAF, record-bounty and coinflip entry points on the logical-days fixture.
 contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
     function test_DaysEffBafBegin() public {
         uint24 day = game.currentDayView_g542950();
-        bytes memory data = vm.envOr("DAYSEFF_NEW_ABI", true)
-            ? abi.encodeWithSignature("beginBafOn(uint24)", day) : abi.encodeWithSignature("beginBaf()");
+        bytes memory data = abi.encodeWithSignature("beginBafOn(uint24)", day);
         emit log_named_uint("dayseff_baf_begin", this.measure(address(jackpots), address(game), data));
         assertEq(jackpots.getLastBafResolvedDay(), day);
     }
@@ -27,9 +25,7 @@ contract DaysEfficiencyProtocolGasTest is LogicalDaysGasTest {
 
     function test_DaysEffBafSkip() public {
         uint24 day = game.currentDayView_g542950();
-        bytes memory data = vm.envOr("DAYSEFF_NEW_ABI", true)
-            ? abi.encodeWithSignature("markBafSkippedAt(uint24,uint24)", uint24(10), day)
-            : abi.encodeWithSignature("markBafSkipped(uint24)", uint24(10));
+        bytes memory data = abi.encodeWithSignature("markBafSkippedAt(uint24,uint24)", uint24(10), day);
         emit log_named_uint("dayseff_baf_skip", this.measure(address(jackpots), address(game), data));
         assertEq(jackpots.getLastBafResolvedDay(), day);
     }

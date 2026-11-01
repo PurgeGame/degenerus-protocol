@@ -15,7 +15,7 @@ contract NewPropertiesTest is Test {
     // =========================================================================
 
     /// @notice BPS split of any amount conserves total: share + remainder == amount
-    /// @dev Targets Phase 32's BPS arithmetic verification with full symbolic coverage
+    /// @dev Full symbolic coverage of BPS arithmetic
     /// @custom:halmos --solver cvc5-int
     function check_bps_split_exact(uint256 amount, uint16 bps) public pure {
         if (amount > 1e30) return; // reasonable ETH range
@@ -69,7 +69,7 @@ contract NewPropertiesTest is Test {
     // =========================================================================
 
     /// @notice Affiliate reward never exceeds proportional bound
-    /// @dev Targets Phase 34's affiliate reward analysis
+    /// @dev Symbolic check of the affiliate reward bound
     /// @custom:halmos --solver cvc5-int
     function check_affiliate_reward_bounded(uint256 amount, uint16 affiliateBps) public pure {
         if (amount > 1e30) return;

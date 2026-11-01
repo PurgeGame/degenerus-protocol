@@ -4,7 +4,6 @@ pragma solidity 0.8.38;
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @dev Three sealed 100-box orders ensure work exceeds the unpaid million-gas floor.
@@ -50,7 +49,7 @@ contract XaNativeMinerSeed is DegenerusGame {
     }
 }
 
-contract XaNativeMinerTest is DeployProtocol, NativeGasExport {
+contract XaNativeMinerTest is DeployProtocol {
     address private constant MINER = address(0xB0A200);
 
     function test_NativePositiveMinerReward() public {
@@ -62,20 +61,17 @@ contract XaNativeMinerTest is DeployProtocol, NativeGasExport {
         XaNativeMinerSeed(payable(address(game))).seed(address(0xB0A100), MINER);
         vm.etch(address(game), production);
         _syncCoinflipFixtureDay(game.currentDayView_g542950());
-        this.measureAndExport();
+        this.mineAsMiner();
     }
 
     /// @dev Isolation resets basefee at an external transaction boundary; set it inside
-    /// this adapter before the nested production call, as a real native transaction does.
-    function measureAndExport() external {
+    /// this adapter before the nested production call.
+    function mineAsMiner() external {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
         vm.txGasPrice(1 gwei);
-        uint256 snapshot = vm.snapshotState();
         vm.prank(MINER);
         game.mineRun(0);
         assertGt(coinflip.coinflipAmount(MINER), 0, "fixture must earn a positive miner stake");
-        assertTrue(vm.revertToState(snapshot));
-        _nativeFixture("human_miner_reward_300", MINER, address(game), abi.encodeCall(game.mineRun, (0)));
     }
 }

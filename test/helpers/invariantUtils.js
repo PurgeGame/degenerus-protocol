@@ -1,6 +1,6 @@
 /**
  * @file invariantUtils.js
- * @description ETH solvency invariant helpers for Degenerus protocol audit (Phase 08).
+ * @description ETH solvency invariant helpers for Degenerus protocol audit.
  *
  * The core solvency invariant is:
  *   game.balance + steth.balanceOf(game) >= currentPrizePool + nextPrizePool + futurePrizePool + claimablePool

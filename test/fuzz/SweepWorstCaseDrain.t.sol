@@ -71,7 +71,7 @@ contract SweepViewer is DegenerusGame {
     }
 }
 
-/// @title SweepWorstCaseDrain — AUTO-03 worst-case, gas-checkpointed human-box sweep.
+/// @title SweepWorstCaseDrain — worst-case, gas-checkpointed human-box sweep.
 ///
 /// @notice The human sweep (GameAfkingModule._runHumanBoxWork, reached only from the mineFlip
 ///         HumanBoxes action) walks the sealed read cohort boxQueue[read] from

@@ -2,7 +2,6 @@
 pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
@@ -40,7 +39,7 @@ contract StorageReuseAtomicHost is DegenerusGame {
     }
 }
 
-contract StorageReuseNativeAtomicTest is DeployProtocol, NativeGasExport {
+contract StorageReuseNativeAtomicTest is DeployProtocol {
     function _prepare(bool terminal) private {
         _deployProtocol();
         uint24 day = 21_000;
@@ -66,13 +65,11 @@ contract StorageReuseNativeAtomicTest is DeployProtocol, NativeGasExport {
 
     function test_nativeDailyApplyWithoutVaultBackstop() public {
         _prepare(false);
-        _nativeFixture("daily_apply_logical", address(0x8888), address(game), abi.encodeCall(StorageReuseAtomicHost.atomic, (false)));
         _verifyApplied(false);
     }
 
     function test_nativeTerminalApplyWithoutVaultBackstop() public {
         _prepare(true);
-        _nativeFixture("terminal_apply_logical", address(0x8888), address(game), abi.encodeCall(StorageReuseAtomicHost.atomic, (true)));
         _verifyApplied(true);
     }
 }

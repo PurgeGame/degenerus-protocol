@@ -11,9 +11,16 @@ import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGas
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {IDegenerusGameAdvanceModule, IDegenerusGameJackpotModule, IDegenerusGameGameOverModule, IDegenerusGameRngModule}
     from "../../contracts/interfaces/IDegenerusGameModules.sol";
-import {NativeFailureExport, NativeFailureProbe} from "../helpers/NativeFailureExport.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+
+/// @dev Finite gas boundary for a call; production failure policies run unchanged.
+contract GasLimitedCaller {
+    function invoke(address target, bytes calldata input, uint256 budget) external returns (bool ok, bytes4 reason) {
+        bytes memory output;
+        (ok, output) = target.call{gas: budget}(input);
+        if (!ok && output.length >= 4) assembly ("memory-safe") { reason := mload(add(output, 32)) }
+    }
+}
 
 /// @dev Preserve dependency storage and normal behavior except the selected selector.
 contract SelectorFaultProxy {
@@ -115,21 +122,11 @@ contract GameIsolationHost is DegenerusGame {
     function swept() external view returns (bool) { return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0; }
 }
 
-contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
+contract GameExternalIsolationTest is DeployProtocol {
     GameIsolationHost private host;
     address private tokenImplementation;
     address private vrfImplementation;
     address private adminImplementation;
-    address private nativeAdmissionProbe;
-
-    function _nativeExtraStorage(string memory key, address account) internal override {
-        if (account != address(game) || nativeAdmissionProbe == address(0)) return;
-        // A gas-limited native continuation can finish at the miner reward lookup
-        // that the unlimited Foundry export does not visit. Export its actual
-        // prestate value, including zero, rather than assuming an omitted slot.
-        bytes32 slot = keccak256(abi.encode(nativeAdmissionProbe, GameSlots.WALLET_IDS));
-        vm.serializeBytes32(key, vm.toString(slot), vm.load(account, slot));
-    }
 
     function setUp() public {
         _deployProtocol();
@@ -492,78 +489,18 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         assertEq(ContractAddresses.SDGNRS.balance, beforeSD);
     }
 
-    function test_NativeChangedGameBoundaries() public {
-        vm.clearMockedCalls();
-        // Seed the real table cursor at an empty current day; the ordinary fixture
-        // mocked this predicate, which would hide the intended VRF boundary on native replay.
-        bytes32 tableSlot = bytes32(uint256(11)); // CrapsBattleStorage._minerSlot, checked by layout oracle.
-        uint256 tableWord = uint256(vm.load(ContractAddresses.CRAPS, tableSlot));
-        vm.store(ContractAddresses.CRAPS, tableSlot,
-            bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView_g542950()) * 8)));
-        NativeFailureProbe probe = new NativeFailureProbe();
-        uint8[6] memory modes = [uint8(1), 2, 5, 8, 9, 10];
-        for (uint256 site; site < 9; ++site) for (uint256 i; i < modes.length; ++i) {
-            if ((site == 3 || site == 4) && i != 0) continue;
-            this.exportNativeGameCase(site, modes[i], probe);
-        }
-    }
-
-    function exportNativeGameCase(uint256 site, uint8 mode, NativeFailureProbe probe) external {
-            uint256 snap = vm.snapshotState();
-            bytes memory input;
-            uint256 supplied = 10_000_000;
-            if (site == 0) {
-                host.seedRng(true, true);
-                _seedCrapsFixtureCursor(game.currentDayView_g542950());
-                vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector));
-                _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
-                input = abi.encodeCall(game.mineRun, (uint32(0)));
-            } else if (site == 1) {
-                _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, mode);
-                input = abi.encodeCall(host.nativeBalance, ());
-            } else if (site == 2) {
-                host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
-                _fault(ContractAddresses.ADMIN, adminImplementation, bytes4(keccak256("shutdownVrf()")), mode);
-                input = abi.encodeCall(host.invoke, (ContractAddresses.GAME_GAMEOVER_MODULE,
-                    abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
-                        (game.currentDayView_g542950(), uint24(10), uint256(10_000_000)))));
-            }
-            if (site >= 5) {
-                bool terminal = site == 8;
-                if (terminal) host.seedTerminal(true); else host.seedPhase();
-                vm.deal(address(game), site == 6 ? 30 ether : 0);
-                if (site != 6) mockStETH.mint(address(game), 30 ether);
-                _fault(address(mockStETH), tokenImplementation,
-                    site == 6 ? IStETH.submit.selector : IStETH.balanceOf.selector, mode);
-                bytes memory worker = terminal
-                    ? abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
-                        (game.currentDayView_g542950(), uint24(10), uint256(10_000_000)))
-                    : site == 7 ? abi.encodeCall(IDegenerusGameJackpotModule.distributeYieldSurplus, (uint256(777)))
-                    : abi.encodeCall(IDegenerusGameAdvanceModule.runDailyPhase_g2582, (uint256(10_000_000)));
-                input = abi.encodeCall(host.invoke,
-                    (terminal ? ContractAddresses.GAME_GAMEOVER_MODULE : ContractAddresses.GAME_ADVANCE_MODULE, worker));
-            }
-            if (site == 3) { input = abi.encodeCall(host.requestProbe, ()); supplied = 500_000; }
-            if (site == 4) { input = abi.encodeCall(host.nativeBalance, ()); supplied = 50_000; }
-            _nativeCheckedFixture(string.concat("game-", vm.toString(site), "-", vm.toString(mode)),
-                address(this), address(probe), abi.encodeCall(probe.invoke, (address(game), input, supplied)));
-            require(vm.revertToState(snap));
-            vm.deleteStateSnapshot(snap);
-    }
-
     function test_NativeOptfixAdmissionBoundaries() public {
         vm.clearMockedCalls();
         bytes32 tableSlot = bytes32(uint256(11));
         uint256 tableWord = uint256(vm.load(ContractAddresses.CRAPS, tableSlot));
         vm.store(ContractAddresses.CRAPS, tableSlot,
             bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView_g542950()) * 8)));
-        NativeFailureProbe probe = new NativeFailureProbe();
-        for (uint256 kind; kind < 3; ++kind) this.exportNativeAdmissionCase(kind, probe);
+        GasLimitedCaller probe = new GasLimitedCaller();
+        for (uint256 kind; kind < 3; ++kind) this.admissionCase(kind, probe);
     }
 
-    function exportNativeAdmissionCase(uint256 kind, NativeFailureProbe probe) external {
+    function admissionCase(uint256 kind, GasLimitedCaller probe) external {
         require(msg.sender == address(this));
-        nativeAdmissionProbe = address(probe);
         uint256 snap = vm.snapshotState();
         if (kind == 0) {
             host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
@@ -572,11 +509,8 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             _seedCrapsFixtureCursor(game.currentDayView_g542950());
         }
         bytes memory input = abi.encodeCall(game.mineRun, (uint32(10_000)));
-        string memory label = kind == 0 ? "optfix-sweep" : kind == 1 ? "optfix-daily" : "optfix-midday";
         uint256 supplied = kind == 1 ? Bounds.RNG_DAILY_REQUEST + Bounds.DEGENESIS_REQUEST_GAS
             + Bounds.RNG_REDEMPTION_CLOSE + 1_000_000 : 6_000_000;
-        _nativeCheckedFixture(label, address(this), address(probe),
-            abi.encodeCall(probe.invoke, (address(game), input, supplied)));
         (bool ok,) = probe.invoke(address(game), input, supplied);
         assertTrue(ok);
         if (kind == 0) {

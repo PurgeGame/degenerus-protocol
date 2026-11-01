@@ -996,8 +996,8 @@ describe("Coinflip", function () {
   });
 
   // =========================================================================
-  // 9. settleFlipModeChange — REMOVED (v46 legacy removal, df4ef365): the
-  // flip-mode settlement entry point no longer exists on Coinflip.
+  // 9. settleFlipModeChange — absent: Coinflip has no flip-mode settlement
+  // entry point.
   // =========================================================================
 
   // =========================================================================

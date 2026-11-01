@@ -2,7 +2,6 @@
 pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 interface CrapsPayoutCoinflip {
@@ -27,7 +26,7 @@ contract CrapsPayoutSequence {
     }
 }
 
-contract CrapsPayoutCompositionGasTest is DeployProtocol, NativeGasExport {
+contract CrapsPayoutCompositionGasTest is DeployProtocol {
     function setUp() public { _deployProtocol(); }
 
     function test_NativeFinalSeatPayoutComposition() public {
@@ -39,17 +38,10 @@ contract CrapsPayoutCompositionGasTest is DeployProtocol, NativeGasExport {
         vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(0, true);
         vm.etch(ContractAddresses.CRAPS, type(CrapsPayoutSequence).runtimeCode);
         CrapsPayoutSequence host = CrapsPayoutSequence(ContractAddresses.CRAPS);
-        uint256 snapshot = vm.snapshotState();
         vm.cool(address(game)); vm.cool(address(coinflip)); vm.cool(address(coin));
         host.pay(hot, main, lane);
         emit log_named_uint("cold final-seat shared payout sequence", vm.lastCallGas().gasTotalUsed);
         assertEq(coinflip.biggestDiceRunEver(), 5_555_555_555, "fresh record branch");
         assertGt(sdgnrs.balanceOf(address(0x710002)), 0, "real record DGNRS payout");
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            this.exportNativeFixture("craps-final-seat-real-payout-sequence", address(this), address(host),
-                abi.encodeCall(host.pay, (hot, main, lane)));
-        }
-        vm.deleteStateSnapshot(snapshot);
     }
 }

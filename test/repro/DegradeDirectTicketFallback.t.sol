@@ -44,7 +44,7 @@ contract DegradeDirectFallbackHarness is DegenerusGameJackpotModule, BucketSeed 
     function queued() external view returns (uint256) { return _ticketQueueLength(_tqWriteKey(42)); }
 }
 
-/// @notice Daily-spine degrade (DAILY-4c): when a direct-lane precondition fails after the lane was
+/// @notice Daily-spine degrade: when a direct-lane precondition fails after the lane was
 ///         latched, the coin+tickets stage falls back to the queued path from the same cursor
 ///         instead of reverting `E()` on every call. Groups the direct lane completed are not drawn
 ///         again: direct batch winners plus queued winners equal the draw's winner count exactly.

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// Ent05KeccakRefactorInvariant.test.js — Phase 278 Wave 2 TST-CLEAN-01
-//
-// Post-ENT-05-refactor statistical invariant of the jackpot ticket-roll.
+// Ent05KeccakRefactorInvariant.test.js — statistical invariant of the keccak-evolved jackpot ticket-roll entropy
 //
 // `DegenerusGameJackpotModule._jackpotTicketRoll` evolves the per-roll entropy
 // word on entry via `entropy = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy)` — a
@@ -13,9 +11,8 @@
 //   - `(entropy / 100) % 46` — the 5%-branch far level offset (+5..+50)
 //   - `uint16(entropy >> 200) % 100` — the Bernoulli whole-ticket round-up slice
 //
-// This test asserts the NEW post-refactor invariant (D-278-ENT05-TEST-01) — it
-// does NOT assert byte-equivalence to the pre-refactor xorshift output (v39→v40
-// BAF roll outputs differ for a given seed by design). Three properties:
+// This test asserts statistical properties of the keccak word; it does NOT
+// assert byte-equivalence to any xorshift output. Three properties:
 //
 //   1. Chi-square UNIFORMITY (one-way goodness-of-fit) of the 30/65/5 path roll
 //      and the near/far offset distributions under the keccak word.
@@ -25,22 +22,18 @@
 //      roll 2 sees `rollEvolve(rollEvolve(E))`. The two rolls' (path, offset)
 //      pairs are asserted independent via the contingency chi-square infra.
 //   3. bits[200..215] Bernoulli sub-roll independence from the bits[0..12]
-//      path/level consumers in the SAME keccak word (FINDINGS-v39.0.md §4 (b) —
-//      disjoint slices of a keccak output word are pairwise independent).
+//      path/level consumers in the SAME keccak word (disjoint slices of a
+//      keccak output word are pairwise independent).
 //
 // DRIFT GATE: greps `DegenerusGameJackpotModule.sol` for the production
 // evolution line and asserts it reads `entropy = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy);`
 // — any drift of the chosen second-arg fails the gate BEFORE the stat assertions
 // run, so the JS `rollEvolve` replica can never silently test the wrong word.
 //
-// PLACEMENT: stat/ per the Phase 275/276 heavy-MC tier (wired into `test:stat`).
+// PLACEMENT: stat/ heavy-MC tier (wired into `test:stat`).
 //
-// CROSS-CITES:
-//   - D-278-ENT05-01 / D-278-ENT05-CHAIN-01 / D-278-ENT05-TEST-01 (278-CONTEXT.md)
-//   - 278-01-SUMMARY.md (hash2(RngTags.JACKPOT_TICKET_ROLL, entropy) self-mix is the landed evolution)
-//   - audit/FINDINGS-v39.0.md §4 (b) (disjoint keccak bit-slices pairwise independent)
-//   - test/stat/JackpotTicketRollSeedUniqueness.test.js (chi² + Wilson-Hilferty infra)
-//   - feedback_rng_backward_trace.md (per-roll entropy unknown at VRF-commitment time)
+// Related: test/stat/JackpotTicketRollSeedUniqueness.test.js (chi² + Wilson-Hilferty
+// infra). The per-roll entropy is unknown at VRF-commitment time.
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -55,7 +48,7 @@ const MODULE_SOURCE_PATH = path.resolve(
   "contracts/modules/DegenerusGameJackpotDrawModule.sol"
 );
 
-// Phase 261/264/266/275 chi² infrastructure reuse (verbatim re-declaration).
+// chi² infrastructure reuse (verbatim re-declaration).
 // Source: test/stat/JackpotTicketRollSeedUniqueness.test.js / TraitDistribution.test.js.
 function wilsonHilfertyZ(chi2, df) {
   const term = Math.cbrt(chi2 / df) - (1 - 2 / (9 * df));
@@ -152,7 +145,7 @@ function contingencyChi2(aSamples, bSamples, aCard, bCard) {
   return { chi2, df };
 }
 
-describe("Ent05KeccakRefactorInvariant (stat-suite, heavy-MC) — TST-CLEAN-01 post-keccak-refactor statistical invariant", function () {
+describe("Ent05KeccakRefactorInvariant (stat-suite, heavy-MC) — post-keccak statistical invariant", function () {
   this.timeout(600_000);
 
   // Drift gate — runs first. If the production evolution line drifts from the
@@ -247,7 +240,7 @@ describe("Ent05KeccakRefactorInvariant (stat-suite, heavy-MC) — TST-CLEAN-01 p
     });
   });
 
-  describe("Property 2 — per-roll seed-uniqueness across the 2-roll medium-amount-branch pattern (D-278-ENT05-CHAIN-01)", function () {
+  describe("Property 2 — per-roll seed-uniqueness across the 2-roll medium-amount-branch pattern", function () {
     const N = 20_000;
 
     it(`roll1 = rollEvolve(E) and roll2 = rollEvolve(rollEvolve(E)) produce distinct evolved words for every base E (N=${N})`, function () {
@@ -328,7 +321,7 @@ describe("Ent05KeccakRefactorInvariant (stat-suite, heavy-MC) — TST-CLEAN-01 p
     });
   });
 
-  describe("Property 3 — bits[200..215] Bernoulli sub-roll independence from the bits[0..12] path/level consumers under the keccak word (FINDINGS-v39.0.md §4 (b))", function () {
+  describe("Property 3 — bits[200..215] Bernoulli sub-roll independence from the bits[0..12] path/level consumers under the keccak word", function () {
     const N = 20_000;
 
     // The Bernoulli slice domain is %100 (0..99). The three bits[0..12] consumer

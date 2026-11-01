@@ -690,9 +690,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (dead) {
             uint256 created = deadCreated;
             uint256 uncreated = deadUncreated;
-            deadPot = uint128(remaining);
-            deadTotal = uint64(created * QTY_SCALE + uncreated);
-            deadUncreatedLeft = uint64(uncreated);
+            deadPot = uint96(remaining);
+            deadTotal = uint80(created * QTY_SCALE + uncreated);
+            deadUncreatedLeft = uint80(uncreated);
             emit DeadVrfPayoutFixed(terminalLevel, remaining, created, uncreated, deadTraitCount);
             _finishTerminalPayout();
             return true;
@@ -856,7 +856,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_TALLY_RECORD, GasBounds.TERMINAL_TALLY_TAIL)) {
                         deadTallyPos = uint32(pos);
                         deadTallyFoilDay = dd;
-                        deadUncreated = uint64(uncreated);
+                        deadUncreated = uint80(uncreated);
                         return false;
                     }
                     uint32 id = _tqPositionAt(queue, pos);
@@ -949,7 +949,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         deadTallyStage = uint8(stage);
         deadTallyFoilDay = dd;
         deadTallyFoilIdx = uint32(idx);
-        deadUncreated = uint64(uncreated);
+        deadUncreated = uint80(uncreated);
     }
 
     /// @dev An owed word's uncreated weight in QTY_SCALE units, snap-adjusted exactly as the
@@ -1041,7 +1041,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         }
         uint256 left = deadUncreatedLeft;
         if (weight > left) revert E();
-        deadUncreatedLeft = uint64(left - weight);
+        deadUncreatedLeft = uint80(left - weight);
         if (amount != 0) {
             _creditClaimableLogged(playerId, amount);
             claimablePool += uint128(amount);

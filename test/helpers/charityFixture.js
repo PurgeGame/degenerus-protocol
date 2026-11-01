@@ -42,7 +42,7 @@ export async function giveSDGNRS(sdgnrs, gameAddress, recipient, amount) {
 }
 
 /**
- * Deploy the full protocol and fund the v33 charity test signers.
+ * Deploy the full protocol and fund the charity test signers.
  *
  * Returns the GNRUS contract (as `charity`), supporting protocol contracts,
  * and named voter / recipient signers + their addresses for tests that
@@ -68,7 +68,7 @@ export async function deployGNRUSFixture() {
   const stethAddress = await mockSteth.getAddress();
   const charityAddress = await charity.getAddress();
 
-  // v33: vote weight = floor(sdgnrs.balanceOf(voter) / 1e12); no minimum, no bonus.
+  // Vote weight = floor(sdgnrs.balanceOf(voter) / 1e12); no minimum, no bonus.
   // Sized for tie-break (voter1 == voter2 == 100 sDGNRS), multi-slot (per-voter
   // independence), and tie-breaker (voter3 == 200 sDGNRS to force a clear winner
   // when paired against the equal-weight pair).

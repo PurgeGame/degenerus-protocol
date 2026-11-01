@@ -180,7 +180,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
     /// @notice Score below AFFILIATE_DGNRS_MIN_SCORE (10 ETH) reverts.
     ///         The claim gate is `score < AFFILIATE_DGNRS_MIN_SCORE` (10) at
-    ///         DegenerusGameBingoModule:226. An affiliate who never recorded a buy under
+    ///         `GameBingo._claimAffiliateDgnrs`. An affiliate who never recorded a buy under
     ///         their own code has score 0 (genuinely below the 10-ether floor), so the
     ///         claim reverts at the gate. A single qualifying buy now scores far above the
     ///         floor (the score is mint-quantity-weighted, not commission-ETH-capped), so

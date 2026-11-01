@@ -6,7 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-/// @dev The independent reference below is the tally at 20a0e892, before gas changes.
+/// @dev The independent reference below is a fixed-unit-budget tally over the terminal read queue.
 ///      Compare the production terminal worker against it from the same seeded storage snapshot.
 contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
     /// @dev The deterministic ending is latched on the passed terminal level and its payout is
@@ -83,14 +83,14 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
             while (pos < len) {
                 if (units == 0) {
                     deadTallyPos = uint32(pos);
-                    deadUncreated = uint64(uncreated);
+                    deadUncreated = uint80(uncreated);
                     return false;
                 }
                 unchecked {
                     --units;
                     ++pos;
                 }
-                // pos is now the registry position plus one, the form _entryRecord takes.
+                // pos is now the registry position plus one, the form `_entryRecordOf` takes.
                 uncreated += _legacyWeight(uint80(_entryRecordOf(_tqReadKey(lvl), uint32(pos)) >> 160), shift);
             }
             deadTallyPos = 0;
@@ -168,11 +168,11 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
         deadTallyStage = uint8(stage);
         deadTallyFoilDay = dd;
         deadTallyFoilIdx = uint32(idx);
-        deadUncreated = uint64(uncreated);
+        deadUncreated = uint80(uncreated);
     }
 
     /// @dev An owed word's uncreated weight in QTY_SCALE units, snap-adjusted exactly as the
-    ///      ticket drain applies it on first touch (_processOneTicketEntry).
+    ///      ticket drain applies it on first touch (_snapOwedPacked).
     function _legacyWeight(uint80 packed, uint8 shift) private pure returns (uint256) {
         if (shift != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
             packed = _snapOwedPacked(packed, shift);

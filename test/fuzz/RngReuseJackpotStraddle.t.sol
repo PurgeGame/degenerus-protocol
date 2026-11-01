@@ -10,21 +10,20 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title RngReuseJackpotStraddle — PoC for the daily-jackpot pending-settlement
-///        wall-day straddle that reuses the prior day's VRF word (v60 R2, RNGREUSE).
+///        wall-day straddle that reuses the prior day's VRF word.
 ///
 /// @notice In the jackpot phase, the "fresh daily jackpot" leg
-///         (AdvanceModule:519 the daily jackpot stage) sets
+///         (the daily jackpot stage in the advance module) sets
 ///         `dailyJackpotCoinTicketsPending = true` UNCONDITIONALLY
-///         (JackpotModule:481) and breaks WITHOUT `_unlockRng`. The deferred
+///         (the jackpot module) and breaks WITHOUT `_unlockRng`. The deferred
 ///         coin/ticket half is completed by a LATER same-day advance
-///         (AdvanceModule:506 → the daily jackpot coin/ticket leg → `_unlockRng`).
+///         (the pending-completion step → the daily jackpot coin/ticket leg → `_unlockRng`).
 ///
 ///         If no advance completes that pending before the wall-day boundary,
 ///         `_unlockRng(D)` never runs, so `rngWordCurrent` / `rngRequestTime`
 ///         stay = day-D's word and `dailyIdx` stays < D. On day D+1 the new-day
-///         advance calls `rngGate(D+1)` (AdvanceModule:330) BEFORE the :506
-///         pending-completion. rngGate's fresh-word branch
-///         (`currentWord != 0 && rngRequestTime != 0`, :1217) fires, the gap
+///         advance calls the daily RNG step for D+1 BEFORE the pending-completion. the daily RNG step's fresh-word branch
+///         (`currentWord != 0 && rngRequestTime != 0`) fires, the gap
 ///         backfill is skipped (`_recordedDailyWord(dailyIdx+1) != 0`), and
 ///         `_applyDailyRng(D+1, currentWord)` writes
 ///             _recordedDailyWord(D+1) = _recordedDailyWord(D)
@@ -40,7 +39,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   - testBug_PendingStraddlesWallDay_ReusesPriorDayWord: cross the wall-day
 ///     WITHOUT completing the pending → the next advance reuses day-D's word.
 ///     `assertEq(wordD1, wordD)` PASSES on buggy HEAD (the reuse), and would
-///     FAIL once the deferred jackpot is completed before rngGate sees D+1.
+///     FAIL once the deferred jackpot is completed before the daily RNG step sees D+1.
 contract RngReuseJackpotStraddleTest is DeployProtocol {
     /// @dev prizePoolsPacked slot (confirmed via the BAF/RngRetry tests): [future:128 | next:128].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
@@ -63,7 +62,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         vm.deal(buyer, 1_000_000 ether);
         vm.deal(address(game), 5_000 ether);
 
-        // LINK for any VRF request path (mirrors the RngRetry PoC).
+        // Subscription funding for any VRF request path (mirrors the RngRetry PoC).
         mockVRF.fundSubscription(1, 1_000 ether);
     }
 
@@ -156,18 +155,18 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     }
 
     /// @notice Generality: the reuse is NOT gated on `dailyJackpotCoinTicketsPending`.
-    ///         Any day whose VRF word was applied by rngGate but NOT yet sealed by
+    ///         Any day whose VRF word was applied by the daily RNG step but NOT yet sealed by
     ///         `_unlockRng` reuses across a wall-day. Here the straddle point is the
-    ///         LEVEL TRANSITION into the jackpot phase (STAGE_ENTERED_JACKPOT, :499):
+    ///         LEVEL TRANSITION into the jackpot phase (STAGE_ENTERED_JACKPOT):
     ///         day-D's word is applied + `jackpotPhaseFlag` is set, but `_unlockRng`
-    ///         is deliberately skipped ("Do not unlock here", :497) and
+    ///         is deliberately skipped ("Do not unlock here") and
     ///         the fresh daily jackpot leg (the SOLE writer of the pending flag, via
-    ///         JackpotModule:481 ← AdvanceModule:519) has NOT run yet. So
+    ///         the jackpot module's daily leg) has NOT run yet. So
     ///         `dailyJackpotCoinTicketsPending == false` here by construction.
     function testFix_TransitionStraddle_DPlus1GetsFreshWord() public {
         // _driveToJackpotPhase() returns the instant jackpotPhase() flips true — i.e.
         // immediately after STAGE_ENTERED_JACKPOT, before the pending-set advance.
-        // dailyJackpotCoinTicketsPending is FALSE here (sole writer is the later :519),
+        // dailyJackpotCoinTicketsPending is FALSE here (sole writer is the later daily jackpot leg),
         // so this proves the fix covers the non-pending break point too.
         // The engine composes the jackpot entry with the first jackpot stages in one call when the
         // allowance covers them (60d31f775), so the old post-entry break point is not a separate

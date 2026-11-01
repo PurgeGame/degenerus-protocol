@@ -135,6 +135,11 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     /// @dev Sentinel for _rollHeroSymbol's banQuadrant param: no quadrant banned.
     uint8 private constant _NO_QUADRANT_BAN = 0xFF;
 
+    /// @dev The Cards quadrant and its Orange King trait: quadrant 2, colour 5 (orange),
+    ///      symbol 6 (King), so (2 << 6) | (5 << 3) | 6.
+    uint8 private constant CARDS_QUADRANT = 2;
+    uint8 private constant ORANGE_KING_TRAIT = 174;
+
     /// @dev Base current-pool jackpot percentage bounds (6%-14%); doubled on the middle day.
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
@@ -371,6 +376,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
             _resumeDecimatorEth(work, d, d.entropy, word, meter, result);
             return;
         }
+        if (d.jackpotPhase) _orangeKingShares(d);
         d.order = d.terminal
             ? JackpotBucketLib.bucketOrderLargestFirst(d.counts)
             : JackpotBucketLib.bucketOrderSoloLast(d.counts, d.solo);
@@ -928,6 +934,29 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     ) private pure returns (uint256) {
         uint8 soloQuadrant = _pickSoloQuadrant(traitIds, entropy);
         return (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
+    }
+
+    /// @dev Orange King as the official Cards trait moves budget toward the solo quadrant:
+    ///      half of Cards' allocation to the solo quadrant when Cards is not solo, or half of
+    ///      every other quadrant's allocation to Cards when it is. Each transfer floors, so an
+    ///      odd wei stays with its donor and the total is unchanged. `_resumeEth` applies it to
+    ///      shares recomputed from the frozen budget on every call, so it never compounds.
+    function _orangeKingShares(EthDraw memory d) internal pure {
+        if (d.traits[CARDS_QUADRANT] != ORANGE_KING_TRAIT) return;
+        uint256[4] memory shares = d.shares;
+        uint8 solo = d.solo;
+        if (solo != CARDS_QUADRANT) {
+            uint256 moved = shares[CARDS_QUADRANT] / 2;
+            shares[CARDS_QUADRANT] -= moved;
+            shares[solo] += moved;
+            return;
+        }
+        for (uint8 q; q < 4; ++q) {
+            if (q == CARDS_QUADRANT) continue;
+            uint256 moved = shares[q] / 2;
+            shares[q] -= moved;
+            shares[CARDS_QUADRANT] += moved;
+        }
     }
 
     /// @dev True when all 4 quadrant colors are gold (color 7). Colors are never

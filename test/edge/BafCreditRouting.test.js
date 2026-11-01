@@ -17,26 +17,26 @@ import {
 } from "../helpers/testUtils.js";
 
 /**
- * BafCreditRouting — verifies the BAF credit-routing changes in Coinflip.sol:
- *   - :525  cursor >= bafResolvedDay (INCLUSIVE by design: a flip that resolved ON
+ * BafCreditRouting — verifies BAF credit routing in the Coinflip claim path (CoinflipCore):
+ *   - cursor >= bafResolvedDay (INCLUSIVE by design: a flip that resolved ON
  *           the BAF day — staked the day before — seeds the NEXT bracket via
  *           claim-time routing; no flip day is score-dead)
- *   - :585  RngLocked guard now keys off storage `level` (was `purchaseLevel_ = level + 1`,
- *           which never matched at x10 boundaries because level is pre-bumped in
- *           _finalizeRngRequest atomically with rngLockedFlag = true)
- *   - :594  jackpot-phase post-BAF override routes credit to cachedLevel + 1 on x10 eras
- *           (otherwise day-D wins claimed during the jackpot phase land in the bracket
- *           that just resolved)
- *   - :1041 same predicate fix for _coinflipLockedDuringTransition (deposit-side lock)
+ *   - recording keys off storage `level` and is unconditional: level is pre-bumped in
+ *           prepareRequestBoundary atomically with rngLockedFlag = true, so a claim in
+ *           the x10 RNG-wait window records to the next bracket and needs no lock
+ *   - in the jackpot phase after a BAF draw, credit routes to the bracket of level + 1
+ *           on x10 eras (day-D wins claimed during the jackpot phase do not land in the
+ *           bracket that just resolved)
+ *   - deposits carry no level-based lock
  *
  * STRATEGY:
- *   The lock predicate is the security-critical change — it's what stops players from
- *   writing into bafTotals[N] between _requestRng and the bracket's resolution (the
+ *   The routing is what stops players from
+ *   writing into bafTotals[N] between the daily RNG request and the bracket's resolution (the
  *   consolidation's beginBafOn and the award stage that draws from the frozen bracket
  *   through bafPairWinners / bafHeadWinner until finalizeBaf). We verify it
  *   directly: drive the game one day cycle organically so alice has a winning claimable
  *   flip + claimableStored, then overwrite the `level` byte in slot 0 of the game's
- *   packed state and assert the lock fires (level=10) or doesn't (level=5).
+ *   packed state and assert the claim records to the next bracket (level=10) or the usual one (level=5).
  *
  *   We do NOT drive organically to level 10 because that costs hundreds of mineFlip
  *   iterations per test; the Foundry fuzz BafRebuyReconciliation.t.sol uses the same
@@ -183,9 +183,9 @@ describe("BafCreditRouting", function () {
   }
 
   // =========================================================================
-  // BAF-ROUTE-03a/b — Lock predicate (the security-critical fix)
+  // Lock predicate (the security-critical fix)
   // =========================================================================
-  describe("BAF-ROUTE-03 lock predicate", function () {
+  describe("lock predicate", function () {
     it("[03a] claim FLOWS in the BAF window and records to the NEXT bracket", async function () {
       // Recording is unconditional: claim-time routing off the promoted level
       // sends in-window credit to bracket level+10 — state the pending draw
@@ -197,7 +197,7 @@ describe("BafCreditRouting", function () {
       const gameAddr = await game.getAddress();
 
       // Simulate the era-10 RNG-wait window: level was bumped to 10 in
-      // _finalizeRngRequest atomically with rngLockedFlag and lastPurchaseDay.
+      // prepareRequestBoundary atomically with rngLockedFlag and lastPurchaseDay.
       // jackpotPhaseFlag stays false during this window.
       await setLevel(gameAddr, 10);
       await setSlot0Bool(gameAddr, 17, true); // lastPurchaseDay
@@ -272,9 +272,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-04 — Non-x10 RNG-wait window does NOT lock
+  // Non-x10 RNG-wait window does NOT lock
   // =========================================================================
-  describe("BAF-ROUTE-04 non-x10 wait window", function () {
+  describe("non-x10 wait window", function () {
     it("[04a] claim succeeds when level=5 + rngLocked + lastPurchaseDay (era 5 has no BAF)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, alice } = fixture;
@@ -331,9 +331,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-01 — Normal sub-x10 claim emits BafFlipRecorded for the right bracket
+  // Normal sub-x10 claim emits BafFlipRecorded for the right bracket
   // =========================================================================
-  describe("BAF-ROUTE-01 routing in normal purchase phase", function () {
+  describe("routing in normal purchase phase", function () {
     it("[01] level=0 purchase claim credits bracket 10 (_bafBracketLevel(1)=10)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
@@ -359,9 +359,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-05 — Post-BAF jackpot-phase override (level=10 + jackpotPhase → bracket 20)
+  // Post-BAF jackpot-phase override (level=10 + jackpotPhase → bracket 20)
   // =========================================================================
-  describe("BAF-ROUTE-05 post-BAF jackpot-phase override", function () {
+  describe("post-BAF jackpot-phase override", function () {
     it("[05a] claim at level=10 + jackpotPhase routes credit to bracket 20 (override fires)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
@@ -422,9 +422,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-02 — cursor >= bafResolvedDay filter (inclusive by design)
+  // cursor >= bafResolvedDay filter (inclusive by design)
   // =========================================================================
-  describe("BAF-ROUTE-02 cursor >= bafResolvedDay (day-of-resolution seeds the next bracket)", function () {
+  describe("cursor >= bafResolvedDay (day-of-resolution seeds the next bracket)", function () {
     it("[02a] cursor == lastBafResolvedDay is INCLUDED (resolution-day flips seed the next bracket)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
@@ -478,9 +478,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-06 — Post-jackpot era-(N+1) purchase claim routes via purchaseLevel_
+  // Post-jackpot era-(N+1) purchase claim routes via purchaseLevel_
   // =========================================================================
-  describe("BAF-ROUTE-06 post-jackpot purchase phase routing", function () {
+  describe("post-jackpot purchase phase routing", function () {
     it("[06] claim at level=10 + !jackpotPhase + !lastPurchaseDay routes via purchaseLevel_=11 → bracket 20", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
@@ -493,7 +493,7 @@ describe("BafCreditRouting", function () {
       // jackpotPhaseFlag = false; lastPurchaseDay = false. purchaseLevel_ = level + 1 = 11.
       // bafLevel = purchaseLevel_ = 11 → _bafBracketLevel(11) = 20.
       // This proves the !inJackpotPhase branch routes the same day-D credit to bracket 20
-      // as the jackpot-phase override does in BAF-ROUTE-05a — the two paths converge.
+      // as the jackpot-phase override does, so the two paths converge.
       await setLevel(gameAddr, 10);
       await setSlot0Bool(gameAddr, 15, false); // jackpotPhaseFlag
       await setSlot0Bool(gameAddr, 17, false); // lastPurchaseDay
@@ -513,9 +513,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-07 — Mid-bracket jackpot phase, override does NOT fire
+  // Mid-bracket jackpot phase, override does NOT fire
   // =========================================================================
-  describe("BAF-ROUTE-07 non-x10 jackpot-phase routing", function () {
+  describe("non-x10 jackpot-phase routing", function () {
     it("[07] claim at level=7 + jackpotPhase credits bracket 10 (no override fires)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
@@ -545,9 +545,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-08 — markBafSkippedAt path routes identically to the beginBafOn path
+  // markBafSkippedAt path routes identically to the beginBafOn path
   // =========================================================================
-  describe("BAF-ROUTE-08 markBafSkippedAt routing equivalence", function () {
+  describe("markBafSkippedAt routing equivalence", function () {
     it("[08] markBafSkippedAt bumps lastBafResolvedDay; day-D claims seed bracket 20, like the beginBafOn path", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
@@ -608,9 +608,9 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-09 — Claims during the BAF award stage leave the resolving bracket frozen
+  // Claims during the BAF award stage leave the resolving bracket frozen
   // =========================================================================
-  describe("BAF-ROUTE-09 award-stage claims", function () {
+  describe("award-stage claims", function () {
     it("[09] claim during the award stage (level=10 + jackpotPhase + rngLocked) records to bracket 20; bracket 10's draw is unchanged", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice, bob } = fixture;

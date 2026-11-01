@@ -8,24 +8,19 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title RngRetryLootboxStall — PoC for the phase-blind `isRetry` RNG bug (v60 R2, RNGRETRY).
+/// @title RngRetryLootboxStall — a stalled mid-day lootbox request must not skip the level transition.
 /// @notice A mid-day lootbox VRF request and the daily VRF request share one
 ///         (vrfRequestId, rngRequestTime, rngWordCurrent) slot-set, distinguished only by
-///         rngLockedFlag. `_finalizeRngRequest` computes
-///             isRetry = vrfRequestId != 0 && rngRequestTime != 0 && rngWordCurrent == 0
-///         which is PHASE-BLIND. If a mid-day lootbox request is still in flight (stalled ≥12h)
-///         when a last-purchase-day → jackpot transition fires its daily RNG request via the
-///         12h timeout branch (rngGate:1263), the daily request is misclassified as a retry,
-///         so the `isTicketJackpotDay && !isRetry` block (AdvanceModule:1693-1716) is SKIPPED:
-///         the sole `level = lvl` increment (:1697), `_rewardTopAffiliate`, the dec-window
-///         update, and `pickCharity` never run.
+///         rngLockedFlag. If a mid-day lootbox request is still in flight (stalled ≥12h)
+///         when a last-purchase-day → jackpot transition fires its daily RNG request, the daily
+///         request must still run the `isTicketJackpotDay` block of `prepareRequestBoundary`:
+///         the sole `level = lvl` increment, `_rewardTopAffiliate`, the decimator-window open/close and `pickCharity`.
 ///
 /// @dev Two tests:
 ///   - testControl_NormalTransition_LevelIncrements: same drive, NO stalled lootbox →
 ///     the transition increments the level (proves the harness + transition work).
 ///   - testBug_StalledLootbox_SkipsLevelIncrement: inject a stalled mid-day lootbox request
-///     before the transition → assert the level still increments. FAILS on the buggy code
-///     (level stuck), PASSES once `isRetry` is made phase-aware (`&& rngLockedFlag`).
+///     before the transition → assert the level still increments.
 contract RngRetryLootboxStallTest is DeployProtocol {
     /// @dev prizePoolsPacked slot (confirmed via the BAF tests): [future:128 | next:128].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
@@ -43,7 +38,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         vm.deal(attacker, 1_000 ether);
         vm.deal(address(game), 5_000 ether);
 
-        // Fund the VRF subscription LINK so the mid-day request passes its >= 40 LINK gate.
+        // Fund the VRF subscription so the mid-day request passes its native floor.
         // Admin's constructor created subscription id 1 on the mock.
         mockVRF.fundSubscription(1, 1_000 ether);
     }

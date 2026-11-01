@@ -10,11 +10,11 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title V61SolvencyAfpay — SEC-02 proof: SOLVENCY-01 re-attested across the v61 afking spend paths.
+/// @title V61SolvencyAfpay — solvency proof: the claimablePool identity holds across the afking spend paths.
 ///
 /// @notice Two invariants, both computed from the REAL slots (no parallel mirror that could drift green):
 ///
-///   invariant_v61PoolEqualsSumOfHalves — the master identity (DegenerusGameStorage.sol:358):
+///   invariant_v61PoolEqualsSumOfHalves — the master identity (`DegenerusGameStorage.claimablePool`):
 ///     `claimablePool == Σ over all tracked addresses of (claimable low half + afking high half of
 ///     balancesPacked[*]) + degenesisVaultBudget + unsplit Degenesis volume`. The last two terms are
 ///     obligations inside claimablePool that no wallet's balance word owns: the Vault's Degenesis budget (a
@@ -22,22 +22,22 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///     not split them yet. Both are read from the real slots (slot 15, and the per-cohort header of
 ///     `degenesisDays`), never from a handler mirror. A split moves half to the prize pool, a quarter to the
 ///     budget and a quarter to the sDGNRS afking half, so the three terms hand over to each other exactly. The afking reservation rides INSIDE claimablePool (no separate aggregate); every
-///     mutation pairs a claimablePool move at the call site (D-01: the pairing is kept at the call sites, not
+///     mutation pairs a claimablePool move at the call site (the pairing is kept at the call sites, not
 ///     in the accessor). This invariant would FAIL under a seeded violation — e.g. an afking debit that dropped
-///     its paired `claimablePool -=` would leave claimablePool > Σ(halves) (the falsifiability guarantee per
-///     T-378-06-02). The half-sum is read from the raw balancesPacked slot (slot 7, the 378-01 key) for each
+///     its paired `claimablePool -=` would leave claimablePool > Σ(halves) (the falsifiability guarantee).
+///     The half-sum is read from the raw balancesPacked slot (slot 6) for each
 ///     tracked address; the tracked set (the actor pool + VAULT/SDGNRS/GNRUS) is a complete cover because the
 ///     handler creates balances only through real paired entrypoints and the only ticket buyers (⇒ jackpot
 ///     winners) are the actors.
 ///
-///   invariant_v61PoolNeverExceedsBacking — the backing bound (DegenerusGame.sol:18):
+///   invariant_v61PoolNeverExceedsBacking — the backing bound (the GameFacade contract invariants):
 ///     `claimablePool <= address(game).balance + steth.balanceOf(game)`. The contract must always hold enough
 ///     ETH+stETH to cover the claim liability after any afking-funded buy / packed credit-debit / stale cashout
 ///     / smite.
 ///
-///   The V61AfkingSpendHandler drives the four SEC-02 spend paths (afking-funded buy, packed credit/debit,
+///   The V61AfkingSpendHandler drives the four spend paths (afking-funded buy, packed credit/debit,
 ///   stale cashout, smite) plus decurse + advance under the [invariant] profile (runs=256, depth=128). The
-///   SolvencyActionHandler (FUZZ-01, 381-01) is a SECOND target that WIDENS the same identity to the buyer
+///   SolvencyActionHandler is a SECOND target that WIDENS the same identity to the buyer
 ///   surfaces that mutate claimablePool but were NOT under the afking-only handler: the whale pass, the lazy
 ///   pass, the deity pass, the Degenesis box (a credit-earning purchase then a Degenesis buy paid from fresh ETH, claimable
 ///   or prepaid afking), a lootbox-bearing buy, the Vault's Degenesis budget spend, prepaid-afking funding,
@@ -92,7 +92,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         // disjoint from it.
         _nextDeityId = 1;
 
-        // The wider buyer-surface handler (FUZZ-01): pass buys + Degenesis box + claim over a DISJOINT actor band
+        // The wider buyer-surface handler: pass buys + Degenesis box + claim over a DISJOINT actor band
         // (0x5A000) so the two handlers' actor sets never collide. Both are targeted in the same campaign; the
         // invariants below sum the halves over the UNION of the two tracked sets.
         solvencyHandler = new SolvencyActionHandler(game, deityPass, mockVRF, 5, _dayWarps());
@@ -113,7 +113,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     // INVARIANT 1: claimablePool == Σ(claimable + afking halves) over the real slots
     // =========================================================================
 
-    /// @notice The master SOLVENCY-01 identity across the afking spend paths AND the wider buyer surfaces. Reads
+    /// @notice The master solvency identity across the afking spend paths AND the wider buyer surfaces. Reads
     ///         the raw balancesPacked slot for each tracked address (the de-duplicated UNION of both handlers'
     ///         tracked sets) and sums both halves; asserts the total equals claimablePool. A dropped paired
     ///         debit on EITHER surface (or a double-counted half) would break this.
@@ -135,7 +135,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         assertEq(
             game.claimablePoolView(),
             sum,
-            "SOLVENCY-01: claimablePool == Sigma (claimable - sentinel + afking) across all tracked addresses + Degenesis budget + unsplit volume"
+            "solvency: claimablePool == Sigma (claimable - sentinel + afking) across all tracked addresses + Degenesis budget + unsplit volume"
         );
     }
 
@@ -149,7 +149,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         assertLe(
             game.claimablePoolView(),
             backing,
-            "SOLVENCY-01: claimablePool <= address(game).balance + stETH"
+            "solvency: claimablePool <= address(game).balance + stETH"
         );
     }
 
@@ -358,7 +358,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     /// @notice A stale cashout via the PUBLIC claimWinnings pays out the actor's claimable and pairs the
     ///         claimablePool debit; the identity holds across it, and the stale cashout sets the curse without
     ///         perturbing any balance. Claimable is seeded paired (the identity holds going IN), then the
-    ///         contract's claimWinnings debit is verified to keep it paired going OUT — exactly the SEC-02
+    ///         contract's claimWinnings debit is verified to keep it paired going OUT — exactly the
     ///         "stale cashout" path. (dailyIdx is seeded so the lastEthDay-0 claimant is stale ⇒ the curse SET
     ///         also fires, and we assert it leaves the balance untouched.)
     function testScenarioStaleCashoutKeepsIdentity() public {
@@ -424,7 +424,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     // FALSIFIABILITY: a seeded dropped-pairing breaks the Σ identity (proves it is non-vacuous)
     // =========================================================================
 
-    /// @notice The dropped-pairing bug shape that T-381-01-01 guards: a buyer-surface spend path credits a
+    /// @notice The dropped-pairing bug shape guarded against here: a buyer-surface spend path credits a
     ///         tracked actor's claimable LOW half but DROPS the paired `claimablePool +=`. We simulate that bug
     ///         by field-isolated vm.store-ing a claimable increment for a tracked SolvencyActionHandler actor
     ///         WITHOUT bumping claimablePool, then assert the underlying equality the invariant checks now FAILS
@@ -539,7 +539,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     }
 
     /// @dev Seed `who`'s claimable (the low half) to `amount` AND bump claimablePool by the same delta, so the
-    ///      SOLVENCY-01 identity holds going IN to the focused stale-cashout test. The contract's own claim
+    ///      solvency identity holds going IN to the focused stale-cashout test. The contract's own claim
     ///      debit is then verified to keep the pairing going OUT — the property under test.
     function _seedClaimablePaired(address who, uint256 amount) internal {
         bytes32 slot = keccak256(abi.encode(uint256(_aid(who)), uint256(BALANCES_PACKED_SLOT)));
@@ -547,7 +547,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;
         vm.store(address(game), slot, bytes32((high << 128) | uint128(amount)));
-        // claimablePool is slot 1, uint128 at byte 16 (the 378-01 key); bump it by (amount - oldLow).
+        // claimablePool is slot 1, uint128 at byte 16; bump it by (amount - oldLow).
         uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
         uint256 lowOther = slot1 & ((uint256(1) << 128) - 1); // currentPrizePool (bytes 0..15)
         uint256 pool = (slot1 >> 128) & type(uint128).max;

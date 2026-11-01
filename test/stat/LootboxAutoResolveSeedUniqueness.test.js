@@ -2,7 +2,7 @@
 //
 // Statistical seed model for direct lootboxes and redemption orders. Redemption
 // mixes the session word with the player in sDGNRS, then uses the human-order
-// BoxOpen domain and a one-based box nonce. No amount or former 5-ETH chunk
+// BoxOpen domain and a one-based box nonce. No amount or 5-ETH chunk
 // enters that draw. This model tests distribution, not production wiring;
 // RandomnessSeedInputs and RedemptionForwardBatches execute the real resolver.
 
@@ -16,8 +16,7 @@ async function deployTester() {
   return tester;
 }
 
-// Phase 261/264/266 chi² infrastructure reuse (verbatim re-declaration).
-// Source: test/stat/TraitDistribution.test.js / LootboxEntropyDistribution.test.js.
+// chi² helper (same as in test/stat/TraitDistribution.test.js / LootboxEntropyDistribution.test.js).
 function wilsonHilfertyZ(chi2, df) {
   const term = Math.cbrt(chi2 / df) - (1 - 2 / (9 * df));
   return term / Math.sqrt(2 / (9 * df));
@@ -73,7 +72,7 @@ function makeCallerDSeeds(N) {
   return seeds;
 }
 
-describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR-04 chi-square across 3 seed families", function () {
+describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — chi-square across 3 seed families", function () {
   this.timeout(600_000);
 
   describe("Per-caller chi² uniformity of bits[224..255] % 100 at N=10K per caller (DegeneretteModule / sDGNRS / redemption order nonces)", function () {
@@ -162,7 +161,7 @@ describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR
   describe("Cross-slice independence — bits[224..255] vs bits[0..15] (rangeRoll consumer) at the same seed set", function () {
     const N = 10_000;
 
-    it("|E[sliceBernoulli * sliceRange] - E[sliceBernoulli] * E[sliceRange]| < 50 at N=10K (FINDINGS-v39.0.md §4(b) cross-slice independence extended to auto-resolve)", function () {
+    it("|E[sliceBernoulli * sliceRange] - E[sliceBernoulli] * E[sliceRange]| < 50 at N=10K (cross-slice independence extended to auto-resolve)", function () {
       const seeds = makeCallerBSeeds(N);
       let sumB = 0;
       let sumR = 0;

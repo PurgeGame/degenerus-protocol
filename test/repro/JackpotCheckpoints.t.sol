@@ -9,6 +9,7 @@ import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWha
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -54,7 +55,7 @@ contract JackpotCheckpointHarness is DegenerusGameJackpotModule, BucketSeed {
         external pure returns (uint16[4] memory counts, uint256[4] memory shares)
     {
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
-        uint256 raw = EntropyLib.hash2(word, lvl);
+        uint256 raw = EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, lvl);
         uint8 solo = _pickSoloQuadrant(traits, raw);
         uint256 entropy = (raw & ~uint256(3)) | ((3 - solo) & 3);
         counts = JackpotBucketLib.terminalWinnerCounts(entropy);

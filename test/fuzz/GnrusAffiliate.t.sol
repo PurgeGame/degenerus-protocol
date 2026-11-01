@@ -198,8 +198,9 @@ contract GnrusAffiliateTest is DegenesisDeployProtocol {
             _settle(day, true);
             (uint16 reward, bool win) = coinflip.getCoinflipDayResult(day);
             assertTrue(win);
+            // The carry from the prior win rides this day and earns the recycle bonus.
+            if (day > 2) expected += expected * 75 / 10_000;
             expected += expected * reward / 100;
-            expected += expected * 75 / 10_000;
             (, uint256 stop, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.GNRUS);
             assertEq(stop, 0);
             assertEq(carry, expected);

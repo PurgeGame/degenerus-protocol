@@ -2,7 +2,6 @@
 pragma solidity 0.8.38;
 
 import {PurchaseDailyLevelOneSaturated} from "./PurchaseDailyWorstCase.t.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -17,7 +16,7 @@ contract StorageReusePurchaseHost is DegenerusGame {
 }
 
 /// @dev Full level-one draw, including all 50 credits, before its daily seal.
-contract StorageReuseNativePurchaseTest is PurchaseDailyLevelOneSaturated, NativeGasExport {
+contract StorageReuseNativePurchaseTest is PurchaseDailyLevelOneSaturated {
     function _purchaseFixtureDay() internal pure override returns (uint24) { return 21_000; }
 
     function test_nativeLevelOneFiftyShareDraw() public {
@@ -26,8 +25,6 @@ contract StorageReuseNativePurchaseTest is PurchaseDailyLevelOneSaturated, Nativ
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, word, day);
         vm.etch(address(game), type(StorageReusePurchaseHost).runtimeCode);
-        _nativeFixture("level_one_draw_50", address(0x8888), address(game),
-            abi.encodeCall(StorageReusePurchaseHost.phaseOnly, ()));
         vm.recordLogs();
         StorageReusePurchaseHost(payable(address(game))).phaseOnly();
         Vm.Log[] memory logs = vm.getRecordedLogs();

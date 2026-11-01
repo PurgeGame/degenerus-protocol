@@ -11,13 +11,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @notice VAULT and sDGNRS each hold SEED_FLIP_DAILY of unstored seed stake on rounds 2..21 and
 ///         on no other round. Nothing at a century level (100, 200, ...) opens another window.
 ///
-///         - SEED-01 the deploy window seeds exactly SEED_FLIP_DAILY on each of its 20 rounds, to
+///         - the deploy window seeds exactly SEED_FLIP_DAILY on each of its 20 rounds, to
 ///           both recipients, and stops after round 21.
-///         - SEED-02 no round after the window, at any later century, carries a seed.
-///         - SEED-03 the seed ADDS to a day's existing stake rather than replacing it.
-///         - SEED-04 the seed never mints WWXRP.
-///         - SEED-05 a stake lane at its ceiling clamps; the seed rides on top of the stored lane.
-///         - SEED-06 the Coinflip has no GAME-callable seed entry point left.
+///         - no round after the window, at any later century, carries a seed.
+///         - the seed ADDS to a day's existing stake rather than replacing it.
+///         - the seed never mints WWXRP.
+///         - a stake lane at its ceiling clamps; the seed rides on top of the stored lane.
+///         - the Coinflip has no GAME-callable seed entry point left.
 contract CenturySeedWindow is DeployProtocol {
     uint256 internal constant SEED_FLIP_DAILY = 200_000;
     uint24 internal constant SEED_FLIP_DAYS = 20;
@@ -52,7 +52,7 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-01 — the deploy window
+    // the deploy window
     // ------------------------------------------------------------------
 
     function testDeployWindowSeedsEveryDayForBothRecipients() public {
@@ -83,7 +83,7 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-02 — no century seed
+    // no century seed
     // ------------------------------------------------------------------
 
     /// @dev Samples the days around the first levels' worth of x00 spacing: a century is at least
@@ -108,7 +108,7 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-03 — add, never replace
+    // add, never replace
     // ------------------------------------------------------------------
 
     function testAddsToAnExistingStakeInsteadOfReplacingIt() public {
@@ -124,7 +124,7 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-04 — owner minting replaces automatic WWXRP allocations
+    // owner minting replaces automatic WWXRP allocations
     // ------------------------------------------------------------------
 
     function testSeedWindowDoesNotMintWwxrp() public {
@@ -139,7 +139,7 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-05 — a capped lane
+    // a capped lane
     // ------------------------------------------------------------------
 
     /// @dev Stakes ADD into a 32-bit whole-FLIP lane that clamps instead of reverting; the seed
@@ -157,7 +157,7 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-06 — no arm entry point
+    // no arm entry point
     // ------------------------------------------------------------------
 
     function testCoinflipExposesNoSeedArm() public {

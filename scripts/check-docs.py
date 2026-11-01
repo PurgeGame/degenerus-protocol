@@ -74,8 +74,6 @@ def main():
             errors.append(f'{name}: unclosed code fence')
         if h1 != 1:
             errors.append(f'{name}: expected one H1, got {h1}')
-        if name == 'AUDITPREP-REPORT.md':
-            continue
         for match in re.finditer(r'\[[^\]]*\]\(([^)\n]+)\)', content):
             target = match[1].strip().strip('<>')
             if urlsplit(target).scheme or target.startswith('//'):

@@ -138,7 +138,7 @@ describe("GameOver", function () {
   // =========================================================================
 
   // The early-gameover (levels 0-9) deity refund is min(deityPassPricePaid[owner],
-  // 20 ETH) per owner (GameOverModule:111-115). A standard pass is bought at 24/25
+  // 20 ETH) per owner (`_handleGameOverDrain`). A standard pass is bought at 24/25
   // ETH (> the 20 ETH cap), so the cap binds and the refund is exactly 20 ETH —
   // Compare refunds separately from terminal jackpot winnings: every deity now
   // also owns ordinary perpetual tickets and may win in the terminal cohort.

@@ -8,7 +8,6 @@ import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
 contract SeizureGasSeeder is DegenerusGameStorage {
@@ -58,7 +57,7 @@ contract SeizureGasSeeder is DegenerusGameStorage {
 
 /// @notice Cold cost of one loan seizure, the stage's per-loan admission estimate. Every account
 ///         is built and the level armed in setUp, so the measured call reads each slot cold.
-abstract contract LoanSeizureGasBase is DeployProtocol, NativeGasExport {
+abstract contract LoanSeizureGasBase is DeployProtocol {
     address internal borrower;
     uint32 internal root;
     uint256 internal family;
@@ -137,15 +136,9 @@ abstract contract LoanSeizureGasBase is DeployProtocol, NativeGasExport {
 
     function _measureAs(string memory label, address expectedPayee) internal returns (uint256 used) {
         _etch();
-        uint256 snapshot = vm.snapshotState();
         uint256 before = gasleft();
         SeizureGasSeeder(address(game)).seize();
         used = before - gasleft();
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(SeizureGasSeeder.seize, ()));
-            SeizureGasSeeder(address(game)).seize();
-        }
         _unetch();
         emit log_named_uint(label, used);
         (, address payee, ) = game.resolveAccount_g7029(root, address(0));
@@ -206,15 +199,9 @@ abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
     }
 
     function _measureTerminal(string memory label) internal returns (uint256 used) {
-        uint256 snapshot = vm.snapshotState();
         uint256 before = gasleft();
         game.mineRun(0);
         used = before - gasleft();
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(game.mineRun, (0)));
-            game.mineRun(0);
-        }
         emit log_named_uint(label, used);
         assertEq(_loanStep(), 0, "one call finishes the book");
         assertLt(used, 10_000_000, "the checkpoint stays under the 10M chunk rule");

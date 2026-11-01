@@ -17,18 +17,18 @@ import {
 /*
  * AffiliateHardening - Per-referrer Commission Cap & Lootbox Activity Taper
  * =========================================================================
- * Targeted tests for Phase 44 affiliate hardening features:
+ * Targeted tests for affiliate hardening features:
  *
- * Commission Cap (AFF-01 through AFF-04):
+ * Commission Cap:
  *   - 0.5 ETH FLIP cap per sender per affiliate per level
  *   - Cumulative tracking across multiple purchases
  *   - Cap resets at each new level
  *   - Independent caps per affiliate
  *
- * Lootbox Activity Taper (AFF-05 through AFF-09):
- *   - No taper below 10000 BPS score
- *   - Linear taper from 100% to 25% between 10000 and 25500 BPS
- *   - Floor at 25% payout above 25500 BPS
+ * Lootbox Activity Taper:
+ *   - No taper below an activity score of 100 points
+ *   - Linear taper from 100% to 25% between 100 and 255 points
+ *   - Floor at 25% payout at 255 points and above
  *   - Leaderboard tracking uses post-taper amount
  *   - lootboxActivityScore parameter flows correctly
  */
@@ -37,16 +37,16 @@ import {
 // Constants (mirror contract values)
 // ---------------------------------------------------------------------------
 
-// The per-sender per-level 0.5 ETH commission cap was removed (perf(344)): the
-// affiliate score now accrues the full scaled amount uncapped. This literal is
-// retained only as the convenient 0.5-ETH value some scenarios still produce.
+// There is no per-sender per-level 0.5 ETH commission cap: the
+// affiliate score accrues the full scaled amount uncapped. This literal is
+// only the convenient 0.5-ETH value some scenarios produce.
 const MAX_COMMISSION_PER_REFERRER_PER_LEVEL = flip(500000); // 0.5 ether
 const REWARD_SCALE_FRESH_L1_3_BPS = 2_500n; // 25%
 const REWARD_SCALE_FRESH_L4P_BPS = 2_000n; // 20%
 const REWARD_SCALE_RECYCLED_BPS = 500n; // 5%
 const BPS_DENOMINATOR = 10_000n;
-// Activity score is now whole points (v69 bps->points migration): taper starts
-// at 100 points and floors at 255 points (was 10000/25500 BPS).
+// Activity score is in whole points: taper starts
+// at 100 points and floors at 255 points.
 const LOOTBOX_TAPER_START_SCORE = 100;
 const LOOTBOX_TAPER_END_SCORE = 255;
 const LOOTBOX_TAPER_MIN_BPS = 2_500n;
@@ -176,7 +176,7 @@ async function deployWithAffiliateSetup() {
 /**
  * Deploy fixture + set up two affiliates: alice ("ALICE") and carol ("CAROL"),
  * both with bob referred. Actually, each sender can only have one referrer.
- * For AFF-04 (different affiliates, same sender), we use bob referred to alice
+ * For the independent-caps case (different affiliates, same sender), we use bob referred to alice
  * and dan referred to carol.
  */
 async function deployWithTwoAffiliates() {
@@ -209,8 +209,8 @@ describe("AffiliateHardening", function () {
   // =========================================================================
   describe("Per-Referrer Commission Cap", function () {
 
-    // AFF-01: Affiliate earns at most 0.5 ETH FLIP from single sender per level
-    describe("AFF-01: Single large purchase hits cap", function () {
+    // Affiliate earns at most 0.5 ETH FLIP from single sender per level
+    describe("Single large purchase hits cap", function () {
 
       it("records full uncapped commission for a single large purchase", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
@@ -304,8 +304,8 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-02: Cap tracks cumulative spend across multiple small purchases
-    describe("AFF-02: Cumulative spend tracking", function () {
+    // Cap tracks cumulative spend across multiple small purchases
+    describe("Cumulative spend tracking", function () {
 
       it("multiple small purchases accumulate toward 0.5 ETH cap", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
@@ -406,8 +406,8 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-03: Cap resets per level
-    describe("AFF-03: Cap resets at each new level", function () {
+    // Cap resets per level
+    describe("Cap resets at each new level", function () {
 
       it("same sender/affiliate pair earns again at a different level", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
@@ -477,8 +477,8 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-04: Cap is per-affiliate (different affiliates have independent caps)
-    describe("AFF-04: Independent caps per affiliate", function () {
+    // Cap is per-affiliate (different affiliates have independent caps)
+    describe("Independent caps per affiliate", function () {
 
       it("two affiliates each accrue independently from different senders", async function () {
         const { affiliate, game, coin, alice, bob, carol, dan, aliceCode, carolCode } =
@@ -561,8 +561,8 @@ describe("AffiliateHardening", function () {
   // =========================================================================
   describe("Lootbox Activity Taper", function () {
 
-    // AFF-05: No taper below 10000 BPS
-    describe("AFF-05: No taper when score < 10000 BPS", function () {
+    // No taper below 10000 BPS
+    describe("No taper when score < 10000 BPS", function () {
 
       it("score 0: full payout, no taper", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
@@ -611,10 +611,10 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-06: Linear taper from 100% to 25% between 10000-25500 BPS
-    describe("AFF-06: Linear taper in 10000-25500 BPS range", function () {
+    // Linear taper from 100% to 25% between 10000-25500 BPS
+    describe("Linear taper in 10000-25500 BPS range", function () {
 
-      it("score exactly 10000: no reduction (taper just starts)", async function () {
+      it("score exactly 100: no reduction (taper just starts)", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -701,8 +701,8 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-07: Floor at 25% payout when score >= 25500
-    describe("AFF-07: Floor at 25% for score >= 25500 BPS", function () {
+    // Floor at 25% payout when score >= 25500
+    describe("Floor at 25% for score >= 25500 BPS", function () {
 
       it("score exactly 25500: 25% payout floor", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
@@ -759,8 +759,8 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-08: Leaderboard tracking uses post-taper amount
-    describe("AFF-08: Leaderboard uses post-taper amount", function () {
+    // Leaderboard tracking uses post-taper amount
+    describe("Leaderboard uses post-taper amount", function () {
 
       it("leaderboard score matches post-taper scaled amount when heavily tapered", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
@@ -830,8 +830,8 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-09: lootboxActivityScore parameter flows correctly through payAffiliate
-    describe("AFF-09: lootboxActivityScore parameter flow", function () {
+    // lootboxActivityScore parameter flows correctly through payAffiliate
+    describe("lootboxActivityScore parameter flow", function () {
 
       it("score=0 produces same result as no-taper baseline", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =

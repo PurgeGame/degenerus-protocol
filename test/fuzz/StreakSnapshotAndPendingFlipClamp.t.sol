@@ -76,7 +76,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — pre-streak >255 snapshot exactness + the <=255 regression-safety + the saturation
+    // Pre-streak >255 snapshot exactness + the <=255 regression-safety + the saturation
     // =========================================================================
 
     /// @notice A manual quest streak ABOVE 255 carried into an afking run is snapshotted EXACTLY into the
@@ -191,7 +191,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 — settlement from elapsed days: pays once, saturates, never wraps
+    // Settlement from elapsed days: pays once, saturates, never wraps
     // =========================================================================
 
     /// @notice Settlement pays exactly the elapsed days' reward once and a repeat claim finds nothing.

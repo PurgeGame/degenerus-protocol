@@ -317,7 +317,7 @@ contract AccountRuleGame is DeployProtocol {
     }
 
     /// @notice An operator approved on the smurf buys for it with its own ETH. Overpay credits the
-    ///         paying caller's ID (`_payerId`), so an operator without an ID cannot overpay.
+    ///         paying caller's ID, so an operator without an ID cannot overpay.
     function test_OperatorPurchaseForSmurf() public {
         _approve(owner, smurfId, operator);
         uint32 smurfOwed = _fixtureEntries(1, smurfId);

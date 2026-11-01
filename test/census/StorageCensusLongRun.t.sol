@@ -27,7 +27,7 @@ interface ICensusShare {
 /// @dev Seeded setup that is NOT part of the census (direct calls outside `_ctx`): player ETH,
 ///      a FLIP float for the cast (coin.mintForGame_g152734 as the Game), a small sDGNRS float for
 ///      burners/voters (sDGNRS.transferFromPool_g106128 as the Game), DGVE shares from the creator, two
-///      GNRUS charity slots, VRF subscription LINK and the loan lender's backing.
+///      GNRUS charity slots, VRF subscription native balance and the loan lender's backing.
 contract StorageCensusLongRunTest is StorageCensus {
     uint256 internal constant PLAYERS = 30;
     uint24 internal constant TARGET_LEVEL = 31;

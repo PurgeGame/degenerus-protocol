@@ -769,7 +769,8 @@ contract WWXRP {
     ///        amount burns; winner weight counts whole WWXRP only.
     /// @custom:reverts BelowMinBurn When amount is under 25 WWXRP.
     /// @custom:reverts NotApproved When the caller may not act for `id`.
-    /// @custom:reverts ScoreOverflow When the bucket entry count would overflow.
+    /// @custom:reverts ScoreOverflow When the day bucket's or (at level x99) the century
+    ///                 bracket's entry count is full.
     /// @custom:reverts InsufficientBalance When the payee's balance is short.
     /// @custom:reverts E (Game) When `id` is unallocated, or a new self entrant must
     ///                 register past paid admission.
@@ -791,7 +792,7 @@ contract WWXRP {
 
     /// @notice Burn all of GNRUS's WWXRP (claimable, then held) into the draw; at level x99 it also
     ///         enters the next x00 incinerator. Game only, from GNRUS's purchase-phase-end step;
-    ///         below MIN_BURN it does nothing.
+    ///         below MIN_BURN, or when either entry counter is full, it does nothing.
     function enterDrawForGnrus() external {
         if (msg.sender != MINTER_GAME) revert OnlyMinter();
         uint256 amount = claimable(GNRUS_ID);
@@ -804,6 +805,22 @@ contract WWXRP {
     function _enterDraw(uint32 id, address payee, uint256 amount) private {
         // The requested logical day lives in Game slot 0 bits 24..47.
         uint24 day = uint24(uint256(game.extsload_g2807007(bytes32(0))) >> 24);
+        uint8 bucket = _bucketOf(day, id);
+        uint256 header = _readDrawHeader(day, bucket);
+        uint256 count = uint32(header >> 192);
+        // Level-x99 burns double as century BAF-incinerator entries: the same
+        // burn and weight also arm the next x00 bracket's skip draw, against its
+        // uint192 accumulator.
+        uint24 lvl = game.currentLvl();
+        bool century = lvl % 100 == 99;
+        // Both entry counters are checked before anything is written or consumed. GNRUS enters
+        // inside the Game's daily request, so a full counter skips its burn (its WWXRP waits)
+        // instead of refusing the request.
+        if (count >= type(uint32).max
+            || (century && uint32(_incineratorHeader(lvl + 1) >> 192) >= type(uint32).max)) {
+            if (id == GNRUS_ID) return;
+            revert ScoreOverflow();
+        }
         uint256 score = game.playerActivityScoreCachedById_g975(id);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // both daily and century weights floor to whole WWXRP at the same BPS boundaries.
@@ -811,19 +828,15 @@ contract WWXRP {
         // 0, so reading the lane first and skipping the dispatch for an empty lane is exact.
         uint16 boonBps;
         if (_holdsWwxrpBoon(id)) boonBps = game.consumeCoinflipBoon_g2902(id);
-        uint8 bucket = _bucketOf(day, id);
         uint256 multBps = drawMultBps(score);
         uint256 effective = _entryWeight(amount, multBps, boonBps);
 
-        uint256 header = _readDrawHeader(day, bucket);
         uint256 raw = header & type(uint96).max;
         uint256 total = (header >> 96) & type(uint96).max;
-        uint256 count = uint32(header >> 192);
 
         uint256 rawHeadroom = type(uint96).max - raw;
         uint256 newRaw = raw + (amount > rawHeadroom ? rawHeadroom : amount);
         uint256 newTotal = total + effective;
-        if (count >= type(uint32).max) revert ScoreOverflow();
         // Saturate rather than revert: a capped bucket keeps accepting burns.
         // Post-cap entries record zero-width intervals (cumEnd == cumStart ==
         // cap), so they carry no winner weight and can never falsely verify.
@@ -834,13 +847,7 @@ contract WWXRP {
         assembly ("memory-safe") { sstore(headerSlot, packedHeader) }
         _drawEntry[_drawEntryKey(day, bucket, uint32(count))] = newTotal | (uint256(id) << 96);
 
-        // Level-x99 burns double as century BAF-incinerator entries: the same
-        // burn and weight also arm the next x00 bracket's skip draw, against its
-        // uint192 accumulator.
-        uint24 lvl = game.currentLvl();
-        if (lvl % 100 == 99) {
-            _recordIncineratorEntry(lvl + 1, id, amount, effective);
-        }
+        if (century) _recordIncineratorEntry(lvl + 1, id, amount, effective);
 
         uint256 shortfall = _consumePrize(id, amount);
         if (shortfall != 0) _burn(payee, shortfall);
@@ -1112,7 +1119,7 @@ contract WWXRP {
     /// @param id The entrant's wallet ID.
     /// @param amount WWXRP burned by the carrying enterDraw() (0 decimals).
     /// @param effective Activity/boon weight computed by the carrying entry (whole WWXRP).
-    /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
+    ///      The carrying entry has already refused a full bracket counter.
     function _recordIncineratorEntry(
         uint24 bracket,
         uint32 id,
@@ -1124,7 +1131,6 @@ contract WWXRP {
         uint256 count = uint32(header >> 192);
 
         uint256 newTotal = total + effective;
-        if (count >= type(uint32).max) revert ScoreOverflow();
         // Saturate rather than revert (same policy as the daily draw): a
         // capped bracket keeps accepting burns; post-cap entries record
         // zero-width intervals and carry no winner weight.

@@ -9,7 +9,6 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {VaultBafRig} from "../repro/VaultBafSettlement.t.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {VaultBackstopHost} from "../fuzz/VaultFlipBackstop.t.sol";
 import {ICoinflip} from "../../contracts/interfaces/ICoinflip.sol";
@@ -123,7 +122,7 @@ contract VaultSettleHost is DegenerusGame {
 // The settle call alone
 // -------------------------------------------------------------------------
 
-abstract contract VaultSettleCallGas is DeployProtocol, NativeGasExport {
+abstract contract VaultSettleCallGas is DeployProtocol {
     /// @dev The full window's first day, 1432 - 89 = 1343, is lane 31 of a result word and lane 6
     ///      of a stake word.
     uint24 internal constant LATEST = 1432;
@@ -142,7 +141,6 @@ abstract contract VaultSettleCallGas is DeployProtocol, NativeGasExport {
 
     /// @dev The first call of the test: every slot the walk touches is cold.
     function test_SettleCallCold() public {
-        uint256 snapshot = vm.snapshotState();
         vm.prank(address(game));
         coinflip.playCoinflip(1, 0);
         uint256 used = vm.lastCallGas().gasTotalUsed;
@@ -151,15 +149,6 @@ abstract contract VaultSettleCallGas is DeployProtocol, NativeGasExport {
         uint256 state = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint32(1), uint256(2)))));
         assertEq(uint24(state >> 128), LATEST, "the walk settles every resolved day");
         assertLe(used, GasBounds.BAF_VAULT_SETTLE, "the settle call fits its declared reserve");
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            string memory label = string.concat("vault-window-", vm.toString(_gap()), "-", vm.toString(_rebuy()));
-            vm.serializeUint(label, "fixedCalleeBudget", GasBounds.BAF_VAULT_SETTLE);
-            vm.serializeBool(label, "enforceBudget", true);
-            this.exportNativeFixture(label, address(game), address(coinflip), abi.encodeCall(coinflip.playCoinflip, (uint32(1), uint256(0))));
-            vm.prank(address(game)); coinflip.playCoinflip(1, 0);
-        }
-        vm.deleteStateSnapshot(snapshot);
     }
 
     /// @dev The same cold call re-priced under Glamsterdam (EIP-8037 / EIP-8038).
@@ -210,7 +199,7 @@ contract VaultSettleCallGas90Plain is VaultSettleCallGas {
 // The real sealing chunk
 // -------------------------------------------------------------------------
 
-abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
+abstract contract VaultSealChunkGas is VaultBafRig {
     uint256 internal constant ALLOWANCE = 9_000_000;
     uint256 internal constant CHUNK_CAP = 10_000_000;
 
@@ -324,7 +313,6 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
 
     function test_SealChunkCold() public {
         uint24 gnrusBefore = _lastClaim(ContractAddresses.GNRUS);
-        uint256 snapshot = vm.snapshotState();
         VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
         uint256 used = vm.lastCallGas().gasTotalUsed;
         emit log_named_uint("vault_seal_chunk_gas", used);
@@ -334,15 +322,6 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
         assertEq(_lastClaim(VAULT), settledAt, "and settles the vault's claim window");
         assertEq(_lastClaim(ContractAddresses.GNRUS), gnrusBefore, "Vault-only seal");
         assertLe(used, CHUNK_CAP, "the sealing chunk stays at or under 10M");
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            string memory label = string.concat("vault-seal-", vm.toString(_slow()), "-", vm.toString(_presettle()), "-", vm.toString(_rebuy()));
-            vm.serializeUint(label, "fixedCalleeBudget", CHUNK_CAP);
-            vm.serializeBool(label, "enforceBudget", true);
-            this.exportNativeFixture(label, address(this), address(game), abi.encodeCall(VaultSettleHost.dailyWith, (ALLOWANCE)));
-            VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
-        }
-        vm.deleteStateSnapshot(snapshot);
     }
 }
 

@@ -54,8 +54,6 @@ import {GNRUS} from "../../contracts/GNRUS.sol";
 // Mock contracts
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MockStETH} from "../../contracts/mocks/MockStETH.sol";
-import {MockLinkToken} from "../../contracts/mocks/MockLinkToken.sol";
-import {MockLinkEthFeed} from "../../contracts/mocks/MockLinkEthFeed.sol";
 import {GameSlots, GameSlotKeys} from "./GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
@@ -70,8 +68,6 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
 
         mockVRF = MockVRFCoordinator(payable(deployCode("MockVRFCoordinator.sol:MockVRFCoordinator", abi.encode())));           // nonce 1
         mockStETH = MockStETH(payable(deployCode("MockStETH.sol:MockStETH", abi.encode())));                  // nonce 2
-        mockLINK = MockLinkToken(payable(deployCode("MockLinkToken.sol:MockLinkToken", abi.encode())));               // nonce 3
-        mockFeed = MockLinkEthFeed(payable(deployCode("MockLinkEthFeed.sol:MockLinkEthFeed", abi.encode(int256(0.004 ether))))); // nonce 4
 
         // BEGIN CANONICAL DEPLOYMENTS
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,

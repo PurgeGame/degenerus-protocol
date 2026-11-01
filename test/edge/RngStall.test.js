@@ -502,8 +502,8 @@ describe("RngStall", function () {
   // 6. 3-Day Stall Detection
   // =========================================================================
 
-  // 3-day stall detection tests removed: rngStalledForThreeDays view removed in Phase 146
-  // (internal stall logic still exists; DegenerusAdmin.propose uses it internally)
+  // There is no external rngStalledForThreeDays view: stall detection is internal only
+  // (DegenerusAdmin.propose uses it internally).
 
   // =========================================================================
   // 7. Normal Fulfillment Within Timeout Window
@@ -642,7 +642,7 @@ describe("RngStall", function () {
       expect(newId).to.be.gt(retryId);
     });
 
-    // rngStalledForThreeDays view removed in Phase 146; stall detection is now internal-only
+    // There is no rngStalledForThreeDays view; stall detection is internal-only
   });
 
   // =========================================================================

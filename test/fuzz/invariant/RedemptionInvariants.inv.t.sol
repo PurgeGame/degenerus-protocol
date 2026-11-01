@@ -65,7 +65,7 @@ contract RedemptionInvariants is DeployProtocol {
     }
 
     // =========================================================================
-    //                         INV-01: ETH SEGREGATION SOLVENCY
+    //                         ETH SEGREGATION SOLVENCY
     // =========================================================================
 
     /// @notice Segregated redemption value never exceeds what backs it.
@@ -82,12 +82,12 @@ contract RedemptionInvariants is DeployProtocol {
         assertGe(
             backing,
             segregated,
-            "INV-01: segregated redemption value exceeds its backing"
+            "segregated redemption value exceeds its backing"
         );
     }
 
     // =========================================================================
-    //                         INV-02: NO DOUBLE CLAIM
+    //                         NO DOUBLE CLAIM
     // =========================================================================
 
     /// @notice No double-claim: claim deleted before payout, re-claim reverts.
@@ -97,13 +97,13 @@ contract RedemptionInvariants is DeployProtocol {
         assertEq(
             handler.ghost_doubleClaim(),
             0,
-            "INV-02: double claim succeeded (claim not deleted before payout)"
+            "double claim succeeded (claim not deleted before payout)"
         );
     }
 
 
     // =========================================================================
-    //                      INV-04: SUPPLY CONSISTENCY
+    //                      SUPPLY CONSISTENCY
     // =========================================================================
 
     /// @notice totalSupply equals initialSupply plus mints minus burns.
@@ -117,7 +117,7 @@ contract RedemptionInvariants is DeployProtocol {
         assertEq(
             sdgnrs.totalSupply(),
             expected,
-            "INV-04: totalSupply != initialSupply + totalMinted - totalBurned (incl. wrapper-path burns)"
+            "totalSupply != initialSupply + totalMinted - totalBurned (incl. wrapper-path burns)"
         );
     }
 
@@ -155,8 +155,7 @@ contract RedemptionInvariants is DeployProtocol {
     /// @dev The proof's `==` needs ¬P1 (game never transferFromPool_g106128→wrapper) ∧ ¬P2 (no unwrap
     ///      recipient == wrapper); this campaign's handlers satisfy both by construction (actors
     ///      are the only recipients), so any drift the fuzzer finds is a REAL paired-decrement
-    ///      break, not benign over-backing. This is the non-vacuous equality coverage the
-    ///      DGNRS-WRAPPER-BACKING-PROOF follow-up called for.
+    ///      break, not benign over-backing. This is the non-vacuous equality coverage.
     function invariant_wrapperBackingExact_preSweep() public view {
         if (wrapperHandler.ghost_yearSweepRan()) return; // yearSweep is the sole intentional break
         assertEq(
@@ -215,9 +214,8 @@ contract RedemptionInvariants is DeployProtocol {
     ///         token balance: `Σ poolBalances == balanceOf(sDGNRS)`.
     /// @dev Every pool debit pairs a contract-balance debit (`transferFromPool_g106128` decrements both
     ///      poolBalances[idx] and balanceOf[address(this)] by the same amount; `burnAtGameOver`
-    ///      zeroes both). A mutation
-    ///      that desyncs the pool ledger from the held balance (the sDGNRS:566/567 survivor cluster
-    ///      in mutation/FINDINGS-v75.md) breaks this equality. Non-vacuous: the redemption handler
+    ///      zeroes both). A desync of the pool ledger
+    ///      from the held balance breaks this equality. Non-vacuous: the redemption handler
     ///      funds actors via `transferFromPool_g106128(Pool.Reward, ...)`, exercising the paired debit.
     function invariant_poolBalanceConservation() public view {
         uint256 pools = sdgnrs.poolBalance(sDGNRS.Pool.Whale)
@@ -234,7 +232,7 @@ contract RedemptionInvariants is DeployProtocol {
 
 
     // =========================================================================
-    //                        INV-06: ROLL BOUNDS
+    //                        ROLL BOUNDS
     // =========================================================================
 
     /// @notice Roll bounds always in [21, 175] for resolved periods.
@@ -244,7 +242,7 @@ contract RedemptionInvariants is DeployProtocol {
         assertEq(
             handler.ghost_rollOutOfBounds(),
             0,
-            "INV-06: resolved roll outside [21, 175]"
+            "resolved roll outside [21, 175]"
         );
     }
 

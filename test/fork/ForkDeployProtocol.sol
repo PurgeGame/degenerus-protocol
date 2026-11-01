@@ -51,10 +51,6 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DGNRS} from "../../contracts/DGNRS.sol";
 import {DegenerusAdmin} from "../../contracts/DegenerusAdmin.sol";
 import {GNRUS} from "../../contracts/GNRUS.sol";
-import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
-import {MockStETH} from "../../contracts/mocks/MockStETH.sol";
-import {MockLinkToken} from "../../contracts/mocks/MockLinkToken.sol";
-import {MockLinkEthFeed} from "../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @dev The slice of Chainlink's VRFCoordinatorV2_5 the suite reads (mainnet, verified at FORK_BLOCK).
 interface IRealVRFCoordinator {
@@ -103,11 +99,10 @@ interface ILidoStETH {
 }
 
 /// @title ForkDeployProtocol -- the protocol deployed onto a pinned mainnet fork.
-/// @notice Deploys every contract exactly as DeployProtocol does (four mocks at nonces 1-4 so the
-///         protocol keeps its CREATE-predicted addresses from nonce 5), but against the REAL
-///         Lido stETH and the Chainlink VRF v2.5 coordinator, which
-///         scripts/lib/patchForFork.js wires into ContractAddresses.sol from ForkPins. The mocks are
-///         deployed only to hold the nonces; nothing references them.
+/// @notice Deploys the protocol in DeployProtocol's order, from the test contract's first nonce,
+///         against the REAL Lido stETH and the Chainlink VRF v2.5 coordinator, which
+///         scripts/lib/patchForFork.js wires into ContractAddresses.sol from ForkPins. No mocks
+///         are deployed.
 ///
 ///         Mainnet time is kept: the fixture never warps to 86400 (the Foundry suites' clock), since
 ///         the real Lido state would not match. DEPLOY_DAY_BOUNDARY is derived from
@@ -181,11 +176,6 @@ abstract contract ForkDeployProtocol is DeployProtocol {
 
     /// @dev DeployProtocol._deployProtocol, minus its warp to 86400.
     function _deployOnFork() private {
-        mockVRF = new MockVRFCoordinator(); // nonce 1 (unused: holds the nonce)
-        mockStETH = new MockStETH(); // nonce 2 (unused)
-        mockLINK = new MockLinkToken(); // nonce 3 (unused)
-        mockFeed = new MockLinkEthFeed(int256(0.004 ether)); // nonce 4 (unused)
-
         // BEGIN CANONICAL DEPLOYMENTS
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
             address[] memory players, bytes32[] memory refs) = (new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));

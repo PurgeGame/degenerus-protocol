@@ -10,35 +10,33 @@ import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimab
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title V61AfpayWaterfall — TST-01 proof: the AfKing-as-payment waterfall (msg.value → claimable → afking).
+/// @title V61AfpayWaterfall — proof of the AfKing-as-payment waterfall (msg.value → claimable → afking).
 ///
-/// @notice Two arms prove the v61 waterfall against the LIVE subject (376 IMPL, contracts byte-frozen):
+/// @notice Two arms prove the waterfall against the LIVE contracts:
 ///
 ///   ARM A — the canonical shortfall sink `_settleShortfall(buyer, shortfall, allowClaimable)`
-///   (DegenerusGameStorage.sol:857) is exercised in isolation via the SettleClaimableShortfallTester (it
+///   (`DegenerusGameStorage._settleShortfall`) is exercised in isolation via the SettleClaimableShortfallTester (it
 ///   inherits the canonical storage layout and runs the EXACT production body — NOT a re-implementation).
-///   This is the ONE helper the lootbox / Degenesis / 3 whale sites (AFPAY-01/03/04) all call, so proving its
+///   This is the ONE helper the lootbox / Degenesis / 3 whale sites all call, so proving its
 ///   ordering + the AfkingSpent emit + the both-short revert + the paired claimablePool debit certifies that
 ///   shared spend path. Arm A asserts: tier-1 claimable drawn only to the STRICT 1-wei sentinel, tier-2
 ///   afking to 0, `AfkingSpent(buyer, afkingUsed)` at the exact afking amount, `allowClaimable=false`
 ///   (the DirectEth leg) SKIPS claimable entirely, both-short reverts E(), and `claimablePool == Sigma (claimable
 ///   + afking)` after every settle (seeded-fuzz over shortfall sizes).
 ///
-///   ARM B — the ticket-mint payment `_processMintPayment` (DegenerusGame.sol:1078, reached via the live
+///   ARM B — the ticket-mint payment `_processMintPayment` (`GamePurchase._processMintPayment`, reached via the live
 ///   public `purchase()` → MintModule → recordMint) across all three pay-kinds: DirectEth (msg.value →
 ///   afking, claimable UNTOUCHED), Claimable (claimable → sentinel → afking), Combined (msg.value →
 ///   claimable → afking). Arm B asserts the draw ORDERING by reading both balances + the `AfkingSpent` emit
 ///   with the exact amount, the prizeContribution composition (proven via the prize-pool delta == the full
 ///   ticket cost, since msg.value + claimableUsed + afkingUsed == cost), the both-short revert, that afking
-///   covers a DirectEth LOOTBOX shortfall the pre-v61 path reverted (AFPAY-03), the fresh-affiliate /
+///   covers a DirectEth LOOTBOX shortfall that would otherwise revert, the fresh-affiliate /
 ///   NO-rebuy-bonus property (the bonus reads claimable deltas → afking is excluded), and the no-double-draw
 ///   property (the afking auto-buy path debits afking EXACTLY once and never re-enters _processMintPayment).
 ///
 /// @dev Reuses the funded-sub + deity-pass + new-day STAGE harness (the accumulating-`_t` warp + fulfill-
 ///   first settle) from V56FreezeSolvency / V56AfkingGasMarginal. Balance reads go through the live views
-///   (claimableWinningsOf / afkingFundingOf) and the raw balancesPacked slot (slot 7, the 378-01 recalibration
-///   key) where a half-isolation proof is needed. Seeded-fuzz deterministic (foundry seed 0xdeadbeef).
-///   Test-only: ZERO contracts/*.sol mutation.
+///   (claimableWinningsOf / afkingFundingOf) and the raw balancesPacked slot (slot 7) where a half-isolation proof is needed. Seeded-fuzz deterministic (foundry seed 0xdeadbeef).
 contract V61AfpayWaterfall is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -54,7 +52,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     }
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (378-01 recalibration key)
+    // Game-resident storage slots
     // -------------------------------------------------------------------------
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // mapping(address=>uint256) [afking:hi128 | claimable:lo128]
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ slot 1, byte 16
@@ -80,7 +78,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     }
 
     // =========================================================================
-    // ARM A — the canonical _settleShortfall sink (AFPAY-01; lootbox/Degenesis/whale share it)
+    // ARM A — the canonical _settleShortfall sink (lootbox/Degenesis/whale share it)
     // =========================================================================
 
     /// @notice Claimable-allowed waterfall: claimable drawn FIRST to the strict 1-wei sentinel, then afking
@@ -103,7 +101,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 expectedClaimableUsed = claimable - 1; // drawn to the strict 1-wei sentinel
         uint256 expectedAfkingUsed = shortfall - expectedClaimableUsed;
 
-        // The afking leg MUST emit AfkingSpent at the exact afking amount (D-02 breadth: the shared helper
+        // The afking leg MUST emit AfkingSpent at the exact afking amount (the shared helper
         // emits too, not only _processMintPayment).
         vm.expectEmit(true, false, false, true, address(t));
         emit AfkingSpent(uint32(uint160(buyer)), expectedAfkingUsed);
@@ -379,8 +377,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         game.purchaseOrderFor{value: 0}(0, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
     }
 
-    /// @notice AFPAY-03: a DirectEth LOOTBOX shortfall is now covered by afking — the pre-v61 DirectEth→revert
-    ///         is LIFTED. An underpaid DirectEth lootbox buy succeeds, drawing the shortfall from afking and
+    /// @notice A DirectEth LOOTBOX shortfall is covered by afking (no DirectEth revert). An underpaid DirectEth lootbox buy succeeds, drawing the shortfall from afking and
     ///         emitting AfkingSpent, while CLAIMABLE stays untouched (DirectEth passes allowClaimable=false).
     function testDirectEthLootboxShortfallCoveredByAfking() public {
         address buyer = makeAddr("lootbox_directeth");
@@ -394,14 +391,14 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 afkingBefore = game.afkingFundingOf(buyer);
 
         vm.deal(buyer, ethSent);
-        // The DirectEth lootbox shortfall draws afking (AFPAY-03), so AfkingSpent fires; the box queues.
+        // The DirectEth lootbox shortfall draws afking, so AfkingSpent fires; the box queues.
         vm.recordLogs();
         vm.prank(buyer);
         game.purchaseOrderFor{value: ethSent}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
 
-        assertTrue(_sawAfkingSpent(buyer, shortfall), "AFPAY-03: DirectEth lootbox shortfall drew afking + emitted AfkingSpent");
-        assertEq(game.claimableWinningsOf(buyer), claimableBefore, "AFPAY-03 DirectEth: claimable byte-UNCHANGED");
-        assertEq(afkingBefore - game.afkingFundingOf(buyer), shortfall, "AFPAY-03: afking debited by exactly the lootbox shortfall");
+        assertTrue(_sawAfkingSpent(buyer, shortfall), "DirectEth lootbox shortfall drew afking + emitted AfkingSpent");
+        assertEq(game.claimableWinningsOf(buyer), claimableBefore, "DirectEth: claimable byte-UNCHANGED");
+        assertEq(afkingBefore - game.afkingFundingOf(buyer), shortfall, "afking debited by exactly the lootbox shortfall");
     }
 
     /// @notice NO-double-draw: the afking auto-buy STAGE path (_deliverAfkingBuy) debits afking EXACTLY once
@@ -477,7 +474,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         _bumpClaimablePool(int256(amount) - int256(oldHigh));
     }
 
-    /// @dev Adjust claimablePool (slot 1, byte 16, uint128) by a signed delta so seeding keeps the SOLVENCY-01
+    /// @dev Adjust claimablePool (slot 1, byte 16, uint128) by a signed delta so seeding keeps the solvency
     ///      identity (claimablePool == Sigma  balances) true going into each buy.
     function _bumpClaimablePool(int256 delta) internal {
         uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));

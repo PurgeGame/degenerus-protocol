@@ -177,8 +177,8 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
     /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `mineFlip()` (no full settle),
-    ///      used by the pass-eviction tests. The STAGE runs strictly PRE-RNG (AdvanceModule:305-326),
-    ///      so the eviction / buy completes before rngGate and the stage is measured on its own.
+    ///      used by the pass-eviction tests. The STAGE runs strictly PRE-RNG (the advance's subscriber stage),
+    ///      so the eviction / buy completes before the daily RNG step and the stage is measured on its own.
     ///      Subscribers must already be registered (subscribe blocks during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
@@ -238,7 +238,7 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
     /// @dev Open the afking reset gate exactly as the contract does on a new-day entry
-    ///      (AdvanceModule:306-308): `subsFullyProcessed = false; _subCursor = 0`. This is the precise
+    ///      (`GameMiner._mineFlip`): `subsFullyProcessed = false; _subCursor = 0`. This is the precise
     ///      EFFECT of the `_afkingResetDay != day` per-day reset, applied to the same two storage
     ///      fields the contract writes (the idle fixture's real day index saturates without ticket
     ///      purchases, so the gate is opened directly rather than via a real day rollover).

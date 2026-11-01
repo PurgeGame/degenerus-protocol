@@ -1,19 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
-import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
-import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
-import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
-import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
-import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
-import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGameDecimatorModule.sol";
-import {DegenerusGameDegenesisModule} from "../../contracts/modules/DegenerusGameDegenesisModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 
-import {Coinflip} from "../../contracts/Coinflip.sol";
-import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
-import {DegenerusAffiliate} from "../../contracts/DegenerusAffiliate.sol";
 import {StorageCensusLongRunTest} from "../census/StorageCensusLongRun.t.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
@@ -22,64 +9,20 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
-import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
-import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusGameDegeneretteModule.sol";
-import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
-import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
-import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
-/// @dev Run twice with DIFFERENTIAL_BASELINE=true/false; compare the emitted DIFF observations at matching checkpoints.
-///      Overrides keep common state-owner pins and separate code addresses for baseline modules.
+/// @dev Replays the census workload and emits every transaction's logs, delegate edges, storage writes
+///      and ETH movements as DIFF observations, with equal account warmth at each call.
 contract ConsolidationReplayTest is StorageCensusLongRunTest {
     address[] private observed;
-    bool private baseline;
     uint256 private checkpoint;
     bool private warm;
-    bool private xaVariantsApplied;
     address[] private replayModules;
 
     function setUp() public override {
         vm.startMappingRecording();
         super.setUp();
-        baseline = vm.envOr("DIFFERENTIAL_BASELINE", false);
-        if (baseline) {
-            _baseline(address(game), "DegenerusGame");
-            _baseline(address(mintModule), "DegenerusGameMintModule");
-            _baseline(address(boonModule), "DegenerusGameBoonModule");
-            _baseline(address(lootboxModule), "DegenerusGameLootboxModule");
-            _baseline(address(ticketModule), "DegenerusGameTicketModule");
-            _baseline(address(afkingModule), "GameAfkingModule");
-            _baseline(address(degenesisModule), "DegenerusGameDegenesisModule");
-            _baseline(address(advanceModule), "DegenerusGameAdvanceModule");
-            _baseline(address(jackpotModule), "DegenerusGameJackpotModule");
-            _baseline(address(jackpotDrawModule), "DegenerusGameJackpotDrawModule");
-            _baseline(address(decimatorModule), "DegenerusGameDecimatorModule");
-            _baseline(address(degeneretteModule), "DegenerusGameDegeneretteModule");
-            _baseline(address(whaleModule), "DegenerusGameWhaleModule");
-            _baseline(address(gameOverModule), "DegenerusGameGameOverModule");
-            _baseline(address(bingoModule), "DegenerusGameBingoModule");
-            _baseline(address(foilModule), "DegenerusGameFoilPackModule");
-            _baseline(address(minerModule), "DegenerusGameMinerModule");
-            _baseline(address(rngModule), "DegenerusGameRngModule");
-            _baseline(address(coinflip), "Coinflip");
-            _baseline(address(quests), "DegenerusQuests");
-            _baseline(address(jackpots), "DegenerusJackpots");
-            // Craps is unchanged by this slice. Keep the identical CrapsViews fixture on
-            // both sides: replacing it with the base runtime removes census-only getters.
-            _baseline(address(jackpotBattle), "JackpotBattle");
-            _baseline(address(parimutuel), "DegenerusParimutuel");
-        }
-        string memory overrideFile = vm.envOr("DIFFERENTIAL_OVERRIDES", string(""));
-        if (!xaVariantsApplied) _loadVariants(false);
-        if (vm.envOr("DIFFERENTIAL_DAILY_BASELINE", false)) {
-            require(bytes(overrideFile).length != 0, "daily baseline requires runtime overrides");
-            jackpotModule = DegenerusGameJackpotModule(address(0x4001));
-            jackpotDrawModule = DegenerusGameJackpotDrawModule(address(0x4002));
-            rngModule = DegenerusGameRngModule(address(0x4003));
-        }
         replayModules.push(address(mintModule)); replayModules.push(address(boonModule));
         replayModules.push(address(lootboxModule)); replayModules.push(address(afkingModule));
         replayModules.push(address(degeneretteModule)); replayModules.push(address(ticketModule));
@@ -108,92 +51,12 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         _observe(address(quests), "Quests");
         _observe(address(jackpots), "Jackpots");
         // This workload's reward formula is zero at basefee zero, including failed attempts.
-        // A nonzero reward is a comparator failure, never an excluded token ledger.
+        // A nonzero reward is a failure, never an excluded token ledger.
         vm.fee(0);
-    }
-
-    function _beforeProtocolSubscriptions() internal override {
-        if (vm.envOr("DIFFERENTIAL_XA", false)) {
-            // Vault/sDGNRS constructors subscribe through Game, which calls Quests.
-            // Install the original QA bodies before those real constructor effects.
-            _loadVariants(true);
-            xaVariantsApplied = true;
-        }
-    }
-
-    function _beforeProtocolDeityInitialization() internal override {
-        if (xaVariantsApplied) _loadVariants(false);
-    }
-
-    function _loadVariants(bool existingOnly) private {
-        string memory overrideFile = vm.envOr("DIFFERENTIAL_OVERRIDES", string(""));
-        if (bytes(overrideFile).length != 0) {
-            string memory variants = vm.readFile(overrideFile);
-            if (vm.keyExistsJson(variants, ".xa")) {
-                require(vm.parseJsonAddress(variants, ".coinflip") == address(coinflip), "Coinflip seed domain mismatch");
-            }
-            uint256 count = vm.parseJsonUint(variants, ".count");
-            for (uint256 i; i < count; ++i) {
-                string memory key = string.concat(".contracts[", vm.toString(i), "]");
-                address target = vm.parseJsonAddress(variants, string.concat(key, ".target"));
-                bool initializer = vm.keyExistsJson(variants, string.concat(key, ".initRuntime"));
-                // Do not occupy a later CREATE target before its constructor runs.
-                if (existingOnly && target.code.length == 0 && !initializer) continue;
-                bytes memory code = vm.parseJsonBytes(variants, string.concat(key, ".runtime"));
-                require(code.length != 0, "missing variant runtime");
-                string memory name = vm.keyExistsJson(variants, string.concat(key, ".name"))
-                    ? vm.parseJsonString(variants, string.concat(key, ".name")) : "";
-                if (initializer && !xaVariantsApplied) {
-                    vm.etch(target, vm.parseJsonBytes(variants, string.concat(key, ".initRuntime")));
-                    bytes memory initData;
-                    if (keccak256(bytes(name)) == keccak256("DegenerusAffiliate")) {
-                        (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
-                            address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
-                        initData = abi.encodeWithSignature("initializeXa(address[],bytes32[],uint8[],address[],bytes32[])", owners, codes, kicks, players, refs);
-                    } else initData = abi.encodeWithSignature("initializeXa()");
-                    (bool initialized, bytes memory reason) = target.call(initData);
-                    if (!initialized) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
-                }
-                vm.etch(target, code);
-                _mapVariant(name, target);
-            }
-        }
     }
 
     function _flipShare() private view returns (address) {
         return address(uint160(uint256(keccak256(abi.encodePacked(hex"d694", address(vault), hex"01")))));
-    }
-
-    function _mapVariant(string memory name, address target) private {
-        bytes32 key = keccak256(bytes(name));
-        if (key == keccak256("Coinflip")) coinflip = Coinflip(target);
-        if (key == keccak256("DegenerusQuests")) quests = DegenerusQuests(target);
-        if (key == keccak256("DegenerusAffiliate")) affiliate = DegenerusAffiliate(target);
-        if (key == keccak256("DegenerusGameMintModule")) mintModule = DegenerusGameMintModule(payable(target));
-        if (key == keccak256("DegenerusGameWhaleModule")) whaleModule = DegenerusGameWhaleModule(payable(target));
-        if (key == keccak256("DegenerusGameTicketModule")) ticketModule = DegenerusGameTicketModule(payable(target));
-        if (key == keccak256("DegenerusGameGameOverModule")) gameOverModule = DegenerusGameGameOverModule(payable(target));
-        if (key == keccak256("DegenerusGameDecimatorModule")) decimatorModule = DegenerusGameDecimatorModule(payable(target));
-        if (key == keccak256("DegenerusGameDegenesisModule")) degenesisModule = DegenerusGameDegenesisModule(payable(target));
-        if (key == keccak256("DegenerusGameFoilPackModule")) foilModule = DegenerusGameFoilPackModule(payable(target));
-        if (key == keccak256("DegenerusGameMinerModule")) minerModule = DegenerusGame(payable(target));
-        if (key == keccak256("DegenerusGameBingoModule")) bingoModule = DegenerusGame(payable(target));
-        if (key == keccak256("GameAfkingModule")) afkingModule = GameAfkingModule(payable(target));
-        if (key == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(payable(target));
-        if (key == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(payable(target));
-        if (key == keccak256("DegenerusGameAdvanceModule")) advanceModule = DegenerusGameAdvanceModule(payable(target));
-        if (key == keccak256("DegenerusGameJackpotModule")) jackpotModule = DegenerusGameJackpotModule(payable(target));
-        if (key == keccak256("DegenerusGameJackpotDrawModule")) jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(target));
-        if (key == keccak256("DegenerusGameRngModule")) rngModule = DegenerusGameRngModule(payable(target));
-        if (key == keccak256("DegenerusGameLootboxModule")) lootboxModule = DegenerusGameLootboxModule(payable(target));
-    }
-
-    function _baseline(address target, string memory name) private {
-        string memory directory = vm.envOr("DIFFERENTIAL_BASELINE_DIR", string(".planning/consolidation/baseline/fixture-artifacts"));
-        string memory file = string.concat(directory, "/", name, ".sol/", name, ".json");
-        bytes memory code = vm.parseJsonBytes(vm.readFile(file), ".deployedBytecode.object");
-        require(code.length != 0, "missing baseline runtime");
-        vm.etch(target, code);
     }
 
     function _observe(address a, string memory name) private {
@@ -204,7 +67,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     }
 
 
-    /// @dev Map the two ERC-7201 regions to the same logical owners in either profile.
+    /// @dev Map the two ERC-7201 regions to logical owners.
     ///      Mapping preimages come from the EVM recorder, never guessed from keys.
     function _logicalStorage(address account, bytes32 slot) private view returns (string memory, bytes32) {
         if (account != address(coinflip) && account != address(quests) && account != address(affiliate)) return (_name(account), slot);
@@ -236,7 +99,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
             vm.prank(from, from);
             label = string.concat(label, ":", vm.toString(game.nextMinerAction()));
         }
-        // Equal account warmth in both executions. Foundry does not reset SSTORE original values.
+        // Equal account warmth at every call. Foundry does not reset SSTORE original values.
         for (uint256 i; i < observed.length; ++i) vm.cool(observed[i]);
         for (uint256 i; i < replayModules.length; ++i) vm.cool(replayModules[i]);
         vm.cool(ContractAddresses.CRAPS_ENGINE);
@@ -311,28 +174,10 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                     insuranceDelta += uint256(v.newValue) - uint256(v.previousValue);
             }
         }
-        assertEq(futureDelta, baseline ? quarters * 2 : quarters, "split future allocation");
-        assertEq(insuranceDelta, baseline ? 0 : quarters, "split insurance allocation");
-        console.log(string.concat("DIFFALLOCATION|", baseline ? "baseline" : "candidate", "|", vm.toString(quarters),
+        assertEq(futureDelta, quarters, "split future allocation");
+        assertEq(insuranceDelta, quarters, "split insurance allocation");
+        console.log(string.concat("DIFFALLOCATION|", vm.toString(quarters),
             "|", vm.toString(futureDelta), "|", vm.toString(insuranceDelta)));
-        if (!baseline || game.gameOver()) return;
-        // Daily requests freeze immediately after the split. The baseline runtime still moves 1% of
-        // future into the pending buffer at the request; the candidate moves nothing, so return the
-        // baseline seed to the live pool. The baseline's own unfreeze would fold a bit-255 sentinel
-        // as value, so its emptied buffer is the zero word.
-        assertTrue(game.rngLocked(), "allocation adaptation requires daily request");
-        uint256 pools = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
-        uint256 pending = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
-        uint256 totalFuture = (pools >> 128) + (pending >> 128);
-        assertEq(uint128(pending), 0, "no pending next contribution at request");
-        assertEq(pending >> 128, totalFuture / 100, "exact baseline request seed before adaptation");
-        totalFuture -= quarters;
-        vm.store(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED), bytes32(uint256(uint128(pools)) | (totalFuture << 128)));
-        vm.store(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED), bytes32(uint256(0)));
-        bytes32 slot = bytes32(GameSlots.YIELD_ACCUMULATOR);
-        bytes32 before = vm.load(address(game), slot);
-        vm.store(address(game), slot, bytes32(uint256(before) + quarters));
-        console.log(string.concat("DIFFSLOT|Game|", vm.toString(slot), "|", vm.toString(vm.load(address(game), slot)), "|", vm.toString(before)));
     }
 
     /// @dev A request receives the same word regardless of profile worker batching.
@@ -530,7 +375,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         GameFunding.addPool(1 ether);
         vm.deal(address(game), address(game).balance + 1 ether);
         bytes32 vaultWord = vm.load(address(game), GameSlotKeys.balances(1));
-        _success("degenesis-vault-spend", address(vault), address(game), 0, baseline ? abi.encodeWithSignature("spendDegenesis(bool,uint256,uint256,uint256)", false, uint256(400), uint256(0), uint256(0.1 ether)) : abi.encodeCall(game.spendDegenesis, (0, false, uint256(400), uint256(0), uint256(0.1 ether))));
+        _success("degenesis-vault-spend", address(vault), address(game), 0, abi.encodeCall(game.spendDegenesis, (0, false, uint256(400), uint256(0), uint256(0.1 ether))));
         assertEq(vm.load(address(game), GameSlotKeys.balances(1)), vaultWord);
         assertEq(uint128(uint256(vm.load(address(game), bytes32(GameSlots.DEGENESIS_VAULT_BUDGET)))), 1 ether - game.mintPrice());
         _warpDay(2, 5 minutes);

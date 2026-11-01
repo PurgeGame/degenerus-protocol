@@ -9,7 +9,6 @@
     "test:stat": "hardhat test test/stat/*.test.js",
     "test:gas": "hardhat test test/gas/*.test.js",
     "test:unit": "hardhat test test/unit/*.test.js",
-    "test:evt-uni": "hardhat test test/unit/EventSurfaceUnification.test.js test/unit/LootboxWholeTicket.test.js test/unit/JackpotTicketRollSilentColdBust.test.js",
     "test:integration": "hardhat test test/integration/*.test.js",
     "test:deploy": "hardhat test test/deploy/*.test.js",
     "test:access": "hardhat test test/access/*.test.js",

@@ -327,7 +327,7 @@ contract LootboxCrapsTest is CrapsPins {
 
     }
 
-    /// @dev With the seams gone there are no harness overrides left to bypass: `_currentIndex`
+    /// @dev There are no harness overrides to bypass: `_writeBuffer`
     ///      and `_wordAt` are the shipped, non-virtual functions, and they resolve through the
     ///      `ContractAddresses.GAME` pin. Production keeps them internal, so observing them takes
     ///      a subclass — but `ShippedProbe` only forwards, and neither function is virtual, so

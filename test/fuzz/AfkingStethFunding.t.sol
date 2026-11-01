@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {NativeFailureExport, NativeFailureProbe} from "../helpers/NativeFailureExport.sol";
 import {SelectorFaultProxy} from "./GameExternalIsolation.t.sol";
 import {IStETH} from "../../contracts/interfaces/IStETH.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -28,7 +27,7 @@ contract SmurfHost is AfkingStethHost {
     }
 }
 
-contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
+contract AfkingStethFundingTest is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
 
@@ -299,20 +298,6 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         assertEq(mockStETH.allowance(PLAYER, address(game)), 1 ether, "failed attempt consumes no allowance");
     }
 
-    function testNativeP8StethFundingSuccess() public {
-        _add(PLAYER, true, 1, 0, 1);
-        mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
-        this.exportNativeFixture("p8-steth-funded", address(this), address(host),
-            abi.encodeWithSignature("subWork(uint256)", WORK_GAS));
-    }
-
-    function testNativeP8StethRefusalContinues() public {
-        _add(PLAYER, true, 1, 0, 1);
-        _add(NEXT, true, 1, host.price(), 1);
-        this.exportNativeFixture("p8-steth-unfunded", address(this), address(host),
-            abi.encodeWithSignature("subWork(uint256)", WORK_GAS));
-    }
-
     function test_OuterPullUnderfundingCannotExpireMember() public {
         _add(PLAYER, false, 1, 0, 1);
         mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
@@ -531,51 +516,4 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         _work();
         assertGt(host.entries(PLAYER), 0);
     }
-    function test_NativeOuterFundingRollbackBoundary() public {
-        NativeFailureProbe probe = new NativeFailureProbe();
-        address implementation = address(0xF005);
-        vm.etch(implementation, address(game).code);
-        uint8[7] memory modes = [uint8(0), 1, 2, 5, 8, 9, 10];
-        for (uint256 i; i < modes.length; ++i) {
-            uint256 snap = vm.snapshotState();
-            _add(PLAYER, true, 1, 0, 1);
-            _add(NEXT, true, 1, host.price(), 0);
-            mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
-            vm.etch(address(game), address(new SelectorFaultProxy(implementation,
-                bytes4(keccak256("pullAfkingSteth(uint32,address,uint256)")), modes[i])).code);
-            if (i == 0) _nativeCheckedFixture("afking-low", address(this), address(probe),
-                abi.encodeCall(probe.invoke, (address(game), abi.encodeCall(host.subWork, (WORK_GAS)), 900_000)));
-            _nativeCheckedFixture(string.concat("afking-", vm.toString(modes[i])), address(this), address(probe),
-                abi.encodeCall(probe.invoke, (address(game), abi.encodeCall(host.subWork, (WORK_GAS)), WORK_GAS)));
-            require(vm.revertToState(snap));
-            vm.deleteStateSnapshot(snap);
-        }
-    }
-
-    function test_NativeEveryStethFundingSite() public {
-        uint8[6] memory modes = [uint8(1), 2, 8, 9, 10, 12];
-        address implementation = address(0xF006);
-        vm.etch(implementation, address(mockStETH).code);
-        NativeFailureProbe probe = new NativeFailureProbe();
-        for (uint256 site; site < 6; ++site) for (uint256 i; i < modes.length; ++i) {
-            this.exportNativeStethFundingCase(site, modes[i], implementation, probe);
-        }
-    }
-
-    function exportNativeStethFundingCase(uint256 site, uint8 mode, address implementation, NativeFailureProbe probe) external {
-        require(msg.sender == address(this));
-        bytes4[6] memory selectors = [IStETH.balanceOf.selector, IStETH.getSharesByPooledEth.selector,
-            IStETH.getPooledEthByShares.selector, IStETH.sharesOf.selector, IStETH.allowance.selector,
-            IStETH.transferSharesFrom.selector];
-        uint256 snap = vm.snapshotState();
-        _add(PLAYER, true, 1, 0, 1);
-        _add(NEXT, true, 1, host.price(), 0);
-        mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
-        vm.etch(address(mockStETH), address(new SelectorFaultProxy(implementation, selectors[site], mode)).code);
-        _nativeCheckedFixture(string.concat("steth-fund-", vm.toString(site), "-", vm.toString(mode)),
-            address(this), address(probe), abi.encodeCall(probe.invoke,
-                (address(game), abi.encodeCall(host.subWork, (WORK_GAS)), WORK_GAS)));
-        require(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
-    }
-
 }

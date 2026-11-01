@@ -72,8 +72,9 @@ contract GnrusWwxrpTest is GnrusFlipTicketsTest {
         assertEq(count, amount >= 25 ? 1 : 0);
     }
 
-    /// Boundary witness, not a claim that four billion entries are practical on the target chain.
-    function test_capacityLimitCanStillRefuseTheRequest() public {
+    /// A full day-bucket or century counter skips GNRUS's burn and the request still completes;
+    /// players are still refused by the shared century counter.
+    function test_fullEntryCounterSkipsGnrusAndRequestCompletes() public {
         for (uint8 which; which < 2; ++which) {
             uint256 snap = vm.snapshotState();
             uint24 day = _seed(100, 0, 3000, 5000, 7000) - 1;
@@ -89,11 +90,19 @@ contract GnrusWwxrpTest is GnrusFlipTicketsTest {
             vm.store(address(wwxrp), bytes32(slot), bytes32(header));
             _fund(25, 0);
             vm.prank(address(game)); wwxrp.enterDrawForGnrus(); // Final legal append commits max count.
+            assertEq(wwxrp.claimable(3), 0);
+            if (which == 1) {
+                address player = address(0xBEEF01);
+                vm.prank(ContractAddresses.VAULT); wwxrp.vaultMintTo(player, 25);
+                vm.expectRevert(bytes4(keccak256("ScoreOverflow()")));
+                vm.prank(player); wwxrp.enterDraw(0, 25);
+                assertEq(wwxrp.balanceOf(player), 25);
+            }
             _fund(25, 0);
-            vm.expectRevert(bytes4(keccak256("ScoreOverflow()")));
             host.request();
-            assertEq(game.currentLvl(), 99);
+            assertEq(game.currentLvl(), 100);
             assertEq(wwxrp.claimable(3), 25);
+            assertEq(uint32(uint256(vm.load(address(wwxrp), bytes32(slot))) >> 192), type(uint32).max);
             assertTrue(vm.revertToState(snap));
         }
     }

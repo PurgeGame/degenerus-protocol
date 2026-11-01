@@ -431,13 +431,14 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.prank(ContractAddresses.GAME);
         crapsBattle.openBonusDay();
 
-        // A field deeper than one batch, so the BUDGET is what stops the walk and not the field.
+        // A field deeper than one realistic call can settle (about 38k gas a seat, continuing
+        // batch after batch while the allowance lasts), so the BUDGET is what stops the walk.
         (uint128 bankroll,,,,,) = crapsBattle.bonusTermsFor(today, 1);
         Craps.Bets memory board;
         board.passLine = 3;
         board.place8 = 3;
         board.place9 = 1;
-        uint256 seated = 100;
+        uint256 seated = 400;
         for (uint256 i = 0; i < seated; ++i) {
             address who = address(uint160(uint256(keccak256(abi.encode("bigfield", i)))));
             vm.prank(ContractAddresses.GAME);

@@ -6,7 +6,7 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 
 /// @title VRFHandler -- Handler contract wrapping VRF mock for invariant tests
-/// @notice Designed for reuse in Phase 15+ invariant tests. The fuzzer calls
+/// @notice Designed for reuse in invariant tests. The fuzzer calls
 ///         fulfillVrf with random words, driving the game through VRF-gated
 ///         state transitions.
 contract VRFHandler is Test {

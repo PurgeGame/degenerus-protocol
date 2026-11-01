@@ -150,14 +150,13 @@ contract FlipEmissionSeeds is DegenesisDeployProtocol {
         vm.prank(GAME);
         coinflip.creditFlip_g317(2, credit);
 
-        // Round 22 WIN: the payout settles into the rolling carry (plus the flat
-        // recycle bonus on the roll) - nothing mints, nothing becomes claimable.
+        // Round 22 WIN: the payout settles into the rolling carry (the recycle
+        // bonus applies only when it rides) - nothing mints, nothing becomes claimable.
         _resolveDay(LAST_SEED_ROUND + 1, true);
         (uint16 r, ) = coinflip.getCoinflipDayResult(LAST_SEED_ROUND + 1);
         uint256 payout = credit + (credit * uint256(r)) / 100;
-        uint256 bonus = (payout * 75) / 10_000;
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
-        assertEq(carry, payout + bonus, "win rolls into carry (with recycle bonus)");
+        assertEq(carry, payout, "win rolls into carry (no recycle bonus until it rides)");
         assertEq(coin.balanceOf(SDGNRS), 0, "post-arming win never mints to the wallet");
         assertEq(coinflip.previewClaimCoinflips(SDGNRS), 0, "nothing claimable post-arming");
         assertEq(coin.totalSupply(), 0, "no FLIP entered existence");

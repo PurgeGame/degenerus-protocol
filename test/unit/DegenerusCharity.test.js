@@ -22,11 +22,11 @@ const DISTRIBUTION_BPS = 200n;
 const BPS_DENOM = 10_000n;
 
 // ---------------------------------------------------------------------------
-// Helper: distribute GNRUS to a recipient via v33 setCharity (instant-apply) + impersonated pickCharity.
+// Helper: distribute GNRUS to a recipient via setCharity (instant-apply) + impersonated pickCharity.
 // `slot` defaults to 5 (any non-locked, non-conflicting slot). Tests that chain multiple distributions
-// in the same fixture instance MUST pass distinct slots and distinct recipients to avoid the FIX-02
+// in the same fixture instance MUST pass distinct slots and distinct recipients to avoid the
 // PreviousWinnerNotVotable guard (`vote()` reverts when currentSlate[slot] == lastWinningRecipient).
-// In v33, a slot with zero approve weight still hits skip-path B because bestSlot is only updated when
+// A slot with zero approve weight still hits skip-path B because bestSlot is only updated when
 // w > bestWeight (w starts at 0). So this helper MUST cast at least one vote to force a paid resolve.
 // ---------------------------------------------------------------------------
 async function distributeGNRUS(charity, deployer, recipientAddr, gameAddress, voter, slot = 5) {
@@ -370,7 +370,7 @@ describe("GNRUS (GNRUS)", function () {
     it("totalSupply is conserved: unallocated + all holders = totalSupply", async function () {
       const { charity, charityAddress, deployer, voter1, recipient1, recipient2, gameAddress } = await loadFixture(deployCharityFixture);
 
-      // Distribute to two recipients across two levels. Use distinct slots so the FIX-02
+      // Distribute to two recipients across two levels. Use distinct slots so the
       // PreviousWinnerNotVotable guard does not block the second vote (slot 5's recipient1
       // is the level-0 winner → currentSlate[5] == lastWinningRecipient at level 1; voting
       // slot 6 with recipient2 sidesteps that branch).

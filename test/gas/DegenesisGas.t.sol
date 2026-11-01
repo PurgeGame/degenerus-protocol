@@ -18,7 +18,6 @@ import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {RequestCostCoordinator} from "../helpers/RequestCostCoordinator.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
@@ -274,7 +273,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
 ///         an uninstrumented call; a recorded replay supplies the accesses for
 ///         GlamsterdamReprice (EIP-8037 / EIP-8038, no state reservoir: new-slot state gas is
 ///         reported separately and the admission bounds must cover execution plus state).
-abstract contract DegenesisGasBase is DegenesisDeployProtocol, NativeGasExport {
+abstract contract DegenesisGasBase is DegenesisDeployProtocol {
     DegenesisGasHost internal host;
 
     struct Measured {
@@ -343,14 +342,6 @@ abstract contract DegenesisGasBase is DegenesisDeployProtocol, NativeGasExport {
         m.exec = r.glamsterdamExec;
         m.state = r.stateGas;
         m.slots = r.newSlots;
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            string memory label = string.concat("degenesis-", vm.toString(address(this)), "-", vm.toString(keccak256(abi.encode(data, m))));
-            vm.serializeUint(label, "osakaFrameGas", m.osaka);
-            vm.serializeUint(label, "projectedExec", m.exec);
-            vm.serializeUint(label, "projectedState", m.state);
-            this.exportNativeFixture(label, sender == address(0) ? address(this) : sender, target, data);
-            emit log_named_string("native_calibration", label);
-        }
     }
 
     function _total(Measured memory m) internal pure returns (uint256) {
@@ -512,20 +503,31 @@ abstract contract DegenesisSettleGas is DegenesisGasBase {
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != RESOLVED) continue;
-            (, uint32 index,, uint256 f, uint256 d, uint256 w, uint32 normal, uint32 high) =
-                abi.decode(logs[i].data, (uint8, uint32, uint256, uint256, uint256, uint256, uint32, uint32));
-            assertEq(uint32(uint256(logs[i].topics[1])), orderIds[index], "order identity");
-            (uint256 ef, uint256 ed, uint256 en, uint256 eh, bool ew) =
-                host.hostOutcome(WORD, _cohort(), volume, q, _lane(orderIds[index]), index);
-            if (_kind() == Kind.DgnrsEmpty && ed != 0) { ed = 0; ew = true; }
-            assertEq(f, ef, "independent FLIP outcome");
-            assertEq(d, ed, "independent sDGNRS outcome");
-            assertEq(w, ew ? 1 : 0, "independent WWXRP outcome");
-            assertEq(normal, en, "independent normal passes");
-            assertEq(high, eh, "independent high passes");
+            this.confirmResolved(logs[i].topics[1], logs[i].data);
             ++seen;
         }
         assertEq(seen, _orders() - _cursor(), "every committed order resolved on its independently predicted branch");
+    }
+
+    /// @dev One resolved order per frame: the decode and its checks stay out of the caller's optimizer frame.
+    function confirmResolved(bytes32 orderTopic, bytes calldata data) external {
+        require(msg.sender == address(this), "confirm self-call");
+        (, uint32 index,, uint256 f, uint256 d, uint256 w, uint32 normal, uint32 high) =
+            abi.decode(data, (uint8, uint32, uint256, uint256, uint256, uint256, uint32, uint32));
+        assertEq(uint32(uint256(orderTopic)), orderIds[index], "order identity");
+        this.assertOutcome(index, f, d, w, normal, high);
+    }
+
+    function assertOutcome(uint32 index, uint256 f, uint256 d, uint256 w, uint32 normal, uint32 high) external {
+        require(msg.sender == address(this), "outcome self-call");
+        (uint256 ef, uint256 ed, uint256 en, uint256 eh, bool ew) =
+            host.hostOutcome(WORD, _cohort(), volume, q, _lane(orderIds[index]), index);
+        if (_kind() == Kind.DgnrsEmpty && ed != 0) { ed = 0; ew = true; }
+        assertEq(f, ef, "independent FLIP outcome");
+        assertEq(d, ed, "independent sDGNRS outcome");
+        assertEq(w, ew ? 1 : 0, "independent WWXRP outcome");
+        assertEq(normal, en, "independent normal passes");
+        assertEq(high, eh, "independent high passes");
     }
 
     function test_SettlementAdmission() public {

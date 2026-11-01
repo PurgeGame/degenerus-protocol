@@ -5,13 +5,13 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
 
-/// @title BoxEnqueue — FUZZ-04 (BOX-ENQUEUE) canonical always-on box-queue invariant.
+/// @title BoxEnqueue — canonical always-on box-queue invariant.
 ///
 /// @notice Every box purchase — mint-with-lootbox, and the whale / lazy / deity pass bundles —
 ///         appends ONE complete entry to the write buffer's box queue, which the
 ///         permissionless mineFlip human-box stage settles in FIFO order from `boxCursor` once the
 ///         buffer is sealed and its word published. A box that never reached the queue could be held
-///         closed by its owner and opened at a favorable live level/boon (the WHALE-01 finding); an
+///         closed by its owner and opened at a favorable live level/boon (the pass-bundled-lootbox enqueue gap); an
 ///         entry rewritten after its append, or settled out of order, would let a later purchase
 ///         change or pre-empt an earlier one.
 ///

@@ -13,6 +13,7 @@ import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGame
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameDecimatorModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
@@ -664,7 +665,7 @@ contract TerminalExactSharesTest is Test {
         returns (uint8[4] memory traitIds, uint16[4] memory bc, uint16[4] memory shareBps, uint8 soloIdx)
     {
         traitIds = JackpotBucketLib.getRandomTraits(word);
-        uint256 entropy = EntropyLib.hash2(word, TLVL);
+        uint256 entropy = EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, TLVL);
         uint8 soloQuadrant = uint8((3 - (entropy & 3)) & 3);
         uint256 eff = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
         bc = JackpotBucketLib.terminalWinnerCounts(eff);

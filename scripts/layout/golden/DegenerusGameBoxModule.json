@@ -872,44 +872,44 @@
     "typeLabel": "uint16"
   },
   {
-    "bytes": "8",
+    "bytes": "10",
     "encoding": "inplace",
     "label": "deadUncreated",
     "offset": 14,
     "slot": 48,
-    "typeLabel": "uint64"
+    "typeLabel": "uint80"
   },
   {
     "bytes": "8",
     "encoding": "inplace",
     "label": "deadCreated",
-    "offset": 22,
+    "offset": 24,
     "slot": 48,
     "typeLabel": "uint64"
   },
   {
-    "bytes": "16",
+    "bytes": "12",
     "encoding": "inplace",
     "label": "deadPot",
     "offset": 0,
     "slot": 49,
-    "typeLabel": "uint128"
+    "typeLabel": "uint96"
   },
   {
-    "bytes": "8",
+    "bytes": "10",
     "encoding": "inplace",
     "label": "deadTotal",
-    "offset": 16,
+    "offset": 12,
     "slot": 49,
-    "typeLabel": "uint64"
+    "typeLabel": "uint80"
   },
   {
-    "bytes": "8",
+    "bytes": "10",
     "encoding": "inplace",
     "label": "deadUncreatedLeft",
-    "offset": 24,
+    "offset": 22,
     "slot": 49,
-    "typeLabel": "uint64"
+    "typeLabel": "uint80"
   },
   {
     "bytes": "32",

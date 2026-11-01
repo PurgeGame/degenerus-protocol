@@ -4,7 +4,7 @@ import hre from "hardhat";
 import { jackpotSoloFixture as deployTester } from "../helpers/jackpotSoloFixture.js";
 
 // ---------------------------------------------------------------------------
-// Fixture: deploy the test-only JackpotSoloTester harness (Plan 02 Task 1).
+// Fixture: deploy the test-only JackpotSoloTester harness.
 // The harness inherits DegenerusGameJackpotModule and exposes _pickSoloQuadrant
 // as an external pure passthrough so Hardhat JS can invoke production bytes.
 // ---------------------------------------------------------------------------
@@ -52,13 +52,13 @@ function makeRng(seed) {
 describe("DegenerusGameJackpotModule._pickSoloQuadrant", function () {
 
   // =======================================================================
-  // SOLO-08(a): Zero-gold rotation parity.
+  // Zero-gold rotation parity.
   // When no winning trait has color==7, the helper returns the existing
-  // rotation index `(3 - (entropy & 3)) & 3` — same as v33.0
+  // rotation index `(3 - (entropy & 3)) & 3` — same as
   // JackpotBucketLib.soloBucketIndex(entropy).
   // =======================================================================
 
-  describe("SOLO-08(a) — zero-gold rotation parity", function () {
+  describe("(a) zero-gold rotation parity", function () {
     it("returns rotation index when traits contain zero gold (all colors 0-6)", async function () {
       const { tester } = await loadFixture(deployTester);
       // Cover every (entropy & 3) value to verify all 4 rotation outputs.
@@ -88,12 +88,12 @@ describe("DegenerusGameJackpotModule._pickSoloQuadrant", function () {
   });
 
   // =======================================================================
-  // SOLO-08(b): One-gold deterministic return.
+  // One-gold deterministic return.
   // When exactly one winning trait has color==7, the helper returns that
   // quadrant index regardless of entropy bits 4+.
   // =======================================================================
 
-  describe("SOLO-08(b) — one-gold deterministic return", function () {
+  describe("(b) one-gold deterministic return", function () {
     for (let goldQuadrant = 0; goldQuadrant < 4; goldQuadrant++) {
       it(`returns quadrant ${goldQuadrant} when only that slot is gold (regardless of entropy)`, async function () {
         const { tester } = await loadFixture(deployTester);
@@ -121,13 +121,13 @@ describe("DegenerusGameJackpotModule._pickSoloQuadrant", function () {
   });
 
   // =======================================================================
-  // SOLO-08(c): 2/3/4-gold uniform distribution.
+  // 2/3/4-gold uniform distribution.
   // Sample 100K random entropies for each goldCount ∈ {2, 3, 4}; bucket the
   // returned indices; run chi-squared against uniform across gold positions;
   // expect chi² < critical value at alpha = 0.05.
   // =======================================================================
 
-  describe("SOLO-08(c) — multi-gold uniform distribution (chi-squared p > 0.05)", function () {
+  describe("(c) multi-gold uniform distribution (chi-squared p > 0.05)", function () {
     this.timeout(180000); // 3 min budget per goldCount sweep
 
     // For each goldCount, define the trait array and the expected gold-quadrant set.
@@ -181,16 +181,16 @@ describe("DegenerusGameJackpotModule._pickSoloQuadrant", function () {
   });
 
   // =======================================================================
-  // SOLO-08(d): Tie-break bit-disjointness from bucket-rotation low-2-bits.
+  // Tie-break bit-disjointness from bucket-rotation low-2-bits.
   // The tie-break uses bits 4+ of `entropy` (formula `(entropy >> 4) % goldCount`
-  // per D-04 — drops the `& 3` mask). Verify:
+  // drops the `& 3` mask). Verify:
   //   1. Varying ONLY bits 0-1 of entropy does NOT change the tie-break output
   //      (bucket rotation reads bits 0-1; tie-break ignores them).
   //   2. Varying ONLY bits 4+ of entropy CAN change the tie-break output.
   //   3. Bits 2-3 are unused by either path (helper output unaffected).
   // =======================================================================
 
-  describe("SOLO-08(d) — tie-break bit-disjointness from bucket-rotation low-2-bits", function () {
+  describe("(d) tie-break bit-disjointness from bucket-rotation low-2-bits", function () {
     it("low-2-bits (entropy & 3) do NOT affect tie-break output for goldCount >= 2", async function () {
       const { tester } = await loadFixture(deployTester);
       // 2-gold fixture: golds at quadrants 0 and 2.

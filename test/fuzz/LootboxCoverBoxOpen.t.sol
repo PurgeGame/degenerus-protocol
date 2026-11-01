@@ -11,7 +11,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 /// @notice A whale pass appends its own entry through `recordCoverBox`: one custom box worth
 ///         10% of a pass per pass bought; the entry's open resolves that many equal boxes, each
 ///         on the same EV scaling a bought custom box of the same size gets, plus whatever boost
-///         the buyer earned. Mutation v78 deleted the pass box roll and nothing in foundry noticed.
+///         the buyer earned. A missing pass box roll fails this test.
 ///         A fresh wallet's 0.24 ETH custom box opened in the same buffer is the yardstick; the
 ///         word is searched until no box draws a spin, so a missing box can never hide behind
 ///         a spin.

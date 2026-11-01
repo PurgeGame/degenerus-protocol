@@ -10,13 +10,13 @@ import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-/// @title V61RngFreezeIntact — SEC-01 proof: the v61 surfaces (AFPAY / PACK / CURSE / SMITE) read NO
+/// @title V61RngFreezeIntact — the AFPAY / PACK / CURSE / SMITE surfaces read NO
 ///        VRF-derived or block entropy in a player-manipulable window, proven EMPIRICALLY by a two-block
 ///        determinism replay (the master RNG-freeze property: every variable interacting with a VRF word
 ///        must be frozen across [rng request -> unlock] vs players; mineFlip exempt).
 ///
-/// @notice The v45 freeze north-star says a surface that consumes block.* / VRF entropy at call time would
-///   produce a DIFFERENT observable result when replayed at a different block. So for each v61 surface we run
+/// @notice The RNG-freeze property: a surface that consumes block.* / VRF entropy at call time would
+///   produce a DIFFERENT observable result when replayed at a different block. So for each surface we run
 ///   the operation twice from a BYTE-IDENTICAL seeded pre-state (vm.snapshotState / vm.revertToState) but at
 ///   two DIFFERENT block contexts — perturbing block.number (vm.roll), block.timestamp (vm.warp),
 ///   block.prevrandao (the post-Merge VRF/randomness opcode) and block.coinbase between the runs — and assert
@@ -33,7 +33,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///   CRITICAL replay discipline: maybeCurse's staleness basis is _currentMintDay() == dailyIdx (the monotonic
 ///   ADVANCE counter, a storage field — NOT block.timestamp). dailyIdx is held FIXED across the two runs (the
 ///   perturbation must vary ONLY the block entropy the surface should ignore; moving dailyIdx would legitimately
-///   change staleness and is not a "block-state read"). The wall clock is perturbed because the v61 surfaces do
+///   change staleness and is not a "block-state read"). The wall clock is perturbed because these surfaces do
 ///   not read it — if any did, the replay would diverge and the test would FAIL. This is the falsifiability
 ///   guarantee: a real VRF/block-entropy leak in AFPAY/CURSE/SMITE breaks the byte-identity, so a green test is
 ///   genuine evidence (not a no-op that any implementation would pass).
@@ -61,7 +61,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
+    // Game-resident storage slots + mintPacked_ field shifts (BitPackingLib)
     // -------------------------------------------------------------------------
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // [afking:hi128 | claimable:lo128]
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ byte 16
@@ -256,17 +256,17 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     // =========================================================================
-    // Complementary static attestation — the v61 function bodies contain NO rngWord
+    // Complementary static attestation — the function bodies contain NO rngWord
     // =========================================================================
 
-    /// @notice STRUCTURAL backing for the dynamic proof: the production v61 spend / curse / smite function
+    /// @notice STRUCTURAL backing for the dynamic proof: the production spend / curse / smite function
     ///         bodies read no VRF word. Greps the source (vm.readFile, fs_permissions read ./contracts) for the
     ///         `rngWord` token inside maybeCurse / decurse / smite / _applyCurseStack and inside _settleShortfall
     ///         + the balance accessors. The dynamic two-block replay above is the PRIMARY evidence; this guards
     ///         against a future edit wiring a VRF read into these bodies.
     function testStaticNoRngWordInV61Bodies() public view {
         // GameAfkingModule: maybeCurse / decurse / smite share a region; assert no rngWord between the SET
-        // function and the end-of-file (the afking-BOX rngWord refs are ABOVE maybeCurse, out of v61 scope).
+        // function and the end-of-file (the afking-BOX rngWord refs are ABOVE maybeCurse, out of scope).
         string memory afking = vm.readFile("./contracts/modules/GameAfkingClaims.sol");
         assertFalse(
             _regionContains(afking, "function _maybeCurse", "", "rngWord"),

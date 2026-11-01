@@ -31,9 +31,8 @@ import {
 // -----------------------------------------------------------------------------
 
 // Inline chi² critical-value table at α=0.05 — copied verbatim from
-// test/stat/PerPullLevelDistribution.test.js L89-97 per 293-CONTEXT.md
-// "Chi² implementation pattern" (no helper-file extraction for a single
-// new consumer — deferred to a v43+ test-maintenance bundle).
+// test/stat/PerPullLevelDistribution.test.js (no helper-file extraction
+// for a single consumer).
 const CHI2_CRIT_05 = Object.freeze({
   1: 3.841,
   2: 5.991,
@@ -44,34 +43,33 @@ const CHI2_CRIT_05 = Object.freeze({
   7: 14.067,
 });
 
-// Phase 282 / 291 invariant-continuity pin reused for cross-phase trace
-// stability; chosen entropy value with no algebraic structure to seed deep
-// keccak chains uniformly.
+// Pinned entropy value shared across fixtures for trace stability; chosen with no
+// algebraic structure to seed deep keccak chains uniformly.
 const DAILY_ENTROPY =
   0x2f02_3456_789a_bcde_f012_3456_789a_bcde_f012_3456_789a_bcde_f012_3456_789a_bcden;
 
-const N_CHI2 = 10000;        // TST-HRROLL-01 + TST-HRROLL-02 iteration count
-const N_EDGE = 100;          // TST-HRROLL-04 + TST-HRROLL-05 entropy-variation count
-const N_GAS_SAMPLES = 5;     // TST-HRROLL-06 measurement repetitions for stddev
-const N_CROSS = 16;          // small-N cross-attestation per D-293-INVOKE-01
+const N_CHI2 = 10000;        // chi² and leader-bonus iteration count
+const N_EDGE = 100;          // edge-case entropy-variation count
+const N_GAS_SAMPLES = 5;     // gas measurement repetitions for stddev
+const N_CROSS = 16;          // small-N cross-attestation iterations
 
-// TST-HRROLL-01 chi² seed — 4 non-zero slots at quadrant 0, symbols 0..3.
+// chi² seed — 4 non-zero slots at quadrant 0, symbols 0..3.
 // Bonus-adjusted expectation: leader at idx 0 effective weight 600
 // (= 400 + 200 leaderBonus); effectiveTotal = 1000 + 200 = 1200; per-bucket
 // rates [600/1200, 300/1200, 200/1200, 100/1200] = [0.5, 0.25, 0.1667, 0.0833].
 const TST_HRROLL_01_SEED = Object.freeze([400, 300, 200, 100]);
 
-// TST-HRROLL-02 LOCKED seed (user disposition 2026-05-17) — quadrant 0,
+// Leader-bonus seed — quadrant 0,
 // symbols 0..3; total=1000, leaderBonus=250, effectiveTotal=1250, leader
 // effective weight=750; expected leader pick-rate exactly 0.60 = 750/1250.
 const TST_HRROLL_02_SEED = Object.freeze([500, 200, 200, 100]);
 const TST_HRROLL_02_EXPECTED_LEADER_RATE = 750 / 1250; // 0.60 exactly
 
-// Currency tag for ETH bets per DegenerusGameDegeneretteModule constants
-// (CURRENCY_ETH = 0; see DegenerusGameDegeneretteModule.sol).
+// Currency tag for ETH bets per the GameDegeneretteBet constants
+// (CURRENCY_ETH = 0; see GameDegeneretteBet.sol).
 const CURRENCY_ETH = 0;
 
-// MIN_BET_ETH at DegenerusGameDegeneretteModule.sol:217 — 5 ether / 1000 =
+// MIN_BET_ETH in GameDegeneretteBet.sol — 5 ether / 1000 =
 // 0.005 ETH. Bets at or above this value flow through the wager-tracking
 // path that writes to dailyHeroWagers[dailyIdx][q].
 const MIN_BET_ETH_VALUE = hre.ethers.parseEther("0.005");
@@ -90,7 +88,7 @@ const UINT32_MASK = 0xffffffn;
 // Module-level helpers
 // -----------------------------------------------------------------------------
 
-// Verbatim copy from test/stat/PerPullLevelDistribution.test.js L99-103.
+// Verbatim copy from test/stat/PerPullLevelDistribution.test.js.
 // Wilson-Hilferty normal approximation of the chi² distribution; used for
 // traceability logging — assertion uses the critical-value table directly.
 function wilsonHilfertyZ(chi2, df) {
@@ -161,9 +159,8 @@ async function seedLootboxRngIndex(gameAddr, index = 1) {
   ]);
 }
 
-// Pack the customTicket so the heroQuadrant's symbol byte decodes to
-// `symbol` per `uint8(customTicket >> (heroQuadrant * 8)) & 7` (the
-// extraction at DegenerusGameDegeneretteModule.sol:487-488).
+// Pack the selected symbol the way betDegenerette's `symbol` argument decodes it:
+// quadrant in bits 3-4, symbol index in bits 0-2 (`_playerTicket`, DegenerusGameDegeneretteModule.sol).
 function customTicketWithSymbol(quadrant, symbol) {
   return (symbol & 0x7) << (quadrant * 8);
 }
@@ -175,7 +172,7 @@ async function placeEthBet(game, signer, quadrant, symbol) {
   return game.connect(signer).betDegenerette(0, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
 }
 
-// Phase 282 / 291 pattern: drive mineFlip() to issue a VRF request,
+// Drive mineFlip() to issue a VRF request,
 // then fulfill with the pinned word. Subsequent jackpot-resolution calls
 // inside the mineFlip chain consume rngWordByDay[day] = word.
 async function pinDailyEntropy(game, deployer, mockVRF, word) {
@@ -219,28 +216,27 @@ async function seedDailyHeroWagersDirect(addr, D, baseSlot, rawAmounts) {
 // Top-level describe block
 // -----------------------------------------------------------------------------
 
-describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture", function () {
+describe("HeroOverrideWeightedRoll — hero symbol weighted-roll regression fixture", function () {
   this.timeout(900_000);
 
   after(() => restoreAddresses());
 
   // ---------------------------------------------------------------------------
   // Setup + sanity — JS-replay oracle wiring + forge-inspect storage-layout
-  // baseSlot derivation. Anchor block that exercises the helper imports +
-  // the storage-layout EMPTY-diff re-validation before any TST-HRROLL-NN
-  // assertion fires.
+  // baseSlot derivation. Anchor block that exercises the helper imports and
+  // validates the storage layout before any other assertion fires.
   // ---------------------------------------------------------------------------
-  describe("TST-HRROLL setup-and-sanity — JS-replay oracle wiring + forge-inspect storage-layout baseSlot derivation", function () {
+  describe("setup-and-sanity — JS-replay oracle wiring + forge-inspect storage-layout baseSlot derivation", function () {
     it("derives dailyHeroWagers base slot from the compiled Hardhat storageLayout and asserts the slot index is a non-negative BigInt", async function () {
       const baseSlot = await deriveDailyHeroWagersBaseSlot("dailyHeroWagers");
       expect(typeof baseSlot).to.equal("bigint");
       expect(baseSlot >= 0n).to.equal(true);
       console.log(
-        `      [TST-HRROLL setup] dailyHeroWagers BASE_SLOT = ${baseSlot.toString()}`
+        `      [hero roll setup] dailyHeroWagers BASE_SLOT = ${baseSlot.toString()}`
       );
     });
 
-    it("the JS-replay oracle returns (false, 0, 0) on a zero-wager input (HRROLL-01 early-bail)", function () {
+    it("the JS-replay oracle returns (false, 0, 0) on a zero-wager input (early-bail)", function () {
       const out = rollHeroSymbolRef({
         day: 1,
         entropy: 0n,
@@ -266,10 +262,10 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   });
 
   // ---------------------------------------------------------------------------
-  // TST-HRROLL-01 — weighted-distribution chi² uniformity at N=10000
+  // Weighted-distribution chi² uniformity at N=10000
   // ---------------------------------------------------------------------------
   describe(
-    "TST-HRROLL-01 — weighted-distribution chi² uniformity at N=" +
+    "weighted-distribution chi² uniformity at N=" +
       N_CHI2 +
       " under seed " +
       JSON.stringify(TST_HRROLL_01_SEED) +
@@ -293,7 +289,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           raw[2] = TST_HRROLL_01_SEED[2]; // 200
           raw[3] = TST_HRROLL_01_SEED[3]; // 100
 
-          // Bonus-adjusted expectation (v42 mechanic):
+          // Bonus-adjusted expectation:
           //   total = 400 + 300 + 200 + 100 = 1000
           //   maxAmount = 400; leaderBonus = 400 / 2 = 200
           //   effectiveTotal = 1000 + 200 = 1200
@@ -335,13 +331,13 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             });
             if (!out.hasWinner) {
               throw new Error(
-                "TST-HRROLL-01: hasWinner=false at i=" + i + " on non-zero seed"
+                "hasWinner=false at i=" + i + " on non-zero seed"
               );
             }
             const flatIdx = (out.winQuadrant << 3) | out.winSymbol;
             if (flatIdx >= 4) {
               throw new Error(
-                "TST-HRROLL-01: oracle returned non-seeded slot at i=" +
+                "oracle returned non-seeded slot at i=" +
                   i +
                   " flatIdx=" +
                   flatIdx +
@@ -377,7 +373,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           const z = wilsonHilfertyZ(chi2, 3);
 
           console.log(
-            `      [TST-HRROLL-01] chi² = ${chi2.toFixed(3)} < ${crit} (df=3); observed=[${observedStr}]; expected=[${expectedStr}]; N=${N_CHI2}; Wilson-Hilferty Z=${z.toFixed(3)}`
+            `      [hero roll] chi² = ${chi2.toFixed(3)} < ${crit} (df=3); observed=[${observedStr}]; expected=[${expectedStr}]; N=${N_CHI2}; Wilson-Hilferty Z=${z.toFixed(3)}`
           );
 
           expect(
@@ -390,11 +386,11 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   );
 
   // ---------------------------------------------------------------------------
-  // TST-HRROLL-02 — ×1.5 leader-bonus binomial at N=10000 under LOCKED seed
+  // ×1.5 leader-bonus binomial at N=10000 under a fixed seed
   // [500, 200, 200, 100]; expected leader pick-rate exactly 0.60 = 750/1250.
   // ---------------------------------------------------------------------------
   describe(
-    "TST-HRROLL-02 — ×1.5 leader-bonus binomial sanity at N=" +
+    "×1.5 leader-bonus binomial sanity at N=" +
       N_CHI2 +
       " under LOCKED seed " +
       JSON.stringify(TST_HRROLL_02_SEED) +
@@ -405,10 +401,10 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
       it(
         "leader pick-rate matches expected 0.60 = 750/1250 (= (maxAmount + leaderBonus) / effectiveTotal) within chi² df=1 tolerance",
         function () {
-          // LOCKED seed at quadrant 0, symbols 0..3; leader at flat idx 0 by
+          // Fixed seed at quadrant 0, symbols 0..3; leader at flat idx 0 by
           // strict-> first-seen tie-break.
           //
-          // v42 mechanic (D-42N-LEADER-BONUS-01):
+          // Leader-bonus mechanic:
           //   total           = 500 + 200 + 200 + 100 = 1000
           //   maxAmount       = 500 (leader at flat idx 0; strict-> first-seen)
           //   leaderBonus     = maxAmount / 2 = 250
@@ -416,15 +412,11 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           //   leader weight   = maxAmount + leaderBonus = 750
           //   pick-rate(leader) = 750 / 1250 = 0.60 exactly
           //
-          // LOCKED disposition note (path-of-investigation): the seed
-          // [500, 200, 200, 100] is uniquely-up-to-permutation the 4-slot
-          // vector satisfying L = 0.5 * T which is the algebraic constraint
-          // for `(L + L/2) / (T + L/2) = 0.60` under
-          // D-42N-LEADER-BONUS-01 with T = 1000, L = 500. The ROADMAP
-          // success-criterion-2 example `(500 + 250) / 1250 = 60%` paired
-          // with seed `[500, 100, 100, 100]` yields 750/1050 ≈ 71.4% under
-          // the actual contract arithmetic — algebraically inconsistent.
-          // User locked the [500, 200, 200, 100] seed on 2026-05-17.
+          // Seed note: [500, 200, 200, 100] is uniquely-up-to-permutation the 4-slot
+          // vector satisfying L = 0.5 * T, which is the algebraic constraint
+          // for `(L + L/2) / (T + L/2) = 0.60` with T = 1000, L = 500. The seed
+          // [500, 100, 100, 100] would yield 750/1050 ≈ 71.4% under the actual
+          // contract arithmetic, so it is not used.
 
           const raw = new Array(32).fill(0);
           raw[0] = TST_HRROLL_02_SEED[0]; // 500
@@ -447,14 +439,14 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           ).to.equal(0.6);
 
           const packed = packDailyHeroWagers(raw);
-          const day = 2; // distinct from TST-HRROLL-01 day=1 for trace clarity
+          const day = 2; // distinct from the chi² test's day=1 for trace clarity
 
           let leaderHits = 0;
           let otherHits = 0;
 
           for (let i = 0; i < N_CHI2; ++i) {
             // Offset the entropy construction by 0xDEADBEEF to make the
-            // distribution independent of the TST-HRROLL-01 sample stream.
+            // distribution independent of the chi² sample stream.
             const entropy =
               ((BigInt(i) + 0xDEADBEEFn) << 192n) |
               (BigInt(i + 1) << 128n) |
@@ -467,13 +459,13 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             });
             if (!out.hasWinner) {
               throw new Error(
-                "TST-HRROLL-02: hasWinner=false at i=" + i + " on non-zero LOCKED seed"
+                "hasWinner=false at i=" + i + " on non-zero LOCKED seed"
               );
             }
             const flatIdx = (out.winQuadrant << 3) | out.winSymbol;
             if (flatIdx >= 4) {
               throw new Error(
-                "TST-HRROLL-02: oracle returned non-seeded slot at i=" +
+                "oracle returned non-seeded slot at i=" +
                   i +
                   " flatIdx=" +
                   flatIdx
@@ -506,12 +498,12 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
           const z = wilsonHilfertyZ(chi2, 1);
           console.log(
-            `      [TST-HRROLL-02] empirical leader pick-rate = ${empiricalLeaderRate.toFixed(
+            `      [hero roll] empirical leader pick-rate = ${empiricalLeaderRate.toFixed(
               4
             )} (target = ${TST_HRROLL_02_EXPECTED_LEADER_RATE} = 750/1250); leaderHits=${leaderHits}, otherHits=${otherHits}, N=${N_CHI2}`
           );
           console.log(
-            `      [TST-HRROLL-02] chi² = ${chi2.toFixed(3)} < ${crit} (df=1, binomial); Wilson-Hilferty Z=${z.toFixed(3)}`
+            `      [hero roll] chi² = ${chi2.toFixed(3)} < ${crit} (df=1, binomial); Wilson-Hilferty Z=${z.toFixed(3)}`
           );
 
           expect(
@@ -524,13 +516,13 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   );
 
   // ---------------------------------------------------------------------------
-  // TST-HRROLL-03 — RNG commitment-window proof: dailyHeroWagers[D][q] slot
+  // RNG commitment-window proof: dailyHeroWagers[D][q] slot
   // bytes byte-identical across day-D→D+1 advance; JS oracle replay produces
-  // identical (q, s) for both captures. D-288-FIX-SHAPE-01 dailyIdx
-  // single-writer invariant preserved.
+  // identical (q, s) for both captures. The dailyIdx single-writer invariant
+  // is preserved.
   // ---------------------------------------------------------------------------
   describe(
-    "TST-HRROLL-03 — RNG commitment-window proof: dailyHeroWagers[D][q] frozen across day-D→D+1 advance",
+    "RNG commitment-window proof: dailyHeroWagers[D][q] frozen across day-D→D+1 advance",
     function () {
       it(
         "captures dailyHeroWagers[D][0..3] slot bytes pre-advance, advances day, asserts post-advance bytes are byte-identical, and the JS-oracle reproduces the same (q, s) for both captures",
@@ -620,7 +612,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           expect(dailyIdxAfter).to.equal(dayD + 1);
 
           console.log(
-            `      [TST-HRROLL-03] dayD=${dayD}; slots=[${slotsBeforeAdvance
+            `      [hero roll] dayD=${dayD}; slots=[${slotsBeforeAdvance
               .map((s) => "0x" + s.toString(16))
               .join(", ")}]; oracle output={hasWinner:${refOut.hasWinner}, q:${refOut.winQuadrant}, s:${refOut.winSymbol}}; dailyIdx advanced once at the request boundary`
           );
@@ -630,14 +622,14 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   );
 
   // ---------------------------------------------------------------------------
-  // TST-HRROLL-04 — single-bettor edge case: deterministic (q, s) return
+  // Single-bettor edge case: deterministic (q, s) return
   // with probability 1.0 across N_EDGE entropy variations. Exercises 2
   // distinct leader-idx positions (flat idx 0 and flat idx 17 — quadrant 2,
   // symbol 1) to cover both early-cursor-position and mid-cursor-position
   // leader-bonus add at pass-2.
   // ---------------------------------------------------------------------------
   describe(
-    "TST-HRROLL-04 — single-bettor edge case: deterministic (q, s) return with probability 1.0 across " +
+    "single-bettor edge case: deterministic (q, s) return with probability 1.0 across " +
       N_EDGE +
       " entropy variations",
     function () {
@@ -675,9 +667,9 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           }
 
           console.log(
-            "      [TST-HRROLL-04 idx=0] single-bettor probability 1.0 confirmed across " +
+            "      [hero roll idx=0] single-bettor probability 1.0 confirmed across " +
               N_EDGE +
-              " distinct entropy values (HRROLL-03 single-bettor disposition; leader at flat idx 0)"
+              " distinct entropy values (single-bettor disposition; leader at flat idx 0)"
           );
         }
       );
@@ -716,7 +708,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           }
 
           console.log(
-            "      [TST-HRROLL-04 idx=17] single-bettor probability 1.0 confirmed across " +
+            "      [hero roll idx=17] single-bettor probability 1.0 confirmed across " +
               N_EDGE +
               " distinct entropy values (leader at flat idx 17 = q=2 s=1; mid-cursor leader-bonus add)"
           );
@@ -726,12 +718,12 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   );
 
   // ---------------------------------------------------------------------------
-  // TST-HRROLL-05 — zero-wager edge case: HRROLL-01 early-bail returns
+  // Zero-wager edge case: the early bail returns
   // (false, 0, 0) across N_EDGE entropy variations. Exercises the
-  // `total == 0` branch at _rollHeroSymbol L1677-1679.
+  // `total == 0` branch in _rollHeroSymbol.
   // ---------------------------------------------------------------------------
   describe(
-    "TST-HRROLL-05 — zero-wager edge case: HRROLL-01 early-bail returns (false, 0, 0) across " +
+    "zero-wager edge case: early-bail returns (false, 0, 0) across " +
       N_EDGE +
       " entropy variations",
     function () {
@@ -768,9 +760,9 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           }
 
           console.log(
-            "      [TST-HRROLL-05] zero-wager (false, 0, 0) confirmed across " +
+            "      [hero roll] zero-wager (false, 0, 0) confirmed across " +
               N_EDGE +
-              " distinct entropy values (HRROLL-01 early-bail at total == 0)"
+              " distinct entropy values (early-bail at total == 0)"
           );
         }
       );
@@ -820,8 +812,8 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // Purchase enough tickets to ensure the drain chain enters the
             // purchaseLevel==1 / ticketsFullyProcessed branch that triggers
             // _emitDailyWinningTraits. 200 tickets is sufficient per the
-            // debug trace; matches the Phase 282 / 291 fixture-volume
-            // baseline scaled down for gas-measurement determinism.
+            // debug trace; scaled down from the larger fixture volume
+            // for gas-measurement determinism.
             await game.connect(alice).purchaseOrderFor(
               0,
               200n,
@@ -927,13 +919,13 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               delta,
             });
             console.log(
-              `      [TST-HRROLL-06 sample ${samples.length}/${N_GAS_SAMPLES}] gasPopulated=${populatedResult.gasUsed}, gasBaseline=${baselineResult.gasUsed}, delta=${delta}`
+              `      [hero roll gas sample ${samples.length}/${N_GAS_SAMPLES}] gasPopulated=${populatedResult.gasUsed}, gasBaseline=${baselineResult.gasUsed}, delta=${delta}`
             );
           }
 
           if (samples.length < N_GAS_SAMPLES) {
             throw new Error(
-              `TST-HRROLL-06: only ${samples.length}/${N_GAS_SAMPLES} valid samples collected after ${totalAttempts} attempts (${invalidSamples} invalid). The mineFlip() path is not reliably reaching _emitDailyWinningTraits — verify state-machine routing.`
+              `only ${samples.length}/${N_GAS_SAMPLES} valid samples collected after ${totalAttempts} attempts (${invalidSamples} invalid). The mineFlip() path is not reliably reaching _emitDailyWinningTraits — verify state-machine routing.`
             );
           }
 
@@ -957,19 +949,18 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   );
 
   // ---------------------------------------------------------------------------
-  // TST-HRROLL-01..05 cross-attestation — small-N production-path replay
+  // Cross-attestation — small-N production-path replay
   // matches JS oracle output via DailyWinningTraits event decode.
   //
-  // Per D-293-INVOKE-01: `_rollHeroSymbol` is `private view` so no
-  // inheritance-style harness can reach it. ALGORITHM_VERIFIED evidence is
-  // established by (a) the JS-replay oracle at test/helpers/rollHeroSymbolRef.mjs
+  // `_rollHeroSymbol` is `private view` so no
+  // inheritance-style harness can reach it. The algorithm is verified by (a) the JS-replay oracle at test/helpers/rollHeroSymbolRef.mjs
   // (used for the chi² + edge-case fixtures) plus (b) this cross-attestation
   // block: for N_CROSS distinct (dailyHeroWagers, randWord) pairs the
   // on-chain `DailyWinningTraits` mainTraitsPacked byte decodes to the
   // hero (q, s) and is asserted byte-equal to the JS oracle's
   // (winQuadrant, winSymbol) output for the same inputs.
   //
-  // Decode rules (from _rollBoard L1623-1627):
+  // Decode rules (from _rollBoard):
   //   trait byte = (heroQuadrant << 6) | (heroColor << 3) | heroSymbol
   //   The hero override changes only the chosen quadrant's symbol; compare
   //   that quadrant's byte with the independent oracle.
@@ -979,7 +970,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   // structural correctness anchor proving the JS oracle's bit-mirror.
   // ---------------------------------------------------------------------------
   describe(
-    "TST-HRROLL-01..05 cross-attestation — small-N production-path replay matches JS oracle output via DailyWinningTraits event decode",
+    "cross-attestation — small-N production-path replay matches JS oracle output via DailyWinningTraits event decode",
     function () {
       it(
         "for " +
@@ -1080,7 +1071,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
             if (finalReceipt === null) {
               throw new Error(
-                `TST-HRROLL cross-attestation i=${i}: mineFlip drain never reached _emitDailyWinningTraits within ${MAX_DRAIN_ITERS} iters`
+                `cross-attestation i=${i}: mineFlip drain never reached _emitDailyWinningTraits within ${MAX_DRAIN_ITERS} iters`
               );
             }
 
@@ -1101,7 +1092,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             }
             if (mainTraitsPacked === null) {
               throw new Error(
-                `TST-HRROLL cross-attestation i=${i}: failed to parse DailyWinningTraits log from receipt`
+                `cross-attestation i=${i}: failed to parse DailyWinningTraits log from receipt`
               );
             }
 
@@ -1126,7 +1117,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             });
 
             // Assert hasWinner=true (seed has 3 non-zero amounts, so total
-            // != 0 and the early-bail at _rollHeroSymbol L1677-1679 does
+            // != 0 and the early-bail in _rollHeroSymbol does
             // not fire).
             expect(
               oracleOut.hasWinner,
@@ -1184,7 +1175,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           }
 
           console.log(
-            `      [TST-HRROLL cross-attest] ${matchCount}/${N_CROSS} production-path replays matched JS oracle output exactly — D-293-INVOKE-01 ALGORITHM_VERIFIED established`
+            `      [cross-attest] ${matchCount}/${N_CROSS} production-path replays matched JS oracle output exactly — algorithm verified`
           );
           expect(matchCount).to.equal(N_CROSS);
         }

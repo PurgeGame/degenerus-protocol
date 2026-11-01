@@ -7,7 +7,6 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {CrapsProgressiveTest, ProgHarness} from "../craps/CrapsProgressive.t.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 
 Vm constant G7VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -47,7 +46,7 @@ contract G7ProgHarness is ProgHarness {
 ///         rare progressive cutoff and the record floor) and the progressive pool balance.
 ///         Callees COIN/COINFLIP/GAME are the suite's mocks; their real cold costs are measured
 ///         separately (G7CrapsCalleeGas) and added in the report.
-contract CrapsFinalSeatNativeGasTest is CrapsProgressiveTest, NativeGasExport {
+contract CrapsFinalSeatNativeGasTest is CrapsProgressiveTest {
     bytes32 private constant HOT_SIG = keccak256("CrapsHottestShooterPaid(uint256,bytes32,uint32,uint16,uint256)");
     bytes32 private constant POT_SIG = keccak256("CrapsBattlePaid(uint256,bytes32,uint32,uint256)");
     bytes32 private constant LANE_SIG = keccak256("CrapsHighRollerPaid(uint256,bytes32,uint32,uint256,bool)");
@@ -151,13 +150,6 @@ contract CrapsFinalSeatNativeGasTest is CrapsProgressiveTest, NativeGasExport {
         assertTrue(ok);
         emit log_named_uint("G7 CRAPS final seat engine-only view gas minus intrinsic", g7Gross() - g7Intrinsic(view_));
         emit log_named_uint("G7 CRAPS seat admission CRAPS_SEAT_GAS_MAX", GasBounds.CRAPS_SEAT_GAS_MAX);
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snap));
-            this.exportNativeFixture("craps-final-seat-all-awards", address(this), address(craps), data);
-            assertTrue(vm.revertToState(snap));
-            _stubCallees();
-            this.exportNativeFixture("craps-final-seat-stubbed-callees", address(this), address(craps), data);
-        }
         vm.deleteStateSnapshot(snap);
     }
 }
@@ -186,32 +178,21 @@ contract CrapsNativeGameStub {
     }
 }
 
-contract CrapsCalleeNativeGasTest is DeployProtocol, NativeGasExport {
+contract CrapsCalleeNativeGasTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
     }
 
-    uint256 private nativeCase;
     function g7Intrinsic(bytes memory data) private pure returns (uint256 gas_) {
         gas_ = 21_000;
         for (uint256 i; i < data.length; ++i) gas_ += data[i] == 0 ? 4 : 16;
     }
     function g7AsCraps(address target, bytes memory data) private returns (uint256) {
-        uint256 snapshot = vm.snapshotState();
         vm.prank(address(crapsBattle));
         (bool ok,) = target.call{gas: 30_000_000}(data);
         assertTrue(ok, "callee call succeeds");
         uint256 used = g7Gross() - g7Intrinsic(data) + 2_600;
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            uint256 post = vm.snapshotState();
-            assertTrue(vm.revertToState(snapshot));
-            this.exportNativeFixture(string.concat("craps-real-callee-", vm.toString(nativeCase)), address(crapsBattle), target, data);
-            assertTrue(vm.revertToState(post));
-            vm.deleteStateSnapshot(post);
-        }
-        ++nativeCase;
-        vm.deleteStateSnapshot(snapshot);
         return used;
     }
 

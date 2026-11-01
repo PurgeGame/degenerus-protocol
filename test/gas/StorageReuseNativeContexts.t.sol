@@ -2,7 +2,6 @@
 pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {ProtocolDrawGasSeeder, ProtocolDailyGasHost} from "./ProtocolBoonAdvanceGas.t.sol";
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
@@ -15,9 +14,8 @@ contract StorageReuseNativeDailySeeder is ProtocolDrawGasSeeder {
     }
 }
 
-/// @dev Native calibration of complete phase calls. Export separately from the
-///      matched codec comparison: these larger fixtures use their production prestate.
-contract StorageReuseNativeDailyContext is DeployProtocol, NativeGasExport {
+/// @dev Complete phase calls on their production prestate.
+contract StorageReuseNativeDailyContext is DeployProtocol {
     function test_nativeDailyApplyWithSixMaximumDepthBoons() public {
         _deployProtocol();
         uint24 day = 21_000;
@@ -29,8 +27,6 @@ contract StorageReuseNativeDailyContext is DeployProtocol, NativeGasExport {
         ProtocolBoonDrawSeeder(address(game)).seedPools(day, 987654321);
         vm.etch(address(game), type(ProtocolDailyGasHost).runtimeCode);
         ProtocolDailyGasHost(payable(address(game))).publishOnly();
-        _nativeFixture("daily_apply_six_boons", address(0x8888), address(game),
-            abi.encodeCall(ProtocolDailyGasHost.applyOnly, ()));
         vm.recordLogs();
         ProtocolDailyGasHost(payable(address(game))).applyOnly();
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -57,7 +53,6 @@ contract StorageReuseNativeCenturyContext is AdvanceCenturyDiverseDestinations {
         for (uint256 reads; !host.prepareTicketsOnly{gas: 12_000_000}(); ++reads) {
             assertLt(reads, 32, "ticket prerequisites stalled");
         }
-        _nativeFixture("daily_apply_century_vault_90", address(0x8888), address(game),
-            abi.encodeCall(CenturyNativeGasHost.applyOnly, ()));
+        host.applyOnly();
     }
 }

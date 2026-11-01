@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFPathHandler} from "../handlers/VRFPathHandler.sol";
 
-/// @title VRFPathInvariants -- Proves VRF path lifecycle invariants (TEST-01/02/03)
+/// @title VRFPathInvariants -- Proves VRF path lifecycle invariants
 /// @notice Asserts lootboxRngIndex never skips/double-increments, stall-to-recovery
 ///         state transitions are valid, and gap backfill produces nonzero words for all
 ///         gap days.
@@ -21,7 +21,7 @@ contract VRFPathInvariants is DeployProtocol {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // TEST-01: Lootbox RNG Index Lifecycle
+    // Lootbox RNG Index Lifecycle
     // ═══════════════════════════════════════════════════════════════════════
 
     /// @notice lootboxRngIndex never moves during VRF fulfillment or a coordinator swap —
@@ -77,7 +77,7 @@ contract VRFPathInvariants is DeployProtocol {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // TEST-03: Logical Day Identity
+    // Logical Day Identity
     // ═══════════════════════════════════════════════════════════════════════
 
     /// @notice Every successful fresh request advances once, and Coinflip agrees atomically.
@@ -106,11 +106,11 @@ contract VRFPathInvariants is DeployProtocol {
         if (runs < 16) return;
         assertGt(advances, 0, "VRFPath: mineFlip never succeeded");
         assertGt(fulfillments, 0, "VRFPath: no VRF word was ever fulfilled");
-        assertGt(fresh, 0, "VRFPath: no fresh index allocation ever committed - TEST-01 unexercised");
-        assertGt(swaps, 0, "VRFPath: no coordinator swap ever succeeded - TEST-02 unexercised");
+        assertGt(fresh, 0, "VRFPath: no fresh index allocation ever committed - unexercised");
+        assertGt(swaps, 0, "VRFPath: no coordinator swap ever succeeded - unexercised");
         assertGt(purchases, 0, "VRFPath: no purchase ever succeeded");
         if (runs < 192) return;
-        assertGt(recoveries, 0, "VRFPath: no post-swap recovery was ever evaluated - TEST-03 unexercised");
+        assertGt(recoveries, 0, "VRFPath: no post-swap recovery was ever evaluated - unexercised");
         if (runs < 1024) return;
         assertGt(gaps, 0, "VRFPath: no recovery ever spanned a skipped day - delayed logical recovery unexercised");
     }

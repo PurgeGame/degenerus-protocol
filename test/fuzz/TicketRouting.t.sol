@@ -80,7 +80,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // ROUTE-01: Far-future tickets route to FF key
+    // Far-future tickets route to FF key
     // =========================================================================
 
     function testFarFutureRoutesToFFKey() public {
@@ -94,7 +94,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // ROUTE-02: Near-future tickets route to write key
+    // Near-future tickets route to write key
     // =========================================================================
 
     function testNearFutureRoutesToWriteKey() public {
@@ -108,7 +108,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // ROUTE-01/02 Boundary: level+5 is near, level+6 is far
+    // Boundary: level+5 is near, level+6 is far
     // =========================================================================
 
     function testBoundaryLevel5RoutesToWriteKey() public {
@@ -126,7 +126,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // ROUTE-01 Scaled: _queueEntriesScaled routes far-future to FF key
+    // Scaled: _queueEntriesScaled routes far-future to FF key
     // =========================================================================
 
     function testScaledFarFutureRoutesToFFKey() public {
@@ -146,7 +146,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // ROUTE-01/02 Range: _queueEntryRange splits correctly
+    // Range: _queueEntryRange splits correctly
     // =========================================================================
 
     function testRangeRoutingSplitsCorrectly() public {
@@ -166,7 +166,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // RNG-02 / ROUTE-03: Guard reverts for FF key writes when rngLocked
+    // Guard reverts for FF key writes when rngLocked
     // =========================================================================
 
     function testRngGuardRevertsOnFFKey() public {
@@ -196,7 +196,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // RNG-02 Scaled: Guard reverts for scaled FF key writes
+    // Scaled: Guard reverts for scaled FF key writes
     // =========================================================================
 
     function testRngGuardScaledRevertsOnFFKey() public {
@@ -208,7 +208,7 @@ contract TicketRoutingTest is Test {
     }
 
     // =========================================================================
-    // RNG-02 Range: Guard reverts on first FF level in range
+    // Range: Guard reverts on first FF level in range
     // =========================================================================
 
     function testRngGuardRangeRevertsOnFirstFFLevel() public {

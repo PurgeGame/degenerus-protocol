@@ -3,12 +3,10 @@
 // LootboxFlipRoundHundreds.test.js — threshold-gated 100-FLIP collapse on both lootbox
 // FLIP award sites.
 //
-// SUPERSEDES the whole-FLIP floor regression this file used to carry (D-279-INLINE-01 /
-// D-279-BUR01-SITE-01). Neither site floors to 1 FLIP any more:
+// Neither site floors to 1 FLIP:
 //
 //   SITE 5 — `_settleLootboxRoll` (`DegenerusGameLootboxModule.sol`)
-//     was:  uint256 flipAmount = (flipOut / 1 ether) * 1 ether;
-//     now:  uint256 flipAmount = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
+//     uint256 flipAmount = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
 //               ? FlipRoundLib.roundFlipToHundreds(
 //                     flipOut, EntropyLib.hash2(RngTags.BOX_ROUND, rollSeed))
 //               : flipOut;
@@ -32,8 +30,7 @@
 //      fixed at VRF fulfillment: the seed binds immutable per-box data (player, amount,
 //      index) hashed with the index's committed word.
 //
-// What survives from the old file, restated for the new expression: the collapse is
-// applied ONCE per roll from that roll's raw `flipOut` (no cross-roll accumulator), it
+// The collapse is applied ONCE per roll from that roll's raw `flipOut` (no cross-roll accumulator), it
 // precedes both the `!= 0` guard and the `creditFlip_g317` call, and the emitted event carries
 // the post-collapse figure — the number the player actually receives.
 //
@@ -44,9 +41,7 @@
 //   probabilistic behaviour of the collapse itself is covered separately and empirically
 //   by `test/stat/FlipRoundHundredsEv.test.js` against `FlipRoundBernoulliTester`.
 //
-// CROSS-CITES:
-//   - .planning/PLAN-FLIP-ROUND-HUNDREDS.md §3c (small-award sites — round above 1,000 FLIP)
-//   - D-279-INLINE-01 / D-279-BUR01-SITE-01 SUPERSEDED
+// Related:
 //   - test/stat/FlipRoundHundredsEv.test.js (EV-neutrality of the primitive)
 //   - test/unit/JackpotTicketRollSilentColdBust.test.js (extractBody + stripLineComments infra)
 

@@ -190,17 +190,16 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     }
 
     // =========================================================================
-    // AC-3 / R2: Binding consistency on the mid-day -> cross-day edge
+    // Binding consistency on the mid-day -> cross-day edge
     // =========================================================================
 
     /// @notice A box purchased AFTER a mid-day VRF request binds to the LIVE LR_INDEX,
     ///         NOT to the in-flight LR_INDEX-1 word being delivered. The mid-day request
     ///         (mineFlip's RequestMidday stage) advances the lootbox index by exactly 1
-    ///         (DegenerusGameAdvanceModule._lrAdvanceIndexClearPending at :1140) and reserves
+    ///         (the request's write-buffer seal, `_sealRngWriteBuffer`) and reserves
     ///         the in-flight word at the just-vacated index (LR_INDEX-1). A subsequent box buy
-    ///         records itself at the NEW LR_INDEX (DegenerusGameMintModule:1949/1960 — and the
-    ///         :1951 `_lootboxWord(index) != 0` guard rejects binding to a worded
-    ///         index), so when the in-flight word lands at LR_INDEX-1 the post-request box at
+    ///         records itself at the NEW LR_INDEX (the new write buffer — never the worded
+    ///         read buffer, so no worded-index guard is needed), so when the in-flight word lands at LR_INDEX-1 the post-request box at
     ///         LR_INDEX is still un-worded and CANNOT be resolved by that word. This is the
     ///         load-bearing RNG-freeze property: a buyer cannot be resolved by a word already
     ///         requested at buy time.
@@ -242,8 +241,8 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         );
 
         // ── Box B: a SECOND box bought AFTER the request must bind to the LIVE index
-        //    (N+1), never to the in-flight index N being drained. The contract's
-        //    :1951 worded-index guard would revert if it tried to key at a worded slot.
+        //    (N+1), never to the in-flight index N being drained. A bet or
+        //    box can only key at the unworded write buffer.
         address buyerB = makeAddr("drainBindingBuyerB");
         vm.deal(buyerB, 100 ether);
         (, , , , uint256 priceWei) = game.purchaseInfo_g1027();

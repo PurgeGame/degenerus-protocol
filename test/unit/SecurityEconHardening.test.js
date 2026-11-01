@@ -84,9 +84,9 @@ describe("SecurityEconHardening", function () {
   // gameOver state will advance time internally to avoid cross-test leakage.
 
   // =========================================================================
-  // FIX-01: Whale bundle purchase reverts after gameOver
+  // Whale bundle purchase reverts after gameOver
   // =========================================================================
-  describe("FIX-01: Whale bundle blocked after gameOver", function () {
+  describe("Whale bundle blocked after gameOver", function () {
     it("purchaseWhalePass reverts after gameOver at level 0", async function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
@@ -106,9 +106,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-02: Lazy pass purchase reverts after gameOver
+  // Lazy pass purchase reverts after gameOver
   // =========================================================================
-  describe("FIX-02: Lazy pass blocked after gameOver", function () {
+  describe("Lazy pass blocked after gameOver", function () {
     it("purchaseLazyPass reverts after gameOver at level 0", async function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
@@ -127,9 +127,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-03: Deity pass purchase reverts after gameOver
+  // Deity pass purchase reverts after gameOver
   // =========================================================================
-  describe("FIX-03: Deity pass blocked after gameOver", function () {
+  describe("Deity pass blocked after gameOver", function () {
     it("purchaseDeityPass reverts after gameOver at level 0", async function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
@@ -148,9 +148,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-04: receive() reverts after gameOver (plain ETH transfers blocked)
+  // receive() reverts after gameOver (plain ETH transfers blocked)
   // =========================================================================
-  describe("FIX-04: receive() blocked after gameOver", function () {
+  describe("receive() blocked after gameOver", function () {
     it("plain ETH transfer to game reverts after gameOver", async function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
@@ -191,9 +191,9 @@ describe("SecurityEconHardening", function () {
   // Deity pass early-gameover refund — price-paid model (c4d48008)
   //
   // The contract tracks `deityPassPricePaid[buyer]` (a uint96 = the ETH price the
-  // buyer paid; WhaleModule:605) and refunds `min(deityPassPricePaid[owner], 20e18)`
+  // buyer paid; `purchaseDeityPass`) and refunds `min(deityPassPricePaid[owner], 20e18)`
   // per owner at an early gameover (level < 10), then clamps to the remaining
-  // budget FIFO (GameOverModule:105-135). There is no per-buyer purchase counter
+  // budget FIFO (`_handleGameOverDrain`). There is no per-buyer purchase counter
   // and no "refund clears the count" step — the boon-ownership gate is the
   // HAS_DEITY_PASS bit, and the refund cap is the price-paid value above. A
   // standard-priced pass (24/25 ETH) is above the 20 ETH cap, so the cap binds and
@@ -264,9 +264,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-06: Terminal deity refunds
+  // Terminal deity refunds
   // =========================================================================
-  describe("FIX-06: Terminal deity refunds", function () {
+  describe("Terminal deity refunds", function () {
 
 
     it("deity pass refund only occurs via gameOver drain (level < 10)", async function () {
@@ -296,9 +296,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-07: GameOver deity payout — flat 20 ETH/pass, levels 0-9, FIFO, budget-capped
+  // GameOver deity payout — flat 20 ETH/pass, levels 0-9, FIFO, budget-capped
   // =========================================================================
-  describe("FIX-07: GameOver deity payout correctness", function () {
+  describe("GameOver deity payout correctness", function () {
     it("flat 20 ETH refund per pass at level 0 (early gameOver)", async function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
@@ -384,9 +384,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-08: FLIP ticket purchases revert within 30 days of liveness timeout
+  // FLIP ticket purchases revert within 30 days of liveness timeout
   // =========================================================================
-  describe("FIX-08: FLIP ticket purchase cutoff", function () {
+  describe("FLIP ticket purchase cutoff", function () {
     it("redeemFlip reverts after 220 days at level 0 (within 30 days of timeout)", async function () {
       const { game, alice } =
         await loadFixture(deployFullProtocol);
@@ -413,9 +413,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-09: subscriptionId stored as uint256, large IDs handled
+  // subscriptionId stored as uint256, large IDs handled
   // =========================================================================
-  describe("FIX-09: uint256 subscriptionId", function () {
+  describe("uint256 subscriptionId", function () {
 
 
     it("subscriptionId exposes uint256 in the ABI", async function () {
@@ -435,9 +435,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-10: 1 wei sentinel preserved in claimable winnings
+  // 1 wei sentinel preserved in claimable winnings
   // =========================================================================
-  describe("FIX-10: 1 wei sentinel in claimable winnings", function () {
+  describe("1 wei sentinel in claimable winnings", function () {
     it("claimWinnings leaves 1 wei sentinel after full claim", async function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
@@ -516,9 +516,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // ECON-03: Multi-level scatter targeting (terminal jackpot)
+  // Multi-level scatter targeting (terminal jackpot)
   // =========================================================================
-  describe("ECON-03: Multi-level scatter targeting", function () {
+  describe("Multi-level scatter targeting", function () {
     it("terminal jackpot worker takes an explicit target level (runTerminalJackpotWork)", async function () {
       // The game-over drain pays the final ticket cohort through
       // runTerminalJackpotWork(poolWei, targetLvl, rngWord, allowance): the GameOver
@@ -539,9 +539,9 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // ECON-04: Jackpot duration defaults to three days
+  // Jackpot duration defaults to three days
   // =========================================================================
-  describe("ECON-04: Jackpot duration", function () {
+  describe("Jackpot duration", function () {
     it("starts with the standard three-day schedule", async function () {
       const { game } = await loadFixture(deployFullProtocol);
       expect(await game.jackpotDuration()).to.equal(3);

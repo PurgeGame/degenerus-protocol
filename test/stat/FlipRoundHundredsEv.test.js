@@ -2,14 +2,14 @@
 //
 // FlipRoundHundredsEv.test.js — statistical validation of the 100-FLIP award collapse.
 //
-// `FlipRoundLib.roundFlipToHundreds` is the ticket Bernoulli collapse re-pointed from
-// ticket counts to FLIP amounts, with the granule moved from 1 FLIP to 100 FLIP: the
+// `FlipRoundLib.roundFlipToHundreds` is a Bernoulli collapse of FLIP amounts to a
+// 100-FLIP granule (modeled on the ticket Bernoulli collapse): the
 // 0..99 whole-FLIP remainder rounds up with probability rem/100 against a uint32 window
 // of a committed-VRF-derived word. This file asserts the properties that make that
-// collapse safe to ship at the four §3c award sites:
+// collapse safe at the small-award sites:
 //
 //   - EV-neutrality: mean(rounded) tracks `floorWholeFlip(amount)`, so the collapse costs
-//     the player only the sub-1-FLIP dust the previous whole-FLIP floor already discarded.
+//     the player only the sub-1-FLIP dust that a whole-FLIP floor would discard.
 //   - Granularity: every output is an exact multiple of 100 FLIP.
 //   - Round-up frequency: fires at rate rem/100, per remainder.
 //   - Window uniformity: `uint32(entropy) % 100` is uniform (chi², df=99), so the
@@ -17,11 +17,9 @@
 //   - The threshold gate: at or below 1,000 FLIP the award is paid EXACTLY, so a small
 //     win never rounds to nothing.
 //
-// CROSS-CITES:
+// Related:
 //   - test/stat/LootboxBernoulliEv.test.js (the ticket-collapse suite this mirrors;
 //     `makeRng` / `wilsonHilfertyZ` re-declared verbatim from it)
-//   - D-279-INLINE-01 SUPERSEDED — the whole-FLIP inline floor is replaced by this
-//     collapse at the award sites.
 
 import { expect } from "chai";
 import hre from "hardhat";

@@ -6,7 +6,7 @@ import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
 import { eth, advanceToNextDay, getLastVRFRequestId, ZERO_BYTES32 } from "../helpers/testUtils.js";
-import { decodeCheckpointKey, ticketCheckpointTraits } from "../helpers/raritySymbolBatchRef.mjs";
+import { decodeCheckpointKey, ticketCheckpointTraits } from "../helpers/ticketTraitsRef.mjs";
 
 const WORD = 0x2f023456789abcdef0123456789abcdef0123456789abcdef0123456789abcden;
 const WALLET_ID_MASK = (1n << 32n) - 1n;

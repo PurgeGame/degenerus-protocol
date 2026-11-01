@@ -18,10 +18,10 @@ interface IFlipCoinflipPlayerMock {
     function withdrawRedeemedFlip(uint256 base) external;
 }
 
-/// @title V62RedemptionReentrancy -- regression for finding V62-03 (verifies the layered FIX).
-///        The vuln description below is retained as context for what the fixes prevent.
+/// @title V62RedemptionReentrancy -- regression for the sDGNRS redemption reentrancy (verifies the layered fix).
+///        The description below states what the fixes prevent.
 ///
-/// @notice V62-03 (adjudicated vs frozen c4d48008): sDGNRS.sol has NO reentrancy
+/// @notice sDGNRS.sol has NO reentrancy
 ///         guard. `claimRedemption` decrements `pendingRedemptionEthValue -= totalRolledEth`
 ///         and deletes the per-(player,day) claim slot BEFORE the payout. The payout's
 ///         `_payEth(player, ethDirect)` MIXED branch (ethDirect > liquid ETH) originally sent
@@ -29,7 +29,7 @@ interface IFlipCoinflipPlayerMock {
 ///         `steth.transfer(player, stethOut)`. The ETH `.call` re-enters the attacker's
 ///         receive() hook while `stethOut` is STILL custodied in the sDGNRS contract, letting a
 ///         reentrant burn() count the in-flight stETH as free backing — breaking the redemption
-///         reserve / SOLVENCY-01 identity
+///         reserve / solvency identity
 ///           pendingRedemptionEthValue <= ETH held + stETH held.
 ///
 ///         TWO independent layers now close the class, pinned by one test each:
@@ -53,7 +53,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
     //                          CONSTANTS / SLOTS
     // =====================================================================
 
-    /// @dev balancesPacked (DegenerusGame) at slot 7 (v61 PACK fold). Low 128 bits = claimable.
+    /// @dev balancesPacked (DegenerusGame) at slot 7. Low 128 bits = claimable.
     uint256 internal constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
     /// @dev claimablePool in the upper 128 bits of slot 1.
     uint256 internal constant GAME_SLOT1 = 1;
@@ -144,7 +144,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         assertEq(game.rngConsumerStage_g379(), 1, "fixture: redemption consumer stage open");
     }
 
-    /// @dev The reserve identity under audit (SOLVENCY-01): the contract's own backing (ETH + stETH)
+    /// @dev The reserve identity under audit: the contract's own backing (ETH + stETH)
     ///      must cover the segregated reservation tracker.
     function _reserveIdentityHolds() internal view returns (bool) {
         uint256 backing = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs))
@@ -208,18 +208,18 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         vm.expectRevert(sDGNRS.NotGameOver.selector);
         attacker.claim(dayD);
         vm.prank(address(game));
-        assertTrue(sdgnrs.runRedemptionWork(batchWord, 9_000_000).done, "V62-03 L1: keeper drained the cohort");
+        assertTrue(sdgnrs.runRedemptionWork(batchWord, 9_000_000).done, "L1: keeper drained the cohort");
         (uint128 owedAfter,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(address(attacker)), dayD);
-        assertEq(uint256(owedAfter), 0, "V62-03 L1: the claim settled rather than parking");
+        assertEq(uint256(owedAfter), 0, "L1: the claim settled rather than parking");
 
         // ---- HEADLINE: no claimant code ran — the re-entry surface is gone by construction. ----
-        assertFalse(attacker.reentered(), "V62-03 L1: claimant hook fired during live settlement");
-        assertEq(attacker.reentrantBurnCount(), 0, "V62-03 L1: reentrant burns landed in the hook");
-        assertEq(address(attacker).balance, attackerEthBefore, "V62-03 L1: live settlement pushed ETH at the claimant");
+        assertFalse(attacker.reentered(), "L1: claimant hook fired during live settlement");
+        assertEq(attacker.reentrantBurnCount(), 0, "L1: reentrant burns landed in the hook");
+        assertEq(address(attacker).balance, attackerEthBefore, "L1: live settlement pushed ETH at the claimant");
         assertEq(
             mockStETH.balanceOf(address(attacker)),
             attackerStethBefore,
-            "V62-03 L1: live settlement pushed stETH at the claimant"
+            "L1: live settlement pushed stETH at the claimant"
         );
 
         // The direct half landed as a game-claimable credit; the Game reserve funded the whole
@@ -227,19 +227,19 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         assertEq(
             game.claimableWinningsOf(address(attacker)),
             ethDirect + 1,
-            "V62-03 L1: direct half must credit the claimant's game claimable"
+            "L1: direct half must credit the claimant's game claimable"
         );
         assertEq(
             address(game).balance + mockStETH.balanceOf(address(game)),
             gameValueBefore,
-            "V62-03 L1: no ETH moves into or out of the game"
+            "L1: no ETH moves into or out of the game"
         );
         assertEq(game.redemptionReserve(), reserve - (ethDirect + lootboxEth),
-            "V62-03 L1: the reserve funds the whole rolled value");
+            "L1: the reserve funds the whole rolled value");
 
         // Reservation fully released and the reserve identity holds.
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "V62-03 L1: reservation not fully released");
-        assertTrue(_reserveIdentityHolds(), "V62-03 L1: SOLVENCY-01 holds after settlement");
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "L1: reservation not fully released");
+        assertTrue(_reserveIdentityHolds(), "L1: reserve identity holds after settlement");
     }
 
     /// @notice Layer 2 — the POST-GAMEOVER claim still pays via _payEth (100% direct, self-claim,
@@ -310,11 +310,11 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
 
         // ---- HEADLINE: the re-entry is reachable (no guard) but extracts NOTHING — the owed
         //      stETH shipped before the hook, so the deterministic burns see zero backing. ----
-        assertTrue(reentrantBurnSucceeded, "V62-03 L2: reentry is still reachable (no guard) -- the fix neutralizes its EFFECT");
-        assertGt(reentrantCount, 0, "V62-03 L2: the reentrant gameOver burns still land in the hook");
-        assertEq(pendingAtHook, 0, "V62-03 L2: outer claim releases the reservation before the hook");
-        assertEq(inFlightSteth, 0, "V62-03 L2: owed stETH already shipped before the ETH hook (stETH-before-ETH CEI)");
-        assertEq(reentrantStethBacking, 0, "V62-03 L2: reentrant burn saw no free stETH backing");
+        assertTrue(reentrantBurnSucceeded, "L2: reentry is still reachable (no guard) -- the fix neutralizes its EFFECT");
+        assertGt(reentrantCount, 0, "L2: the reentrant gameOver burns still land in the hook");
+        assertEq(pendingAtHook, 0, "L2: outer claim releases the reservation before the hook");
+        assertEq(inFlightSteth, 0, "L2: owed stETH already shipped before the ETH hook (stETH-before-ETH CEI)");
+        assertEq(reentrantStethBacking, 0, "L2: reentrant burn saw no free stETH backing");
 
         // The attacker's TOTAL receipts equal exactly the one entitled payout (ethDirect): seedEth
         // arrived as the .call value, the remainder as the pre-hook stETH ship. The reentrant
@@ -323,10 +323,10 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
             (address(attacker).balance - attackerEthBefore) +
                 (mockStETH.balanceOf(address(attacker)) - attackerStethBefore),
             ethDirect,
-            "V62-03 L2: attacker receipts != the single entitled payout (reentry extracted value)"
+            "L2: attacker receipts != the single entitled payout (reentry extracted value)"
         );
 
-        assertTrue(_reserveIdentityHolds(), "V62-03 L2: SOLVENCY-01 holds after the reentrant claim");
+        assertTrue(_reserveIdentityHolds(), "L2: reserve identity holds after the reentrant claim");
     }
 }
 

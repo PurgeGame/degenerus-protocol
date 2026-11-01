@@ -58,10 +58,9 @@ contract CrapsPreferenceGasTest is CrapsPins {
     }
 
     function test_GasSaveReadAndPrepare() public {
-        uint32[5] memory boards = [uint32(0), 3, (3 << 9) | (3 << 12) | (1 << 27), 3 << 27, 5 << 27];
-        uint256 cases = vm.envOr("P8C_NEW_BOARDS", false) ? 5 : 4;
+        uint32[4] memory boards = [uint32(0), 3, (3 << 9) | (3 << 12) | (1 << 27), 3 << 27];
         uint256 snapshot = vm.snapshotState();
-        for (uint256 b; b < cases; ++b) {
+        for (uint256 b; b < boards.length; ++b) {
             assertTrue(vm.revertToState(snapshot));
             bytes32 key = keccak256(abi.encode(id, CrapsPreferenceLib.PASS_SLOT));
             vm.cool(address(table));

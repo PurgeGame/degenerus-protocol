@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 261 STAT-07 — pack-feel CIs over >=100K 10-ticket packs (40 trait rolls each).
-// JS-replica color sampling (drift-guarded by Plan 01 D-03 boundary harness).
+// PackFeel.test.js -- pack-feel CIs over >=100K 10-ticket packs (40 trait rolls each).
+// JS-replica color sampling (drift-guarded by the boundary harness).
 // Asserts measured >=1-of-tier frequencies fall within Wilson 99% CIs of analytical
 // values computed from (1 - P(color>=k))^40 under the heavy-tail color distribution.
 //
-// Reconciliation note: REQUIREMENTS.md STAT-07 cites 99.5% / 92.3% / 71.7% / 27.0%
-// — the analytical values under the canonical (1 - sum(P[color>=k]))^40 formula yield
-// {99.99%, 99.51%, 92.86%, 26.94%}. The Plan-locked assertions use the canonical
-// analytical values (computed inline at file top); the REQUIREMENTS.md headline
-// numbers are retained as Wilson-CI lower-bound informational targets, not
-// hard assertions. Phase 262 audit may surface a REQUIREMENTS.md amendment.
+// Reconciliation note: headline targets of 99.5% / 92.3% / 71.7% / 27.0% are looser
+// than the analytical values under the canonical (1 - sum(P[color>=k]))^40 formula,
+// which yield {99.99%, 99.51%, 92.86%, 26.94%}. The assertions use the canonical
+// analytical values; the headline numbers are informational lower-bound targets,
+// not hard assertions.
 //
 // ---------------------------------------------------------------------------
 // Mechanics:
@@ -28,7 +27,7 @@
 //     legendary (color==7) = 0.00781
 //
 //   Analytical pack frequency: P(>=1 of tier in pack) = 1 - (1 - tail)^40
-//     notable   ≈ 0.99999 (REQUIREMENTS.md target 99.5% — comfortable)
+//     notable   ≈ 0.99999 (target 99.5% — comfortable)
 //     rare      ≈ 0.99506 (target 92.3%)
 //     epic      ≈ 0.92857 (target 71.7%)
 //     legendary ≈ 0.26937 (target 27.0%)
@@ -51,7 +50,7 @@ function makeRng(seed) {
 }
 
 // JS replica of DegenerusTraitUtils.weightedColorBucket(uint32 rnd).
-// Drift-guarded by Plan 01 D-03 boundary harness.
+// Drift-guarded by the boundary harness.
 function jsWeightedColorBucket(rnd) {
   const scaled = (rnd * 256n) >> 32n;
   if (scaled < 64n) return 0;
@@ -93,11 +92,11 @@ function wilson99(successes, total) {
   return { lo: center - half, hi: center + half };
 }
 
-describe("STAT-07 — pack-feel CIs over 100K packs (40 rolls/pack)", function () {
+describe("pack-feel CIs over 100K packs (40 rolls/pack)", function () {
   this.timeout(120000); // 2 min budget — pure JS, ~4M jsWeightedColorBucket calls
 
   it("measured >=1-of-tier frequencies match analytical values within Wilson 99% CIs", function () {
-    // Distinct per-test seed (D-13 reproducibility). Hex literal 0xC010_0070.
+    // Distinct per-test seed (reproducibility). Hex literal 0xC010_0070.
     const rng = makeRng(0xC010_0070);
     const packCounts = { notable: 0, rare: 0, epic: 0, legendary: 0 };
 

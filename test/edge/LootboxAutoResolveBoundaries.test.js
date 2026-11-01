@@ -1,21 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// LootboxAutoResolveBoundaries.test.js — Phase 275 Wave 2 TST-LBX-AR-02
+// LootboxAutoResolveBoundaries.test.js — boundary tests for the auto-resolve Bernoulli round-up
 //
 // Boundary tests for the auto-resolve Bernoulli round-up at scaledPre ∈
-// {0, 1, 99, 100, 101, 199, 200}. The hoisted Bernoulli math from Phase 275
-// LBX-AR-01 / D-275-HOIST-01 is byte-identical between manual + auto-resolve
+// {0, 1, 99, 100, 101, 199, 200}. The hoisted Bernoulli math
+// is byte-identical between manual + auto-resolve
 // branches, so the existing `LootboxBernoulliTester.bernoulliWhole(...)`
 // helper is the load-bearing surface for these boundary assertions. Direct
-// integration coverage of the auto-resolve callers lands in TST-LBX-AR-03
-// (silent cold-bust regression) and TST-LBX-AR-05 (rem-byte snapshot).
-//
-// PLACEMENT: edge/ per D-275-TST-PLACEMENT-01 (boundary tests live in edge/).
-//
-// CROSS-CITES:
-//   - D-275-HOIST-01 (Bernoulli math byte-identical between manual + auto-resolve)
-//   - D-275-TST-PLACEMENT-01 (edge placement for boundary tests)
-//   - TST-LBX-AR-02 per .planning/REQUIREMENTS.md
+// integration coverage of the auto-resolve callers lives in the silent cold-bust
+// regression and rem-byte snapshot tests.
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -40,7 +33,7 @@ function makeRng(seedHex) {
   };
 }
 
-describe("LootboxAutoResolveBoundaries — Phase 275 Wave 2 TST-LBX-AR-02", function () {
+describe("LootboxAutoResolveBoundaries", function () {
   this.timeout(180_000);
 
   describe("Deterministic boundaries", function () {

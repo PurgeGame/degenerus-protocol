@@ -43,7 +43,7 @@ contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
 }
 
 /// @dev Run with FOUNDRY_ISOLATE=true: every measured purchase starts with cold accounts/slots.
-///      State and event digests permit before/after comparison without retaining old contracts.
+///      State and event digests are logged per scenario.
 contract PurchaseHotPathGasTest is DeployProtocol {
     address internal constant BUYER = address(0xB071);
     address internal constant REFERRER = address(0xAFF1);
@@ -51,7 +51,6 @@ contract PurchaseHotPathGasTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        _baselineIfConfigured();
         vm.warp(block.timestamp + 20 days);
         vm.deal(BUYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
@@ -62,33 +61,6 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _syncCoinflipFixtureDay(day);
         vm.prank(address(game));
         quests.rollDailyQuest(day, 123, false, false, false);
-    }
-
-    /// @dev Optional pre-change runtime snapshot for gas/state parity runs. The JSON maps
-    ///      contract names to deployed bytecode; normal regression runs need no snapshot.
-    function _baselineIfConfigured() private {
-        string memory path = vm.envOr("PURCHASE_BASELINE_FILE", string(""));
-        if (bytes(path).length == 0) return;
-        string memory json = vm.readFile(path);
-        _restoreRuntime(json, "DegenerusGame", address(game));
-        _restoreRuntime(json, "DegenerusQuests", address(quests));
-        _restoreRuntime(json, "DegenerusAffiliate", address(affiliate));
-        _restoreRuntime(json, "DegenerusGameMintModule", address(mintModule));
-        _restoreRuntime(json, "DegenerusGameFoilPackModule", address(foilModule));
-        _restoreRuntime(json, "DegenerusGameWhaleModule", address(whaleModule));
-        _restoreRuntime(json, "DegenerusGameLootboxModule", address(lootboxModule));
-        _restoreRuntime(json, "DegenerusGameBoonModule", address(boonModule));
-        _restoreRuntime(json, "DegenerusGameTicketModule", address(ticketModule));
-        _restoreRuntime(json, "DegenerusGameDailyModule", address(jackpotModule));
-        _restoreRuntime(json, "DegenerusGameDailyModule", address(jackpotDrawModule));
-        _restoreRuntime(json, "GameAfkingModule", address(afkingModule));
-        uint256 active = uint256(vm.load(address(quests), bytes32(0)));
-        vm.store(address(quests), bytes32(uint256(2)), bytes32(uint256(uint16(active >> 128))));
-        vm.store(address(quests), bytes32(0), bytes32(uint256(uint128(active))));
-    }
-
-    function _restoreRuntime(string memory json, string memory name, address target) private {
-        vm.etch(target, vm.parseJsonBytes(json, string.concat(".", name)));
     }
 
     function _seed(uint24 lvl, bool frozen) internal {

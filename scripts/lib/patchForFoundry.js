@@ -13,13 +13,12 @@ import { patchContractAddresses } from "./patchContractAddresses.js";
 export const FOUNDRY_TEST_CONTRACT =
   "0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496";
 
-// 4 mocks deployed before protocol contracts:
-// MockVRFCoordinator, MockStETH, MockLinkToken, MockLinkEthFeed
-export const MOCK_COUNT = 4;
+// 2 mocks deployed before protocol contracts: MockVRFCoordinator, MockStETH.
+export const MOCK_COUNT = 2;
 
 // Foundry test contracts start with nonce 1 (EIP-161: contracts start at 1).
-// Mocks use nonces 1..4, protocol starts at nonce 5.
-export const PROTOCOL_START_NONCE = MOCK_COUNT + 1; // = 5
+// Mocks use nonces 1..2, protocol starts at nonce 3.
+export const PROTOCOL_START_NONCE = MOCK_COUNT + 1; // = 3
 
 // Fixed boundary timestamp for reproducibility (1 day = 86400 seconds): DEPLOY_DAY_BOUNDARY
 // is derived from it, so 86400 is day index 1. DeployProtocol.sol deploys at this timestamp
@@ -33,13 +32,11 @@ const DEPLOY_TIMESTAMP = 86400;
  * @returns {{ predicted, external, dayBoundary, deployTimestamp, FOUNDRY_TEST_CONTRACT, PROTOCOL_START_NONCE }}
  */
 export function patchForFoundry() {
-  // Compute mock addresses at nonces 1-5
+  // Compute mock addresses at nonces 1-2
   const mockAddrs = {};
   const mockNames = [
     "MockVRFCoordinator",
     "MockStETH",
-    "MockLinkToken",
-    "MockLinkEthFeed",
   ];
   for (let i = 0; i < MOCK_COUNT; i++) {
     const addr = ethers.getCreateAddress({

@@ -293,6 +293,8 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         uint256 awardTarget = windowDay < GameTimeLib.MAIN_LAUNCH_DAY ? 0 : (target > 500 ? 500 : target);
         added = added * entryPrice / _JACKPOT_PRICE;
         uint256 paidCount = uint32(g);
+        // Paid and awarded seats share one 32-bit entrant lane: awards never push it past full.
+        if (awardTarget > type(uint32).max - paidCount) awardTarget = type(uint32).max - paidCount;
         uint256 highMult = detached ? 1 : (g >> _BG_TERM_TIER_SHIFT & _BG_TERM_HIGH_TAIL != 0
             ? CrapsPriceLib.HIGH_TAIL : CrapsPriceLib.HIGH_BASE);
         uint256 paidUnits = paidCount + uint32(_loadHighField(key)) * (highMult - 1);

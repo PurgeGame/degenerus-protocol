@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 261 SURF-05 gas regression.
+// Gas regression for weightedColorBucket and _pickSoloQuadrant.
 //
-// Methodology per CONTEXT.md D-11 / `feedback_gas_worst_case.md`:
+// Methodology:
 //   1. Derive theoretical worst-case bound from opcode-by-opcode walk FIRST.
-//   2. HEAD-only measurement (no v33.0 binary resurrection — A/B harness deferred).
+//   2. HEAD-only measurement (no A/B comparison against an earlier binary).
 //   3. Assert measured gas against the literal pinned bound from step (1).
 //
 // ============================================================================
@@ -46,13 +46,13 @@
 // gas pure-body cost. The body-bound `PICK_SOLO_QUADRANT_HARD_BOUND = 1500`
 // gives ~200 gas headroom over the measured value to absorb minor codegen
 // variance from compiler-version drift; the underlying pure opcode cost
-// remains well below the original 500-gas spec target.
+// remains well below the 500-gas target.
 //
 // `weightedColorBucket(uint32) → uint8` (8-comparator if-chain under unchecked):
 //   worst case = falls through 7 comparators (rnd ≥ 254 → return 7)
 //   7 × LT + 1 RETURN                                      ≈ 100 gas
-//   plan asserts measured = HEAD reference value (literal pinned in this header)
-//   within ±100 gas — D-11 HEAD-only model.
+//   the test asserts measured = HEAD reference value (literal pinned in this header)
+//   within ±100 gas (HEAD-only model).
 //
 // ============================================================================
 // PINNED REFERENCE GAS VALUES (HEAD-only — captured 2026-05-08, asserted thereafter)
@@ -64,14 +64,14 @@
 // Re-pin only after an explicit code change explains the delta.
 
 const WEIGHTED_COLOR_BUCKET_GAS_REF       = 21636;
-const WEIGHTED_COLOR_BUCKET_TOLERANCE     = 100;  // ±100 gas per SURF-05
+const WEIGHTED_COLOR_BUCKET_TOLERANCE     = 100;  // ±100 gas
 
 // PICK_SOLO_QUADRANT_HARD_BOUND — measured-realistic ceiling on the
 // _pickSoloQuadrant body delta as exposed by the paired-empty-wrapper
 // methodology. Measured 4-gold worst-case delta: 1218 gas. Bound includes
 // ~200 gas headroom for compiler-codegen variance. The underlying pure-body
-// opcode cost (~310-350 gas) remains well under the original SURF-05 500-gas
-// spec target; the 1500-gas bound reflects the inherent ~900 gas of
+// opcode cost (~310-350 gas) remains well under the 500-gas
+// target; the 1500-gas bound reflects the inherent ~900 gas of
 // paired-call dispatch/decode/encode overhead that the methodology adds on
 // top of the pure body cost (see header derivation above).
 const PICK_SOLO_QUADRANT_HARD_BOUND       = 1500;
@@ -104,7 +104,7 @@ function traitsByColors(colors) {
   return [trait(0, colors[0], 0), trait(1, colors[1], 0), trait(2, colors[2], 0), trait(3, colors[3], 0)];
 }
 
-describe("Phase 261 SURF-05 — gas regression", function () {
+describe("gas regression", function () {
   this.timeout(600000);
   after(function () { restoreAddresses(); });
 
@@ -134,7 +134,7 @@ describe("Phase 261 SURF-05 — gas regression", function () {
       console.log(`  [REF-CHECK] _pickSoloQuadrant call-frame=${callFrameGas} noOp=${overheadGas} body-delta=${bodyGas}`);
       // Sanity: body delta must be positive (calldata-shape-matched paired call → delta is the helper body plus inherent wrapper-pair overhead).
       expect(bodyGas, `bodyGas ${bodyGas} is non-positive — paired-call shape mismatch`).to.be.greaterThan(0);
-      // SURF-05 bound (paired-empty-wrapper delta, including ~900 gas inherent
+      // Bound (paired-empty-wrapper delta, including ~900 gas inherent
       // dispatch/decode/encode overhead on top of the pure body cost):
       expect(bodyGas, `4-gold body delta ${bodyGas} exceeds PICK_SOLO_QUADRANT_HARD_BOUND ${PICK_SOLO_QUADRANT_HARD_BOUND}`).to.be.lessThanOrEqual(PICK_SOLO_QUADRANT_HARD_BOUND);
     });

@@ -14,11 +14,8 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev The round drain's queue-word cache: adjacent seats share one loaded queue word, so each
-///      queue word is loaded at most once per call. The uncached differential reference
-///      (contracts/mocks/QueueWordCacheReference.hex) was compiled against the pre-ring storage
-///      layout (unrecycled queue keys, level-keyed trait buffers, no queue rotation, unit
-///      budgets) and cannot run against current storage, so these tests check the cache against
-///      an uncached oracle computed here from raw queue lanes and the canonical queue rotation.
+///      queue word is loaded at most once per call. These tests check the cache against an
+///      uncached oracle computed here from raw queue lanes and the canonical queue rotation.
 contract QueueWordCacheHarness is DegenerusGameStorage, WalletSeed {
     uint24 private constant FAR_FUTURE_BIT = uint24(1) << 22;
 

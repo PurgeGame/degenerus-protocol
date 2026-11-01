@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 import {ProfileModules} from "../helpers/ProfileModules.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
@@ -9,7 +8,6 @@ import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
-import {QueuedJackpotReference} from "../helpers/QueuedJackpotReference.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
@@ -39,6 +37,8 @@ abstract contract DirectTicketFixture is BucketSeed {
         dailyJackpotCoinTicketsPending = true;
         dailyTicketBudgetsPacked = 1 | ((tickets * 4) << 8);
     }
+    /// @dev Prepares the target after a queued award, before its drain.
+    function prepareTarget() external { _setTicketBufferLevel(42); }
     function addDeities() external {
         // Real deity purchases always register a permanent ID in their initial grant.
         for (uint8 i; i < 32; ++i) {
@@ -90,7 +90,6 @@ abstract contract DirectTicketFixture is BucketSeed {
     }
 }
 contract DirectJackpotHarness is DegenerusGameJackpotModule, DirectTicketFixture {}
-contract QueuedJackpotHarness is QueuedJackpotReference, DirectTicketFixture {}
 
 contract DirectJackpotTicketsTest is Test {
     uint256 private constant FULL_WORK_ALLOWANCE = 16_000_000;
@@ -100,7 +99,9 @@ contract DirectJackpotTicketsTest is Test {
     bytes32 private constant BATCH = keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     DirectJackpotHarness private h;
-    QueuedJackpotHarness private queued;
+    /// @dev The same production module over an unprepared target: the queued route, drawn from
+    ///      the same cursor, is the reference for the direct route's winners.
+    DirectJackpotHarness private queued;
     mapping(address => uint256[4]) private expected;
     bytes32 private allEvents;
 
@@ -109,7 +110,7 @@ contract DirectJackpotTicketsTest is Test {
         ProfileModules.installGame(vm);
         ProfileModules.installCraps(vm);
         h = new DirectJackpotHarness();
-        queued = new QueuedJackpotHarness();
+        queued = new DirectJackpotHarness();
         // Worker placement follows the selected deployment profile.
     }
     function _wins(bytes32 digest, Vm.Log[] memory logs) private view returns (bytes32, uint256 entries) {
@@ -162,15 +163,24 @@ contract DirectJackpotTicketsTest is Test {
     }
     function _compare(uint256 word, uint256 tickets, uint256 holders, bool repeated, bool deity) private {
         h.seed(word, tickets, holders, repeated, true);
-        queued.seed(word, tickets, holders, repeated, true);
+        queued.seed(word, tickets, holders, repeated, false);
         if (deity) { h.addDeities(); queued.addDeities(); }
         (bytes32 sourceBefore,) = h.digest(41);
         vm.recordLogs();
-        queued.runDailyJackpotTickets(word, gasleft());
+        bool done;
+        for (uint256 calls; !done && calls < 100; ++calls) {
+            MineFlipGas.Result memory r = queued.runDailyJackpotTickets(word, FULL_WORK_ALLOWANCE);
+            assertTrue(r.progressed || r.done);
+            done = r.done;
+        }
+        assertTrue(done);
         Vm.Log[] memory referenceLogs = vm.getRecordedLogs();
         (bytes32 want, uint256 entries) = _wins(0, referenceLogs);
+        assertGt(queued.queueLength(), 0, "the reference took the queued route");
+        (, uint256 referenceMinted) = queued.digest(42);
+        assertEq(referenceMinted, 0, "the queued route writes no target bucket");
         vm.recordLogs();
-        bool done;
+        done = false;
         for (uint256 calls; !done && calls < 100; ++calls) {
             MineFlipGas.Result memory r = h.runDailyJackpotTickets(word, FULL_WORK_ALLOWANCE);
             assertTrue(r.progressed || r.done);
@@ -268,8 +278,8 @@ contract DirectJackpotTicketsTest is Test {
 
     function _benchmark(uint256 tickets, bool repeated, bool populated) private {
         h.seed(WORD, tickets, 512, repeated, true);
-        queued.seed(WORD, tickets, 512, repeated, true);
-        if (populated) { h.prefillTarget(); queued.prefillTarget(); }
+        queued.seed(WORD, tickets, 512, repeated, false);
+        if (populated) h.prefillTarget();
         uint256 before;
         uint256 awardGas;
         uint256 awardCalls;
@@ -283,6 +293,9 @@ contract DirectJackpotTicketsTest is Test {
             ++awardCalls;
         }
         assertTrue(awarded);
+        assertGt(queued.queueLength(), 0, "the reference took the queued route");
+        queued.prepareTarget();
+        if (populated) queued.prefillTarget();
         queued.commit(WORD + 123);
         uint256 drainGas;
         bool done;
@@ -359,7 +372,7 @@ contract DirectRoundRepricer {
 ///      colours (sixteen split appends each) and one with one rare group.
 ///      The theoretical round has two rare groups of distinct colours in every quadrant:
 ///      common + 8 x (rare group - common group), extrapolated from the two measurements.
-contract DirectRoundGasTest is NativeGasExport {
+contract DirectRoundGasTest is Test {
     uint256 private constant ROUND_WINNERS = 32;
     uint256 private constant CHECKPOINT_TARGET_GAS = 10_000_000;
     uint256 private constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
@@ -393,14 +406,6 @@ contract DirectRoundGasTest is NativeGasExport {
         h.materialize(TARGET, lanes, ROUND_WINNERS, seed);
         used = g0 - gasleft();
         assertTrue(vm.revertToStateAndDelete(snap));
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            string memory label = string.concat("direct-round-", vm.toString(seed));
-            vm.serializeUint(label, "osakaFrameGas", used);
-            vm.serializeUint(label, "rareGroups", seed == COMMON_SEED ? 0 : RARE_GROUPS);
-            vm.serializeUint(label, "maximumRareGroups", MAX_RARE_GROUPS);
-            vm.serializeUint(label, "declaredRoundBound", h.roundMax());
-            this.exportNativeFixture(label, address(this), address(h), abi.encodeCall(h.materialize, (TARGET, lanes, ROUND_WINNERS, seed)));
-        }
     }
 
     function _repricedRound(uint256 seed, uint256 measured) private returns (uint256 glam, uint256 exec) {

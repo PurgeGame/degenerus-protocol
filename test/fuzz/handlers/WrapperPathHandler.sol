@@ -57,7 +57,7 @@ contract WrapperPathHandler is Test {
 
     /// @notice Cumulative sDGNRS totalSupply burned by wrapper-path actions (burnWrapped /
     ///         post-gameOver burn / yearSweep all burn backing supply). The RedemptionHandler's
-    ///         INV-04 ghost ledger cannot see these — the supply-consistency invariant adds this
+    ///         ghost ledger cannot see these — the supply-consistency invariant adds this
     ///         term so both handlers' burns reconcile against the live totalSupply.
     uint256 public ghost_sdgnrsBurnedViaWrapper;
 

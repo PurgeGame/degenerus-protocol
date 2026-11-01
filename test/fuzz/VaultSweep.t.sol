@@ -20,21 +20,36 @@ contract StrayNft {
     }
 }
 
+/// @dev Minimal ERC20 standing in for a foreign token sent to the vault.
+contract StrayToken {
+    mapping(address => uint256) public balanceOf;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
 /// @title VaultSweep — foreign-asset rescue out of DegenerusVault.
-/// @notice The vault can receive assets it has no other handling for: LINK recovered from a
-///         retired VRF subscription, and any NFT an outside party sends it. Both would be
-///         stranded without a sweep. What must NOT be sweepable is anything backing holder
+/// @notice The vault can receive assets it has no other handling for: any ERC20 or NFT an
+///         outside party sends it. Both would be stranded without a sweep. What must NOT be sweepable is anything backing holder
 ///         accounting — for ERC20 that is stETH, and nothing else.
 contract VaultSweepTest is DeployProtocol {
     event TokenSwept(address indexed token, address indexed to, uint256 amount);
     event NftSwept(address indexed token, address indexed to, uint256 tokenId);
 
-    /// @dev DegenerusVaultShare mints INITIAL_SUPPLY of DGVE to CREATOR, so CREATOR clears the
-    ///      >50.1% test in the vault's private _isVaultOwner. vm.mockCall cannot help here: the
-    ///      modifier reads the private function, not the external getter.
+    /// @dev The vault owner is the pinned owner executor (ContractAddresses.OWNER_GOVERNANCE), which
+    ///      OwnerTargetCall impersonates. vm.mockCall cannot help here: the modifier compares
+    ///      msg.sender with the pinned address, not the external getter.
     address private vaultOwner;
     address private outsider;
     StrayNft private nft;
+    StrayToken private token;
 
     uint256 private constant PARKED = 500 ether;
 
@@ -46,8 +61,8 @@ contract VaultSweepTest is DeployProtocol {
         outsider = makeAddr("sweep_outsider");
         require(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "harness: governance is not the vault owner");
 
-        // LINK parked in the vault, as shutdownVrf / retrySubCancel would leave it.
-        mockLINK.mint(address(vault), PARKED);
+        token = new StrayToken();
+        token.mint(address(vault), PARKED);
 
         nft = new StrayNft();
         nft.mint(address(vault), 7);
@@ -60,13 +75,13 @@ contract VaultSweepTest is DeployProtocol {
     function test_sweepToken_rejectsNonVaultOwner() public {
         vm.prank(outsider);
         vm.expectRevert(bytes4(keccak256("NotVaultOwner()")));
-        vault.sweepToken(address(mockLINK), outsider, 0);
+        vault.sweepToken(address(token), outsider, 0);
     }
 
     function test_sweepToken_rejectsZeroRecipient() public {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("ZeroAddress()")));
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), address(0), 0)), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(token), address(0), 0)), 0);
     }
 
     /// @notice stETH sits here as a real balance backing DGVE and can never be swept.
@@ -105,27 +120,27 @@ contract VaultSweepTest is DeployProtocol {
 
     function test_sweepToken_zeroAmountSweepsFullBalance() public {
         vm.expectEmit(true, true, false, true, address(vault));
-        emit TokenSwept(address(mockLINK), vaultOwner, PARKED);
+        emit TokenSwept(address(token), vaultOwner, PARKED);
 
         vm.prank(vaultOwner);
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), vaultOwner, 0)), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(token), vaultOwner, 0)), 0);
 
-        assertEq(mockLINK.balanceOf(address(vault)), 0, "LINK left in the vault");
-        assertEq(mockLINK.balanceOf(vaultOwner), PARKED, "LINK did not reach the recipient");
+        assertEq(token.balanceOf(address(vault)), 0, "token left in the vault");
+        assertEq(token.balanceOf(vaultOwner), PARKED, "token did not reach the recipient");
     }
 
     function test_sweepToken_partialAmount() public {
         vm.prank(vaultOwner);
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), vaultOwner, 200 ether)), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(token), vaultOwner, 200 ether)), 0);
 
-        assertEq(mockLINK.balanceOf(address(vault)), PARKED - 200 ether, "wrong remainder");
-        assertEq(mockLINK.balanceOf(vaultOwner), 200 ether, "wrong amount sent");
+        assertEq(token.balanceOf(address(vault)), PARKED - 200 ether, "wrong remainder");
+        assertEq(token.balanceOf(vaultOwner), 200 ether, "wrong amount sent");
     }
 
     function test_sweepToken_revertsOverBalance() public {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), vaultOwner, PARKED + 1)), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(token), vaultOwner, PARKED + 1)), 0);
     }
 
     // ──────────────────────────────────────────────────────────────────────

@@ -10,7 +10,6 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {CenturyBafScores, CenturyNativeGasHost} from "./AdvanceCenturyConsolidationGas.t.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {RequestCostCoordinator} from "../helpers/RequestCostCoordinator.sol";
 
 /// @dev Last-purchase-day state one level below `lvl`; the real request pre-increments the level.
@@ -52,7 +51,7 @@ contract ConsolidationLevelSeeder is DegenerusGame {
 ///         battle through the production modules, then measures the consolidation call alone with
 ///         every engine account cold. The three yield surplus recipients hold the claimable
 ///         sentinel from deployment, so no surplus credit is a zero-to-nonzero write.
-abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
+abstract contract PoolConsolidationFixture is FreshWordLeg {
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
     uint24 internal constant DAY = 400;
@@ -210,7 +209,6 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         bool x0 = lvl % 10 == 0;
         bool win = uint256(keccak256(abi.encode(uint256(61), _word()))) & 1 == 1;
         assertEq(_emptyRecipientSlots(), 0, "protocol recipients keep their claimable sentinel");
-        uint256 nativeSnapshot = vm.snapshotState();
         _coolAll();
         vm.recordLogs();
         MineFlipGas.Result memory result = host.dailyWith{gas: 12_000_000}(9_000_000);
@@ -239,12 +237,6 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         assertEq(_countTopic(logs, keccak256("LevelQuestRolled(uint24,uint24,uint8,uint256)")), 1, "level quest rolls");
         assertEq(_dailyLegLogs(logs), 0, "consolidation pays no award");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(nativeSnapshot));
-            this.exportNativeFixture(string.concat("pool-consolidation-", _label()), address(this), address(host),
-                abi.encodeCall(host.dailyWith, (uint256(9_000_000))));
-        }
-        vm.deleteStateSnapshot(nativeSnapshot);
     }
 
     /// @dev The level-entry funding call included: a source-shaped live subscription below the
@@ -255,7 +247,6 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         // balances[1]: nonzero request count, 0.01 ETH native balance.
         vm.store(address(mockVRF), keccak256(abi.encode(uint256(1), uint256(2))),
             bytes32((uint256(100) << 192) | (uint256(0.01 ether) << 96)));
-        uint256 nativeSnapshot = vm.snapshotState();
         _coolAll();
         vm.cool(address(mockVRF));
         vm.recordLogs();
@@ -270,12 +261,6 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, NativeGasExport {
         assertEq(_countTopic(logs, keccak256("VrfFunded(uint24,uint256,uint256)")), 1, "funding outcome");
         assertEq(_countTopic(logs, keccak256("YieldSurplusDistributed(uint256)")), 1, "surplus distributes");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(nativeSnapshot));
-            this.exportNativeFixture(string.concat("pool-consolidation-", label), address(this), address(host),
-                abi.encodeCall(host.dailyWith, (uint256(9_000_000))));
-        }
-        vm.deleteStateSnapshot(nativeSnapshot);
     }
 
     function test_ConsolidationColdFunded() public { _fundingCase(); }

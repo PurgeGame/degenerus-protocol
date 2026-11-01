@@ -11,11 +11,11 @@ import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-/// @title V61CureBountyDecurse — TST-04 proof: the cashout-curse CURE (any buy >= 1 ticket worth clears the
+/// @title V61CureBountyDecurse — the cashout-curse CURE (any buy >= 1 ticket worth clears the
 ///        counter), the sub-ticket mint-day STAMP (DAY_SHIFT, NO cure), the manual-lootbox
 ///        mint-day behavior, and the permissionless paid `decurse`.
 ///
-/// @notice CURE (CURSE-04, MintModule._purchaseForWith:1326-1330): every buy whose `totalCost >= priceWei`
+/// @notice CURE (`GamePurchase._purchaseForWith`): every buy whose `totalCost >= priceWei`
 ///   (>=1 whole ticket worth, funding-agnostic) calls `_clearCurse(buyer)` BEFORE the post-action score read,
 ///   so the curing buy itself scores un-penalized. The cure host is the live `purchase()` ticket/lootbox path
 ///   (`_purchaseForWith`), reached by direct / batched (large qty) / affiliate-coded / lootbox>=ticket /
@@ -27,11 +27,11 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///   PRESERVES an existing curse. That truthful non-cure behavior is asserted by contrast (a curse survives a
 ///   whale-pass purchase) so the cure-vs-no-cure boundary is falsifiable in both directions.
 ///
-///   MINT-DAY STAMP (CURSE-05): the cumulative whole-ticket floor stamps DAY_SHIFT without curing a
+///   MINT-DAY STAMP: the cumulative whole-ticket floor stamps DAY_SHIFT without curing a
 ///   curse when each individual buy remains below the cure threshold. Read the saved field directly;
 ///   bountyEligible is an unconditional compatibility view and cannot prove a mint-day write.
 ///
-///   DECURSE (CURSE-06, GameAfkingModule.decurse:1696, dispatched DegenerusGame.sol:443): permissionless;
+///   DECURSE (`GameAfkingModule.decurse`, dispatched through `GameFacade.decurse`): permissionless;
 ///   reverts E() if the target's curse is already 0 (no wasted burn); burns exactly PRICE_COIN_UNIT/10
 ///   (100 FLIP) from msg.sender via burnCoin; clears the curse to 0; emits Decursed(msg.sender, target).
 ///   Proven: a clear + the exact 100-FLIP burn + the Decursed expectEmit, a revert-if-already-0, and a
@@ -58,7 +58,7 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
+    // Game-resident storage slots + mintPacked_ field shifts (BitPackingLib)
     // -------------------------------------------------------------------------
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // [afking:hi128 | claimable:lo128]
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ byte 16
@@ -483,9 +483,9 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     /// @dev Register `referrer` as an affiliate and return a usable affiliate code. A buy carrying this code
-    ///      takes the fresh/recycled affiliate split path in MintModule. (Falls back to a synthetic non-zero
+    ///      takes the fresh/recycled affiliate split path in GamePurchase. (Falls back to a synthetic non-zero
     ///      code if the affiliate registration entrypoint shape differs — the cure fires regardless of whether
-    ///      the code resolves to a real referrer, since CURSE-04 precedes the affiliate logic.)
+    ///      the code resolves to a real referrer, since the cure precedes the affiliate logic.)
     function _registerAffiliate(address referrer) internal returns (bytes32) {
         // A non-zero affiliate code drives the coded-buy branch; the referrer need only be funded so the buy
         // does not revert on an unrelated path. The cure is independent of the affiliate resolution.

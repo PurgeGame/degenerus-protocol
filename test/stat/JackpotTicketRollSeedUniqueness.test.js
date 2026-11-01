@@ -1,28 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// JackpotTicketRollSeedUniqueness.test.js — Phase 276 Wave 2 TST-JPT-BR-03 + TST-JPT-BR-04
+// JackpotTicketRollSeedUniqueness.test.js — jackpot ticket-roll bit-slice independence and 2-roll uniqueness
 //
 // Two independence properties of the jackpot ticket-roll Bernoulli slice
-// `bits[96..127]` consumed by `DegenerusGameJackpotModule._jackpotTicketRoll`
-// (Plan A, c473867e):
+// `bits[96..127]` consumed by `DegenerusGameJackpotModule._jackpotTicketRoll`:
 //
-//   TST-JPT-BR-03 — bit-slice independence chi-square:
+//   Bit-slice independence chi-square:
 //     The Bernoulli round-up reads `bits[96..127]` of the per-roll `entropy`
 //     word. The path/level selection in the SAME word reads `bits[0..12]`:
 //       - `entropy % 100`        — the 0..99 path roll (30%/65%/5% branch)
 //       - `(entropy / 100) % 4`  — the 65%-branch near level offset
 //       - `(entropy / 100) % 46` — the 5%-branch far level offset
 //     The two consumption windows are separated by 180+ bits of the same
-//     256-bit keccak-derived word. Per audit/FINDINGS-v39.0.md §4 (b),
-//     disjoint bit-slices of a keccak output word are pairwise independent —
+//     256-bit keccak-derived word. Disjoint bit-slices of a keccak output
+//     word are pairwise independent —
 //     the 180+ bit gap makes correlation structurally impossible. This test
 //     empirically confirms: pairwise chi-square between the `bits[96..127]`
 //     slice and EACH of the three `bits[0..12]` consumers, ≥10K seeds, chi²
 //     below the critical value at α=0.05.
 //
-//   TST-JPT-BR-04 — 2-roll uniqueness:
+//   2-roll uniqueness:
 //     The medium-amount branch of `_awardJackpotTickets` (0.5-5 ETH) splits
-//     the amount in half and calls `_jackpotTicketRoll` TWICE (L2157 + L2166).
+//     the amount in half and calls `_jackpotTicketRoll` TWICE.
 //     `_jackpotTicketRoll` evolves `entropy` via `EntropyLib.hash2(entropy,
 //     entropy)` on entry. So roll 1 consumes `bits[96..127]` of
 //     `rollEvolve(E)` and roll 2 consumes `bits[96..127]` of
@@ -41,23 +40,18 @@
 // chain (the on-chain JackpotBernoulliTester.bernoulliRaw32 of the JS-evolved
 // word must equal the JS-computed slice).
 //
-// Per CONTEXT.md `<deferred>` this uses the direct-call approach (the
-// JackpotBernoulliTester slice helpers + the JS keccak replica). The
-// full-stack 4-caller / 2-roll integration exercise stays deferred — revisit
-// only if the Phase 280 adversarial pass surfaces a concern.
+// This uses the direct-call approach (the JackpotBernoulliTester slice helpers
+// + the JS keccak replica); no full-stack 4-caller / 2-roll integration exercise.
 //
-// PLACEMENT: stat/ per the Phase 275 / D-275-TST-PLACEMENT-01 scheme (heavy-MC
-// tier; wired into the `test:stat` npm script). No test/jackpot/ directory.
+// PLACEMENT: stat/ (heavy-MC tier; wired into the `test:stat` npm script).
 //
-// CROSS-CITES:
-//   - D-276-INLINE-01 (Bernoulli inlined in _jackpotTicketRoll; bits[96..127] slice)
-//   - audit/FINDINGS-v39.0.md §4 (b) (disjoint keccak bit-slices are pairwise independent)
-//   - EntropyLib.hash2 (per-roll keccak self-mix evolution between the L2157/L2166 rolls)
-//   - test/stat/LootboxAutoResolveSeedUniqueness.test.js (Phase 275 chi-square precedent)
+// Related:
+//   - Bernoulli is inlined in _jackpotTicketRoll; bits[96..127] slice
+//   - EntropyLib.hash2 (per-roll keccak self-mix evolution between the two rolls)
+//   - test/stat/LootboxAutoResolveSeedUniqueness.test.js (chi-square precedent)
 //   - test/stat/TraitDistribution.test.js (chi² + Wilson-Hilferty infrastructure source)
-//   - feedback_rng_backward_trace.md (per-roll entropy unknown at VRF-commitment time)
-//   - feedback_rng_commitment_window.md (winner cannot mutate the per-roll entropy
-//     once _jackpotTicketRoll is entered)
+//   - per-roll entropy is unknown at VRF-commitment time, and the winner cannot mutate
+//     it once _jackpotTicketRoll is entered
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -72,7 +66,7 @@ async function deployTester() {
   return tester;
 }
 
-// Phase 261/264/266 chi² infrastructure reuse (verbatim re-declaration).
+// chi² infrastructure (verbatim re-declaration).
 // Source: test/stat/TraitDistribution.test.js / LootboxAutoResolveSeedUniqueness.test.js.
 function wilsonHilfertyZ(chi2, df) {
   const term = Math.cbrt(chi2 / df) - (1 - 2 / (9 * df));
@@ -161,10 +155,10 @@ function contingencyChi2(aSamples, bSamples, aCard, bCard) {
   return { chi2, df };
 }
 
-describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-03 bit-slice independence + TST-JPT-BR-04 2-roll uniqueness", function () {
+describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — bit-slice independence + 2-roll uniqueness", function () {
   this.timeout(600_000);
 
-  describe("TST-JPT-BR-03 — bits[96..127] Bernoulli slice is independent of the bits[0..12] path/level consumers (FINDINGS-v39.0.md §4 (b))", function () {
+  describe("bits[96..127] Bernoulli slice is independent of the bits[0..12] path/level consumers", function () {
     const N = 10_000;
 
     // The Bernoulli slice domain is %100 (0..99). The three bits[0..12]
@@ -225,7 +219,7 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
     });
   });
 
-  describe("TST-JPT-BR-04 — 2-roll uniqueness: the two _jackpotTicketRoll calls in the medium-amount branch consume bits[96..127] of DISTINCT hash2-evolved words", function () {
+  describe("2-roll uniqueness: the two _jackpotTicketRoll calls in the medium-amount branch consume bits[96..127] of DISTINCT hash2-evolved words", function () {
     const N = 10_000;
 
     it(`EntropyLib.hash2(entropy, entropy) JS replica is byte-identical to the chain (drift guard, spot-checked)`, async function () {
@@ -264,7 +258,7 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
       for (let i = 0; i < N; i++) {
         const base = rng();
         // _jackpotTicketRoll evolves `entropy = EntropyLib.hash2(entropy, entropy)`
-        // on entry. Roll 1 (L2157) sees rollEvolve(E); roll 2 (L2166) sees
+        // on entry. Roll 1 sees rollEvolve(E); roll 2 sees
         // rollEvolve of roll 1's RETURNED entropy, i.e. rollEvolve(rollEvolve(E)).
         const e1 = rollEvolve(base);
         const e2 = rollEvolve(e1);

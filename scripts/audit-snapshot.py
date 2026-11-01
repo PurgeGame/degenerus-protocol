@@ -12,7 +12,7 @@ from audit_scope import inventory
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT = ROOT / "docs/audit"
 BUILD_INPUTS = ("package.json", "package-lock.json", "foundry.toml", "foundry.lock",
-                "hardhat.config.js", "halmos.toml", ".gitmodules", "Makefile",
+                "hardhat.config.js", ".gitmodules", "Makefile",
                 "deployments/eip170.json", ".github/workflows/ci.yml")
 
 

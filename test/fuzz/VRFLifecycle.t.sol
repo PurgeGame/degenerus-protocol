@@ -8,7 +8,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title VRFLifecycle -- Proves VRF fulfillment works and game advances past level 0
-/// @notice Final validation that Phase 14 infrastructure is ready for invariant testing.
+/// @notice Final validation that the VRF test infrastructure is ready for invariant testing.
 contract VRFLifecycle is DeployProtocol {
     VRFHandler public vrfHandler;
 

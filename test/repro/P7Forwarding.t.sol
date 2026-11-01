@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
-import {NativeFailureExport} from "../helpers/NativeFailureExport.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoundedCall} from "../../contracts/libraries/BoundedCall.sol";
 
@@ -56,7 +55,7 @@ contract P7ForwardingHarness {
         return (succeeded, 0);
     }
 }
-contract P7ForwardingTest is NativeFailureExport {
+contract P7ForwardingTest is Test {
     P7ForwardingHarness harness;
     function setUp() public { harness = new P7ForwardingHarness(); vm.deal(address(harness), 1 ether); }
     function testScaledFloorTailAndOverBudgetCallee() public {
@@ -76,12 +75,6 @@ contract P7ForwardingTest is NativeFailureExport {
             assertFalse(ok); assertEq(address(harness.target()).balance, beforeBalance);
             (ok,) = harness.invoke(factor, 4, true);
             assertTrue(ok);
-        }
-    }
-    function testNativeRepricedFailuresAndSuccess() public {
-        for (uint32 factor = 1; factor <= 5; ++factor) for (uint256 mode; mode <= 4; ++mode) {
-            _nativeCheckedFixture(string.concat("p7-forward-", vm.toString(factor), "-", vm.toString(mode)),
-                address(this), address(harness), abi.encodeCall(harness.invoke, (factor, mode, false)));
         }
     }
 }

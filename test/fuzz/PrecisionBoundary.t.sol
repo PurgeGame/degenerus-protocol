@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import "forge-std/Test.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
-/// @title PrecisionBoundary -- Zero-rounding boundary tests (PREC-02)
+/// @title PrecisionBoundary -- Zero-rounding boundary tests
 /// @notice Arithmetic bounds for explicit model assumptions, plus production price-library checks.
 /// @dev Does NOT duplicate existing ShareMathInvariants or VaultShareMath tests.
 ///      Focuses specifically on: minimum viable amounts, ceil-floor round-trips, BPS floor bounds.

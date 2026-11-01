@@ -74,13 +74,13 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // D-11 — seat-required subscribe (InvalidToken on the new-run branch)
+    // Seat-required subscribe (InvalidToken on the new-run branch)
     // =========================================================================
 
-    /// @notice D-11 NEGATIVE: an EOA holding NO AFKing Subscription Token reverts InvalidToken() on a new-run subscribe
+    /// @notice NEGATIVE: an EOA holding NO AFKing Subscription Token reverts InvalidToken() on a new-run subscribe
     ///         (dailyQuantity >= 1) — a seat the payee holds is the sole afking credential, burned by the
-    ///         token's consumeSeat at subscribe. That burn precedes the D-12 grounding gate, so the
-    ///         EOA is funded to isolate the credential failure.
+    ///         token's consumeSeat at subscribe, before the run is written. The EOA is funded so the
+    ///         revert can only be the credential failure.
     function testD11SeatlessEoaRevertsInvalidToken() public {
         address p = makeAddr("d11_nocoin");
         _fundPool(p, 50 ether);       // funded, so the revert can ONLY be InvalidToken (not a funding revert)
@@ -88,23 +88,21 @@ contract V56SubHardening is DeployProtocol {
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
         game.subscribe(0, false, 1, seat);
-        assertEq(_subscriberIndexOf(p), 0, "D-11: the coinless sub was never created");
+        assertEq(_subscriberIndexOf(p), 0, "the coinless sub was never created");
     }
 
-    /// @notice D-11 POSITIVE: an EOA holding >= 1 AFKing Subscription Token (granted via `_grantSeat`, no pass anywhere
-    ///         — the pass/horizon machinery is deleted) clears D-11 and subscribes successfully (funded so
-    ///         D-12 is also satisfied). The successor of the old finite-pass-covers-the-level proof: the
-    ///         coin gate has no level dependence at all.
+    /// @notice POSITIVE: an EOA holding >= 1 AFKing Subscription Token (granted via `_grantSeat`, no pass anywhere)
+    ///         clears the seat gate and subscribes successfully. The coin gate has no level dependence at all.
     function testD11SeatedEoaSubscribes() public {
         address p = makeAddr("d11_seated");
         uint256 seat = _grantSeat(p);
         _fundPool(p, 50 ether);
         vm.prank(p);
         game.subscribe(0, false, 1, seat); // MUST NOT revert
-        assertGt(_subscriberIndexOf(p), 0, "D-11: seated sub created");
+        assertGt(_subscriberIndexOf(p), 0, "seated sub created");
     }
 
-    /// @notice D-11 (deity confers nothing for afking gating): a deity holder WITHOUT an AFKing Subscription Token still
+    /// @notice Deity confers nothing for afking gating: a deity holder WITHOUT an AFKing Subscription Token still
     ///         reverts InvalidToken(). Deity ownership has no bearing on the afking credential.
     function testD11DeityHolderWithoutSeatRevertsInvalidToken() public {
         address p = makeAddr("d11_deity_nocoin");
@@ -114,7 +112,7 @@ contract V56SubHardening is DeployProtocol {
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
         game.subscribe(0, false, 1, seat);
-        assertEq(_subscriberIndexOf(p), 0, "D-11: a deity holder without a coin is still rejected (InvalidToken)");
+        assertEq(_subscriberIndexOf(p), 0, "a deity holder without a coin is still rejected (InvalidToken)");
     }
 
     // =========================================================================
@@ -188,7 +186,7 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // D-13 — VAULT / sDGNRS bootstrap exemption (no coin + unfunded still subscribes)
+    // VAULT / sDGNRS bootstrap exemption (no coin + unfunded still subscribes)
     // =========================================================================
 
     /// @notice The protocol seats subscribed in their own constructors, seatless and unfunded, at box
@@ -224,11 +222,9 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // Crossing eviction SUPERSEDED — a seated sub survives level changes / STAGE
-    // processing without eviction. The pass/horizon crossing gate (the per-iter
-    // `currentLevel > sub.validThroughLevel` re-read that used to refresh-or-evict)
-    // is DELETED along with `Sub.validThroughLevel` / `_passHorizonOf`. Membership
-    // is no longer level-dependent at all: it ends only via cancel, funding-skip
+    // No crossing eviction: a seated sub survives level changes / STAGE
+    // processing without eviction. There is no pass/horizon crossing gate. Membership
+    // is not level-dependent at all: it ends only via cancel, funding-skip
     // kill (SubscriptionExpired reason 1); the coin's seat lock blocks an active sub's last-coin transfer.
     // =========================================================================
 
@@ -301,19 +297,17 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // LEVEL-0 PASS GATE — SUPERSEDED. The old `(validThroughLevel == 0 ||
-    // validThroughLevel < level)` boundary was specific to the deleted pass/horizon
-    // gate; the AFKing Subscription Token credential (D-11, above) has no level dependence
-    // whatsoever, so there is no level-0 boundary left to exercise. The D-11 /
-    // D-13 sections above already cover coinless/seated/deity-without-coin/
+    // No level-0 pass gate: the AFKing Subscription Token credential has no level dependence
+    // whatsoever, so there is no level-0 boundary to exercise. The seat-required and
+    // bootstrap-exemption sections above already cover coinless/seated/deity-without-coin/
     // VAULT-SDGNRS-exempt subscribe, and none of those outcomes vary with level.
     // =========================================================================
 
     // =========================================================================
-    // F-356-01 — the drainAffiliateBases Game dispatch stub is reachable + AFFILIATE-only
+    // The drainAffiliateBases Game dispatch stub is reachable + AFFILIATE-only
     // =========================================================================
 
-    /// @notice F-356-01 reachability: the GameFacade.drainAffiliateBases dispatch stub is reachable
+    /// @notice Reachability: the GameFacade.drainAffiliateBases dispatch stub is reachable
     ///         from the affiliate path. Pranked as ContractAddresses.AFFILIATE (the caller the
     ///         DegenerusAffiliate.claim() loop routes through), the stub delegatecalls the module past
     ///         its AFFILIATE-only gate, settles the sub and returns the elapsed affiliate base
@@ -341,7 +335,7 @@ contract V56SubHardening is DeployProtocol {
         assertEq(_flipClaimed(p), 0, "and pays nothing");
     }
 
-    /// @notice F-356-01 AFFILIATE-only: a NON-affiliate caller routed through the SAME Game dispatch stub
+    /// @notice AFFILIATE-only: a NON-affiliate caller routed through the SAME Game dispatch stub
     ///         reverts NotApproved(), leaving the checkpoint (and so the owed base) intact.
     function testDrainAffiliateBaseStubAffiliateOnly() public {
         address p = makeAddr("drain_gate");
@@ -530,7 +524,7 @@ contract V56SubHardening is DeployProtocol {
 
     /// @dev Warp to a fresh day boundary + `offsetSeconds` (the daily reset is 82620s past midnight).
     ///      Lands deterministically in the first seconds of a NEW day so advanceDue() is true and the
-    ///      removed participation windows cannot be hidden by a late-day timestamp. Mirrors the v56 gas-marginal
+    ///      removed participation windows cannot be hidden by a late-day timestamp. Mirrors the gas-marginal
     ///      `_warpToBoundary` day-roll, threaded through the accumulating-timestamp workaround.
     function _warpToDayBoundary(uint256 offsetSeconds) internal {
         uint256 dayLen = 1 days;

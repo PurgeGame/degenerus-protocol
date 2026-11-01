@@ -6,32 +6,27 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-/// @title MutationKills — regression tests that CLOSE the GENUINE oracle gaps the v63 mutation
-///        campaign surfaced (subject a8b702a7). Each test is a deterministic branch-proof: it
-///        PASSES on the clean subject and FAILS when the named survivor's mutation is re-applied
-///        in place. The fail-with-mutation / pass-without evidence is recorded per test in the
-///        header comment AND in audit/mutation/MUTATION-FINDINGS-v63.md.
+/// @title MutationKills — deterministic branch-proofs for paths the broader suites do not assert:
+///        the post-gameOver deterministic / pool-drain / settle paths, the BitPackingLib.setPacked
+///        round-trip. Each test PASSES on the subject and
+///        FAILS when the mutation named in its notice is applied in place.
 ///
-/// @dev Provenance — every survivor below was logged `--> UNCAUGHT` by slither-mutate under the
-///      COMPREHENSIVE oracle (the union of the 12 388-02 green-baseline suites). The shared cause
-///      is that the comprehensive oracle drives the LIVE-game redemption path exhaustively but
-///      never drives the POST-gameOver deterministic / pool-drain / settle paths, the
-///      BitPackingLib.setPacked round-trip, or the distress-mode level!=0 branch. None of these
-///      survivors is a contract defect — each subject line is correct; the regression net simply
-///      lacked an assertion (see SURVIVOR-TRIAGE-v63.md / MUTATION-FINDINGS-v63.md).
+/// @dev The broader suites drive the LIVE-game redemption path exhaustively but never drive the
+///      POST-gameOver deterministic / pool-drain / settle paths, the BitPackingLib.setPacked
+///      round-trip. Each subject line is correct; these
+///      tests supply the missing assertions. The distress-mode level != 0 branch is left to the JS
+///      suites (see the NOTE at the end).
 ///
-///      These tests are TEST-ONLY (no contract source is persistently edited). Validation runs
-///      transiently re-applied each survivor's mutation, confirmed the test went red, then
-///      `git checkout -- contracts/` restored the byte-frozen subject.
+///      These tests are TEST-ONLY (no contract source is edited).
 ///
 /// @dev Run: forge test --match-path test/mutation/MutationKills.t.sol
 contract MutationKills is DeployProtocol {
     // ---------------------------------------------------------------------
-    //                      BitPackingLib.setPacked (G-BPL-01)
+    //                      BitPackingLib.setPacked
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS BitPackingLib.sol:110 [CR] — the setPacked masked-RMW return body commented
-    ///         out (returns 0). Also kills the C1 MASK_* value-change survivors (lines 33/36/39/42/45)
+    /// @notice KILLS `BitPackingLib.setPacked` [CR] — the setPacked masked-RMW return body commented
+    ///         out (returns 0). Also kills the C1 MASK_* value-change survivors
     ///         because it feeds an OVER-WIDE value and asserts the field is bounded to its mask width
     ///         and that sibling fields are preserved.
     /// @dev Pure-library round-trip. Pre-loads a word with two adjacent fields, writes a third via
@@ -112,7 +107,7 @@ contract MutationKills is DeployProtocol {
         );
     }
 
-    /// @notice KILLS sDGNRS.sol:624/625/659/666-707 [RR] — the gameOver deterministic
+    /// @notice KILLS `sDGNRS.burn` deterministic leg [RR] — the gameOver deterministic
     ///         burn leg (burn() → _deterministicBurn → _deterministicBurnFrom). The comprehensive
     ///         oracle only drives the LIVE gambling-burn path, so the whole post-gameOver payout
     ///         (supply burn, balance debit, ETH payout, Burn event) survived.
@@ -147,7 +142,7 @@ contract MutationKills is DeployProtocol {
         assertEq(stethOut, 0, "fixture seeds full ETH coverage; no stETH leg expected");
     }
 
-    /// @notice KILLS sDGNRS.sol:685/686/690-693/707 [RR] — the stETH-fallback split
+    /// @notice KILLS `sDGNRS._deterministicBurnFrom` [RR] — the stETH-fallback split
     ///         inside _deterministicBurnFrom (ethBal/stethBal reads + the ethOut=ethBal /
     ///         stethOut=totalValueOwed-ethOut split). Drives a partially-ETH-depleted contract so the
     ///         payout must split across ETH and the stETH fallback leg.
@@ -185,7 +180,7 @@ contract MutationKills is DeployProtocol {
     //                  sDGNRS — burnAtGameOver
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS sDGNRS.sol:602/603/605/606 [RR] — burnAtGameOver zeroes the
+    /// @notice KILLS `sDGNRS.burnAtGameOver` [RR] — burnAtGameOver zeroes the
     ///         contract's own balance, decrements supply by it, deletes poolBalances, emits Transfer.
     ///         The comprehensive oracle never calls burnAtGameOver.
     /// @dev Branch-proof: assert the contract holds undistributed tokens (the targeted branch's
@@ -213,7 +208,7 @@ contract MutationKills is DeployProtocol {
     //                  sDGNRS — transferFromPool_g106128
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS sDGNRS.sol:549/553/555/558/559/567/569/570 [RR] — the regular
+    /// @notice KILLS `sDGNRS.transferFromPool_g106128` [RR] — the regular
     ///         (to != this) transferFromPool_g106128 leg: pool debit, contract-balance debit, recipient
     ///         credit, return value. setUp already exercises this (it funds the burner), but no
     ///         assertion pinned the post-conditions; this test pins them.
@@ -234,7 +229,7 @@ contract MutationKills is DeployProtocol {
         assertEq(sdgnrs.balanceOf(address(sdgnrs)), contractBefore - req, "contract balance not debited");
     }
 
-    /// @notice KILLS sDGNRS.sol:563/564 [RR] — the SELF-WIN branch of transferFromPool_g106128
+    /// @notice KILLS `sDGNRS.transferFromPool_g106128` [RR] — the SELF-WIN branch of transferFromPool_g106128
     ///         (to == address(this)): burns instead of a no-op transfer, decrementing supply and
     ///         emitting Transfer to address(0). The oracle never drives the self-win branch.
     /// @dev Branch-proof: target to == address(this) and assert supply DROPPED (the burn happened),
@@ -260,7 +255,7 @@ contract MutationKills is DeployProtocol {
     //                  sDGNRS — wrapperTransferTo
     // ---------------------------------------------------------------------
 
-    /// @notice KILLS sDGNRS.sol:456/457/459 [RR] — wrapperTransferTo moves sDGNRS from
+    /// @notice KILLS `sDGNRS.wrapperTransferTo` [RR] — wrapperTransferTo moves sDGNRS from
     ///         the DGNRS wrapper to a recipient (DGNRS-only). The oracle never exercises this path.
     /// @dev Seed the DGNRS wrapper with sDGNRS (via the Reward pool), then transfer as DGNRS and
     ///      assert the wrapper debit + recipient credit (supply unchanged — pure transfer).
@@ -286,14 +281,14 @@ contract MutationKills is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // NOTE on DegenerusGameStorage.sol:583 (_isDistressMode live branch):
-    //   The line-583 RR survivor is classified FALSE in SURVIVOR-TRIAGE-v63.md, not killed here.
+    // NOTE on `DegenerusGameStorage._isDistressMode` (live branch):
+    //   The live-branch mutation is not killed here.
     //   It is behaviorally covered OUTSIDE the comprehensive forge-oracle union (by the JS distress
     //   suites: test/unit/DistressLootbox.test.js, LootboxAutoResolveSilentColdBust.test.js, etc.),
     //   so it is a gap in the narrow forge-oracle subset, NOT a hole in the protocol's overall
-    //   regression coverage. Driving the line-583 (level != 0) branch deterministically here would
+    //   regression coverage. Driving the live (level != 0) branch deterministically here would
     //   require advancing the game past level 0 through the full purchase/advance flow — out of
     //   proportion to closing a gap that is already covered elsewhere. Per the audit posture (do not
-    //   over-invest; reachable-but-already-covered survivors are FALSE), it is recorded FALSE.
+    //   over-invest), it is left to the JS suites.
     // ---------------------------------------------------------------------
 }

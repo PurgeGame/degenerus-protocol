@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {AutomaticRedemptionSettlementTest} from "../fuzz/AutomaticRedemptionSettlement.t.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -9,7 +8,7 @@ import {GameFunding} from "../helpers/GameFunding.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
-contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasExport {
+contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
     function _coolSettlementState() internal {
         vm.cool(address(game));
         vm.cool(address(sdgnrs));
@@ -116,7 +115,6 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         uint256 rolled = _claimBase(alice, day) * roll / 100;
         boxes = _boxes(rolled - rolled / 2);
         uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
-        uint256 snapshot = vm.snapshotState();
         _coolSettlementState();
         vm.recordLogs();
         vm.prank(address(game));
@@ -125,13 +123,6 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, NativeGasE
         used = beforeGas - gasleft() + 21_000;
         _assertPaid(day, rolled, beneficiaryBefore, withEscrow);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            string memory label = string.concat("redemption-", vm.toString(boxes), "-", vm.toString(withEscrow), "-", vm.toString(used));
-            this.exportNativeFixture(label, address(game), address(sdgnrs), abi.encodeCall(sdgnrs.runRedemptionWork, (settlementWord, uint256(9_000_000))));
-            vm.prank(address(game)); sdgnrs.runRedemptionWork(settlementWord, 9_000_000);
-        }
-        vm.deleteStateSnapshot(snapshot);
     }
 
     /// @dev Per-order calibration: the cold maximum over words and the won-escrow

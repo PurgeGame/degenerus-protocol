@@ -43,9 +43,9 @@ contract C1Viewer is DegenerusGame {
     }
 }
 
-/// @title C1BoxAutoOpen — REGRESSION TEST for finding V62-01 (lootbox auto-open off-by-one).
+/// @title C1BoxAutoOpen — REGRESSION TEST for the lootbox auto-open off-by-one.
 ///
-/// @notice THE DEFECT CLASS (V62-01): a human lootbox entry is appended to boxQueue[N] while N is the
+/// @notice THE DEFECT CLASS: a human lootbox entry is appended to boxQueue[N] while N is the
 ///         write buffer. The mid-day request (mineFlip's RequestMidday stage) or the daily request seals
 ///         N — the write side flips to N ^ 1 — BEFORE the word lands, and the word is published for the
 ///         read buffer N. The human-box stage and the boxesPending hint must read buffer N, not the
@@ -187,7 +187,7 @@ contract C1BoxAutoOpen is DeployProtocol {
     }
 
     // =========================================================================
-    // V62-01 regression — MID-DAY (rawFulfillRandomWords) word-landing path.
+    // Regression — MID-DAY (rawFulfillRandomWords) word-landing path.
     // mineFlip's human-box stage MUST open the just-finalized box at read buffer N.
     // =========================================================================
 
@@ -240,7 +240,7 @@ contract C1BoxAutoOpen is DeployProtocol {
     }
 
     // =========================================================================
-    // V62-01 regression — DAILY-FINALIZE (_finalizeLootboxRng) word-landing path.
+    // Regression — DAILY-FINALIZE (_finalizeLootboxRng) word-landing path.
     // Proves the fix covers the general LR_INDEX-cursor read, not only the mid-day branch.
     // =========================================================================
 
@@ -265,7 +265,7 @@ contract C1BoxAutoOpen is DeployProtocol {
 
         // The daily word finalizes buffer N, and the permissionless keeper's human-box stage
         // opens the box at N (the read buffer) before any later request can retire it. The
-        // V62-01 off-by-one (opening the write side) would leave it closed. An open stores the read
+        // The off-by-one (opening the write side) would leave it closed. An open stores the read
         // cursor past the entry and leaves the entry word itself unchanged.
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("c1_daily_word")) | 2);

@@ -281,7 +281,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
 
     /// @notice An auto-rebuy player's deposit draws the TAKE-PROFIT BANK (claimableStored) and
     ///         bonuses that draw. The rolling carry is a separate bucket the deposit never
-    ///         touches — it earns its own bonus where it rolls, inside the settle walk.
+    ///         touches — its bonus joins the stake when it rides a later resolved day.
     function test_AutoRebuyDepositDrawsTheBankAndLeavesTheCarryAlone() public {
         uint256 stake = 100_000;
         uint256 takeProfit = 100_000;
@@ -298,7 +298,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         uint256 payout = stake + (stake * uint256(r)) / 100;
         uint256 reserved = (payout / takeProfit) * takeProfit;
         uint256 rolled = payout - reserved;
-        uint256 expectedCarry = rolled + _recyclingBonus(rolled);
+        uint256 expectedCarry = rolled;
 
         // Settle-only probe: banks the take-profit chunk and rolls the remainder as carry.
         vm.prank(player);
@@ -334,8 +334,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
     /// @dev Driven through the real freeze rather than a mocked flag: the carry gates read
     ///      Coinflip's own settlement marker (`flipsClaimableDay < currentDayIndex()`), not the
     ///      game's `rngLocked()`, so warping past the resolved day is what shuts them. The error
-    ///      they raise is still `RngLocked`. Level is 0 here, so
-    ///      `_coinflipLockedDuringTransition`'s x10 gate is false either way.
+    ///      they raise is `RngLocked`.
     function test_DepositUnderRngLockCannotReachTheCarry() public {
         uint256 stake = 100_000;
         uint256 takeProfit = 100_000;

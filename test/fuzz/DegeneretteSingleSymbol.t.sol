@@ -397,7 +397,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     }
 
     /// @notice A natural WWXRP jackpot pays its token prize through the ordinary payout path.
-    /// @dev Pinned from an off-chain Keccak search (.planning/wild-color/find_box_jackpot.py):
+    /// @dev Pinned from an off-chain Keccak search:
     ///      seed 1292767, hero 15 gives a natural S9 with two house wilds, before the rig.
     function testNaturalWwxrpJackpotPaysTokens() public {
         uint256 seed = 1_292_767;

@@ -31,7 +31,7 @@ contract LivenessRequestWorker is DegenerusGame {
 ///         either a return path discards `finished`, or the caller only invokes the worker
 ///         while it can still FIND work — leaving "flag set, no work, every entry point
 ///         reverts" reachable. The handler drives random sequences (ticket/lootbox/foil/whale
-///         buys, mid-day lootbox requests through mineFlip as a player or as a credited LINK
+///         buys, mid-day lootbox requests through mineFlip as a player or as a credited VRF
 ///         donor, VRF fulfilment with delays and stalls, mineFlip cranks, intra-day and cross-day
 ///         warps including the pre-reset minute, prize-pool seeding to force turbo and normal
 ///         last-purchase-day seals) and after EVERY action runs an isolated liveness check.
@@ -47,7 +47,7 @@ contract LivenessRequestWorker is DegenerusGame {
 ///              RequestMidday stage dispatches), called alone for a fresh account, must not
 ///              revert RngNotReady or any other liveness gate (only the legitimate
 ///              economic/timing refusals).
-///           4. PROBE: a credited LINK donor buys a minimum box (pending work below the
+///           4. PROBE: a credited VRF donor buys a minimum box (pending work below the
 ///              threshold, which the donor's credit pays) and mines when the engine selects
 ///              the request for it, so it issues whenever the timing gates allow. On success,
 ///              fulfil and crank to quiescence again and re-run step 2 — every mid-day cycle
@@ -255,7 +255,7 @@ contract AdvanceLivenessHandler is Test {
     }
 
     /// Mid-day lootbox request through mineFlip from a random player (after optionally topping
-    /// up the pending lootbox value) or from a funded LINK donor, whose credit pays the threshold
+    /// up the pending lootbox value) or from a credited VRF donor, whose credit pays the threshold
     /// gate for pending work below it (mode 2 buys a box under the threshold first).
     function actMiddayRequest(uint256 actorSeed, uint256 mode) external action("middayRequest") {
         mode = mode % 3;
@@ -265,7 +265,7 @@ contract AdvanceLivenessHandler is Test {
         _request(mode == 2 ? _donor() : a);
     }
 
-    /// A funded LINK donor whose credit pays the threshold gate on the donor's own mineFlip.
+    /// A credited VRF donor whose credit pays the threshold gate on the donor's own mineFlip.
     function _donor() internal returns (address donor) {
         donor = address(uint160(0xD0D0D0));
         vm.prank(ContractAddresses.ADMIN);

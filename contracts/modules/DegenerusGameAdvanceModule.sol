@@ -91,6 +91,12 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     uint8 private constant STAGE_TERMINAL_LOANS = 20;
     uint8 private constant STAGE_DEGENESIS_DAY = 21;
     uint8 private constant STAGE_VAULT_FLIPS_SETTLED = 22;
+    // Next-to-future skim curve by purchase age (_nextToFutureBps). After genesis: 45% at ages 0-1,
+    // 35% at age 2, 30% at age 3, sliding to 15% at age 8, then rising to 45% at the purchase
+    // timeout; each step except the 15% trough adds the level's decade bonus. Genesis runs its own
+    // curve from the 30% FAST base.
+    uint16 private constant NEXT_TO_FUTURE_BPS_DAY1 = 4500;
+    uint16 private constant NEXT_TO_FUTURE_BPS_DAY2 = 3500;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
     uint16 private constant NEXT_TO_FUTURE_BPS_DEADLINE = 4500;
@@ -900,12 +906,22 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         }
     }
 
+    /// @dev Base next-to-future skim for consolidation, in BPS, before the ratio adjustment,
+    ///      overshoot surcharge, additive random, variance and 80% cap. `purchaseAge` is the
+    ///      purchase phase's age in days at consolidation; a first-day fill settles at age 1.
+    ///      Levels after genesis bank more the faster they fill: 45% at ages 0-1, 35% at age 2,
+    ///      30% at age 3. The skim then slides from the age-3 value to 15% at age 8 and rises to
+    ///      45% at the purchase timeout, capped at 100%. Every step but the 15% trough adds the
+    ///      decade bonus, +1% per tens digit of the level within its century (+9% at x90-x99).
+    ///      Genesis (purchaseLevel 1) uses its own offset curve from the 30% base.
     function _nextToFutureBps(uint32 purchaseAge, uint24 purchaseLevel) internal pure returns (uint16) {
         uint256 bps;
         if (purchaseLevel != 1) {
             uint256 lvlBonus = (uint256(purchaseLevel % 100) / 10) * 100;
+            if (purchaseAge <= 1) return uint16(NEXT_TO_FUTURE_BPS_DAY1 + lvlBonus);
+            if (purchaseAge == 2) return uint16(NEXT_TO_FUTURE_BPS_DAY2 + lvlBonus);
             uint256 fast = NEXT_TO_FUTURE_BPS_FAST + lvlBonus;
-            if (purchaseAge <= 3) return uint16(fast);
+            if (purchaseAge == 3) return uint16(fast);
             if (purchaseAge <= 8) {
                 return uint16(fast - ((fast - NEXT_TO_FUTURE_BPS_MIN) * (purchaseAge - 3)) / 5);
             }

@@ -88,8 +88,6 @@ abstract contract StorageCensus is DeployProtocol {
         _censusRegister(address(icons32), "Icons32");
         _censusRegister(address(mockStETH), "MockStETH");
         _censusRegister(address(mockVRF), "MockVRF");
-        _censusRegister(address(mockLINK), "MockLINK");
-        _censusRegister(address(mockFeed), "MockFeed");
         _censusRegister(address(mintModule), "mod:Mint");
         _censusRegister(address(ticketModule), "mod:Ticket");
         _censusRegister(address(minerModule), "mod:Miner");

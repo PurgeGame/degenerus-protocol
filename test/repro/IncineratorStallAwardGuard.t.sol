@@ -14,7 +14,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @notice The x00 incinerator pays 10% of the FLIP that the armed BAF day's direct depositors
 ///         burned and LOST. The armed day and the BAF skip decision are only coupled when the
 ///         same word resolves both. A VRF stall used to split them: a retry that re-stamped the
-///         request onto the wall day let rngGate backfill the armed day with a DERIVED word while
+///         request onto the wall day let the daily RNG step backfill the armed day with a DERIVED word while
 ///         the transition kept the fresh one. A request now keeps the day it was first sent for
 ///         (the retry and a coordinator swap re-send it without re-stamping), so the stalled
 ///         request's word resolves the armed day itself. Pinned with the word that used to split

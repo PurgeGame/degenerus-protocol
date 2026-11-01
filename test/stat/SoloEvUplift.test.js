@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Phase 261 STAT-06 — per-surface 100K-sample EV-uplift Monte Carlo.
-// D-04: per-surface assertion model (final-day / daily / purchase, three independent sims).
-// D-05: base bucket counts [24, 16, 8, 1]; ethPool below JACKPOT_SCALE_MIN_WEI so
-//       bucketCountsForPool returns the base counts unchanged. No pool-scaling confound.
-// D-06: ±5% relative tolerance (5σ safety at 100K samples).
-// D-07: owns-the-gold-quadrant-ticket model — for each draw conditioned on >=1 gold,
+// SoloEvUplift.test.js — per-surface 100K-sample EV-uplift Monte Carlo.
+// Per-surface assertion model (final-day / daily / purchase, three independent sims).
+// Base bucket counts [24, 16, 8, 1]; ethPool below JACKPOT_SCALE_MIN_WEI so
+// bucketCountsForPool returns the base counts unchanged. No pool-scaling confound.
+// ±5% relative tolerance (5σ safety at 100K samples).
+// Owns-the-gold-quadrant-ticket model — for each draw conditioned on >=1 gold,
 //       compute (with-priority EV) = 1/goldCount × solo-payout-per-ticket
 //                                   + (goldCount-1)/goldCount × E[non-solo-payout-per-ticket],
 //       (baseline EV) = 1/4 × solo-payout-per-ticket + 3/4 × E[non-solo-payout-per-ticket].
@@ -17,7 +17,7 @@
 //
 //   For each draw:
 //     - Sample colors[4] via heavy-tail jsWeightedColorBucket and condition on
-//       >=1 gold (color==7) per D-07.
+//       >=1 gold (color==7).
 //     - Pick the holder's quadrant g = goldQuads[0] (the model is symmetric
 //       across gold quadrants — any deterministic choice yields the same
 //       expectation under the uniform-over-goldQuads tie-break).
@@ -36,11 +36,10 @@
 //   conditioned-on->=1-gold draws. Per-draw payouts are in BPS units; the
 //   /10000 fraction cancels in the ratio.
 //
-//   Surface BPS sources (hand-copied; T-261-02-01 mitigation: Phase 262 §3a
-//   delta-surface table re-verifies these literals against contract source):
-//     final-day → FINAL_DAY_SHARES_PACKED at DegenerusGameJackpotModule.sol L150-154
+//   Surface BPS sources (hand-copied; verify these literals against contract source):
+//     final-day → `DegenerusGameJackpotModule.FINAL_DAY_SHARES_PACKED`
 //                 = [6000, 1333, 1333, 1334]
-//     daily / purchase → DAILY_JACKPOT_SHARES_PACKED at L158-159
+//     daily / purchase → `DegenerusGameJackpotModule.DAILY_JACKPOT_SHARES_PACKED`
 //                 = [2000, 2000, 2000, 2000]
 //
 //   Drift detection: if any literal drifts from the contract source, the
@@ -74,7 +73,7 @@ function makeRng(seed) {
 }
 
 // JS replica of DegenerusTraitUtils.weightedColorBucket(uint32 rnd).
-// Drift-guarded by Plan 01 D-03 boundary harness.
+// Drift-guarded by the boundary harness.
 function jsWeightedColorBucket(rnd) {
   const scaled = (rnd * 256n) >> 32n;
   if (scaled < 64n) return 0;
@@ -91,8 +90,8 @@ function jsWeightedColorBucket(rnd) {
 const COLOR_PROB = [0.25000, 0.25000, 0.25000, 0.12500, 0.06250, 0.03125, 0.02344, 0.00781];
 
 // Surface BPS share vectors at base bucket counts [24, 16, 8, 1].
-// final-day source: FINAL_DAY_SHARES_PACKED (DegenerusGameJackpotModule.sol L150-154).
-// daily / purchase source: DAILY_JACKPOT_SHARES_PACKED (DegenerusGameJackpotModule.sol L158-159).
+// final-day source: FINAL_DAY_SHARES_PACKED (DegenerusGameJackpotModule).
+// daily / purchase source: DAILY_JACKPOT_SHARES_PACKED (DegenerusGameJackpotModule).
 const SURFACES = {
   finalDay: { name: "final-day", shareBps: [6000, 1333, 1333, 1334], analyticalUplift: 3.78, seed: 0xC010_0061 },
   daily:    { name: "daily",     shareBps: [2000, 2000, 2000, 2000], analyticalUplift: 3.21, seed: 0xC010_0062 },
@@ -100,16 +99,16 @@ const SURFACES = {
 };
 const BASE_COUNTS = [24, 16, 8, 1];
 const SAMPLES = 100_000;
-const TOLERANCE_REL = 0.05; // ±5% relative per D-06
+const TOLERANCE_REL = 0.05; // ±5% relative
 
 // Payout-per-ticket at quadrant `q` under rotation `rot`, given a surface
 // share-BPS vector and base bucket counts. The /10000 BPS-to-fraction factor
 // is omitted because it cancels in the priority/baseline ratio.
 //
-// rotatedShareBps formula (JackpotBucketLib.sol L248-250):
+// rotatedShareBps formula (`JackpotBucketLib.rotatedShareBps`):
 //   baseIndex = (traitIdx + offset + 1) & 3
 //   share = packed[baseIndex]              -- packed slot at position baseIndex
-// counts (traitBucketCounts L36-50):
+// counts rotate by the same offset:
 //   counts[i] = base[(i + offset) & 3]
 function payoutAtQuadrant(shareBps, rot, q) {
   const count = BASE_COUNTS[(q + rot) & 3];
@@ -117,7 +116,7 @@ function payoutAtQuadrant(shareBps, rot, q) {
   return share / count;
 }
 
-describe("STAT-06 — per-surface EV uplift over 100K conditioned-on->=1-gold samples", function () {
+describe("per-surface EV uplift over 100K conditioned-on->=1-gold samples", function () {
   this.timeout(600000); // 10 min budget per surface — three back-to-back 100K MCs
 
   for (const [key, surf] of Object.entries(SURFACES)) {
@@ -143,7 +142,7 @@ describe("STAT-06 — per-surface EV uplift over 100K conditioned-on->=1-gold sa
           jsWeightedColorBucket((w >> 96n) & 0xFFFFFFFFn),
         ];
 
-        // D-07 conditioning: skip draws with no gold trait.
+        // Conditioning on >=1 gold: skip draws with no gold trait.
         const goldQuads = [];
         for (let q = 0; q < 4; q++) if (colors[q] === 7) goldQuads.push(q);
         if (goldQuads.length === 0) continue;

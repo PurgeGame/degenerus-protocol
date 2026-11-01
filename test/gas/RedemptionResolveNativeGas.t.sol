@@ -3,13 +3,12 @@ pragma solidity 0.8.38;
 
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 import {RedemptionTerminalSeeder} from "../fuzz/AutomaticRedemptionSettlement.t.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 /// @dev The original resolution-only calibration: close a funded batch, publish
 /// its real-shaped word, then measure before the first beneficiary is admitted.
-contract RedemptionResolveNativeGasTest is RedemptionFixture, NativeGasExport {
+contract RedemptionResolveNativeGasTest is RedemptionFixture {
     function _resolution(uint16 roll, bool winningFlip) private {
         uint32 batch = _openBatchId();
         _seedFlipBacking(1_000_000);
@@ -21,7 +20,6 @@ contract RedemptionResolveNativeGasTest is RedemptionFixture, NativeGasExport {
         vm.etch(address(game), type(RedemptionTerminalSeeder).runtimeCode);
         RedemptionTerminalSeeder(payable(address(game))).seedLiveRedemptionWord(word);
         vm.etch(address(game), original);
-        uint256 snapshot = vm.snapshotState();
         vm.cool(address(sdgnrs));
         vm.cool(address(game));
         (uint256 used, MineFlipGas.Result memory result) = this.coldResolution(word);
@@ -31,12 +29,6 @@ contract RedemptionResolveNativeGasTest is RedemptionFixture, NativeGasExport {
         assertEq(_cursor(), 0, "resolution admits no beneficiary");
         assertLe(used, Bounds.REDEMPTION_RESOLVE_GAS, "full cold resolution frame fits");
         emit log_named_uint("redemption_resolution_cold_frame", used);
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            this.exportNativeFixture(string.concat("redemption-resolve-", vm.toString(roll), "-", vm.toString(winningFlip)),
-                address(game), address(sdgnrs), abi.encodeCall(sdgnrs.runRedemptionWork, (word, uint256(300_000))));
-        }
-        vm.deleteStateSnapshot(snapshot);
     }
 
     function coldResolution(uint256 word) external returns (uint256 used, MineFlipGas.Result memory result) {

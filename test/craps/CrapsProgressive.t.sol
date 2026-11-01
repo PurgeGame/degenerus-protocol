@@ -1592,7 +1592,7 @@ contract CrapsProgressiveTest is CrapsPins {
         uint256 debited =
             craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 25, uint16(craps.SYBIL_SCORE_FLOOR()), alice);
 
-        // PROG-01/02: the gross award and the pool debit are exactly what they always were.
+        // the gross award and the pool debit are exactly what they always were.
         assertEq(debited, candidate, "the pool debit is not the gross standing-admitted award");
         assertEq(craps.progressivePool(), pool - candidate, "the pool retained the pass slice");
 

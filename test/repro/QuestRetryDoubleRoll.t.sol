@@ -11,20 +11,17 @@ import {Vm} from "forge-std/Vm.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title QuestRetryDoubleRoll -- a cross-midnight daily RETRY must not re-force a quest
-/// @notice The foil daily is rolled at the final-jackpot RNG REQUEST — the boundary where
-///         ticket routing flips to the next level. A 20h VRF retry re-requests a word for a
-///         transition that ALREADY happened, and if it crosses the simulated-day boundary it
-///         carries the NEW wall day (no RNGREUSE clamp arm engages while a request is pending:
-///         rngWordCurrent is 0). Ungated, that second request rolls a SECOND consecutive
-///         forced slot-1 quest — a foil daily whose one-per-cycle slot the first day's quest
-///         may already have spent (uncompletable, FoilAlreadyBought), or on a turbo arming day
-///         a forced decimator via the retry-preserved decDayOneActive. Either bills a rolled
-///         miss. Pre-change behaviour rolled nothing here (the fulfilment-side force is gated
-///         on gapDays == 0); `!isDailyRetry` in _finalizeRngRequest restores that, and this
-///         pins it.
+/// @notice The foil daily is rolled for the final-jackpot day (`rollDailyQuest` with
+///         `finalJackpotRun`) — the boundary where ticket routing flips to the next level. A 20h
+///         VRF retry (`retryRng`) re-requests a word for a commitment that ALREADY exists, and if
+///         it crosses the simulated-day boundary it carries the NEW wall day. The retry must not
+///         roll a SECOND consecutive forced slot-1 quest — a foil daily whose one-per-cycle slot
+///         the first day's quest may already have spent (uncompletable, FoilAlreadyBought), or on
+///         a turbo arming day a forced decimator via the retry-preserved decDayOneActive. Either
+///         bills a rolled miss.
 ///
-/// @dev Falsification: reverting the `!isDailyRetry` gate makes
-///      test_crossMidnightRetryDoesNotRerollQuest fail with the day-D+1 slot-1 stamp.
+/// @dev test_crossMidnightRetryDoesNotRerollQuest fails with the day-D+1 slot-1 stamp if the
+///      retry rolls again.
 ///      test_finalJackpotRequestDoesRollTheFoilDaily is the non-vacuity control — it proves the
 ///      fixture really reaches a final-jackpot request that DOES roll the forced quest, so a
 ///      green retry test cannot be an artifact of never arming the roll at all.
@@ -88,8 +85,8 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         game.mineRun(0);
         assertEq(game.currentLvl(), oldLevel + 1, "fresh request advances the level");
         assertTrue(game.rngLocked(), "request returns with word still pending");
-        // The level-promoting RNG request (_finalizeRngRequest) no longer writes this
-        // mapping at all — the window was opened earlier, at the seal. The stamp recorded
+        // The level-promoting RNG request (prepareRequestBoundary) does not re-stamp this
+        // mapping — the window was opened earlier, at the seal. The stamp recorded
         // there must be untouched by the request.
         assertEq(_generationStart(target), sealBlock, "request does not re-stamp the sealed window");
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -120,8 +117,8 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         );
     }
 
-    /// @notice The 20h retry, fired on the NEXT wall day, must roll nothing: the day it
-    ///         carries must stay unrolled exactly as the pre-change fulfilment path left it.
+    /// @notice The 20h retry, fired on the NEXT wall day, must roll nothing: the standing
+    ///         slot-1 quest keeps its day and type.
     function test_crossMidnightRetryDoesNotRerollQuest() public {
         _driveToLastPurchaseDay();
         (bool rolled, uint8 rolledType, uint24 rolledDay) = _driveToFinalJackpotRequest();
@@ -176,7 +173,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
                 (, , bool lpd2, bool rngL2, ) = game.purchaseInfo_g1027();
                 if (game.currentLvl() >= 1 && lpd2 && !rngL2) {
                     // Settle the engine's own mid-day work (closed Craps windows) so the window
-                    // is idle, as an unlocked last purchase day was before the engine refactor.
+                    // is idle.
                     _settleMidday();
                     (, , lpd2, rngL2, ) = game.purchaseInfo_g1027();
                     if (lpd2 && !rngL2) return game.currentLvl();
@@ -231,7 +228,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
     /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
     ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
-    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight.
+    ///      covers it), until the engine is idle with nothing in flight.
     function _settleMidday() internal {
         for (uint256 i; i < 64; i++) {
             if (game.rngLocked()) return;

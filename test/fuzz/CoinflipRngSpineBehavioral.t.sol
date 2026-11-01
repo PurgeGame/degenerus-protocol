@@ -6,7 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title CoinflipRngSpineBehavioral — MECH-03 RNG-spine behavioral net
+/// @title CoinflipRngSpineBehavioral — RNG-spine behavioral net
 ///
 /// @notice The pre-existing attestation
 ///         `RngFreezeAndRemovalProofs.t.sol::testWinLossRngPathByteUnmodified` is a
@@ -34,12 +34,10 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         the `% 20` roll selection, or moves the `>= 50` packing threshold yields a
 ///         different value and FAILS the readback.
 ///
-/// @dev Full gambit mutation campaign on processCoinflipPayouts / _storeDayResult /
-///      _dayResult remains CI-resumable (v63/v64 precedent — not run inline here).
 contract CoinflipRngSpineBehavioral is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
 
-    // Mirror of the contract's private reward branches (Coinflip.sol:145-148, :859-886).
+    // Mirror of the contract's private reward branches (`FlipRoundLib.coinflipRewardPercent`, `CoinflipCore._dayResult`).
     uint16 internal constant EXTRA_MIN_PERCENT = 78;
     uint16 internal constant EXTRA_RANGE = 38;
     uint16 internal constant FIXED_UNLUCKY = 50; // roll == 0
@@ -103,7 +101,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
     }
 
     // =====================================================================
-    // MECH-03 — day-result is the pure function of the frozen daily word.
+    // day-result is the pure function of the frozen daily word.
     // =====================================================================
 
     /// @notice Behavioral: across every reward-roll branch and every day-bonus the advance

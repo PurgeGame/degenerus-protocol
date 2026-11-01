@@ -420,11 +420,10 @@ contract V56SecUnmanipulable is DeployProtocol {
         assertEq(_subscriberIndexOf(p), 0, "hook A: the record is gone after the finalize handed the streak back");
     }
 
-    // Hook (C) pass-eviction crossing was DROPPED: the per-level validity horizon, the crossing
-    // refresh/evict branch, and `_passHorizonOf` are all deleted — membership now ends only via cancel,
+    // Hook (C), pass eviction on a level crossing, has no counterpart: membership ends only via cancel or
     // funding-skip kill (reason 1) — the AFKing Subscription Token's seat lock blocks exits-by-transfer — and a level crossing
-    // is a non-event for an in-set sub. The property this hook stood for ("no eviction on a level crossing")
-    // is proven directly by AfKingSubscription.t.sol's `testPasslessCoinHolderProcessedNoEviction`.
+    // is a non-event for an in-set sub. "No eviction on a level crossing" is proven directly by
+    // AfKingSubscription.t.sol's `testPasslessCoinHolderProcessedNoEviction`.
 
     /// @notice Hook (D) unfunded expiry + its BOUNDARY. A NORMAL underfunded sub is finalized
     ///         (`_finalizeAfking`) BEFORE it is removed. The
@@ -658,7 +657,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///      sub-ending finalize, read from the QuestStreakBonusAwarded event
     ///      (player ID indexed, uint16 amount, uint24 newStreak, uint24 currentDay). The finalize emits with
     ///      amount == 0 and newStreak == the decay-applied final streak. Requires vm.recordLogs() first.
-    ///      currentDay is uint24 at c4d48008 (DegenerusQuests:112-117), not uint32 — the topic-0 hash
+    ///      currentDay is uint24 at c4d48008 (DegenerusQuests), not uint32 — the topic-0 hash
     ///      diverges if the signature string mis-widths it.
     function _lastFinalizeStreakFor(address who) internal returns (uint24) {
         bytes32 sig = keccak256("QuestStreakBonusAwarded(uint32,uint16,uint24,uint24)");

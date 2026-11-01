@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 
 /// @title FinalSweepPayoutLegs — the game-over final sweep's three bare payout calls cannot revert.
 ///
@@ -13,7 +12,7 @@ import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 ///         crank and hard-revert on failure by policy — the receivers are the protocol's own
 ///         pinned contracts, which cannot refuse. These pins drive the real crank into the sweep
 ///         with the REAL receivers and assert every leg pays: stETH-only, ETH-only, and mixed.
-contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
+contract FinalSweepPayoutLegs is DeployProtocol {
     address internal keeper = address(0xBEEF);
 
     function setUp() public {
@@ -49,23 +48,6 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
         game.mineRun(0);
     }
 
-    function _sweepNative(string memory label) internal {
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) {
-            _sweep();
-            return;
-        }
-        vm.warp(block.timestamp + 30 days + 1);
-        uint256 snapshot = vm.snapshotState();
-        vm.prank(keeper);
-        game.mineRun(0);
-        uint256 post = vm.snapshotState();
-        assertTrue(vm.revertToState(snapshot));
-        this.exportNativeFixture(label, keeper, address(game), abi.encodeCall(game.mineRun, (uint32(0))));
-        assertTrue(vm.revertToState(post));
-        vm.deleteStateSnapshot(snapshot);
-        vm.deleteStateSnapshot(post);
-    }
-
     struct Ledger {
         uint256 vaultSt;
         uint256 sdSt;
@@ -96,7 +78,7 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
         }
         vm.deal(address(game), 90 ether);
         Ledger memory b = _ledger();
-        _sweepNative("final-sweep-eth");
+        _sweep();
         Ledger memory a = _ledger();
         assertEq(address(game).balance, 0, "the sweep must leave the game empty");
         uint256 paid = (a.vaultEth - b.vaultEth) + (a.sdEth - b.sdEth) + (a.gnEth - b.gnEth);
@@ -114,7 +96,7 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
         mockStETH.mint(address(game), 60 ether);
         uint256 st = mockStETH.balanceOf(address(game));
         Ledger memory b = _ledger();
-        _sweepNative("final-sweep-steth");
+        _sweep();
         Ledger memory a = _ledger();
         assertEq(mockStETH.balanceOf(address(game)), 0, "the sweep must move every stETH share");
         uint256 paidSt = (a.vaultSt - b.vaultSt) + (a.sdSt - b.sdSt) + (a.gnSt - b.gnSt);
@@ -132,7 +114,7 @@ contract FinalSweepPayoutLegs is DeployProtocol, NativeGasExport {
         if (st0 < 20 ether) mockStETH.mint(address(game), 20 ether - st0);
         uint256 st = mockStETH.balanceOf(address(game));
         Ledger memory b = _ledger();
-        _sweepNative("final-sweep-mixed");
+        _sweep();
         Ledger memory a = _ledger();
         assertEq(address(game).balance, 0, "ETH swept");
         assertEq(mockStETH.balanceOf(address(game)), 0, "stETH swept");

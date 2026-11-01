@@ -641,7 +641,7 @@ contract GoldenTicketFoilPack is Test {
 
     /// @dev The grand pushes from the DRAIN, which runs inside mineFlip — a
     ///      deterministic protocol function with no player discretion — and strictly
-    ///      before the draw it feeds, since the readiness gate holds rngGate until the
+    ///      before the draw it feeds, since the readiness gate holds the daily RNG step until the
     ///      foil drain catches up. So the futurePrizePool debit always lands ahead of
     ///      any pool math that reads it, exactly as the armed board route's own grand
     ///      does from runDailyJackpot, and the RNG lock is deliberately NOT consulted.

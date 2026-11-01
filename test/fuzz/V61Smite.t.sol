@@ -9,14 +9,14 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-/// @title V61Smite — TST-05 proof: deity-smite (the deity adds a curse stack to a smitee for 200 FLIP),
+/// @title V61Smite — deity-smite (the deity adds a curse stack to a smitee for 200 FLIP),
 ///        the ownerOf gate, the active-afker immunity, the 5-stack ceiling, the saturating +2, the shared
 ///        curse/smite counter, and the single-cure-clears-both property.
 ///
-/// @notice smite(deityId, smitee) (GameAfkingModule.smite:1710, dispatched DegenerusGame.sol:454) validates
+/// @notice smite(deityId, smitee) (GameAfkingModule.smite) validates
 ///   strictly BEFORE the burn, in this order:
 ///     1. IDegenerusDeityPass(DEITY_PASS).ownerOf(deityId) != msg.sender  → revert E() (NO burn)
-///     2. _subOf[smitee].dailyQuantity != 0 (active afking sub)           → revert E() (the SOLE immunity)
+///     2. _isLiveMember(smitee) (active afking sub)                       → revert E() (the SOLE immunity)
 ///     3. smitee curse >= 10 (the 5-stack smite ceiling; 1 stack = 2 pts) → revert E()
 ///     4. smitee ∈ {VAULT, SDGNRS, GNRUS} (protocol-addr skip)            → revert E()
 ///   then: burnCoin(msg.sender, PRICE_COIN_UNIT/5) = 200 FLIP; _applyCurseStack(smitee) (+2 saturating at
@@ -51,7 +51,7 @@ contract V61Smite is DeployProtocol {
     }
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
+    // Game-resident storage slots + mintPacked_ field shifts (BitPackingLib)
     // -------------------------------------------------------------------------
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED;
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
@@ -110,7 +110,7 @@ contract V61Smite is DeployProtocol {
     // Immunity: an active afker smitee reverts BEFORE the burn
     // =========================================================================
 
-    /// @notice An active-afker smitee (_subOf[smitee].dailyQuantity != 0) is the SOLE immunity: smite reverts
+    /// @notice An active-afker smitee (`_isLiveMember`) is the SOLE immunity: smite reverts
     ///         BEFORE the burn. Asserts NO burn AND no curse change (the validation precedes both).
     function testSmiteActiveAfkerImmuneRevertsPreBurn() public {
         (address deity, uint256 deityId) = _mintDeity("imm_deity");
@@ -327,9 +327,9 @@ contract V61Smite is DeployProtocol {
     // Active-afker setup (real funded subscription)
     // =========================================================================
 
-    /// @dev Set up `name` as an active afker (a funded lootbox subscription ⇒ dailyQuantity != 0). The AFKing
+    /// @dev Set up `name` as an active afker (a funded lootbox subscription ⇒ a live member). The AFKing
     ///      Coin is the sole subscribe credential (the smite immunity under test reads
-    ///      _subOf[smitee].dailyQuantity, independent of any deity-pass score bit).
+    ///      `_isLiveMember(smitee)`, independent of any deity-pass score bit).
     function _setupActiveAfker(string memory name) internal returns (address a) {
         a = makeAddr(name);
         _fundPool(a, 50 ether);

@@ -60,7 +60,7 @@ const QUEST_FLIP_TARGET = flip(2000); // 2 * 1000 FLIP
 
 /**
  * Impersonate the game contract and call rollDailyQuest.
- * (rollDailyQuest access changed from onlyCoin to onlyGame in v13.0)
+ * (rollDailyQuest is restricted to onlyGame)
  */
 async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintFlip = false) {
   const gameAddr = await game.getAddress();

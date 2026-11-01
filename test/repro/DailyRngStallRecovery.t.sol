@@ -343,7 +343,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         // A ticket AWARD from the previous draw routes to the next level and would
         // satisfy the drain gate's purchaseLevel probe, sending the retry through the
         // gate's own no-swap branch. Model the award-less previous draw instead: with
-        // read(L+1) empty the gate is skipped and the retry meets the rngGate sentinel
+        // read(L+1) empty the gate is skipped and the retry meets the daily RNG sentinel
         // — the state under test.
         _clearQueue(_readKeyOf(L + 1));
 

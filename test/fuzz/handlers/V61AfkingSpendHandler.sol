@@ -11,8 +11,8 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title V61AfkingSpendHandler — invariant handler driving the v61 afking spend paths for SEC-02 (SOLVENCY-01)
-/// @notice Exercises the NEW v61 spend surfaces in a randomized sequence: (1) an afking-funded buy (the
+/// @title V61AfkingSpendHandler — invariant handler driving the afking spend paths for the solvency invariant
+/// @notice Exercises the spend surfaces in a randomized sequence: (1) an afking-funded buy (the
 ///         msg.value -> claimable -> afking waterfall through the live _processMintPayment / _settleShortfall),
 ///         (2) a packed credit/debit (a real depositAfkingFunding credit + a subsequent draw), (3) a stale
 ///         cashout (claimWinnings -> maybeCurse), (4) a deity smite (FLIP-only, off the ETH path), (5) a
@@ -36,7 +36,7 @@ contract V61AfkingSpendHandler is Test {
     MockVRFCoordinator public vrf;
 
     // -------------------------------------------------------------------------
-    // Canonical v61 storage layout (378-01 recalibration key + BitPackingLib)
+    // Canonical storage layout (BitPackingLib)
     // -------------------------------------------------------------------------
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS score bit (subscribe gate)

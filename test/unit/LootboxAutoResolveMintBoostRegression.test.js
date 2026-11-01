@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Structural guards for the current mint-boost queue and remainder paths.
-// Runtime behavior is covered by the mint/lootbox Foundry suites. Historical
-// comparisons with HEAD are retired: they cannot detect a committed regression.
+// Runtime behavior is covered by the mint/lootbox Foundry suites. Comparisons
+// with HEAD are not used: they cannot detect a committed regression.
 
 import { expect } from "chai";
 import fs from "node:fs";
@@ -20,15 +20,15 @@ const LOOTBOX_MODULE_PATH = path.resolve(
   "contracts/modules/DegenerusGameLootboxModule.sol"
 );
 
-describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-06", function () {
+describe("LootboxAutoResolveMintBoostRegression", function () {
   this.timeout(30_000);
 
-  describe("Mint-boost callsite at GamePurchase still calls `_queuePurchaseEntries` (D-40N-MINTBOOST-OUT-01)", function () {
+  describe("Mint-boost callsite at GamePurchase still calls `_queuePurchaseEntries`", function () {
 
 
     it("[01b] mint-boost callsite uses the boost-derived `adjustedQty32` argument (boostBps drives the scaled fractional quantity)", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      // The pre-Phase-275 callsite at L1142 is:
+      // The callsite in `GamePurchase` is:
       //   _queuePurchaseEntries(buyerId, targetLevel, adjustedQty32);
       // Match by argument shape (boost-derived fractional adjustedQty32).
       const callPattern = /_queuePurchaseEntries\(buyerId,\s*targetLevel,\s*adjustedQty32\)/;

@@ -68,7 +68,7 @@ contract FreezeHarness is DegenerusGameAdvanceModule, WalletSeed {
     }
 }
 
-/// @title FreezeLifecycleTest -- Unit tests for FREEZE-01 through FREEZE-04
+/// @title FreezeLifecycleTest -- Unit tests for the prize-pool freeze lifecycle
 contract FreezeLifecycleTest is Test {
     FreezeHarness harness;
     uint256 internal constant SENTINEL = uint256(1) << 255;
@@ -100,7 +100,7 @@ contract FreezeLifecycleTest is Test {
     }
 
     // =====================================================================
-    // FREEZE-01: _freezePool sets the flag and touches nothing else
+    // _freezePool sets the flag and touches nothing else
     // =====================================================================
 
     function testSwapAndFreezeSetsFrozenFlag() public {
@@ -128,7 +128,7 @@ contract FreezeLifecycleTest is Test {
     }
 
     // =====================================================================
-    // FREEZE-04 (critical): Accumulators preserved when already frozen
+    // (critical) Accumulators preserved when already frozen
     // =====================================================================
 
     function testSwapAndFreezePreservesAccumulatorsWhenAlreadyFrozen() public {
@@ -146,7 +146,7 @@ contract FreezeLifecycleTest is Test {
     }
 
     // =====================================================================
-    // FREEZE-03: _unfreezePool folds pending into live, leaves the sentinel, clears the flag
+    // _unfreezePool folds pending into live, leaves the sentinel, clears the flag
     // =====================================================================
 
     function testUnfreezeMergesPendingIntoLive() public {
@@ -299,7 +299,7 @@ contract FreezeLifecycleTest is Test {
     }
 
     // =====================================================================
-    // FREEZE-02: Freeze branch routing tests
+    // Freeze branch routing tests
     // =====================================================================
 
     function testFrozenPurchaseBranchRoutesPending() public {
@@ -351,7 +351,7 @@ contract FreezeLifecycleTest is Test {
     }
 
     // =====================================================================
-    // FREEZE-04: Multi-day accumulator persistence (5 jackpot days)
+    // Multi-day accumulator persistence (5 jackpot days)
     // =====================================================================
 
     /// @dev Simulate 5 jackpot days: freeze persists, accumulators grow, unfreeze merges all.

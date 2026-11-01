@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
 import {BattlePaidMinerProbe, BattleConstructionGameSeed,
@@ -48,7 +47,7 @@ contract BattleMaximumTableSeed is BattleConstructionTableSeed {
 /// @notice Adversarial maximum search using production construction and full mineFlip calls.
 /// Gas comes from physically cold isolated calls; all seeding/search/assertions are outside
 /// the measured call. Run with FOUNDRY_ISOLATE=true. A search maximum is not a universal proof.
-contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExport {
+contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
     uint256 private constant WORKER_FRAME_GAS = 100_000;
     // Fund both delegatecall hops and their EIP-150 retention above the logical allowance.
     uint256 private constant WORKER_CALL_GAS = 6_000_000;
@@ -228,42 +227,6 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         emit log_named_uint("search_max_queue_width", width);
     }
 
-    /// @dev Export the original independently searched cold construction units.
-    /// Keep recording in its own test so the Osaka cold-search measurements above
-    /// cannot inherit access warmth from a prior export.
-    function test_NativeBattleConstructionWitnesses() public {
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length == 0) return;
-        uint256[8] memory words = [uint256(375906), 402703, 683165, 132695, 231013, 392095, 728309, 106207];
-        uint8[11] memory widths = [uint8(1), 2, 3, 4, 7, 8, 9, 15, 16, 17, 31];
-        uint256 pristine = vm.snapshotState();
-        uint256 allowance = GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + WORKER_FRAME_GAS;
-        for (uint256 i; i < words.length; ++i) {
-            for (uint256 j; j < widths.length; ++j) {
-                Case memory c = _case(words[i], widths[j]);
-                _seed(c);
-                this.exportNativeFixture(string.concat("battle-native-", vm.toString(words[i]), "-", vm.toString(widths[j])),
-                    address(this), address(game), abi.encodeCall(BattleConstructionGameSeed.runDraw, (CEILING, c.word, allowance)));
-                (, bool progressed) = _worker(c, allowance, WORKER_CALL_GAS);
-                assertTrue(progressed);
-                assertEq(_round().drawnCount, 50, "the full fixed field unit executed");
-                assertTrue(_round().started, "the first full field sealed");
-                assertTrue(vm.revertToState(pristine));
-            }
-        }
-        Case memory resumed = _case(402703, 2);
-        resumed.target = 150;
-        _seed(resumed);
-        for (uint256 i; i < 3; ++i) {
-            this.exportNativeFixture(string.concat("battle-native-resume-", vm.toString(i)), address(this), address(game),
-                abi.encodeCall(BattleConstructionGameSeed.runDraw, (CEILING, resumed.word, allowance)));
-            (, bool progressed) = _worker(resumed, allowance, WORKER_CALL_GAS);
-            assertTrue(progressed);
-            assertEq(_round().drawnCount, (i + 1) * 50);
-            assertEq(_round().started, i == 2);
-        }
-        vm.deleteStateSnapshot(pristine);
-    }
-
     function _mine(uint256 supplied) private returns (bool ok, uint256 transactionGas) {
         _cool();
         bytes memory reason;
@@ -315,9 +278,6 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         c.target = 150;
         _seed(c);
         vm.etch(address(game), gameCode);
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            this.exportBattleNativeFixture();
-        }
         uint256 initial = vm.snapshotState();
         uint256 low = 1_000_000;
         uint256 high = 8_000_000;
@@ -352,14 +312,6 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol, NativeGasExp
         assertGt(afterRound.drawCursor, 0);
         emit log_named_uint("minimum_successful_supplied_gas", high);
         emit log_named_uint("boundary_transaction_gas_used", used);
-    }
-
-    /// @dev Set basefee inside an isolated adapter so the exported prestate includes
-    /// the actual positive miner-credit branch and every account it accesses.
-    function exportBattleNativeFixture() external {
-        require(msg.sender == address(this));
-        vm.fee(1 gwei);
-        _nativeFixture("battle_first_checkpoint", MINER, address(game), abi.encodeCall(game.mineRun, (0)));
     }
 
     function test_MaxProductionMinerPassBranches() public {

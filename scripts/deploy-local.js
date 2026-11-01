@@ -43,10 +43,6 @@ async function main() {
 
   const mockVRF = await deploy("MockVRFCoordinator");
   const mockStETH = await deploy("MockStETH");
-  const mockLINK = await deploy("MockLinkToken");
-  const mockFeed = await deploy("MockLinkEthFeed", [
-    hre.ethers.parseEther("0.004"), // ~0.004 ETH per LINK
-  ]);
 
   const mocks = {
     VRF_COORDINATOR: await mockVRF.getAddress(),
@@ -290,8 +286,6 @@ async function main() {
     for (const name of [
       "MockVRFCoordinator",
       "MockStETH",
-      "MockLinkToken",
-      "MockLinkEthFeed",
     ]) {
       allContracts.add(name);
     }

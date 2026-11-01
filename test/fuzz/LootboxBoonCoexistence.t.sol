@@ -8,10 +8,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxBoonCoexistence -- Tests that lootbox-rolled boons coexist with existing boons
-/// @notice Validates the change in commit 004a9065 that removed the single-category exclusivity
-///         gate from _rollLootboxBoons. Before that commit, if a player had an active boon in
-///         category X, a lootbox roll producing a boon in category Y was silently dropped via
-///         early return. Now _applyBoon runs unconditionally for any rolled boon type.
+/// @notice Validates that a lootbox roll (rollBoxBoons) has no single-category exclusivity gate:
+///         if a player has an active boon in category X, a roll producing a boon in category Y
+///         is still delivered, because _applyBoon runs unconditionally for any rolled boon type.
 ///
 ///         Uses vm.store to pre-inject a coinflip boon into boonPacked[player], then opens
 ///         lootboxes with controlled VRF words. LootBoxReward events prove _applyBoon ran

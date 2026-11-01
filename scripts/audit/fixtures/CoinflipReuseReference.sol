@@ -62,7 +62,7 @@ contract CoinflipReuseReference {
             uint256 reward = results[uint24(d)];
             uint256 stake = stakes[id][uint24(d)];
             if ((id == 1 || id == 2) && d >= seedFirst && d <= seedLast) stake += 200_000;
-            stake += carry;
+            stake += carry + carry * 75 / 10_000;
             if (stake != 0) {
                 if (reward >= 50) {
                     uint256 payout = stake + stake * reward / 100;
@@ -71,7 +71,6 @@ contract CoinflipReuseReference {
                         uint256 reserved = p.stop == 0 ? 0 : payout / p.stop * p.stop;
                         winnings += reserved;
                         carry = payout - reserved;
-                        carry += carry * 75 / 10_000;
                         if (carry > type(uint128).max) carry = type(uint128).max;
                     } else winnings += payout;
                 } else {

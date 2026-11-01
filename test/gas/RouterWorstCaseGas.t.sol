@@ -18,7 +18,7 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
 
-    /// @notice TST-06 / Δ3 advance leg: with NO subscribers and NO ready boxes, a real new day's work
+    /// @notice Advance leg: with NO subscribers and NO ready boxes, a real new day's work
     ///         (subscriber preparation, the day's request, then the day's processing with its ticket
     ///         drain) is driven THROUGH `mineFlip()` with a realistic 10M allowance per call.
     /// @dev    Owner gas rule (2026-10-03): the engine admits checkpoints while the allowance covers the

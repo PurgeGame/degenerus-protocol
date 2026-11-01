@@ -7,16 +7,17 @@ import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJ
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title JackpotSingleCallHarness -- drives the live single-call daily-ETH jackpot surface
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited (external)
-///         `runTerminalJackpotWork` executes the live `_processDailyEth -> _processBucket ->
-///         _addClaimableEth` path in THIS contract's storage. The harness only adds a
+///         `runTerminalJackpotWork` executes the live `_runTerminalJackpot -> _resumeEth ->
+///         _payEthQuadrant` path in THIS contract's storage. The harness only adds a
 ///         `lvlTraitEntry` seeder + read-only accounting views; it overrides NO production
 ///         logic. `runTerminalJackpotWork` pays the fixed DAILY_ETH_MAX_WINNERS=305 terminal
-///         geometry (bucket counts 152/104/48/1), in ONE call -- exactly the JGAS-03 surface.
+///         geometry (bucket counts 152/104/48/1), in ONE call.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
 contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Push `count` distinct, non-zero holder addresses into lvlTraitEntry[lvl][traitId].
@@ -27,7 +28,7 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
         _seedBucketDistinct(lvl, traitId, count, base);
     }
 
-    // -- read-only accounting views (the credit sinks _processDailyEth writes) --
+    // -- read-only accounting views (the credit sinks the ETH payout writes) --
 
     /// @dev Credited claimable: above the registration sentinel, which is outside claimablePool.
     function claimableOf(address who) external view returns (uint256) {
@@ -52,8 +53,8 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 }
 
-/// @title JackpotSingleCallCorrectness -- JGAS-03 single-call 305-winner proofs
-/// @notice After the JGAS-02 two-call-split removal, the daily ETH jackpot pays all 305
+/// @title JackpotSingleCallCorrectness -- single-call 305-winner proofs
+/// @notice The daily ETH jackpot pays all 305
 ///         winners (buckets 152/104/48/1 at max scale) correctly in ONE call:
 ///         - every bucket paid, exact per-winner amounts, none missed, none double-paid
 ///         - conservation: total ETH credited (claimable + whale-pass) == the distributed pool
@@ -61,7 +62,7 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
 ///         - the split path is behaviorally gone (no resume stage entered) + grep-clean
 ///
 /// @dev Drives the live `runTerminalJackpotWork` entry (msg.sender==GAME guard satisfied via prank)
-///      which routes straight into the single-call `_processDailyEth` at the 305 ceiling.
+///      which runs `_resumeEth` at the 305 ceiling.
 contract JackpotSingleCallCorrectness is Test {
     JackpotSingleCallHarness internal h;
 
@@ -75,7 +76,7 @@ contract JackpotSingleCallCorrectness is Test {
             (uint64(1334) << 48);
 
     /// @dev The REAL mainnet block gas limit. foundry.toml inflates block_gas_limit to 30e9 for
-    ///      the test harness; the JGAS-03 "fits under the block limit" bar is the mainnet 30M.
+    ///      the test harness; the "fits under the block limit" bar is the mainnet 30M.
     uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
 
     /// @dev JackpotEthWin topic0 (for vm.recordLogs filtering).
@@ -92,10 +93,10 @@ contract JackpotSingleCallCorrectness is Test {
     }
 
     // =========================================================================
-    // Task 1 — 305-winner single-call correctness + conservation
+    // 305-winner single-call correctness + conservation
     // =========================================================================
 
-    /// @notice JGAS-03: at max scale the daily-ETH jackpot pays exactly DAILY_ETH_MAX_WINNERS=305
+    /// @notice At max scale the daily-ETH jackpot pays exactly DAILY_ETH_MAX_WINNERS=305
     ///         winners across the 4 buckets (152 + 104 + 48 + 1) in ONE call -- every bucket paid,
     ///         each winner credited its exact per-winner bucket amount, none missed, none double
     ///         credited within its bucket, and total ETH credited == the distributed pool.
@@ -150,7 +151,7 @@ contract JackpotSingleCallCorrectness is Test {
         assertGt(paidWei, 0, "the single call actually distributed ETH");
     }
 
-    /// @notice JGAS-03 (exact per-winner amounts, no double-pay within a bucket): for the three
+    /// @notice Exact per-winner amounts, no double-pay within a bucket): for the three
     ///         normal (non-solo) buckets, every distinct seeded holder's claimable balance is a
     ///         whole multiple of that bucket's per-winner amount (share/count). A holder credited
     ///         twice (duplicate winner draw) shows 2x -- which is correct single-draw accounting,
@@ -191,7 +192,7 @@ contract JackpotSingleCallCorrectness is Test {
         }
     }
 
-    /// @notice JGAS-03 fuzz: across a range of pools that still reach the 305 ceiling, the single
+    /// @notice Fuzz: across a range of pools that still reach the 305 ceiling, the single
     ///         call always pays exactly 305 winners and never overpays the pool. (The 305 cap is
     ///         the fixed terminal geometry for any non-empty pool.)
     function testFuzz_SingleCall305AtMaxScale(uint96 extraWei) public {
@@ -216,16 +217,15 @@ contract JackpotSingleCallCorrectness is Test {
     }
 
     // =========================================================================
-    // Task 2 — single call fits the block gas limit (worst-case-first) + split gone
+    // Single call fits the block gas limit (worst-case-first) + split gone
     // =========================================================================
 
-    /// @notice JGAS-03 worst-case-FIRST gas fit: the theoretical worst case for the daily-ETH
+    /// @notice Worst-case-FIRST gas fit: the theoretical worst case for the daily-ETH
     ///         path is the 305-winner max-scale single call (all 4 buckets, 152/104/48/1) -- no
     ///         daily-ETH path produces more winners (DAILY_ETH_MAX_WINNERS = 305 is the hard
     ///         cap, and MAX_BUCKET_WINNERS=248 never clips a 152 bucket). We measure THAT call's
     ///         gas (gasleft delta) and assert it is < the mainnet 30M block gas limit, i.e. it
-    ///         fits with margin. Full peg calibration + the margin attribution to the removed
-    ///         per-winner autoRebuyState SLOAD is Phase 319 / JGAS-04; this plan's bar is "fits".
+    ///         fits with margin. This test's bar is "fits".
     function testWorstCaseSingleCallFitsBlockGasLimit() public {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
@@ -253,15 +253,15 @@ contract JackpotSingleCallCorrectness is Test {
     }
 
     // =========================================================================
-    // Phase 319 / JGAS-04 — worst-case-FIRST re-frame + freed-SLOAD delta attribution
+    // Worst-case-FIRST re-frame + freed-SLOAD delta attribution
     // =========================================================================
 
-    /// @notice JGAS-04 worst-case-FIRST re-frame: assert the 305-winner max-scale single call IS the
+    /// @notice Worst-case-FIRST re-frame: assert the 305-winner max-scale single call IS the
     ///         daily-ETH worst case BEFORE measuring, then assert measured < 30M with margin and emit
-    ///         the margin. 318-06 already proved 305 is structurally the max; JGAS-04 makes the
+    ///         the margin. 305 is structurally the max; this makes the
     ///         worst-case-first framing an explicit standalone assertion (the two hard caps:
     ///         DAILY_ETH_MAX_WINNERS = 305 and MAX_BUCKET_WINNERS = 248 which never clips a 152 bucket)
-    ///         and records the 30M - measured margin for the SUMMARY.
+    ///         and records the 30M - measured margin.
     function testJgas04WorstCaseFirstReframeWithMargin() public {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
@@ -271,12 +271,12 @@ contract JackpotSingleCallCorrectness is Test {
         assertEq(
             _total(bc),
             DAILY_ETH_MAX_WINNERS,
-            "JGAS-04 worst case: 305 winners == DAILY_ETH_MAX_WINNERS (the daily-ETH hard cap)"
+            "worst case: 305 winners == DAILY_ETH_MAX_WINNERS (the daily-ETH hard cap)"
         );
         //  (b) no single bucket count can exceed MAX_BUCKET_WINNERS = 248, so the 152/104/48/1
         //      geometry is never clipped — 305-across-4-buckets is the true maximum work shape.
         for (uint8 b; b < 4; ++b) {
-            assertLe(bc[b], 248, "JGAS-04 worst case: no bucket exceeds MAX_BUCKET_WINNERS = 248 (never clips 152)");
+            assertLe(bc[b], 248, "worst case: no bucket exceeds MAX_BUCKET_WINNERS = 248 (never clips 152)");
         }
 
         _seedAllBuckets(traitIds);
@@ -287,22 +287,22 @@ contract JackpotSingleCallCorrectness is Test {
         (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasUsed = gasBefore - gasleft();
 
-        assertGt(paidWei, 0, "JGAS-04: the measured worst-case call actually paid out");
+        assertGt(paidWei, 0, "the measured worst-case call actually paid out");
         assertLt(
             gasUsed,
             MAINNET_BLOCK_GAS_LIMIT,
-            "JGAS-04: the 305-winner worst case fits under the 30M mainnet block gas limit with margin"
+            "the 305-winner worst case fits under the 30M mainnet block gas limit with margin"
         );
 
         // Emit the margin (30M - measured) for the SUMMARY.
         uint256 margin = MAINNET_BLOCK_GAS_LIMIT - gasUsed;
-        assertGt(margin, 0, "JGAS-04: positive margin under the block limit");
+        assertGt(margin, 0, "positive margin under the block limit");
         emit log_named_uint("jgas04_worst_case_305_winner_gas", gasUsed);
         emit log_named_uint("jgas04_margin_under_30M", margin);
     }
 
 
-    /// @notice JGAS-03 split behaviorally gone: the daily-ETH jackpot at the 305 ceiling completes
+    /// @notice Single-call behavior: the daily-ETH jackpot at the 305 ceiling completes
     ///         in ONE call -- the full pool resolves with no second-call carry. We re-run the same
     ///         max-scale call and assert it fully resolves (paidWei + the unit-rounding dust ==
     ///         POOL_WEI) with no pending remainder that a resume stage would have to drain. There
@@ -342,7 +342,7 @@ contract JackpotSingleCallCorrectness is Test {
     }
 
 
-    /// @notice JGAS-03 preserved ceiling: every rotation of the terminal geometry is a
+    /// @notice Preserved ceiling: every rotation of the terminal geometry is a
     ///         permutation of 152/104/48/1 = 305.
     function testPreservedTerminalCeiling() public pure {
         for (uint256 r; r < 4; ++r) {
@@ -371,7 +371,7 @@ contract JackpotSingleCallCorrectness is Test {
     }
 
     /// @dev Reproduces runTerminalJackpotWork's trait + effective-entropy derivation (the harness has
-    ///      an empty dailyHeroWagers, so _applyHeroOverride is a no-op and the traits are exactly
+    ///      an empty dailyHeroWagers, so `_rollHeroSymbol` is a no-op and the traits are exactly
     ///      getRandomTraits(word)).
     function _deriveTraits(uint256 word)
         internal
@@ -379,7 +379,7 @@ contract JackpotSingleCallCorrectness is Test {
         returns (uint8[4] memory traitIds, uint256 effectiveEntropy)
     {
         traitIds = JackpotBucketLib.getRandomTraits(word);
-        uint256 entropy = EntropyLib.hash2(word, TARGET_LVL);
+        uint256 entropy = EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, TARGET_LVL);
         uint8 soloQuadrant = _pickSoloQuadrantLocal(traitIds, entropy);
         effectiveEntropy = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
     }

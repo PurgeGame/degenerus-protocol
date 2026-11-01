@@ -1,7 +1,7 @@
 import { ownerAction } from "../helpers/deployFixture.js";
 /**
  * @file EthInvariant.test.js
- * @description ETH solvency invariant tests for Degenerus protocol (Phase 08 audit, ACCT-01, ACCT-08).
+ * @description ETH solvency invariant tests for Degenerus protocol.
  *
  * Tests the solvency invariant:
  *   game.balance + steth.balanceOf(game) >= currentPool + nextPool + futurePool + claimablePool
@@ -13,10 +13,10 @@ import { ownerAction } from "../helpers/deployFixture.js";
  *   4. After VRF fulfillment + processing
  *   5. After claimWinnings (if any winner)
  *   6. After adminStakeEthForStEth
- *   7. Game-over terminal state (ACCT-08)
+ *   7. Game-over terminal state
  *
- * ACCT-02 context: All 11 _creditClaimable call sites were verified PASS in plan 08-01.
- * No known FINDING sites exist. If this test fails unexpectedly, it is a new ACCT-01 finding.
+ * Every claimable credit is expected to be matched by a pool or sink debit.
+ * If this test fails unexpectedly, it is a new solvency finding.
  */
 
 import { expect } from "chai";
@@ -44,7 +44,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 // 912 days in seconds — pre-game liveness timeout
 const SECONDS_912_DAYS = 912 * 86400;
 
-describe("EthInvariant (ACCT-01, ACCT-08)", function () {
+describe("EthInvariant", function () {
   after(function () {
     restoreAddresses();
   });
@@ -54,7 +54,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
   // ===========================================================================
   it("1. Fresh deploy — solvency invariant holds", async function () {
     const { game, mockStETH } = await loadFixture(deployFullProtocol);
-    // ACCT-02 context: no FINDING sites — this should always pass
+    // No known unpaired credit sites — this should always pass
     await assertSolvencyInvariant(game, mockStETH);
   });
 
@@ -115,7 +115,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       }
     }
 
-    // ACCT-02 context: no FINDING sites — all jackpot distributions correctly paired
+    // No known unpaired credit sites — all jackpot distributions correctly paired
     await assertSolvencyInvariant(game, mockStETH);
   });
 
@@ -183,9 +183,9 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
   });
 
   // ===========================================================================
-  // Checkpoint 7: Game-over terminal state (ACCT-08)
+  // Checkpoint 7: Game-over terminal state
   // ===========================================================================
-  it("7. Game-over terminal state — solvency invariant holds (ACCT-08)", async function () {
+  it("7. Game-over terminal state — solvency invariant holds", async function () {
     const { game, mockStETH, deployer, mockVRF, alice } = await loadFixture(
       deployFullProtocol
     );
@@ -229,7 +229,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       "Game should be over after 912-day timeout"
     );
 
-    // ACCT-08: Solvency invariant holds in game-over terminal state
+    // Solvency invariant holds in game-over terminal state
     await assertSolvencyInvariant(game, mockStETH);
 
     // Also verify per-player consistency for alice (may have no winnings at level 0)

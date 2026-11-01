@@ -9,7 +9,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 
-/// @title V56FreezeSolvency -- the SEC-02 proof in three legs against the frozen subject:
+/// @title V56FreezeSolvency -- the solvency proof in three legs against the frozen subject:
 ///        (1) the ETH/claimablePool debit path (one in-context site, the delivered buy); (2) a
 ///        solvency invariant fuzz; (3) an RNG-freeze determinism fuzz.
 ///
@@ -429,12 +429,12 @@ contract V56FreezeSolvency is DeployProtocol {
     // The solvency observable
     // =========================================================================
 
-    /// @dev The master SOLVENCY-01 invariant: `game.balance + steth.balanceOf(game) >= claimablePool`
-    ///      (DegenerusGame.sol:18). The fixture holds plain ETH (no stETH minted to the game), so the stETH
+    /// @dev The master solvency invariant: `game.balance + steth.balanceOf(game) >= claimablePool`
+    ///      (the GameFacade contract invariants). The fixture holds plain ETH (no stETH minted to the game), so the stETH
     ///      term is 0; reading it explicitly keeps the assertion faithful to the contract's invariant shape.
     function _assertSolvent(string memory tag) internal {
         uint256 backing = address(game).balance + mockStETH.balanceOf(address(game));
-        assertGe(backing, _claimablePool(), string(abi.encodePacked("SOLVENCY-01: balance + steth >= claimablePool [", tag, "]")));
+        assertGe(backing, _claimablePool(), string(abi.encodePacked("solvency: balance + steth >= claimablePool [", tag, "]")));
     }
 
     // =========================================================================

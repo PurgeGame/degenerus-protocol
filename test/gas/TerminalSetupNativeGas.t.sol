@@ -26,7 +26,6 @@ contract TerminalSetupNativeGasTest is ColdTerminalFixture {
         assertFalse(game.gameOver(), "setup not yet run");
         vm.etch(address(game), type(TerminalSetupNativeHost).runtimeCode);
         TerminalSetupNativeHost host = TerminalSetupNativeHost(payable(address(game)));
-        uint256 snapshot = vm.snapshotState();
         vm.cool(address(game));
         vm.cool(ContractAddresses.GAME_GAMEOVER_MODULE);
         vm.cool(address(mockStETH));
@@ -47,16 +46,5 @@ contract TerminalSetupNativeGasTest is ColdTerminalFixture {
         assertGt(winners, 0, "trace includes the separate jackpot worker");
         assertLt(used, 10_000_000, "combined setup and admitted draw fit");
         emit log_named_uint("terminal_setup_and_admitted_draw", used);
-        if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
-            assertTrue(vm.revertToState(snapshot));
-            this.exportNativeFixture("terminal-setup-thirty-refunds", address(this), address(host),
-                abi.encodeCall(host.nativeTerminalSetup, (uint256(2_000_000))));
-            string memory path = string.concat(vm.envString("STORAGE_REUSE_EXPORT"), "/terminal-setup-thirty-refunds.call.json");
-            vm.serializeJson("terminal-setup-thirty-refunds", vm.readFile(path));
-            vm.serializeUint("terminal-setup-thirty-refunds", "workerAllowance", 2_000_000);
-            string memory json = vm.serializeUint("terminal-setup-thirty-refunds", "allowanceWord", 0);
-            vm.writeJson(json, path);
-        }
-        vm.deleteStateSnapshot(snapshot);
     }
 }

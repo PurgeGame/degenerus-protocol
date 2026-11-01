@@ -48,7 +48,7 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
     function deactivate() external { _clearRngRequest(); }
 
     /// @dev Mirror of GameFacade.rawFulfillRandomWords (the callback lives in the facade,
-    ///      not the module, so the LINK-paid call carries no delegatecall overhead).
+    ///      not the module, so the subscription-paid callback carries no delegatecall overhead).
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         uint256 vrf;
         uint256 word;

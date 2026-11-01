@@ -6,16 +6,15 @@ import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title RngWindowFreeze — FUZZ-02 canonical RNG-FREEZE durable invariant.
+/// @title RngWindowFreeze — canonical RNG-FREEZE durable invariant.
 ///
 /// @notice Promotes the scattered freeze SCENARIO proofs (RngFreezeAndRemovalProofs placement/resolve
 ///         guards, V56FreezeSolvency stamped-day open, the RngIndexDrainOrdering ghost binding) into ONE
 ///         always-on fuzzed property: across any fuzzed action sequence, no player-controllable action
 ///         taken WHILE THE VRF WINDOW IS OPEN (rngLocked() == true) mutates a storage slot the pending
-///         consumption reads. This is the v45 north-star as a continuous net — trace BACKWARD from each
+///         consumption reads. This is the RNG-freeze property as a continuous net — trace BACKWARD from each
 ///         consumer, ENUMERATE every in-window SLOAD (not only the VRF-derived seeds; the non-VRF cursors
-///         read alongside the word are a distinct bug class per
-///         [[feedback_rng_window_storage_read_freshness]]), and assert byte-equality across an isolated
+///         read alongside the word are a distinct bug class), and assert byte-equality across an isolated
 ///         in-window player action. Case (b) PROMOTE/EXTEND — it does NOT re-prove the scenario guards; it
 ///         asserts the GENERAL property over the player-controllable in-window action space.
 ///
@@ -73,7 +72,7 @@ contract RngWindowFreeze is DeployProtocol {
         handler = new RngWindowFreezeHandler(game, mockVRF, 5);
         targetContract(address(handler));
 
-        // the mid-day request gates on the VRF subscription holding >= 40 LINK; DeployProtocol does
+        // the mid-day request gates on the VRF subscription's native floor; DeployProtocol does
         // not fund the mock subscription (subId 1 — the Admin constructor's createSubscription).
         // Fund it here so the mid-day window driver can actually open the lootbox window.
         mockVRF.fundSubscription(1, 100e18);
@@ -113,7 +112,7 @@ contract RngWindowFreeze is DeployProtocol {
     /// @notice THE PROPERTY. No player-controllable action taken inside the VRF window mutated, in
     ///         isolation (no mineFlip between snapshot and re-check), any enumerated consumed slot. The
     ///         handler increments ghost_frozenSlotMutations only for player-attributable changes — the
-    ///         mineFlip heartbeat (the v45-exempt mutator) is never measured against the property.
+    ///         mineFlip heartbeat (the exempt mutator) is never measured against the property.
     function invariant_inWindowSloadsFrozen() public view {
         assertEq(
             handler.ghost_frozenSlotMutations(),

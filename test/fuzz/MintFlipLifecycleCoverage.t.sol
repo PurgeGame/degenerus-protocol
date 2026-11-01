@@ -13,10 +13,10 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///        both legs are fully drained. No subscriber is ever permanently skipped by either cursor leg.
 ///
 /// @notice The two cursor legs, each proven non-stranding here:
-///   - STAMP/BUY leg (DegenerusGameAdvanceModule `_runSubscriberStage`, cursor `_subCursor`): an
-///     UNCONDITIONAL per-day reset (`_afkingResetDay != day -> _subCursor = 0; subsFullyProcessed =
-///     false`) then a weight-budgeted walk of the FULL `[0, len)` set until `subsFullyProcessed`. So
-///     every in-set sub is stamped each day.
+///   - STAMP/BUY leg (GameAfkingModule `runSubscriberWork_g6352`, cursor `_subCursor`): once per
+///     daily request the miner pins `_afkingResetDay = dailyIdx + 1` and resets `_subCursor`,
+///     `_subOpenCursor` and `subsFullyProcessed` (GameMiner), then a weight-budgeted walk of the
+///     FULL set runs until `subsFullyProcessed`. So every in-set sub is stamped each day.
 ///   - OPEN leg (mineFlip's Afking stage, GameAfkingModule `runAfkingWork_g8553`, cursor `_subOpenCursor`):
 ///     a FULL-RING scan that visits up to `len` subs from the cursor, wrapping mid-scan, admitting
 ///     each box against the call's gas allowance and resuming mid-ring across calls. The stage is
@@ -38,9 +38,8 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 contract MintFlipLifecycleCoverage is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the post-PACK Sub-slot offset block
-    // (forge inspect DegenerusGame storage: _subOf@52, _subscribers@54, _subscriberIndex@55,
-    //  cursors@56 — _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4;
-    //  subsFullyProcessed bool @slot0 byte28.)
+    // (GameSlots: SUBSCRIBERS, SUB_CURSOR — _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 ·
+    //  _afkingResetDay u24 @byte4; subsFullyProcessed bool @slot0 byte28.)
     // -------------------------------------------------------------------------
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;      // packed 85-bit lanes (length @ slot)
     uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;           // packed: _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4
@@ -207,7 +206,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     ///   assert the churned subs are stamped (next-day, per the buy-leg per-day reset that rewinds the
     ///   cursor to 0) AND their boxes opened (open-leg full-ring) — none permanently skipped.
     function test_ChurnSubscribeMidCycleStillFullyCovered() public {
-        // Wave 1: an initial set, stamped + opened through one clean cycle so both cursors walk to the
+        // First set: an initial set, stamped + opened through one clean cycle so both cursors walk to the
         // set length and PARK there (the exact pre-condition the strand needs).
         uint256 N1 = 90; // > OPEN_BATCH
         address[] memory wave1 = _spawnSubs(N1, "churn1_");
@@ -533,7 +532,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev The number of subs the fixture self-subscribes at deploy (VAULT + SDGNRS via SUB-09), so
+    /// @dev The number of subs the fixture self-subscribes at deploy (VAULT + SDGNRS), so
     ///      churn-count assertions account for the baseline non-test occupants.
     function _baseSubCount() internal pure returns (uint256) {
         return 2; // VAULT + sDGNRS self-subscribe in DeployProtocol

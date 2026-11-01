@@ -7,7 +7,7 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
-/// @title PoolFlowHandler — invariant handler driving the four-pool value flow for FUZZ-05 (POOL-CONSERVATION)
+/// @title PoolFlowHandler — invariant handler driving the four-pool value flow (pool conservation)
 /// @notice Exercises the operations that MOVE value between the four prize pools so the conservation oracle in
 ///         PoolConservation.inv.t.sol has real transfers to observe (a vacuous green — pools that never move —
 ///         would prove nothing). Three actions:
