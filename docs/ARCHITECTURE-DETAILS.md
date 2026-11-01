@@ -445,9 +445,10 @@ the preceding seal. The BAF day's own flip settles after this request and scores
 Dust does not suppress GNRUS settlement; only the ticket purchase can be skipped.
 
 The Affiliate constructor registers `bytes32("GNRUS")` for GNRUS wallet ID 3 with kickback 10.
-GNRUS has no stored referral; constructor bootstrap referrals to ID 3 are rejected. Each ETH ticket
-donation routes its commission through the donor's gameplay ID without storing a referral for
-GNRUS. Players using GNRUS's code route uplines through Vault and sDGNRS.
+GNRUS has no stored referral; a constructor bootstrap referral naming ID 3 as the referred player
+is rejected. Each ETH ticket donation routes its commission through the donor's gameplay ID
+without storing a referral for GNRUS. Players using GNRUS's code route uplines through Vault and
+sDGNRS.
 
 Sizing adds Coinflip backing and wallet FLIP, including plain transfers to GNRUS. The burn spends
 wallet tokens first, then stored claimable and withdrawable carry. `balanceOfWithClaimable`

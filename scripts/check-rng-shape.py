@@ -93,7 +93,7 @@ def validate(root, manifest):
         parts.append(args[start:])
         tag = parts[0]
         refs = re.findall(r'RngTags\.(\w+)', tag)
-        valid = bool(re.fullmatch(r'RngTags\.\w+', tag)) or bool(re.fullmatch(r'ticketLeg\?RngTags\.\w+:RngTags\.\w+', tag))
+        valid = bool(re.fullmatch(r'RngTags\.\w+', tag))
         if not valid or any(t not in tags for t in refs):
             errors.append(f'Nonconstant or unknown tag: {row}')
         used.update(refs)

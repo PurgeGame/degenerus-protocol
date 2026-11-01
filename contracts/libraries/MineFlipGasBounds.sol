@@ -32,8 +32,8 @@ library MineFlipGasBounds {
     // frame, 3.25M. Coordinator calls forward all gas above the tails; only stETH stays at 50k.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
     // GNRUS's purchase-phase-end step (one flip settlement walk and an ordinary FLIP ticket
-    // purchase burning claimable then carry) rides only a request that can end the purchase
-    // phase; the miner admission and the refill tail add it for exactly those requests.
+    // purchase burning wallet FLIP, then claimable, then carry) rides only a request that can end
+    // the purchase phase; the miner admission and the refill tail add it for exactly those requests.
     // Worst measured (x99 with WWXRP entry, 35 days): 0.502M Osaka, 1.626M Glamsterdam total.
     uint256 internal constant GNRUS_TICKET_PURCHASE = 2_125_000;
     uint256 internal constant RNG_DAILY_REQUEST = 4_400_000;

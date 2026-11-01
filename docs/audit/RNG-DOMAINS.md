@@ -23,9 +23,8 @@ identity.
   site fails. The manifest classes are `RNG`, `NON-RNG` (storage addressing, commitments, identities),
   `CONSTANT` and `HASH-IMPLEMENTATION`;
 - every tag is a named nonzero constant, values are unique, and every tag is used;
-- the first argument of every `EntropyLib` call is a single `RngTags` constant (or the one
-  `ticketLeg ? RngTags.WHALE_TICKET : RngTags.WHALE_QUADRANT` selector), and the argument count
-  matches the hash width;
+- the first argument of every `EntropyLib` call is a single `RngTags` constant, and the argument
+  count matches the hash width;
 - no tagged hash takes `address(`, `ContractAddresses.`, `block.`, `tx.`, `chainid()`, `blockhash(`
   or `gasleft(`; the only exempt argument is the Lens expression `issuer == ContractAddresses.VAULT
   ? VAULT_WALLET_ID : SDGNRS_WALLET_ID`, which maps an issuer to its constant wallet ID;
@@ -317,7 +316,7 @@ word.
 | Craps ties / rounding | `H(CRAPS_TIE, word, bound << 64 \| betId)` / `H(CRAPS_ROUND, word, betId)` | Fixed window and entry |
 | Craps hot bonus | none | Scheduled fields: seats share hot activation after the twelfth surviving roll; rotation adds 30 percentage points for the seat's shooter hand from roll 13 on. Custom battles have no hot bonus |
 | Jackpot allocation / quadrants | `allocationRoot = H(JACKPOT_ALLOCATION, word, level)` (solo-adjusted on the ETH path); quadrant seed `H(JACKPOT_QUADRANT, allocationRoot, q)` | Pool size, pass quantity and previous winners excluded |
-| Whale pass recipient | `H(WHALE_QUADRANT \| WHALE_TICKET, quadrantSeed) % (len + virtualDeityCount)` | One draw over the quadrant's official winning-trait bucket; the caller fixes the leg (`ticketLeg`); never selects from the ETH recipient list; an empty set pays no pass and returns zero spend |
+| Whale pass recipient | Ticket jackpot: `H(WHALE_TICKET, quadrantSeed) % (len + virtualDeityCount)`; ETH quadrant passes: none | Ticket jackpot: one draw per quadrant over its winning-trait bucket, `quadrantSeed = H(JACKPOT_QUADRANT, entropy, q)`; an empty set awards no pass and moves no pool. ETH quadrant passes need no draw: they go to the quadrant's first ETH winner |
 | Jackpot recipient sampling | `H(BUCKET_SAMPLE, root, salt, pull)`; padding `H(SAMPLE_PADDING, entropy, used)` | Salts distinguish ETH/current/early-bird/purchase draws; ticket legs use quadrant seed and salt `239`/`241`/`242` + `q` by leg kind; prize size excluded |
 | Jackpot FLIP / shares | FLIP level `H(FLIP_LEVEL, word, pull)`; daily current-pool share `H(JACKPOT_DAILY_BPS, word)`; ticket roll `H(JACKPOT_TICKET_ROLL, entropy)` | Fixed pull ordinals |
 | Direct jackpot ticket rounds | `seed = H(TICKET_DIRECT, allocationRoot, q << 32 \| i, round)`; `H(TICKET_SHUFFLE, seed, q)`; `H(TICKET_SHUFFLE_STEP, entropy, left)`; `H(TICKET_GROUP, seed, group)` | See [Ticket generation](#ticket-generation); caller gas and the global round counter are not inputs |
