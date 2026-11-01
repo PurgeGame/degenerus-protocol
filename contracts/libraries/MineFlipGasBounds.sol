@@ -79,11 +79,14 @@ library MineFlipGasBounds {
     uint256 internal constant TERMINAL_TALLY_TAIL = 250_000;
     // Cold sweep 547.3k + shutdown admission (1M + 250k reserve + 15,873 EIP-150
     // + 10k frame), with margin. Admin's cancellation admission (450k + 50k tail + 10k) fits in 1M.
+    // The sweep is always its transaction's mandatory first unit (Terminal runs only first, 30 days
+    // after the payout), so it runs with all gas, GNRUS's sDGNRS/DGNRS cash-out included.
     uint256 internal constant TERMINAL_FINAL_SWEEP = 2_200_000;
     // Sweep return reserve.
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;
     // After the sweep's stETH read: the three payout legs and the VRF shutdown admission
-    // (1M floor + 250k reserve + 15,873 EIP-150 + 10k frame), with margin.
+    // (1M floor + 250k reserve + 15,873 EIP-150 + 10k frame), with margin. GNRUS's cash-out after
+    // the legs is outside this reserve: the first-unit sweep carries all the transaction's gas.
     uint256 internal constant TERMINAL_SWEEP_AFTER_READ = 1_400_000;
     // Eight changed seats, a fresh seat word, cursor/release writes and return: <=209.8k.
     uint256 internal constant TICKET_TAIL = 260_000;
