@@ -24,7 +24,7 @@
 CLASS	callee	function	file	mode	pin	rationale
 # Decimator jackpot integration (2026-10-05)
 
-CRANK-PINNED	IAFKingSeatMint.mintSeatFor	_grantSeatCoin	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	On the sDGNRS automatic purchase path structurally skipped: initProtocolDeity latches both protocol wallets' SEAT_CLAIMED bit (construction seats), so the crank sees a bit test only; player passes still mint here
+CRANK-PINNED	IAFKingSeatMint.mintSeatFor	_grantSeatCoin	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	On the sDGNRS automatic purchase path structurally skipped: initProtocolDeity latches both protocol wallets' SEAT_CLAIMED bit (they hold no seat), so the crank sees a bit test only; player passes still mint here
 CRANK-PINNED	ICoinflip.armBafDraw	_sealPurchaseDay	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/BafWeightedDraw.t.sol;test/gas/BafDrawGas.t.sol	x0 last-purchase latch arms tomorrow's weighted flip draw; COINFLIP gate is msg.sender==GAME
 OFF-CRANK	ICoinflip.armRecord	_beginBoxOrder	modules/GamePurchaseBox.sol	BARE		Reached only through the mint module's _lootboxLeg on player purchases; the keeper never purchases
 OFF-CRANK	ICoinflip.armRecord	_placeDegeneretteBetCore	modules/GameDegeneretteBet.sol	BARE		Consolidated/renamed site; Bet placement only (biggest-spin record arm)

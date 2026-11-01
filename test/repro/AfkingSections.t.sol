@@ -49,13 +49,14 @@ contract AfkingSectionsHarness is DegenerusGameBoxModule, WalletSeed {
     }
     function cursor() external view returns (uint256) { return _subOpenCursor; }
     function pending() external view returns (uint256) { return _pendingBoxCount; }
-    /// @dev Storage slot of the word holding the first ticket position (2000).
+    /// @dev Storage slot of the word holding the first ticket position (10,002).
     function ticketWordSlot() external pure returns (bytes32 slot) {
-        assembly ("memory-safe") { mstore(0, _subscribers.slot) slot := add(keccak256(0, 32), 666) }
+        assembly ("memory-safe") { mstore(0, _subscribers.slot) slot := add(keccak256(0, 32), 3334) }
     }
 }
 
 contract AfkingSectionsTest is Test {
+    uint256 private constant CAP = 10_002;
     AfkingSectionsHarness private h;
 
     function setUp() public {
@@ -80,11 +81,11 @@ contract AfkingSectionsTest is Test {
             assertEq(h.position(boxes[i]), i + 1);
         }
         for (uint256 i; i < t; ++i) {
-            assertEq(h.at(2000 - i), tickets[i]);
-            assertEq(h.position(tickets[i]), 2001 - i);
+            assertEq(h.at(CAP - i), tickets[i]);
+            assertEq(h.position(tickets[i]), CAP + 1 - i);
         }
         assertEq(h.at(b), 0, "box sentinel");
-        assertEq(h.at(2000 - t), 0, "ticket sentinel");
+        assertEq(h.at(CAP - t), 0, "ticket sentinel");
     }
 
     function testFuzz_SectionsMatchReferenceUnderSwitchAndRemoval(uint256 seed) public {
@@ -126,21 +127,22 @@ contract AfkingSectionsTest is Test {
     }
 
     function test_FullCapacityKeepsSentinelAndMovesAcrossPackedGap() public {
-        uint32[] memory boxes = new uint32[](2000);
-        uint32[] memory tickets = new uint32[](2000);
-        for (uint256 i; i < 2000; ++i) {
-            uint32 id = h.put(address(uint160(0x10000 + i)), i >= 1000);
-            if (i < 1000) boxes[i] = id;
-            else tickets[i - 1000] = id;
+        uint256 half = CAP / 2;
+        uint32[] memory boxes = new uint32[](CAP);
+        uint32[] memory tickets = new uint32[](CAP);
+        for (uint256 i; i < CAP; ++i) {
+            uint32 id = h.put(address(uint160(0x10000 + i)), i >= half);
+            if (i < half) boxes[i] = id;
+            else tickets[i - half] = id;
         }
-        _verify(boxes, 1000, tickets, 1000);
+        _verify(boxes, half, tickets, half);
         vm.expectRevert(DegenerusGameStorage.E.selector);
         h.put(address(0xFFFFF), false);
         vm.prank(address(0x10000));
         h.subscribe(boxes[0], true, 1, 0);
-        tickets[1000] = boxes[0];
-        boxes[0] = boxes[999];
-        _verify(boxes, 999, tickets, 1001);
+        tickets[half] = boxes[0];
+        boxes[0] = boxes[half - 1];
+        _verify(boxes, half - 1, tickets, half + 1);
     }
 
     function test_AllSubscriptionMutationsWaitAcrossEveryTimingWindow() public {
@@ -161,7 +163,7 @@ contract AfkingSectionsTest is Test {
         h.setGate(0);
         vm.prank(owner);
         h.subscribe(id, true, 1, 0);
-        assertEq(h.position(id), 2001, "unlocked switch is immediate");
+        assertEq(h.position(id), CAP + 1, "unlocked switch is immediate");
     }
 
     function test_OpenerNeverReadsTicketsAndProtocolSkipIsMandatoryProgress() public {

@@ -14,7 +14,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///        through mintPackedFor; per account, the seat minted to the account's payee), immediate
 ///        buyer minting, the subscribe seat burn, the vault mint and restyle surface, the
 ///        cancel removal, and the RNG freeze window. The token sits at the
-///        predicted AFKING_SUB_TOKEN address; SDGNRS holds serial 1 and the vault serial 2.
+///        predicted AFKING_SUB_TOKEN address; the protocol subscriptions hold no seat.
 contract AfKingSeatToken is SeatFixture {
     function setUp() public {
         _setUpSeats();
@@ -40,21 +40,22 @@ contract AfKingSeatToken is SeatFixture {
     // Deploy seeding & the seat burn
     // ──────────────────────────────────────────────────────────────────────
 
-    function testConstructionSeats() public view {
-        assertEq(afkingSubToken.totalSupply(), 2, "the two protocol seats at deploy");
-        assertEq(afkingSubToken.ownerOf(1), address(sdgnrs), "serial 1 -> SDGNRS");
-        assertEq(afkingSubToken.ownerOf(2), address(vault), "serial 2 -> VAULT");
-        assertEq(afkingSubToken.balanceOf(address(sdgnrs)), 1, "sdgnrs seat");
-        assertEq(afkingSubToken.balanceOf(address(vault)), 1, "vault seat");
-        assertEq(afkingSubToken.nextSerial(), 3, "no seat minted past the construction pair");
+    /// @notice Deployment mints no seat; both protocol wallets keep the SEAT_CLAIMED latch and
+    ///         their deity pass NFTs.
+    function testDeploymentHoldsNoSeat() public view {
+        assertEq(afkingSubToken.totalSupply(), 0, "no seat at deploy");
+        assertEq(afkingSubToken.balanceOf(address(sdgnrs)), 0, "sdgnrs holds no seat");
+        assertEq(afkingSubToken.balanceOf(address(vault)), 0, "vault holds no seat");
+        assertEq(afkingSubToken.nextSerial(), 1, "the first player seat is serial 1");
         assertEq(afkingSubToken.freeClaims(), 0, "free tranche untouched at deploy");
-        assertTrue(_isEligible(address(sdgnrs)) && _isEligible(address(vault)), "construction seats latched");
+        assertTrue(_isEligible(address(sdgnrs)) && _isEligible(address(vault)), "protocol seat bits latched");
+        assertEq(deityPass.ownerOf(0), address(vault), "vault keeps its deity pass");
+        assertEq(deityPass.ownerOf(6), address(sdgnrs), "sdgnrs keeps its deity pass");
     }
 
     function testProtocolSelfSubsActiveViaIdentityCarve() public view {
         // Both self-subscribed at construction, BEFORE the token existed in the
-        // deploy order — the exemption covers them and burns nothing; the token's
-        // constructor then seats both for real (serials 1 and 2).
+        // deploy order: the exemption covers them, burns nothing and needs no seat.
         assertTrue(_active(address(vault)), "vault self-sub active");
         assertTrue(_active(address(sdgnrs)), "sdgnrs self-sub active");
         assertEq(game.subscriberSetLength(), 2, "exactly the two protocol subs");
@@ -82,7 +83,7 @@ contract AfKingSeatToken is SeatFixture {
         assertEq(uint24((lane >> 46) & ((uint256(1) << 22) - 1)), game.currentDayView_g542950(), "checkpointed today");
         uint256 meta = uint256(vm.load(address(game), keccak256(abi.encode(uint256(id >> 2), GameSlots.SUB_META))))
             >> ((id & 3) * 64);
-        assertEq(uint24((meta >> 11) & ((uint256(1) << 22) - 1)), game.currentDayView_g542950(), "run starts today");
+        assertEq(uint24((meta >> 14) & ((uint256(1) << 22) - 1)), game.currentDayView_g542950(), "run starts today");
         assertEq(game.subscriberSetLength(), 3, "set grew by one");
         assertEq(afkingSubToken.balanceOf(player), 0, "the seat was burned");
     }
@@ -159,11 +160,11 @@ contract AfKingSeatToken is SeatFixture {
         assertEq(afkingSubToken.balanceOf(buyer), 1, "still exactly one seat");
         // The deity purchase also confers a pass on the buyer's AFFILIATE, which defaults
         // to the VAULT when unreferred. A conferred pass is not a purchase, so it mints no
-        // seat: the vault keeps only its construction seat and burns no tranche slot.
+        // seat: the vault holds none and burns no tranche slot.
         assertEq(
             afkingSubToken.balanceOf(ContractAddresses.VAULT),
-            1,
-            "vault holds only its construction seat; a conferred pass mints none"
+            0,
+            "vault holds no seat; a conferred pass mints none"
         );
         assertEq(afkingSubToken.freeClaims(), 1, "only the buyer consumed a tranche slot");
     }
@@ -178,8 +179,8 @@ contract AfKingSeatToken is SeatFixture {
         assertEq(afkingSubToken.balanceOf(buyer), 1, "deity buyer receives a seat");
         assertEq(
             afkingSubToken.balanceOf(ContractAddresses.VAULT),
-            1,
-            "default affiliate keeps only its construction seat"
+            0,
+            "default affiliate receives no seat"
         );
         assertEq(
             afkingSubToken.freeClaims(),
@@ -226,7 +227,7 @@ contract AfKingSeatToken is SeatFixture {
 
     function testVaultMintLockedUntilFreeTrancheFills() public {
         // Token-side: only the vault may mint, and that stays locked while the free tranche
-        // is open (0 of 1,000 minted here), so paid seats can never crowd out free ones.
+        // is open (0 of 5,000 minted here), so paid seats can never crowd out free ones.
         vm.prank(address(vault));
         vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
         afkingSubToken.vaultMintSeats(makeAddr("grantee"), 1);
@@ -243,49 +244,48 @@ contract AfKingSeatToken is SeatFixture {
     }
 
     function testVaultSeatTransferIsOwnerGated() public {
+        uint256 seat = _giveSeat(address(vault));
         vm.prank(makeAddr("rando"));
         vm.expectRevert(NotVaultOwner.selector);
-        vault.sweepNft(ContractAddresses.AFKING_SUB_TOKEN, makeAddr("nope"), 2);
-        assertEq(afkingSubToken.ownerOf(2), address(vault));
+        vault.sweepNft(ContractAddresses.AFKING_SUB_TOKEN, makeAddr("nope"), seat);
+        assertEq(afkingSubToken.ownerOf(seat), address(vault));
     }
 
     function testVaultSeatRestyleIsOwnerGated() public {
+        uint256 seat = _giveSeat(address(vault));
         vm.prank(makeAddr("rando"));
         vm.expectRevert(NotVaultOwner.selector);
         vault.playerAction(
             ContractAddresses.AFKING_SUB_TOKEN,
-            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 2, 1, 1, 1),
+            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", seat, 1, 1, 1),
             0
         );
     }
 
-    /// @dev The vault restyles its own construction seat (serial 2) AND the SDGNRS
-    ///      construction seat (serial 1), which the token authorizes it to steward
-    ///      because SDGNRS has no admin surface of its own.
-    function testVaultRestylesOwnAndSdgnrsConstructionSeats() public {
+    /// @dev The vault restyles a seat it holds; it has no authority over a seat sDGNRS holds.
+    function testVaultRestylesOnlyItsOwnSeat() public {
+        uint256 own = _giveSeat(address(vault));
+        uint256 other = _giveSeat(address(sdgnrs));
         address owner_ = ContractAddresses.CREATOR;
         vm.prank(owner_);
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.AFKING_SUB_TOKEN,
-            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 2, 9, 0xabcdef, 0x123456),
+            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", own, 9, 0xabcdef, 0x123456),
             0
         )), 0), (bytes));
-        (uint8 s2, uint24 bg2, uint24 tr2) = afkingSubToken.seatTraits(2);
+        (uint8 s2, uint24 bg2, uint24 tr2) = afkingSubToken.seatTraits(own);
         assertEq(s2, 9, "vault seat restyled");
         assertEq(bg2, 0xabcdef);
         assertEq(tr2, 0x123456);
 
         vm.prank(owner_);
-        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
+        vm.expectRevert(AFKingSubscriptionToken.NotAuthorized.selector);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.AFKING_SUB_TOKEN,
-            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 1, 4, 0x0f0f0f, 0xf0f0f0),
+            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", other, 4, 0x0f0f0f, 0xf0f0f0),
             0
-        )), 0), (bytes));
-        (uint8 s1, uint24 bg1, uint24 tr1) = afkingSubToken.seatTraits(1);
-        assertEq(s1, 4, "sdgnrs seat restyled by its vault steward");
-        assertEq(bg1, 0x0f0f0f);
-        assertEq(tr1, 0xf0f0f0);
-        assertEq(afkingSubToken.ownerOf(1), address(sdgnrs), "ownership unchanged by a restyle");
+        )), 0);
+        assertEq(afkingSubToken.ownerOf(other), address(sdgnrs), "the sdgnrs-held seat is untouched");
     }
 
     // ──────────────────────────────────────────────────────────────────────

@@ -22,7 +22,8 @@ abstract contract SeatFixture is DeployProtocol {
     uint32 internal constant VAULT_ID = 1;
     uint32 internal constant SDGNRS_ID = 2;
     uint256 internal constant SUB_FUND = 0.05 ether;
-    uint256 internal constant SEAT_CAP = 2000;
+    uint256 internal constant SEAT_CAP = 10_002;
+    uint256 internal constant FREE_TRANCHE = 5000;
     bytes4 internal constant NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 internal constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
 
@@ -54,7 +55,7 @@ abstract contract SeatFixture is DeployProtocol {
         (, position1) = _laneOf(id);
     }
 
-    /// @dev The wallet ID in physical set position `position` (boxes from 0, tickets descending from 2000).
+    /// @dev The wallet ID in physical set position `position` (boxes from 0, tickets descending from SEAT_CAP).
     function _setElement(uint256 position) internal view returns (uint256) {
         bytes32 slot = bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + position / 3);
         return uint32(uint256(vm.load(address(game), slot)) >> ((position % 3) * 85));
@@ -116,7 +117,7 @@ abstract contract SeatFixture is DeployProtocol {
     /// @dev A fresh seat for `who`: a free-tranche mint (the GAME-gated push mint a pass
     ///      purchase makes) while the tranche is open, else a vault mint. Read before a prank.
     function _giveSeat(address who) internal returns (uint256 seat) {
-        if (afkingSubToken.freeClaims() < 1000) {
+        if (afkingSubToken.freeClaims() < FREE_TRANCHE) {
             vm.prank(ContractAddresses.GAME);
             afkingSubToken.mintSeatFor(who);
         } else {
@@ -230,7 +231,7 @@ abstract contract SeatFixture is DeployProtocol {
 ///        decisions G6; F-token notes §6 seat bullets 1–6 and O1; F-game test item 9).
 /// @notice A new run burns exactly one seat held by the subscriber's payee; a change, a cancel
 ///         and the exempt VAULT/SDGNRS subscriptions burn nothing; a vault mint is refused while
-///         the free tranche is open and whenever live seats + set length would pass 2,000; an
+///         the free tranche is open and whenever live seats + set length would pass 10,002; an
 ///         ended run frees exactly one vault mint the moment it leaves the set (a cancel removes
 ///         it at once); transfers never read the Game. The Vault's quantity 0 is a pause that
 ///         keeps its entry, so pause and resume cannot take the combined count past the cap.
@@ -433,12 +434,12 @@ contract SeatConsumptionTest is SeatFixture {
     // ═══════════════ Bullet 3: exempt subscriptions never burn ═══════════════
 
     /// @notice VAULT and SDGNRS subscribed in their constructors, before the token existed (a
-    ///         token call would have reverted the deploy); both construction seats are intact.
-    function test_exemptConstructionSubscriptionsBurnedNothing() public view {
-        assertEq(_L(), 2, "both construction seats live");
-        assertEq(afkingSubToken.nextSerial(), 3, "nothing minted or burned since");
-        assertEq(afkingSubToken.ownerOf(1), address(sdgnrs));
-        assertEq(afkingSubToken.ownerOf(2), address(vault));
+    ///         token call would have reverted the deploy); neither holds a seat.
+    function test_exemptProtocolSubscriptionsHoldNoSeat() public view {
+        assertEq(_L(), 0, "no seat at deploy");
+        assertEq(afkingSubToken.nextSerial(), 1, "nothing minted or burned since");
+        assertEq(afkingSubToken.balanceOf(address(sdgnrs)), 0);
+        assertEq(afkingSubToken.balanceOf(address(vault)), 0);
         assertEq(_S(), 2, "exactly the two exempt entries");
         assertTrue(_activeId(VAULT_ID) && _activeId(SDGNRS_ID), "both exempt runs live");
     }
@@ -453,32 +454,35 @@ contract SeatConsumptionTest is SeatFixture {
     }
 
     /// @notice A change of the VAULT run through a vault-approved operator never calls
-    ///         consumeSeat, even naming the vault's own seat.
+    ///         consumeSeat, even naming a seat the vault holds.
     function test_vaultChangeThroughOperatorNeverCallsTheToken() public {
+        uint256 seat = _giveSeat(address(vault));
         _approveVaultOperator();
         _expectNoBurn();
         vm.prank(op);
-        game.subscribe(VAULT_ID, false, 2, 2);
+        game.subscribe(VAULT_ID, false, 2, seat);
         assertEq(_qty(VAULT_ID), 2, "vault run changed");
-        assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat untouched");
-        assertEq(_L(), 2);
+        assertEq(afkingSubToken.ownerOf(seat), address(vault), "vault seat untouched");
+        assertEq(_L(), 1);
     }
 
     /// @notice The Vault's quantity 0 through the operator is the owner's pause: it never calls
     ///         consumeSeat, keeps the seat, the entry and the configured quantity, and sets the pause flag.
     function test_vaultPauseThroughOperatorNeverCallsTheToken() public {
+        uint256 seat = _giveSeat(address(vault));
         _approveVaultOperator();
         _expectNoBurn();
         vm.prank(op);
-        game.subscribe(VAULT_ID, false, 0, 2);
+        game.subscribe(VAULT_ID, false, 0, seat);
         assertEq(_qty(VAULT_ID), 1, "the pause keeps the lane quantity");
         assertTrue(_inSet(VAULT_ID), "and the entry");
         assertTrue(_flags() & 4 != 0, "owner pause flag set");
-        assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat untouched");
+        assertEq(afkingSubToken.ownerOf(seat), address(vault), "vault seat untouched");
     }
 
     /// @notice Vault quantity zero retains its entry; a later resume burns no seat.
     function test_vaultResubscribeThroughOperatorNeverCallsTheToken() public {
+        uint256 seat = _giveSeat(address(vault));
         _approveVaultOperator();
         vm.prank(op);
         game.subscribe(VAULT_ID, false, 0, 0);
@@ -488,49 +492,49 @@ contract SeatConsumptionTest is SeatFixture {
 
         _expectNoBurn();
         vm.prank(op);
-        game.subscribe(VAULT_ID, false, 1, 2);
+        game.subscribe(VAULT_ID, false, 1, seat);
         assertTrue(_inSet(VAULT_ID), "vault back in the set");
         assertEq(_S(), s0, "resume reuses the existing entry");
-        assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat never burned");
-        assertEq(_L(), 2);
+        assertEq(afkingSubToken.ownerOf(seat), address(vault), "vault seat never burned");
+        assertEq(_L(), 1);
     }
 
     // ═══════════════ Bullet 4: the vault mint's two gates ═══════════════
 
-    function test_vaultMintRefusedUntilTheThousandthFreeSeat() public {
-        _fillFreeTrancheTo(999);
+    function test_vaultMintRefusedUntilTheFiveThousandthFreeSeat() public {
+        _fillFreeTrancheTo(FREE_TRANCHE - 1);
         address to = makeAddr("grantee");
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
 
-        _fillFreeTrancheTo(1000);
+        _fillFreeTrancheTo(FREE_TRANCHE);
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
-        assertEq(afkingSubToken.balanceOf(to), 1, "opens after the 1,000th free seat");
+        assertEq(afkingSubToken.balanceOf(to), 1, "opens after the 5,000th free seat");
     }
 
     function test_vaultMintCapBoundary() public {
         (address p, uint256 seat) = _passBuyer("cap-sub");
         _subscribe(p, 0, seat);
-        _fillFreeTrancheTo(1000);
+        _fillFreeTrancheTo(FREE_TRANCHE);
         address to = makeAddr("cap-grantee");
 
         _mintToCap(to, 1);
-        assertEq(_L() + _S(), 1999);
+        assertEq(_L() + _S(), SEAT_CAP - 1);
 
         vm.startPrank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 2)), 0); // would land on 2,001
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0); // lands on 2,000
-        assertEq(_L() + _S(), 2000);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 2)), 0); // would pass the cap
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0); // lands on the cap
+        assertEq(_L() + _S(), SEAT_CAP);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         vm.stopPrank();
     }
 
     function test_vaultMintOfNReachingExactlyTheCapSucceeds() public {
-        _fillFreeTrancheTo(1000);
+        _fillFreeTrancheTo(FREE_TRANCHE);
         address to = makeAddr("cap-n");
         uint256 room = SEAT_CAP - _L() - _S();
         vm.prank(ContractAddresses.CREATOR);
@@ -550,7 +554,7 @@ contract SeatConsumptionTest is SeatFixture {
         );
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (makeAddr("zero"), 0)), 0);
-        assertEq(afkingSubToken.nextSerial(), 3, "nothing minted");
+        assertEq(afkingSubToken.nextSerial(), 1, "nothing minted");
     }
 
     // ═══════════════ Bullet 5: a run that leaves the set frees one mint ═══════════════
@@ -564,7 +568,7 @@ contract SeatConsumptionTest is SeatFixture {
         game.subscribe{value: 1 ether}(0, false, 1, seatB);
         uint32 idA = game.walletIdOf_g3120(a);
         uint32 idB = game.walletIdOf_g3120(b);
-        _fillFreeTrancheTo(1000);
+        _fillFreeTrancheTo(FREE_TRANCHE);
         address to = makeAddr("freed-grantee");
         _mintToCap(to, 0);
 
@@ -645,19 +649,20 @@ contract SeatConsumptionTest is SeatFixture {
         assertTrue(_active(p) && _pos(id) != 0, "the run keeps running without a seat");
     }
 
-    function test_vaultMovesItsConstructionSeatAndKeepsItsSubscription() public {
+    function test_vaultMovesASeatItHoldsAndKeepsItsSubscription() public {
         address x = makeAddr("seat-two");
         address y = makeAddr("seat-two-swept");
+        uint256 seat = _giveSeat(address(vault));
         vm.prank(ContractAddresses.CREATOR);
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (ContractAddresses.AFKING_SUB_TOKEN, x, 2)), 0);
-        assertEq(afkingSubToken.ownerOf(2), x, "sweepNft moves serial 2");
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (ContractAddresses.AFKING_SUB_TOKEN, x, seat)), 0);
+        assertEq(afkingSubToken.ownerOf(seat), x, "sweepNft moves the seat");
         assertTrue(_inSet(VAULT_ID) && _activeId(VAULT_ID), "vault run untouched");
 
         vm.prank(x);
-        afkingSubToken.transferFrom(x, address(vault), 2);
+        afkingSubToken.transferFrom(x, address(vault), seat);
         vm.prank(ContractAddresses.CREATOR);
-        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(afkingSubToken), y, 2)), 0);
-        assertEq(afkingSubToken.ownerOf(2), y, "sweepNft moves serial 2");
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(afkingSubToken), y, seat)), 0);
+        assertEq(afkingSubToken.ownerOf(seat), y, "sweepNft moves the seat");
 
         _driveDay();
         assertTrue(_inSet(VAULT_ID) && _activeId(VAULT_ID), "vault run keeps running");
@@ -665,14 +670,14 @@ contract SeatConsumptionTest is SeatFixture {
 
     // ═══════════════ F-game item 9 extras ═══════════════
 
-    function test_vaultPauseAndResumeKeepCombinedCapAtTwoThousand() public {
+    function test_vaultPauseAndResumeKeepCombinedCap() public {
         vm.prank(ContractAddresses.CREATOR);
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
             0
         )), 0), (bytes));
-        _fillFreeTrancheTo(1000);
+        _fillFreeTrancheTo(FREE_TRANCHE);
 
         vm.prank(op);
         game.subscribe(VAULT_ID, false, 0, 0);
@@ -682,21 +687,21 @@ contract SeatConsumptionTest is SeatFixture {
 
         address to = makeAddr("o1-grantee");
         _mintToCap(to, 0);
-        assertEq(_L() + _S(), 2000);
+        assertEq(_L() + _S(), SEAT_CAP);
 
         vm.prank(op);
         game.subscribe(VAULT_ID, false, 1, 0);
         assertEq(_exemptEntries(), 2, "VAULT re-entered");
-        assertEq(_L() + _S(), 2000, "resume cannot exceed the cap");
+        assertEq(_L() + _S(), SEAT_CAP, "resume cannot exceed the cap");
 
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
 
         uint256 n = _S() - _exemptEntries();
-        assertLe(_S(), 2000, "set bound");
-        assertLe(_L() + n + 1, 2000, "non-exempt bound");
-        assertGe(afkingSubToken.balanceOf(address(sdgnrs)), 1, "seat 1 stays live");
+        assertLe(_S(), SEAT_CAP, "set bound");
+        assertLe(_L() + n + 2, SEAT_CAP, "non-exempt bound");
+        assertEq(afkingSubToken.balanceOf(address(sdgnrs)), 0, "sdgnrs holds no seat");
     }
 
     /// @notice SDGNRS's account cannot be acted for: no operator can be approved for ID 2 and a

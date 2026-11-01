@@ -112,7 +112,7 @@ contract NonReceiver {}
 
 /// @title AFKingSubscriptionToken — standalone ERC721 unit tests (no protocol deploy; the
 ///        game / vault / icons are mocks etched at their compile-time addresses). The seat
-///        collection: construction seats, the free tranche, the capped vault mint, the
+///        collection: an empty start, the free tranche, the capped vault mint, the
 ///        Game-only burn (`consumeSeat`), plain ERC721 transfers and the on-chain art surface.
 contract AFKingSubscriptionTokenTest is Test {
     AFKingSubscriptionToken internal coin;
@@ -123,9 +123,6 @@ contract AFKingSubscriptionTokenTest is Test {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant SDGNRS = ContractAddresses.SDGNRS;
     address internal constant ICONS = ContractAddresses.ICONS_32;
-
-    uint24 internal constant DEFAULT_BG = 0xd9d9d9;
-    uint24 internal constant DEFAULT_TRIM = 0x3f1a82;
 
     string internal constant DESCRIPTION =
         '"description":"AFKing seat. Starting an afking-mode subscription burns one seat."';
@@ -148,7 +145,7 @@ contract AFKingSubscriptionTokenTest is Test {
         bob = makeAddr("bob");
         admin = makeAddr("admin");
         mvault.setOwner(admin, true);
-        // The two exempt protocol subscriptions are in the set from construction.
+        // The two exempt protocol subscriptions are in the set from deployment.
         game.setSetLength(2);
         // In-test `new` deployments must not land on the compile-time
         // protocol addresses (CREATE(this, 5..31)) — the GAME/VAULT/ICONS
@@ -179,11 +176,11 @@ contract AFKingSubscriptionTokenTest is Test {
 
     /// @dev Exhaust the free tranche: pushed mints to distinct fresh addresses.
     function _exhaustFreeTranche() internal {
-        uint256 remaining = 1000 - coin.freeClaims();
+        uint256 remaining = 5000 - coin.freeClaims();
         for (uint256 i; i < remaining; i++) {
             _mintSeat(address(uint160(0xF111_0000 + i)));
         }
-        assertEq(coin.freeClaims(), 1000, "free tranche exhausted");
+        assertEq(coin.freeClaims(), 5000, "free tranche exhausted");
     }
 
     /// @dev Write `freeClaims` (slot 5, bytes 24..25: renderer 0..19 | nextSerial 20..23 |
@@ -210,32 +207,35 @@ contract AFKingSubscriptionTokenTest is Test {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Metadata & construction
+    // Metadata & deployment
     // ──────────────────────────────────────────────────────────────────────
 
     function testMetadata() public view {
         assertEq(coin.name(), "AFKing Subscription Token");
         assertEq(coin.symbol(), "AFK");
-        assertEq(coin.FREE_TRANCHE(), 1000);
-        assertEq(coin.SEAT_CAP(), 2000);
+        assertEq(coin.FREE_TRANCHE(), 5000);
+        assertEq(coin.SEAT_CAP(), 10_002);
     }
 
-    function testConstructionMintsProtocolSeats() public view {
-        assertEq(coin.totalSupply(), 2, "the two protocol seats at deploy");
-        assertEq(coin.nextSerial(), 3, "serials 1 and 2 taken");
-        assertEq(coin.freeClaims(), 0, "construction seats are not free-tranche seats");
-        assertEq(coin.ownerOf(1), SDGNRS, "serial 1 -> SDGNRS");
-        assertEq(coin.ownerOf(2), VAULT, "serial 2 -> VAULT");
-        assertEq(coin.balanceOf(SDGNRS), 1, "sdgnrs holds its seat");
-        assertEq(coin.balanceOf(VAULT), 1, "vault holds its seat");
-        (uint8 s, uint24 bg, uint24 tr) = coin.seatTraits(1);
-        assertEq(s, 0, "default symbol");
-        assertEq(bg, DEFAULT_BG, "default background");
-        assertEq(tr, DEFAULT_TRIM, "default trim");
-        (s, bg, tr) = coin.seatTraits(2);
-        assertEq(s, 0, "default symbol");
-        assertEq(bg, DEFAULT_BG, "default background");
-        assertEq(tr, DEFAULT_TRIM, "default trim");
+    /// @notice Deployment mints no seat: the protocol subscriptions are exempt and hold none.
+    function testDeploymentMintsNoSeat() public {
+        assertEq(coin.totalSupply(), 0, "no seat at deploy");
+        assertEq(coin.nextSerial(), 1, "the first seat is serial 1");
+        assertEq(coin.freeClaims(), 0);
+        assertEq(coin.balanceOf(SDGNRS), 0, "sdgnrs holds no seat");
+        assertEq(coin.balanceOf(VAULT), 0, "vault holds no seat");
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.ownerOf(1);
+        assertEq(_mintSeat(alice), 1, "the first player seat is serial 1");
+    }
+
+    /// @notice The vault holds no authority over a seat it does not own, including one held
+    ///         by sDGNRS.
+    function testVaultCannotRestyleAnotherHoldersSeat() public {
+        uint256 id = _mintSeat(SDGNRS);
+        vm.prank(VAULT);
+        vm.expectRevert(AFKingSubscriptionToken.NotAuthorized.selector);
+        coin.setSeatTraits(id, 1, 1, 1);
     }
 
     function testSupportsInterface() public view {
@@ -247,11 +247,11 @@ contract AFKingSubscriptionTokenTest is Test {
 
     function testViewsRevertOnMissingToken() public {
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-        coin.ownerOf(3);
+        coin.ownerOf(1);
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-        coin.getApproved(3);
+        coin.getApproved(1);
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-        coin.seatTraits(3);
+        coin.seatTraits(1);
         vm.expectRevert(AFKingSubscriptionToken.ZeroAddress.selector);
         coin.balanceOf(address(0));
     }
@@ -262,11 +262,11 @@ contract AFKingSubscriptionTokenTest is Test {
 
     function testPushMintUsesDefaultArtThenRestyles() public {
         uint256 id = _mintSeat(alice);
-        assertEq(id, 3, "serials are sequential after the construction seats");
+        assertEq(id, 1, "serials start at 1");
         assertEq(coin.ownerOf(id), alice);
         assertEq(coin.balanceOf(alice), 1);
         assertEq(coin.freeClaims(), 1);
-        assertEq(coin.totalSupply(), 3, "live count includes the new seat");
+        assertEq(coin.totalSupply(), 1, "live count includes the new seat");
 
         // Default art is deterministic in (recipient, serial) -- no entropy is read.
         (uint8 es, uint24 ebg, uint24 etr) = _seeded(alice, id);
@@ -293,9 +293,9 @@ contract AFKingSubscriptionTokenTest is Test {
     function testMintSeatForZeroAddressIsNoOp() public {
         vm.prank(GAME);
         coin.mintSeatFor(address(0));
-        assertEq(coin.nextSerial(), 3, "no serial consumed");
+        assertEq(coin.nextSerial(), 1, "no serial consumed");
         assertEq(coin.freeClaims(), 0, "no tranche slot consumed");
-        assertEq(coin.totalSupply(), 2, "no seat minted");
+        assertEq(coin.totalSupply(), 0, "no seat minted");
     }
 
     function testRestyleOnlyOwner() public {
@@ -326,7 +326,7 @@ contract AFKingSubscriptionTokenTest is Test {
     }
 
     /// @dev Traits pack 4 per storage word (64-bit lanes) — neighbors must
-    ///      not bleed, including across the construction seats' lanes.
+    ///      not bleed.
     function testTraitPackingNeighborsIsolated() public {
         uint256[] memory ids = new uint256[](10);
         for (uint256 i; i < 10; i++) {
@@ -351,28 +351,19 @@ contract AFKingSubscriptionTokenTest is Test {
                 "trim survives neighbors"
             );
         }
-        // The construction seats' lanes are untouched by the claims around them.
-        (uint8 s0, uint24 bg0, uint24 tr0) = coin.seatTraits(1);
-        assertEq(s0, 0);
-        assertEq(bg0, DEFAULT_BG);
-        assertEq(tr0, DEFAULT_TRIM);
-        (s0, bg0, tr0) = coin.seatTraits(2);
-        assertEq(s0, 0);
-        assertEq(bg0, DEFAULT_BG);
-        assertEq(tr0, DEFAULT_TRIM);
     }
 
     function testFreeTrancheExhaustionThenClaimReverts() public {
         _exhaustFreeTranche();
-        assertEq(coin.totalSupply(), 1002, "2 construction + 1000 free");
+        assertEq(coin.totalSupply(), 5000, "the 5,000 free seats");
         // Past the tranche the pushed mint is a SILENT no-op -- it rides inside a pass
         // purchase and must never revert one. The acquirer simply gets no seat.
         vm.prank(ContractAddresses.GAME);
         coin.mintSeatFor(alice);
         assertEq(coin.balanceOf(alice), 0, "no seat past the tranche");
-        assertEq(coin.totalSupply(), 1002, "and no serial consumed");
-        assertEq(coin.nextSerial(), 1003, "next serial unmoved");
-        assertEq(coin.freeClaims(), 1000, "tranche counter stops at 1,000");
+        assertEq(coin.totalSupply(), 5000, "and no serial consumed");
+        assertEq(coin.nextSerial(), 5001, "next serial unmoved");
+        assertEq(coin.freeClaims(), 5000, "tranche counter stops at 5,000");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -392,19 +383,19 @@ contract AFKingSubscriptionTokenTest is Test {
     }
 
     /// @notice One free seat short of the tranche, a vault mint with ample capacity is refused;
-    ///         the 1,000th free mint opens it.
-    function testVaultMintRefusedAt999ThenOpensAtTheThousandth() public {
-        for (uint256 i; i < 999; i++) _mintSeat(address(uint160(0xF111_0000 + i)));
-        assertEq(coin.freeClaims(), 999);
+    ///         the 5,000th free mint opens it.
+    function testVaultMintRefusedAt4999ThenOpensAtTheFiveThousandth() public {
+        for (uint256 i; i < 4999; i++) _mintSeat(address(uint160(0xF111_0000 + i)));
+        assertEq(coin.freeClaims(), 4999);
         vm.prank(VAULT);
         vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
         coin.vaultMintSeats(alice, 1);
 
         _mintSeat(bob);
-        assertEq(coin.freeClaims(), 1000);
+        assertEq(coin.freeClaims(), 5000);
         vm.prank(VAULT);
         coin.vaultMintSeats(alice, 1);
-        assertEq(coin.balanceOf(alice), 1, "vault mint opens after the 1,000th free seat");
+        assertEq(coin.balanceOf(alice), 1, "vault mint opens after the 5,000th free seat");
     }
 
     function testVaultGrantZeroAddressReverts() public {
@@ -421,7 +412,7 @@ contract AFKingSubscriptionTokenTest is Test {
         vm.prank(VAULT);
         coin.vaultMintSeats(bob, 2);
         assertEq(coin.balanceOf(bob), 2, "seats land immediately, no claim step");
-        assertEq(coin.freeClaims(), 1000, "a vault mint is not a free-tranche seat");
+        assertEq(coin.freeClaims(), 5000, "a vault mint is not a free-tranche seat");
 
         // Default art, restylable by the recipient like any other seat.
         uint256 id = uint256(coin.nextSerial()) - 1;
@@ -451,37 +442,50 @@ contract AFKingSubscriptionTokenTest is Test {
         assertTrue(freeId != mintedId);
     }
 
-    /// @notice The cap: live seats + amount + the game's set length may reach 2,000 and not
-    ///         pass it. Sum 1,999 -> minting 1 lands on 2,000; one more is refused.
+    /// @notice The cap: live seats + amount + the game's set length may reach 10,002 and not
+    ///         pass it. Sum 10,001 -> minting 1 lands on 10,002; one more is refused.
     function testVaultGrantCapAndFullSupply() public {
         _exhaustFreeTranche();
         game.setSetLength(3);
-        // L = 1002, S = 3: 995 more seats leave the sum at 2,000 - 1 = 1,999 after 994.
+        // L = 5,000, S = 3: 4,998 more seats leave the sum at 10,001.
         vm.startPrank(VAULT);
-        coin.vaultMintSeats(bob, 994);
-        assertEq(coin.totalSupply() + game.subscriberSetLength(), 1999, "sum at 1,999");
+        coin.vaultMintSeats(bob, 4998);
+        assertEq(coin.totalSupply() + game.subscriberSetLength(), 10_001, "sum at 10,001");
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         coin.vaultMintSeats(bob, 2);
         coin.vaultMintSeats(bob, 1);
-        assertEq(coin.totalSupply() + game.subscriberSetLength(), 2000, "sum lands on the cap");
+        assertEq(coin.totalSupply() + game.subscriberSetLength(), 10_002, "sum lands on the cap");
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         coin.vaultMintSeats(bob, 1);
         vm.stopPrank();
 
-        assertEq(coin.totalSupply(), 1997, "2 + 1000 + 995");
-        assertEq(coin.balanceOf(bob), 995);
+        assertEq(coin.totalSupply(), 9999, "5,000 + 4,999");
+        assertEq(coin.balanceOf(bob), 4999);
     }
 
-    /// @notice One call reaching exactly 2,000 succeeds; one that would land on 2,001 reverts.
+    /// @notice With only the two protocol subscriptions in the set, the Vault's headroom after
+    ///         the free tranche is exactly 5,000 player places.
+    function testVaultHeadroomAfterFreeTrancheIsFiveThousand() public {
+        _exhaustFreeTranche();
+        vm.startPrank(VAULT);
+        vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
+        coin.vaultMintSeats(bob, 5001);
+        coin.vaultMintSeats(bob, 5000);
+        vm.stopPrank();
+        assertEq(coin.totalSupply(), 10_000, "10,000 player seats");
+        assertEq(coin.totalSupply() + game.subscriberSetLength(), 10_002, "plus the two protocol subscriptions");
+    }
+
+    /// @notice One call reaching exactly 10,002 succeeds; one that would pass it reverts.
     ///         The tranche is closed by writing `freeClaims` (slot 5) so the live count varies.
     /// forge-config: default.fuzz.runs = 256
     function testFuzzVaultMintCapBoundary(uint256 setLen, uint256 n, uint256 extraLive) public {
         extraLive = bound(extraLive, 0, 40);
         for (uint256 i; i < extraLive; i++) _mintSeat(address(uint160(0xF222_0000 + i)));
-        _setFreeClaims(1000);
-        setLen = bound(setLen, 1850, 2000 - coin.totalSupply());
+        _setFreeClaims(5000);
+        setLen = bound(setLen, 9850, 10_002 - coin.totalSupply());
         game.setSetLength(setLen);
-        uint256 room = 2000 - coin.totalSupply() - setLen;
+        uint256 room = 10_002 - coin.totalSupply() - setLen;
         n = bound(n, 1, room + 3);
         vm.prank(VAULT);
         if (n > room) {
@@ -491,7 +495,7 @@ contract AFKingSubscriptionTokenTest is Test {
         } else {
             coin.vaultMintSeats(bob, n);
             assertEq(coin.balanceOf(bob), n);
-            assertLe(coin.totalSupply() + setLen, 2000, "never past the cap");
+            assertLe(coin.totalSupply() + setLen, 10_002, "never past the cap");
         }
     }
 
@@ -506,7 +510,7 @@ contract AFKingSubscriptionTokenTest is Test {
     /// @notice A set length alone at the cap blocks every vault mint, whatever the live count.
     function testVaultMintBlockedWhenSetFillsTheCap() public {
         _exhaustFreeTranche();
-        game.setSetLength(2000 - coin.totalSupply());
+        game.setSetLength(10_002 - coin.totalSupply());
         vm.prank(VAULT);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         coin.vaultMintSeats(bob, 1);
@@ -538,7 +542,7 @@ contract AFKingSubscriptionTokenTest is Test {
         _burn(alice, id);
 
         assertEq(coin.balanceOf(alice), 1, "balance - 1");
-        assertEq(coin.totalSupply(), 3, "live count - 1");
+        assertEq(coin.totalSupply(), 1, "live count - 1");
         assertEq(coin.nextSerial(), next, "nextSerial unchanged");
         assertEq(coin.freeClaims(), free, "freeClaims unchanged");
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
@@ -564,7 +568,7 @@ contract AFKingSubscriptionTokenTest is Test {
         vm.stopPrank();
 
         assertEq(coin.ownerOf(b), bob, "bob's seat untouched");
-        assertEq(coin.totalSupply(), 3, "exactly one burn landed");
+        assertEq(coin.totalSupply(), 1, "exactly one burn landed");
     }
 
     /// @notice After the burn every surface treats the serial as nonexistent.
@@ -616,7 +620,9 @@ contract AFKingSubscriptionTokenTest is Test {
     /// @notice Serials are never reused, and the next serial renders its own seeded art even
     ///         when it shares a trait word with a burned, fully restyled serial.
     function testNextMintAfterBurnGetsFreshSerialAndOwnArt() public {
-        uint256 a = _mintSeat(alice); // 3 (word 0)
+        uint256 a = _mintSeat(alice); // 1 (word 0)
+        _mintSeat(alice); // 2
+        _mintSeat(alice); // 3
         uint256 b = _mintSeat(alice); // 4 (word 1, lane 0)
         assertEq(b >> 2, 1, "serial 4 opens trait word 1");
         vm.prank(alice);
@@ -625,7 +631,7 @@ contract AFKingSubscriptionTokenTest is Test {
         _burn(alice, a);
 
         uint256 c = _mintSeat(bob);
-        assertEq(c, 5, "fresh serial, no reuse of 3 or 4");
+        assertEq(c, 5, "fresh serial, no reuse of 1 or 4");
         assertEq(c >> 2, b >> 2, "shares the burned serial's trait word");
         (uint8 es, uint24 ebg, uint24 etr) = _seeded(bob, c);
         (uint8 s, uint24 bg, uint24 tr) = coin.seatTraits(c);
@@ -657,7 +663,7 @@ contract AFKingSubscriptionTokenTest is Test {
                 burned++;
             }
         }
-        assertEq(coin.totalSupply(), 2 + uint256(mints) - burned, "live = minted - burned");
+        assertEq(coin.totalSupply(), uint256(mints) - burned, "live = minted - burned");
         assertEq(coin.totalSupply(), uint256(coin.nextSerial()) - 1 - burned, "live = serials - burned");
         assertEq(
             coin.balanceOf(alice) + coin.balanceOf(bob) + coin.balanceOf(SDGNRS) + coin.balanceOf(VAULT),
@@ -862,7 +868,7 @@ contract AFKingSubscriptionTokenTest is Test {
         assertFalse(_contains(json, "Status"), "no Status attribute");
         assertFalse(_contains(json, "Locked"), "no lock state");
         assertFalse(_contains(json, "Transferable"), "no lock state");
-        assertTrue(_startsWith(json, '{"name":"AFK Sub #3 - MockSymbol"'), "name");
+        assertTrue(_startsWith(json, '{"name":"AFK Sub #1 - MockSymbol"'), "name");
     }
 
     function testTokenURIExternalRendererOverrideAndFallback() public {

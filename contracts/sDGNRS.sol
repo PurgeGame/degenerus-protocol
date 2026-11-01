@@ -748,8 +748,8 @@ contract sDGNRS {
         // caller's own account (`id == 0`), claimable first, then prepaid AFKing ETH.
         // The afking module exempts the pinned SDGNRS wallet from its seat burn and the
         // completed-day signup gate, so this subscribe lands before the seat token is deployed
-        // and `seatId` is ignored; the token's constructor then mints sDGNRS its construction
-        // seat. An unfunded day pauses the seat until it can pay again.
+        // and `seatId` is ignored; sDGNRS holds no seat. An unfunded day pauses the
+        // subscription until it can pay again.
         // Coinflip auto-rebuy is NOT enabled here: during the 20-day seed window
         // sDGNRS's daily flip wins accumulate as unminted coinflip claimable backing
         // (sDGNRS never holds a FLIP wallet balance); Coinflip arms perpetual

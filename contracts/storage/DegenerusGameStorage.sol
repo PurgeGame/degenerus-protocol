@@ -4221,11 +4221,15 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Reverse lookup by wallet ID, four 64-bit lanes per word (lane `id & 3` of key
-    ///      `id >> 2`): [0..10] set position + 1 (0 = not a member), [11..32] run-start day, the
+    ///      `id >> 2`): [0..13] set position + 1 (0 = not a member), [14..35] run-start day, the
     ///      daily draw's age base; bit 63 retains an allocated lane. Only individual interactions
-    ///      read it; the daily passes walk
-    ///      `_subscribers` directly.
+    ///      read it; the daily passes walk `_subscribers` directly.
     mapping(uint256 => uint256) internal _subMeta;
+
+    /// @dev `_subMeta` lane fields: position + 1 below SUB_META_RUN_START_SHIFT (physical
+    ///      positions reach SUBSCRIBER_CAP), the run-start day above it.
+    uint256 internal constant SUB_META_POSITION_MASK = 0x3fff;
+    uint256 internal constant SUB_META_RUN_START_SHIFT = 14;
 
     function _subMetaLane(uint32 id) internal view returns (uint256) {
         return uint64(_subMeta[id >> 2] >> ((id & 3) * 64)) & ((uint256(1) << 63) - 1);
@@ -4239,23 +4243,23 @@ abstract contract DegenerusGameStorage {
     }
 
     function _subPosition1(uint32 id) internal view returns (uint256) {
-        return _subMetaLane(id) & 0x7ff;
+        return _subMetaLane(id) & SUB_META_POSITION_MASK;
     }
 
     function _subRunStart(uint32 id) internal view returns (uint24) {
-        return uint24((_subMetaLane(id) >> 11) & SUB_DAY_MASK);
+        return uint24((_subMetaLane(id) >> SUB_META_RUN_START_SHIFT) & SUB_DAY_MASK);
     }
 
     function _setSubPosition1(uint32 id, uint256 position1) internal {
-        _setSubMetaLane(id, (_subMetaLane(id) & ~uint256(0x7ff)) | position1);
+        _setSubMetaLane(id, (_subMetaLane(id) & ~SUB_META_POSITION_MASK) | position1);
     }
 
     function _setSubRunStart(uint32 id, uint256 day) internal {
-        _setSubMetaLane(id, (_subMetaLane(id) & 0x7ff) | (day << 11));
+        _setSubMetaLane(id, (_subMetaLane(id) & SUB_META_POSITION_MASK) | (day << SUB_META_RUN_START_SHIFT));
     }
 
-    /// @dev Two-ended packed set: boxes at [0,B), tickets descending from 2000, at most
-    ///      2000 members and one empty sentinel. The length word is logical membership,
+    /// @dev Two-ended packed set: boxes at [0,B), tickets descending from SUBSCRIBER_CAP, at
+    ///      most SUBSCRIBER_CAP members and one empty sentinel. The length word is logical membership,
     ///      NOT the physical extent. Use _subLaneAt/_setSubLaneAt; never index/push/pop.
     ///      Vault and sDGNRS remain at box positions 0 and 1; protocol ticket mode is forbidden.
     uint256[] internal _subscribers;
@@ -4299,7 +4303,7 @@ abstract contract DegenerusGameStorage {
     ///      each apply their chunk's total in one write.
     ///      The scheduler finishes the prior cohort before preparation; subscribe locks all
     ///      membership/configuration changes until this cohort opens. Zero is the O(1) done
-    ///      check. Shares the cursor slot; at most 2000 paid stamps fit the subscriber set.
+    ///      check. Shares the cursor slot; at most SUBSCRIBER_CAP paid stamps fit the subscriber set.
     uint16 internal _pendingBoxCount;
 
     /// @dev Box-side membership. Ticket count is _subscribers.length - _subBoxCount.
@@ -4318,7 +4322,9 @@ abstract contract DegenerusGameStorage {
     ///      reward endpoint `_afkingEndpoint`.
     uint24 internal _afkingEndpointDay;
 
-    uint256 internal constant SUBSCRIBER_CAP = 2000;
+    /// @dev Set capacity: 10,000 player places plus the two exempt protocol subscriptions.
+    ///      Physical positions reach SUBSCRIBER_CAP, which stays below the ticket-phase bit.
+    uint256 internal constant SUBSCRIBER_CAP = 10_002;
     uint256 internal constant SUBSCRIBER_TICKET_PHASE = 1 << 15;
 
     // =========================================================================
@@ -4698,7 +4704,7 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev The word holding positions `3k..3k+2`. Callers bound positions to [0,2000].
+    /// @dev The word holding positions `3k..3k+2`. Callers bound positions to [0,SUBSCRIBER_CAP].
     function _subscriberWordAt(uint256 position) internal view returns (uint256 word) {
         assembly ("memory-safe") {
             mstore(0, _subscribers.slot)

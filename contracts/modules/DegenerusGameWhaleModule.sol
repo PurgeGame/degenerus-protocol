@@ -1193,7 +1193,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      ARRIVES here: `mintSeatFor` mints it with deterministic default art the holder
     ///      can restyle at any time (setSeatTraits), so no separate claim step stands
     ///      between a purchased pass and its seat. The token silently declines once its
-    ///      1,000-seat free tranche is exhausted, so this never brings down a purchase.
+    ///      5,000-seat free tranche is exhausted, so this never brings down a purchase.
     ///
     ///      The `mintPacked_` bit is the ONLY once-per-account guard — the token keeps no
     ///      twin and mints whatever it is handed. So the bit is set BEFORE the call, and
@@ -1216,7 +1216,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 /// @dev Minimal interface for the GAME-gated AFKing seat mint.
 interface IAFKingSeatMint {
     /// @param to The pass-buying account's payee, receiving a
-    ///        free-tranche seat (silent no-op once the 1,000-seat free tranche is exhausted).
+    ///        free-tranche seat (silent no-op once the 5,000-seat free tranche is exhausted).
     ///        The once-per-account latch (SEAT_CLAIMED) stays on the buying account's own word.
     function mintSeatFor(address to) external;
 }

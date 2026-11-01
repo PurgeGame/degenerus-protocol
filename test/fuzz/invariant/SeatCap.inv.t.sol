@@ -14,12 +14,12 @@ import {SeatCapHandler} from "../handlers/SeatCapHandler.sol";
 /// @title SeatCap — live seats plus subscriber-set entries stay within the seat cap.
 /// @notice With L = live seats and S = set length, after every handler step:
 ///         - Both protocol entries remain in the set, including a paused VAULT;
-///         - L + S <= 2000: a vault mint requires L + n + S <= 2000, free mints all
-///           precede the first vault mint and create at most 1,002 live seats, a non-exempt
+///         - L + S <= 10,002: a vault mint requires L + n + S <= 10,002, free mints all
+///           precede the first vault mint and create at most 5,000 live seats, a non-exempt
 ///           new run moves one unit from L to S, and reclaims and evictions lower S;
 ///         - L == (nextSerial - 1) - burns, L == the sum of ghost holder balances, every holder's
 ///           balance matches the ghost, non-exempt insertions <= burns;
-///         - freeClaims <= 1000, no free mint after the first vault mint, nextSerial monotone and
+///         - freeClaims <= 5000, no free mint after the first vault mint, nextSerial monotone and
 ///           no burned serial owned again;
 ///         - each action's own expectation (a new run burns exactly the named payee seat, a
 ///           change/cancel/exempt subscription burns nothing, a vault mint is refused exactly
@@ -182,10 +182,10 @@ contract SeatCapInvariant is DeployProtocol {
         _ok();
         handler.fastForward(0); // the free tranche closes
         _ok();
-        assertEq(afkingSubToken.freeClaims(), 1000);
+        assertEq(afkingSubToken.freeClaims(), 5000);
         handler.fastForward(0); // vault seats up to the cap
         _ok();
-        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2000, "at the cap");
+        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 10_002, "at the cap");
         handler.vaultMint(1, 1); // refused at the cap
         _ok();
 
@@ -193,10 +193,10 @@ contract SeatCapInvariant is DeployProtocol {
             handler.driveDay(d); // evict the unfunded
             _ok();
         }
-        assertLt(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2000, "runs left the set");
+        assertLt(afkingSubToken.totalSupply() + game.subscriberSetLength(), 10_002, "runs left the set");
         handler.vaultMint(0, 0); // boundary mint into what was freed
         _ok();
-        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2000, "back at the cap");
+        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 10_002, "back at the cap");
 
         uint256 position = _posOf(1);
         assertGt(position, 0);
@@ -211,7 +211,7 @@ contract SeatCapInvariant is DeployProtocol {
         }
         handler.vaultMint(0, 0); // refill only capacity freed by ordinary subscribers
         _ok();
-        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2000);
+        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 10_002);
         address recipient = handler.phantom();
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (recipient, 1)), 0);
@@ -224,7 +224,7 @@ contract SeatCapInvariant is DeployProtocol {
         assertEq(_posOf(1), position, "resume reuses the retained position");
         assertEq(game.subscriberSetLength(), members, "resume adds no entry");
         assertEq(afkingSubToken.totalSupply(), liveSeats, "resume burns no seat");
-        assertEq(liveSeats + members, 2000);
+        assertEq(liveSeats + members, 10_002);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (recipient, 1)), 0);
         handler.transferSeat(N_WALLETS_PLUS_PHANTOM);
@@ -234,7 +234,7 @@ contract SeatCapInvariant is DeployProtocol {
 
     /// @notice The oracle is live: each drift written behind the handler's back is reported.
     function test_oracleCatchesDrift() public {
-        handler.subscribe(0 | (uint256(1) << 56)); // wallet 0 burns its seat (serial 3)
+        handler.subscribe(0 | (uint256(1) << 56)); // wallet 0 burns its seat (serial 1)
         _ok();
         uint256 burned = handler.burnedSerials(0);
 
@@ -261,7 +261,7 @@ contract SeatCapInvariant is DeployProtocol {
         bytes32 lenSlot = bytes32(GameSlots.SUBSCRIBERS);
         uint256 len = uint256(vm.load(address(game), lenSlot));
         vm.store(address(game), lenSlot, bytes32(len + 2));
-        assertEq(handler.check(), "L + S > 2000");
+        assertEq(handler.check(), "L + S > CAP");
         vm.revertToState(snap);
 
         _ok();

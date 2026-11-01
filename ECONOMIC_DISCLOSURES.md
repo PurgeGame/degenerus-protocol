@@ -116,11 +116,11 @@ tables and reward curves.
     vault owner can mint enough to take nearly all of those FLIP awards. Supply, price and balances
     are unprotected; the [audit boundaries](SECURITY.md#audit-boundaries) distinguish these rules
     from a path that pays assets beyond the prescribed awards.
-- AFKing subscription seats: construction mints serial 1 to sDGNRS (it has no transfer surface, so
-  that seat never leaves) and serial 2 to the Vault (transferable like any seat). Once all **1,000**
-  free-tranche seats are claimed, the vault owner can mint further seats to chosen recipients while
-  live seats plus the subscriber set stay at or below **2,000** (`SEAT_CAP`); capacity reopens as
-  subscriptions leave the set.
+- AFKing subscription seats: no seat is minted at deployment; the Vault's and sDGNRS's exempt
+  subscriptions hold none. Once all **5,000** free-tranche seats are minted, the vault owner can
+  mint further seats to chosen recipients while live seats plus the subscriber set stay at or below
+  **10,002** (`SEAT_CAP`: 10,000 player places plus the two protocol subscriptions); capacity
+  reopens as subscriptions leave the set.
 - The craps comp allowance starts at **4.96M FLIP-equivalent** (`200 * CrapsPriceLib.NORMAL_VALUE`)
   and grows by **2% of completed non-jackpot battle eligible bankroll**, plus a jackpot battle's
   fee-based comp share (2% of its eligible base fees and 80% of a 12% loss budget on extra high-seat

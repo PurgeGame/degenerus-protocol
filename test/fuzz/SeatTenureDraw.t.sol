@@ -122,7 +122,7 @@ contract SeatTenureDraw is DeployProtocol {
     /// @dev The run-start day of `who` (reverse-lookup lane bits 11..32).
     function _runStart(address who) internal view returns (uint24) {
         uint256 meta = uint256(vm.load(address(game), _metaSlot(who))) >> ((game.walletIdOf_g3120(who) & 3) * 64);
-        return uint24((meta >> 11) & ((uint256(1) << 22) - 1));
+        return uint24((meta >> 14) & ((uint256(1) << 22) - 1));
     }
 
     /// @dev Run age in days: the endpoint minus the run-start day (0 when not yet past it).
@@ -301,7 +301,7 @@ contract SeatTenureDraw is DeployProtocol {
             address[3] memory expected;
             uint256 n;
             for (uint256 rank; rank < 4; ++rank) {
-                uint256 physical = rank < boxes ? rank : 2000 - (rank - boxes);
+                uint256 physical = rank < boxes ? rank : 10_002 - (rank - boxes);
                 uint256 ids = uint256(vm.load(address(game), bytes32(root + (physical / 3))));
                 address owner = _fixturePayee(uint32(ids >> ((physical % 3) * 85)));
                 if (owner != ContractAddresses.VAULT) expected[n++] = owner;

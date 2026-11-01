@@ -28,7 +28,8 @@ contract SeatCapHandler is Test {
     address internal constant CREATOR = ContractAddresses.CREATOR;
     uint32 internal constant VAULT_ID = 1;
     uint32 internal constant SDGNRS_ID = 2;
-    uint256 internal constant CAP = 2000;
+    uint256 internal constant CAP = 10_002;
+    uint256 internal constant FREE_TRANCHE = 5000;
     uint256 internal constant N_WALLETS = 10;
     bytes4 internal constant NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 internal constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
@@ -90,10 +91,7 @@ contract SeatCapHandler is Test {
         op = address(uint160(0x5EA7_0F00));
         vaultOp = address(uint160(0x5EA7_0F01));
         phantom = address(uint160(0x5EA7_0F02));
-        gNext = 3;
-        _gAdd(1, s);
-        _gAdd(2, address(v));
-        gLive = 2;
+        gNext = 1;
         _noteHolder(phantom);
         for (uint256 i; i < N_WALLETS; ++i) _noteHolder(wallets[i]);
     }
@@ -332,7 +330,7 @@ contract SeatCapHandler is Test {
     }
 
     /// @notice A vault-owner mint of `n` seats: refused exactly while the free tranche is open
-    ///         or when live seats + n + set length would pass 2,000.
+    ///         or when live seats + n + set length would pass CAP.
     function vaultMint(uint256 seed, uint256 nRaw) external {
         ++calls[A_VMINT];
         uint256 l = token.totalSupply();
@@ -341,14 +339,14 @@ contract SeatCapHandler is Test {
         uint256 room = l + s < CAP ? CAP - l - s : 0;
         uint256 n = seed % 5 == 0 ? room + (seed >> 8) % 3 : nRaw % 41;
         address to = _recipient(seed >> 16);
-        bool expectRevert = n != 0 && (free0 < 1000 || l + n + s > CAP);
+        bool expectRevert = n != 0 && (free0 < FREE_TRANCHE || l + n + s > CAP);
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         try vault.afkingSeatMint(to, n) {
             if (expectRevert) _violate("vault mint past a gate succeeded");
             ++oks[A_VMINT];
         } catch (bytes memory r) {
             if (!expectRevert) _violate("vault mint within both gates refused");
-            bytes4 want = free0 < 1000
+            bytes4 want = free0 < FREE_TRANCHE
                 ? AFKingSubscriptionToken.FreeTrancheOpen.selector
                 : AFKingSubscriptionToken.SeatCapReached.selector;
             if (bytes4(r) != want) _violate("vault mint refused with the wrong error");
@@ -361,10 +359,10 @@ contract SeatCapHandler is Test {
     function fastForward(uint256 seed) external {
         ++calls[A_FFWD];
         uint256 free0 = token.freeClaims();
-        if (free0 < 1000) {
+        if (free0 < FREE_TRANCHE) {
             uint256 leave = seed % 3;
-            if (1000 - free0 <= leave) return;
-            uint256 k = 1000 - free0 - leave;
+            if (FREE_TRANCHE - free0 <= leave) return;
+            uint256 k = FREE_TRANCHE - free0 - leave;
             _jumpFreeTranche(k);
             ++oks[A_FFWD];
             return;
@@ -528,18 +526,21 @@ contract SeatCapHandler is Test {
         uint256 position = _pos(VAULT_ID);
         uint256 s0 = game.subscriberSetLength();
         uint256 l0 = token.totalSupply();
-        address owner2 = gOwner[2];
-        uint256 seat = (seed >> 8) % 2 == 0 ? 2 : 1 + (seed >> 16) % (gNext + 5);
+        uint256 seat = 1 + (seed >> 16) % (gNext + 5);
+        if ((seed >> 8) % 2 == 0 && seatsOf[address(vault)].length != 0) {
+            seat = seatsOf[address(vault)][(seed >> 32) % seatsOf[address(vault)].length];
+        }
+        address seatOwner = gOwner[seat];
         uint8 qty = live ? ((seed % 3 == 0) ? 0 : uint8(1 + (seed >> 24) % 3)) : 1;
         vm.prank(vaultOp);
         try game.subscribe(VAULT_ID, false, qty, seat) {
             ++oks[A_VAULTSUB];
             if (token.totalSupply() != l0) _violate("an exempt subscription burned a seat");
-            if (owner2 != address(0)) {
-                try token.ownerOf(2) returns (address o) {
-                    if (o != owner2) _violate("serial 2 moved");
+            if (seatOwner != address(0)) {
+                try token.ownerOf(seat) returns (address o) {
+                    if (o != seatOwner) _violate("the named seat moved");
                 } catch {
-                    _violate("serial 2 burned by an exempt subscription");
+                    _violate("the named seat burned by an exempt subscription");
                 }
             }
             if (game.subscriberSetLength() != s0 || _pos(VAULT_ID) != position) {
@@ -645,8 +646,8 @@ contract SeatCapHandler is Test {
         if (!consistent) return "set element does not match its Sub position";
         if (!sdgnrsIn) return "SDGNRS left the set";
         if (e != 2) return "VAULT left the set";
-        if (s > CAP) return "S > 2000";
-        if (l + s > CAP) return "L + S > 2000";
+        if (s > CAP) return "S > CAP";
+        if (l + s > CAP) return "L + S > CAP";
         uint256 serials = uint256(token.nextSerial()) - 1;
         if (serials < gBurns || l != serials - gBurns) return "L != (nextSerial - 1) - burns";
         if (l != gLive) return "L != ghost live count";
@@ -659,7 +660,7 @@ contract SeatCapHandler is Test {
         }
         if (sum != l) return "L != sum of holder balances";
         if (gInsertions > gBurns) return "non-exempt insertions > burns";
-        if (token.freeClaims() > 1000) return "freeClaims > 1000";
+        if (token.freeClaims() > FREE_TRANCHE) return "freeClaims > FREE_TRANCHE";
         if (gFree != token.freeClaims()) return "freeClaims != ghost free mints";
         for (uint256 i; i < burnedSerials.length; ++i) {
             try token.ownerOf(burnedSerials[i]) returns (address) {

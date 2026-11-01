@@ -36,14 +36,15 @@ pragma solidity 0.8.38;
  *         (0-31) plus ANY 24-bit RGB background and trim — cosmetic only.
  *
  * @dev SEAT MODEL (one seat per subscription):
- *      - Mints: 2 construction seats — serial 1 to SDGNRS, serial 2 to the
- *        VAULT (default colors); a 1,000-seat FREE tranche minted to pass
- *        buyers when they buy (one per account for life, enforced by the
- *        game's SEAT_CLAIMED latch; the seat goes to the account's payee; past
- *        1,000 a pass confers no seat); and vault mints to any recipient via
- *        the vault's owner-gated afkingSeatMint, refused until the free
- *        tranche is gone and allowed only while live seats plus the game's
- *        subscriber-set length stay within SEAT_CAP.
+ *      - Mints: a 5,000-seat FREE tranche minted to pass buyers when they
+ *        buy (one per account for life, enforced by the game's SEAT_CLAIMED
+ *        latch; the seat goes to the account's payee; past 5,000 a pass
+ *        confers no seat); and vault mints to any recipient via the vault's
+ *        owner-gated afkingSeatMint, refused until the free tranche is gone
+ *        and allowed only while live seats plus the game's subscriber-set
+ *        length stay within SEAT_CAP. Serials start at 1.
+ *      - The exempt VAULT/SDGNRS subscriptions hold no seat; they occupy two
+ *        set places, so SEAT_CAP is 10,000 player places plus those two.
  *      - Burns: the game's subscribe calls consumeSeat when it starts a new
  *        run (never for the exempt VAULT/SDGNRS subscriptions). Changing a
  *        live run burns nothing.
@@ -145,7 +146,7 @@ contract AFKingSubscriptionToken {
     /// @notice symbolId >= 32 on a restyle
     error InvalidTrait();
 
-    /// @notice Vault mints are refused until all 1,000 free-tranche seats are
+    /// @notice Vault mints are refused until all 5,000 free-tranche seats are
     ///         minted
     error FreeTrancheOpen();
 
@@ -225,17 +226,13 @@ contract AFKingSubscriptionToken {
       |                            CONSTANTS                                 |
       +======================================================================+*/
 
-    /// @notice Free-tranche size: the first 1,000 seats minted to pass buyers
-    uint256 public constant FREE_TRANCHE = 1000;
+    /// @notice Free-tranche size: the first 5,000 seats minted to pass buyers
+    uint256 public constant FREE_TRANCHE = 5000;
 
     /// @notice A vault mint must leave live seats plus the game's subscriber-set
-    ///         length at or below this
-    uint256 public constant SEAT_CAP = 2000;
-
-    /// @dev Default colors for the two construction seats: the deity-pass
-    ///      card look (light ground, purple trim).
-    uint24 private constant DEFAULT_BG = 0xd9d9d9;
-    uint24 private constant DEFAULT_TRIM = 0x3f1a82;
+    ///         length at or below this: 10,000 player places plus the two exempt
+    ///         protocol subscriptions
+    uint256 public constant SEAT_CAP = 10_002;
 
     uint16 private constant ICON_VB = 512;
 
@@ -302,16 +299,9 @@ contract AFKingSubscriptionToken {
         _;
     }
 
-    /// @notice Mints the two protocol self-subscriber seats and registers this contract's
-    ///         ENS reverse name.
+    /// @notice Starts serials at 1 and registers this contract's ENS reverse name.
     constructor() {
-        // The protocol self-subscribers' construction seats: serial 1 to SDGNRS,
-        // serial 2 to the VAULT (default colors). Their own subscriptions are exempt
-        // from the seat burn. SDGNRS has no transfer surface, so serial 1 never
-        // leaves; the vault may transfer serial 2 like any seat it holds.
         nextSerial = 1;
-        _mintSeat(ContractAddresses.SDGNRS, 0, DEFAULT_BG, DEFAULT_TRIM);
-        _mintSeat(ContractAddresses.VAULT, 0, DEFAULT_BG, DEFAULT_TRIM);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -352,7 +342,7 @@ contract AFKingSubscriptionToken {
     ///      any time via `setSeatTraits`. No entropy is read: the seed is cosmetic-only and
     ///      never touches a VRF word, so this is outside the RNG-freeze surface entirely.
     ///
-    ///      Silent no-op (never a revert) on an exhausted 1,000-seat tranche and on the
+    ///      Silent no-op (never a revert) on an exhausted 5,000-seat tranche and on the
     ///      zero address, because this rides inside a purchase and must never brick one.
     ///      Past the tranche a pass simply confers no seat. Every free mint precedes the
     ///      first vault mint, so this path needs no cap check.
@@ -390,18 +380,11 @@ contract AFKingSubscriptionToken {
     /// @dev Clears the serial's 64-bit trait lane before writing, so a restyle REPLACES
     ///      rather than ORs into the previous value (the mint path can assume a zero lane;
     ///      this one cannot).
-    ///      The VAULT may additionally restyle the SDGNRS-held construction seat (serial 1).
-    ///      SDGNRS is a protocol contract with no admin surface, so that seat's art would
-    ///      otherwise be frozen at the constructor defaults forever; the vault (owner-gated
-    ///      on its side, `playerAction`) is its steward. Cosmetic only — it confers no
-    ///      authority over the seat itself, which SDGNRS still owns and which has no
-    ///      ERC721-out path.
     /// @param tokenId Seat serial to restyle
     /// @param symbolId Icon index (0-31)
     /// @param bgRgb 24-bit card background
     /// @param trimRgb 24-bit card trim
-    /// @custom:reverts NotAuthorized When the caller neither owns the seat nor is the VAULT
-    ///                 restyling the SDGNRS construction seat
+    /// @custom:reverts NotAuthorized When the caller does not own the seat
     /// @custom:reverts InvalidTrait When symbolId >= 32
     function setSeatTraits(
         uint256 tokenId,
@@ -409,12 +392,7 @@ contract AFKingSubscriptionToken {
         uint24 bgRgb,
         uint24 trimRgb
     ) external {
-        address holder = _owners[tokenId];
-        if (
-            holder != msg.sender &&
-            !(holder == ContractAddresses.SDGNRS &&
-                msg.sender == ContractAddresses.VAULT)
-        ) revert NotAuthorized();
+        if (_owners[tokenId] != msg.sender) revert NotAuthorized();
         if (symbolId >= 32) revert InvalidTrait();
         uint256 shift = (tokenId & 3) << 6;
         uint256 word = _traitWords[tokenId >> 2];
@@ -428,7 +406,7 @@ contract AFKingSubscriptionToken {
 
     /// @notice Mint seats straight to a recipient (vault only — reached through the
     ///         vault's owner-gated afkingSeatMint), each with default art the recipient
-    ///         may restyle. Refused until the free tranche's 1,000 seats are all out, so
+    ///         may restyle. Refused until the free tranche's 5,000 seats are all out, so
     ///         paid seats never crowd out free ones; then allowed while live seats plus
     ///         `amount` plus the game's subscriber-set length stay within SEAT_CAP. Each
     ///         subscription removed from the set frees one more.
@@ -436,7 +414,7 @@ contract AFKingSubscriptionToken {
     /// @param amount Seats to mint
     /// @custom:reverts OnlyVault When caller is not the vault contract
     /// @custom:reverts ZeroAddress When to is address(0)
-    /// @custom:reverts FreeTrancheOpen While fewer than 1,000 free seats are out
+    /// @custom:reverts FreeTrancheOpen While fewer than 5,000 free seats are out
     /// @custom:reverts SeatCapReached When live seats + amount + the subscriber-set
     ///                 length would pass SEAT_CAP
     function vaultMintSeats(address to, uint256 amount) external {

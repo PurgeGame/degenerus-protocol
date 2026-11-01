@@ -156,6 +156,18 @@ contract DegenesisVaultSpend is DegenesisFixture {
         _assertExactSpend(a, cost);
     }
 
+    /// @notice The Vault's own whale pass is a protocol pass purchase: its latched SEAT_CLAIMED bit
+    ///         keeps it from minting a free-tranche seat.
+    function test_VaultWhalePassMintsNoSeat() public {
+        uint32 serial0 = afkingSubToken.nextSerial();
+        uint16 free0 = afkingSubToken.freeClaims();
+        assertEq((game.mintPackedFor(ContractAddresses.VAULT) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1, 1, "vault seat bit latched");
+        _spend(true, 1, 0, 2.4 ether);
+        assertEq(afkingSubToken.nextSerial(), serial0, "no seat minted");
+        assertEq(afkingSubToken.freeClaims(), free0, "no free-tranche slot used");
+        assertEq(afkingSubToken.balanceOf(ContractAddresses.VAULT), 0, "the vault holds no seat");
+    }
+
     /// @notice Any maxCost from the cost up to the budget moves exactly the cost.
     /// forge-config: default.fuzz.runs = 32
     function testFuzz_SpendLeavesNoCashout(uint256 extra) public {

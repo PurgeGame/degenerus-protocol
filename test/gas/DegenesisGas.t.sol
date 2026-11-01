@@ -194,7 +194,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         uint256 position = idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes);
         winner = _seedWallet(address(uint160(0x5EA7F000)));
         _setSubLaneAt(position, uint256(winner));
-        _setSubMetaLane(winner, (position + 1) | (uint256(1) << 11));
+        _setSubMetaLane(winner, (position + 1) | (uint256(1) << SUB_META_RUN_START_SHIFT));
         _afkingEndpointDay = 200;
     }
     function hostRequestOnly() external {

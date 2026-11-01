@@ -264,7 +264,7 @@ library GameSlotKeys {
     function subLane(address game, uint32 id) internal view returns (uint256 lane, uint256 position1) {
         Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
         uint256 meta = uint256(vm.load(game, keccak256(abi.encode(uint256(id >> 2), GameSlots.SUB_META))));
-        position1 = uint64(meta >> ((id & 3) * 64)) & 0x7ff;
+        position1 = uint64(meta >> ((id & 3) * 64)) & 0x3fff;
         if (position1 == 0) return (0, 0);
         uint256 position = position1 - 1;
         uint256 word = uint256(vm.load(game, bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + position / 3)));

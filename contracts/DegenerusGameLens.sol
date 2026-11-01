@@ -351,7 +351,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         s.score = _decodeSubScore((lane >> SUB_SCORE_SHIFT) & SUB_SCORE_MASK);
         s.checkpointDay = _subDay(lane);
         s.checkpointStreak = uint16(_subCheckpointStreak(lane));
-        s.runStartDay = uint24((meta >> 11) & SUB_DAY_MASK);
+        s.runStartDay = uint24((meta >> SUB_META_RUN_START_SHIFT) & SUB_DAY_MASK);
         // Mirrors the module's settlement, which pays nothing for a paused seat (its checkpoint
         // day is parked past every endpoint) and nothing once reward collection closes at the
         // liveness trigger.
@@ -376,7 +376,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         }
         meta = uint64(_sload(game, _mapSlot(uint256(id >> 2), metaBase)) >> ((id & 3) * 64))
             & ((uint256(1) << 63) - 1);
-        position1 = meta & 0x7ff;
+        position1 = meta & SUB_META_POSITION_MASK;
         if (position1 == 0) return (0, 0, meta);
         uint256 position = position1 - 1;
         uint256 word = _sload(game, bytes32(uint256(keccak256(abi.encode(setSlot))) + position / 3));

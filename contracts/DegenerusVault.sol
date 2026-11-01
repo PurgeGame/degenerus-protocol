@@ -455,8 +455,7 @@ contract DegenerusVault {
         // Protocol-owned self-subscription: claimable-first daily lootbox buy of flat
         // quantity 1 (id 0 = the vault itself). The afking module exempts the pinned VAULT
         // wallet from the seat burn and the completed-day signup gate, so this subscribe
-        // lands before the seat token is deployed and names no seat; the token's constructor
-        // then mints the vault its construction seat.
+        // lands before the seat token is deployed and names no seat.
         gamePlayer.subscribe(0, false, 1, 0);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
@@ -640,15 +639,16 @@ contract DegenerusVault {
     /// @notice Mint AFKing seats straight to a recipient. Seats carry deterministic default
     ///         art the recipient can restyle, so no claim step stands between the sale and the
     ///         seat.
-    /// @dev The token refuses mints until all 1,000 free-tranche seats are gone, then allows
+    /// @dev The token refuses mints until all 5,000 free-tranche seats are minted, then allows
     ///      them while live seats + `amount` + the game's subscriber-set length stay within
-    ///      2,000. Every non-exempt subscription start burns a seat and every subscription the game
-    ///      removes from its set frees one unit, so churn reopens room to sell.
+    ///      10,002 (10,000 player places plus the two exempt protocol subscriptions). Every
+    ///      non-exempt subscription start burns a seat and every subscription the game removes
+    ///      from its set frees one unit, so churn reopens room to sell.
     /// @param to Seat recipient
     /// @param amount Seats to mint
     /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor
-    /// @custom:reverts FreeTrancheOpen (token) While fewer than 1,000 free seats are out
-    /// @custom:reverts SeatCapReached (token) When the mint would pass the 2,000 cap
+    /// @custom:reverts FreeTrancheOpen (token) While fewer than 5,000 free seats are out
+    /// @custom:reverts SeatCapReached (token) When the mint would pass the 10,002 cap
     /// @custom:reverts ZeroAddress (token) When `to` is the zero address
     function afkingSeatMint(address to, uint256 amount) external onlyVaultOwner {
         if (amount == 0) return;

@@ -26,9 +26,9 @@ SOURCES = (
 # family field or child cap); loan quote, rates, prices and whale-pass awards are unchanged.
 # Reviewed 2026-11-01: Storage and WhaleModule refund comment text only; the loan model is unaffected.
 SOURCE_SHA256 = {
-    "contracts/storage/DegenerusGameStorage.sol": "aedee457eb0d95e13e041eb26d5bc9bc5d73af22b20aaedf24fee25abecbe5d1",
+    "contracts/storage/DegenerusGameStorage.sol": "3bcf92e274405de96bd7d604e74a880a5f947cd347dee37d032f7e3d12c8820b",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
-    "contracts/modules/DegenerusGameWhaleModule.sol": "3d3df97df5d8610c0aea2dd133e0f1fb262696a7e3eb1bc0a62d48f42b275b0f",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "cbd55c06694967bcc8063e1c870dc1044f4eb72f0d12af4f97f32cb60d0653b2",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",
 }
 

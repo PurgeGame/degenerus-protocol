@@ -271,6 +271,6 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         for (uint256 i; i < 1024 && !game.rngLocked(); ++i) game.mineRun(0);
         assertTrue(game.rngLocked(), "after the midday cohort drains the next daily request locks");
     }
-    // The two live protocol seats also consume the 2,000 cap: 1,998 subscriptions fit.
-    function test_MidnightDefersSubscriberStampingUntilReadCohortCompletes() public { _crossMidnight(1998); }
+    // A full set: 10,000 player subscriptions beside the two protocol subscriptions.
+    function test_MidnightDefersSubscriberStampingUntilReadCohortCompletes() public { _crossMidnight(10_002); }
 }

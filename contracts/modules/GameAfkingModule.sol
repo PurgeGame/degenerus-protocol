@@ -412,7 +412,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         }
         _setSubLaneAt(index, lane);
         _setSubscriberCount(count + 1);
-        _setSubMetaLane(id, (index + 1) | (runStart << 11));
+        _setSubMetaLane(id, (index + 1) | (runStart << SUB_META_RUN_START_SHIFT));
     }
 
     /// @dev Remove a physical 1-based position, replacing it with its own section's tail.
@@ -693,7 +693,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         // 90% next / 10% future), so the per-sub cost is an add, not a pool SSTORE.
 
         // Public membership/mode changes are locked throughout this pass. Each section
-        // is dense, and its zero sentinel stays empty even at the combined 2000-member cap.
+        // is dense, and its zero sentinel stays empty even at the combined SUBSCRIBER_CAP.
         while (true) {
             uint256 position = c.cursor < SUBSCRIBER_TICKET_PHASE
                 ? c.cursor : SUBSCRIBER_CAP - (c.cursor - SUBSCRIBER_TICKET_PHASE);

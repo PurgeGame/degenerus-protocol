@@ -63,7 +63,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         lane = _withSubCheckpoint(lane, day, 0);
         if (removal) lane |= SUB_REMOVAL_BIT;
         _setSubLaneAt(position1 - 1, lane);
-        _setSubMetaLane(id, position1 | (uint256(day) << 11));
+        _setSubMetaLane(id, position1 | (uint256(day) << SUB_META_RUN_START_SHIFT));
     }
 
     /// @param mode 0=self funded ticket,1=claimable ticket,2=claimable then prepaid ticket,

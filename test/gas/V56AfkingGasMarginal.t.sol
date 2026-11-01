@@ -65,11 +65,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      longer have a settle cadence (compute-on-read obviated it); this is purely a test warp helper.
     uint256 internal constant SETTLE_PERIOD = 10;
 
-    /// @dev SUBSCRIBER_CAP (GameAfkingModule.sol): the shipped worst-case active sub count — a hard
-    ///      backstop AT the natural bound, since membership requires holding an AFKing Subscription Token (a fixed
-    ///      2,000-coin supply); distinct subscribers can never exceed the coin count, so the cap only
-    ///      fail-louds that invariant. A per-tx ceiling proof "at the cap" must use 2000.
-    uint256 internal constant SUBSCRIBER_CAP = 2000;
+    /// @dev SUBSCRIBER_CAP (DegenerusGameStorage.sol): 10,000 player places plus the two protocol
+    ///      subscriptions. A per-tx ceiling proof "at the cap" must use 10,002.
+    uint256 internal constant SUBSCRIBER_CAP = 10_002;
 
     /// @dev Historical transaction allowance used by bounded progress witnesses.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;

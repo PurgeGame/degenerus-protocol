@@ -86,17 +86,17 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     // =====================================================================================
-    // Genesis: the construction seats are latched game-side
+    // Genesis: the protocol seat bits are latched game-side
     // =====================================================================================
 
-    /// @notice Both protocol wallets hold a construction seat from the token constructor;
-    ///         initProtocolDeity latches their SEAT_CLAIMED bit so `_grantSeatCoin` (the
-    ///         `mintSeatFor` push) is a pure bit test on the automatic purchase path.
+    /// @notice Neither protocol wallet holds a seat; initProtocolDeity latches their SEAT_CLAIMED
+    ///         bit so `_grantSeatCoin` (the `mintSeatFor` push) is a pure bit test on the
+    ///         automatic purchase path.
     function test_Genesis_SeatBitLatchedForBothProtocolWallets() public view {
         assertEq((game.mintPackedFor(ContractAddresses.SDGNRS) >> SEAT_CLAIMED_SHIFT) & 1, 1, "sDGNRS seat bit");
         assertEq((game.mintPackedFor(ContractAddresses.VAULT) >> SEAT_CLAIMED_SHIFT) & 1, 1, "vault seat bit");
-        assertEq(afkingSubToken.balanceOf(ContractAddresses.SDGNRS), 1, "sDGNRS holds exactly its construction seat");
-        assertEq(afkingSubToken.balanceOf(ContractAddresses.VAULT), 1, "vault holds exactly its construction seat");
+        assertEq(afkingSubToken.balanceOf(ContractAddresses.SDGNRS), 0, "sDGNRS holds no seat");
+        assertEq(afkingSubToken.balanceOf(ContractAddresses.VAULT), 0, "vault holds no seat");
     }
 
     // =====================================================================================
@@ -337,7 +337,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         (bool bought,,) = _lastWhalePurchase();
         assertTrue(bought, "fixture: bought");
         assertEq(afkingSubToken.nextSerial(), serial0, "no seat minted");
-        assertEq(afkingSubToken.balanceOf(ContractAddresses.SDGNRS), 1, "still one seat");
+        assertEq(afkingSubToken.balanceOf(ContractAddresses.SDGNRS), 0, "still no seat");
     }
 
     // =====================================================================================

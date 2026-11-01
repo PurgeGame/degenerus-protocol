@@ -73,7 +73,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
             | (removal ? SUB_REMOVAL_BIT : 0);
         _setSubLaneAt(position, _withSubCheckpoint(lane, checkpointDay, checkpointStreak));
         _setSubscriberCount(count + 1);
-        _setSubMetaLane(id, (position + 1) | (uint256(runStart) << 11));
+        _setSubMetaLane(id, (position + 1) | (uint256(runStart) << SUB_META_RUN_START_SHIFT));
     }
 
     function setEndpoint(uint24 day) external { _afkingEndpointDay = day; }

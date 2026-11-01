@@ -729,8 +729,8 @@ interface IDegenerusGame {
     /// @notice Length of the AFKing subscriber set: live subscriptions, the two exempt protocol
     ///         subscriptions (VAULT, SDGNRS) and seized runs awaiting the in-pass removal.
     /// @dev The seat token's capped vault mint reads it: `liveSeats + n + subscriberSetLength()`
-    ///      may not exceed 2,000. Every non-exempt entry burned a seat, so the set stays within
-    ///      2,000.
+    ///      may not exceed 10,002. Every non-exempt entry burned a seat, so the set stays within
+    ///      10,002.
     function subscriberSetLength() external view returns (uint256);
 
     /// @notice GAME-only atomic stETH pull; caller catches any failed funding attempt.

@@ -107,7 +107,7 @@ Source: [contracts/storage/DegenerusGameStorage.sol](../contracts/storage/Degene
 | `_subscribers payload` | Three 85-bit lanes at 85k | Lane: ID 0–31; quantity-minus-one 32–34; tickets 35; score code 36–45; day 46–67; removal 68; streak 69–84. |
 | `_subCursor` | 0–14; 15 | Section offset; ticket-section flag (otherwise boxes). |
 | `_afkingProtocolFlags` | 0; 1; 2; 3; 4 | Vault bought; sDGNRS bought; Vault owner pause; Vault unfunded; sDGNRS unfunded. |
-| `_subMeta[id>>2]` | Four 64-bit lanes | Lane: position+1 0–10; run-start day 11–32; retained 63. |
+| `_subMeta[id>>2]` | Four 64-bit lanes | Lane: position+1 0–13; run-start day 14–35; retained 63 (`SUB_META_*`). |
 | `foilMatchClaimed[id]` | Two 32-bit lanes | Lane: exact day 0–23; four claim bits 24–27. |
 | `foilRecord[level&3][id]` | 0–23; 24–39; 40–55; 56–183 | First eligible day; multiplier; activity; four uint32 ticket lines. |
 | `foilRecord[level&3][id]` | 184–207; 208–231; 232; 255 | Generation day; exact level; gold paid; ready. |

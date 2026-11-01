@@ -252,7 +252,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     function _memberAt(uint256 i) internal view returns (uint32) {
         uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.SUB_BOX_COUNT)));
         uint256 boxes = uint16(packed >> (GameSlots.SUB_BOX_COUNT_OFFSET * 8));
-        uint256 position = i < boxes ? i : 2000 - (i - boxes);
+        uint256 position = i < boxes ? i : 10_002 - (i - boxes);
         bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
         uint256 word = uint256(vm.load(address(game), bytes32(uint256(base) + position / 3)));
         return uint32((word >> ((position % 3) * 85)) & 0xFFFFFFFF);

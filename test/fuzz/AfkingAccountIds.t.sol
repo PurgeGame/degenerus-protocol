@@ -64,15 +64,17 @@ contract AfkingIdPackingTest is Test {
         uint32 t1 = h.add(address(2), true);
         uint32 t2 = h.add(address(3), true);
         uint32 t3 = h.add(address(4), true);
-        assertEq(h.position1(t1), 2001);
-        assertEq(h.position1(t2), 2000);
-        assertEq(h.position1(t3), 1999);
-        // 1998..2000 share word 666; removing the newest ticket clears its lane only.
-        h.remove(2001);
-        assertEq(h.position1(t3), 2001, "ticket tail moved to the head");
-        assertEq(uint32(h.laneAt(2000)), t3);
-        assertEq(h.laneAt(1998), 0);
-        assertEq(uint32(h.laneAt(1999)), t2);
+        assertEq(h.position1(t1), 10_003);
+        assertEq(h.position1(t2), 10_002);
+        assertEq(h.position1(t3), 10_001);
+        // Physical 10,000 and 10,001 share word 3,333 and 10,002 opens word 3,334; removing the
+        // head moves the tail up and clears only the tail's lane.
+        h.remove(10_003);
+        assertEq(h.position1(t3), 10_003, "ticket tail moved to the head");
+        assertEq(uint32(h.laneAt(10_002)), t3);
+        assertEq(h.laneAt(10_000), 0);
+        assertEq(uint32(h.laneAt(10_001)), t2);
+        assertEq(h.runStart(t3), 7, "the move keeps the run start");
         assertEq(uint32(h.laneAt(0)), 1, "box section untouched");
     }
 

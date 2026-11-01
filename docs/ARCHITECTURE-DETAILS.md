@@ -223,10 +223,12 @@ today)`; its first purchase and first credited day are the next day. Changing qu
 settles the run first and keeps its start. Cancelling settles, then `finalizeAfking(id,
 earnedStreak, endpoint)` hands the accumulated streak back to Quests and anchors the manual quest
 streak at the run's reward endpoint. Unfunded members expire at the daily pass (rewards not yet
-settled are forfeit); loan seizure cancels a borrower's run. The member set is capped at 2,000
-(`SUBSCRIBER_CAP`); seats are capped at 2,000 live seats plus members (`SEAT_CAP`), the first 1,000
-(`FREE_TRANCHE`) minted free to pass buyers and the rest minted by the Vault owner
-(`afkingSeatMint`).
+settled are forfeit); loan seizure cancels a borrower's run. The member set is capped at 10,002
+(`SUBSCRIBER_CAP`): 10,000 player places plus the Vault's and sDGNRS's exempt subscriptions, which
+hold no seat. Live seats plus members are capped at the same 10,002 (`SEAT_CAP`). The first 5,000
+seats (`FREE_TRANCHE`, serials from 1) are minted free to pass buyers, one per purchasing account
+for life; the Vault owner mints the rest (`afkingSeatMint`) once all 5,000 are minted. A member
+leaving the set frees room for another Vault mint.
 
 Each day the subscriber pass (`PrepareSubscriptions`, ahead of the daily request) buys for every
 member at the active ticket level's price times quantity: in box mode one lootbox, its activity

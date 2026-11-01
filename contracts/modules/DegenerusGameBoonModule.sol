@@ -67,8 +67,8 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         // The Game constructor registered the protocol wallets as IDs 1-3.
         _registerDeity(VAULT_WALLET_ID, VAULT_DEITY_SYMBOL);
         _registerDeity(SDGNRS_WALLET_ID, SDGNRS_DEITY_SYMBOL);
-        _latchConstructionSeat(VAULT_WALLET_ID);
-        _latchConstructionSeat(SDGNRS_WALLET_ID);
+        _latchSeatClaimed(VAULT_WALLET_ID);
+        _latchSeatClaimed(SDGNRS_WALLET_ID);
         emit EntriesQueuedRange(VAULT_WALLET_ID, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
         emit EntriesQueuedRange(SDGNRS_WALLET_ID, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
         uint24 mintCeiling = _mintCeiling();
@@ -99,7 +99,9 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         if (count != 0) _tqAppendLanes(key, lanes, count);
     }
 
-    function _latchConstructionSeat(uint32 who) private {
+    /// @dev The protocol subscriptions are exempt and hold no seat; the latch keeps a later
+    ///      protocol pass purchase from minting a free-tranche seat.
+    function _latchSeatClaimed(uint32 who) private {
         uint256 packed = mintPacked_[who] | (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT);
         mintPacked_[who] = packed;
         emit MintRecorded(who, packed);
