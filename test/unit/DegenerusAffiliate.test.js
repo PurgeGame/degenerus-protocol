@@ -189,16 +189,17 @@ describe("DegenerusAffiliate", function () {
       expect(dgnrsInfo.kickback).to.equal(0);
     });
 
-    it("emits Affiliate(1) events for VAULT and DGNRS on construction", async function () {
-      const { affiliate, game, vault, sdgnrs } = await loadFixture(deployFullProtocol);
+    it("emits Affiliate(1) events for VAULT, DGNRS and GNRUS on construction", async function () {
+      const { affiliate, game, vault, sdgnrs, gnrus } = await loadFixture(deployFullProtocol);
       const events = await getEvents(affiliate.deploymentTransaction(), affiliate, "Affiliate");
       const codes = events.filter((event) => event.args.amount === 1n);
       expect(codes.map((event) => event.args.code)).to.deep.equal([
-        toBytes32("VAULT"), toBytes32("DGNRS"),
+        toBytes32("VAULT"), toBytes32("DGNRS"), toBytes32("GNRUS"),
       ]);
       expect(codes.map((event) => event.args.senderId)).to.deep.equal([
         await game.walletIdOf_g3120(await vault.getAddress()),
         await game.walletIdOf_g3120(await sdgnrs.getAddress()),
+        await game.walletIdOf_g3120(await gnrus.getAddress()),
       ]);
     });
 

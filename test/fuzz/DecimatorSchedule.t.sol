@@ -56,6 +56,7 @@ contract DecimatorScheduleTest is Test {
         vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)"), abi.encode(uint256(0)));
         // Charity address is read from the shared interface constant; no-return mock catches its selector.
         vm.mockCall(ContractAddresses.GNRUS, abi.encodeWithSignature("pickCharity(uint24)"), "");
+        vm.mockCall(ContractAddresses.GAME_MINT_MODULE, abi.encodeWithSignature("redeemGnrusFlip()"), "");
         h = DecimatorScheduleHost(ContractAddresses.GAME);
     }
     function test_RequestForcesOneDayBeforeRoutingAtBothClosureSpeeds() public {

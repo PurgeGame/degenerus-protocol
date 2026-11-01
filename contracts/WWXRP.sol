@@ -381,6 +381,8 @@ contract WWXRP {
 
     /// @notice Minimum WWXRP burn per draw entry (0 decimals)
     uint256 public constant MIN_BURN = 25;
+    /// @dev GNRUS's wallet ID (fixed at Game deployment).
+    uint32 private constant GNRUS_ID = 3;
 
     /// @dev Prize gate moduli
     uint256 private constant BIG_GATE = 365;
@@ -773,21 +775,35 @@ contract WWXRP {
     ///                 register past paid admission.
     function enterDraw(uint32 id, uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
-        // The requested logical day lives in Game slot 0 bits 24..47.
-        uint256 gameHeader = uint256(game.extsload_g2807007(bytes32(0)));
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
             (, payee, authorized) = game.resolveAccount_g7029(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
-
-        uint24 day = uint24(gameHeader >> 24);
         // Self entrants resolve or register through the canonical Game registry before
         // activity and reward records use the ID. Registration follows the free-ID policy;
         // this token burn does not provide a qualifying ETH quote beyond that limit.
         if (id == 0) id = game.walletIdOf_g3120(msg.sender);
         if (id == 0) id = game.registerWallet_g9539(msg.sender, true);
+        _enterDraw(id, payee, amount);
+    }
+
+    /// @notice Burn all of GNRUS's WWXRP (claimable, then held) into the draw; at level x99 it also
+    ///         enters the next x00 incinerator. Game only, from GNRUS's purchase-phase-end step;
+    ///         below MIN_BURN it does nothing.
+    function enterDrawForGnrus() external {
+        if (msg.sender != MINTER_GAME) revert OnlyMinter();
+        uint256 amount = claimable(GNRUS_ID);
+        uint256 held = balanceOf[ContractAddresses.GNRUS];
+        // A saturated prize balance cannot overflow the sum: held tokens then wait for a later century.
+        if (held <= type(uint256).max - amount) amount += held;
+        if (amount >= MIN_BURN) _enterDraw(GNRUS_ID, ContractAddresses.GNRUS, amount);
+    }
+
+    function _enterDraw(uint32 id, address payee, uint256 amount) private {
+        // The requested logical day lives in Game slot 0 bits 24..47.
+        uint24 day = uint24(uint256(game.extsload_g2807007(bytes32(0))) >> 24);
         uint256 score = game.playerActivityScoreCachedById_g975(id);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // both daily and century weights floor to whole WWXRP at the same BPS boundaries.

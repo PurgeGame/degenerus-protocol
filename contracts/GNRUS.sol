@@ -29,10 +29,14 @@ import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {BoundedCall} from "./libraries/BoundedCall.sol";
 
-/// @notice Minimal interface for sDGNRS balance snapshots used by GNRUS governance.
+/// @notice Minimal sDGNRS interface: governance balance snapshots and the game-over cash-out.
 interface ISDGNRSSnapshot {
     /// @notice Get sDGNRS balance for an address.
     function balanceOf(address account) external view returns (uint256);
+    /// @notice Burn the caller's sDGNRS; after game over pays its ETH/stETH share directly.
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
+    /// @notice Burn the caller's DGNRS wrapper the same way.
+    function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 }
 
 /// @notice Minimal interface for DegenerusGame donation-facing functions used by GNRUS.
@@ -450,6 +454,12 @@ contract GNRUS {
     ///      3-year sweepResidualToVault delay). The game's final sweep is one-shot (GO_SWEPT latch).
     function onFinalSweep() external onlyGame {
         sweptAt = uint40(block.timestamp);
+        // The sweep has already paid sDGNRS, so cash out the sDGNRS and DGNRS GNRUS earned at the
+        // final price. A refused burn never blocks the sweep.
+        uint256 held = sdgnrs.balanceOf(address(this));
+        if (held != 0) try sdgnrs.burn(held) {} catch {}
+        held = ISDGNRSSnapshot(ContractAddresses.DGNRS).balanceOf(address(this));
+        if (held != 0) try sdgnrs.burnWrapped(held) {} catch {}
     }
 
     // =====================================================================

@@ -749,7 +749,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return; // Already swept
 
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
-        charityGameOver.onFinalSweep(); // stamp GNRUS with the sweep time (anchors its recovery gates)
 
         _releaseRedemptionReserve();
         uint256 owedV  = _takeSinkBalance(VAULT_WALLET_ID);
@@ -765,7 +764,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         emit FinalSwept(totalFunds);
 
-        if (totalFunds == 0) { _shutdownVrf(meter); return; }
+        if (totalFunds == 0) { charityGameOver.onFinalSweep(); _shutdownVrf(meter); return; }
 
         // Protocol balances are fully backed apart from the three unbacked 1-wei sentinels, so
         // totalFunds >= owedV + owedSD + owedG - 3. A game holding exactly its obligations, or an
@@ -786,6 +785,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         stBal = _sendStethFirst(ContractAddresses.VAULT,  owedV  + thirdShare, stBal);
         stBal = _sendStethFirst(ContractAddresses.SDGNRS, owedSD + thirdShare, stBal);
         _sendStethFirst(ContractAddresses.GNRUS,          owedG  + gnrusExtra, stBal);
+        // After every sink is paid: stamp GNRUS's recovery gates and let it cash out its sDGNRS.
+        charityGameOver.onFinalSweep();
         _shutdownVrf(meter);
     }
 

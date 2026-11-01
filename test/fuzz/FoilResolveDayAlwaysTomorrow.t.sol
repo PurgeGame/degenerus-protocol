@@ -54,7 +54,9 @@ contract FoilGenerationFreshRequest is DeployProtocol {
 
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
         _lastFulfilledReqId = fresh;
-        game.mineRun(0);
+        // A full-gas call can publish and finish W in one transaction; small calls stop at the
+        // first checkpoint after W's word is recorded, while its jackpot is still owed.
+        _crankSmallUntilWordRecorded(W);
         assertTrue(game.rngWordForDay(W) != 0, "W's word recorded by the fulfil crank");
         assertEq(_dailyIdx(), W, "publication preserves the requested day");
         assertTrue(game.rngLocked(), "W's jackpot still owed under the lock");
@@ -162,6 +164,17 @@ contract FoilGenerationFreshRequest is DeployProtocol {
                 mockVRF.fulfillRandomWords(reqId, vrfWord);
                 _lastFulfilledReqId = reqId;
             }
+        }
+    }
+
+    /// @dev Small-gas mining calls: each runs its mandatory unit and stops where the next
+    ///      estimate does not fit. A call too small for its mandatory unit reverts whole, so the
+    ///      allowance steps up until one lands.
+    function _crankSmallUntilWordRecorded(uint24 day) internal {
+        uint256 gasCap = 500_000;
+        for (uint256 i; i < 64 && game.rngWordForDay(day) == 0; ++i) {
+            (bool ok,) = address(game).call{gas: gasCap}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+            if (!ok) gasCap += 250_000;
         }
     }
 

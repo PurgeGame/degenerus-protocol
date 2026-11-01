@@ -69,7 +69,7 @@ POOL-TO-POOL	_setPrizePools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	REA
 MUTATOR-DEF	_setPrizePools	_setFuturePrizePool	storage/DegenerusGameStorage.sol	READ	helper body delegates to the packed-slot setter
 MUTATOR-DEF	_setPrizePools	_setPrizePools	storage/DegenerusGameStorage.sol	READ	canonical packed-slot setter definition
 POOL-TO-POOL	_setPrizePools	_startDailyEth	modules/DegenerusGameJackpotModule.sol	READ	the purchase-phase drip merge (future debit + ticket-leg next credit + insurance skim debit) — one packed write
-POOL-TO-POOL	_setPrizePools	awardWhalePass_g5502	modules/DegenerusGameWhaleModule.sol	READ	exact full-pass cost from up to 25% of a jackpot-phase quadrant credits future; paired current debit includes returned spend; ticket-leg passes do not write pools
+POOL-TO-POOL	_setPrizePools	_awardQuadrantPasses	modules/DegenerusGameJackpotModule.sol	READ	exact full-pass cost from up to 25% of a jackpot-phase quadrant credits future; paired current debit includes returned spend; ticket-leg passes do not write pools
 VALUE-IN	_setPrizePools	_buyFoilPack	modules/DegenerusGameFoilCore.sol	READ	foil premium lands in live pools (75/25 split) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
 VALUE-IN	_setPrizePools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools (the purchase reverts under the daily lock)
 VALUE-IN	_setPrizePools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools

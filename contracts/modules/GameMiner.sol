@@ -143,6 +143,10 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                 if (action == MinerAction.RequestDaily && degenesisClosed < DEGENESIS_DAYS) {
                     requestMax += GasBounds.DEGENESIS_REQUEST_GAS;
                 }
+                // GNRUS's ticket buy rides only a request that can end the purchase phase.
+                if (action == MinerAction.RequestDaily && _dailyRequestMayEndPhase()) {
+                    requestMax += GasBounds.GNRUS_TICKET_PURCHASE;
+                }
                 // Batch pricing and the reserve pull stay atomic with
                 // the commitment. Only a nonempty open batch pays their rare admission cost.
                 // The first mandatory action bypasses estimates, including this sizing read.

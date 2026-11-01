@@ -1181,8 +1181,12 @@ contract WalletIdTruthHandler is Test {
         if (action == 44) {
             uint256 qty = 400 * (1 + p1 % 4);
             uint256 boxAmt = p2 % 3 == 0 ? 0 : bound(p2, 0.01 ether, 0.2 ether);
-            bytes memory data = _purchaseData(id, qty, boxAmt, _code(p1 >> 8, caller), p1 % 5 == 4, p1 % 13 == 12);
-            _acctCall(action, caller, id, GAME, _price() * qty / 400 + boxAmt, data, AUTH | F_CR);
+            bool combined = p1 % 5 == 4;
+            bool foil = p1 % 13 == 12;
+            bytes memory data = _purchaseData(id, qty, boxAmt, _code(p1 >> 8, caller), combined, foil);
+            // GNRUS (ID 3) takes exact fresh-ETH ticket donations from anyone: no box, no foil.
+            uint256 mode = id == 3 && boxAmt == 0 && !combined && !foil ? GIFT : AUTH;
+            _acctCall(action, caller, id, GAME, _price() * qty / 400 + boxAmt, data, mode | F_CR);
         } else if (action == 45) {
             _acctCall(action, caller, id, GAME, 0, abi.encodeWithSignature(
                 "redeemFlip(uint32,uint256)", id, 400 * (1 + p1 % 4)), AUTH | F_CR);

@@ -106,6 +106,11 @@ contract RequestGameSeeder is DegenerusGame {
 }
 
 contract RequestFlipSeeder is CoinflipStakeSetter {
+    function resolvedFrontier(uint24 day) external {
+        flipsClaimableDay = day;
+        requestedDailyIdx = day;
+        playerState[3].lastClaim = day;
+    }
     function seedBacking(uint24 latest, uint8 mode) external {
         uint32 id = degenerusGame.walletIdOf_g3120(ContractAddresses.SDGNRS);
         PlayerCoinflipState storage s = playerState[id];
@@ -203,6 +208,10 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         host = RequestGameSeeder(payable(address(game)));
         host.seed(_daily(), _transition(), _certify());
         _syncCoinflipFixtureDay(game.currentDayView_g542950());
+        bytes memory flipCode = address(coinflip).code;
+        vm.etch(address(coinflip), type(RequestFlipSeeder).runtimeCode);
+        RequestFlipSeeder(address(coinflip)).resolvedFrontier(_daily() ? DAY - 1 : DAY);
+        vm.etch(address(coinflip), flipCode);
         burnerId = _giveWalletId(BURNER);
         if (!_daily() && !_arm()) host.pendingMidday(_shape(), burnerId);
         // Cover populated foil swaps and the costlier first toggle of an empty foil slot.
@@ -323,6 +332,8 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         emit log_named_uint("cold_request_operation", used);
         uint256 bound = _daily() ? Bounds.RNG_DAILY_REQUEST : Bounds.RNG_MIDDAY_REQUEST;
         if (_redemption()) bound += Bounds.RNG_REDEMPTION_CLOSE;
+        // The phase-ending request is the one the miner admits with GNRUS's ticket buy.
+        if (scenario == Scenario.Transition) bound += Bounds.GNRUS_TICKET_PURCHASE;
         assertLe(used, bound, "complete cold request fits its operation bound");
         if (_shape() == 3) assertLt(host.credit(burnerId), 100 ether, "nonzero donor charge executes");
         _assertRequested();
@@ -347,7 +358,10 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
         vm.prank(_shape() == 3 ? BURNER : address(this));
-        host.requestOnly{gas: 6_000_000}(_daily());
+        uint256 allowance = (_daily() ? Bounds.RNG_DAILY_REQUEST + Bounds.DEGENESIS_REQUEST_GAS
+            : Bounds.RNG_MIDDAY_REQUEST) + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS
+            + (_transition() ? Bounds.GNRUS_TICKET_PURCHASE : 0);
+        host.requestOnly{gas: allowance}(_daily());
         return vm.lastCallGas().gasTotalUsed;
     }
     function test_ColdMidday() public { _measureRequest(Scenario.Midday); }
@@ -454,7 +468,9 @@ contract MineFlipRequestGasTest is DeployProtocol, NativeGasExport {
         this.configure(Scenario.CertifyDailyRedeem);
         // The engine adds the Degenesis step to the daily request until the seventh cohort closes.
         uint256 degenesis = _degenesisClosed() < 7 ? Bounds.DEGENESIS_REQUEST_GAS : 0;
-        game.mineRun{gas: Bounds.RNG_DAILY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + degenesis + REQUEST_FRAME_GAS}(0);
+        // This request ends the purchase phase (13 -> 14), so its admission carries GNRUS's buy.
+        game.mineRun{gas: Bounds.RNG_DAILY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + degenesis
+            + Bounds.GNRUS_TICKET_PURCHASE + REQUEST_FRAME_GAS}(0);
         emit log_named_uint("cold_certify_daily_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineRun(uint32)", uint32(0))));
         _assertRequested();
     }

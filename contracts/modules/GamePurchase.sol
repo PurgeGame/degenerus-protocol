@@ -36,6 +36,8 @@ import {GamePurchaseBoon} from "./GamePurchaseBoon.sol";
 import {GamePurchaseBox} from "./GamePurchaseBox.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
+interface IWwxrpGnrusDraw { function enterDrawForGnrus() external; }
+
 /// @notice Shared purchase, account funding and loan implementation in Game storage.
 abstract contract GamePurchase is
     DegenerusGamePayoutUtils,
@@ -242,8 +244,18 @@ abstract contract GamePurchase is
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) internal {
+        // Anyone may donate GNRUS tickets with fresh ETH (no box) paying the whole cost, so
+        // GNRUS's balances are never drawn. The donor refers that purchase: its commission
+        // routes as if the donor's own code were used.
+        if (buyerId == GNRUS_WALLET_ID) {
+            uint256 cost = _purchaseCostInputs(entryQuantityScaled).ticketCost;
+            if (payKind != MintPaymentKind.DirectEth || boxOrder != 0 || msg.value != cost) revert E();
+            affiliateCode = bytes32(uint256(_registerCallerAccount(0, cost)));
+        } else {
+            buyerId = _resolveAccountId(buyerId);
+        }
         _purchaseForAccount(
-            _resolveAccountId(buyerId),
+            buyerId,
             entryQuantityScaled,
             boxOrder,
             affiliateCode,
@@ -362,6 +374,26 @@ abstract contract GamePurchase is
     ) internal {
         uint32 buyerId = _resolveAccountId(id);
         _redeemFlipFor(buyerId, entryQuantityScaled);
+    }
+
+    /// @dev Settles GNRUS's flips every level (recording its BAF score), then buys through the
+    ///      ordinary FLIP redemption price, quest and queue path; dust (or an unrepresentably
+    ///      large excess) stays for a later level. Sized from wallet FLIP (donations) plus the
+    ///      settled backing (claimable plus withdrawable carry); the burn spends the wallet first,
+    ///      then the backing without a mint; stakes on unresolved days stay committed. A phase-ending request is unlocked with the pool above target, so the
+    ///      redemption window opens; the dust skips mirror the purchase's own refusals.
+    function _redeemGnrusFlip() internal {
+        coinflip.playCoinflip(GNRUS_WALLET_ID, 0);
+        // The last x99 request before the century: all of GNRUS's WWXRP enters the x00 incinerator.
+        if (level % 100 == 99) IWwxrpGnrusDraw(ContractAddresses.WWXRP).enterDrawForGnrus();
+        uint256 available = coinflip.previewFlipBackingById(GNRUS_WALLET_ID)
+            + coin.balanceOf(ContractAddresses.GNRUS);
+        uint256 quantity = (available * (4 * QTY_SCALE)) / PRICE_COIN_UNIT;
+        if (quantity > type(uint32).max) quantity = type(uint32).max;
+        uint24 targetLevel = _activeTicketLevel();
+        if ((PriceLookupLib.priceForLevel(targetLevel) * quantity) / (4 * QTY_SCALE) < TICKET_MIN_BUYIN_WEI
+            || (quantity < SNAP_CHECK_MAX_UNITS && quantity >> _snapShiftFor(targetLevel) == 0)) return;
+        _redeemFlipFor(GNRUS_WALLET_ID, quantity);
     }
 
     function _redeemFlipFor(

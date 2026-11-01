@@ -492,8 +492,8 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         if (count != 0) each = (net / (count * ETH_PRIZE_UNIT)) * ETH_PRIZE_UNIT;
     }
 
-    /// @dev The whale module's quadrant conversion cost: whole passes (two half passes each)
-    ///      from the share, paid whenever the bucket has a recipient.
+    /// @dev A quadrant's conversion cost: whole passes (two half passes each) from the share,
+    ///      paid whenever the bucket has a winner.
     function _passCost(uint256 share) private pure returns (uint256) {
         return (share / (8 * HALF_WHALE_PASS_PRICE)) * 2 * HALF_WHALE_PASS_PRICE;
     }
@@ -693,27 +693,33 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
         }
         for (uint8 q; q < 4; ++q) {
             if (passes[q] != 0) {
-                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, plan.entropy, q), true);
+                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, plan.entropy, q));
             }
         }
     }
 
-    /// @dev Bounded sibling-module award to one recipient from the bucket of `trait`. A ticket
-    ///      leg passes half-pass units; an ETH quadrant passes its original share and gets the
-    ///      spend back.
-    function _awardWhalePass(
-        uint24 lvl, uint8 trait, uint256 amount, uint256 randWord, bool ticketLeg
-    ) private returns (uint256 spent) {
+    /// @dev Bounded sibling-module award of a ticket jackpot's `halfPasses` to one recipient
+    ///      drawn from the bucket of `trait`.
+    function _awardWhalePass(uint24 lvl, uint8 trait, uint256 halfPasses, uint256 randWord) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
             abi.encodeWithSelector(
-                IDegenerusGameWhaleModule.awardWhalePass_g5502.selector,
-                lvl, trait, amount, randWord, ticketLeg
+                IDegenerusGameWhaleModule.awardWhalePass_g201599.selector, lvl, trait, halfPasses, randWord
             )
         );
         if (!ok) {
             assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         }
-        spent = abi.decode(data, (uint256));
+    }
+
+    /// @dev An ETH quadrant's whole passes (one per 18 ETH of its share) go to its first ETH
+    ///      winner, so the solo winner holds both; the exact cost credits futurePrizePool.
+    function _awardQuadrantPasses(uint32 winner, uint256 share) private returns (uint256 spent) {
+        spent = _passCost(share);
+        uint256 halfPasses = spent / HALF_WHALE_PASS_PRICE;
+        _addHalfPasses(winner, halfPasses);
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(next, future + uint128(spent));
+        emit JackpotWhalePassWin(winner, halfPasses, 5);
     }
 
     /// @notice Distribute yield surplus (stETH appreciation) to stakeholders.
@@ -1060,8 +1066,8 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
     /// @dev Pays ETH winners [pos, count) of one quadrant, `perWinner` each, in fixed groups of
     ///      ETH_AWARD_CHUNK. Winner `i` depends only on the frozen bucket, `seed` and `i`, and
     ///      each group of eight reads one packed word, so a resumed quadrant redraws nothing. The
-    ///      first group also converts `passShare` when it is nonzero. The solo quadrant has one
-    ///      winner, so its golden-ticket arm follows its only award.
+    ///      first winner also receives the passes `passShare` converts when it is nonzero. The
+    ///      solo quadrant has one winner, who takes its ETH, its passes and its golden-ticket arm.
     /// @return next First unpaid position; `count` when the quadrant is finished.
     /// @return paid ETH credited plus any pass cost, for this call only.
     /// @return liability Claimable liability added in this call.
@@ -1097,10 +1103,7 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
             if (c.pos == 0) bound += GasBounds.JACKPOT_ETH_FIRST_GROUP_GAS;
             if (!MineFlipGas.canRun(meter, bound, JACKPOT_TAIL_GAS)) break;
             uint32 first;
-            if (c.pos == 0) {
-                if (effectiveLen == 0) return (c.count, 0, 0);
-                if (c.passShare != 0) paid = _awardWhalePass(c.lvl, c.trait, c.passShare, c.seed, false);
-            }
+            if (c.pos == 0 && effectiveLen == 0) return (c.count, 0, 0);
             for (uint256 i = c.pos; i < end; ++i) {
                 (uint32 w, uint256 index) = _drawBucketEntry(
                     c.lvl, c.trait, len, effectiveLen, deity, c.seed, uint8(200 + c.q), i, cursor
@@ -1113,7 +1116,11 @@ abstract contract DegenerusGameJackpotModule is GameJackpotEvents, GameDailyInte
                     liability += c.perWinner;
                 }
             }
-            if (c.armGold && first != 0) _armGoldenTicket(first, c.lvl, c.trait);
+            if (first != 0) {
+                // The first winner also takes the quadrant's passes: the solo winner holds both.
+                if (c.passShare != 0) paid += _awardQuadrantPasses(first, c.passShare);
+                if (c.armGold) _armGoldenTicket(first, c.lvl, c.trait);
+            }
             c.pos = end;
             MineFlipGas.markProgress(meter);
         }

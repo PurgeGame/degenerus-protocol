@@ -253,6 +253,7 @@ contract DegenerusAffiliate {
     /// @dev Protocol wallet IDs (reserved by the Game at construction).
     uint32 private constant VAULT_ID = 1;
     uint32 private constant SDGNRS_ID = 2;
+    uint32 private constant GNRUS_ID = 3;
     /// @dev Code-info flags: both upline caches valid.
     uint8 private constant UPLINES_VALID = 6;
     /// @dev Referral words below this bound (other than 0 and REF_CODE_LOCKED) are default-code
@@ -271,6 +272,7 @@ contract DegenerusAffiliate {
     bytes32 private constant REF_CODE_LOCKED = bytes32(uint256(1));
     bytes32 private constant AFFILIATE_CODE_VAULT = bytes32("VAULT");
     bytes32 private constant AFFILIATE_CODE_DGNRS = bytes32("DGNRS");
+    bytes32 private constant AFFILIATE_CODE_GNRUS = bytes32("GNRUS");
 
     /// @notice DegenerusQuests contract for direct quest handler calls (constant).
     IDegenerusQuestsAffiliate internal constant affiliateQuests = IDegenerusQuestsAffiliate(ContractAddresses.QUESTS);
@@ -342,7 +344,7 @@ contract DegenerusAffiliate {
         emit Affiliate(0, AFFILIATE_CODE_DGNRS, VAULT_ID);
         emit Affiliate(0, AFFILIATE_CODE_VAULT, SDGNRS_ID);
 
-        _createAffiliateCode(ContractAddresses.GNRUS, bytes32("GNRUS"), 10);
+        _createAffiliateCode(ContractAddresses.GNRUS, AFFILIATE_CODE_GNRUS, 10);
 
         uint256 len = bootstrapOwners.length;
         for (uint256 i; i < len; ) {
@@ -780,6 +782,12 @@ contract DegenerusAffiliate {
         if (senderId == 0) revert Insufficient();
         uint256 stored = uint256(_affiliateStorage().playerReferralCode[senderId]);
         if (stored == 0) {
+            if (senderId == GNRUS_ID) {
+                // GNRUS never stores a referral: each ticket donation is referred by its donor,
+                // whose wallet ID the Game passes as the code.
+                uint32 donor = uint32(uint256(code));
+                return donor == 0 ? (NO_REFERRER_REF, AFFILIATE_CODE_VAULT) : (donor, bytes32(DEFAULT_ID_TAG | donor));
+            }
             if (code != bytes32(0)) {
                 bytes32 word;
                 (ref, word) = _referralTarget(code, senderId);
@@ -1169,7 +1177,9 @@ contract DegenerusAffiliate {
         uint32 referrerId = _affiliateStorage()._affiliateCode[code_].ownerId;
         if (referrerId == 0) revert Insufficient();
         uint32 playerId = game.registerWallet_g9539(player, true);
-        if (referrerId == playerId || _affiliateStorage().playerReferralCode[playerId] != bytes32(0)) revert Insufficient();
+        // GNRUS keeps no stored referral: its donations are referred by their donors.
+        if (referrerId == playerId || playerId == GNRUS_ID
+            || _affiliateStorage().playerReferralCode[playerId] != bytes32(0)) revert Insufficient();
         _setReferral(playerId, code_, code_, referrerId);
         emit Affiliate(0, code_, playerId);
     }

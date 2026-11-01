@@ -262,7 +262,10 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
         assertTrue(ok);
         uint8 after_ = _action();
         emit log_named_uint("next action after one 16.7M call", after_);
-        assertGt(after_, uint8(DegenerusGameStorage.MinerAction.Tickets),
+        // Wait means the call drained the whole session after Publish; any later action means it
+        // stopped at an estimate. Either way it chained past Publish's mandatory unit.
+        assertTrue(after_ == uint8(DegenerusGameStorage.MinerAction.Wait)
+            || after_ > uint8(DegenerusGameStorage.MinerAction.Tickets),
             "non-vacuous: the 16.7M call chains Publish into later estimate-admitted actions");
         vm.revertToStateAndDelete(snap);
     }

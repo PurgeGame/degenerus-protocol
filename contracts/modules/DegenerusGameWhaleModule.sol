@@ -1133,42 +1133,20 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // Whale Pass Claims
     // =========================================================================
 
-    /// @notice Nested jackpot award against GAME storage, with deferred delivery.
-    /// @dev One recipient from one quadrant's bucket. A ticket leg supplies half-pass units
-    ///      and never moves pools: its ETH already backs nextPrizePool. An ETH quadrant
-    ///      supplies its original ETH budget; whole passes consume at most 25%, with the
-    ///      exact cost credited to futurePrizePool. JackpotModule includes that spend in its
-    ///      matching current-pool debit, and pays all remaining ETH.
-    /// @return spent Award value credited (a ticket leg ignores this return).
-    function awardWhalePass_g5502(
-        uint24 lvl,
-        uint8 trait,
-        uint256 amount,
-        uint256 randWord,
-        bool ticketLeg
-    ) external returns (uint256 spent) {
-        uint256 halfPasses = ticketLeg ? amount : (amount / (8 * HALF_WHALE_PASS_PRICE)) * 2;
-        if (halfPasses == 0) return 0;
-        uint32 winner = _drawWhalePassWinner(lvl, trait, randWord, ticketLeg);
-        if (winner == 0) return 0;
+    /// @notice Nested ticket-jackpot award against GAME storage, with deferred delivery.
+    /// @dev One recipient from one quadrant's bucket receives `halfPasses`. The leg's ETH
+    ///      already backs nextPrizePool, so no pool moves.
+    function awardWhalePass_g201599(uint24 lvl, uint8 trait, uint256 halfPasses, uint256 randWord) external {
+        uint32 winner = _drawWhalePassWinner(lvl, trait, randWord);
+        if (winner == 0) return;
         _addHalfPasses(winner, halfPasses);
-        spent = halfPasses * HALF_WHALE_PASS_PRICE;
-        if (!ticketLeg) {
-            (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(next, future + uint128(spent));
-        }
-        emit JackpotWhalePassWin(winner, halfPasses, ticketLeg ? 4 : 5);
+        emit JackpotWhalePassWin(winner, halfPasses, 4);
     }
 
     /// @dev Fresh recipient from one frozen bucket, weighting real and deity virtual entries
     ///      alike. Award sizes never enter the seed.
-    function _drawWhalePassWinner(
-        uint24 lvl,
-        uint8 trait,
-        uint256 randWord,
-        bool ticketLeg
-    ) private view returns (uint32) {
-        uint256 entropy = EntropyLib.hash2(ticketLeg ? RngTags.WHALE_TICKET : RngTags.WHALE_QUADRANT, randWord);
+    function _drawWhalePassWinner(uint24 lvl, uint8 trait, uint256 randWord) private view returns (uint32) {
+        uint256 entropy = EntropyLib.hash2(RngTags.WHALE_TICKET, randWord);
         uint256 len = _bucketLength(lvl, trait);
         uint32 deity = _traitDeity(trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);

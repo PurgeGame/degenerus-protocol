@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+
+import {Vm} from "forge-std/Vm.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
@@ -390,6 +392,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Fulfill the VRF (word stored in rngWordCurrent, NOT yet in lootboxRngWordByIndex)
         mockVRF.fulfillRandomWords(reqId, vrfWord);
+        vm.recordLogs();
         game.mineRun(0); // required publication; the callback stores only the final word
         _lastFulfilledReqId = reqId;
 
@@ -397,17 +400,19 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 day4Start = _relTs(4 * 86400);
         vm.warp(day4Start);
 
-        // The stale word should be stored at the reserved index. It is read before day 4's
-        // first call: the call that completes the stale day also issues day 4's request,
-        // which recycles this buffer.
-        // The stored value may be the raw VRF word or a derived (keccak256) word
-        // depending on whether the stale redirect path or backfill path was taken.
-        uint256 storedWord = _readLootboxWord(reservedIndex);
+        // The stale word is published at the reserved index. The publishing call may also drain
+        // the read consumers and issue the next request, which recycles this buffer, so the
+        // publication event is the witness. The stored value may be the raw VRF word or a
+        // derived (keccak256) word depending on whether the stale redirect path or backfill
+        // path was taken.
+        uint256 storedWord = _publishedAt(vm.getRecordedLogs(), reservedIndex, reqId);
         assertTrue(storedWord != 0, "Stale redirect should store nonzero word at correct index");
 
         // mineFlip on day 4: rngGate sees requestDay < day, redirects stale word
-        // to lootbox via _finalizeLootboxRng. The game processes both days inline.
-        game.mineRun(0);
+        // to lootbox via _finalizeLootboxRng. The game processes both days inline. When the
+        // publishing call already completed the stale day (and may have opened a mid-day
+        // request this harness never answers), there is nothing left for the stale request.
+        if (_readVrfRequestId() == reqId) game.mineRun(0);
 
         // Process the stale day until its request is retired (the completing call may issue
         // day 4's request); the stale word is still the published word until then.
@@ -535,12 +540,27 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 request = vrf.lastRequestId();
         assertEq(_readVrfRequestId(), request, "answering the live request");
         vrf.fulfillRandomWords(request, word);
+        // One call may publish, drain the read consumers and issue the next request, which
+        // recycles this buffer; the publication event is the durable witness.
+        vm.recordLogs();
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked() || _readVrfRequestId() != request) break;
             game.mineRun(0);
-            if (_readVrfRequestId() == request && _readLootboxWord(index) != 0) published = _readLootboxWord(index);
         }
+        published = _publishedAt(vm.getRecordedLogs(), index, request);
         assertTrue(!game.rngLocked() || _readVrfRequestId() != request, "answered request's day completes");
+    }
+
+    /// @dev The word LootboxRngApplied published at `index` for `request` (0 if none); at most once.
+    function _publishedAt(Vm.Log[] memory logs, uint48 index, uint256 request) internal view returns (uint256 word) {
+        bytes32 topic = keccak256("LootboxRngApplied(uint48,uint256,uint256)");
+        uint256 count;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0 || logs[i].topics[0] != topic) continue;
+            (uint48 idx, uint256 w, uint256 rid) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+            if (idx == index && rid == request) { word = w; ++count; }
+        }
+        assertLe(count, 1, "an index is published once per request");
     }
 
     /// @notice Mid-day rawFulfillRandomWords with word=0 stores 1 at the lootbox index.

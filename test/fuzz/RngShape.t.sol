@@ -12,7 +12,7 @@ contract RngShapeTest is Test {
     }
 
     function testFuzz_ActionAndDiscriminatorIndependence(uint256 word) public pure {
-        uint256[] memory tags = new uint256[](113);
+        uint256[] memory tags = new uint256[](112);
         tags[0] = RngTags.BAF_FAR_PAIR;
         tags[1] = RngTags.BAF_FUTURE_ATTEMPT;
         tags[2] = RngTags.BAF_HEAD;
@@ -116,18 +116,17 @@ contract RngShapeTest is Test {
         tags[100] = RngTags.TICKET_SHUFFLE;
         tags[101] = RngTags.TICKET_SHUFFLE_STEP;
         tags[102] = RngTags.TICKET_TRAITS;
-        tags[103] = RngTags.WHALE_QUADRANT;
-        tags[104] = RngTags.WHALE_TICKET;
-        tags[105] = RngTags.WWXRP_BIG;
-        tags[106] = RngTags.WWXRP_BUCKET;
-        tags[107] = RngTags.WWXRP_INCINERATOR;
-        tags[108] = RngTags.WWXRP_SMALL;
-        tags[109] = RngTags.WWXRP_WINNER;
-        tags[110] = RngTags.DEGENESIS_BOON;
-        tags[111] = RngTags.DEGENESIS_BOON_EXTRA;
-        tags[112] = RngTags.DEGENESIS_BOON_TYPE;
+        tags[103] = RngTags.WHALE_TICKET;
+        tags[104] = RngTags.WWXRP_BIG;
+        tags[105] = RngTags.WWXRP_BUCKET;
+        tags[106] = RngTags.WWXRP_INCINERATOR;
+        tags[107] = RngTags.WWXRP_SMALL;
+        tags[108] = RngTags.WWXRP_WINNER;
+        tags[109] = RngTags.DEGENESIS_BOON;
+        tags[110] = RngTags.DEGENESIS_BOON_EXTRA;
+        tags[111] = RngTags.DEGENESIS_BOON_TYPE;
         for (uint256 i; i < tags.length; ++i) {
-            assertEq(tags[i], i < 57 ? i + 1 : i < 66 ? i + 2 : i + 3, "tags must stay uniquely assigned");
+            assertEq(tags[i], i < 57 ? i + 1 : i < 66 ? i + 2 : i < 103 ? i + 3 : i + 4, "tags must stay uniquely assigned");
             uint256 a = EntropyLib.hash2(tags[i], word);
             assertTrue(a != EntropyLib.hash3(tags[i], word, 0), "fixed-width arity separates draws");
             assertTrue(EntropyLib.hash3(tags[i], word, 0) != EntropyLib.hash3(tags[i], word, 1), "entry position separates draws");

@@ -509,7 +509,9 @@ contract FLIP {
     }
 
     /// @dev Ungated by the RNG lock: consumeCoinflipsForBurn reaches claimableStored only —
-    ///      settled days the pending word cannot reprice — never the auto-rebuy carry.
+    ///      settled days the pending word cannot reprice — never the auto-rebuy carry. GNRUS
+    ///      also spends its carry: its only burn is the Game's purchase-phase-end ticket buy,
+    ///      made at the fresh daily request before it is committed, with every day resolved.
     function _consumeCoinflipShortfall(address player, uint256 amount) private returns (uint256 consumed) {
         if (amount == 0) return 0;
         uint256 balance = balanceOf[player];
@@ -520,7 +522,9 @@ contract FLIP {
         if (player == ContractAddresses.VAULT) balance += uint256(_supply.vaultAllowance);
         if (balance >= amount) return 0;
         unchecked {
-            consumed = coinflip.consumeCoinflipsForBurn(player, amount - balance);
+            consumed = player == ContractAddresses.GNRUS
+                ? coinflip.consumeFlipBacking(player, amount - balance)
+                : coinflip.consumeCoinflipsForBurn(player, amount - balance);
         }
         if (balance + consumed < amount) revert Insufficient();
     }

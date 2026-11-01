@@ -620,8 +620,8 @@ abstract contract DegenerusGameStorage {
     /// @dev Next index of `_loansDue[level]` to seize while `LOANS_DUE_PENDING` is set;
     ///      slot-4 bytes 16..19.
     uint32 internal loanSeizeCursor;
-    /// @dev Last resolved day the Game successfully settled both Vault and GNRUS through.
-    ///      A lower bound on both Coinflip cursors; slot-4 bytes 20..22, preserving later roots.
+    /// @dev Last resolved day the Game successfully settled the Vault through. A lower
+    ///      bound on its actual Coinflip cursor; slot-4 bytes 20..22, preserving later roots.
     uint24 internal vaultFlipSettledDay;
     /// @dev Bits 0/1 invalidate the retained even/odd trait bitmap until its first append.
     uint8 internal traitBucketStale;
@@ -880,8 +880,8 @@ abstract contract DegenerusGameStorage {
     ///      The award is a bare half-pass counter binding to no level: claimWhalePass sets the target
     ///      from the level standing at claim time and reports it on WhalePassClaimed. The paying level
     ///      is not carried here either — every emit site sits in a receipt that already stamps it.
-    ///      `source`: 2 BAF direct, 3 award tickets (JackpotDrawModule), 4 early bird, 5 quadrant
-    ///      conversion (WhaleModule).
+    ///      `source`: 2 BAF direct, 3 award tickets (JackpotDrawModule), 4 ticket-jackpot passes
+    ///      (WhaleModule), 5 ETH quadrant conversion to the quadrant's first ETH winner (JackpotModule).
     event JackpotWhalePassWin(
         uint32 indexed walletId,
         uint256 halfPassCount,
@@ -3298,6 +3298,19 @@ abstract contract DegenerusGameStorage {
 
     function _dailyRequestDue() internal view returns (bool) {
         return _wallDay() > lastDailyRequestWallDay;
+    }
+
+    /// @dev True when the next fresh daily request can end the purchase phase (GNRUS's ticket buy
+    ///      rides it): the phase end is latched, or prepareRequestBoundary's early turbo can latch
+    ///      it. A superset of that branch, which also needs day >= purchaseStartDay and no mid-day
+    ///      lock; nothing it reads changes before that branch runs (Degenesis pricing adds only
+    ///      to the future pool).
+    function _dailyRequestMayEndPhase() internal view returns (bool) {
+        if (jackpotPhaseFlag) return false;
+        if (lastPurchaseDay) return true;
+        uint256 day = uint256(dailyIdx) + 1;
+        return day >= GameTimeLib.MAIN_LAUNCH_DAY && day <= uint256(purchaseStartDay) + 1 && level % 10 != 9
+            && _getNextPrizePool() > _prizePoolTarget(level + 1);
     }
 
     function _wallDayAt(uint48 ts) internal pure returns (uint24) {

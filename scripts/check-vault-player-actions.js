@@ -67,7 +67,7 @@ const excluded = {
   PARIMUTUEL: ["recordGrowth", "runGrowthWork"],
   WWXRP: [
     "approve", "transfer", "transferFrom", "vaultMintTo", // Existing sweepToken / wwxrpMint.
-    "burnForAccount", "burnForGame", "consumeBoon", "creditPrize", "mintPrize", "resolveIncinerator",
+    "burnForAccount", "burnForGame", "consumeBoon", "creditPrize", "enterDrawForGnrus", "mintPrize", "resolveIncinerator",
     "setGameMintScale", "setTrustedMinter", // Direct DGVE-owner controls.
   ],
   SDGNRS: [

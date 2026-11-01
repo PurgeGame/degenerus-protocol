@@ -229,8 +229,10 @@ The ending, in order:
    completion, or fixing the hard-stall pot, stamps `GO_TIME` (`_finishTerminalPayout`).
 4. **Final sweep.** At `GO_TIME + 30 days`, `_handleFinalSweep` releases the redemption reserve,
    pays the Vault, sDGNRS and GNRUS their own game balances, splits the rest of the Game's ETH and
-   stETH in thirds between them (pro rata if short), forfeits all other unclaimed balances, clears
-   Admin's active subscription reference and attempts to cancel the VRF subscription.
+   stETH in thirds between them (pro rata if short), and forfeits all other unclaimed balances.
+   After those payouts, GNRUS records its recovery timestamp and attempts to cash out its native
+   and wrapped DGNRS; refused burns are caught. This hook also runs when Game custody is zero.
+   The sweep then clears Admin's active subscription reference and attempts to cancel the VRF subscription.
    A refused cancellation can be retried through `Admin.retrySubCancel`. Game balance claims revert
    after the sweep.
 

@@ -297,8 +297,10 @@ Admission bounds live in `MineFlipGasBounds` (cold-path, including new-state gas
 assumed unless a constant says so). Among the largest: `LEVEL_ONE_DRAW` 7.5M, `DAILY_APPLY` 7.2M,
 `TRANSITION_CLOSE` 6.2M, `TICKET_ROUND_MAX` 5.1M, `JACKPOT_BATTLE_DRAW` 4.7M,
 `TICKET_DIRECT_ROUND_GAS_MAX` 4.5M (each further 32-winner direct ticket award round),
-`RNG_DAILY_REQUEST` 4.4M, `BAF_VAULT_SETTLE` 3.5M, `HUMAN_ENTRY_GAS` 3.2M, `RNG_TERMINAL_REQUEST`
-3.1M, `CRAPS_SEAT_GAS_MAX` 2.8M and `BAF_AWARD_GROUP` 2.4M. Trusted holder exits that read stETH
+`RNG_DAILY_REQUEST` 4.4M (plus `GNRUS_TICKET_PURCHASE` 2.125M on a request that can end the
+purchase phase), `BAF_VAULT_SETTLE` 3.5M,
+`HUMAN_ENTRY_GAS` 3.2M, `RNG_TERMINAL_REQUEST` 3.1M, `CRAPS_SEAT_GAS_MAX` 2.8M and
+`BAF_AWARD_GROUP` 2.4M. Trusted holder exits that read stETH
 (`BoundedCall.stethBalanceOrZero`, used by the Vault, sDGNRS and GNRUS) revert
 `InsufficientExecutionGas` unless `gasleft()` is at least `STETH_READ_MIN_GAS + CALL_OVERHEAD +
 ceil(STETH_READ_MIN_GAS / 63)` = 111,588, then forward all gas; a failed read counts as zero.
@@ -307,7 +309,7 @@ Daily-phase work reports `Advance(stage, lvl)`. Stage constants (`DegenerusGameA
 transition done, 6 purchase daily, 7 entered jackpot, 8 jackpot coin+tickets, 9 jackpot phase ended,
 10 jackpot daily started, 14 early-bird tickets, 15 purchase daily tickets, 16 jackpot-day battle
 step, 17 purchase-day battle step, 18 daily word applied, 19 BAF award group, 20 terminal loans, 21
-Degenesis day, 22 Vault and GNRUS flips settled. The RNG module reports 1 (request issued) and the GameOver
+Degenesis day, 22 Vault flips settled. The RNG module reports 1 (request issued) and the GameOver
 module 0 (game over) and 5 (terminal tickets working). Stage events report work; none changes the
 game phase by itself.
 
@@ -429,31 +431,56 @@ pending future pool (the stage runs under the daily lock, with the pools frozen)
 and bumps the bracket epoch. A game-over latch during the stage releases the uncredited reservation
 into the distributable total.
 
-The x0 last-purchase seal arms the next day's weighted depositor draw and, in the same step,
-settles Vault and GNRUS through that day's applied result (`playCoinflip(1, 0)` followed by
-`playCoinflip(3, 0)`). Both bracket scores include every winning flip the bracket counts. The BAF
-day's own flip settles after the next request and scores the next bracket. Every seal-capable x0
-purchase leg keeps `BAF_VAULT_SETTLE` (3.5M for both full 90-day walks) in its tail, in addition to
-`DAILY_PHASE_TAIL` (250k). The separate daily-phase checkpoint settles both accounts every 45
-resolved days before any phase can unlock. `_settleProtocolFlips` stamps `vaultFlipSettledDay`
-(stage 22) only after both calls succeed; a failure rolls back both claims and the stamp. This field
-retains Game slot 4, byte offset 20. Zero-deposit gifts require no account permission and cannot
-withdraw or spend the account's winnings. RNG application and terminal resolution have no added
-settlement dependency. The cold 90-day unlimited-rebuy pair measures at most 518,290 Osaka gas
-across 95 cases: every single-loss position, all wins, alternating outcomes and all losses. The largest combined
-execution/state estimate under the retained Glamsterdam repricing model is 1,118,208. Both stay
-below half of the 3.5M reserve; the model is not a native Glamsterdam execution measurement.
-The daily checkpoint peaks at 597,129 gas and the complete x0 `mineRun` seal at 1,766,093 gas,
-with a 10M supplied-gas cap. See `test/gas/VaultBafSettleGas.t.sol` for the assertions.
+The x0 last-purchase seal arms the next day's weighted depositor draw and settles Vault through
+that day's applied result (`playCoinflip(1, 0)`). Each seal-capable x0 purchase leg keeps
+`BAF_VAULT_SETTLE` (3.5M) in its tail, in addition to `DAILY_PHASE_TAIL` (250k). The separate
+stage-22 checkpoint settles Vault every 45 resolved days. `_settleVaultFlips` stamps
+`vaultFlipSettledDay` after success; failure rolls back the claim and stamp. This field retains
+Game slot 4, byte offset 20. Zero-deposit gifts cannot withdraw or spend the account's winnings.
+See `test/gas/VaultBafSettleGas.t.sol` for cold settlement and full sealing-chunk measurements.
 
-The Affiliate constructor registers `bytes32("GNRUS")` for GNRUS wallet ID 3 with kickback 10,
-before optional bootstrap codes and referrals. The percentage applies to the calculated affiliate
-reward, not the purchase amount. Existing code validation and duplicate protection apply, including
-to conflicting bootstrap entries. Coinflip enables unlimited auto-rebuy for ID 3 at day 1: claim
-cursor and start day 1, enabled and unlimited flags set, internal stop sentinel 1, public take-profit
-0. Affiliate awards enter ID-keyed stakes; wins roll with the ordinary recycle bonus and losses
-consume the carry. No FLIP award mints to the GNRUS wallet, and no extra post-game-over FLIP path is
-required.
+GNRUS settles separately at the next request, before the level increments or the BAF word is
+requested. Its winning-flip score therefore enters the same closing bracket as a settlement at
+the preceding seal. The BAF day's own flip settles after this request and scores the next bracket.
+Dust does not suppress GNRUS settlement; only the ticket purchase can be skipped.
+
+The Affiliate constructor registers `bytes32("GNRUS")` for GNRUS wallet ID 3 with kickback 10.
+GNRUS has no stored referral; constructor bootstrap referrals to ID 3 are rejected. Each ETH ticket
+donation routes its commission through the donor's gameplay ID without storing a referral for
+GNRUS. Players using GNRUS's code route uplines through Vault and sDGNRS.
+
+Sizing adds Coinflip backing and wallet FLIP, including plain transfers to GNRUS. The burn spends
+wallet tokens first, then stored claimable and withdrawable carry. `balanceOfWithClaimable`
+excludes carry, so the purchase combines the backing preview with the wallet-only balance view.
+FLIP rewards remain in Coinflip until consumed; there is no extra post-game-over withdrawal path.
+
+Anyone can donate ETH tickets to account 3 through `purchaseOrderFor`: DirectEth, exact quoted
+payment, no box and no foil. Underpayment and overpayment revert for every donor. GNRUS's balances
+never cover a shortfall. The donor is registered under the ordinary paid-admission policy, and
+its ID replaces any supplied affiliate code for that purchase. The normal 75/20/5 route selects
+the donor or its uplines, with zero default-code kickback. GNRUS's stored referral is untouched.
+AFKing bases are drained once and split without multiplying the total when recipients coincide.
+Ticket history, activity and quest progress belong to GNRUS. Other account actions retain their
+ordinary authorization checks, and donations obey the normal liveness and game-over gates.
+
+At the last x99 purchase-phase request, GNRUS also enters its claimable and held WWXRP into the
+daily draw and upcoming x00 incinerator when the spendable amount reaches MIN_BURN. If adding
+held tokens would overflow uint256, only claimable prizes enter and held tokens wait for a later
+century. This runs before the header day and level advance. Draw prizes credit wallet ID 3 through
+Coinflip.
+
+At the final sweep, GNRUS receives its sink payout and then attempts to redeem all held sDGNRS
+and DGNRS. The hook stamps the recovery timestamp and catches refused burns. GNRUS's sDGNRS is
+excluded from the community-vote supply denominator. Holder exits redeem the ETH/stETH backing
+available when they execute.
+
+GNRUS's 2.125M is reserved only on a daily request that can end the purchase phase: the phase end
+is latched, or the early turbo can latch it (one of the phase's first two requests at a non-x9
+level with the next pool over target). The miner admission and the refill tail add it under the
+same test. A phase-ending request's full reservation is 7.775M with Degenesis preparation (0.7M)
+and redemption close (0.55M); adding a conservative 1M frame allowance gives 8.775M. Its refill tail
+reserves 5.175M (3.05M on other requests). These are admission reservations; actual costs depend on
+the state touched.
 
 ## Coinflip, BAF and affiliate records
 
@@ -567,11 +594,11 @@ padding redraw loads its source word through that cached root or from the header
 does not change entry weights or sampled order.
 
 Each ordinary jackpot-phase ETH quadrant can convert up to 25% of its original allocation to full
-whale passes at 4.5 ETH each. The shares and budget-based ETH winner targets are calculated first.
-The Jackpot module delegates a separate recipient draw and claim credit to
-`WhaleModule.awardWhalePass_g5502`; it returns the exact cost credited to futurePrizePool. The
-Jackpot module includes that cost in the current-pool debit and pays the remaining ETH to the
-original winners. The solo ETH winner owns any golden-ticket arm. `QuadrantWhalePass` covers the
+whale passes at 4.5 ETH each (one per 18 ETH of the quadrant's share). The shares and budget-based
+ETH winner targets are calculated first. The quadrant's first ETH winner receives all of its passes,
+so the solo winner holds the solo ETH prize, its passes and any golden-ticket arm. The Jackpot
+module credits the pass claim and the exact pass cost to futurePrizePool, includes that cost in the
+current-pool debit and pays the remaining ETH to the winners. `QuadrantWhalePass` covers the
 conversion rules.
 
 Ordinary purchase-phase and jackpot-phase ETH draws size their winners from the draw's ETH budget.

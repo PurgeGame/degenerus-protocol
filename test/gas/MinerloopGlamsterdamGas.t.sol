@@ -464,7 +464,7 @@ contract MinerloopGlamsterdamSettlementGasTest is DeployProtocol, MinerloopGasPr
     }
 }
 
-/// @notice The real x0 seal, with both maximum-carry 90-day walks and a final loss.
+/// @notice The real x0 Vault-only seal, with a maximum-carry 90-day walk and a final loss.
 contract MinerloopGlamsterdamProtocolSealGasTest is VaultSealChunkGasSlowRebuy, MinerloopGasProbe {
     function test_GlamsterdamProtocol90DaySeal() public {
         assertEq(game.walletIdOf_g3120(ContractAddresses.VAULT), 1);
@@ -478,10 +478,10 @@ contract MinerloopGlamsterdamProtocolSealGasTest is VaultSealChunkGasSlowRebuy, 
             abi.encodeCall(VaultSettleHost.dailyWith, (ALLOWANCE)), CHUNK_CAP);
         assertTrue(_latched());
         assertEq(_lastClaim(ContractAddresses.VAULT), latchDay);
-        assertEq(_lastClaim(ContractAddresses.GNRUS), latchDay);
-        _report("x0_seal_including_both_90day_walks", r, CHUNK_CAP);
+        assertEq(_lastClaim(ContractAddresses.GNRUS), latchDay - 90, "GNRUS waits for the closing request");
+        _report("x0_seal_vault_90day_walk", r, CHUNK_CAP);
         assertLt(r.osakaExec, CHUNK_CAP);
-        assertLt(r.glamsterdamExec, CHUNK_CAP);
+        assertLt(r.glamsterdamExec + r.stateGas, CHUNK_CAP);
     }
 }
 

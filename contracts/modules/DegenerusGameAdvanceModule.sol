@@ -35,7 +35,7 @@ import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {IDegenerusGameAdvanceModule, IDegenerusGameFoilWorkerModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
-    IGameAfkingModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
+    IGameAfkingModule, IDegenerusGameDegenesisModule, IDegenerusGameMintModule} from "../interfaces/IDegenerusGameModules.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
@@ -90,7 +90,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;
     uint8 private constant STAGE_TERMINAL_LOANS = 20;
     uint8 private constant STAGE_DEGENESIS_DAY = 21;
-    uint8 private constant STAGE_PROTOCOL_FLIPS_SETTLED = 22;
+    uint8 private constant STAGE_VAULT_FLIPS_SETTLED = 22;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
     uint16 private constant NEXT_TO_FUTURE_BPS_DEADLINE = 4500;
@@ -190,11 +190,11 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         uint24 stamp = vaultFlipSettledDay;
         if (day > stamp && uint256(day) - stamp >= 45) {
             if (!MineFlipGas.canRun(meter, GasBounds.BAF_VAULT_SETTLE, GasBounds.DAILY_PHASE_TAIL)) return result;
-            _settleProtocolFlips(day);
+            _settleVaultFlips(day);
             result.progressed = true;
             MineFlipGas.markProgress(meter);
             MineFlipGas.finish(meter);
-            emit Advance(STAGE_PROTOCOL_FLIPS_SETTLED, level);
+            emit Advance(STAGE_VAULT_FLIPS_SETTLED, level);
             return result;
         }
         uint24 lvl = level;
@@ -202,7 +202,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         bool lastPurchase = !inJackpot && lastPurchaseDay;
         uint24 purchaseLevel = lastPurchase ? lvl : lvl + 1;
         uint8 stage;
-        // An x0 purchase day's seal arms the BAF draw and settles Vault and GNRUS flips, so the
+        // An x0 purchase day's seal arms the BAF draw and settles the vault's flips, so the
         // legs that can seal the day leave that settlement whole in their tail.
         uint256 sealTail = GasBounds.DAILY_PHASE_TAIL;
         if (!inJackpot && purchaseLevel % 10 == 0) {
@@ -479,7 +479,13 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         if (isTicketJackpotDay && (level + 1) % 10 == 5 && (level + 1) % 100 != 95) {
             jackpotFlags |= JACKPOT_TURBO;
         }
-        if (isTicketJackpotDay && (jackpotFlags & JACKPOT_TURBO) != 0) _activateNextTickets();
+        if (isTicketJackpotDay) {
+            // Once per purchase phase GNRUS's flips settle (recording its BAF score) and its
+            // spendable FLIP buys closing-level tickets; no seal or backstop settles GNRUS.
+            _componentDelegate(ContractAddresses.GAME_MINT_MODULE,
+                abi.encodeWithSelector(IDegenerusGameMintModule.redeemGnrusFlip.selector));
+            if ((jackpotFlags & JACKPOT_TURBO) != 0) _activateNextTickets();
+        }
         uint24 lvl = level + 1;
         rngLockedFlag = true;
         {
@@ -838,12 +844,11 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         emit PoolsSettled(lvl, day, psd, p.next, p.future, p.current, p.yield, claimablePool, p.claimable);
     }
 
-    /// @dev Zero deposits settle Vault and GNRUS winnings atomically. All callers have an applied
+    /// @dev Zero deposit banks mintable winnings exactly once. All callers have an applied
     ///      final-day result, so the 90-day walk reaches `day` (or was already settled).
-    ///      Stamp only after both calls succeed; reload/modify only this packed field, never slot 4.
-    function _settleProtocolFlips(uint24 day) private {
+    ///      Reload/modify only this packed field after the call; never flush a cached slot 4.
+    function _settleVaultFlips(uint24 day) private {
         coinflip.playCoinflip(VAULT_WALLET_ID, 0);
-        coinflip.playCoinflip(GNRUS_WALLET_ID, 0);
         if (day > vaultFlipSettledDay) vaultFlipSettledDay = day;
     }
 
@@ -870,12 +875,12 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             bool bafLevel_ = purchaseLevel % 10 == 0;
             if (bafLevel_) {
                 coinflip.armBafDraw(day + 1);
-                // Today's result is applied: settling both accounts gives their scores
+                // Today's result is applied: settling the vault's flips here gives its score
                 // every win this bracket counts. The BAF day's own flip settles after
                 // tomorrow's request and scores the next bracket, as for any player. The
-                // Game uses zero-amount gifts, which settle each account's own claims
-                // without spending or withdrawing its winnings.
-                _settleProtocolFlips(day);
+                // Game is not authorized for the vault's account, so this is a zero-amount
+                // gift: it only settles the vault's own claims.
+                _settleVaultFlips(day);
             }
             if (bafLevel_ && day - psd <= 1) {
                 jackpotFlags = JACKPOT_TURBO;

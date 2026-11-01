@@ -242,18 +242,11 @@ interface IDegenerusGameWhaleModule {
     /// @param id Account to claim for (0 = caller; otherwise allocated, else E).
     function claimWhalePass(uint32 id) external;
 
-    /// @notice Awards early-bird or quadrant passes to one fresh recipient.
+    /// @notice Awards a ticket jackpot's whole passes to one fresh recipient.
     /// @dev Nested delegatecall from JackpotModule against frozen GAME inventory: one
-    ///      recipient from the bucket of `trait`, drawn with `randWord`. A ticket leg passes
-    ///      half-pass units and moves no pools; an ETH quadrant passes its ETH allocation and
-    ///      its pass cost credits future. Returns award value (zero for an empty draw).
-    function awardWhalePass_g5502(
-        uint24 lvl,
-        uint8 trait,
-        uint256 amount,
-        uint256 randWord,
-        bool ticketLeg
-    ) external returns (uint256 spent);
+    ///      recipient from the bucket of `trait`, drawn with `randWord`, receives `halfPasses`;
+    ///      no pool moves.
+    function awardWhalePass_g201599(uint24 lvl, uint8 trait, uint256 halfPasses, uint256 randWord) external;
 
     /// @notice Vault-funded recipient purchase: Game-storage delegatecall from spendDegenesis,
     ///         VAULT caller only.
@@ -273,6 +266,7 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Explicit-value purchase adapter (Foil, Degenesis)
 interface IDegenerusGameMintModule {
+    function redeemGnrusFlip() external;
     function purchaseWith(
         uint32 buyerId,
         uint256 entryQuantityScaled,

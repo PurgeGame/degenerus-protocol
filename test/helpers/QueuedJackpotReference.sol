@@ -724,7 +724,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         }
         for (uint8 q; q < 4; ++q) {
             if (passes[q] != 0) {
-                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(75, plan.entropy, q), true);
+                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(75, plan.entropy, q));
             }
         }
     }
@@ -781,22 +781,27 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         if (i != work.winner) work.winner = uint16(i);
     }
 
-    /// @dev Bounded sibling-module award to one recipient from the bucket of `trait`. A ticket
-    ///      leg passes half-pass units; an ETH quadrant passes its original share and gets the
-    ///      spend back.
-    function _awardWhalePass(
-        uint24 lvl, uint8 trait, uint256 amount, uint256 randWord, bool ticketLeg
-    ) private returns (uint256 spent) {
+    /// @dev Bounded sibling-module award of a ticket jackpot's `halfPasses` to one recipient
+    ///      drawn from the bucket of `trait`.
+    function _awardWhalePass(uint24 lvl, uint8 trait, uint256 halfPasses, uint256 randWord) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
             abi.encodeWithSelector(
-                IDegenerusGameWhaleModule.awardWhalePass_g5502.selector,
-                lvl, trait, amount, randWord, ticketLeg
+                IDegenerusGameWhaleModule.awardWhalePass_g201599.selector, lvl, trait, halfPasses, randWord
             )
         );
         if (!ok) {
             assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         }
-        spent = abi.decode(data, (uint256));
+    }
+
+    /// @dev An ETH quadrant's whole passes go to its first ETH winner; the cost credits future.
+    function _awardQuadrantPasses(uint32 winner, uint256 share) private returns (uint256 spent) {
+        spent = _passCost(share);
+        uint256 halfPasses = spent / HALF_WHALE_PASS_PRICE;
+        _addHalfPasses(winner, halfPasses);
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(next, future + uint128(spent));
+        emit JackpotWhalePassWin(winner, halfPasses, 5);
     }
 
     /// @notice Distribute yield surplus (stETH appreciation) to stakeholders.
@@ -1170,7 +1175,6 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             if (pos == 0) {
                 _assertReadableTicketLevel(lvl);
                 if (effectiveLen == 0) return (count, 0, 0);
-                if (passShare != 0) paid = _awardWhalePass(lvl, trait, passShare, seed, false);
             }
             for (uint256 i = pos; i < end; ++i) {
                 (uint32 w, uint256 index) = _drawBucketEntry(
@@ -1184,7 +1188,10 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
                     liability += perWinner;
                 }
             }
-            if (armGold && first != 0) _armGoldenTicket(first, lvl, trait);
+            if (first != 0) {
+                if (passShare != 0) paid += _awardQuadrantPasses(first, passShare);
+                if (armGold) _armGoldenTicket(first, lvl, trait);
+            }
             pos = end;
         }
         return (pos, paid, liability);

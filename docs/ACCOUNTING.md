@@ -181,7 +181,7 @@ custody above `claimablePool`, not a separate obligation.
 
 Final sweep (`_handleFinalSweep`, at `GO_TIME + 30 days`, once):
 
-1. Sets `GO_SWEPT`; stamps GNRUS (`onFinalSweep`).
+1. Sets `GO_SWEPT`.
 2. Releases the redemption reserve to sDGNRS claimable.
 3. Takes the Vault, sDGNRS and GNRUS balance words (claimable plus AFKing) as `owed`; sets
    `claimablePool = 0`. Every other player balance is forfeited.
@@ -194,7 +194,10 @@ Final sweep (`_handleFinalSweep`, at `GO_TIME + 30 days`, once):
 5. Pays each sink its `owed` plus a third of the remainder (GNRUS takes the rounding wei); if
    custody is short of `owed` (the three unbacked sentinels, or an stETH loss), the legs are pro
    rata and sum to custody. stETH is sent first.
-6. Clears Admin's subscription handle and attempts cancellation, refunding the Vault on success.
+6. Calls GNRUS `onFinalSweep` after the sink payments (also when custody is zero). It stamps
+   the recovery timestamp and attempts to redeem GNRUS's sDGNRS and DGNRS into ETH/stETH,
+   catching refused burns.
+7. Clears Admin's subscription handle and attempts cancellation, refunding the Vault on success.
    Coordinator refusal leaves the sweep committed; a failed Admin call reverts the whole sweep.
 
 After the sweep, `claimWinnings`/`claimClaimable` revert `AlreadySwept`, AFKing withdrawal and

@@ -7,6 +7,13 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 /// @notice Explicit-value purchase adapter for Foil and Degenesis; executes in Game storage.
 contract DegenerusGameMintModule is GamePurchase {
+    /// @notice Settle GNRUS's flips and spend its spendable FLIP on the closing level.
+    /// @dev Called only from the fresh daily request that ends a purchase phase.
+    function redeemGnrusFlip() external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        _redeemGnrusFlip();
+    }
+
     /// @notice Execute explicit-value ticket and box legs in Game storage.
     /// @dev Payable so the carried msg.value does not revert the delegatecall.
     function purchaseWith(

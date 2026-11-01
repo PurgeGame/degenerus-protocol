@@ -1131,7 +1131,7 @@
     {
       "file": "modules/DegenerusGameWhaleModule.sol",
       "function": "_drawWhalePassWinner",
-      "expression": "EntropyLib.hash2(ticketLeg?RngTags.WHALE_TICKET:RngTags.WHALE_QUADRANT,randWord)",
+      "expression": "EntropyLib.hash2(RngTags.WHALE_TICKET,randWord)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },

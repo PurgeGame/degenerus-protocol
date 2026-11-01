@@ -31,6 +31,11 @@ library MineFlipGasBounds {
     // 0.55M/0.59M). Refill admission: VRF_DAILY_REFILL_TAIL + 150k funding minimum + 45k value
     // frame, 3.25M. Coordinator calls forward all gas above the tails; only stETH stays at 50k.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
+    // GNRUS's purchase-phase-end step (one flip settlement walk and an ordinary FLIP ticket
+    // purchase burning claimable then carry) rides only a request that can end the purchase
+    // phase; the miner admission and the refill tail add it for exactly those requests.
+    // Worst measured (x99 with WWXRP entry, 35 days): 0.502M Osaka, 1.626M Glamsterdam total.
+    uint256 internal constant GNRUS_TICKET_PURCHASE = 2_125_000;
     uint256 internal constant RNG_DAILY_REQUEST = 4_400_000;
     // Rest of a fresh daily request after its refill. Measured 1.546M (refill day, funding call
     // and request included); plus the Degenesis-pricing and redemption-close extras admitted on top.
@@ -55,8 +60,8 @@ library MineFlipGasBounds {
     uint256 internal constant VRF_LEVEL_FUND_TAIL = 1_000_000;
     // 150k phase tail + bounded balance 60,794 and allocation/frame margin.
     uint256 internal constant DAILY_PHASE_TAIL = 250_000;
-    // Conservative envelope for both 90-day Vault and GNRUS walks at the checkpoint and x0 seal,
-    // including the Game stamp; VaultBafSettleGas covers every single-loss position.
+    // Conservative full-walk envelope for the 90-day Vault checkpoint and x0 seal,
+    // including the Game stamp.
     uint256 internal constant BAF_VAULT_SETTLE = 3_500_000;
     // Forced all-gold grand prize with distinct traits and fresh buffer: 2.263M.
     uint256 internal constant FOIL_PACK = 3_000_000;

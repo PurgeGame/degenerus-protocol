@@ -211,6 +211,7 @@ Deployment aliases: `GAME_MINT_MODULE`.
 | `boonPacked(uint32)` (`0x401fe997`) | Compiler-generated getter | None |
 | `gameOver()` (`0xbdb337d1`) | Compiler-generated getter | None |
 | `purchaseWith(uint32,uint256,uint256,bytes32,uint8,uint256,uint32)` (`0x6a290c34`) | [DegenerusGameMintModule.purchaseWith](../contracts/modules/DegenerusGameMintModule.sol) | None |
+| `redeemGnrusFlip()` (`0x456d5323`) | [DegenerusGameMintModule.redeemGnrusFlip](../contracts/modules/DegenerusGameMintModule.sol) | None |
 
 ### Eip170DegenesisFoil
 
@@ -240,7 +241,7 @@ Deployment aliases: `GAME_ADVANCE_MODULE`.
 | `applyDailyWord_g1652()` (`0x00067d07`) | [DegenerusGameAdvanceModule.applyDailyWord_g1652](../contracts/modules/DegenerusGameAdvanceModule.sol) | [Eip170Boon](#eip170boon).`resolveProtocolBoonDraws` |
 | `boonPacked(uint32)` (`0x401fe997`) | Compiler-generated getter | None |
 | `gameOver()` (`0xbdb337d1`) | Compiler-generated getter | None |
-| `prepareRequestBoundary(uint24)` (`0x2d89146c`) | [DegenerusGameAdvanceModule.prepareRequestBoundary](../contracts/modules/DegenerusGameAdvanceModule.sol) | [Eip170DegenesisFoil](#eip170degenesisfoil).`prepareDegenesis_g47` |
+| `prepareRequestBoundary(uint24)` (`0x2d89146c`) | [DegenerusGameAdvanceModule.prepareRequestBoundary](../contracts/modules/DegenerusGameAdvanceModule.sol) | [Eip170DegenesisFoil](#eip170degenesisfoil).`prepareDegenesis_g47`; [Eip170Mint](#eip170mint).`redeemGnrusFlip` |
 | `runDailyPhase_g2582(uint256)` (`0x00095b45`) | [DegenerusGameAdvanceModule.runDailyPhase_g2582](../contracts/modules/DegenerusGameAdvanceModule.sol) | [Eip170Advance](#eip170advance).`stakeExcessEth`; [Eip170Afking](#eip170afking).`runSubDraw_g1232`; [Eip170Jackpot](#eip170jackpot).`runDailyJackpot`; [Eip170Jackpot](#eip170jackpot).`runPurchaseDailyTickets`; [Eip170Jackpot](#eip170jackpot).`payDailyFlipJackpot`; [Eip170Jackpot](#eip170jackpot).`distributeYieldSurplus`; [Eip170Jackpot](#eip170jackpot).`runEarlyBirdTickets`; [Eip170Jackpot](#eip170jackpot).`runBafAwards`; [Eip170Jackpot](#eip170jackpot).`runDailyJackpotTickets`; [Eip170JackpotDraw](#eip170jackpotdraw).`runPurchaseJackpotBattle`; [Eip170TicketFoil](#eip170ticketfoil).`queuePerpetualTickets` |
 | `runLoanSeizureWork(uint256)` (`0xb18da899`) | [DegenerusGameAdvanceModule.runLoanSeizureWork](../contracts/modules/DegenerusGameAdvanceModule.sol) | [Eip170Endgame](#eip170endgame).`seizeLoan` |
 | `runTerminalPhase(uint256)` (`0x56dd4651`) | [DegenerusGameAdvanceModule.runTerminalPhase](../contracts/modules/DegenerusGameAdvanceModule.sol) | [Eip170Afking](#eip170afking).`runSubDraw_g1232`; [Eip170Endgame](#eip170endgame).`runGameOverAdvance`; [Eip170Endgame](#eip170endgame).`seizeLoan` |
@@ -259,11 +260,11 @@ Deployment aliases: `GAME_JACKPOT_MODULE`.
 | `payDailyFlipJackpot(uint24,uint256,uint24,uint24)` (`0x6fc6b504`) | [DegenerusGameJackpotModule.payDailyFlipJackpot](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170JackpotDraw](#eip170jackpotdraw).`awardDailyFlipJackpot` |
 | `payGoldenTicketGrand(uint32,uint24,uint8)` (`0x91ac65cb`) | [DegenerusGameJackpotModule.payGoldenTicketGrand](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170JackpotDraw](#eip170jackpotdraw).`payGoldenTicket` |
 | `runBafAwards(uint256,uint256)` (`0xc0ccc81e`) | [DegenerusGameJackpotModule.runBafAwards](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170JackpotDraw](#eip170jackpotdraw).`runBafAwards` |
-| `runDailyJackpot(bool,uint24,uint256,uint256)` (`0x0254169e`) | [DegenerusGameJackpotModule.runDailyJackpot](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170Decimator](#eip170decimator).`runDecimatorJackpotAwards`; [Eip170JackpotDraw](#eip170jackpotdraw).`payGoldenTicket`; [Eip170Whale](#eip170whale).`awardWhalePass_g5502` |
-| `runDailyJackpotTickets(uint256,uint256)` (`0xd306ef4b`) | [DegenerusGameJackpotModule.runDailyJackpotTickets](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170TicketFoil](#eip170ticketfoil).`runJackpotTicketAwards`; [Eip170Whale](#eip170whale).`awardWhalePass_g5502` |
-| `runEarlyBirdTickets(uint256,uint256)` (`0x91ae808f`) | [DegenerusGameJackpotModule.runEarlyBirdTickets](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170TicketFoil](#eip170ticketfoil).`runJackpotTicketAwards`; [Eip170Whale](#eip170whale).`awardWhalePass_g5502` |
-| `runPurchaseDailyTickets(uint256,uint256)` (`0x3a34a2f8`) | [DegenerusGameJackpotModule.runPurchaseDailyTickets](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170TicketFoil](#eip170ticketfoil).`runJackpotTicketAwards`; [Eip170Whale](#eip170whale).`awardWhalePass_g5502` |
-| `runTerminalJackpotWork(uint256,uint24,uint256,uint256)` (`0x45f2191b`) | [DegenerusGameJackpotModule.runTerminalJackpotWork](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170Decimator](#eip170decimator).`runDecimatorJackpotAwards`; [Eip170Whale](#eip170whale).`awardWhalePass_g5502` |
+| `runDailyJackpot(bool,uint24,uint256,uint256)` (`0x0254169e`) | [DegenerusGameJackpotModule.runDailyJackpot](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170Decimator](#eip170decimator).`runDecimatorJackpotAwards`; [Eip170JackpotDraw](#eip170jackpotdraw).`payGoldenTicket` |
+| `runDailyJackpotTickets(uint256,uint256)` (`0xd306ef4b`) | [DegenerusGameJackpotModule.runDailyJackpotTickets](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170TicketFoil](#eip170ticketfoil).`runJackpotTicketAwards`; [Eip170Whale](#eip170whale).`awardWhalePass_g201599` |
+| `runEarlyBirdTickets(uint256,uint256)` (`0x91ae808f`) | [DegenerusGameJackpotModule.runEarlyBirdTickets](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170TicketFoil](#eip170ticketfoil).`runJackpotTicketAwards`; [Eip170Whale](#eip170whale).`awardWhalePass_g201599` |
+| `runPurchaseDailyTickets(uint256,uint256)` (`0x3a34a2f8`) | [DegenerusGameJackpotModule.runPurchaseDailyTickets](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170TicketFoil](#eip170ticketfoil).`runJackpotTicketAwards`; [Eip170Whale](#eip170whale).`awardWhalePass_g201599` |
+| `runTerminalJackpotWork(uint256,uint24,uint256,uint256)` (`0x45f2191b`) | [DegenerusGameJackpotModule.runTerminalJackpotWork](../contracts/modules/DegenerusGameJackpotModule.sol) | [Eip170Decimator](#eip170decimator).`runDecimatorJackpotAwards` |
 
 ### Eip170JackpotDraw
 
@@ -285,7 +286,7 @@ Deployment aliases: `GAME_WHALE_MODULE`.
 
 | External entry (selector) | Implementing function | Direct delegate destinations |
 | --- | --- | --- |
-| `awardWhalePass_g5502(uint24,uint8,uint256,uint256,bool)` (`0x000a7c73`) | [DegenerusGameWhaleModule.awardWhalePass_g5502](../contracts/modules/DegenerusGameWhaleModule.sol) | None |
+| `awardWhalePass_g201599(uint24,uint8,uint256,uint256)` (`0x00005af7`) | [DegenerusGameWhaleModule.awardWhalePass_g201599](../contracts/modules/DegenerusGameWhaleModule.sol) | None |
 | `boonPacked(uint32)` (`0x401fe997`) | Compiler-generated getter | None |
 | `claimWhalePass(uint32)` (`0x947219fc`) | [DegenerusGameWhaleModule.claimWhalePass](../contracts/modules/DegenerusGameWhaleModule.sol) | None |
 | `gameOver()` (`0xbdb337d1`) | Compiler-generated getter | None |
@@ -892,6 +893,7 @@ Deployment aliases: `WWXRP`.
 | `decimals()` (`0x313ce567`) | Compiler-generated getter | None |
 | `drawMultBps(uint256)` (`0xda3e60b3`) | [WWXRP.drawMultBps](../contracts/WWXRP.sol) | None |
 | `enterDraw(uint32,uint256)` (`0x0724b15a`) | [WWXRP.enterDraw](../contracts/WWXRP.sol) | None |
+| `enterDrawForGnrus()` (`0x39616122`) | [WWXRP.enterDrawForGnrus](../contracts/WWXRP.sol) | None |
 | `entryAt(uint24,uint8,uint32)` (`0x01618a98`) | [WWXRP.entryAt](../contracts/WWXRP.sol) | None |
 | `findWinningEntry(uint24)` (`0x75fbcbe0`) | [WWXRP.findWinningEntry](../contracts/WWXRP.sol) | None |
 | `gameMintScale()` (`0x700849e2`) | Compiler-generated getter | None |

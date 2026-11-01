@@ -281,6 +281,18 @@ contract WwxrpWalletIdsTest is DeployProtocol {
 
     /// @notice Anyone can run `claim`; the prize is credited to the ID stored in the winning entry
     ///         (visible to the winner's address through walletIdOf) and the event carries the ID.
+    function test_GnrusClaimByAnyoneCreditsIdThree() public {
+        uint24 day = game.currentDayView_g542950();
+        vm.prank(address(game)); wwxrp.creditPrize(3, 100);
+        vm.prank(address(game)); wwxrp.enterDrawForGnrus();
+        uint8 bucket = wwxrp.bucketOf(day, 3);
+        RecyclingState.seedDailyWord(address(game), day + 1, _smallWordFor(day, bucket));
+        vm.warp(block.timestamp + 1 days);
+        vm.expectCall(address(coinflip), abi.encodeCall(CoinflipCore.creditFlip_g317, (uint32(3), 10_000)), 1);
+        vm.prank(address(0xBEEF)); wwxrp.claim(day, 0);
+        assertEq(coinflip.coinflipAmount(address(0xBEEF)), 0);
+    }
+
     function test_ClaimByAnyone_CreditsStoredId() public {
         address p = makeAddr("draw_winner");
         uint24 day = _today();

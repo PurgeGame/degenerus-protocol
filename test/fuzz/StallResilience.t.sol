@@ -128,16 +128,16 @@ contract StallResilience is DeployProtocol {
 
         // Resume: the reissued request's word finalizes the reserved index. Publication is the
         // first action of the next call, before any consumer reads the word.
-        newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0x1007CAFE);
+        uint256 reissued = newVRF.lastRequestId();
+        newVRF.fulfillRandomWords(reissued, 0x1007CAFE);
+        uint24 sealedBefore = _dailyIdx();
         vm.recordLogs();
         game.mineRun(0);
-        assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Reserved index finalized by the reissued word");
 
         // The engine steps on that index without an unexpected error, and the box bought into
         // the stalled cohort resolves on that word in the engine's human-box stage, which must
         // finish before any later request may retire the buffer: its queue entry opens
         // (the open reports an event indexed by the buyer).
-        uint24 sealedBefore = _dailyIdx();
         for (uint256 i = 0; i < 50 && _dailyIdx() == sealedBefore; i++) {
             if (!_step()) break;
         }
@@ -146,6 +146,16 @@ contract StallResilience is DeployProtocol {
         assertTrue(entry != 0, "the stalled cohort's box entry exists");
         assertEq(BoxOrderLib.boId(entry), game.walletIdOf_g3120(buyer), "the entry belongs to the buyer");
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        // The completing call may issue the next request, recycling this buffer: the
+        // publication event is the witness that the reissued word finalized the index.
+        uint256 applied;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0
+                || logs[i].topics[0] != keccak256("LootboxRngApplied(uint48,uint256,uint256)")) continue;
+            (uint48 idx, uint256 w, uint256 rid) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+            if (idx == orphanedIndex && rid == reissued && w != 0) ++applied;
+        }
+        assertEq(applied, 1, "Reserved index finalized by the reissued word");
         bool opened;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length > 1

@@ -15,6 +15,11 @@ contract WwxrpClaimableGasTest is DeployProtocol {
         emit log_named_uint(label, used.gasTotalUsed);
         emit log_named_int(string.concat(label, "_refund"), used.gasRefunded);
     }
+    function test_Gas_PlayerEnterDraw() public {
+        vm.prank(address(game)); wwxrp.creditPrize(id, 100);
+        vm.prank(player); wwxrp.enterDraw(0, 25); _report("wwxrp_enter_first");
+        vm.prank(player); wwxrp.enterDraw(0, 25); _report("wwxrp_enter_repeat");
+    }
     function test_Gas_DirectMintNewRecipient() public {
         vm.prank(address(game)); wwxrp.mintPrize(player, 100); _report("wwxrp_mint_new");
     }

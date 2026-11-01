@@ -927,7 +927,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _assertReferralUpdated(logs, address(affiliate), P_A, CODE_A, _id(OWN_A), false);
         _assertReferralUpdated(logs, address(affiliate), P_V, VAULT_CODE, 1, false);
         _assertReferralUpdated(logs, address(affiliate), ContractAddresses.VAULT, DGNRS_CODE, 2, false);
-        assertEq(_countLogs(logs, address(affiliate), AFFILIATE_EVENT), 17);
+        // Three protocol codes and referrals, six bootstrap codes and seven referrals.
+        assertEq(_countLogs(logs, address(affiliate), AFFILIATE_EVENT), 18);
     }
 
     function test_BootstrapPurchaseCreditsRegisteredOwner() public {

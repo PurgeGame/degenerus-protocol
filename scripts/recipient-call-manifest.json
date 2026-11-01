@@ -995,9 +995,9 @@
     "path": "contracts/DegenerusAffiliate.sol",
     "scope": "DegenerusAffiliate.constructor",
     "kind": "recipient-helper",
-    "expression": "_createAffiliateCode(ContractAddresses.GNRUS, bytes32(\"GNRUS\"), 10)",
+    "expression": "_createAffiliateCode(ContractAddresses.GNRUS, AFFILIATE_CODE_GNRUS, 10)",
     "count": 1,
-    "review": "Launch code uses the existing registration helper before optional bootstrap entries. GNRUS has permanent Game ID 3; kickback 10 is percent and within the 25-percent bound. Existing duplicate protection rejects user and bootstrap collisions. Pinned by test/fuzz/GnrusAffiliate.t.sol."
+    "review": "PINNED: construction registers GNRUS code with existing reserved ID 3; no GNRUS stored referral is assigned. Bootstrap inputs remain owner configuration."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",
@@ -3561,6 +3561,14 @@
   },
   {
     "path": "contracts/FLIP.sol",
+    "scope": "FLIP._consumeCoinflipShortfall",
+    "kind": "external",
+    "expression": "coinflip.consumeFlipBacking(player, amount - balance)",
+    "count": 1,
+    "review": "CRANK: GNRUS alone takes this branch. Its Game request buy runs before the new daily request index; all requested days are resolved. Consume claimable then carry, without mint. GnrusFlipTickets fuzzes equality with the preview."
+  },
+  {
+    "path": "contracts/FLIP.sol",
     "scope": "FLIP._mint",
     "kind": "external",
     "expression": "coinflip.creditSdgnrsBacking(amount)",
@@ -3854,6 +3862,38 @@
     "expression": "IDegenerusGame(ContractAddresses.GAME).walletIdentityOf_g8516(voter)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.onFinalSweep",
+    "kind": "external",
+    "expression": "ISDGNRSSnapshot(ContractAddresses.DGNRS).balanceOf(address(this))",
+    "count": 1,
+    "review": "PINNED: Game-only post-sink cashout; balance views are pinned O(1), both native/wrapped burns are caught. Recipient is GNRUS with an empty receive; stETH is the existing trusted asset. Cashout ordering and refused burns are tested in GnrusFinalSweepGas."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.onFinalSweep",
+    "kind": "external",
+    "expression": "sdgnrs.balanceOf(address(this))",
+    "count": 1,
+    "review": "PINNED: Game-only post-sink cashout; balance views are pinned O(1), both native/wrapped burns are caught. Recipient is GNRUS with an empty receive; stETH is the existing trusted asset. Cashout ordering and refused burns are tested in GnrusFinalSweepGas."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.onFinalSweep",
+    "kind": "external",
+    "expression": "sdgnrs.burn(held)",
+    "count": 1,
+    "review": "PINNED: Game-only post-sink cashout; balance views are pinned O(1), both native/wrapped burns are caught. Recipient is GNRUS with an empty receive; stETH is the existing trusted asset. Cashout ordering and refused burns are tested in GnrusFinalSweepGas."
+  },
+  {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.onFinalSweep",
+    "kind": "external",
+    "expression": "sdgnrs.burnWrapped(held)",
+    "count": 1,
+    "review": "PINNED: Game-only post-sink cashout; balance views are pinned O(1), both native/wrapped burns are caught. Recipient is GNRUS with an empty receive; stETH is the existing trusted asset. Cashout ordering and refused burns are tested in GnrusFinalSweepGas."
   },
   {
     "path": "contracts/GNRUS.sol",
@@ -4585,6 +4625,46 @@
   },
   {
     "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP._enterDraw",
+    "kind": "external",
+    "expression": "game.consumeCoinflipBoon_g2902(id)",
+    "count": 1,
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP._enterDraw",
+    "kind": "external",
+    "expression": "game.currentLvl()",
+    "count": 1,
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP._enterDraw",
+    "kind": "external",
+    "expression": "game.extsload_g2807007(bytes32(0))",
+    "count": 1,
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP._enterDraw",
+    "kind": "external",
+    "expression": "game.playerActivityScoreCachedById_g975(id)",
+    "count": 1,
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP._enterDraw",
+    "kind": "recipient-helper",
+    "expression": "_holdsWwxrpBoon(id)",
+    "count": 1,
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
     "scope": "WWXRP._holdsWwxrpBoon",
     "kind": "external",
     "expression": "game.extsload_g2807007(slot)",
@@ -4651,38 +4731,6 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.enterDraw",
     "kind": "external",
-    "expression": "game.consumeCoinflipBoon_g2902(id)",
-    "count": 1,
-    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
-  },
-  {
-    "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enterDraw",
-    "kind": "external",
-    "expression": "game.currentLvl()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enterDraw",
-    "kind": "external",
-    "expression": "game.extsload_g2807007(bytes32(0))",
-    "count": 1,
-    "review": "LDAYS2: trusted Game static read of slot 0 combines logical day and irreversible terminal latch. No player-controlled callee, write or callback; close before terminal entropy can settle that day."
-  },
-  {
-    "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enterDraw",
-    "kind": "external",
-    "expression": "game.playerActivityScoreCachedById_g975(id)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/WWXRP.sol",
-    "scope": "WWXRP.enterDraw",
-    "kind": "external",
     "expression": "game.registerWallet_g9539(msg.sender, true)",
     "count": 1,
     "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
@@ -4707,9 +4755,17 @@
     "path": "contracts/WWXRP.sol",
     "scope": "WWXRP.enterDraw",
     "kind": "recipient-helper",
-    "expression": "_holdsWwxrpBoon(id)",
+    "expression": "_enterDraw(id, payee, amount)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+  },
+  {
+    "path": "contracts/WWXRP.sol",
+    "scope": "WWXRP.enterDrawForGnrus",
+    "kind": "recipient-helper",
+    "expression": "_enterDraw(GNRUS_ID, ContractAddresses.GNRUS, amount)",
+    "count": 1,
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -6603,9 +6659,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._sealPurchaseDay",
     "kind": "recipient-helper",
-    "expression": "_settleProtocolFlips(day)",
+    "expression": "_settleVaultFlips(day)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "CRANK: Vault-only zero-deposit claim walk at the BAF seal or 45-day checkpoint; stamps after success, no withdrawal or mint. VaultBafSettleGas and VaultFlipBackstop pin the path."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6641,22 +6697,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._settleProtocolFlips",
-    "kind": "external",
-    "expression": "coinflip.playCoinflip(GNRUS_WALLET_ID, 0)",
-    "count": 1,
-    "review": "Pinned Coinflip zero-deposit gift settles ID 3 without withdrawing or spending winnings. Unlimited rebuy retains carry; both calls precede the shared Game stamp. Second-account callback failure rolls back both settlements. Full 90-day pair is reserved in BAF_VAULT_SETTLE; pinned by VaultFlipBackstop and VaultBafSettleGas."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._settleProtocolFlips",
-    "kind": "external",
-    "expression": "coinflip.playCoinflip(VAULT_WALLET_ID, 0)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._settleTerminalLoans",
     "kind": "recipient-helper",
     "expression": "_settleLevelLoans(meter, result)",
@@ -6670,6 +6710,14 @@
     "expression": "_settleLoans(uint24(lvl + step), i, meter, result)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule._settleVaultFlips",
+    "kind": "external",
+    "expression": "coinflip.playCoinflip(VAULT_WALLET_ID, 0)",
+    "count": 1,
+    "review": "CRANK: Vault-only zero-deposit claim walk at the BAF seal or 45-day checkpoint; stamps after success, no withdrawal or mint. VaultBafSettleGas and VaultFlipBackstop pin the path."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6766,6 +6814,14 @@
     "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.prepareDegenesis_g47.selector, day) )",
     "count": 1,
     "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
+    "kind": "recipient-helper",
+    "expression": "_componentDelegate(ContractAddresses.GAME_MINT_MODULE, abi.encodeWithSelector(IDegenerusGameMintModule.redeemGnrusFlip.selector))",
+    "count": 1,
+    "review": "CRANK: pinned Game mint delegate, fresh closing purchase request only, before level increment and lock. Bubbled failure is reviewed by GnrusFlipTickets and its cold gas suite."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6923,9 +6979,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
     "kind": "recipient-helper",
-    "expression": "_settleProtocolFlips(day)",
+    "expression": "_settleVaultFlips(day)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "CRANK: Vault-only zero-deposit claim walk at the BAF seal or 45-day checkpoint; stamps after success, no withdrawal or mint. VaultBafSettleGas and VaultFlipBackstop pin the path."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7652,8 +7708,8 @@
     "scope": "DegenerusGameGameOverModule._handleFinalSweep",
     "kind": "external",
     "expression": "charityGameOver.onFinalSweep()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "count": 2,
+    "review": "PINNED: final sweep calls the GNRUS hook after all three payouts, including the empty-funds branch. One-shot Game latch; cashout ordering tested in GnrusFinalSweepGas."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8067,17 +8123,17 @@
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._awardTicketPasses",
     "kind": "recipient-helper",
-    "expression": "_awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, plan.entropy, q), true)",
+    "expression": "_awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, plan.entropy, q))",
     "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback. Ticket-leg only after the ETH-quadrant conversion moved inline (first ETH winner); the bool selector argument is gone."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._awardWhalePass",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameWhaleModule.awardWhalePass_g5502.selector, lvl, trait, amount, randWord, ticketLeg ) )",
+    "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameWhaleModule.awardWhalePass_g201599.selector, lvl, trait, halfPasses, randWord ) )",
     "count": 1,
-    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation."
+    "review": "Interface-bound selector call. Review target authorization, argument forwarding, caller/value context and rollback at the implementation. The selected-profile dispatch is listed in docs/MODULE-MAP.md; this site inventory does not prove ABI preservation. Selector awardWhalePass_g201599(uint24,uint8,uint256,uint256): ticket-leg passes only, no return value, no pool write."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -8105,22 +8161,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule._payEthAwardWork",
-    "kind": "recipient-helper",
-    "expression": "_awardWhalePass(c.lvl, c.trait, c.passShare, c.seed, false)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Daily/jackpot component hooks preserve the committed word and checkpoint allowance; ETH draw temporary values moved to a work record with unchanged credit IDs, pool deltas and ordering."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule._payEthQuadrant",
-    "kind": "recipient-helper",
-    "expression": "_payEthAwardWork(c, meter)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Daily/jackpot component hooks preserve the committed word and checkpoint allowance; ETH draw temporary values moved to a work record with unchanged credit IDs, pool deltas and ordering."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._resolveGoldenTicket",
     "kind": "recipient-helper",
     "expression": "_drawPayGoldenTicket( uint32(g), lvl, GOLDEN_TICKET_ROUTE_BOARD, golds, grand )",
@@ -8134,22 +8174,6 @@
     "expression": "ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall{gas: childGas}( abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorJackpotAwards.selector, terms, MineFlipGas.child(meter, JACKPOT_TAIL_GAS)) )",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule._resumeDecimatorEth",
-    "kind": "recipient-helper",
-    "expression": "_payEthQuadrant( d.lvl, d.solo, d.traits[d.solo], 1, soloEth, passShare, EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, entropy, d.solo), _allGold(d.traits), work.winner, meter )",
-    "count": 1,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule._resumeEth",
-    "kind": "recipient-helper",
-    "expression": "_payEthQuadrant( d.lvl, q, d.traits[q], count, perWinner, converts ? d.shares[q] : 0, EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, d.entropy, q), d.armGold && q == d.solo, d.pos, meter )",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Daily/jackpot component hooks preserve the committed word and checkpoint allowance; ETH draw temporary values moved to a work record with unchanged credit IDs, pool deltas and ordering."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -8560,6 +8584,14 @@
     "review": "Internal explicit-value purchase leg in Game storage; fixed Affiliate, Quests and Coinflip calls preserve original caller, account authorization, payment split and revert atomicity. Mint adapter entry rejects direct calls."
   },
   {
+    "path": "contracts/modules/DegenerusGameMintModule.sol",
+    "scope": "DegenerusGameMintModule.redeemGnrusFlip",
+    "kind": "recipient-helper",
+    "expression": "_redeemGnrusFlip()",
+    "count": 1,
+    "review": "CRANK: Game-context guard; no public facade route. Uses fixed ID 3, resolved backing, minimum and snap skip, ordinary ticket burn and queue."
+  },
+  {
     "path": "contracts/modules/DegenerusGameMintStreakUtils.sol",
     "scope": "DegenerusGameMintStreakUtils._cacheAffiliateBonus",
     "kind": "external",
@@ -8755,9 +8787,9 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestDailyRng_g8190",
     "kind": "recipient-helper",
-    "expression": "_refillVrfNative(meter, GasBounds.VRF_DAILY_REFILL_TAIL)",
+    "expression": "_refillVrfNative(meter, _dailyRequestMayEndPhase() ? GasBounds.VRF_DAILY_REFILL_TAIL + GasBounds.GNRUS_TICKET_PURCHASE : GasBounds.VRF_DAILY_REFILL_TAIL)",
     "count": 1,
-    "review": "DAILY: first-step optional native refill; coordinator calls forward all gas above the daily-request tail, no balance admission for the following daily request."
+    "review": "DAILY: first-step optional native refill; coordinator calls forward all gas above the daily-request tail, no balance admission for the following daily request. The refill tail adds GNRUS_TICKET_PURCHASE only when _dailyRequestMayEndPhase() (the same storage test the miner admission uses), evaluated before the request boundary changes any field it reads."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -11107,9 +11139,9 @@
     "path": "contracts/modules/GamePurchase.sol",
     "scope": "GamePurchase._purchase",
     "kind": "recipient-helper",
-    "expression": "_purchaseForAccount( _resolveAccountId(buyerId), entryQuantityScaled, boxOrder, affiliateCode, payKind )",
+    "expression": "_purchaseForAccount( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind )",
     "count": 1,
-    "review": "Player purchase resolves the account and funds the ticket/box legs in Game context; fixed Affiliate, Quests and Coinflip recipients retain their authorization."
+    "review": "Donation exception is fixed ID 3, DirectEth tickets only with no box and exact quoted msg.value, so no funding shortfall or refund. The donor is registered through the ordinary paid-admission helper; its current gameplay ID replaces the supplied code. Affiliate resolves that one-off donor route without storing a GNRUS referral; constructor bootstrap referrals to ID 3 are rejected. Other IDs retain _resolveAccountId authorization. All effects roll back on liveness failure."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",
@@ -11238,6 +11270,46 @@
     "expression": "_callTicketPurchase( buyerId, 0, entryQuantityScaled, MintPaymentKind.DirectEth, 0, jackpotPhaseFlag, ticket )",
     "count": 1,
     "review": "STACK_SPILL_REVIEW: FLIP quest units are the same bounded quantity/(4*QTY_SCALE); shared ticket funding uses caller memory. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemGnrusFlip",
+    "kind": "external",
+    "expression": "IWwxrpGnrusDraw(ContractAddresses.WWXRP).enterDrawForGnrus()",
+    "count": 1,
+    "review": "PINNED: WWXRP uses Game header, activity cache, boon and level before the request increments the level; allocated ID 3, claimable-first burn, no recipient callback. Overflow-safe sizing leaves held tokens waiting when the sum cannot fit. The uint32 entry-count refusal remains a reported capacity boundary; this census does not establish universal revert-freedom."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemGnrusFlip",
+    "kind": "external",
+    "expression": "coin.balanceOf(ContractAddresses.GNRUS)",
+    "count": 1,
+    "review": "CRANK: fixed FLIP wallet-balance view, added to the settled backing preview. Rounded coin cost cannot exceed this sum; the burn spends wallet tokens before backing. No recipient callback."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemGnrusFlip",
+    "kind": "external",
+    "expression": "coinflip.playCoinflip(GNRUS_WALLET_ID, 0)",
+    "count": 1,
+    "review": "CRANK: allocated ID 3, permissionless zero-amount gift settlement, every prior request resolved. No deposit burn, minimum, stake-cap or quest leg. Settles even if the subsequent dust check skips; GnrusFlipTickets pins BAF score and cursor."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemGnrusFlip",
+    "kind": "external",
+    "expression": "coinflip.previewFlipBackingById(GNRUS_WALLET_ID)",
+    "count": 1,
+    "review": "CRANK: reads settled backing after the mandatory zero-deposit settlement. The general bounded 90-day view walk matches consumption for valid resolved histories, including unlimited carry, expiry and losses. Pinned Coinflip, no user-selected recipient."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemGnrusFlip",
+    "kind": "recipient-helper",
+    "expression": "_redeemFlipFor(GNRUS_WALLET_ID, quantity)",
+    "count": 1,
+    "review": "CRANK: capped uint32 quantity, prechecked minimum/snap, registered ID 3. The phase-ending boundary proves an unlocked request and pool above its unchanged target. Burns backing without mint and queues closing-level tickets before the request lock. Wallet gifts and settled backing jointly size the purchase; wallet tokens burn first."
   },
   {
     "path": "contracts/modules/GamePurchase.sol",

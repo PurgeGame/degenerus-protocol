@@ -53,6 +53,7 @@ contract QuadrantWhalePassTest is Test {
         uint256[4] passEvents;
         address[4] passWinner;
         address[4] ethWinner;
+        address[4] firstEthWinner;
         bytes32 fingerprint;
         uint256 ethTotal;
         uint256 passTotal;
@@ -134,7 +135,10 @@ contract QuadrantWhalePassTest is Test {
             if (logs[i].topics[0] == ETH_WIN) {
                 uint8 q = uint8(uint256(logs[i].topics[3])) >> 6;
                 (uint256 amount, uint256 index) = abi.decode(logs[i].data, (uint256, uint256));
-                if (d.slots[q] == 0) d.each[q] = amount;
+                if (d.slots[q] == 0) {
+                    d.each[q] = amount;
+                    d.firstEthWinner[q] = h.walletKeyOf(uint32(uint256(logs[i].topics[1])));
+                }
                 assertEq(amount, d.each[q], "every winner in a quadrant gets the same award");
                 d.eth[q] += amount;
                 d.ethTotal += amount;
@@ -177,9 +181,6 @@ contract QuadrantWhalePassTest is Test {
         uint8 solo = JackpotBucketLib.soloBucketIndex(entropy);
         Expect memory e = _expect(traits, counts, shares, solo);
         for (uint8 q; q < 4; ++q) {
-            uint256 len = h.bucketLength(traits[q]);
-            // Gold six has no virtual deity entry.
-            address deity = traits[q] == GoldSixLib.TRAIT ? address(0) : h.deityOf(traits[q]);
             uint256 full = e.full[q];
             uint256 cost = full * PASS_PRICE;
             assertEq(d.halves[q], full * 2, "whole passes from this quadrant's quarter");
@@ -193,12 +194,8 @@ contract QuadrantWhalePassTest is Test {
             }
             if (full != 0) {
                 assertGe(h.whalePassOf(d.passWinner[q]), full * 2, "pass claim credited");
-                uint256 root = EntropyLib.hash2(106, EntropyLib.hash3(75, entropy, q));
-                uint8 color = (traits[q] >> 3) & 7;
-                uint256 virtuals = deity == address(0) ? 0 : color >= 5 ? 1 : 2;
-                uint256 index = root % (len + virtuals);
-                address expected = index < len ? address(BASE + uint160(q) * 0x10000 + uint160(index) + 1) : deity;
-                assertEq(d.passWinner[q], expected, "fresh entry draw with real and deity weights");
+                assertEq(d.passWinner[q], d.firstEthWinner[q], "the quadrant's first ETH winner takes its passes");
+                if (q == solo) assertEq(d.passWinner[q], d.ethWinner[q], "the solo winner holds the ETH and the passes");
             }
             spent += cost;
         }
@@ -281,9 +278,10 @@ contract QuadrantWhalePassTest is Test {
         assertTrue(vm.revertToState(snap));
         Draw memory converted = _run(3 * current, word, 1, false);
         for (uint8 q; q < 4; ++q) assertGt(converted.halves[q], 0, "every quarter converts");
-        bool fresh;
-        for (uint8 q; q < 4; ++q) if (_backed(converted.passWinner[q]) == 0) fresh = true;
-        assertTrue(fresh, "a pass recipient need not be an ETH winner");
+        for (uint8 q; q < 4; ++q) {
+            assertEq(converted.passWinner[q], converted.firstEthWinner[q], "passes go to the first ETH winner");
+            assertGt(_backed(converted.passWinner[q]), 0, "the pass recipient is paid ETH too");
+        }
         assertEq(converted.fingerprint, ordinary.fingerprint, "conversion preserves the original ETH draw");
     }
 
@@ -309,7 +307,7 @@ contract QuadrantWhalePassTest is Test {
         (,,, uint256 entropy) = _geometry(word, 1000 ether, true);
         uint8 solo = JackpotBucketLib.soloBucketIndex(entropy);
         assertEq(h.walletKeyOf(uint32(h.goldenTicketRaw())), d.ethWinner[solo]);
-        assertTrue(d.ethWinner[solo] != d.passWinner[solo], "separate draws exercise distinct winners");
+        assertEq(d.passWinner[solo], d.ethWinner[solo], "the solo winner takes the ETH, the passes and the golden ticket");
     }
 
     function test_oneWalletCanWinPassesFromMultipleQuadrants() public {

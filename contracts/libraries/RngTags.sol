@@ -107,7 +107,6 @@ library RngTags {
     uint256 internal constant TICKET_SHUFFLE = 103;
     uint256 internal constant TICKET_SHUFFLE_STEP = 104;
     uint256 internal constant TICKET_TRAITS = 105;
-    uint256 internal constant WHALE_QUADRANT = 106;
     uint256 internal constant WHALE_TICKET = 107;
     uint256 internal constant WWXRP_BIG = 108;
     uint256 internal constant WWXRP_BUCKET = 109;

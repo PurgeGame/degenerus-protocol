@@ -7,6 +7,17 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+
+contract GnrusAffiliateSubSeeder is WalletSeed {
+    function seed(uint32 player) external {
+        _clearSubscriberSet();
+        _seedSubscriber(3, true);
+        _seedSubscriber(player, false);
+        _afkingEndpointDay = 3;
+    }
+}
 
 contract GnrusAffiliateTest is DegenesisDeployProtocol {
     bytes32 private constant CODE = bytes32("GNRUS");
@@ -30,6 +41,9 @@ contract GnrusAffiliateTest is DegenesisDeployProtocol {
         assertEq(owner, ContractAddresses.GNRUS);
         assertEq(id, 3);
         assertEq(kickback, 10);
+        assertEq(affiliate.getReferrerIdById(3), 1);
+        (uint32 direct, uint32 first, uint32 second) = affiliate.referrerIdsById(3);
+        assertEq(direct, 1); assertEq(first, 2); assertEq(second, 1);
         (bool enabled, uint256 stop, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(owner);
         assertTrue(enabled);
         assertEq(stop, 0);
@@ -79,6 +93,17 @@ contract GnrusAffiliateTest is DegenesisDeployProtocol {
         new DegenerusAffiliate(owners, codes, kicks, new address[](0), new bytes32[](0));
     }
 
+    function test_constructorRejectsBootstrapReferralForGnrus() public {
+        vm.mockCall(address(game), abi.encodeWithSelector(game.registerWallet_g9539.selector,
+            ContractAddresses.GNRUS, true), abi.encode(uint32(3)));
+        address[] memory players = new address[](1);
+        bytes32[] memory refs = new bytes32[](1);
+        players[0] = ContractAddresses.GNRUS;
+        refs[0] = bytes32("VAULT");
+        vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
+        new DegenerusAffiliate(new address[](0), new bytes32[](0), new uint8[](0), players, refs);
+    }
+
     function test_kickbackIsTenPercentOfScaledRewardAndCreditsReachGnrus() public {
         uint256 credited;
         for (uint256 i; i < 12; ++i) {
@@ -99,6 +124,62 @@ contract GnrusAffiliateTest is DegenesisDeployProtocol {
         }
         assertGt(credited, 0, "production payout selects GNRUS");
         assertEq(coin.balanceOf(ContractAddresses.GNRUS), 0);
+    }
+
+    function test_donorIdRouteScoresDonorWithoutStoringGnrusReferral() public {
+        uint32 donor = _giveWalletId(address(0xD010));
+        vm.prank(address(game));
+        (, , uint256 kickback) = affiliate.payAffiliateCombined_g3742656(
+            bytes32(uint256(donor)), 3, 4, 10_000, 0, 0, 0, 0);
+        assertEq(kickback, 0);
+        assertEq(affiliate.affiliateScore(4, donor), 2000);
+        assertEq(affiliate.getReferrerIdById(3), 1);
+        vm.prank(address(game));
+        affiliate.payAffiliateCombined_g3742656(bytes32(0), 3, 4, 10_000, 0, 0, 0, 0);
+        assertEq(affiliate.getReferrerIdById(3), 1);
+    }
+
+    function test_externalPlayersUseGnrusVaultSdgnrsRoutesWithoutDuplicatingShare() public {
+        vm.mockCall(address(quests), abi.encodeWithSelector(quests.handleAffiliate_g2566281.selector), abi.encode(uint256(0)));
+        uint256 seen;
+        uint24 day = uint24(game.currentDayView_g542950());
+        for (uint256 i; i < 250 && seen != (1 << 20) - 1; ++i) {
+            uint32 id = _giveWalletId(address(uint160(0xBE00 + i)));
+            uint256 roll = uint256(keccak256(abi.encodePacked(keccak256("affiliate-payout-roll-v1"), day, id, CODE))) % 20;
+            seen |= 1 << roll;
+            uint32 recipient = roll < 15 ? 3 : roll < 19 ? 1 : 2;
+            uint256 beforeStake = coinflip.coinflipAmountById(recipient);
+            vm.prank(address(game));
+            uint256 kickback = affiliate.payAffiliate(10_000, CODE, id, 4, true, 0);
+            assertEq(kickback, 200);
+            assertEq(coinflip.coinflipAmountById(recipient) - beforeStake, 1800, "one whole share goes to selected route");
+            assertEq(affiliate.getReferrerIdById(id), 3);
+        }
+        assertEq(seen, (1 << 20) - 1);
+        assertEq(coin.balanceOf(ContractAddresses.GNRUS), 0);
+    }
+
+    function test_afkingGnrusAndReferredSubsConserveBaseAndDuplicateClaimsAreEmpty() public {
+        uint32 player = _giveWalletId(address(0xBEEF));
+        vm.prank(address(game));
+        affiliate.payAffiliate(0, CODE, player, 1, true, 0);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(GnrusAffiliateSubSeeder).runtimeCode);
+        GnrusAffiliateSubSeeder(address(game)).seed(player);
+        vm.etch(address(game), original);
+        uint32[] memory subs = new uint32[](4);
+        subs[0] = 3; subs[1] = player; subs[2] = 3; subs[3] = player;
+        uint256 beforeGnrus = coinflip.coinflipAmountById(3);
+        uint256 beforePlayer = coinflip.coinflipAmountById(player);
+        affiliate.claim(subs);
+        // Three elapsed days: own ticket reward 600; external base 210 splits 158/42/10 through 3/1/2.
+        assertEq(coinflip.coinflipAmountById(3) - beforeGnrus, 758);
+        assertEq(coinflip.coinflipAmountById(player) - beforePlayer, 300);
+        assertEq(affiliate.affiliateScore(1, 3), 210);
+        assertEq(affiliate.totalAffiliateScore(1), 210);
+        affiliate.claim(subs);
+        assertEq(coinflip.coinflipAmountById(3) - beforeGnrus, 758);
+        assertEq(coinflip.coinflipAmountById(player) - beforePlayer, 300);
     }
 
     function _settle(uint24 day, bool win) private {

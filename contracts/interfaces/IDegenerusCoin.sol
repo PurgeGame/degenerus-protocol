@@ -38,6 +38,9 @@ interface IDegenerusCoin {
     /// @param amount The amount of coins to mint
     function mintForGame_g152734(address player, uint256 amount) external;
 
+    /// @notice Wallet FLIP balance.
+    function balanceOf(address account) external view returns (uint256);
+
     /// @notice Spendable FLIP for a player: wallet balance (plus the mint allowance for VAULT)
     ///         + claimable coinflip winnings.
     /// @param player The address to read.

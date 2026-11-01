@@ -851,13 +851,14 @@ contract sDGNRS {
     }
 
     /// @notice sDGNRS supply held by governance-eligible addresses.
-    /// @dev Excludes undistributed pools (held by this contract), DGNRS wrapper, and vault.
+    /// @dev Excludes undistributed pools (held by this contract), DGNRS wrapper, vault and GNRUS.
     ///      Gambling burns already left `_totalSupply` at the burn, so they never vote.
     function votingSupply() external view returns (uint256) {
         return _totalSupply
             - balanceOf[address(this)]
             - balanceOf[ContractAddresses.DGNRS]
-            - balanceOf[ContractAddresses.VAULT];
+            - balanceOf[ContractAddresses.VAULT]
+            - balanceOf[ContractAddresses.GNRUS];
     }
 
     /// @notice Transfer sDGNRS from a reward pool to a recipient

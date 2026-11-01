@@ -102,7 +102,7 @@ contract VaultFlipBackstopTest is DeployProtocol {
             assertEq(bank, 45 * 12_500);
             assertEq(cursor, DAY);
             (, uint24 gnrusCursor) = _positionFor(3);
-            assertEq(gnrusCursor, DAY);
+            assertEq(gnrusCursor, DAY - 45, "Vault-only backstop leaves GNRUS cursor unchanged");
             assertEq(coin.balanceOf(ContractAddresses.GNRUS), 0);
             assertEq(coin.vaultMintAllowance(), allowanceBefore, "zero deposit banks without minting");
             // A later direct settle cannot duplicate the bank, or alter the Game stamp.
@@ -145,7 +145,7 @@ contract VaultFlipBackstopTest is DeployProtocol {
     function test_failedSettleRollsBackStampAndCursor() public {
         _seed(90, DAY - 90, 0);
         vm.mockCallRevert(ContractAddresses.JACKPOTS,
-            abi.encodePacked(bytes4(keccak256("recordBafFlip(uint32,uint24,uint256)")), abi.encode(uint32(3))), abi.encodeWithSignature("TestFailure()"));
+            abi.encodePacked(bytes4(keccak256("recordBafFlip(uint32,uint24,uint256)")), abi.encode(uint32(1))), abi.encodeWithSignature("TestFailure()"));
         vm.expectRevert(bytes4(keccak256("TestFailure()")));
         host.phase(9_000_000);
         assertEq(host.stamp(), DAY - 90);
@@ -153,7 +153,7 @@ contract VaultFlipBackstopTest is DeployProtocol {
         assertEq(bank, 0);
         assertEq(cursor, DAY - 90);
         (, uint24 gnrusCursor) = _positionFor(3);
-        assertEq(gnrusCursor, DAY - 90, "second account failure rolls back both cursors");
+        assertEq(gnrusCursor, DAY - 90, "Vault failure leaves GNRUS cursor unchanged");
         vm.clearMockedCalls();
         assertTrue(host.phase(9_000_000).progressed);
         (bank, cursor) = _position();

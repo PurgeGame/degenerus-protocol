@@ -37,7 +37,8 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         MineFlipGas.Meter memory meter = MineFlipGas.fromCall(36);
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _minerMaintenancePending()
             || _livenessTriggered() || day != _afkingResetDay || day != dailyIdx + 1 || !dailyComplete || !_dailyRequestDue() || !subsFullyProcessed) revert RngNotReady();
-        _refillVrfNative(meter, GasBounds.VRF_DAILY_REFILL_TAIL);
+        _refillVrfNative(meter, _dailyRequestMayEndPhase()
+            ? GasBounds.VRF_DAILY_REFILL_TAIL + GasBounds.GNRUS_TICKET_PURCHASE : GasBounds.VRF_DAILY_REFILL_TAIL);
         _rngPrepareRequestBoundary(day);
         _swapTicketSlot();
         _swapFoilSlot();

@@ -33,18 +33,11 @@ contract RetiredTicketReadersTest is Test {
         RetiredWhaleHarness h = new RetiredWhaleHarness();
         h.seed(DEITY, true);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        h.awardWhalePass_g5502(1, 0, 2, 11, true);
+        h.awardWhalePass_g201599(1, 0, 2, 11);
         assertEq(h.awarded(DEITY), 0);
         h.seed(DEITY, false);
-        h.awardWhalePass_g5502(1, 0, 2, 11, true);
+        h.awardWhalePass_g201599(1, 0, 2, 11);
         assertEq(h.awarded(DEITY), 2, "retirement guard must preserve a valid empty-deity draw");
-    }
-    function test_RetiredWhaleQuadrantRejectsEmptyDeityBucket() public {
-        RetiredWhaleHarness h = new RetiredWhaleHarness();
-        h.seed(DEITY, true);
-        vm.expectRevert(DegenerusGameStorage.E.selector);
-        h.awardWhalePass_g5502(1, 0, 80 ether, 11, false);
-        assertEq(h.awarded(DEITY), 0);
     }
     function test_RetiredJackpotTerminalPaysNobodyBeforeCachedLengthDeityDraw() public {
         RetiredJackpotHarness h = new RetiredJackpotHarness();

@@ -178,6 +178,36 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _measure("first_referral", 400, 0, CODE, MintPaymentKind.DirectEth, _price());
         _measure("repeat_referral", 400, 0, CODE, MintPaymentKind.DirectEth, _price());
     }
+    function test_Gas_DefaultReferral() public {
+        bytes32 defaultCode = bytes32(uint256(uint160(REFERRER)));
+        _measure("first_default_referral", 400, 0, defaultCode, MintPaymentKind.DirectEth, _price());
+        _measure("repeat_default_referral", 400, 0, defaultCode, MintPaymentKind.DirectEth, _price());
+    }
+    function test_Gas_UnregisteredDonation() public {
+        address donor = address(0xD0A710);
+        uint256 cost = _price();
+        vm.deal(donor, 1 ether);
+        assertEq(game.walletIdOf_g3120(donor), 0);
+        vm.prank(donor);
+        game.purchaseOrderFor{value: cost}(3, 400, 0, CODE, MintPaymentKind.DirectEth, false);
+        emit log_named_uint("donation_unregistered", vm.snapshotGasLastCall("donation-unregistered"));
+        assertGt(game.walletIdOf_g3120(donor), 0);
+    }
+
+    function test_Gas_Donation() public {
+        uint256 cost = _price();
+        vm.prank(BUYER);
+        (bool ok,) = address(game).call{value: cost}(abi.encodeCall(game.purchaseOrderFor,
+            (uint32(3), uint256(400), uint256(0), CODE, MintPaymentKind.DirectEth, false)));
+        uint256 used = vm.snapshotGasLastCall("donation");
+        emit log_named_uint("donation_first", used);
+        emit log_named_uint("donation_success", ok ? 1 : 0);
+        if (ok) {
+            vm.prank(BUYER);
+            game.purchaseOrderFor{value: cost}(3, 400, 0, CODE, MintPaymentKind.DirectEth, false);
+            emit log_named_uint("donation_repeat", vm.snapshotGasLastCall("donation-repeat"));
+        }
+    }
     function test_Gas_Claimable() public {
         _prime(0);
         _measure("claimable_repeat", 1200, 0, 0, MintPaymentKind.Claimable, 0);

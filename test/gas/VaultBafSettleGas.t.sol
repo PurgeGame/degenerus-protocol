@@ -13,11 +13,12 @@ import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {VaultBackstopHost} from "../fuzz/VaultFlipBackstop.t.sol";
 import {ICoinflip} from "../../contracts/interfaces/ICoinflip.sol";
+import {MinerloopGasProbe} from "../helpers/MinerloopGasProbe.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 
-/// @title VaultBafSettleGas — cold cost of Vault and GNRUS settlement at the x0 seal.
+/// @title VaultBafSettleGas — cold cost of Vault settlement at the x0 seal.
 ///
-/// @notice The seal settles Vault and GNRUS through zero-deposit calls: two claim walks over
+/// @notice The seal settles Vault through a zero-deposit call: one claim walk over
 ///         the days since its last settlement, at most COIN_CLAIM_DAYS (90), always through the
 ///         latest resolved day. Its gas is the BAF_VAULT_SETTLE reserve that every seal-capable
 ///         purchase leg keeps in its tail on an x0 purchase day.
@@ -181,7 +182,7 @@ abstract contract VaultSettleCallGas is DeployProtocol, NativeGasExport {
         emit log_named_uint("glamsterdam_state_gas", r.stateGas);
         emit log_named_uint("new_slots_0_to_x", r.newSlots);
         emit log_named_uint("cold_accounts", r.coldAccounts);
-        assertLt(r.glamsterdamExec + r.stateGas, 10_000_000, "the settle unit stays under 10M under Glamsterdam");
+        assertLe(r.glamsterdamExec + r.stateGas, GasBounds.BAF_VAULT_SETTLE, "the settle unit fits its reserve under Glamsterdam");
     }
 }
 
@@ -311,16 +312,18 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
 
     /// @dev The first call of the test: the latch day's last purchase leg and its seal, cold.
     function test_SealCrankCold() public {
+        uint24 gnrusBefore = _lastClaim(ContractAddresses.GNRUS);
         game.mineRun{gas: CHUNK_CAP}(0);
         uint256 used = vm.lastCallGas().gasTotalUsed;
         assertTrue(_latched(), "the full crank seals within 10M supplied gas");
         assertEq(_lastClaim(VAULT), settledAt);
-        assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt);
+        assertEq(_lastClaim(ContractAddresses.GNRUS), gnrusBefore, "Vault-only seal leaves GNRUS for the request");
         emit log_named_uint("protocol_seal_full_crank_gas", used);
         assertLe(used, CHUNK_CAP);
     }
 
     function test_SealChunkCold() public {
+        uint24 gnrusBefore = _lastClaim(ContractAddresses.GNRUS);
         uint256 snapshot = vm.snapshotState();
         VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
         uint256 used = vm.lastCallGas().gasTotalUsed;
@@ -329,7 +332,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
         (uint24 armed, , ) = coinflip.bafDrawInfo();
         assertEq(armed, latchDay + 1, "and arms the BAF draw");
         assertEq(_lastClaim(VAULT), settledAt, "and settles the vault's claim window");
-        assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt, "and settles GNRUS's claim window");
+        assertEq(_lastClaim(ContractAddresses.GNRUS), gnrusBefore, "Vault-only seal");
         assertLe(used, CHUNK_CAP, "the sealing chunk stays at or under 10M");
         if (bytes(vm.envOr("STORAGE_REUSE_EXPORT", string(""))).length != 0) {
             assertTrue(vm.revertToState(snapshot));
@@ -374,11 +377,12 @@ contract VaultSealChunkGasSlowRebuy is VaultSealChunkGas {
             VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(1, latchDay, pattern);
             VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(3, latchDay, pattern);
             vm.etch(address(coinflip), original);
+            uint24 gnrusBefore = _lastClaim(ContractAddresses.GNRUS);
             game.mineRun{gas: CHUNK_CAP}(0);
             uint256 used = vm.lastCallGas().gasTotalUsed;
             assertTrue(_latched());
             assertEq(_lastClaim(VAULT), settledAt);
-            assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt);
+            assertEq(_lastClaim(ContractAddresses.GNRUS), gnrusBefore, "Vault-only seal leaves GNRUS for the request");
             assertLe(used, CHUNK_CAP);
             emit log_named_uint("seal_pattern", pattern);
             emit log_named_uint("protocol_seal_full_crank_gas", used);
@@ -389,13 +393,13 @@ contract VaultSealChunkGasSlowRebuy is VaultSealChunkGas {
         emit log_named_uint("maximum_protocol_seal_crank_gas", maximum);
     }
 
-    function test_secondSettlementFailureRollsBackSealAndBothAccounts() public {
+    function test_vaultSettlementFailureRollsBackSeal() public {
         uint24 vaultCursor = _lastClaim(VAULT);
         uint24 gnrusCursor = _lastClaim(ContractAddresses.GNRUS);
         bytes32 stampWord = vm.load(address(game), bytes32(uint256(4)));
         (uint24 armedBefore, uint96 weightBefore, uint32 entriesBefore) = coinflip.bafDrawInfo();
         vm.mockCallRevert(ContractAddresses.JACKPOTS,
-            abi.encodePacked(bytes4(keccak256("recordBafFlip(uint32,uint24,uint256)")), abi.encode(uint32(3))),
+            abi.encodePacked(bytes4(keccak256("recordBafFlip(uint32,uint24,uint256)")), abi.encode(uint32(1))),
             abi.encodeWithSignature("SecondSettlementFailed()"));
         vm.expectRevert(bytes4(keccak256("SecondSettlementFailed()")));
         VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
@@ -411,7 +415,7 @@ contract VaultSealChunkGasSlowRebuy is VaultSealChunkGas {
         VaultSettleHost(payable(address(game))).dailyWith(ALLOWANCE);
         assertTrue(_latched());
         assertEq(_lastClaim(VAULT), settledAt);
-        assertEq(_lastClaim(ContractAddresses.GNRUS), settledAt);
+        assertEq(_lastClaim(ContractAddresses.GNRUS), gnrusCursor, "Vault-only seal leaves GNRUS for the request");
     }
 
     function _slow() internal pure override returns (bool) { return true; }
@@ -506,4 +510,128 @@ contract ProtocolSettleUnlimitedGas is DeployProtocol {
             vm.deleteStateSnapshot(snap);
         }
     }
+}
+
+/// @notice The complete Vault-only backstop checkpoint on both schedules.
+contract VaultBackstopRepricedGas is DeployProtocol, MinerloopGasProbe {
+    uint24 private constant LATEST = 1432;
+    function setUp() public {
+        _deployProtocol();
+        vm.warp((uint256(LATEST) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        vm.etch(address(game), type(VaultBackstopHost).runtimeCode);
+    }
+    function seedBackstop(uint8 pattern) external {
+        require(msg.sender == address(this));
+        bytes memory original = address(coinflip).code;
+        vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
+        VaultSettleSeeder(address(coinflip)).seedUnlimitedHistory(1, LATEST, pattern);
+        vm.etch(address(coinflip), original);
+        VaultBackstopHost(payable(address(game))).seedPhase(LATEST, LATEST - 90, 0);
+    }
+    function _measure(uint8 pattern) private {
+        this.seedBackstop(pattern);
+        (GlamsterdamReprice.Result memory r, bytes memory returned) = _probe(address(game), address(this),
+            abi.encodeCall(VaultBackstopHost.phase, (uint256(9_000_000))), 9_500_000);
+        MineFlipGas.Result memory result = abi.decode(returned, (MineFlipGas.Result));
+        assertTrue(result.progressed);
+        assertFalse(result.done);
+        _report(string.concat("vault_backstop_pattern_", vm.toString(pattern)), r, GasBounds.BAF_VAULT_SETTLE);
+        assertLe(r.osakaExec, GasBounds.BAF_VAULT_SETTLE);
+        assertLe(r.glamsterdamExec + r.stateGas, GasBounds.BAF_VAULT_SETTLE);
+    }
+    function test_ColdPattern00() public { _measure(0); }
+    function test_ColdPattern01() public { _measure(1); }
+    function test_ColdPattern02() public { _measure(2); }
+    function test_ColdPattern03() public { _measure(3); }
+    function test_ColdPattern04() public { _measure(4); }
+    function test_ColdPattern05() public { _measure(5); }
+    function test_ColdPattern06() public { _measure(6); }
+    function test_ColdPattern07() public { _measure(7); }
+    function test_ColdPattern08() public { _measure(8); }
+    function test_ColdPattern09() public { _measure(9); }
+    function test_ColdPattern10() public { _measure(10); }
+    function test_ColdPattern11() public { _measure(11); }
+    function test_ColdPattern12() public { _measure(12); }
+    function test_ColdPattern13() public { _measure(13); }
+    function test_ColdPattern14() public { _measure(14); }
+    function test_ColdPattern15() public { _measure(15); }
+    function test_ColdPattern16() public { _measure(16); }
+    function test_ColdPattern17() public { _measure(17); }
+    function test_ColdPattern18() public { _measure(18); }
+    function test_ColdPattern19() public { _measure(19); }
+    function test_ColdPattern20() public { _measure(20); }
+    function test_ColdPattern21() public { _measure(21); }
+    function test_ColdPattern22() public { _measure(22); }
+    function test_ColdPattern23() public { _measure(23); }
+    function test_ColdPattern24() public { _measure(24); }
+    function test_ColdPattern25() public { _measure(25); }
+    function test_ColdPattern26() public { _measure(26); }
+    function test_ColdPattern27() public { _measure(27); }
+    function test_ColdPattern28() public { _measure(28); }
+    function test_ColdPattern29() public { _measure(29); }
+    function test_ColdPattern30() public { _measure(30); }
+    function test_ColdPattern31() public { _measure(31); }
+    function test_ColdPattern32() public { _measure(32); }
+    function test_ColdPattern33() public { _measure(33); }
+    function test_ColdPattern34() public { _measure(34); }
+    function test_ColdPattern35() public { _measure(35); }
+    function test_ColdPattern36() public { _measure(36); }
+    function test_ColdPattern37() public { _measure(37); }
+    function test_ColdPattern38() public { _measure(38); }
+    function test_ColdPattern39() public { _measure(39); }
+    function test_ColdPattern40() public { _measure(40); }
+    function test_ColdPattern41() public { _measure(41); }
+    function test_ColdPattern42() public { _measure(42); }
+    function test_ColdPattern43() public { _measure(43); }
+    function test_ColdPattern44() public { _measure(44); }
+    function test_ColdPattern45() public { _measure(45); }
+    function test_ColdPattern46() public { _measure(46); }
+    function test_ColdPattern47() public { _measure(47); }
+    function test_ColdPattern48() public { _measure(48); }
+    function test_ColdPattern49() public { _measure(49); }
+    function test_ColdPattern50() public { _measure(50); }
+    function test_ColdPattern51() public { _measure(51); }
+    function test_ColdPattern52() public { _measure(52); }
+    function test_ColdPattern53() public { _measure(53); }
+    function test_ColdPattern54() public { _measure(54); }
+    function test_ColdPattern55() public { _measure(55); }
+    function test_ColdPattern56() public { _measure(56); }
+    function test_ColdPattern57() public { _measure(57); }
+    function test_ColdPattern58() public { _measure(58); }
+    function test_ColdPattern59() public { _measure(59); }
+    function test_ColdPattern60() public { _measure(60); }
+    function test_ColdPattern61() public { _measure(61); }
+    function test_ColdPattern62() public { _measure(62); }
+    function test_ColdPattern63() public { _measure(63); }
+    function test_ColdPattern64() public { _measure(64); }
+    function test_ColdPattern65() public { _measure(65); }
+    function test_ColdPattern66() public { _measure(66); }
+    function test_ColdPattern67() public { _measure(67); }
+    function test_ColdPattern68() public { _measure(68); }
+    function test_ColdPattern69() public { _measure(69); }
+    function test_ColdPattern70() public { _measure(70); }
+    function test_ColdPattern71() public { _measure(71); }
+    function test_ColdPattern72() public { _measure(72); }
+    function test_ColdPattern73() public { _measure(73); }
+    function test_ColdPattern74() public { _measure(74); }
+    function test_ColdPattern75() public { _measure(75); }
+    function test_ColdPattern76() public { _measure(76); }
+    function test_ColdPattern77() public { _measure(77); }
+    function test_ColdPattern78() public { _measure(78); }
+    function test_ColdPattern79() public { _measure(79); }
+    function test_ColdPattern80() public { _measure(80); }
+    function test_ColdPattern81() public { _measure(81); }
+    function test_ColdPattern82() public { _measure(82); }
+    function test_ColdPattern83() public { _measure(83); }
+    function test_ColdPattern84() public { _measure(84); }
+    function test_ColdPattern85() public { _measure(85); }
+    function test_ColdPattern86() public { _measure(86); }
+    function test_ColdPattern87() public { _measure(87); }
+    function test_ColdPattern88() public { _measure(88); }
+    function test_ColdPattern89() public { _measure(89); }
+    function test_ColdPattern90() public { _measure(90); }
+    function test_ColdPattern91() public { _measure(91); }
+    function test_ColdPattern92() public { _measure(92); }
+    function test_ColdPattern93() public { _measure(93); }
+    function test_ColdPattern94() public { _measure(94); }
 }

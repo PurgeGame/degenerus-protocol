@@ -228,7 +228,9 @@ contract GameFSMProductionTransitionTest is Test {
         vm.etch(ContractAddresses.COINFLIP, deps);
         vm.etch(ContractAddresses.CRAPS, deps);
         vm.etch(ContractAddresses.QUESTS, deps);
-        // Mint aliases Endgame; do not overwrite the production terminal worker.
+        // This FSM abstracts purchase dependencies; the dedicated GNRUS suite runs the real buy.
+        vm.mockCall(ContractAddresses.GAME_MINT_MODULE,
+            abi.encodeWithSignature("redeemGnrusFlip()"), "");
     }
 
     function _dayStart(uint24 day) private pure returns (uint256) {

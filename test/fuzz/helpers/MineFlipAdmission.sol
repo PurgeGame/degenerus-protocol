@@ -55,7 +55,8 @@ library MineFlipAdmission {
         if (action == IDLE || action == WAIT || action == CERTIFY) return 0;
         if (action == DEGENESIS_SETTLE) return degenesisSettleFirstUnit();
         if (action == REQUEST_DAILY) {
-            return GasBounds.RNG_DAILY_REQUEST + GasBounds.RNG_REDEMPTION_CLOSE
+            // Worst case: a request that can end the purchase phase also carries GNRUS's buy.
+            return GasBounds.RNG_DAILY_REQUEST + GasBounds.RNG_REDEMPTION_CLOSE + GasBounds.GNRUS_TICKET_PURCHASE
                 + (sale ? GasBounds.DEGENESIS_REQUEST_GAS : 0);
         }
         if (action == REQUEST_MIDDAY) return GasBounds.RNG_MIDDAY_REQUEST;

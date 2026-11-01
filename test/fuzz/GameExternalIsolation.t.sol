@@ -7,6 +7,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IStETH} from "../../contracts/interfaces/IStETH.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
+import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {IDegenerusGameAdvanceModule, IDegenerusGameJackpotModule, IDegenerusGameGameOverModule, IDegenerusGameRngModule}
     from "../../contracts/interfaces/IDegenerusGameModules.sol";
@@ -572,9 +573,11 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
         }
         bytes memory input = abi.encodeCall(game.mineRun, (uint32(10_000)));
         string memory label = kind == 0 ? "optfix-sweep" : kind == 1 ? "optfix-daily" : "optfix-midday";
+        uint256 supplied = kind == 1 ? Bounds.RNG_DAILY_REQUEST + Bounds.DEGENESIS_REQUEST_GAS
+            + Bounds.RNG_REDEMPTION_CLOSE + 1_000_000 : 6_000_000;
         _nativeCheckedFixture(label, address(this), address(probe),
-            abi.encodeCall(probe.invoke, (address(game), input, 6_000_000)));
-        (bool ok,) = probe.invoke(address(game), input, 6_000_000);
+            abi.encodeCall(probe.invoke, (address(game), input, supplied)));
+        (bool ok,) = probe.invoke(address(game), input, supplied);
         assertTrue(ok);
         if (kind == 0) {
             assertTrue(host.swept()); assertEq(admin.subscriptionId(), 0);
