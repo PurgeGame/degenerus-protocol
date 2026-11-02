@@ -62,7 +62,29 @@ ENV_KEYS = (
 # and a differently patched ContractAddresses.sol, so it is never part of a full-tree run: only
 # an explicit `--group fork` (or `--file test/fork/...`) selects it, and then alone.
 FORK_GROUP = "fork"
-INVARIANT_SHARDS = 3
+INVARIANT_SHARDS = 4
+# Relative cost of the heaviest invariant roots (minutes of suite time, one thread, default
+# profile). CI shards are filled heaviest-first onto the lightest shard so each job fits the
+# hosted time limit; unlisted roots count as one minute. Only the relative sizes matter.
+INVARIANT_COST_MINUTES = {
+    "test/fuzz/invariant/AdvanceLiveness.inv.t.sol": 38,
+    "test/fuzz/invariant/AnyInputSafetyDegenesis.inv.t.sol": 35,
+    "test/fuzz/invariant/RngFreezeDegenesisTimeline.inv.t.sol": 34,
+    "test/fuzz/invariant/CrapsRngSeal.inv.t.sol": 31,
+    "test/fuzz/invariant/CompositionDegenesis.inv.t.sol": 21,
+    "test/fuzz/invariant/CrapsRealWiringConservation.inv.t.sol": 20,
+    "test/fuzz/invariant/DegenesisTimelineVariants.inv.t.sol": 15,
+    "test/fuzz/invariant/PoolConservation.inv.t.sol": 14,
+    "test/fuzz/invariant/LoanAccounting.inv.t.sol": 14,
+    "test/fuzz/invariant/PoolConservationDegenesis.inv.t.sol": 11,
+    "test/fuzz/invariant/GameFSMDegenesis.inv.t.sol": 8,
+    "test/fuzz/invariant/DegenesisSolvency.inv.t.sol": 8,
+    "test/fuzz/invariant/AnyInputSafety.inv.t.sol": 5,
+    "test/fuzz/invariant/WalletIdTruth.inv.t.sol": 5,
+    "test/fuzz/invariant/SeatCapDegenesis.inv.t.sol": 4,
+    "test/fuzz/invariant/Composition.inv.t.sol": 4,
+    "test/fuzz/invariant/WalletIdTruthDegenesis.inv.t.sol": 4,
+}
 # Sources that only build against one profile's packaging. The Craps outcome-injection mock
 # overrides the external dice engine hook, which glamsterdam compiles inline; it and the
 # suites that use it are skipped (never compiled) under that profile.
@@ -122,9 +144,15 @@ def groups():
     # CI shards of the invariants group (each fits a hosted job's time limit); a default
     # full-tree run uses the whole group instead.
     invariant_roots = sorted(p for p in result["invariants"] if p.name.endswith(".t.sol"))
-    shard = max(1, (len(invariant_roots) + INVARIANT_SHARDS - 1) // INVARIANT_SHARDS)
-    for i in range(INVARIANT_SHARDS):
-        result[f"invariants-{i + 1}"] = set(invariant_roots[i * shard:(i + 1) * shard])
+    cost = lambda p: INVARIANT_COST_MINUTES.get(str(p), 1)
+    shards = [set() for _ in range(INVARIANT_SHARDS)]
+    loads = [0] * INVARIANT_SHARDS
+    for root in sorted(invariant_roots, key=lambda p: (-cost(p), str(p))):
+        i = loads.index(min(loads))
+        shards[i].add(root)
+        loads[i] += cost(root)
+    for i, roots in enumerate(shards):
+        result[f"invariants-{i + 1}"] = roots
     result[FORK_GROUP] = {p for p in files if is_fork_source(p)}
     missing = set(files) - support - set().union(*result.values())
     if missing:
