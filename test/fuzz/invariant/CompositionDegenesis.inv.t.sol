@@ -16,6 +16,10 @@ contract CompositionDegenesis is CompositionInvariant, DegenesisWeekOpening {
         return DEPLOY_TS_DEGENESIS;
     }
 
+    function _vacuityPrefix() internal pure override returns (string memory) {
+        return "COMPOSITION_DEGENESIS_";
+    }
+
     function setUp() public override {
         _deployProtocol();
         _degenesisWeek(true);
@@ -39,6 +43,10 @@ contract CompositionDegenesis is CompositionInvariant, DegenesisWeekOpening {
 contract CompositionDegenesisBacklog is CompositionInvariant, DegenesisWeekOpening {
     function _deployTimestamp() internal pure override(DeployProtocol, DegenesisWeekOpening) returns (uint256) {
         return DEPLOY_TS_DEGENESIS;
+    }
+
+    function _vacuityPrefix() internal pure override returns (string memory) {
+        return "COMPOSITION_DEGENESIS_BACKLOG_";
     }
 
     function _dgwBacklog() internal pure override returns (bool) {

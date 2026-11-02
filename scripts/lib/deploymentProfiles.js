@@ -374,7 +374,6 @@ export const PROFILES = {
       "contract": "DegenerusGameEndgameModule",
       "aliases": [
         "GAME_MINT_MODULE",
-        "GAME_DECIMATOR_MODULE",
         "GAME_GAMEOVER_MODULE",
         "GAME_FOILPACK_MODULE",
         "GAME_DEGENESIS_MODULE"
@@ -385,10 +384,6 @@ export const PROFILES = {
         "GAME_MINT_MODULE": {
           "field": "mintModule",
           "type": "DegenerusGameMintModule"
-        },
-        "GAME_DECIMATOR_MODULE": {
-          "field": "decimatorModule",
-          "type": "DegenerusGameDecimatorModule"
         },
         "GAME_GAMEOVER_MODULE": {
           "field": "gameOverModule",
@@ -405,13 +400,21 @@ export const PROFILES = {
       }
     },
     {
+      "key": "GAME_DECIMATOR_MODULE",
+      "contract": "DegenerusGameDecimatorModule",
+      "aliases": [
+        "GAME_DECIMATOR_MODULE"
+      ],
+      "fixtureField": "decimatorModule",
+      "fixtureType": "DegenerusGameDecimatorModule"
+    },
+    {
       "key": "GAME_ADVANCE_MODULE",
       "contract": "DegenerusGameDailyModule",
       "aliases": [
         "GAME_ADVANCE_MODULE",
         "GAME_JACKPOT_MODULE",
-        "GAME_JACKPOT_DRAW_MODULE",
-        "GAME_RNG_MODULE"
+        "GAME_JACKPOT_DRAW_MODULE"
       ],
       "fixtureField": "dailyModule",
       "fixtureType": "DegenerusGameDailyModule",
@@ -424,10 +427,6 @@ export const PROFILES = {
           "field": "jackpotModule",
           "type": "DegenerusGameJackpotModule"
         },
-        "GAME_RNG_MODULE": {
-          "field": "rngModule",
-          "type": "DegenerusGameRngModule"
-        },
         "GAME_JACKPOT_DRAW_MODULE": {
           "field": "jackpotDrawModule",
           "type": "DegenerusGameJackpotDrawModule"
@@ -439,7 +438,8 @@ export const PROFILES = {
       "contract": "DegenerusGamePassModule",
       "aliases": [
         "GAME_WHALE_MODULE",
-        "GAME_TICKET_MODULE"
+        "GAME_TICKET_MODULE",
+        "GAME_RNG_MODULE"
       ],
       "fixtureField": "passModule",
       "fixtureType": "DegenerusGamePassModule",
@@ -451,6 +451,10 @@ export const PROFILES = {
         "GAME_TICKET_MODULE": {
           "field": "ticketModule",
           "type": "DegenerusGameTicketModule"
+        },
+        "GAME_RNG_MODULE": {
+          "field": "rngModule",
+          "type": "DegenerusGameRngModule"
         }
       }
     },

@@ -23,7 +23,7 @@
       "scripts/check-rng-taint.sh"
     ],
     "exitcode": 0,
-    "stdout": "manifest classes: PURE-DERIVE=189, EXEMPT-ADVANCE=80, CONSUMER-SEALED=100, PRODUCER=5, NOT-RNG=32\nlive sites: 406   manifest rows: 406\n\u001b[0;32mPASS\u001b[0m RNG-word taint registry matches source\n",
+    "stdout": "manifest classes: PURE-DERIVE=189, EXEMPT-ADVANCE=80, CONSUMER-SEALED=100, PRODUCER=5, NOT-RNG=30\nlive sites: 404   manifest rows: 404\n\u001b[0;32mPASS\u001b[0m RNG-word taint registry matches source\n",
     "stderr": ""
   },
   {
@@ -32,7 +32,7 @@
       "scripts/check-rng-shape.py"
     ],
     "exitcode": 0,
-    "stdout": "{\"tags\": 113, \"reviewed_hash_sites\": 200, \"reviewed_raw_bit_exceptions\": 1, \"status\": \"PASS\"}\n",
+    "stdout": "{\"tags\": 112, \"reviewed_hash_sites\": 199, \"reviewed_raw_bit_exceptions\": 1, \"status\": \"PASS\"}\n",
     "stderr": ""
   },
   {
@@ -41,7 +41,7 @@
       "scripts/check-recipient-calls.py"
     ],
     "exitcode": 0,
-    "stdout": "Recipient-call gate: 1575 reviewed expressions; external, value, hook, pointer, assembly and transitive helper calls covered.\n",
+    "stdout": "Recipient-call gate: 1560 reviewed expressions; external, value, hook, pointer, assembly and transitive helper calls covered.\n",
     "stderr": ""
   }
 ]

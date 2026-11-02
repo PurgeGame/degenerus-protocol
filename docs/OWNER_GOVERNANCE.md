@@ -118,7 +118,7 @@ entire canonical dataset afterward. A fresh setup uses seven upload transactions
 completed setup submits none. A mismatch requires an approved correction; it is never silently
 overwritten.
 
-The executor is the final deployment in each profile: nonce `N+36` in the eip170 profile and `N+20`
+The executor is the final deployment in each profile: nonce `N+36` in the eip170 profile and `N+21`
 in the glamsterdam profile, where `N` is the first deployment's nonce. Earlier contract addresses
 follow the deployer's CREATE nonces in profile order; the Vault's constructor creates the DGVF and
 DGVE tokens from the Vault's own nonce.

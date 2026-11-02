@@ -343,7 +343,8 @@ before a day-`(d+3)` entry can reuse day `d`'s storage bank.
   - `test/fuzz/StorageSlotPins.t.sol::test_ProductionGameSlotConstants`;
     `test/fuzz/StorageFoundation.t.sol::testSlot0FieldOffsets`
   - Hosted CI, `.github/workflows/ci.yml` job `foundry-build`, step "Glamsterdam profile layout
-    identity": selects the `glamsterdam` profile, builds `contracts/`, runs both layout gates on
-    that build, and runs `check_recursive_layout.py --baseline forge-out-production`, which fails on
-    any layout difference between the two profiles' builds for every contract they share
+    identity": selects the `glamsterdam` profile, builds `contracts/`, checks the Glamsterdam size
+    limits, runs both layout gates on that build, and runs
+    `check_recursive_layout.py --baseline forge-out-production`, which fails on any layout
+    difference between the two profiles' builds for every contract they share
     (DegenerusGame, every Game and Craps delegate, Coinflip, the standalone state contracts)

@@ -224,4 +224,5 @@ again.
   against their fixed admission bound (`LOAN_SEIZE + LOAN_SEIZE_TAIL`), the heaviest seizure (an
   active AFKing run, a deity pass on symbol 31 and a native sDGNRS burn) with at least 15% headroom,
   and the cold game-over checkpoint (that account plus the full 99-level scan) through the full
-  `mineRun` stack.
+  `mineRun` stack. `test/gas/LoanSeizureGlamsterdamGas.t.sol` prices the same units under
+  Glamsterdam (`GlamsterdamReprice`) for both lenders and asserts the same bound covers them.

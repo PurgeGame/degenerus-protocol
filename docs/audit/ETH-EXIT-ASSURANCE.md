@@ -2,7 +2,7 @@
 
 ## Conclusion and scope
 
-The retained symbolic run reports passes for eight local accounting properties of its recorded
+The retained symbolic run reports passes for nine local accounting properties of its recorded
 production storage helpers. A finite model also rules out funding a new whale-pass purchase with an
 immediate loan against that purchase's ticket award. These results do **not** constitute a proof that
 every protocol execution or economic strategy is unexploitable.
@@ -12,19 +12,18 @@ exit. This assumption does not make the VRF coordinator, stETH, compiler, deploy
 or other accounts trusted by implication. The adversarial target is an outsider obtaining value
 beyond the entitlements and authority specified by the contracts.
 
-The [run input hashes](eth-exit-proof-2026-10-28/source-sha256.json) identify the retained
+The [run input hashes](eth-exit-proof-2026-11-02/source-sha256.json) identify the retained
 campaign's contracts. They are evidence provenance, not an alternative audit freeze. The audit
 target and repository hash manifest are defined in [AUDIT.md](../AUDIT.md). Integration tests use
 deterministic address pins and mock external contracts; they do not attest to deployed mainnet
 bytecode.
 
-The retained source hashes differ from 38 current contract files, including `DegenerusQuests.sol`,
-`DegenerusVault.sol`, `GNRUS.sol` and `sDGNRS.sol`. The helper hashes identify three copied harnesses;
-two differ from the current harnesses. Integration and boundary run metadata records deterministic
-fixture address processing; their contract input hashes match the retained campaign manifest, not
-the current contracts. Results below apply to those recorded inputs. The four named standalone
-contracts are not the subject of the eight helper properties below, and the evidence does not
-certify the complete package or replace review of their behavior.
+The retained source hashes match the contracts in this tree, and the helper hashes match its three
+harnesses. Integration and boundary run metadata records deterministic fixture address processing;
+their contract input hashes match the retained campaign manifest. Results below apply to those
+recorded inputs. Standalone contracts such as `DegenerusQuests.sol`, `DegenerusVault.sol`,
+`GNRUS.sol` and `sDGNRS.sol` are not the subject of the nine helper properties below, and the
+evidence does not certify the complete package or replace review of their behavior.
 
 ## What was proved
 
@@ -38,6 +37,7 @@ helper bodies.
 | Claimable credit | Crediting account A increases its claimable balance by exactly the amount; its AFKing balance and a distinct account B are unchanged. The aggregate liability is unchanged by this primitive, so its caller still has to fund or reclassify the credit. |
 | AFKing credit | Crediting prepaid funding increases the account's AFKing balance and `claimablePool` by the same amount, leaving claimable and the other account unchanged. |
 | Combined debit | With both balances sufficient, the claimable and AFKing halves each fall by their respective debit. Neither borrows bits from the other half. |
+| Loan credit | A loan debits the lender's claimable and AFKing balances by the principal, adds the ticket portion to the prize pools (90% next, 10% future, pending while frozen) and credits the rest to the borrower's AFKing balance. `claimablePool` plus the four prize buffers equals the starting obligations. |
 | Overdraw rejection | If either debit exceeds its balance, the production debit reverts and the packed balance remains unchanged. Debit amounts here span all `uint256` values. |
 | Purchase shortfall | For a covered cost, the claimable and AFKing draws sum to that cost, the account and aggregate liability each decrease by that cost, and the claimable 1-wei sentinel remains. Disallowing claimable spending forces that draw to zero. |
 | Redemption reserve release | Releasing a protected reserve moves its value into sDGNRS claimable without changing aggregate liability; the reserve becomes zero and a second release adds nothing. |
@@ -53,7 +53,7 @@ every reachable production state satisfies the premises. They do not
 independently establish registration, ownership, reward eligibility, or the funding correctness of
 every caller.
 
-All eight checks passed with no bounded-loop cutoff and no unresolved query in the final run. The
+All nine checks passed with no bounded-loop cutoff and no unresolved query in the final run. The
 loop bound was 2; these particular helpers have no loop whose truncation limits the result. The
 toolchain was Solidity 0.8.38, via-IR, optimizer runs 1000, Osaka, Foundry
 `c07d504b4ae67754584f4e05ff0c547a43c50f7b`, Halmos 0.3.3, and Yices. This retains the usual
@@ -108,14 +108,14 @@ fuzz default is 1,000 cases; the mature composition test uses 64 and the two V73
 use 400 each. These are bounded tests, not universal proofs. Several suites require real progress
 and include deliberately broken-state checks to show their assertions can fail.
 
-A second campaign passed **74 tests across 11 suites**, covering actual ETH Degenerette
-caps/overflow and frozen resolution, dead-VRF endings, hard-stall loan settlement, stETH-loss
-liveness, and coordinator rotation after fulfillment. The stETH-loss and terminal-loan settlement
-fuzz tests each use 24 cases. The stETH-loss test's success permits claims to fail with the documented
-shortfall error; it establishes progress, not
-protection against asset loss. With repeated helper suites counted once and the four new concrete
-harness checks included, **130 distinct concrete tests passed** (137 executions). No test failed or
-was skipped in either completed campaign or the final helper run.
+A second campaign passed **75 tests across 11 suites**, covering actual ETH Degenerette
+caps/overflow and frozen resolution, dead-VRF endings (including payout weights above 64 bits),
+hard-stall loan settlement, stETH-loss liveness, and coordinator rotation after fulfillment. The
+stETH-loss and terminal-loan settlement fuzz tests each use 24 cases. The stETH-loss test's success
+permits claims to fail with the documented shortfall error; it establishes progress, not protection
+against asset loss. With repeated helper suites counted once and the four new concrete harness
+checks included, **131 distinct concrete tests passed** (138 executions). No test failed or was
+skipped in either completed campaign or the final helper run.
 
 The independent split-arithmetic checker passed 24 checks, including sensitivity controls. Those are
 source-pinned mathematical models, not symbolic execution of every production payout caller.
@@ -128,7 +128,7 @@ For a full solvency proof, let `A` be held ETH plus supported stETH value and `L
 liability ledger, including reserved and pending value. Starting from `A >= L`, a deposit adding the
 same amount to both, a correctly funded reclassification preserving `L`, and a payout subtracting
 the same amount from both all preserve the inequality. Spending only measured surplus also preserves
-it. The eight helper checks establish parts of these transitions. The missing step is proving that
+it. The nine helper checks establish parts of these transitions. The missing step is proving that
 **every reachable caller** meets those premises, including the amount, recipient, single-consumption
 rule and implicit terminal reserves. Separately, fair entitlement and economic profitability need
 stronger properties than solvency.
@@ -208,7 +208,7 @@ From the repository root, with the scratch environment from [Testing](../TESTING
 python3 scripts/prove-eth-ledgers.py --output "$AUDIT_SCRATCH/eth-ledger-proof"
 python3 scripts/check-eth-loan-bootstrap.py --json-output "$AUDIT_SCRATCH/loan-bootstrap-results.json"
 python3 scripts/check-split-arithmetic.py --json-output "$AUDIT_SCRATCH/split-results.json"
-ETH_EVIDENCE=docs/audit/eth-exit-proof-2026-10-28
+ETH_EVIDENCE=docs/audit/eth-exit-proof-2026-11-02
 for campaign in integration boundaries; do
   set --
   while IFS= read -r source; do
@@ -229,6 +229,6 @@ caller run-limit/profile overrides to reproduce those settings. The campaigns us
 require an external RPC endpoint. Real-Lido fork regressions are a separate check described in
 [Testing](../TESTING.md#mainnet-forks-and-deep-invariants).
 
-Results are retained in [eth-exit-proof-2026-10-28](eth-exit-proof-2026-10-28/): source hashes,
+Results are retained in [eth-exit-proof-2026-11-02](eth-exit-proof-2026-11-02/): source hashes,
 symbolic results, concrete output, finite loan results, split-arithmetic results and structural-gate
 output. The records describe bounded runs of the named inputs.

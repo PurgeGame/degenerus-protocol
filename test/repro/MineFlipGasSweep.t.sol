@@ -262,11 +262,23 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
         assertTrue(ok);
         uint8 after_ = _action();
         emit log_named_uint("next action after one 16.7M call", after_);
-        // Wait means the call drained the whole session after Publish; any later action means it
-        // stopped at an estimate. Either way it chained past Publish's mandatory unit.
+        assertTrue(after_ != uint8(DegenerusGameStorage.MinerAction.Publish),
+            "non-vacuous: the 16.7M call runs past Publish's mandatory unit");
+        // A ticket backlog larger than one call leaves the chain inside the Tickets worker. Sweep
+        // from there as well, so the calls that finish Tickets and admit the next action on its
+        // estimate are covered, then require the next 16.7M call to carry the chain past Tickets.
+        if (after_ == uint8(DegenerusGameStorage.MinerAction.Tickets)) {
+            _fullSweep("first action Tickets (resumed after Publish)");
+            (ok,) = _mineAt(CAP);
+            assertTrue(ok);
+            after_ = _action();
+            emit log_named_uint("next action after the second 16.7M call", after_);
+        }
+        // Wait means the session drained; any action after Tickets means the chain stopped at an
+        // estimate after the ticket work.
         assertTrue(after_ == uint8(DegenerusGameStorage.MinerAction.Wait)
             || after_ > uint8(DegenerusGameStorage.MinerAction.Tickets),
-            "non-vacuous: the 16.7M call chains Publish into later estimate-admitted actions");
+            "non-vacuous: the chain carries Publish into later estimate-admitted actions");
         vm.revertToStateAndDelete(snap);
     }
 

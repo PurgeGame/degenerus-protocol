@@ -92,8 +92,8 @@ contract ChainPinProbe is DegenerusGameStorage {
         s.dense = true;
         for (uint256 i; i < boxes; ++i) if (uint32(_subLaneAt(i)) == 0) s.dense = false;
         if (uint32(_subLaneAt(boxes)) != 0) s.dense = false;
-        for (uint256 i; i < tickets; ++i) if (uint32(_subLaneAt(2000 - i)) == 0) s.dense = false;
-        if (uint32(_subLaneAt(2000 - tickets)) != 0) s.dense = false;
+        for (uint256 i; i < tickets; ++i) if (uint32(_subLaneAt(SUBSCRIBER_CAP - i)) == 0) s.dense = false;
+        if (uint32(_subLaneAt(SUBSCRIBER_CAP - tickets)) != 0) s.dense = false;
         uint8 flags = _afkingProtocolFlags;
         for (uint256 i = _subOpenCursor; i < boxes; ++i) {
             uint32 e = uint32(_subLaneAt(i));

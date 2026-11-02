@@ -27,7 +27,7 @@ contract DeadTallyCheckpointHarness is DegenerusGameGameOverModule, BucketSeed {
         uint24 key = _tqReadKey(lvl);
         for (uint256 i; i < count; ++i) _seedQueued(key, lvl, address(uint160(0x10000 + i)), uint80(100) << 8);
     }
-    function tallyState() external view returns (uint8 stage, uint32 pos, uint64 uncreated) {
+    function tallyState() external view returns (uint8 stage, uint32 pos, uint80 uncreated) {
         return (deadTallyStage, deadTallyPos, deadUncreated);
     }
 
@@ -134,7 +134,7 @@ contract DeadTallyGasCheckpointsTest is Test {
         }
         assertTrue(done);
         assertGt(calls, 1, "cold backlog spans checkpoints");
-        (uint8 stage,, uint64 weight) = h.tallyState();
+        (uint8 stage,, uint80 weight) = h.tallyState();
         assertEq(stage, 3);
         assertEq(weight, 3000 * 100 * 100);
         assertTrue(vm.revertToState(snap));
@@ -147,7 +147,7 @@ contract DeadTallyGasCheckpointsTest is Test {
         emit log_named_uint("calls at the minimum full-scan allowance", calls);
         assertTrue(done);
         assertGt(calls, 2, "minimum allowance still splits the backlog across many calls");
-        uint64 splitWeight;
+        uint80 splitWeight;
         (stage,, splitWeight) = h.tallyState();
         assertEq(stage, 3);
         assertEq(splitWeight, weight);

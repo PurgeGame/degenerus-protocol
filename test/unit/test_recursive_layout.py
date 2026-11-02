@@ -32,5 +32,5 @@ class RecursiveLayoutTests(unittest.TestCase):
    self.assertTrue({'Eip170Purchase','Eip170Actions','Eip170TicketFoil'} <= modules)
   with patch.dict(os.environ, PROFILE='glamsterdam'):
    self.assertEqual(set(module.expected_modules()), {
-    'DegenerusGameBoxModule', 'DegenerusGameDailyModule',
+    'DegenerusGameBoxModule', 'DegenerusGameDailyModule', 'DegenerusGameDecimatorModule',
     'DegenerusGameEndgameModule', 'DegenerusGamePassModule'})

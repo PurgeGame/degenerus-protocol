@@ -249,8 +249,9 @@ library MineFlipGasBounds {
     // One loan settlement: list and loan reads, the auto-repay check, ownership and default-ID
     // writes, native sDGNRS burn, AFKing-run finalization with its Quests call, the 32-symbol
     // deity scan with a cold DeityPass.seize, loan deletion and event.
-    // Cold account with a run, a symbol-31 deity and sDGNRS: 194.1k vs LOAN_SEIZE + TAIL = 260k.
-    uint256 internal constant LOAN_SEIZE = 200_000;
+    // Cold account with a run, a symbol-31 deity and sDGNRS: 194.1k Osaka, 283.3k Glamsterdam
+    // vs LOAN_SEIZE + TAIL = 340k.
+    uint256 internal constant LOAN_SEIZE = 280_000;
     // Cursor and pending-flag writes, game over's loan cursor, event and return.
     uint256 internal constant LOAN_SEIZE_TAIL = 60_000;
     // Game over's loan scan: one due level's cold count read and step.

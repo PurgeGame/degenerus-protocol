@@ -1,7 +1,7 @@
 Warning: This is a nightly build of Foundry. It is recommended to use the latest stable version. To mute this warning set `FOUNDRY_DISABLE_NIGHTLY_WARNING` in your environment. 
 
 Compiling 44 files with Solc 0.8.38
-Solc 0.8.38 finished in 2.29s
+Solc 0.8.38 finished in 2.25s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
     --> lib/forge-std/src/Vm.sol:1339:9:
@@ -363,72 +363,86 @@ Note: The shadowed declaration is here:
    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3616:43:
+    --> contracts/storage/DegenerusGameStorage.sol:3620:43:
      |
-3616 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+3620 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
      |                                           ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3632:9:
+    --> contracts/storage/DegenerusGameStorage.sol:3636:9:
      |
-3632 |         uint24 level,
+3636 |         uint24 level,
      |         ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3756:41:
+    --> contracts/storage/DegenerusGameStorage.sol:3760:41:
      |
-3756 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+3760 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
      |                                         ^^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3762:44:
+    --> contracts/storage/DegenerusGameStorage.sol:3766:44:
      |
-3762 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+3766 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
      |                                            ^^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1385:22:
+    --> contracts/storage/DegenerusGameStorage.sol:1380:22:
      |
-1385 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+1380 |             packed = uint80(id) << OWNER_IDX_SHIFT;
      |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1454:22:
+    --> contracts/storage/DegenerusGameStorage.sol:1449:22:
      |
-1454 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+1449 |             packed = uint80(id) << OWNER_IDX_SHIFT;
      |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1521:25:
+    --> contracts/storage/DegenerusGameStorage.sol:1516:25:
      |
-1521 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
+1516 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
      |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1978:25:
+    --> contracts/storage/DegenerusGameStorage.sol:1969:25:
      |
-1978 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+1969 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
      |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   ╭▸ test/halmos/EthLedgerProductionProof.t.sol:56:25
+   │
+56 │         claimablePool = uint128(before_);
+   │                         ━━━━━━━━━━━━━━━━
+   │
+   ├ note: consider disabling this lint if you're certain the cast is safe
+   │       
+   │       // casting to 'uint128' is safe because [explain why]
+   │       // forge-lint: disable-next-line(unsafe-typecast)
+   │       
+   │       
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
 
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
    ╭▸ test/unit/EthLoanBootstrap.t.sol:19:59
@@ -444,14 +458,29 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
    │       
    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
 
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   ╭▸ test/halmos/EthLedgerProductionProof.t.sol:61:26
+   │
+61 │         claimablePool -= uint128(principal);
+   │                          ━━━━━━━━━━━━━━━━━━
+   │
+   ├ note: consider disabling this lint if you're certain the cast is safe
+   │       
+   │       // casting to 'uint128' is safe because [explain why]
+   │       // forge-lint: disable-next-line(unsafe-typecast)
+   │       
+   │       
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
 
-Running 8 tests for test/halmos/EthLedgerProductionProof.t.sol:EthLedgerProductionProof
+
+Running 9 tests for test/halmos/EthLedgerProductionProof.t.sol:EthLedgerProductionProof
 [32m[PASS][0m check_claim_credit_is_local(uint32,uint32,uint96,uint96,uint96,uint256) (paths: 13, time: 0.06s, bounds: [])
-[32m[PASS][0m check_combined_debit_keeps_lanes_separate(uint32,uint32,uint96,uint96,uint96,uint96) (paths: 19, time: 0.17s, bounds: [])
-[32m[PASS][0m check_overdraw_reverts_without_cross_lane_borrow(uint32,uint32,uint96,uint96,uint256,uint256) (paths: 11, time: 0.16s, bounds: [])
-[32m[PASS][0m check_prepaid_credit_accounts_liability(uint32,uint32,uint96,uint96,uint96,uint96) (paths: 14, time: 0.07s, bounds: [])
-[32m[PASS][0m check_prize_contribution_conserves_in_either_buffer(uint96,uint96,uint96,uint96,uint96,uint96,bool) (paths: 27, time: 0.18s, bounds: [])
-[32m[PASS][0m check_redemption_release_is_reclassification_and_once(uint96,uint96,uint96) (paths: 18, time: 0.29s, bounds: [])
-[32m[PASS][0m check_shortfall_conserves_and_preserves_sentinel(uint32,uint32,uint96,uint96,uint96,bool) (paths: 80, time: 4.82s, bounds: [])
-[32m[PASS][0m check_yield_excludes_all_counted_obligations(uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96) (paths: 19, time: 0.20s, bounds: [])
-Symbolic test result: 8 passed; 0 failed; time: 5.95s
+[32m[PASS][0m check_combined_debit_keeps_lanes_separate(uint32,uint32,uint96,uint96,uint96,uint96) (paths: 19, time: 0.22s, bounds: [])
+[32m[PASS][0m check_loan_credit_retains_total_obligations(uint32,uint32,uint96,uint96,uint96,uint96,uint96,uint96,bool) (paths: 147, time: 37.86s, bounds: [])
+[32m[PASS][0m check_overdraw_reverts_without_cross_lane_borrow(uint32,uint32,uint96,uint96,uint256,uint256) (paths: 10, time: 0.05s, bounds: [])
+[32m[PASS][0m check_prepaid_credit_accounts_liability(uint32,uint32,uint96,uint96,uint96,uint96) (paths: 14, time: 0.06s, bounds: [])
+[32m[PASS][0m check_prize_contribution_conserves_in_either_buffer(uint96,uint96,uint96,uint96,uint96,uint96,bool) (paths: 27, time: 0.13s, bounds: [])
+[32m[PASS][0m check_redemption_release_is_reclassification_and_once(uint96,uint96,uint96) (paths: 18, time: 0.22s, bounds: [])
+[32m[PASS][0m check_shortfall_conserves_and_preserves_sentinel(uint32,uint32,uint96,uint96,uint96,bool) (paths: 80, time: 4.45s, bounds: [])
+[32m[PASS][0m check_yield_excludes_all_counted_obligations(uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96) (paths: 19, time: 0.21s, bounds: [])
+Symbolic test result: 9 passed; 0 failed; time: 43.27s

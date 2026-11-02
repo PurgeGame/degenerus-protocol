@@ -96,7 +96,7 @@ library BitPackingLib {
     ///         lane) or conferred (a deity buyer's affiliate) never set it; the
     ///         Vault and sDGNRS genesis deities have it set by initialization without
     ///         a free-tranche mint. This bit is the sole once-per-account guard — the token
-    ///         caps the tranche at 1,000 but keeps no per-account record of its own.
+    ///         caps the tranche at 5,000 but keeps no per-account record of its own.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 146;
 
     /// @notice Bit position for last level credited for mint streak (bits 148-171)

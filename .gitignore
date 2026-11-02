@@ -67,8 +67,8 @@ docs/audit/*
 !docs/audit/RNG-DOMAINS.md
 !docs/audit/source-sha256.txt
 !docs/audit/ETH-EXIT-ASSURANCE.md
-!docs/audit/eth-exit-proof-2026-10-28/
-!docs/audit/eth-exit-proof-2026-10-28/**
+!docs/audit/eth-exit-proof-2026-11-02/
+!docs/audit/eth-exit-proof-2026-11-02/**
 
 # ── Meta ────────────────────────────────────────────────────────────────
 !/README.md

@@ -4,15 +4,10 @@ pragma solidity 0.8.38;
 import {DegenerusGameAdvanceModule} from "../../modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameJackpotModule} from "../../modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameJackpotDrawModule} from "../../modules/DegenerusGameJackpotDrawModule.sol";
-import {DegenerusGameRngModule} from "../../modules/DegenerusGameRngModule.sol";
 import {MineFlipGas} from "../../libraries/MineFlipGas.sol";
 
-/// @notice Daily processing, jackpot draws and RNG in the Game storage context.
-contract GlamsterdamDaily is DegenerusGameAdvanceModule, DegenerusGameJackpotModule, DegenerusGameJackpotDrawModule, DegenerusGameRngModule {
-    function _rngPrepareRequestBoundary(uint24 day) internal override {
-        prepareRequestBoundary(day);
-    }
-
+/// @notice Daily processing and jackpot draws in the Game storage context.
+contract GlamsterdamDaily is DegenerusGameAdvanceModule, DegenerusGameJackpotModule, DegenerusGameJackpotDrawModule {
     function _dailyRunJackpot(bool inJackpot, uint24 lvl, uint256 word, uint256 allowance) internal override returns (MineFlipGas.Result memory) {
         return runDailyJackpot(inJackpot, lvl, word, allowance);
     }

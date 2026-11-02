@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 import {GameFacade} from "../../contracts/modules/GameFacade.sol";
 
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -264,36 +264,51 @@ contract SdgnrsConstructorSubscribeTest is DeployProtocol {
             abi.encodeWithSelector(AFKingSubscriptionToken.consumeSeat.selector),
             0
         );
-        // Both protocol seats subscribe once, one lootbox unit a day.
-        vm.expectCall(
-            ContractAddresses.GAME,
-            abi.encodeWithSignature("subscribe(uint32,bool,uint8,uint256)", uint32(0), false, uint8(1), uint256(0)),
-            2
-        );
+        // Both protocol subscriptions start once, one lootbox unit a day.
+        bytes memory subscribeCall =
+            abi.encodeWithSignature("subscribe(uint32,bool,uint8,uint256)", uint32(0), false, uint8(1), uint256(0));
+        vm.expectCall(ContractAddresses.GAME, subscribeCall, 2);
         vm.recordLogs();
+        vm.startStateDiffRecording();
         _deployProtocol();
+        Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        uint256 sdgnrsSub = type(uint256).max;
-        uint256 vaultSub = type(uint256).max;
-        uint256 firstTokenLog = type(uint256).max;
+        bool sdgnrsSub;
+        bool vaultSub;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter == ContractAddresses.AFKING_SUB_TOKEN && firstTokenLog == type(uint256).max) {
-                firstTokenLog = i;
-            }
             if (logs[i].emitter != ContractAddresses.GAME || logs[i].topics[0] != SUBSCRIPTION_UPDATED) continue;
             uint32 player = uint32(uint256(logs[i].topics[1]));
             (uint8 qty, bool tickets) = abi.decode(logs[i].data, (uint8, bool));
             assertEq(qty, 1);
             assertFalse(tickets);
-            if (player == 2) sdgnrsSub = i;
-            if (player == 1) vaultSub = i;
+            if (player == 2) sdgnrsSub = true;
+            if (player == 1) vaultSub = true;
         }
-        assertTrue(sdgnrsSub != type(uint256).max, "sDGNRS subscribed at construction");
-        assertTrue(vaultSub != type(uint256).max, "the vault subscribed at construction");
-        assertTrue(firstTokenLog != type(uint256).max, "the seat token deployed");
-        assertLt(sdgnrsSub, firstTokenLog, "sDGNRS subscribed before the seat token existed");
-        assertLt(vaultSub, firstTokenLog);
+        assertTrue(sdgnrsSub, "sDGNRS subscribed at construction");
+        assertTrue(vaultSub, "the vault subscribed at construction");
+
+        // The seat token emits nothing at construction, so order its creation against both
+        // subscribe calls in the account-access record.
+        uint256 tokenCreated = type(uint256).max;
+        uint256 subscribes;
+        uint256 lastSubscribe;
+        bytes32 subscribeHash = keccak256(subscribeCall);
+        for (uint256 i; i < accesses.length; ++i) {
+            Vm.AccountAccess memory a = accesses[i];
+            if (a.kind == VmSafe.AccountAccessKind.Create && a.account == ContractAddresses.AFKING_SUB_TOKEN) {
+                tokenCreated = i;
+            } else if (
+                a.kind == VmSafe.AccountAccessKind.Call && a.account == ContractAddresses.GAME
+                    && keccak256(a.data) == subscribeHash
+            ) {
+                ++subscribes;
+                lastSubscribe = i;
+            }
+        }
+        assertTrue(tokenCreated != type(uint256).max, "the seat token deployed");
+        assertEq(subscribes, 2, "both protocol subscribe calls recorded");
+        assertLt(lastSubscribe, tokenCreated, "both protocol subscriptions started before the seat token existed");
         assertEq(address(afkingSubToken), ContractAddresses.AFKING_SUB_TOKEN);
     }
 }

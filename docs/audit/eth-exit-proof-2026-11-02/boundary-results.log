@@ -1,5 +1,5 @@
-Compiling 314 files with Solc 0.8.38
-Solc 0.8.38 finished in 208.90s
+Compiling 309 files with Solc 0.8.38
+Solc 0.8.38 finished in 169.69s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
     --> lib/forge-std/src/Vm.sol:1339:9:
@@ -350,15 +350,15 @@ Warning (6335): "error" will be promoted to keyword in the future and will not b
      |                                         ^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
-   --> test/fuzz/handlers/SeatCapHandler.sol:139:9:
+   --> test/fuzz/handlers/SeatCapHandler.sol:132:9:
     |
-139 |         uint256 at = seatSlot[serial] - 1;
+132 |         uint256 at = seatSlot[serial] - 1;
     |         ^^^^^^^^^^
 
 Warning (6335): "leave" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
-   --> test/fuzz/handlers/SeatCapHandler.sol:400:13:
+   --> test/fuzz/handlers/SeatCapHandler.sol:363:13:
     |
-400 |             uint256 leave = seed % 3;
+363 |             uint256 leave = seed % 3;
     |             ^^^^^^^^^^^^^
 
 Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
@@ -391,47 +391,47 @@ Note: The shadowed declaration is here:
    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3616:43:
+    --> contracts/storage/DegenerusGameStorage.sol:3620:43:
      |
-3616 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+3620 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
      |                                           ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3632:9:
+    --> contracts/storage/DegenerusGameStorage.sol:3636:9:
      |
-3632 |         uint24 level,
+3636 |         uint24 level,
      |         ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3756:41:
+    --> contracts/storage/DegenerusGameStorage.sol:3760:41:
      |
-3756 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+3760 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
      |                                         ^^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3762:44:
+    --> contracts/storage/DegenerusGameStorage.sol:3766:44:
      |
-3762 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+3766 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
      |                                            ^^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> contracts/storage/DegenerusGameStorage.sol:350:5:
+   --> contracts/storage/DegenerusGameStorage.sol:346:5:
     |
-350 |     uint24 internal level = 0;
+346 |     uint24 internal level = 0;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
@@ -457,36 +457,36 @@ Note: The other declaration is here:
    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2519): This declaration shadows an existing declaration.
-   --> test/fuzz/helpers/TicketQueueStorage.sol:137:13:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:129:13:
     |
-137 |             uint256 lane = uint32(uint256(vm.load(host, _future(key, id))) >> ((position & 7) * 32));
+129 |             uint256 lane = uint32(uint256(vm.load(host, _future(key, id))) >> ((position & 7) * 32));
     |             ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> test/fuzz/helpers/TicketQueueStorage.sol:144:9:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:136:9:
     |
-144 |         uint256 lane = (word >> shift) & ((uint256(1) << 42) - 1);
+136 |         uint256 lane = (word >> shift) & ((uint256(1) << 42) - 1);
     |         ^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-   --> test/fuzz/helpers/TicketQueueStorage.sol:160:13:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:152:13:
     |
-160 |             uint256 prior = uint256(vm.load(host, target));
+152 |             uint256 prior = uint256(vm.load(host, target));
     |             ^^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> test/fuzz/helpers/TicketQueueStorage.sol:172:9:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:164:9:
     |
-172 |         uint256 prior = uint256(vm.load(host, slot));
+164 |         uint256 prior = uint256(vm.load(host, slot));
     |         ^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-   --> test/fuzz/helpers/TicketQueueStorage.sol:163:13:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:155:13:
     |
-163 |             uint256 lane = value == 0 ? 0 : 0x80000000 | count | ((uint256(value) >> 10) & 0x40000000);
+155 |             uint256 lane = value == 0 ? 0 : 0x80000000 | count | ((uint256(value) >> 10) & 0x40000000);
     |             ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
-   --> test/fuzz/helpers/TicketQueueStorage.sol:176:9:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:168:9:
     |
-176 |         uint256 lane = value == 0 ? 0 : (uint256(value) & ((uint256(1) << 41) - 1)) | (uint256(1) << 41);
+168 |         uint256 lane = value == 0 ? 0 : (uint256(value) & ((uint256(1) << 41) - 1)) | (uint256(1) << 41);
     |         ^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
@@ -545,27 +545,27 @@ Note: The shadowed declaration is here:
     |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1385:22:
+    --> contracts/storage/DegenerusGameStorage.sol:1380:22:
      |
-1385 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+1380 |             packed = uint80(id) << OWNER_IDX_SHIFT;
      |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1454:22:
+    --> contracts/storage/DegenerusGameStorage.sol:1449:22:
      |
-1454 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+1449 |             packed = uint80(id) << OWNER_IDX_SHIFT;
      |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1521:25:
+    --> contracts/storage/DegenerusGameStorage.sol:1516:25:
      |
-1521 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
+1516 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
      |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/storage/DegenerusGameStorage.sol:1978:25:
+    --> contracts/storage/DegenerusGameStorage.sol:1969:25:
      |
-1978 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+1969 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
      |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
@@ -587,9 +587,9 @@ Warning (3149): The result type of the shift operation is equal to the type of t
    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint24) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-   --> contracts/modules/DegenerusGameBoonModule.sol:500:26:
+   --> contracts/modules/DegenerusGameBoonModule.sol:502:26:
     |
-500 |             boonTypes |= uint24(boonType) << (8 * slot);
+502 |             boonTypes |= uint24(boonType) << (8 * slot);
     |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
@@ -611,15 +611,15 @@ Warning (3149): The result type of the shift operation is equal to the type of t
     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/sDGNRS.sol:1321:62:
+    --> contracts/sDGNRS.sol:1324:62:
      |
-1321 |             _setBatchPlayer(parity, index, uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
+1324 |             _setBatchPlayer(parity, index, uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
      |                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-    --> contracts/sDGNRS.sol:1322:20:
+    --> contracts/sDGNRS.sol:1325:20:
      |
-1322 |                 | (uint128(uint16(score) + 1) << BATCH_PLAYER_SCORE_SHIFT));
+1325 |                 | (uint128(uint16(score) + 1) << BATCH_PLAYER_SCORE_SHIFT));
      |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
@@ -1109,15 +1109,15 @@ Warning (5667): Unused function parameter. Remove or comment out the variable na
    |                               ^^^^^^^^^^^^^^^^^^^^
 
 Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-   --> contracts/modules/DegenerusGameLootboxModule.sol:699:67:
+   --> contracts/modules/DegenerusGameLootboxModule.sol:696:67:
     |
-699 |     function _localboxResolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
+696 |     function _localboxResolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
     |                                                                   ^^^^^^^^^^
 
 Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-   --> test/craps/CrapsPins.sol:521:99:
+   --> test/craps/CrapsPins.sol:522:99:
     |
-521 |     function _openBattle(CrapsViews c, uint32 played, uint8 bankMult, uint16 goalMult, uint24 su, uint16 bar)
+522 |     function _openBattle(CrapsViews c, uint32 played, uint8 bankMult, uint16 goalMult, uint24 su, uint16 bar)
     |                                                                                                   ^^^^^^^^^^
 
 Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
@@ -1133,51 +1133,51 @@ Warning (6417): The constructor of the contract (or its base) uses inline assemb
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-   --> test/fuzz/DeadVrfEnding.t.sol:404:32:
+   --> test/fuzz/DeadVrfEnding.t.sol:425:32:
     |
-404 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+425 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-   --> test/fuzz/DeadVrfEnding.t.sol:428:32:
+   --> test/fuzz/DeadVrfEnding.t.sol:449:32:
     |
-428 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+449 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-   --> test/fuzz/DeadVrfEnding.t.sol:453:32:
+   --> test/fuzz/DeadVrfEnding.t.sol:474:32:
     |
-453 |         vm.etch(address(game), type(DeadVrfSeeder).runtimeCode);
+474 |         vm.etch(address(game), type(DeadVrfSeeder).runtimeCode);
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-   --> test/fuzz/DeadVrfEnding.t.sol:530:32:
+   --> test/fuzz/DeadVrfEnding.t.sol:551:32:
     |
-530 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+551 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-   --> test/fuzz/DeadVrfEnding.t.sol:577:32:
+   --> test/fuzz/DeadVrfEnding.t.sol:598:32:
     |
-577 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+598 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-   --> test/fuzz/DeadVrfEnding.t.sol:658:32:
+   --> test/fuzz/DeadVrfEnding.t.sol:679:32:
     |
-658 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
-    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-   --> test/fuzz/DeadVrfEnding.t.sol:695:32:
-    |
-695 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+679 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
    --> test/fuzz/DeadVrfEnding.t.sol:716:32:
     |
 716 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DeadVrfEnding.t.sol:737:32:
+    |
+737 |         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
@@ -1247,9 +1247,9 @@ Warning (6417): The constructor of the contract (or its base) uses inline assemb
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
-  --> test/fuzz/TerminalLoanSettlement.t.sol:83:32:
+  --> test/fuzz/TerminalLoanSettlement.t.sol:85:32:
    |
-83 |         vm.etch(address(game), type(TerminalLoanSeeder).runtimeCode);
+85 |         vm.etch(address(game), type(TerminalLoanSeeder).runtimeCode);
    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
@@ -1265,9 +1265,9 @@ Warning (2072): Unused local variable.
     |         ^^^^^^^^^^^^^^^^
 
 Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-   --> test/fuzz/handlers/WalletIdTruthHandler.sol:788:64:
+   --> test/fuzz/handlers/WalletIdTruthHandler.sol:804:64:
     |
-788 |     function _pmBet(uint256 action, address caller, uint32 id, address bettor, bool over) internal {
+804 |     function _pmBet(uint256 action, address caller, uint32 id, address bettor, bool over) internal {
     |                                                                ^^^^^^^^^^^^^^
 
 Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
@@ -1324,12 +1324,6 @@ Warning (5667): Unused function parameter. Remove or comment out the variable na
 12 |     function at(uint256 word, uint24 lvl, uint256 total, uint256 stratum) internal pure returns (uint64) {
    |                               ^^^^^^^^^^
 
-Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-    --> test/helpers/QueuedJackpotReference.sol:1492:9:
-     |
-1492 |         uint8 counter,
-     |         ^^^^^^^^^^^^^
-
 Warning (2018): Function state mutability can be restricted to pure
    --> contracts/modules/CrapsBattleCore.sol:864:5:
     |
@@ -1343,9 +1337,9 @@ Warning (2018): Function state mutability can be restricted to pure
     |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to view
-    --> contracts/DegenerusAffiliate.sol:1113:5:
+    --> contracts/DegenerusAffiliate.sol:1132:5:
      |
-1113 |     function _payoutUpline(uint32 ownerId, bool second, uint256 cache)
+1132 |     function _payoutUpline(uint32 ownerId, bool second, uint256 cache)
      |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to pure
@@ -1361,9 +1355,9 @@ Warning (2018): Function state mutability can be restricted to view
    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to view
-  --> contracts/profiles/glamsterdam/GlamsterdamGame.sol:46:5:
+  --> contracts/profiles/glamsterdam/GlamsterdamGame.sol:42:5:
    |
-46 |     function _gameMinerAction() internal override returns (uint8) {
+42 |     function _gameMinerAction() internal override returns (uint8) {
    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to pure
@@ -1373,15 +1367,15 @@ Warning (2018): Function state mutability can be restricted to pure
     |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to view
-   --> test/fuzz/DegeneretteFreezeResolution.t.sol:896:5:
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:895:5:
     |
-896 |     function _rawPayouts(bytes memory spins, uint8 currency, uint128 stake, uint16 activity)
+895 |     function _rawPayouts(bytes memory spins, uint8 currency, uint128 stake, uint16 activity)
     |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to view
-   --> test/fuzz/DegeneretteFreezeResolution.t.sol:972:5:
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:971:5:
     |
-972 |     function _countResolvedAndCapped(uint64 betA, uint64 betB)
+971 |     function _countResolvedAndCapped(uint64 betA, uint64 betB)
     |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to view
@@ -1427,43 +1421,44 @@ Warning (2018): Function state mutability can be restricted to view
    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2018): Function state mutability can be restricted to pure
-   --> test/helpers/BoundedGasProbe.sol:117:5:
+   --> test/helpers/BoundedGasProbe.sol:108:5:
     |
-117 |     function _surcharge(VmSafe.AccountA ... ccountCount, uint256 firstWrites) {
+108 |     function _surcharge(VmSafe.AccountA ... ccountCount, uint256 firstWrites) {
     |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (4591): There are more than 256 warnings. Ignoring the rest.
 
-Ran 16 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfEndingTest
-[PASS] test_SameStableOwnerClaimsThreeTerminalDomainsExactlyOnce() (gas: 4484174)
-[PASS] test_UnattendedPurchaseDeadlineEndsWithoutCalendarCredit() (gas: 7079395)
-[PASS] test_claimsCloseAtTheFinalSweep() (gas: 4363855)
-[PASS] test_deadEndingSplitsThePotDeterministically() (gas: 4802442)
-[PASS] test_fulfilmentAfterTheDeadLatchIsANoOp() (gas: 4075882)
-[PASS] test_lootboxOnlyMiddayRequestIsReissuedBySwap() (gas: 8544467)
-[PASS] test_pendingRedemptionResolvesAtExpectedValue() (gas: 4272818)
-[PASS] test_sdgnrsDeterministicBurnWorksAfterTheDeadEnding() (gas: 4343715)
-[PASS] test_stallAcrossDeadlineKeepsTheLevelRescuable() (gas: 16036325)
-[PASS] test_starvedPreSwapBatchCannotCloseTheSwapWindow() (gas: 229300266)
+Ran 17 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfEndingTest
+[PASS] test_SameStableOwnerClaimsThreeTerminalDomainsExactlyOnce() (gas: 4435346)
+[PASS] test_UnattendedPurchaseDeadlineEndsWithoutCalendarCredit() (gas: 7001994)
+[PASS] test_claimsCloseAtTheFinalSweep() (gas: 4333370)
+[PASS] test_deadEndingSplitsThePotDeterministically() (gas: 4757163)
+[PASS] test_fulfilmentAfterTheDeadLatchIsANoOp() (gas: 4039112)
+[PASS] test_lootboxOnlyMiddayRequestIsReissuedBySwap() (gas: 8466982)
+[PASS] test_pendingRedemptionResolvesAtExpectedValue() (gas: 4235227)
+[PASS] test_sdgnrsDeterministicBurnWorksAfterTheDeadEnding() (gas: 4306079)
+[PASS] test_stallAcrossDeadlineKeepsTheLevelRescuable() (gas: 15991347)
+[PASS] test_starvedPreSwapBatchCannotCloseTheSwapWindow() (gas: 229094470)
 Logs:
   batchGas: 78256
   requestGas: 130821
   witnessGas: 20211
   leakGas: 0
 
-[PASS] test_starvedPreSwapBatchWithRefusingCoordinatorCannotCloseTheSwapWindow() (gas: 229200619)
+[PASS] test_starvedPreSwapBatchWithRefusingCoordinatorCannotCloseTheSwapWindow() (gas: 228994811)
 Logs:
   batchGas: 78256
   requestGas: 30818
   witnessGas: 20211
   leakGas: 0
 
-[PASS] test_stuckDayWithAppliedWordEndsOnAFreshWord() (gas: 2452224)
-[PASS] test_stuckDayWithDeliveredWordEndsOnAFreshWord() (gas: 2213579)
-[PASS] test_swapSpendsTheDailyRetry() (gas: 6915125)
-[PASS] test_unansweredMiddayRequestAtDeadlineEndsDeterministically() (gas: 6862632)
-[PASS] test_wordDeliveredAfterTheWindowIsDiscarded() (gas: 4094452)
-Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 352.37ms (342.14ms CPU time)
+[PASS] test_stuckDayWithAppliedWordEndsOnAFreshWord() (gas: 2407184)
+[PASS] test_stuckDayWithDeliveredWordEndsOnAFreshWord() (gas: 2172477)
+[PASS] test_swapSpendsTheDailyRetry() (gas: 6848743)
+[PASS] test_unansweredMiddayRequestAtDeadlineEndsDeterministically() (gas: 6803078)
+[PASS] test_weightsPastSixtyFourBitsClaimExactly() (gas: 4764131)
+[PASS] test_wordDeliveredAfterTheWindowIsDiscarded() (gas: 4057682)
+Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 301.55ms (295.94ms CPU time)
 
 Ran 8 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfLivenessTest
 [PASS] test_backlogWordIsNeverDead() (gas: 105838)
@@ -1474,141 +1469,141 @@ Ran 8 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfLivenessTest
 [PASS] test_onlyAPublishedWordKeepsVrfAlivePastTheWindow() (gas: 69160)
 [PASS] test_retryBitKeepsTheWindowAndTheDay() (gas: 61798)
 [PASS] test_stallAcrossDeadlineWaitsForTheVrfDeadWindow() (gas: 61887)
-Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 348.50µs (233.28µs CPU time)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 306.54µs (211.57µs CPU time)
 
 Ran 8 tests for test/fuzz/DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
-[PASS] testBatchedPayoutEqualsPerSpinExpectation_Tier1() (gas: 458497)
+[PASS] testBatchedPayoutEqualsPerSpinExpectation_Tier1() (gas: 458564)
 Logs:
   tier1_eth_claimable_delta: 10125000000000000
   tier1_flip_delta: 4100
   tier1_wwxrp_delta: 0
 
-[PASS] testDegeneretteUnfrozenPathRegression() (gas: 288163)
-[PASS] testDgnrsAwardStaysPerSpin() (gas: 989581)
+[PASS] testDegeneretteUnfrozenPathRegression() (gas: 288116)
+[PASS] testDgnrsAwardStaysPerSpin() (gas: 989393)
 Logs:
   dgnrs_parent_per_spin: 4037980161600000000000
   dgnrs_parent_stale_hypothetical: 4079592000000000000000
   dgnrs_nested_box_awards: 0
 
-[PASS] testEthCapBindsOnIdenticalSpin_Tier2() (gas: 413292)
+[PASS] testEthCapBindsOnIdenticalSpin_Tier2() (gas: 413201)
 Logs:
   tier2_eth_credited: 167900000000000000
   tier2_spins_capped: 2
 
-[PASS] testFlipSurvivalFlipLossZeroesMint() (gas: 305644)
-[PASS] testLootboxSummedPerBetIdNotAcrossBets() (gas: 3270448)
+[PASS] testFlipSurvivalFlipLossZeroesMint() (gas: 305631)
+[PASS] testLootboxSummedPerBetIdNotAcrossBets() (gas: 3270332)
 Logs:
   perbetid_eth_one_call: 95000000000000000
   perbetid_eth_two_calls: 95000000000000000
 
-[PASS] testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() (gas: 596324)
-[PASS] test_SharedBoardAcrossPlayersCurrenciesAndBets() (gas: 644329)
-Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 13.10ms (7.64ms CPU time)
+[PASS] testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() (gas: 596252)
+[PASS] test_SharedBoardAcrossPlayersCurrenciesAndBets() (gas: 644398)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 11.23ms (6.48ms CPU time)
 
 Ran 15 tests for test/fuzz/DegeneretteSingleSymbol.t.sol:DegeneretteSingleSymbolTest
-[PASS] testAllAxesAllHeroesAndWildsAgainstIndependentScoreAndRig() (gas: 398732059)
-[PASS] testAutomaticFlipReelsExposeHeroAndUseIndependentColorsAndSharedMath() (gas: 240222)
-[PASS] testAutomaticFlipRejectsOversizedPerSpinStakeWithoutTruncation() (gas: 40625)
-[PASS] testAutomaticWwxrpHashesItsSeedAndScoresTheRiggedReel() (gas: 3693087)
-[PASS] testDiceBetsRejectAtomicallyForEveryCurrencyAndFundingRoute() (gas: 2840856)
-[PASS] testDifferentHeroesRerollRemainingTicketButShareHouse() (gas: 2051354)
-[PASS] testFuzzPayoutBoundsAndWwxrpBonusTiers(uint128,uint8,uint8,uint16) (runs: 1000, μ: 17570, ~: 17964)
-[PASS] testHeroIsStoredOnlyInTheSelectedSymbol() (gas: 702554)
-[PASS] testHouseProducerAllColorSymbolPairsAndWildNibble() (gas: 2543580)
-[PASS] testInvalidSymbolRejectedAndNewBetJoinsUnrevealedWriteCohort() (gas: 471945)
-[PASS] testNaturalEthJackpotCapsCashAndResolvesOverflow() (gas: 452177)
-[PASS] testNaturalWwxrpJackpotPaysTokens() (gas: 60312)
-[PASS] testSharedHeroTicketsAndPrefixAcrossPlayersBetsStakesAndEthFlip() (gas: 1793326)
-[PASS] testUnsupportedCurrenciesRejectAtomicallyForEveryFundingRoute() (gas: 701052)
-[PASS] testWildScoringAndNoGoldPremium() (gas: 15791)
-Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 606.06ms (600.65ms CPU time)
+[PASS] testAllAxesAllHeroesAndWildsAgainstIndependentScoreAndRig() (gas: 398732037)
+[PASS] testAutomaticFlipReelsExposeHeroAndUseIndependentColorsAndSharedMath() (gas: 237770)
+[PASS] testAutomaticFlipRejectsOversizedPerSpinStakeWithoutTruncation() (gas: 39998)
+[PASS] testAutomaticWwxrpHashesItsSeedAndScoresTheRiggedReel() (gas: 3601158)
+[PASS] testDiceBetsRejectAtomicallyForEveryCurrencyAndFundingRoute() (gas: 2837742)
+[PASS] testDifferentHeroesRerollRemainingTicketButShareHouse() (gas: 2051326)
+[PASS] testFuzzPayoutBoundsAndWwxrpBonusTiers(uint128,uint8,uint8,uint16) (runs: 1000, μ: 17555, ~: 17920)
+[PASS] testHeroIsStoredOnlyInTheSelectedSymbol() (gas: 702485)
+[PASS] testHouseProducerAllColorSymbolPairsAndWildNibble() (gas: 2543558)
+[PASS] testInvalidSymbolRejectedAndNewBetJoinsUnrevealedWriteCohort() (gas: 471895)
+[PASS] testNaturalEthJackpotCapsCashAndResolvesOverflow() (gas: 451735)
+[PASS] testNaturalWwxrpJackpotPaysTokens() (gas: 59658)
+[PASS] testSharedHeroTicketsAndPrefixAcrossPlayersBetsStakesAndEthFlip() (gas: 1793351)
+[PASS] testUnsupportedCurrenciesRejectAtomicallyForEveryFundingRoute() (gas: 700687)
+[PASS] testWildScoringAndNoGoldPremium() (gas: 15769)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 543.92ms (539.09ms CPU time)
 
 Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
 [PASS] test_deployerIsTestContract() (gas: 379)
 [PASS] test_nonceIncrements() (gas: 47513)
 [PASS] test_startingNonce() (gas: 2555)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 76.86µs (22.19µs CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 72.62µs (23.93µs CPU time)
 
 Ran 1 test for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerDegenesis
-[PASS] testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() (gas: 3491133)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.78ms (2.58ms CPU time)
+[PASS] testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() (gas: 3491439)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 6.92ms (2.28ms CPU time)
 
 Ran 3 tests for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerShape
 [PASS] testActorsAreInDisjointRange() (gas: 34269)
-[PASS] testGhostCountersStartZero() (gas: 19086)
-[PASS] testTrackedAddrsIsCompleteCover() (gas: 27032)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.70ms (76.57µs CPU time)
+[PASS] testGhostCountersStartZero() (gas: 19042)
+[PASS] testTrackedAddrsIsCompleteCover() (gas: 27010)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.25ms (72.18µs CPU time)
 
 Ran 10 tests for test/fuzz/StethLossLiveness.t.sol:StethLossLiveness
-[PASS] testFuzz_stethLossAnyFractionAnyTime(uint256,uint8) (runs: 24, μ: 2494109226, ~: 2408522640)
+[PASS] testFuzz_stethLossAnyFractionAnyTime(uint256,uint8) (runs: 24, μ: 2459200906, ~: 2402521595)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss100Percent_afterGameOver() (gas: 2665249431)
+[PASS] test_stethLoss100Percent_afterGameOver() (gas: 2572519312)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss100Percent_beforeSweep() (gas: 2408463876)
+[PASS] test_stethLoss100Percent_beforeSweep() (gas: 2402462809)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss100Percent_midGame() (gas: 2408523890)
+[PASS] test_stethLoss100Percent_midGame() (gas: 2402522823)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss10Percent_afterGameOver() (gas: 2665301881)
+[PASS] test_stethLoss10Percent_afterGameOver() (gas: 2572571748)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss10Percent_beforeSweep() (gas: 2408521702)
+[PASS] test_stethLoss10Percent_beforeSweep() (gas: 2402520657)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss10Percent_midGame() (gas: 2408521988)
+[PASS] test_stethLoss10Percent_midGame() (gas: 2402520921)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss50Percent_afterGameOver() (gas: 2665302013)
+[PASS] test_stethLoss50Percent_afterGameOver() (gas: 2572571880)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss50Percent_beforeSweep() (gas: 2408520844)
+[PASS] test_stethLoss50Percent_beforeSweep() (gas: 2402519821)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss50Percent_midGame() (gas: 2408520835)
+[PASS] test_stethLoss50Percent_midGame() (gas: 2402519812)
 Logs:
-  redemption roll: 160
+  redemption roll: 105
   redemption pending tokens: 0
 
-Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 82.33s (82.32s CPU time)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 71.28s (71.27s CPU time)
 
 Ran 1 test for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanPendingBatchTest
-[PASS] test_HardDeadlineBypassesUnfinishedNormalLoanBatch() (gas: 34878563)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 37.82ms (32.47ms CPU time)
+[PASS] test_HardDeadlineBypassesUnfinishedNormalLoanBatch() (gas: 34363612)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 34.33ms (29.39ms CPU time)
 
 Ran 7 tests for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanSettlementTest
-[PASS] testFuzz_RandomBookSettlesOnceAtTheRepaymentPrice(uint256) (runs: 24, μ: 9357074, ~: 9435472)
-[PASS] test_ChunkedSettlementResumesAroundManualRepayment() (gas: 43855622)
-[PASS] test_DeadVrfAtTheDecisionLeavesLoansUntouched() (gas: 5055655)
-[PASS] test_DeadlineEndingSettlesEveryLoanBeforeTheTerminalRequest() (gas: 15988643)
-[PASS] test_EmptyBookScansInOneCallThenTheEndingProceeds() (gas: 2764248)
-[PASS] test_HardDeadlineInterruptsTerminalLoanBookWithoutReversingPaidPrefix() (gas: 18335249)
-[PASS] test_OlderWordLandingDuringSettlementChangesNothing() (gas: 6923746)
-Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 405.49ms (399.27ms CPU time)
+[PASS] testFuzz_RandomBookSettlesOnceAtTheRepaymentPrice(uint256) (runs: 24, μ: 9105632, ~: 9108547)
+[PASS] test_ChunkedSettlementResumesAroundManualRepayment() (gas: 39658708)
+[PASS] test_DeadVrfAtTheDecisionLeavesLoansUntouched() (gas: 6827590)
+[PASS] test_DeadlineEndingSettlesEveryLoanBeforeTheTerminalRequest() (gas: 13545167)
+[PASS] test_EmptyBookScansInOneCallThenTheEndingProceeds() (gas: 2717537)
+[PASS] test_HardDeadlineInterruptsTerminalLoanBookWithoutReversingPaidPrefix() (gas: 19149137)
+[PASS] test_OlderWordLandingDuringSettlementChangesNothing() (gas: 6842502)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 345.45ms (339.76ms CPU time)
 
 Ran 2 tests for test/repro/VrfRotationMidDayReRoll.t.sol:VrfRotationMidDayReRoll
-[PASS] test_C1_rotationAfterMidDayWordLands_doesNotReRoll(uint256) (runs: 1000, μ: 7534467, ~: 7534467)
-[PASS] test_C1_rotationDuringGenuineMidDayFlight_stillReIssues(uint256) (runs: 1000, μ: 7624175, ~: 7624175)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 14.51s (14.51s CPU time)
+[PASS] test_C1_rotationAfterMidDayWordLands_doesNotReRoll(uint256) (runs: 1000, μ: 7501769, ~: 7501769)
+[PASS] test_C1_rotationDuringGenuineMidDayFlight_stillReIssues(uint256) (runs: 1000, μ: 7591454, ~: 7591454)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 12.54s (12.54s CPU time)
 
-Ran 11 test suites in 98.28s (98.28s CPU time): 74 tests passed, 0 failed, 0 skipped (74 total tests)
+Ran 11 test suites in 85.07s (85.07s CPU time): 75 tests passed, 0 failed, 0 skipped (75 total tests)

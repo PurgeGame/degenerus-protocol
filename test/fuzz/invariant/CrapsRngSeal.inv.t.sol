@@ -91,23 +91,45 @@ contract CrapsRngSeal is DeployProtocol {
     // NON-VACUITY
     // =========================================================================
 
-    function afterInvariant() public view {
-        assertGt(handler.ghost_daysSeenOpen(), 1, "vacuous: the campaign never opened a second craps day");
-        assertGt(handler.ghost_entries(), 0, "vacuous: no entry ever bound");
-        assertGt(handler.ghost_arms(), 0, "vacuous: no field ever shut");
-        assertGt(
-            handler.ghost_armsWhileDailyLocked() + handler.ghost_armsWhileMidDayInFlight(),
-            0,
-            "vacuous: no field shut while a protocol VRF window was open"
-        );
-        assertGt(handler.ghost_postArmAmendAttempts(), 0, "vacuous: no amendment was ever tried on a shut field");
-        assertGt(handler.ghost_settlesWithWord(), 0, "vacuous: no field ever settled on a real word");
-        assertGt(
-            handler.ghost_inWindowCrapsActions() + handler.ghost_midDayInWindowCrapsActions(),
-            0,
-            "vacuous: no craps door was tried inside a protocol VRF window"
-        );
-        assertGt(handler.ghost_fulfilments(), 0, "vacuous: the VRF machinery never delivered a word");
+    /// @dev A run that ends in game over (a sequence can warp past the VRF deadman) stops driving the
+    ///      table once the latch lands, so the per-run floors apply to runs still live at the end. Each
+    ///      floor is also counted over the process (vm.setEnv, suite-unique prefix); once MIN_RUNS runs
+    ///      have finished, every floor must have been met by some run.
+    uint256 private constant MIN_RUNS = 16;
+
+    function _vacuityPrefix() internal pure virtual returns (string memory) {
+        return "CRAPS_RNG_SEAL_";
+    }
+
+    function _floor(string memory k, bool met, bool live, string memory reason, uint256 runs) private {
+        k = string.concat(_vacuityPrefix(), k);
+        uint256 total = vm.envOr(k, uint256(0)) + (met ? 1 : 0);
+        vm.setEnv(k, vm.toString(total));
+        if (live) assertTrue(met, reason);
+        if (runs >= MIN_RUNS) assertGt(total, 0, reason);
+    }
+
+    function afterInvariant() public {
+        bool live = !game.gameOver();
+        string memory runsKey = string.concat(_vacuityPrefix(), "RUNS");
+        uint256 runs = vm.envOr(runsKey, uint256(0)) + 1;
+        vm.setEnv(runsKey, vm.toString(runs));
+        _floor("DAYS", handler.ghost_daysSeenOpen() > 1, live,
+            "vacuous: the campaign never opened a second craps day", runs);
+        _floor("ENTRIES", handler.ghost_entries() > 0, live, "vacuous: no entry ever bound", runs);
+        _floor("ARMS", handler.ghost_arms() > 0, live, "vacuous: no field ever shut", runs);
+        _floor("ARMS_IN_WINDOW",
+            handler.ghost_armsWhileDailyLocked() + handler.ghost_armsWhileMidDayInFlight() > 0, live,
+            "vacuous: no field shut while a protocol VRF window was open", runs);
+        _floor("AMENDS", handler.ghost_postArmAmendAttempts() > 0, live,
+            "vacuous: no amendment was ever tried on a shut field", runs);
+        _floor("SETTLES", handler.ghost_settlesWithWord() > 0, live,
+            "vacuous: no field ever settled on a real word", runs);
+        _floor("DOORS_IN_WINDOW",
+            handler.ghost_inWindowCrapsActions() + handler.ghost_midDayInWindowCrapsActions() > 0, live,
+            "vacuous: no craps door was tried inside a protocol VRF window", runs);
+        _floor("FULFILMENTS", handler.ghost_fulfilments() > 0, live,
+            "vacuous: the VRF machinery never delivered a word", runs);
     }
 
     // =========================================================================

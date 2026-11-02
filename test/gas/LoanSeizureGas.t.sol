@@ -99,6 +99,7 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
             vm.prank(address(game));
             sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, borrower, 1e15);
         }
+        _beforeBorrow();
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         vm.prank(borrower);
         game.borrow(root, 1, type(uint256).max, q.principal);
@@ -109,6 +110,9 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         _setBalances(root, owed / 2, owed - owed / 2);
         if (!terminal) { _etch(); SeizureGasSeeder(address(game)).enterDue(1); _unetch(); }
     }
+
+    /// @dev Hook between the collateral and the loan: a case picks its lender here.
+    function _beforeBorrow() internal virtual {}
 
     function _setBalances(uint32 id, uint256 claimable, uint256 afking) internal {
         _etch(); SeizureGasSeeder(address(game)).setBalances(id, uint128(claimable), uint128(afking)); _unetch();

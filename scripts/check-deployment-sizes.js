@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Interface, keccak256 } from 'ethers';
-import { DEPLOYMENTS } from './lib/deploymentManifest.js';
+import { PROFILES } from './lib/deploymentManifest.js';
 const argv = process.argv.slice(2);
 function option(flag, fallback) {
   const i = argv.indexOf(flag);
@@ -17,6 +17,9 @@ const schedule = option('--schedule', 'eip170');
 const file = option('--arguments', null);
 const limits = { eip170: [24576, 49152], osaka: [24576, 49152], glamsterdam: [65536, 131072] }[schedule];
 if (!limits) throw new Error(`Unknown schedule: ${schedule}`);
+// The deployment set follows PROFILE when set, otherwise the schedule's own profile.
+const profile = process.env.PROFILE || (schedule === 'glamsterdam' ? 'glamsterdam' : 'eip170');
+const DEPLOYMENTS = PROFILES[profile];
 if (argv.length > 1 || argv.some(s => s.startsWith('--'))) throw new Error('Unexpected arguments');
 const out = argv[0] || process.env.FOUNDRY_OUT || 'forge-out';
 const overrides = file ? JSON.parse(fs.readFileSync(file)) : {};
@@ -51,7 +54,8 @@ for (const entry of entries) {
   rows.push({ key: entry.key, contract: name, runtime_bytes: runtime, initcode_bytes: initcode,
     constructor_arguments: args, runtime_remaining: limits[0] - runtime, initcode_remaining: limits[1] - initcode });
 }
-const guard = spawnSync('python3', [fileURLToPath(new URL('./check-memory-guard.py', import.meta.url)), out, '--json'], { encoding: 'utf8' });
+const guard = spawnSync('python3', [fileURLToPath(new URL('./check-memory-guard.py', import.meta.url)), out, '--json'],
+  { encoding: 'utf8', env: { ...process.env, PROFILE: profile } });
 if (guard.error) throw guard.error;
 if (guard.signal || !guard.stdout) throw new Error(`Memory guard failed: ${guard.stderr || guard.signal}`);
 const memoryGuard = JSON.parse(guard.stdout);

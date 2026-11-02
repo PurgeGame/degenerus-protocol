@@ -71,10 +71,31 @@ contract CompositionInvariant is DeployProtocol {
     ///      3 whale-pass purchases, 26 successful mineFlips, 6 VRF fulfillments (max level reached was 0 in
     ///      every run: the 8 x 100 ETH actors never fill the level-0 target, so no level floor is asserted).
     ///      Thresholds sit well below those minima: purchases >= 20, mineFlips >= 5, VRF >= 1, whale >= 1.
-    function afterInvariant() public view {
+    ///      A run that ends in game over (at depth 256 a sequence can warp past the VRF deadman while a
+    ///      request is unanswered) stops mining once the latch lands, and the latch itself takes a
+    ///      successful terminal mineRun; the mineFlip floor applies to runs still live at the end. Runs
+    ///      meeting it are counted over the process (vm.setEnv, suite-unique prefix), and once MIN_RUNS
+    ///      runs have finished at least one must have.
+    uint256 private constant MIN_RUNS = 16;
+
+    function _vacuityPrefix() internal pure virtual returns (string memory) {
+        return "COMPOSITION_";
+    }
+
+    function _acc(string memory k, uint256 v) internal returns (uint256 total) {
+        k = string.concat(_vacuityPrefix(), k);
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
+    }
+
+    function afterInvariant() public {
         assertGe(compositionHandler.ghost_purchases(), 20, "vacuous: purchases did not succeed");
         assertGe(compositionHandler.ghost_whalePurchases(), 1, "vacuous: no whale pass purchase succeeded");
-        assertGe(compositionHandler.ghost_mineFlips(), 5, "vacuous: mineFlip did not make progress");
         assertGe(compositionHandler.ghost_vrfFulfillments(), 1, "vacuous: no VRF word was fulfilled");
+        bool mined = compositionHandler.ghost_mineFlips() >= 5;
+        if (!game.gameOver()) assertTrue(mined, "vacuous: mineFlip did not make progress");
+        uint256 runs = _acc("RUNS", 1);
+        uint256 minedRuns = _acc("MINED", mined ? 1 : 0);
+        if (runs >= MIN_RUNS) assertGt(minedRuns, 0, "vacuous: no run made mineFlip progress");
     }
 }

@@ -13,9 +13,9 @@
   },
   "scope": "new whale-pass ticket award; immediate borrow; excludes bundled rewards and later outcomes",
   "source_hashes": {
-    "contracts/storage/DegenerusGameStorage.sol": "8e9c2c842fc9eeb8e71cd0e9418f02f39de6f6cae6b5b203722e880204ec3641",
+    "contracts/storage/DegenerusGameStorage.sol": "3bcf92e274405de96bd7d604e74a880a5f947cd347dee37d032f7e3d12c8820b",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
-    "contracts/modules/DegenerusGameWhaleModule.sol": "e18867f2d1428cbe78a7663fa6b04af63eabe9198699d174ee921dbb05e82b98",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "cbd55c06694967bcc8063e1c870dc1044f4eb72f0d12af4f97f32cb60d0653b2",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46"
   }
 }

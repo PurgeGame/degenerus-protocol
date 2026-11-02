@@ -113,8 +113,9 @@ jobs:
         run: make CHECK_ARTIFACTS=forge-out-production check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-memory-guard check-recipient-calls check-eth-loan-bootstrap
 
       # Cross-profile storage identity. Regenerates the glamsterdam profile files, builds the
-      # production contracts only (contracts/; the test helpers target the default profile), then
-      # runs both layout gates on that build. The recursive check's --baseline compares every
+      # production contracts only (contracts/; the test helpers target the default profile), checks
+      # every deployment against the Glamsterdam size limits (65,536 runtime / 131,072 initcode),
+      # then runs both layout gates on that build. The recursive check's --baseline compares every
       # contract layout the two builds share (DegenerusGame, every Game and Craps delegate,
       # Coinflip and the standalone state contracts) with the eip170 build above and fails on
       # any difference. Last in the job: the working tree stays on glamsterdam afterwards.
@@ -125,6 +126,7 @@ jobs:
           node scripts/select-profile.js
           node scripts/select-profile.js --check
           forge build contracts --skip test --threads 4 --out forge-out-glamsterdam --cache-path .foundry-cache-glamsterdam
+          node scripts/check-deployment-sizes.js --schedule glamsterdam forge-out-glamsterdam
           CHECK_ARTIFACTS=forge-out-glamsterdam bash scripts/layout/storage_layout_oracle.sh
           python3 scripts/layout/check_recursive_layout.py --out forge-out-glamsterdam --baseline forge-out-production --report .audit-test-logs/foundry/recursive-layout-glamsterdam.json
 

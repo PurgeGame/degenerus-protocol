@@ -38,6 +38,10 @@ contract RngIndexDrainOrderingDegenesis is RngIndexDrainOrderingInvariants {
 }
 
 contract CrapsRngSealDegenesis is CrapsRngSeal {
+    function _vacuityPrefix() internal pure override returns (string memory) {
+        return "CRAPS_RNG_SEAL_DEGENESIS_";
+    }
+
     function _deployTimestamp() internal pure override returns (uint256) {
         return DEPLOY_TS_DEGENESIS;
     }

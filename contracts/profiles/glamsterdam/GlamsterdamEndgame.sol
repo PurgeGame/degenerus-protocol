@@ -2,16 +2,15 @@
 pragma solidity 0.8.38;
 
 import {DegenerusGameGameOverModule} from "../../modules/DegenerusGameGameOverModule.sol";
-import {DegenerusGameDecimatorModule} from "../../modules/DegenerusGameDecimatorModule.sol";
 import {DegenerusGameDegenesisModule} from "../../modules/DegenerusGameDegenesisModule.sol";
 import {DegenerusGameFoilUserModule} from "../../modules/DegenerusGameFoilUserModule.sol";
 import {DegenerusGameMintModule} from "../../modules/DegenerusGameMintModule.sol";
 import {MintPaymentKind} from "../../interfaces/IDegenerusGame.sol";
 
-/// @notice Terminal settlement, Degenesis, Decimator, foil claims and their explicit-value
-///         purchases in Game storage.
-contract GlamsterdamEndgame is DegenerusGameGameOverModule, DegenerusGameDecimatorModule,
-    DegenerusGameDegenesisModule, DegenerusGameFoilUserModule, DegenerusGameMintModule
+/// @notice Terminal settlement, Degenesis, foil claims and their explicit-value purchases in
+///         Game storage.
+contract GlamsterdamEndgame is DegenerusGameGameOverModule, DegenerusGameDegenesisModule,
+    DegenerusGameFoilUserModule, DegenerusGameMintModule
 {
     function _endgameSplitDegenesis() internal override {
         _endgameDegenesisSplit();

@@ -78,9 +78,11 @@ contract VaultPlayerActionsTest is SeatFixture {
 
     /// @notice Approvals outlive a change of DGVE majority, and the new holder revokes them.
     function test_newMajorityHolderRevokesPreviousApprovals() public {
+        // The Vault holds no seat at deployment; give it one to approve.
+        uint256 seat = _grantSeat(address(vault));
         _act(address(game), abi.encodeCall(IDegenerusGame.setOperatorApproval, (0, stranger, true)));
         _act(ContractAddresses.AFKING_SUB_TOKEN, abi.encodeWithSignature("setApprovalForAll(address,bool)", stranger, true));
-        _act(ContractAddresses.AFKING_SUB_TOKEN, abi.encodeWithSignature("approve(address,uint256)", stranger, 2));
+        _act(ContractAddresses.AFKING_SUB_TOKEN, abi.encodeWithSignature("approve(address,uint256)", stranger, seat));
 
         address successor = makeAddr("successor");
         DegenerusVaultShare dgve = DegenerusVaultShare(computeCreateAddress(address(vault), 2));
@@ -94,12 +96,12 @@ contract VaultPlayerActionsTest is SeatFixture {
             ContractAddresses.AFKING_SUB_TOKEN, abi.encodeWithSignature("setApprovalForAll(address,bool)", stranger, false), 0
         )));
         _approved(successor, abi.encodeCall(vault.playerAction, (
-            ContractAddresses.AFKING_SUB_TOKEN, abi.encodeWithSignature("approve(address,uint256)", address(0), 2), 0
+            ContractAddresses.AFKING_SUB_TOKEN, abi.encodeWithSignature("approve(address,uint256)", address(0), seat), 0
         )));
         (,, approved) = game.resolveAccount_g7029(VAULT_ID, stranger);
         assertFalse(approved, "game approval revoked");
         assertFalse(afkingSubToken.isApprovedForAll(address(vault), stranger), "seat operator revoked");
-        assertEq(afkingSubToken.getApproved(2), address(0), "seat approval revoked");
+        assertEq(afkingSubToken.getApproved(seat), address(0), "seat approval revoked");
     }
 
     function test_fundsAndPartialWithdrawalStayWithVault() public {
