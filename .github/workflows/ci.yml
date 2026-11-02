@@ -598,7 +598,7 @@ jobs:
     timeout-minutes: 330
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 16
       matrix:
         include: ${{ fromJSON(needs.deep-selection.outputs.partitions) }}
     steps:
