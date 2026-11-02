@@ -612,7 +612,7 @@ jobs:
         with:
           version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
-      - name: Deep invariant partition (Advance 10x100; suite overrides retained)
+      - name: Deep invariant partition (Advance 20x50; suite overrides retained)
         env:
           INVARIANT_FILE: ${{ matrix.file }}
           INVARIANT_MATCH: ${{ matrix.match }}

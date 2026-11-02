@@ -88,7 +88,8 @@ dictionary_weight = 80
 include_storage = true
 include_push_bytes = true
 
-# CI schedules AdvanceLiveness as ten independently seeded 100-run processes.
+# CI schedules AdvanceLiveness as twenty independently seeded 50-run processes, each inside a
+# hosted job's time limit.
 # Local deep stays at 1000 runs; every CI process crosses its 48-run rare-coverage gate.
 # The property also declares explicit inline settings for this profile because
 # its inline default settings otherwise override inherited profile values.
@@ -98,7 +99,7 @@ max_test_rejects = 131072
 seed = "0xdeadbeef"
 
 [profile.deep_advance_ci.invariant]
-runs = 100
+runs = 50
 depth = 256
 fail_on_revert = false
 shrink_run_limit = 5000

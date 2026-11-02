@@ -75,19 +75,19 @@ class DeepMatrixTests(unittest.TestCase):
         self.write("AdvanceLiveness.inv.t.sol", "function invariant_advanceLiveness() public view {}")
         rows = module.matrix(self.root)
         partitions = [row for row in rows if row["seed_partition"] != ""]
-        self.assertEqual(len(partitions), 10)
-        self.assertEqual({row["seed_partition"] for row in partitions}, {str(i) for i in range(10)})
+        self.assertEqual(len(partitions), 20)
+        self.assertEqual({row["seed_partition"] for row in partitions}, {str(i) for i in range(20)})
         self.assertEqual(sum(row["runs"] for row in partitions), 1000)
-        self.assertTrue(all(row["runs"] == 100 and row["depth"] == 256 and
+        self.assertTrue(all(row["runs"] == 50 and row["depth"] == 256 and
                             row["profile"] == "deep_advance_ci" for row in partitions))
         self.assertEqual(len({module.partition_seed("12345", "1", row["seed_partition"])
-                              for row in partitions}), 10)
+                              for row in partitions}), 20)
         for name in ["invariant_advanceLiveness", "invariant_advanceLivenessExtra",
                      "invariant_inherited", "test_focused", "test_importedHelper"]:
             for signature in [name, name + "()"]:
                 matches = [row for row in rows if re.search(row["match"], signature)
                            and not re.search(row["exclude"], signature)]
-                self.assertEqual(len(matches), 10 if name == "invariant_advanceLiveness" else 1)
+                self.assertEqual(len(matches), 20 if name == "invariant_advanceLiveness" else 1)
                 if name != "invariant_advanceLiveness":
                     self.assertEqual(matches[0]["profile"], "deep")
 
@@ -103,7 +103,7 @@ class DeepMatrixTests(unittest.TestCase):
         self.assertNotEqual(seed, module.partition_seed("12345", "2", "0"))
         self.assertNotEqual(seed, module.partition_seed("12346", "1", "0"))
         self.assertEqual(module.partition_seed("12345", "1", ""), "12345")
-        for invalid in ["10", "-1", "00", "unknown"]:
+        for invalid in ["20", "-1", "00", "unknown"]:
             with self.assertRaisesRegex(ValueError, "Unknown AdvanceLiveness"):
                 module.partition_seed("12345", "1", invalid)
         with self.assertRaisesRegex(ValueError, "identity"):
@@ -115,11 +115,11 @@ class DeepMatrixTests(unittest.TestCase):
         self.assertEqual(profiles["deep"]["invariant"]["runs"], 1000)
         self.assertEqual(profiles["deep"]["invariant"]["depth"], 256)
         self.assertEqual(profiles["deep_advance_ci"]["invariant"],
-                         dict(profiles["deep"]["invariant"], runs=100))
+                         dict(profiles["deep"]["invariant"], runs=50))
         self.assertEqual(profiles["deep_advance_ci"]["fuzz"], profiles["deep"]["fuzz"])
         text = (root / "test/fuzz/invariant/AdvanceLiveness.inv.t.sol").read_text()
         for profile, runs, depth in [("default", 64, 100), ("deep", 1000, 256),
-                                     ("deep_advance_ci", 100, 256)]:
+                                     ("deep_advance_ci", 50, 256)]:
             for key, expected in [("runs", runs), ("depth", depth)]:
                 matches = re.findall(r"forge-config: " + profile + r"\.invariant\." + key + r" = (\d+)", text)
                 self.assertEqual(matches, [str(expected)])

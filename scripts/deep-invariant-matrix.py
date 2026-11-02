@@ -15,8 +15,8 @@ HEAVY = {
 }
 ADVANCE_FILE = "AdvanceLiveness.inv.t.sol"
 ADVANCE_PROPERTY = "invariant_advanceLiveness"
-ADVANCE_PARTITIONS = 10
-ADVANCE_RUNS = 100
+ADVANCE_PARTITIONS = 20
+ADVANCE_RUNS = 50
 ADVANCE_DEPTH = 256
 ADVANCE_PROFILE = "deep_advance_ci"
 
