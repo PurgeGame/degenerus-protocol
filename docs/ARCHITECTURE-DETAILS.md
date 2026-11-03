@@ -454,7 +454,7 @@ Dust does not suppress GNRUS settlement; only the ticket purchase can be skipped
 
 The Affiliate constructor registers `bytes32("GNRUS")` for GNRUS wallet ID 3 with kickback 10.
 GNRUS has no stored referral; a constructor bootstrap referral naming ID 3 as the referred player
-is rejected. Each ETH ticket donation routes its commission through the donor's gameplay ID
+is rejected. Each ETH ticket donation pays its whole commission to the donor's gameplay ID
 without storing a referral for GNRUS. Players using GNRUS's code route uplines through Vault and
 sDGNRS.
 
@@ -466,11 +466,14 @@ FLIP rewards remain in Coinflip until consumed; there is no extra post-game-over
 Anyone can donate ETH tickets to account 3 through `purchaseOrderFor`: DirectEth, exact quoted
 payment, no box and no foil. Underpayment and overpayment revert for every donor. GNRUS's balances
 never cover a shortfall. The donor is registered under the ordinary paid-admission policy, and
-its ID replaces any supplied affiliate code for that purchase. The normal 75/20/5 route selects
-the donor or its uplines, with zero default-code kickback. GNRUS's stored referral is untouched.
-AFKing bases are drained once and split without multiplying the total when recipients coincide.
-Ticket history, activity and quest progress belong to GNRUS. Other account actions retain their
-ordinary authorization checks, and donations obey the normal liveness and game-over gates.
+its ID replaces any supplied affiliate code for that purchase. The donor receives the whole
+commission (no 75/20/5 roll, zero kickback) and the purchase bonus in one stake credit. GNRUS's
+stored referral is untouched. GNRUS owns the tickets and their winnings and keeps the ticket
+history, activity, quest progress and rewards, any biggest-buy record and Degenesis credit. A
+Vault Degenesis purchase for GNRUS carries no donor and keeps ordinary routing. AFKing bases are
+drained once and split without multiplying the total when recipients coincide. Other account
+actions retain their ordinary authorization checks, and donations obey the normal liveness and
+game-over gates.
 
 At the last x99 purchase-phase request, GNRUS also enters its claimable and held WWXRP into the
 daily draw and upcoming x00 incinerator when the spendable amount reaches MIN_BURN. If adding
@@ -660,9 +663,13 @@ Match randomness is fixed, but ETH caps, sDGNRS rewards, and recirculation use l
 old wins are not reserved ETH obligations. A VRF stall leaves the logical day where it was (recovery
 backfills nothing). While a requested daily result is unsettled, an account on auto-rebuy cannot
 change its auto-rebuy settings (`RngLocked`), and sDGNRS's perpetual auto-rebuy arms only as daily
-results settle. 14 days without a completed daily session, or a request whose word is not in use 14
-days after it was sent, ends the game deterministically. `_endingReason`, `_vrfDead` and the NatSpec
-of `DegenerusGameGameOverModule.runGameOverAdvance` state the implemented behavior.
+results settle. The same gate governs the carry: `claimCoinflipCarry` withdraws it, and a player's
+gameplay FLIP burn spends it after wallet FLIP and banked winnings, only once the day's flip is
+applied. Auto-rebuy stays on and the rest keeps rolling. Transfers and claims never reach the carry,
+and protocol accounts spend theirs only through their timed backing routes. 14 days without a
+completed daily session, or a request whose word is not in use 14 days after it was sent, ends the
+game deterministically. `_endingReason`, `_vrfDead` and the NatSpec of
+`DegenerusGameGameOverModule.runGameOverAdvance` state the implemented behavior.
 
 ## Century transitions and the sDGNRS level purchase
 

@@ -25,6 +25,9 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///                       into claimableStored (claimCoinflips territory) and only
 ///                       the remainder rolls as carry;
 ///                       claimCoinflipCarry pays from the carry alone.
+///         6. GAMEPLAY BURNS — consumeCoinflipsForBurn takes the bank, then a player's
+///                       carry only once today's flip is applied; protocol accounts,
+///                       transfers and claims never reach it.
 contract CoinflipCarryClaim is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
 
@@ -250,18 +253,18 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // 6. The carry is unreachable from FLIP's burn-shortfall leg
+    // 6. Gameplay burns: the bank, then the carry once today's flip is applied
     // ---------------------------------------------------------------------
 
-    /// FLIP's `_consumeCoinflipShortfall` carries NO freeze gate, on the claim that
-    /// `consumeCoinflipsForBurn` reaches `claimableStored` only — settled days the pending word
-    /// cannot reprice. That claim rests on an adjacency inside `_setCoinflipAutoRebuy`: the sole
-    /// writer of `autoRebuyEnabled = false` drains the carry in the same block, so the
-    /// `else if (oldCarry != 0)` branch in `_claimCoinflipsInternal` (which WOULD fold a carry
-    /// into `mintable`) is unreachable. Pin it here rather than leave it to inspection: the
-    /// position is frozen, a live carry rides the unapplied day, and a consume for an arbitrary
-    /// amount must take the settled bank and leave the carry exactly as it found it.
-    function testFuzz_BurnConsumeNeverReachesTheCarry(uint96 wantRaw) public {
+    /// FLIP's `_consumeCoinflipShortfall` carries NO freeze gate. While today's flip is
+    /// unapplied, `consumeCoinflipsForBurn` reaches `claimableStored` only — settled days the
+    /// pending word cannot reprice. That also rests on an adjacency inside
+    /// `_setCoinflipAutoRebuy`: the sole writer of `autoRebuyEnabled = false` drains the carry in
+    /// the same block, so the `else if (oldCarry != 0)` branch in `_claimCoinflipsInternal`
+    /// (which WOULD fold a carry into `mintable`) is unreachable. Pin it: the position is
+    /// frozen, a live carry rides the unapplied day, and a consume for an arbitrary amount must
+    /// take the settled bank and leave the carry exactly as it found it.
+    function testFuzz_FrozenBurnConsumeNeverReachesTheCarry(uint96 wantRaw) public {
         _enterRebuyWithStake(50_000); // take-profit banks chunks AND leaves a carry
         _resolveDay(3, true);
         vm.prank(player);
@@ -300,22 +303,19 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
 
     /// THE requirement, stated whole: nobody can change the carry amount riding the current
     /// day's flip once that day's result becomes knowable. Knowable is the operative word — the
-    /// day boundary itself is not the hazard, since no word has been requested there yet. `autoRebuyCarry` has six writers;
-    /// five are externally reachable. This drives every one of them while day 4 sits unapplied
-    /// with a live carry on it, and asserts the carry is byte-identical at the end.
+    /// day boundary itself is not the hazard, since no word has been requested there yet. The
+    /// carry's writers, driven here while day 4 sits unapplied with a live carry on it (the carry
+    /// must be byte-identical at the end) unless noted:
     ///
-    ///   consumeFlipBacking      -> only via FLIP.burnCoinForSalvage, whose sole entry
-    ///                                 (sellFarFutureEntries) reverts under the game's RNG lock.
-    ///                                 That lock is up from the VRF request until _unlockRng,
-    ///                                 which runs after the payouts that apply the day — so it
-    ///                                 covers every moment a word is knowable. Not driven here:
-    ///                                 this fixture sits BEFORE the request, where the pending
-    ///                                 word does not exist and there is nothing to salvage
-    ///                                 against.
     ///   _setCoinflipAutoRebuy      -> the exit and the re-arm, both revert here
     ///   claimCoinflipCarry         -> reverts here
-    ///   withdrawRedeemedFlip       -> sDGNRS-only, gated at sDGNRS.burn by the RNG lock AND by
-    ///                                 its own rngWordForDay(today) != 0 submit check
+    ///   _claimCoinflipsAmount      -> CLAIM_BURN (consumeCoinflipsForBurn) takes the bank only
+    ///                                 while frozen; driven below. CLAIM_BACKING
+    ///                                 (consumeFlipBacking, withdrawRedeemedFlip) serves GNRUS's
+    ///                                 phase-end ticket buy, sDGNRS's Decimator entry and the
+    ///                                 sDGNRS redemption close, all made by the Game or sDGNRS
+    ///                                 with every requested day applied. Not driven here.
+    ///   _claimAcquiredCoinflips    -> gated on !_flipFrozen() like claimCoinflipCarry
     ///   _claimCoinflipsInternal    -> ungated, but its walk stops at flipsClaimableDay, which
     ///                                 by definition of the freeze is strictly before day 4 —
     ///                                 so it can only ever fold ALREADY-public resolved days,
@@ -363,6 +363,124 @@ contract CoinflipCarryClaim is DegenesisDeployProtocol {
 
         (, , uint256 carry1, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry1, carry0, "no reachable path moved the carry riding the unapplied day");
+    }
+
+    /// Applied flip, take-profit bank present: a burn shortfall drains the bank first, then the
+    /// carry, and the position stays on auto-rebuy.
+    function test_UnfrozenBurnSpendsBankFirstThenCarry() public {
+        _enterRebuyWithStake(50_000);
+        _resolveDay(3, true); // applied, clock still on day 3: not frozen
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(0, 0); // settle
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        uint256 bank = coinflip.previewClaimCoinflips(player);
+        assertGt(bank, 0, "precondition: a banked take-profit chunk");
+        assertGt(carry, 1_000, "precondition: a carry");
+
+        vm.prank(ContractAddresses.COIN);
+        uint256 consumed = coinflip.consumeCoinflipsForBurn(player, bank + 1_000);
+
+        assertEq(consumed, bank + 1_000, "bank plus the shortfall from carry");
+        assertEq(coinflip.previewClaimCoinflips(player), 0, "bank drained first");
+        (bool enabled, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertTrue(enabled, "still on auto-rebuy");
+        assertEq(carryAfter, carry - 1_000, "only the shortfall left the carry");
+    }
+
+    /// The burn caps at bank plus carry and never touches more.
+    function test_UnfrozenBurnCapsAtBankPlusCarry() public {
+        _enterRebuyWithStake(50_000);
+        _resolveDay(3, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(0, 0);
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        uint256 bank = coinflip.previewClaimCoinflips(player);
+
+        vm.prank(ContractAddresses.COIN);
+        uint256 consumed = coinflip.consumeCoinflipsForBurn(player, type(uint128).max);
+
+        assertEq(consumed, bank + carry);
+        (bool enabled, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertTrue(enabled);
+        assertEq(carryAfter, 0);
+    }
+
+    /// Through FLIP's real gameplay burn: with an empty wallet and bank, the burn reverts while
+    /// the carry rides an unapplied day and succeeds from the carry once that day applies; the
+    /// remainder keeps compounding.
+    function test_GameplayBurnSpendsCarryOnlyOnceTheFlipApplies() public {
+        _enterRebuyWithStake(); // 0 take-profit: every win rolls, nothing banks
+        _resolveDay(3, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(0, 0);
+        _warpToDay(4); // day 4 requested, unapplied: frozen
+        assertEq(coin.balanceOf(player), 0, "precondition: empty wallet");
+
+        vm.prank(GAME);
+        vm.expectRevert(FLIP.Insufficient.selector);
+        coin.burnCoin_g27673(player, 1_000);
+
+        _resolveDay(4, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(0, 0);
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        vm.prank(GAME);
+        coin.burnCoin_g27673(player, 1_000);
+        (bool enabled, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertTrue(enabled);
+        assertEq(carryAfter, carry - 1_000, "the burn spent applied carry");
+
+        _resolveDay(5, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(0, 0);
+        (, , uint256 carryNext, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(carryNext, _carryAfterRide(carry - 1_000, 5), "the remainder kept rolling");
+    }
+
+    /// A resolved loss settles before any spend: the wiped carry cannot fund a burn.
+    function test_GameplayBurnSettlesALossBeforeSpending() public {
+        _enterRebuyWithStake();
+        _resolveDay(3, true); // a winning carry, left unsettled
+        _resolveDay(4, false); // then a loss, applied
+        vm.prank(GAME);
+        vm.expectRevert(FLIP.Insufficient.selector);
+        coin.burnCoin_g27673(player, 1);
+    }
+
+    /// Transfers and claims stay on the bank: an applied carry is reachable only through a
+    /// gameplay burn or claimCoinflipCarry.
+    function test_TransfersAndClaimsNeverReachTheCarry() public {
+        _enterRebuyWithStake();
+        _resolveDay(3, true);
+        vm.prank(player);
+        coinflip.claimCoinflipCarry(0, 0);
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertGt(carry, 0);
+
+        vm.prank(player);
+        vm.expectRevert();
+        coin.transfer(operator, 1);
+        vm.prank(player);
+        assertEq(coinflip.claimCoinflips(0, type(uint256).max), 0);
+        vm.prank(ContractAddresses.COIN);
+        assertEq(coinflip.claimCoinflipsFromFlip(player, type(uint256).max), 0);
+
+        (, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(carryAfter, carry);
+    }
+
+    /// Protocol IDs (VAULT, sDGNRS, GNRUS) never reach a carry through the gameplay consumer;
+    /// GNRUS (ID 3, the boundary) holds one, which only its timed backing route spends.
+    function test_ProtocolAccountsGameplayBurnNeverReachesCarry() public {
+        vm.prank(GAME);
+        coinflip.creditFlip_g317(3, 50_000);
+        _resolveDay(3, true);
+        vm.prank(ContractAddresses.COIN);
+        assertEq(coinflip.consumeCoinflipsForBurn(ContractAddresses.GNRUS, 1_000), 0, "no carry for a protocol ID");
+        (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfoById(3);
+        assertGt(carry, 0, "precondition: GNRUS holds an applied carry");
+        vm.prank(ContractAddresses.COIN);
+        assertEq(coinflip.consumeFlipBacking(ContractAddresses.GNRUS, 1_000), 1_000, "the backing route reaches it");
     }
 
     function test_RevertsWithoutAutoRebuy() public {

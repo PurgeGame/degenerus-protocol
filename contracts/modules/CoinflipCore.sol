@@ -290,6 +290,12 @@ abstract contract CoinflipCore {
     uint32 private constant VAULT_WALLET_ID = 1;
     uint32 private constant SDGNRS_WALLET_ID = 2;
     uint32 private constant GNRUS_WALLET_ID = 3;
+    /// @dev _claimCoinflipsAmount modes. MINT pays the bank as minted FLIP. BURN consumes the
+    ///      bank, then a player's carry once today's flip is applied. BACKING consumes the bank,
+    ///      then the carry; its protocol callers run only with every requested flip applied.
+    uint8 private constant CLAIM_MINT = 0;
+    uint8 private constant CLAIM_BURN = 1;
+    uint8 private constant CLAIM_BACKING = 2;
 
     // Player coinflip state, keyed by wallet ID: two slots. Slot A holds the claim bank,
     // cursor, auto-rebuy start day and flags; slot B holds the take-profit stop and rolling
@@ -621,7 +627,7 @@ abstract contract CoinflipCore {
         uint256 amount
     ) external coinflipContext returns (uint256 claimed) {
         (address key, address payee) = _account(id);
-        return _claimCoinflipsAmount(key, payee, id, amount, true);
+        return _claimCoinflipsAmount(key, payee, id, amount, CLAIM_MINT);
     }
 
     /// @notice Claim coinflip winnings via FLIP to cover token transfers/burns.
@@ -634,7 +640,7 @@ abstract contract CoinflipCore {
         address player,
         uint256 amount
     ) external coinflipContext onlyFLIP returns (uint256 claimed) {
-        return _claimCoinflipsAmount(player, player, 0, amount, true);
+        return _claimCoinflipsAmount(player, player, 0, amount, CLAIM_MINT);
     }
 
     /// @notice Get the result of a coinflip day.
@@ -645,17 +651,19 @@ abstract contract CoinflipCore {
         return _dayResult(day);
     }
 
-    /// @notice Consume coinflip winnings via FLIP for burns (no mint).
-    /// @dev Access: FLIP only. Same safety as claimCoinflipsFromFlip —
-    ///      only claimableStored is consumable, carry stays in autoRebuyCarry.
+    /// @notice Consume coinflip winnings via FLIP for gameplay burns (no mint).
+    /// @dev Access: FLIP only. Settles, then consumes claimableStored, then — for a player ID
+    ///      (not VAULT, sDGNRS or GNRUS) once today's flip is applied — the auto-rebuy carry.
+    ///      Auto-rebuy stays on and the rest of the carry keeps rolling. While the flip is
+    ///      frozen only claimableStored is consumable.
     /// @param player The player whose coinflip winnings to consume.
     /// @param amount Maximum FLIP to consume.
-    /// @return consumed Actual amount of FLIP consumed (deducted from claimable, no token mint).
+    /// @return consumed Actual amount of FLIP consumed (claimable plus carry, no token mint).
     function consumeCoinflipsForBurn(
         address player,
         uint256 amount
     ) external coinflipContext onlyFLIP returns (uint256 consumed) {
-        return _claimCoinflipsAmount(player, player, 0, amount, false);
+        return _claimCoinflipsAmount(player, player, 0, amount, CLAIM_BURN);
     }
 
     /// @notice Consume `amount` of `player`'s coinflip-resident backing (FLIP only): sDGNRS's
@@ -672,20 +680,7 @@ abstract contract CoinflipCore {
         address player,
         uint256 amount
     ) external coinflipContext onlyFLIP returns (uint256 consumed) {
-        consumed = _claimCoinflipsAmount(player, player, 0, amount, false);
-        uint256 remainder = amount - consumed;
-        if (remainder == 0) return consumed;
-        uint32 id = _viewWalletId(player);
-        PlayerCoinflipState storage state = playerState[id];
-        uint256 carry = state.autoRebuyCarry;
-        uint256 fromCarry = remainder <= carry ? remainder : carry;
-        if (fromCarry != 0) {
-            unchecked {
-                state.autoRebuyCarry = uint128(carry - fromCarry);
-            }
-            consumed += fromCarry;
-            _emitClaimState(id);
-        }
+        return _claimCoinflipsAmount(player, player, 0, amount, CLAIM_BACKING);
     }
 
     /// @notice Credit de-circulated FLIP to sDGNRS's redemption backing (FLIP only).
@@ -716,13 +711,14 @@ abstract contract CoinflipCore {
 
     /// @dev Internal claim up to `amount` for the account keyed `key` (wallet `id`, 0 = look it
     ///      up); FLIP mints to `payee`, while loss consolation credits wallet `id`. A wallet with no ID has no stake
-    ///      and claims nothing.
+    ///      and claims nothing. The settle walk runs first, so the carry read below is the one
+    ///      every resolved day leaves; `mode` is one of the CLAIM_* constants.
     function _claimCoinflipsAmount(
         address key,
         address payee,
         uint32 id,
         uint256 amount,
-        bool mintTokens
+        uint8 mode
     ) private returns (uint256 claimed) {
         id = _walletId(key, id, false);
         if (id == 0) return 0;
@@ -730,26 +726,28 @@ abstract contract CoinflipCore {
         uint256 mintable = _claimCoinflipsInternal(id, state);
         uint128 storedBefore = state.claimableStored;
         uint256 stored = storedBefore + mintable;
-        if (stored == 0) {
-            // _claimCoinflipsInternal may still have advanced lastClaim / settled carry.
-            _emitClaimState(id);
-            return 0;
-        }
-
-        uint256 toClaim = amount;
-        if (toClaim > stored) {
-            toClaim = stored;
-        }
-        uint128 remainder = _toUint128Sat(stored - toClaim);
+        claimed = amount < stored ? amount : stored;
+        uint128 remainder = _toUint128Sat(stored - claimed);
         if (remainder != storedBefore) {
             state.claimableStored = remainder;
         }
 
-        if (toClaim != 0) {
-            if (mintTokens) {
-                flip.mintForGame_g152734(payee, toClaim);
+        if (mode == CLAIM_MINT) {
+            if (claimed != 0) flip.mintForGame_g152734(payee, claimed);
+        } else if (
+            claimed < amount && (mode == CLAIM_BACKING || (id > GNRUS_WALLET_ID && !_flipFrozen()))
+        ) {
+            // The carry is today's stake until the flip applies; afterwards it is withdrawable
+            // (claimCoinflipCarry's gate), so a player's gameplay burn may spend it.
+            uint256 carry = state.autoRebuyCarry;
+            uint256 fromCarry = amount - claimed;
+            if (fromCarry > carry) fromCarry = carry;
+            if (fromCarry != 0) {
+                unchecked {
+                    state.autoRebuyCarry = uint128(carry - fromCarry);
+                    claimed += fromCarry;
+                }
             }
-            claimed = toClaim;
         }
         _emitClaimState(id);
     }
@@ -1701,22 +1699,10 @@ abstract contract CoinflipCore {
         if (base == 0) return 0;
         address s = ContractAddresses.SDGNRS;
 
-        // Consume the settled genesis seed reserve first (no token mint — removes a
-        // future mint of `removed`).
-        removed = _claimCoinflipsAmount(s, s, SDGNRS_WALLET_ID, base, false);
-        uint256 remainder = base - removed;
-        if (remainder == 0) return removed;
-
-        // Decrement the rolling auto-rebuy carry for the rest (the steady state once auto-rebuy
-        // is armed after the seed window).
-        PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
-        uint256 carry = state.autoRebuyCarry;
-        if (remainder > carry) remainder = carry;
-        unchecked {
-            state.autoRebuyCarry = uint128(carry - remainder);
-            removed += remainder;
-        }
-        _emitClaimState(SDGNRS_WALLET_ID);
+        // The settled genesis seed reserve first (no token mint — removes a future mint of
+        // `removed`), then the rolling auto-rebuy carry (the steady state once auto-rebuy is
+        // armed after the seed window).
+        return _claimCoinflipsAmount(s, s, SDGNRS_WALLET_ID, base, CLAIM_BACKING);
     }
 
     /*+======================================================================+

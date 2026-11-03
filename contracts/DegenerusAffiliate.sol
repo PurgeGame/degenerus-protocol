@@ -773,7 +773,7 @@ contract DegenerusAffiliate {
         if (stored == 0) {
             if (senderId == GNRUS_ID) {
                 // GNRUS never stores a referral: each ticket donation is referred by its donor,
-                // whose wallet ID the Game passes as the code.
+                // whose wallet ID the Game passes as the code, and pays that donor the whole share.
                 uint32 donor = uint32(uint256(code));
                 return donor == 0 ? (NO_REFERRER_REF, AFFILIATE_CODE_VAULT) : (donor, bytes32(DEFAULT_ID_TAG | donor));
             }
@@ -1072,10 +1072,12 @@ contract DegenerusAffiliate {
 
     /// @dev Roll the purchase winner on the (wall day, buyer ID, route code) entropy: VAULT/SDGNRS
     ///      evenly for a buyer without a referrer, else 75% owner, 20% upline1, 5% upline2. The wall
-    ///      day is the cheapest day source; the roll only needs to vary daily.
+    ///      day is the cheapest day source; the roll only needs to vary daily. A GNRUS ticket
+    ///      donation (GNRUS sender resolved to its donor) pays the donor outright.
     function _purchaseWinner(bytes32 code, uint32 ownerId, uint32 buyerId, bool noReferrer, uint256 word)
         private returns (uint32 winner, uint256 updatedWord)
     {
+        if (buyerId == GNRUS_ID && !noReferrer) return (ownerId, word);
         uint256 entropy = uint256(keccak256(abi.encodePacked(
             AFFILIATE_ROLL_TAG, GameTimeLib.currentDayIndex(), buyerId, code
         )));

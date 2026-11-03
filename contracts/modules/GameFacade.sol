@@ -520,7 +520,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      Account `id` (0 = caller) receives the purchases; the caller must be authorized
     ///      for it. Fresh ETH comes from the caller; claimable and AFKing legs spend the account's.
     ///      GNRUS's account (ID 3) takes donations from anyone: DirectEth tickets paid exactly by
-    ///      msg.value, no box, no foil; the donor refers that purchase (the code is ignored).
+    ///      msg.value, no box, no foil (the code is ignored). GNRUS gets the tickets; the donor
+    ///      gets the purchase bonus and the whole commission as FLIP stake.
     /// @param id Account receiving the purchases (0 = caller).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     /// @param boxOrder Packed box order (0 to skip): [quantity:7][kind:2][customUnits:21], every

@@ -59,7 +59,7 @@ interface ICoinflip {
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     /// @notice Claim coinflip winnings via FLIP to cover token transfers/burns.
     function claimCoinflipsFromFlip(address player, uint256 amount) external returns (uint256 claimed);
-    /// @notice Consume coinflip winnings via FLIP for burns (no mint).
+    /// @notice Consume coinflip winnings, then a player's applied-flip carry, for burns (no mint).
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
     /// @notice Consume coinflip-resident backing (claimable -> carry) for the automatic Decimator.
     function consumeFlipBacking(address player, uint256 amount) external returns (uint256 consumed);
@@ -511,10 +511,12 @@ contract FLIP {
         _mint(to, amount);
     }
 
-    /// @dev Ungated by the RNG lock: consumeCoinflipsForBurn reaches claimableStored only —
-    ///      settled days the pending word cannot reprice — never the auto-rebuy carry. GNRUS
-    ///      also spends its carry: its only burn is the Game's purchase-phase-end ticket buy,
-    ///      made at the fresh daily request before it is committed, with every day resolved.
+    /// @dev Ungated by the RNG lock: consumeCoinflipsForBurn reaches settled claimableStored, and
+    ///      a player's auto-rebuy carry only once today's flip is applied (claimCoinflipCarry's
+    ///      gate), so the pending word cannot reprice what is spent. Protocol accounts never reach
+    ///      carry there. GNRUS spends its carry through consumeFlipBacking: its only burn is the
+    ///      Game's purchase-phase-end ticket buy, made at the fresh daily request before it is
+    ///      committed, with every day resolved.
     function _consumeCoinflipShortfall(address player, uint256 amount) private returns (uint256 consumed) {
         if (amount == 0) return 0;
         uint256 balance = balanceOf[player];

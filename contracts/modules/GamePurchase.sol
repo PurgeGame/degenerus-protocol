@@ -245,8 +245,8 @@ abstract contract GamePurchase is
         MintPaymentKind payKind
     ) internal {
         // Anyone may donate GNRUS tickets with fresh ETH (no box) paying the whole cost, so
-        // GNRUS's balances are never drawn. The donor refers that purchase: its commission
-        // routes as if the donor's own code were used.
+        // GNRUS's balances are never drawn. The donor's ID replaces the code: the donor takes
+        // the purchase bonus and the whole commission; GNRUS keeps everything else.
         if (buyerId == GNRUS_WALLET_ID) {
             uint256 cost = _purchaseCostInputs(entryQuantityScaled).ticketCost;
             if (payKind != MintPaymentKind.DirectEth || boxOrder != 0 || msg.value != cost) revert E();
@@ -910,6 +910,12 @@ abstract contract GamePurchase is
 
         // One Coinflip write for the buyer credit + the rolled affiliate winner. winner != buyer
         // (winner == sender credits nothing), so no slot collision; the pair call skips zero legs.
+        // A GNRUS ticket donation (nonzero donor code) moves its purchase bonus onto the donor's
+        // commission leg.
+        if (buyerId == GNRUS_WALLET_ID && affiliateCode != 0) {
+            lootboxFlipCredit -= ticket.bonusCredit;
+            affWinnerCredit += ticket.bonusCredit;
+        }
         if (lootboxFlipCredit != 0 || affWinnerCredit != 0) {
             coinflip.creditFlipPair_g578(
                 buyerId,

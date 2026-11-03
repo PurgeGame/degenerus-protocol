@@ -4987,7 +4987,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore._claimCoinflipsAmount",
     "kind": "external",
-    "expression": "flip.mintForGame_g152734(payee, toClaim)",
+    "expression": "flip.mintForGame_g152734(payee, claimed)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5259,7 +5259,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.claimCoinflips",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsAmount(key, payee, id, amount, true)",
+    "expression": "_claimCoinflipsAmount(key, payee, id, amount, CLAIM_MINT)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5267,7 +5267,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.claimCoinflipsFromFlip",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsAmount(player, player, 0, amount, true)",
+    "expression": "_claimCoinflipsAmount(player, player, 0, amount, CLAIM_MINT)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5299,23 +5299,15 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.consumeCoinflipsForBurn",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsAmount(player, player, 0, amount, false)",
+    "expression": "_claimCoinflipsAmount(player, player, 0, amount, CLAIM_BURN)",
     "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
+    "review": "FLIP-only gameplay burn consumer for the funding address's own ID: settles, consumes claimableStored, then the auto-rebuy carry only for a player ID (above GNRUS) once today's flip is applied (claimCoinflipCarry's gate). No mint, no other recipient."
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.consumeFlipBacking",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsAmount(player, player, 0, amount, false)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
-  },
-  {
-    "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore.consumeFlipBacking",
-    "kind": "recipient-helper",
-    "expression": "_viewWalletId(player)",
+    "expression": "_claimCoinflipsAmount(player, player, 0, amount, CLAIM_BACKING)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },
@@ -5419,7 +5411,7 @@
     "path": "contracts/modules/CoinflipCore.sol",
     "scope": "CoinflipCore.withdrawRedeemedFlip",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsAmount(s, s, SDGNRS_WALLET_ID, base, false)",
+    "expression": "_claimCoinflipsAmount(s, s, SDGNRS_WALLET_ID, base, CLAIM_BACKING)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Shared Coinflip body preserves credit/claim saturation, account authorization and fixed Game/Jackpots/WWXRP/record recipients. The quest hook targets the separate Quests root only in the split profile; combined overrides preserve internal credit/reward ordering."
   },

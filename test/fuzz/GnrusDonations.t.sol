@@ -7,6 +7,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {GlamsterdamGame} from "../../contracts/profiles/glamsterdam/GlamsterdamGame.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {QaSlots} from "../helpers/QaSlots.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract GnrusDonationHost is GnrusTicketHost {
@@ -21,6 +23,7 @@ contract GnrusDonationHost is GnrusTicketHost {
     }
     function ledger(uint32 id) external view returns (uint256) { return balancesPacked[id]; }
     function mintWord() external view returns (uint256) { return mintPacked_[3]; }
+    function setMintWord(uint32 id, uint256 w) external { mintPacked_[id] = w; }
     function end(bool terminal) external {
         gameOver = terminal;
         lastPurchaseDay = false;
@@ -229,5 +232,138 @@ contract GnrusDonationsTest is DeployProtocol {
             assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
         }
         _unchangedFunds();
+    }
+
+    // ---- Donor rewards: the donation's FLIP belongs to the donor ----
+
+    bytes32 private constant E_STAKE = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
+    bytes32 private constant E_PROGRESS = keccak256("QuestProgressUpdated(uint32,uint24,uint8,uint8,uint128,uint256)");
+    bytes32 private constant E_DONE = keccak256("QuestCompleted(uint32,uint24,uint8,uint8,uint32,uint256)");
+    bytes32 private constant E_LEVEL_DONE = keccak256("LevelQuestCompleted(uint32,uint24,uint8,uint256)");
+
+    /// Per-account accounting of one donation's stake credits and quest events.
+    struct Donated {
+        uint32 id;
+        uint256 stake;
+        uint256 stakeEvents;
+        uint256 gnrusStake;
+        uint256 otherStake;
+        uint256 questReward; // the donor's own quest completions (its affiliate quest)
+        uint256 levelDone;
+        uint256 gnrusQuestEvents;
+        uint256 otherQuestEvents;
+    }
+
+    function _donate(address donor, uint256 qty) private returns (Donated memory r) {
+        vm.deal(donor, 100 ether);
+        vm.recordLogs();
+        vm.prank(donor);
+        game.purchaseOrderFor{value: price * qty / 400}(3, qty, 0, bytes32("IGNORED"), MintPaymentKind.DirectEth, false);
+        r.id = game.walletIdOf_g3120(donor);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            Vm.Log memory l = logs[i];
+            if (l.topics.length < 2) continue;
+            uint32 who = uint32(uint256(l.topics[1]));
+            if (l.emitter == address(coinflip) && l.topics[0] == E_STAKE) {
+                (uint256 amount,) = abi.decode(l.data, (uint256, uint256));
+                if (who == r.id) {
+                    r.stake += amount;
+                    ++r.stakeEvents;
+                } else if (who == 3) {
+                    r.gnrusStake += amount;
+                } else {
+                    r.otherStake += amount;
+                }
+            } else if (l.emitter == address(quests)) {
+                bytes32 t = l.topics[0];
+                if (t != E_PROGRESS && t != E_DONE && t != E_LEVEL_DONE) continue;
+                if (who == 3) {
+                    ++r.gnrusQuestEvents;
+                } else if (who != r.id) {
+                    ++r.otherQuestEvents;
+                } else if (t == E_DONE) {
+                    (,, uint256 reward) = abi.decode(l.data, (uint8, uint32, uint256));
+                    r.questReward += reward;
+                } else if (t == E_LEVEL_DONE) {
+                    (, uint256 reward) = abi.decode(l.data, (uint8, uint256));
+                    r.questReward += reward;
+                    ++r.levelDone;
+                }
+            }
+        }
+    }
+
+    function _referVia(address player, bytes32 code) private {
+        vm.prank(player);
+        affiliate.referPlayer(code);
+    }
+
+    function test_donorTakesPurchaseBonusAndWholeCommission() public {
+        address up2 = address(0xA002);
+        address up1 = address(0xA001);
+        _giveWalletId(up2);
+        vm.prank(up2);
+        affiliate.createAffiliateCode(bytes32("UPTWO"), 0);
+        _referVia(up1, bytes32("UPTWO"));
+        vm.prank(up1);
+        affiliate.createAffiliateCode(bytes32("UPONE"), 0);
+        uint32 up1Id = game.walletIdOf_g3120(up1);
+        uint32 up2Id = game.walletIdOf_g3120(up2);
+        // Twelve donors under the same two uplines: the old 75/20/5 roll would have paid an
+        // upline for most of them.
+        uint256 gnrusQuestEvents;
+        for (uint160 i; i < 12; ++i) {
+            address donor = address(0xD100 + i);
+            _referVia(donor, bytes32("UPONE"));
+            Donated memory r = _donate(donor, 400);
+            assertEq(r.otherStake, 0, "no stake to uplines or protocol accounts");
+            assertEq(r.stake, 100 + 200 + r.questReward, "bonus + whole commission (+ its affiliate quest)");
+            assertEq(r.stakeEvents, 1 + r.levelDone, "bonus and commission are one stake write");
+            assertEq(r.otherQuestEvents, 0, "no upline quest progress");
+            assertEq(affiliate.affiliateScore(4, r.id), 200);
+            gnrusQuestEvents += r.gnrusQuestEvents;
+        }
+        assertGt(gnrusQuestEvents, 0, "the purchase quest stays GNRUS's");
+        assertEq(affiliate.affiliateScore(4, up1Id), 0);
+        assertEq(affiliate.affiliateScore(4, up2Id), 0);
+        assertEq(host.readEntries(4), 12 * 400, "every ticket queues to GNRUS");
+
+        Donated memory bulk = _donate(address(0xD200), 4000);
+        assertEq(bulk.otherStake, 0);
+        assertEq(bulk.stake, 1_000 + 500 + 2_000 + bulk.questReward, "10 tickets, level 4+");
+        _unchangedFunds();
+    }
+
+    function test_donorCommissionAtLevelsOneToThree() public {
+        host.prime(3, 0);
+        price = PriceLookupLib.priceForLevel(3);
+        Donated memory r = _donate(DONOR, 400);
+        assertEq(r.otherStake, 0);
+        assertEq(r.stake, 100 + 250 + r.questReward, "levels 1-3 fresh rate");
+        assertEq(affiliate.affiliateScore(3, r.id), 250);
+    }
+
+    function test_centuryBonusUsesGnrusScoreNotDonorStreak() public {
+        host.prime(100, 0);
+        price = PriceLookupLib.priceForLevel(100);
+        address plain = address(0xD300);
+        address streaker = address(0xD301);
+        uint32 streakerId = _giveWalletId(streaker);
+        // A 50-day quest streak synced today: it would lift any score it fed.
+        uint24 day = nextDay - 1;
+        uint256 qs = uint256(day) << 24 | uint256(day) << 48 | uint256(50) << 72 | uint256(50) << 88;
+        vm.store(address(quests), keccak256(abi.encode(uint256(streakerId), QaSlots.STATE)), bytes32(qs));
+        // GNRUS's own live mint streak gives it a nonzero score, so the century bonus applies.
+        host.setMintWord(3, host.mintWord()
+            | (uint256(20) << BitPackingLib.LEVEL_STREAK_SHIFT)
+            | (uint256(99) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT));
+        uint256 snap = vm.snapshotState();
+        _donate(plain, 400);
+        uint256 plainEntries = host.readEntries(100);
+        assertTrue(vm.revertToState(snap));
+        _donate(streaker, 400);
+        assertEq(host.readEntries(100), plainEntries, "GNRUS's century bonus ignores the donor's streak");
+        assertGt(plainEntries, 400, "a century bonus applied");
     }
 }
