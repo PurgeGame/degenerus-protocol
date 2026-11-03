@@ -631,6 +631,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deep-invariant-${{ strategy.job-index }}-evidence
-          path: .audit-test-logs/foundry/
+          path: |
+            .audit-test-logs/foundry/
+            .foundry-cache/invariant/
+            cache/invariant/
           include-hidden-files: true
           if-no-files-found: ignore

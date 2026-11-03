@@ -145,6 +145,7 @@ contract AdvanceLiveness is DeployProtocol {
             vm.toString(handler.ghost_maxLevel())
         );
         console.log(run);
+        if (handler.ghost_violations() != 0) _logViolation(handler.firstViolation());
 
         // Non-vacuity. Coverage is accumulated (above) because one run can legitimately miss a shape.
         // Measured over 65 default-profile runs (accumulated totals): checks 7,587, next-day checks 1,499,

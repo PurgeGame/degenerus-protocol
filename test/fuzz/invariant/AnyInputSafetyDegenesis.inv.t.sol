@@ -151,6 +151,13 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: _selectors()}));
     }
 
+    /// @dev Inline config is not inherited, so the base suite's deep budget is restated here.
+    /// forge-config: deep.invariant.runs = 256
+    /// forge-config: deep.invariant.depth = 128
+    function invariant_anyInputSafety() public override {
+        super.invariant_anyInputSafety();
+    }
+
     function test_degenesisWeekHappened() public view {
         _assertDegenesisWeekHappened();
     }

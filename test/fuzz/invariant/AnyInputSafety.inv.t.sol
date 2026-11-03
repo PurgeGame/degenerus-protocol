@@ -205,7 +205,7 @@ contract AnyInputSafety is DeployProtocol {
     /// forge-config: default.invariant.depth = 100
     /// forge-config: deep.invariant.runs = 256
     /// forge-config: deep.invariant.depth = 128
-    function invariant_anyInputSafety() public {
+    function invariant_anyInputSafety() public virtual {
         _checkSolvency();
         _checkBystander();
         _checkConservation();

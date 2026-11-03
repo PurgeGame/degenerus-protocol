@@ -115,7 +115,7 @@ class DeepMatrixTests(unittest.TestCase):
         self.assertEqual(profiles["deep"]["invariant"]["runs"], 1000)
         self.assertEqual(profiles["deep"]["invariant"]["depth"], 256)
         self.assertEqual(profiles["deep_advance_ci"]["invariant"],
-                         dict(profiles["deep"]["invariant"], runs=50))
+                         dict(profiles["deep"]["invariant"], runs=50, shrink_run_limit=0))
         self.assertEqual(profiles["deep_advance_ci"]["fuzz"], profiles["deep"]["fuzz"])
         text = (root / "test/fuzz/invariant/AdvanceLiveness.inv.t.sol").read_text()
         for profile, runs, depth in [("default", 64, 100), ("deep", 1000, 256),

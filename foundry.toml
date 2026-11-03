@@ -102,7 +102,8 @@ seed = "0xdeadbeef"
 runs = 50
 depth = 256
 fail_on_revert = false
-shrink_run_limit = 5000
+# A shrunk liveness sequence can stop reproducing; report the original one.
+shrink_run_limit = 0
 show_metrics = true
 dictionary_weight = 80
 include_storage = true
