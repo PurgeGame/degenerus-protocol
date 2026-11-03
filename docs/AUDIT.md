@@ -2,7 +2,7 @@
 
 ## Target and identity
 
-**Audit tag: `audit-2026-11-01`** (the commit this tag points to). The target is the **EIP-170
+**Audit tag: `audit-2026-11-02`** (the commit this tag points to). The target is the **EIP-170
 profile**, selected by `PROFILE=eip170`, with deployment order and aliases in
 [deployments/eip170.json](../deployments/eip170.json). Runtime and initcode ceilings are 24,576 and
 49,152 bytes per deployment. Compiler settings are Solidity 0.8.38, via IR, optimizer runs 1,000 and
@@ -81,7 +81,7 @@ forks, deep invariants and symbolic checks. Run the source hash check above befo
 fixture-driven tests. [The index](README.md) links mechanism-specific references.
 
 Verification evidence applies only to its captured inputs. Focused regressions do not certify the
-complete Foundry/Hardhat battery or the 70-partition deep invariant matrix on the final handoff.
+complete Foundry/Hardhat battery or the 80-partition deep invariant matrix on the final handoff.
 Hosted CI and the final audit commit/tag require their own validation; see [Testing](TESTING.md).
 
 ## Project High-severity criteria

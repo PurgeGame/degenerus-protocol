@@ -259,10 +259,11 @@ contract FLIP {
       |  Read-only functions for UIs and external contracts to query state.  |
       +======================================================================+*/
 
-    /// @notice Total spendable FLIP at the current time (balance + claimable coinflips).
+    /// @notice Wallet FLIP plus claimable coinflip winnings: the transfer budget.
     /// @dev For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
+    ///      Gameplay burns can also spend a player's applied auto-rebuy carry, which is excluded.
     /// @param player The address to query.
-    /// @return spendable Total spendable amount right now.
+    /// @return spendable Wallet balance plus claimable winnings.
     function balanceOfWithClaimable(address player) external view returns (uint256 spendable) {
         spendable = balanceOf[player];
         if (player == ContractAddresses.VAULT) {
@@ -561,7 +562,7 @@ contract FLIP {
     ///      PARIMUTUEL burns exactly one fixed stake, and only from the payee of an account whose
     ///      caller it authorized, so the widening reaches no non-consenting balance.
     ///      Carry-consuming automatic sDGNRS Decimator burns keep plain onlyGame;
-    ///      ordinary table bets consume only held FLIP and settled claimables.
+    ///      ordinary table bets consume held FLIP, settled claimables, then applied carry.
     ///      Rejection reuses the shared `OnlyGame()` generic, so a trace names OnlyGame() even
     ///      though PARIMUTUEL is equally admitted.
     modifier onlyGameOrParimutuel() {

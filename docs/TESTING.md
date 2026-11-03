@@ -154,7 +154,7 @@ that draining ready work does not manufacture a deadline by advancing the clock.
 call boundaries do not reproduce every invariant-executor warmth property. Fixed-time draining models
 cooperating callers, not transaction throughput.
 
-Results apply to their captured inputs and configured limits. The complete 70-partition deep
+Results apply to their captured inputs and configured limits. The complete 80-partition deep
 invariant matrix and hosted CI must be assessed on the final handoff inputs; a focused pass or a
 collection of per-file passes on different revisions is not a full-matrix result. Local toolchain
 versions that differ from CI also require separate validation. Parser/IR integrity checks do not

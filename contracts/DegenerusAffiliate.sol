@@ -631,7 +631,8 @@ contract DegenerusAffiliate {
      *      shared (day, senderId, code) entropy and credits the winner via ONE quest hop. The winner
      *      credit is RETURNED, not paid here, so the caller batches it with the buyer's credit into
      *      one Coinflip write: `creditFlipPair_g578(senderId, playerKickback, winnerId, winnerCredit)`.
-     *      The winner is rolled among stored owner and upline IDs, so nothing is decoded.
+     *      The winner is rolled among stored owner and upline IDs, so nothing is decoded. A GNRUS
+     *      ticket donation skips the roll and the referral lock and pays its donor outright.
      * @param code Referral code supplied with the buy (resolved + locked once).
      * @param senderId The buyer's wallet ID (seeds the winner roll).
      * @param levelDay Leaderboard level for all legs (ticket and lootbox both freeze at level + 1)

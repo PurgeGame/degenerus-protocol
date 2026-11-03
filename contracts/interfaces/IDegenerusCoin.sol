@@ -41,10 +41,10 @@ interface IDegenerusCoin {
     /// @notice Wallet FLIP balance.
     function balanceOf(address account) external view returns (uint256);
 
-    /// @notice Spendable FLIP for a player: wallet balance (plus the mint allowance for VAULT)
-    ///         + claimable coinflip winnings.
+    /// @notice Wallet balance (plus the mint allowance for VAULT) + claimable coinflip winnings:
+    ///         the transfer budget. Gameplay burns can also spend applied auto-rebuy carry.
     /// @param player The address to read.
-    /// @return spendable The total amount the player can spend on a burn/transfer.
+    /// @return spendable Wallet balance plus claimable winnings.
     function balanceOfWithClaimable(
         address player
     ) external view returns (uint256 spendable);

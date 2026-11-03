@@ -139,12 +139,18 @@ guarantee against arbitrary losses.
 Coinflip settles only the last **90 resolved days**. Older unclaimed stakes and stale auto-rebuy
 carry forfeit; already banked claimable winnings do not expire. The Game banks the Vault's pending
 winnings every 45 resolved days as well as at the x0 purchase seal. Skipped-bracket BAF consolation
-expires when that player's two alternating score records are reused.
+expires when that player's two alternating score records are reused. Gameplay FLIP burns spend the
+wallet, then banked coinflip winnings, then the player's auto-rebuy carry once that day's flip is
+applied. Transfers and claims never spend carry, and the Vault, sDGNRS and GNRUS never spend it
+through a gameplay burn.
 
 Affiliate leaderboard and proportional DGNRS scores cap at **34,359,738,367 whole FLIP per wallet ID
 per level**. The allocation denominator counts only accepted score. Commissions, kickbacks, quest
 rewards and AFKing payouts keep their uncapped inputs. Current scores remain exact; exact retired
 history is available from events, while clipped history preserves the activity-bonus calculation.
+A GNRUS ticket donation made under a donor's code pays that donor the purchase bonus and the whole
+commission as one FLIP stake, with no upline split; GNRUS keeps the tickets, quests, records and
+activity. A GNRUS purchase without a donor code routes like any other purchase.
 
 Game EV depends on the product, activity, timing, prices and other participants. Do not extend a
 claim about ticket-ETH routing into a claim of zero house edge for every side-game. Craps uses
