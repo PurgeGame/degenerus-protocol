@@ -73,6 +73,12 @@ include_push_bytes = true
 via_ir = false
 optimizer = false
 
+# A deep campaign's end-of-run completion walk may make up to 12,000 calls at up to 30M gas
+# each, past the default per-test gas.
+[profile.deep]
+gas_limit = 400_000_000_000
+block_gas_limit = 400_000_000_000
+
 [profile.deep.fuzz]
 runs = 10000
 max_test_rejects = 131072
@@ -82,7 +88,9 @@ seed = "0xdeadbeef"
 runs = 1000
 depth = 256
 fail_on_revert = false
-shrink_run_limit = 5000
+# Shrinking replays every candidate with its completion walk and can outlast a CI job;
+# a failure reports its original sequence instead.
+shrink_run_limit = 0
 show_metrics = true
 dictionary_weight = 80
 include_storage = true
@@ -93,6 +101,10 @@ include_push_bytes = true
 # Local deep stays at 1000 runs; every CI process crosses its 48-run rare-coverage gate.
 # The property also declares explicit inline settings for this profile because
 # its inline default settings otherwise override inherited profile values.
+[profile.deep_advance_ci]
+gas_limit = 400_000_000_000
+block_gas_limit = 400_000_000_000
+
 [profile.deep_advance_ci.fuzz]
 runs = 10000
 max_test_rejects = 131072
@@ -102,7 +114,6 @@ seed = "0xdeadbeef"
 runs = 50
 depth = 256
 fail_on_revert = false
-# A shrunk liveness sequence can stop reproducing; report the original one.
 shrink_run_limit = 0
 show_metrics = true
 dictionary_weight = 80

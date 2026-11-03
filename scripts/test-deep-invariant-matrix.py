@@ -51,6 +51,16 @@ class DeepMatrixTests(unittest.TestCase):
         rows = module.matrix(self.root)
         self.assertEqual([x["label"] for x in rows], ["invariant_real", "other-tests"])
 
+    def test_heavy_suite_splits_imported_suite_properties(self):
+        self.write("Base.inv.t.sol", "function invariant_base() public view {}")
+        self.write("RngFreezeDegenesisTimeline.inv.t.sol", """
+            import {Base} from "./Base.inv.t.sol";
+            // import {Fake} from "./Fake.inv.t.sol";
+            contract Derived is Base {}
+        """)
+        rows = [x for x in module.matrix(self.root) if x["file"].endswith("RngFreezeDegenesisTimeline.inv.t.sol")]
+        self.assertEqual([x["label"] for x in rows], ["invariant_base", "other-tests"])
+
     def test_named_and_fallback_jobs_form_exact_partition(self):
         self.write("CrapsRngSeal.inv.t.sol", """
             function invariant_arm() public view {}
@@ -115,8 +125,10 @@ class DeepMatrixTests(unittest.TestCase):
         self.assertEqual(profiles["deep"]["invariant"]["runs"], 1000)
         self.assertEqual(profiles["deep"]["invariant"]["depth"], 256)
         self.assertEqual(profiles["deep_advance_ci"]["invariant"],
-                         dict(profiles["deep"]["invariant"], runs=50, shrink_run_limit=0))
+                         dict(profiles["deep"]["invariant"], runs=50))
         self.assertEqual(profiles["deep_advance_ci"]["fuzz"], profiles["deep"]["fuzz"])
+        self.assertEqual({k: v for k, v in profiles["deep_advance_ci"].items() if not isinstance(v, dict)},
+                         {k: v for k, v in profiles["deep"].items() if not isinstance(v, dict)})
         text = (root / "test/fuzz/invariant/AdvanceLiveness.inv.t.sol").read_text()
         for profile, runs, depth in [("default", 64, 100), ("deep", 1000, 256),
                                      ("deep_advance_ci", 50, 256)]:

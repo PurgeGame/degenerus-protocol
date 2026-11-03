@@ -12,6 +12,7 @@ HEAVY = {
     "CrapsConservation.inv.t.sol",
     "CrapsRealWiringConservation.inv.t.sol",
     "CrapsRngSeal.inv.t.sol",
+    "RngFreezeDegenesisTimeline.inv.t.sol",
 }
 ADVANCE_FILE = "AdvanceLiveness.inv.t.sol"
 ADVANCE_PROPERTY = "invariant_advanceLiveness"
@@ -31,6 +32,24 @@ def partition_seed(run_id, run_attempt, partition):
         raise ValueError("Unknown AdvanceLiveness seed partition")
     identity = f"deep-invariants:AdvanceLiveness:{run_id}:{run_attempt}:{partition}"
     return "0x" + hashlib.sha256(identity.encode()).hexdigest()
+
+
+def _strip(text):
+    return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
+
+
+def _suite_text(path, seen=None):
+    """A suite's source plus the invariant suites it imports, whose properties it may inherit."""
+    seen = set() if seen is None else seen
+    if path in seen:
+        return ""
+    seen.add(path)
+    text = _strip(path.read_text())
+    for target in re.findall(r"\bimport\b[^;]*?[\"']([^\"']+\.inv\.t\.sol)[\"']", text):
+        base = (path.parent / target).resolve()
+        if base.is_file():
+            text += "\n" + _suite_text(base, seen)
+    return text
 
 
 def matrix(root):
@@ -61,7 +80,7 @@ def matrix(root):
         # This is only a scheduling hint, not the authority on which tests exist.
         # The complementary job below retains EVERY test not selected by name,
         # including inherited properties, new tests and imported helper tests.
-        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", path.read_text(), flags=re.S)
+        text = _suite_text(path)
         names = sorted(set(re.findall(r"^\s*function\s+(invariant[A-Za-z0-9_$]*)\s*\(", text, re.M)))
         if not names:
             raise ValueError(f"No named invariant properties in heavy suite {source}")
