@@ -109,8 +109,10 @@ contract DegeneretteBetInvariant is DeployProtocol {
     /// @dev `betsPlaced > 0` alone is always satisfied by the fixture bet. Measured over 514
     ///      default-profile runs: about 7 campaign bets placed and 2 resolved per run, but a single run can
     ///      place none, so campaign counts are accumulated over the process (unique DB_ prefix) and must be
-    ///      non-zero once MIN_RUNS runs have completed.
-    uint256 private constant MIN_RUNS = 16;
+    ///      non-zero once MIN_RUNS runs have completed. At deep depth (1,000 runs, seed 0x9abe074e1) only
+    ///      201 runs resolve a campaign bet and 548 end in game over, so 16 runs miss every resolution
+    ///      about 3% of the time; 128 runs miss it with probability below 1e-12.
+    uint256 private constant MIN_RUNS = 128;
 
     function _acc(string memory k, uint256 v) private returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;

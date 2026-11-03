@@ -974,7 +974,7 @@
   "test/fuzz/invariant/CrapsConservation.inv.t.sol": "bf5ac66089417d9f62861a2b944177bde2f497e938ffe15cc259a79f2f4daf17",
   "test/fuzz/invariant/CrapsRealWiringConservation.inv.t.sol": "d85b6d961e4c0a55b130c1b7aaa7cd716f25281417ae9aeecc602f2a554f97bd",
   "test/fuzz/invariant/CrapsRngSeal.inv.t.sol": "53c6a3ac232aaba3a85827da6b45c5251784891f059fd98726f849476bcdd048",
-  "test/fuzz/invariant/DegeneretteBet.inv.t.sol": "2019e0be853bfb2536f0043793b7a2cece88237911da67dc4778acd2fc464499",
+  "test/fuzz/invariant/DegeneretteBet.inv.t.sol": "87e39198f8b7596c5004041c8db41729c30d76a08a4599f512e91d19a99cb6f0",
   "test/fuzz/invariant/DegenesisLiveness.inv.t.sol": "4d6576c5d19950610fdc3d42021cf400b834596d41afde91cc3bb277d34d90ba",
   "test/fuzz/invariant/DegenesisRngFreeze.inv.t.sol": "e6787ab25c113f5ba6610a3f952411e0f4b0c27f1223eed3cabe63c74ac34eaa",
   "test/fuzz/invariant/DegenesisSaleFlow.inv.t.sol": "b8e948e7d038d83c69641edf6a5a4d2ada081493e52644875623ae9a1249a245",
