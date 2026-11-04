@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
@@ -73,6 +74,7 @@ contract RedemptionInvariants is DeployProtocol {
     ///      over custody and sDGNRS's Game claimable (which holds the released reserve) back it.
     ///      Uses assertGe (not assertEq): backing may exceed the segregated amount.
     function invariant_ethSegregationSolvency() public view {
+        handler.judgeCheck("RedemptionInvariants");
         uint256 segregated = sdgnrs.pendingRedemptionEthValue();
         uint256 backing = game.redemptionReserve();
         if (game.gameOver()) {
@@ -187,6 +189,8 @@ contract RedemptionInvariants is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("RedemptionInvariants", handler);
+        ChainStallProbe.check("RedemptionInvariants", address(game), mockVRF);
         uint256 runs = _acc("RI_RUNS", 1);
         uint256 burns = _acc("RI_burns", handler.successfulBurns() - 1); // the seeded burn excluded
         uint256 resolved = _acc("RI_resolved", handler.ghost_resolvedBatches());

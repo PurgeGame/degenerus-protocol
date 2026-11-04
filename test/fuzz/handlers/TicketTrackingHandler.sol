@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
@@ -12,7 +13,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 /// @notice Wraps purchase operations and tracks which (level, player) pairs have been queued.
 ///         Uses entriesOwedView to verify consistency: if a player purchased at a level,
 ///         their ticketsOwed should be non-zero.
-contract TicketTrackingHandler is Test {
+contract TicketTrackingHandler is Test, ChainCallJudge {
     DegenerusGame public game;
 
     // --- Ghost tracking ---
@@ -86,9 +87,8 @@ contract TicketTrackingHandler is Test {
     /// @notice Interleave queue draining with purchases and the separately targeted VRF handler.
     function advance(uint256 actorSeed) external useActor(actorSeed) {
         vm.prank(currentActor);
-        try game.mineRun(0) {
-            ghost_advances++;
-        } catch {}
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+        if (mrOk) { ghost_advances++; }
     }
 
     /// @notice Attest all three cohorts and the address-facing view against raw position records.

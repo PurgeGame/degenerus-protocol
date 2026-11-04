@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {RngIndexDrainHandler} from "../handlers/RngIndexDrainHandler.sol";
 
@@ -59,6 +60,7 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
     }
 
     function invariant_drainBinding() public view {
+        handler.judgeCheck("RngIndexDrainOrdering");
         _assertBinding();
     }
 
@@ -71,6 +73,8 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
     ///      (beyond the anchor) are accumulated over the process (unique RD_ prefix) and must be non-zero
     ///      once 16 runs have completed.
     function afterInvariant() public {
+        ChainCallTally.tally("RngIndexDrainOrdering", handler);
+        ChainStallProbe.check("RngIndexDrainOrdering", address(game), mockVRF);
         _assertCoverage();
         _assertBinding();
         uint256 runs = _acc("RD_RUNS", 1);

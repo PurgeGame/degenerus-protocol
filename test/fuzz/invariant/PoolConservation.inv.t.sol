@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {PoolFlowHandler} from "../handlers/PoolFlowHandler.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
@@ -91,6 +92,7 @@ contract PoolConservation is DeployProtocol {
     ///         STRENGTHENS MultiLevel's `balance >= claimablePool` (one pool) to all four pools — a
     ///         consolidation/jackpot transfer that inflated a pool beyond the contract's backing would break it.
     function invariant_totalPoolsFullyBacked() public view {
+        handler.judgeCheck("PoolConservation");
         uint256 sumPools = game.currentPrizePoolView() +
             game.nextPrizePoolView() +
             game.futurePrizePoolView() +
@@ -146,6 +148,8 @@ contract PoolConservation is DeployProtocol {
     ///         ghost_advances > 0 makes a "green because nothing moved" pass impossible: if no advance succeeded
     ///         across the 256/128 run, this campaign FAILS.
     function afterInvariant() public {
+        ChainCallTally.tally("PoolConservation", handler);
+        ChainStallProbe.check("PoolConservation", address(game), mockVRF);
         assertGt(
             handler.ghost_advances(),
             0,

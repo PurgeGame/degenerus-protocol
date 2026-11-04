@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {GameFacade} from "../../../contracts/modules/GameFacade.sol";
 import {QaSlots} from "../../helpers/QaSlots.sol";
 import {PeripheralSlots} from "../../helpers/PeripheralSlots.sol";
@@ -62,7 +63,7 @@ interface IWidOwnerOf {
 ///      A queued battle must drain before that buffer can be reused. The growth market opens
 ///      only in a jackpot phase at level >= 1, so the bet doors mock `getGrowth(0)` as open for
 ///      that one bet when the real market is shut. Neither touches an ID path.
-contract WalletIdTruthHandler is Test {
+contract WalletIdTruthHandler is Test, ChainCallJudge {
     // ------------------------------------------------------------------ wiring
     DegenerusGame public immutable game;
     MockVRFCoordinator public immutable vrf;
@@ -338,6 +339,14 @@ contract WalletIdTruthHandler is Test {
             if (revCount[id][sel]++ == 0 && _revSels[id].length < 8) _revSels[id].push(sel);
         }
         _ingest(ok, nonPaying, id);
+    }
+
+    /// @dev One engine call through the chain judge (`id` is also its site label).
+    function _mineCall(uint256 id, address keeper) internal returns (bool ok) {
+        bytes memory ret;
+        (ok, ret) = _call(id, keeper, GAME, 0, abi.encodeWithSignature("mineRun(uint32)", uint32(0)), false);
+        if (ok) _judgeSuccess();
+        else _judgeRevert(GAME, ret, 0, OK_IDLE_WAIT, uint16(id));
     }
 
     /// @dev Record the logs of one call. Logs of a reverted call are dropped.
@@ -902,7 +911,7 @@ contract WalletIdTruthHandler is Test {
         address keeper = _actor(a);
         uint24 lvl = game.currentLvl();
         vm.fee(1 gwei);
-        _call(36, keeper, GAME, 0, abi.encodeWithSignature("mineRun(uint32)", uint32(0)), false);
+        _mineCall(36, keeper);
         vm.fee(0);
         if (game.currentLvl() > lvl) ghost_levels += game.currentLvl() - lvl;
     }
@@ -924,7 +933,7 @@ contract WalletIdTruthHandler is Test {
         vm.fee(1 gwei);
         for (uint256 i; i < 40; ++i) {
             _fulfill(39, uint256(keccak256(abi.encode(word, i))));
-            (bool ok,) = _call(39, keeper, GAME, 0, abi.encodeWithSignature("mineRun(uint32)", uint32(0)), false);
+            bool ok = _mineCall(39, keeper);
             if (!ok && !_fulfill(39, uint256(keccak256(abi.encode(word, i, "r"))))) break;
         }
         vm.fee(0);
@@ -941,7 +950,7 @@ contract WalletIdTruthHandler is Test {
         vm.fee(1 gwei);
         for (uint256 i; i < 40; ++i) {
             _fulfill(42, uint256(keccak256(abi.encode(word, i, "aligned"))));
-            (bool ok,) = _call(42, keeper, GAME, 0, abi.encodeWithSignature("mineRun(uint32)", uint32(0)), false);
+            bool ok = _mineCall(42, keeper);
             if (!ok && !_fulfill(42, uint256(keccak256(abi.encode(word, i, "aligned-r"))))) break;
         }
         vm.fee(0);

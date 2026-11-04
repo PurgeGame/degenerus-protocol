@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {DegenesisBoonReference as BoonRef} from "../helpers/DegenesisBoonReference.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -35,7 +36,7 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 ///         - DegenesisInventoryBurned / DegenesisFundsReleased: the closing burn and terminal
 ///           release totals.
 ///         Violations are counted with the first message kept, and the suite asserts zero.
-contract DegenesisSolvencyHandler is Test {
+contract DegenesisSolvencyHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
     sDGNRS public sd;
@@ -437,10 +438,9 @@ contract DegenesisSolvencyHandler is Test {
         int256 surplusBefore = surplus();
         uint256 requestedBefore = dayIndex();
         vm.recordLogs();
-        try game.mineRun{gas: g}(0) {
-            ran = true;
-            ++ghost_mines;
-        } catch {}
+        // The budgets include values below some first-unit bounds, so a gas refusal is legitimate.
+        (ran,) = _mine(address(game), g, OK_ALL, 1);
+        if (ran) ++ghost_mines;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // Recorded logs survive a reverted call (an engine call that ran out of gas); a revert
         // has no state effect, so its logs are discarded unread.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFPathHandler} from "../handlers/VRFPathHandler.sol";
 
@@ -27,6 +28,7 @@ contract VRFPathInvariants is DeployProtocol {
     /// @notice lootboxRngIndex never moves during VRF fulfillment or a coordinator swap —
     ///         only fresh requests advance it
     function invariant_indexNeverSkips() public view {
+        handler.judgeCheck("VRFPathInvariants");
         assertEq(
             handler.ghost_indexSkipViolations(),
             0,
@@ -95,6 +97,8 @@ contract VRFPathInvariants is DeployProtocol {
     ///         from all of them: about 31% of runs evaluate a post-swap recovery and about 4% recover
     ///         across a real gap (seed 0xdeadbeef and default-profile measurements).
     function afterInvariant() public {
+        ChainCallTally.tally("VRFPathInvariants", handler);
+        ChainStallProbe.check("VRFPathInvariants", address(game), mockVRF);
         uint256 runs = _acc("VP_RUNS", 1);
         uint256 advances = _acc("VP_advances", handler.ghost_advances());
         uint256 fulfillments = _acc("VP_fulfillments", handler.ghost_fulfillments());

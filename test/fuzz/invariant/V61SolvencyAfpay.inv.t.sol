@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {V61AfkingSpendHandler} from "../handlers/V61AfkingSpendHandler.sol";
@@ -118,6 +119,8 @@ contract V61SolvencyAfpay is DeployProtocol {
     ///         tracked sets) and sums both halves; asserts the total equals claimablePool. A dropped paired
     ///         debit on EITHER surface (or a double-counted half) would break this.
     function invariant_queueViewsMatchPositionAccounting() public view {
+        handler.judgeCheck("V61SolvencyAfpay");
+        solvencyHandler.judgeCheck("V61SolvencyAfpay");
         assertEq(solvencyHandler.ghost_ticketViewViolations(), 0, "queue view disagrees with position record");
     }
 
@@ -181,6 +184,9 @@ contract V61SolvencyAfpay is DeployProtocol {
     ///         through the new paths). Asserting the success counters > 0 here makes a "passes because nothing
     ///         happened" green impossible: if every widened action reverted, this campaign FAILS.
     function afterInvariant() public {
+        ChainCallTally.tally("V61SolvencyAfpay", handler);
+        ChainStallProbe.check("V61SolvencyAfpay", address(game), mockVRF);
+        ChainCallTally.tally("V61SolvencyAfpay", solvencyHandler);
         uint256 widenedSuccesses = solvencyHandler.ghost_passBuys() +
             solvencyHandler.ghost_boxBuys() +
             solvencyHandler.ghost_claims();

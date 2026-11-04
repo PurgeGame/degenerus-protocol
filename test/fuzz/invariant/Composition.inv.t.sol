@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {CompositionHandler} from "../handlers/CompositionHandler.sol";
 
@@ -31,6 +32,7 @@ contract CompositionInvariant is DeployProtocol {
     /// @dev obligations = currentPrizePool + nextPrizePool + futurePrizePool + claimablePool
     ///      Must be <= game contract ETH balance at all times.
     function invariant_poolSolvency() public view {
+        compositionHandler.judgeCheck("Composition");
         assertEq(
             compositionHandler.ghost_poolSolvencyViolation(),
             0,
@@ -89,6 +91,8 @@ contract CompositionInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("Composition", compositionHandler);
+        ChainStallProbe.check("Composition", address(game), mockVRF);
         assertGe(compositionHandler.ghost_purchases(), 20, "vacuous: purchases did not succeed");
         assertGe(compositionHandler.ghost_whalePurchases(), 1, "vacuous: no whale pass purchase succeeded");
         assertGe(compositionHandler.ghost_vrfFulfillments(), 1, "vacuous: no VRF word was fulfilled");

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -42,7 +43,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///      Actors live in the 0x5A000 band — disjoint from V61AfkingSpendHandler (0xAF000) and
 ///      WhaleHandler (0xB0000) so the two invariants' actor sets never collide when co-targeted in one campaign.
 ///      Day warps are opt-in (constructor flag): only the Degenesis-timeline campaign needs cohorts to seal.
-contract SolvencyActionHandler is Test {
+contract SolvencyActionHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     DegenerusDeityPass public deityPass;
     MockVRFCoordinator public vrf;
@@ -403,7 +404,7 @@ contract SolvencyActionHandler is Test {
         uint256 rounds = dayWarpsEnabled ? 8 : 3;
         for (uint256 i; i < rounds; i++) {
             vm.prank(currentActor);
-            try game.mineRun(0) {} catch {}
+            _mine(address(game), 0, OK_IDLE_WAIT, 1);
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);

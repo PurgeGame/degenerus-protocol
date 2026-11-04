@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {OwnerTargetCall} from "../../helpers/OwnerTargetCall.sol";
 
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -51,11 +52,14 @@ contract SeatCapInvariant is DeployProtocol {
     /// forge-config: default.invariant.runs = 64
     /// forge-config: default.invariant.depth = 64
     function invariant_seatCap() public view {
+        handler.judgeCheck("SeatCap");
         string memory why = handler.check();
         assertEq(why, "", why);
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("SeatCap", handler);
+        ChainStallProbe.check("SeatCap", address(game), mockVRF);
         uint256 runs = vm.envOr(_counterKey("SEATCAP_RUNS"), uint256(0)) + 1;
         vm.setEnv(_counterKey("SEATCAP_RUNS"), vm.toString(runs));
         uint256 prevMax = vm.envOr(_counterKey("SEATCAP_MAXSUM"), uint256(0));

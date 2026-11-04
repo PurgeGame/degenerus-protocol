@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {VaultHandler} from "../handlers/VaultHandler.sol";
@@ -43,6 +44,8 @@ contract VaultShareMathInvariant is DeployProtocol {
 
     /// @notice Burned shares disappear; full burns mint exactly the refill supply.
     function invariant_shareSupplyReconciles() public view {
+        vaultHandler.judgeCheck("VaultShareMath");
+        gameHandler.judgeCheck("VaultShareMath");
         assertEq(vaultHandler.ethShare().totalSupply() + vaultHandler.ghost_ethBurned(),
             INITIAL_SUPPLY * (1 + vaultHandler.ghost_ethRefills()), "DGVE burn/refill accounting");
         assertEq(vaultHandler.flipShare().totalSupply() + vaultHandler.ghost_coinBurned(),
@@ -116,6 +119,9 @@ contract VaultShareMathInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("VaultShareMath", vaultHandler);
+        ChainStallProbe.check("VaultShareMath", address(game), mockVRF);
+        ChainCallTally.tally("VaultShareMath", gameHandler);
         uint256 runs = _acc("VS_RUNS", 1);
         uint256 purchases = _acc("VS_purchases", gameHandler.ghost_successfulPurchases());
         uint256 advances = _acc("VS_advances", gameHandler.ghost_successfulAdvances());

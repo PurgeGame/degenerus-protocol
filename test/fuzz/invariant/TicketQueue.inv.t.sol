@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {TicketTrackingHandler} from "../handlers/TicketTrackingHandler.sol";
@@ -43,6 +44,7 @@ contract TicketQueueInvariant is DeployProtocol {
     /// @dev verifyConsistency asserts (and so reverts on a violation) the three cohort queues against the raw
     ///      position records and every actor's address-facing view, at every level up to level + 5.
     function invariant_noConsistencyViolations() public view {
+        ticketHandler.judgeCheck("TicketQueue");
         for (uint256 lvl; lvl <= uint256(game.currentLvl()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
     }
 
@@ -80,6 +82,8 @@ contract TicketQueueInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("TicketQueue", ticketHandler);
+        ChainStallProbe.check("TicketQueue", address(game), mockVRF);
         assertGe(ticketHandler.ghost_advances(), 1, "vacuous: mineFlip never succeeded in this run");
         assertGe(vrfHandler.ghost_vrfFulfillments(), 1, "vacuous: no VRF word was fulfilled in this run");
         uint256 runs = _acc("TQ_RUNS", 1);

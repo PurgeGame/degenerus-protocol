@@ -80,6 +80,7 @@ contract MatureCompositionTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         MultiLevelHandler opening = new MultiLevelHandler(game, mockVRF, 1);
         opening.scriptedOpening();
+        opening.judgeCheck("MatureComposition");
         assertGe(game.currentLvl(), 10, "real mature opening");
         _drain(true);
         openingLevel = game.currentLvl();

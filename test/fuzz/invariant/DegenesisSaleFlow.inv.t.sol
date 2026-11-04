@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DegenesisDeployProtocol} from "../helpers/DeployProtocol.sol";
 import {DegenesisSaleFlowHandler} from "../handlers/DegenesisSaleFlowHandler.sol";
 
@@ -26,6 +27,7 @@ contract DegenesisSaleFlow is DegenesisDeployProtocol {
     ///         are accepted; sealed cohorts never change; splits only after sealing and never undone;
     ///         degenesisClosed never decreases; nothing stays live after the seventh close or game over.
     function invariant_saleStateMachine() public view {
+        handler.judgeCheck("DegenesisSaleFlow");
         assertEq(handler.bad_levelDuringSale(), 0, "level, latch, turbo or jackpot phase during the sale");
         assertEq(handler.bad_buyAccepted(), 0, "a buy was accepted off the sale, after the end, or malformed");
         assertEq(handler.bad_sealedCohortChanged(), 0, "a sealed cohort changed");
@@ -56,6 +58,8 @@ contract DegenesisSaleFlow is DegenesisDeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("DegenesisSaleFlow", handler);
+        ChainStallProbe.check("DegenesisSaleFlow", address(game), mockVRF);
         uint256 runs = _acc("DSF_RUNS", 1);
         uint256 buys = _acc("DSF_buys", handler.ghost_buys());
         uint256 offSale = _acc("DSF_offSaleRejects", handler.ghost_offSaleRejects());

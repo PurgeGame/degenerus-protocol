@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {QaSlots} from "../../helpers/QaSlots.sol";
 import {PeripheralSlots} from "../../helpers/PeripheralSlots.sol";
 
@@ -58,11 +59,14 @@ contract WalletIdTruthInvariant is DeployProtocol {
     }
 
     function invariant_walletIdTruth() public view {
+        handler.judgeCheck("WalletIdTruth");
         handler.checkAll();
     }
 
     /// @notice Coverage report, accumulated across runs through the process environment.
     function afterInvariant() public virtual {
+        ChainCallTally.tally("WalletIdTruth", handler);
+        ChainStallProbe.check("WalletIdTruth", address(game), mockVRF);
         uint256 runs = vm.envOr(_counterKey("WID_RUNS"), uint256(0)) + 1;
         vm.setEnv(_counterKey("WID_RUNS"), vm.toString(runs));
         uint256 regs = vm.envOr(_counterKey("WID_REGS"), uint256(0)) + handler.regCount();

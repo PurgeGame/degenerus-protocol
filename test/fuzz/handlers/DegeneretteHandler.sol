@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -13,7 +14,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///         and ghost variable tracking for ETH accounting invariants.
 /// @dev Targets the NEVER-FUZZED Degenerette bet accounting: wager in = payout + burn.
 ///      Tracks ETH flows to verify no ETH is created or destroyed during bet lifecycle.
-contract DegeneretteHandler is Test {
+contract DegeneretteHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
@@ -126,6 +127,23 @@ contract DegeneretteHandler is Test {
             return;
         }
 
+        // The fixture below stands in for a mid-day word on an idle engine. While a daily window is open
+        // (rngLocked) it would clear the request-active bit of the live daily request and leave the lock set,
+        // a state the engine never reaches (the miner selects the daily apply, which refuses it with E()).
+        // So an open window is first closed through the engine: answer the request, crank.
+        for (uint256 i; i < 8 && game.rngLocked(); ++i) {
+            uint256 inFlight = vrf.lastRequestId();
+            if (inFlight != 0) {
+                (, , bool answered) = vrf.pendingRequests(inFlight);
+                if (!answered) {
+                    try vrf.fulfillRandomWords(inFlight, uint256(keccak256(abi.encode("degenerette-resolve", inFlight))) | 2) {} catch {}
+                }
+            }
+            vm.prank(currentActor);
+            _mine(address(game), 0, OK_IDLE_WAIT, 3);
+        }
+        if (game.rngLocked()) return;
+
         // Fill the bet's lootbox word so the sweep's resolve RNG-ready gate is satisfiable, and
         // force the active lootbox index past the bet's index so the sweep's finalized-index
         // frontier reaches it (mirrors _ensureLootboxIndexOpen's storage-poke idiom above: the
@@ -139,7 +157,8 @@ contract DegeneretteHandler is Test {
         // Bets resolve only as the engine's Degenerette read consumer of the published word
         // (mineFlip).
         vm.prank(currentActor);
-        try game.mineRun(0) {
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+        if (mrOk) {
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
                 ghost_totalEthPayout += (claimableAfter - claimableBefore);
@@ -150,7 +169,7 @@ contract DegeneretteHandler is Test {
                 ghost_betsResolved++;
                 actorBets[currentActor].pop();
             }
-        } catch {
+        } else {
             ghost_resolvesFailed++;
         }
     }
@@ -202,7 +221,7 @@ contract DegeneretteHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineRun(0) {} catch {}
+        _mine(address(game), 0, OK_IDLE_WAIT, 2);
     }
 
     // --- Internal helpers ---

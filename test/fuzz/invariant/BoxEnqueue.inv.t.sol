@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
@@ -63,6 +64,7 @@ contract BoxEnqueue is DeployProtocol {
     // =========================================================================
 
     function invariant_everyCreationAppendsOneMatchingEntry() public view {
+        handler.judgeCheck("BoxEnqueue");
         assertEq(handler.appendViolations(), 0, handler.lastAppendViolation());
     }
 
@@ -82,6 +84,8 @@ contract BoxEnqueue is DeployProtocol {
     // =========================================================================
 
     function afterInvariant() public {
+        ChainCallTally.tally("BoxEnqueue", handler);
+        ChainStallProbe.check("BoxEnqueue", address(game), mockVRF);
         assertGe(
             handler.pathsExercised(),
             2,

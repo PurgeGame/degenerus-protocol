@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -57,7 +58,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///      Test-only: NO contracts/*.sol is mutated. The only vm.store is the standard slot-33
 ///      lootbox-index seed (mirroring RngFreezeAndRemovalProofs.setUp) so an active lootbox index
 ///      exists to snapshot. Slot reads are vm.load against the authoritative layout.
-contract RngWindowFreezeHandler is Test {
+contract RngWindowFreezeHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
@@ -214,7 +215,7 @@ contract RngWindowFreezeHandler is Test {
             _drainReadConsumers();
             vm.warp(block.timestamp + 1 days);
             vm.prank(currentActor);
-            try game.mineRun(0) {} catch {}
+            _mine(address(game), 0, OK_IDLE_WAIT, 1);
             if (game.rngLocked()) break;
             // Not yet latched — clear any non-daily in-flight request to keep progressing.
             uint256 reqId = vrf.lastRequestId();
@@ -313,7 +314,7 @@ contract RngWindowFreezeHandler is Test {
 
         _snapshotEnumeratedSet();
         vm.prank(currentActor);
-        try game.mineRun(0) {} catch {}
+        _mine(address(game), 0, OK_IDLE_WAIT, 2);
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -348,7 +349,7 @@ contract RngWindowFreezeHandler is Test {
         // Fulfillment only buffers the daily word; the lock clears when a subsequent mineFlip processes
         // the day (the EXEMPT heartbeat). Drive it until rngLocked() falls (capped).
         for (uint256 i; i < 8 && game.rngLocked(); i++) {
-            try game.mineRun(0) {} catch {}
+            _mine(address(game), 0, OK_IDLE_WAIT, 3);
         }
     }
 
@@ -359,7 +360,7 @@ contract RngWindowFreezeHandler is Test {
     function _drainReadConsumers() internal {
         if (game.rngLocked()) return;
         if (_requestActive()) {
-            if (game.isRngFulfilled()) { try game.mineRun(0) {} catch {} }
+            if (game.isRngFulfilled()) _mine(address(game), 0, OK_IDLE_WAIT, 4);
             else return;
         }
         uint48 read = RecyclingState.readBuffer(address(game));
@@ -371,7 +372,7 @@ contract RngWindowFreezeHandler is Test {
             bool ticketsDone = (uint256(vm.load(address(game), bytes32(0))) >> (24 * 8)) & 0xff != 0;
             bool midDayDone = (packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK == 0;
             if (ticketsDone && midDayDone && game.boxIndexComplete(read) && packed & (uint256(1) << (250 + (read & 1))) == 0) return;
-            try game.mineRun(0) {} catch {}
+            _mine(address(game), 0, OK_IDLE_WAIT, 5);
         }
     }
 
@@ -462,7 +463,8 @@ contract RngWindowFreezeHandler is Test {
 
             for (uint256 j; j < 4 && !_midDayWindowOpen(); j++) {
                 vm.prank(currentActor);
-                try game.mineRun(0) {} catch { break; }
+                (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 6);
+                if (!mrOk) { break; }
             }
 
             if (_midDayWindowOpen()) {
@@ -528,7 +530,7 @@ contract RngWindowFreezeHandler is Test {
 
         _snapshotMidDaySet();
         vm.prank(currentActor);
-        try game.mineRun(0) {} catch {}
+        _mine(address(game), 0, OK_IDLE_WAIT, 7);
         _checkMidDayFrozenAfterIsolatedAction();
     }
 

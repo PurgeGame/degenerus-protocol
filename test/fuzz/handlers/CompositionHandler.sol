@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -11,7 +12,7 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 /// @notice Exercises cross-module state transitions and tracks ghost variables
 ///         for composition safety invariants (pool solvency, level monotonicity, game-over latch).
 /// @dev Uses FOUNDRY_PROFILE=deep for 1K invariant runs.
-contract CompositionHandler is Test {
+contract CompositionHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
@@ -83,9 +84,8 @@ contract CompositionHandler is Test {
 
         // Now advance
         vm.prank(currentActor);
-        try game.mineRun(0) {
-            ghost_mineFlips++;
-        } catch {}
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+        if (mrOk) { ghost_mineFlips++; }
 
         _checkCompositionInvariants();
     }
@@ -144,9 +144,8 @@ contract CompositionHandler is Test {
                 }
             }
             vm.prank(currentActor);
-            try game.mineRun(0) {
-                ghost_mineFlips++;
-            } catch {}
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
+            if (mrOk) { ghost_mineFlips++; }
         }
     }
 
@@ -177,9 +176,8 @@ contract CompositionHandler is Test {
         // Try to advance 3 times (may trigger VRF, jackpot, etc.)
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineRun(0) {
-                ghost_mineFlips++;
-            } catch {}
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 3);
+            if (mrOk) { ghost_mineFlips++; }
         }
 
         // Try to fulfill VRF if pending
@@ -195,9 +193,8 @@ contract CompositionHandler is Test {
 
         // Advance again after VRF
         vm.prank(currentActor);
-        try game.mineRun(0) {
-            ghost_mineFlips++;
-        } catch {}
+        (bool mined,) = _mine(address(game), 0, OK_IDLE_WAIT, 4);
+        if (mined) { ghost_mineFlips++; }
 
         _checkCompositionInvariants();
     }

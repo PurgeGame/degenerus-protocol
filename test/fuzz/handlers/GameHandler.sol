@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -10,7 +11,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 /// @title GameHandler -- Handler for core game operations in invariant tests
 /// @notice Wraps purchase/mineFlip/claimWinnings with bounded inputs,
 ///         multi-actor support, and ghost variable ETH tracking.
-contract GameHandler is Test {
+contract GameHandler is Test, ChainCallJudge {
     DegenerusGame public game;
 
     // --- Ghost variables ---
@@ -90,13 +91,14 @@ contract GameHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineRun(0) {
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+        if (mrOk) {
             ghost_successfulAdvances++;
             uint256 currentLevel = game.currentLvl();
             if (currentLevel > ghost_maxLevelReached) {
                 ghost_maxLevelReached = currentLevel;
             }
-        } catch {}
+        }
     }
 
     /// @notice Claim winnings for an actor

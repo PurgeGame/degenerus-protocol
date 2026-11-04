@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -12,7 +13,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///         The invariant test checks that level only increases, gameOver is terminal, level is
 ///         frozen after gameOver, the VRF-progress clock never rewinds, and that a well-formed,
 ///         unblocked advance never hard-stalls (bounded no-brick liveness).
-contract FSMHandler is Test {
+contract FSMHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
@@ -129,11 +130,8 @@ contract FSMHandler is Test {
                 }
             }
             vm.prank(driver);
-            try game.mineRun(0) {
-                ghost_advances++;
-            } catch {
-                break;
-            }
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+            if (mrOk) { ghost_advances++; } else { break; }
         }
     }
 
@@ -185,9 +183,8 @@ contract FSMHandler is Test {
         bool gameOverBefore = game.gameOver();
 
         vm.prank(currentActor);
-        try game.mineRun(0) {
-            ghost_advances++;
-        } catch {}
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
+        if (mrOk) { ghost_advances++; }
 
         _postAction(levelBefore, gameOverBefore);
     }
@@ -255,11 +252,8 @@ contract FSMHandler is Test {
             if (!game.advanceDue() && !game.rngLocked()) break;
 
             vm.prank(cranker);
-            try game.mineRun(0) {
-                ghost_advances++;
-            } catch {
-                break;
-            }
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 3);
+            if (mrOk) { ghost_advances++; } else { break; }
         }
 
         _postAction(levelBefore, gameOverBefore);

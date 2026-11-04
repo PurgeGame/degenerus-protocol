@@ -150,6 +150,7 @@ contract FlipCarryAccountingInvariant is FlipCarryBase {
     }
 
     function afterInvariant() public virtual {
+        gameHandler.judgeCheck("FlipCarry");
         string[33] memory n = _names();
         uint256 runs = _acc("RUNS", 1);
         uint256 calls = _acc("ACTIONS", h.actions());

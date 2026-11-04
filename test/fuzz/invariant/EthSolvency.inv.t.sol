@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
@@ -36,6 +37,7 @@ contract EthSolvencyInvariant is DeployProtocol {
     /// @dev This is THE critical invariant for any ETH-holding protocol.
     ///      If this fails, the protocol is insolvent -- players cannot claim their winnings.
     function invariant_ethSolvency() public view {
+        gameHandler.judgeCheck("EthSolvency");
         uint256 gameBalance = address(game).balance + mockStETH.balanceOf(address(game));
         // Canonical obligation set (freeze-window pending buffer included; dead post-game-over
         // live pools excluded) -- see SolvencyObligations. Still a real `balance < obligations` test.
@@ -151,6 +153,8 @@ contract EthSolvencyInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("EthSolvency", gameHandler);
+        ChainStallProbe.check("EthSolvency", address(game), mockVRF);
         uint256 runs = _acc("ES_RUNS", 1);
         uint256 purchases = _acc("ES_purchases", gameHandler.ghost_successfulPurchases());
         uint256 advances = _acc("ES_advances", gameHandler.ghost_successfulAdvances());

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {console} from "forge-std/console.sol";
 import {DegenesisDeployProtocol} from "../helpers/DeployProtocol.sol";
@@ -121,6 +122,7 @@ contract DegenesisSolvencyInvariant is DegenesisDeployProtocol {
     // =====================================================================
 
     function invariant_backingCoversObligations() public view {
+        handler.judgeCheck("DegenesisSolvency");
         assertGe(SolvencyObligations.backing(game), SolvencyObligations.obligations(game), "ETH + stETH < obligations");
     }
 
@@ -253,6 +255,8 @@ contract DegenesisSolvencyInvariant is DegenesisDeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("DegenesisSolvency", handler);
+        ChainStallProbe.check("DegenesisSolvency", address(game), mockVRF);
         uint256 runs = _acc("RUNS", 1);
         uint256 buys = _acc("buys", handler.ghost_buys());
         uint256 internalBuys = _acc("internalBuys", handler.ghost_internalBuys());

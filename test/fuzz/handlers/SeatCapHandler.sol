@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {Test} from "forge-std/Test.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToken.sol";
@@ -18,7 +19,7 @@ import {GameSlots, GameSlotKeys} from "../../helpers/GameSlots.sol";
 ///      `freeClaims` and `nextSerial` in token slot 5 (compiled layout: renderer 0..19 |
 ///      nextSerial 20..23 | freeClaims 24..25 | liveSeats 26..27); the ghost records those
 ///      serials as minted and burned, the state of free seats whose runs have since left the set.
-contract SeatCapHandler is Test {
+contract SeatCapHandler is Test, ChainCallJudge {
     DegenerusGame internal immutable game;
     AFKingSubscriptionToken internal immutable token;
     DegenerusVault internal immutable vault;
@@ -598,13 +599,14 @@ contract SeatCapHandler is Test {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 300; ++i) {
             _fulfill();
-            try game.mineRun(0) {
+            (bool mined, bytes4 sel) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+            if (mined) {
                 ++dayCranks;
-            } catch (bytes memory r) {
-                if (r.length == 4 && bytes4(r) == RNG_NOT_READY && _fulfill()) continue;
-                if (!(r.length == 4 && bytes4(r) == NO_WORK)) _noteRevert(A_DAY, r);
-                break;
+                continue;
             }
+            if (sel == RNG_NOT_READY && _fulfill()) continue;
+            if (sel != NO_WORK) _noteRevert(A_DAY, abi.encodePacked(sel));
+            break;
         }
         ++oks[A_DAY];
         _syncMints(0, token.freeClaims());
@@ -614,11 +616,9 @@ contract SeatCapHandler is Test {
     function mineFlip(uint256) external {
         ++calls[A_MINE];
         _fulfill();
-        try game.mineRun(0) {
-            ++oks[A_MINE];
-        } catch (bytes memory r) {
-            _noteRevert(A_MINE, r);
-        }
+        (bool mined, bytes4 sel) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
+        if (mined) ++oks[A_MINE];
+        else _noteRevert(A_MINE, abi.encodePacked(sel));
         _syncMints(0, token.freeClaims());
         _checkLive();
     }

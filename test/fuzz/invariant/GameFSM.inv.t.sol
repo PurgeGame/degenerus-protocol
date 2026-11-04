@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {FSMHandler} from "../handlers/FSMHandler.sol";
 
@@ -46,6 +47,7 @@ contract GameFSMInvariant is DeployProtocol {
     /// @notice Level monotonicity: level never decreases
     /// @dev The FSMHandler tracks every level decrease. This count must be 0.
     function invariant_levelMonotonic() public view {
+        fsmHandler.judgeCheck("GameFSM");
         assertEq(
             fsmHandler.ghost_levelDecreaseCount(),
             0,
@@ -118,6 +120,8 @@ contract GameFSMInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("GameFSM", fsmHandler);
+        ChainStallProbe.check("GameFSM", address(game), mockVRF);
         uint256 runs = _acc("FSM_RUNS", 1);
         uint256 purchases = _acc("FSM_purchases", fsmHandler.ghost_purchases() - openingPurchases);
         uint256 advances = _acc("FSM_advances", fsmHandler.ghost_advances() - openingAdvances);

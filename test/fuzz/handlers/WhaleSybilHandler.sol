@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -15,7 +16,7 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 ///         varying levels.
 /// @dev Uses two actor pools: whales (high ETH, few actors) and sybils (low ETH, many actors).
 ///      Whale passes use dynamic price lookup to match current level pricing.
-contract WhaleSybilHandler is Test {
+contract WhaleSybilHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
@@ -296,9 +297,8 @@ contract WhaleSybilHandler is Test {
         }
 
         vm.prank(caller);
-        try game.mineRun(0) {
-            ghost_advances++;
-        } catch {}
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+        if (mrOk) { ghost_advances++; }
     }
 
     /// @notice Fulfill VRF

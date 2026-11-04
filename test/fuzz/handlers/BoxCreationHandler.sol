@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
@@ -34,7 +35,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 /// @dev The actor base is 0x70000 (disjoint from WhaleHandler's 0xB0000 and the afking handler's
 ///      0xAF000 / 0xDE17A); even actors are field-isolated-seeded with the HAS_DEITY_PASS score
 ///      bit. Test-only: ZERO contracts/*.sol mutation.
-contract BoxCreationHandler is Test {
+contract BoxCreationHandler is Test, ChainCallJudge {
     using BoxOrderLib for uint256;
 
     DegenerusGame public game;
@@ -337,9 +338,8 @@ contract BoxCreationHandler is Test {
         ReadState memory pre = readState();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.mineRun(0) {
-            ok = true;
-        } catch {}
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+        if (mrOk) { ok = true; }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         if (ok) _checkFifo(pre, readState(), logs);
     }

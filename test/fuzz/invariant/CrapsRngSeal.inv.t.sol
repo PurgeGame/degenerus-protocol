@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {CrapsRngSealHandler} from "../handlers/CrapsRngSealHandler.sol";
@@ -46,6 +47,7 @@ contract CrapsRngSeal is DeployProtocol {
     // =========================================================================
 
     function invariant_armedLeafIsUnworded() public view {
+        handler.judgeCheck("CrapsRngSeal");
         assertEq(handler.ghost_armsOnWordedIndex(), 0, "CRAPS-SEAL: a field shut onto a leaf that already held a word");
     }
 
@@ -110,6 +112,8 @@ contract CrapsRngSeal is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("CrapsRngSeal", handler);
+        ChainStallProbe.check("CrapsRngSeal", address(game), mockVRF);
         bool live = !game.gameOver();
         string memory runsKey = string.concat(_vacuityPrefix(), "RUNS");
         uint256 runs = vm.envOr(runsKey, uint256(0)) + 1;

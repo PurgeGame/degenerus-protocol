@@ -66,6 +66,7 @@ contract WholeDayChunkingIndependenceTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         MultiLevelHandler opening = new MultiLevelHandler(game, mockVRF, 1);
         opening.scriptedOpening();
+        opening.judgeCheck("WholeDayChunkingIndependence");
         assertGe(game.currentLvl(), 10, "fixture: real mature opening");
         vm.deal(DRIVER, 1_000_000 ether);
         vm.deal(SAVER, 100 ether);

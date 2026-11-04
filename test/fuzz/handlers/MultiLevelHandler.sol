@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -15,7 +16,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///         runs from that deep state, with price escalation and pool growth tracking.
 /// @dev Actors are funded with large ETH balances to sustain purchases at escalating prices.
 ///      Ghost variables track pool balances at each level transition for solvency verification.
-contract MultiLevelHandler is Test {
+contract MultiLevelHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
@@ -117,11 +118,8 @@ contract MultiLevelHandler is Test {
                 _fulfillPendingVrf();
                 uint256 levelBefore = game.currentLvl();
                 vm.prank(driver);
-                try game.mineRun(0) {
-                    ghost_advances++;
-                } catch {
-                    break;
-                }
+                (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+                if (mrOk) { ghost_advances++; } else { break; }
                 _checkLevelTransition(levelBefore);
             }
         }
@@ -303,9 +301,8 @@ contract MultiLevelHandler is Test {
         uint256 levelBefore = game.currentLvl();
 
         vm.prank(currentActor);
-        try game.mineRun(0) {
-            ghost_advances++;
-        } catch {}
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
+        if (mrOk) { ghost_advances++; }
 
         _checkLevelTransition(levelBefore);
     }

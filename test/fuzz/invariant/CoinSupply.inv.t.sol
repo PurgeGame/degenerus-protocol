@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
@@ -49,6 +50,8 @@ contract CoinSupplyInvariant is DeployProtocol {
     ///      stream, not from a sum of balances. Falsifiable -- an escaped mint (totalSupply bumped
     ///      with no Transfer(from==0)) or an escaped burn makes the two sides diverge.
     function invariant_flipCirculatingConserved() public view {
+        gameHandler.judgeCheck("CoinSupply");
+        probe.judgeCheck("CoinSupply");
         assertEq(
             coin.totalSupply() + probe.ghostBurned(),
             probe.initialTotal() + probe.ghostMinted(),
@@ -110,6 +113,9 @@ contract CoinSupplyInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("CoinSupply", gameHandler);
+        ChainStallProbe.check("CoinSupply", address(game), mockVRF);
+        ChainCallTally.tally("CoinSupply", probe);
         uint256 runs = _acc("CS_RUNS", 1);
         uint256 minted = _acc("CS_minted", probe.ghostMinted());
         uint256 burned = _acc("CS_burned", probe.ghostBurned());

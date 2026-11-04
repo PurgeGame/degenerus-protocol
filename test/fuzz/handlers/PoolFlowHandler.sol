@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -29,7 +30,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///      through real contract entrypoints: it NEVER vm.stores a pool value into existence (which would test the
 ///      seeder, not the contract). The only vm cheats used are vm.deal (fund the actors' wallets) and vm.prank
 ///      (act as an actor) — neither writes a pool. All pool mutation is the contract's own doing.
-contract PoolFlowHandler is Test {
+contract PoolFlowHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
@@ -144,9 +145,9 @@ contract PoolFlowHandler is Test {
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineRun(0) {
-                ghost_advances++; // a consolidation/skim/jackpot transfer pass ran — non-vacuity witness
-            } catch {}
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+            // a consolidation/skim/jackpot transfer pass ran — non-vacuity witness
+            if (mrOk) ghost_advances++;
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);
@@ -213,11 +214,8 @@ contract PoolFlowHandler is Test {
                     }
                 }
                 vm.prank(driver);
-                try game.mineRun(0) {
-                    ghost_advances++;
-                } catch {
-                    break;
-                }
+                (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
+                if (mrOk) { ghost_advances++; } else { break; }
             }
         }
         if (game.currentLvl() > start) ghost_levelUps++;

@@ -111,6 +111,7 @@ contract RedemptionAccounting is RedemptionFixture {
     ///      handler): about 2 campaign burns per run,
     ///      a batch resolved in 78% of runs, a claim in all but one.
     function afterInvariant() public {
+        handler.judgeCheck("RedemptionAccounting");
         uint256 runs = _acc("RA_RUNS", 1);
         uint256 burns = _acc("RA_burns", handler.successfulBurns() - 1); // the seeded burn excluded
         uint256 resolved = _acc("RA_resolved", handler.ghost_resolvedBatches());

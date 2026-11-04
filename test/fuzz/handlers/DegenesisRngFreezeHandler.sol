@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {DegenesisBoonReference as BoonRef} from "../helpers/DegenesisBoonReference.sol";
 import {CrapsLensReader} from "../../../contracts/CrapsLens.sol";
 
@@ -110,7 +111,7 @@ library DegenesisOrderRef {
 ///         the lootbox read buffer sealed by the latest request is re-hashed: neither may change
 ///         before resolution. Counters below must stay 0; the ghost_* tallies feed the suite's
 ///         non-vacuity gate.
-contract DegenesisRngFreezeHandler is Test {
+contract DegenesisRngFreezeHandler is Test, ChainCallJudge {
     bytes32 internal constant SIG_RESOLVED =
         keccak256("DegenesisOrderResolved(uint32,uint8,uint32,uint256,uint256,uint256,uint256,uint32,uint32)");
     bytes32 internal constant SIG_BUY = keccak256("DegenesisBuy(uint32,uint8,uint32,uint256,uint256)");
@@ -309,16 +310,8 @@ contract DegenesisRngFreezeHandler is Test {
         address caller = address(uint160(uint256(keccak256(abi.encode("deg-rng-miner", callerSeed % 7)))));
         vm.recordLogs();
         vm.prank(caller);
-        bool ok;
-        if (g == 0) {
-            try game.mineRun(0) {
-                ok = true;
-            } catch {}
-        } else {
-            try game.mineRun{gas: g}(0) {
-                ok = true;
-            } catch {}
-        }
+        // A capped-gas call may be refused below the first-unit bound; unbounded gas may not.
+        (bool ok,) = _mine(address(game), g, g == 0 ? OK_IDLE_WAIT : OK_ALL, 1);
         _afterAction(_logsOf(ok), req0);
     }
 
@@ -334,9 +327,8 @@ contract DegenesisRngFreezeHandler is Test {
             uint256 req0 = vrf.lastRequestId();
             vm.recordLogs();
             bool ok;
-            try game.mineRun(0) {
-                ok = true;
-            } catch {}
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
+            if (mrOk) { ok = true; }
             _afterAction(_logsOf(ok), req0);
             if (!ok && !(answer && _requestOpen())) return;
         }
@@ -410,9 +402,8 @@ contract DegenesisRngFreezeHandler is Test {
             uint256 req0 = vrf.lastRequestId();
             vm.recordLogs();
             bool ok;
-            try game.mineRun(0) {
-                ok = true;
-            } catch {}
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 3);
+            if (mrOk) { ok = true; }
             _afterAction(_logsOf(ok), req0);
             if (!ok && !_requestOpen()) return;
         }

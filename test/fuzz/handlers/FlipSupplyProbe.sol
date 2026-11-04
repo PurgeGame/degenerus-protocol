@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
@@ -55,7 +56,7 @@ interface ICoinflipClaim {
 ///      Any escaped mint/burn (a `_supply` field mutated without its matching event, or with a
 ///      mismatched amount) breaks the identity and latches a mismatch counter the invariant asserts
 ///      is zero.
-contract FlipSupplyProbe is Test {
+contract FlipSupplyProbe is Test, ChainCallJudge {
     FLIP public immutable coin;
     DegenerusGame public immutable game;
     MockVRFCoordinator public immutable vrf;
@@ -181,7 +182,8 @@ contract FlipSupplyProbe is Test {
             }
             if (!game.advanceDue() && !game.rngLocked()) break;
             vm.prank(cranker);
-            try game.mineRun(0) {} catch { break; }
+            (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+            if (!mrOk) { break; }
         }
         _reconcile(t0, v0);
     }

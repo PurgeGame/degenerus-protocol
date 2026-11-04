@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusVault, DegenerusVaultShare} from "../../../contracts/DegenerusVault.sol";
@@ -13,7 +14,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 /// @dev Tracks successful burns and full-supply refills against the production vault.
 ///      In Foundry tests, the test contract (0x7FA9...) is CREATOR and holds initial vault shares.
 ///      The handler prank-calls as the test contract (creator) for burn operations.
-contract VaultHandler is Test {
+contract VaultHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     DegenerusVault public vault;
     FLIP public coin;
@@ -145,7 +146,7 @@ contract VaultHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineRun(0) {} catch {}
+        _mine(address(game), 0, OK_IDLE_WAIT, 1);
     }
 
     /// @notice Fulfill VRF

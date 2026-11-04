@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {WhaleSybilHandler} from "../handlers/WhaleSybilHandler.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
@@ -40,6 +41,7 @@ contract WhaleSybilInvariant is DeployProtocol {
 
     /// @notice ETH + stETH backing covers obligations under concurrent whale + sybil pressure
     function invariant_solvencyUnderPressure() public view {
+        wsHandler.judgeCheck("WhaleSybil");
         uint256 gameBacking = SolvencyObligations.backing(game);
         // Canonical obligation set (pending buffer in, dead post-GO pools out) -- SolvencyObligations.
         uint256 obligations = SolvencyObligations.obligations(game);
@@ -109,6 +111,8 @@ contract WhaleSybilInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("WhaleSybil", wsHandler);
+        ChainStallProbe.check("WhaleSybil", address(game), mockVRF);
         _assertTraceCoverage();
         uint256 runs = _acc("WS_RUNS", 1);
         uint256 whales = _acc("WS_whales", wsHandler.ghost_whaleSuccessful());

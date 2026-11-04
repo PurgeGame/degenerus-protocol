@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
@@ -71,6 +72,8 @@ contract DegeneretteBetInvariant is DeployProtocol {
     /// @dev The critical invariant: game balance >= sum of all pool obligations.
     ///      This is the same invariant as EthSolvency but under Degenerette pressure.
     function invariant_solvencyUnderDegenerette() public view {
+        degHandler.judgeCheck("DegeneretteBet");
+        gameHandler.judgeCheck("DegeneretteBet");
         uint256 gameBalance = address(game).balance;
         // Canonical obligation set: pending freeze buffer included, dead post-GO live pools
         // excluded (only claimablePool survives game-over). This keeps claimablePool in the
@@ -120,6 +123,9 @@ contract DegeneretteBetInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
+        ChainCallTally.tally("DegeneretteBet", degHandler);
+        ChainStallProbe.check("DegeneretteBet", address(game), mockVRF);
+        ChainCallTally.tally("DegeneretteBet", gameHandler);
         uint256 runs = _acc("DB_RUNS", 1);
         uint256 placed = _acc("DB_placed", degHandler.ghost_betsPlaced() - fixtureBets);
         uint256 resolved = _acc("DB_resolved", degHandler.ghost_betsResolved() - fixtureResolved);

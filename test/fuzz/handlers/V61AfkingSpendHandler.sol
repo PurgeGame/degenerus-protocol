@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -29,7 +30,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///      balancesPacked slot for each tracked address (no parallel mirror) and asserts the half-sum identity +
 ///      the bal+stETH backing bound. Ghost accounting tracks afking deposited / drawn / cashed out for the
 ///      diagnostic invariants.
-contract V61AfkingSpendHandler is Test {
+contract V61AfkingSpendHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     FLIP public coin;
     DegenerusDeityPass public deityPass;
@@ -255,7 +256,7 @@ contract V61AfkingSpendHandler is Test {
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineRun(0) {} catch {}
+            _mine(address(game), 0, OK_IDLE_WAIT, 1);
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);

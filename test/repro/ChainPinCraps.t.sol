@@ -467,6 +467,7 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
     ///      stage 7, no lock, no live request, no terminal flag; Maintenance only when complete) and
     ///      F5a (the predicate and the worker agree) in the live machine.
     function _couplings() internal {
+        handler.judgeCheck("ChainPinCraps");
         for (uint48 b; b < 2; ++b) {
             assertEq(_bit(b), !crapsBattle.rngCohortComplete(b), "F3: Game pending bit and craps FIFO disagree");
         }

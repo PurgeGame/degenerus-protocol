@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {MultiLevelHandler} from "../handlers/MultiLevelHandler.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
@@ -35,6 +36,7 @@ contract MultiLevelInvariant is DeployProtocol {
     }
 
     function invariant_solvencyAcrossLevels() public view {
+        mlHandler.judgeCheck("MultiLevel");
         assertGe(
             address(game).balance + mockStETH.balanceOf(address(game)),
             SolvencyObligations.obligations(game),
@@ -68,7 +70,9 @@ contract MultiLevelInvariant is DeployProtocol {
     /// @dev The first walk supplies required activity after the opening snapshots. A trace may
     ///      then legitimately stop buying, time out, and end the game. Required-prefix failures
     ///      are persistent, so fail_on_revert=false cannot turn them into discarded calls.
-    function afterInvariant() public view {
+    function afterInvariant() public {
+        ChainCallTally.tally("MultiLevel", mlHandler);
+        ChainStallProbe.check("MultiLevel", address(game), mockVRF);
         require(!mlHandler.walkFailed(), "MultiLevel: required trace prefix failed");
         assertTrue(mlHandler.walkPrefixComplete(), "MultiLevel: required trace prefix never ran");
         assertEq(mlHandler.walkPrefixPurchases(), 3, "MultiLevel: required purchases did not complete");

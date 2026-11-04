@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -27,7 +28,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///           only after all its orders resolved (outside game over);
 ///         - a bound word implies an active cohort until game over; seven closes leave nothing active,
 ///           no word and no inventory; game over leaves nothing active.
-contract DegenesisSaleFlowHandler is Test {
+contract DegenesisSaleFlowHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
     sDGNRS public sdgnrs;
@@ -183,7 +184,8 @@ contract DegenesisSaleFlowHandler is Test {
         uint256 g = bound(gasSeed, 250_000, 10_000_000);
         _observe();
         vm.prank(actors[actorSeed % actors.length]);
-        (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+        // A capped-gas call may be refused below the first-unit bound.
+        (bool ok,) = _mine(address(game), g, OK_ALL, 1);
         if (ok) ++ghost_mines;
         else _dropLogs();
         _observe();
@@ -212,7 +214,7 @@ contract DegenesisSaleFlowHandler is Test {
                 continue;
             }
             _observe();
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+            (bool ok,) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
             if (!ok) {
                 _dropLogs();
                 break;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {CrapsRngSealHandler} from "../handlers/CrapsRngSealHandler.sol";
@@ -49,6 +50,7 @@ contract CrapsRealWiringConservation is DeployProtocol {
 
     /// @notice THE SPINE: no settlement credits more than the settlement can draw from.
     function invariant_creditsNeverExceedTheSettlementBound() public view {
+        handler.judgeCheck("CrapsRealWiringConservation");
         if (handler.ghost_creditsOverBound() != 0) {
             revert(
                 string.concat(
@@ -88,7 +90,9 @@ contract CrapsRealWiringConservation is DeployProtocol {
 
 
 
-    function afterInvariant() public view {
+    function afterInvariant() public {
+        ChainCallTally.tally("CrapsRealWiringConservation", handler);
+        ChainStallProbe.check("CrapsRealWiringConservation", address(game), mockVRF);
         assertGt(handler.ghost_creditedOut(), 0, "vacuous: no settlement ever credited stake");
         assertGt(handler.ghost_flipBurnedIn(), 0, "vacuous: no FLIP was ever burned into the table");
         assertGt(handler.ghost_subsidies(), 0, "vacuous: no day ever opened with a budget");

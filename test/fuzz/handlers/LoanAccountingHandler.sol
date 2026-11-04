@@ -14,6 +14,8 @@ import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {TicketQueueStorage} from "../helpers/TicketQueueStorage.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
+import {MineFlipAdmission} from "../helpers/MineFlipAdmission.sol";
 
 /// @dev Etched over the Game: back claimable credits, seed far-future collateral, keep the daily
 ///      index current, and enter a due level arming its settlement as `prepareRequestBoundary` does.
@@ -111,7 +113,7 @@ contract LoanAccountingSeeder is DegenerusGameStorage {
 ///         from the contract's loan views. The first PLAN.length steps of every run follow a fixed
 ///         op order (fuzzed arguments) that forces a borrow, a late-window borrow, a repayment, an
 ///         auto-repayment and a seizure, so no run passes without every transition.
-contract LoanAccountingHandler is Test {
+contract LoanAccountingHandler is Test, ChainCallJudge {
     DegenerusGame public immutable game;
     DegenerusGameLens public immutable lens;
     sDGNRS public immutable sdgnrsToken;
@@ -200,6 +202,10 @@ contract LoanAccountingHandler is Test {
     uint256 public ghost_seizures;
     uint256 public ghost_ordinarySweepRejects;
     uint256 public ghost_chunkedSettles;
+    uint256 public ghost_adequateGasRuns; // worker runs given at least the admission minimum
+    uint256 public ghost_starvedRuns; // worker runs that stopped at a cap below the admission minimum
+    uint256 public ghost_fallbackAtAdequateGas; // the seeder had to finish a worker given adequate gas
+    uint256 public ghost_workerChunkCapHit; // 64 successful chunks and still pending (informational)
     uint256 public ghost_sweeps;
     uint256 public ghost_claims;
     uint256 public ghost_gateRejects;
@@ -574,9 +580,25 @@ contract LoanAccountingHandler is Test {
     function _runWorker(uint256 b) internal {
         if ((b >> 8) & 1 == 1 && game.nextMinerAction() == ACTION_SEIZE_LOANS) {
             uint256 gasCap = 600_000 + (b >> 16) % 2_400_000;
-            for (uint256 i; i < 64 && _pending(); ++i) {
-                try game.mineRun{gas: gasCap}(0) {} catch { break; }
+            // At or above the admission minimum the worker must make progress: only a gas refusal at
+            // a cap below it is legitimate, and the seeder is never needed to finish what it started.
+            bool adequate = gasCap >= MineFlipAdmission.minGas(MineFlipAdmission.SEIZE_LOANS, false);
+            bool reverted;
+            uint256 i;
+            for (; i < 64 && _pending(); ++i) {
+                (bool mined,) = _mine(address(game), gasCap, adequate ? OK_IDLE_WAIT : OK_ALL, 1);
+                if (!mined) {
+                    reverted = true;
+                    break;
+                }
                 ++ghost_chunkedSettles;
+            }
+            if (adequate) {
+                ++ghost_adequateGasRuns;
+                if (reverted && _pending()) ++ghost_fallbackAtAdequateGas;
+                else if (i == 64 && _pending()) ++ghost_workerChunkCapHit;
+            } else if (reverted) {
+                ++ghost_starvedRuns;
             }
         }
         if (_pending()) {

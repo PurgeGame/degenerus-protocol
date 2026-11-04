@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -60,7 +61,7 @@ import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 ///
 ///      Test-only: NO contracts/*.sol is mutated. The only vm.store lives in the falsifiability
 ///      seam, which the campaign excludes.
-contract CrapsRngSealHandler is Test {
+contract CrapsRngSealHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
     FLIP public coin;
@@ -383,7 +384,7 @@ contract CrapsRngSealHandler is Test {
         }
         vm.recordLogs();
         if (asActor) vm.prank(currentActor);
-        try game.mineRun(0) {} catch {}
+        _mine(address(game), 0, OK_IDLE_WAIT, 1);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < n; i++) {
             uint64 slot = armedSlots[i];
@@ -482,7 +483,8 @@ contract CrapsRngSealHandler is Test {
     ///      progress, so the engine stops at the next checkpoint it cannot admit.
     function _minimalEngineStep() internal returns (bool ok) {
         for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
-            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+            // The ladder starts below some first-unit bounds, so a gas refusal on a low rung is expected.
+            (ok,) = _mine(address(game), g, OK_ALL, 2);
             if (ok) return true;
         }
     }

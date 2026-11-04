@@ -157,6 +157,7 @@ contract BoxOpeningNeverRevertsMatureTest is BoxOpeningNeverRevertsBase {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         MultiLevelHandler opening = new MultiLevelHandler(game, mockVRF, 1);
         opening.scriptedOpening();
+        opening.judgeCheck("BoxOpeningNeverReverts");
         assertGe(game.currentLvl(), 10, "fixture: real mature opening");
         for (uint256 i; i < 2_000 && game.nextMinerAction() != 0; ++i) {
             uint256 id = mockVRF.lastRequestId();

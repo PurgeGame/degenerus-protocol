@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {console} from "forge-std/console.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
@@ -42,6 +43,7 @@ contract LoanAccountingInvariant is DeployProtocol {
     }
 
     function invariant_closedLoansPaidSpecOrSeized() public view {
+        handler.judgeCheck("LoanAccounting");
         _noViolations(1);
     }
 
@@ -66,6 +68,13 @@ contract LoanAccountingInvariant is DeployProtocol {
 
     /// @notice Progress floor per run, plus a coverage report accumulated across runs.
     function afterInvariant() public {
+        ChainCallTally.tally("LoanAccounting", handler);
+        ChainStallProbe.check("LoanAccounting", address(game), mockVRF);
+        assertEq(
+            handler.ghost_fallbackAtAdequateGas(),
+            0,
+            "the seeder had to finish a SeizeLoans worker that was given at least the admission minimum gas"
+        );
         assertGt(handler.ghost_borrows(), 0, "no borrow");
         assertGt(handler.ghost_ticketBorrows(), 0, "no late-window borrow");
         assertGt(handler.ghost_day20Borrows(), 0, "no borrow on the day-20 boundary");
@@ -86,13 +95,18 @@ contract LoanAccountingInvariant is DeployProtocol {
         _bump("LA_SEIZURES", handler.ghost_seizures());
         _bump("LA_ORDINARY_SWEEP_REJECTS", handler.ghost_ordinarySweepRejects());
         _bump("LA_CHUNKED", handler.ghost_chunkedSettles());
+        _bump("LA_WORKER_ADEQUATE_GAS", handler.ghost_adequateGasRuns());
+        _bump("LA_WORKER_STARVED", handler.ghost_starvedRuns());
+        _bump("LA_FALLBACK_ADEQUATE_GAS", handler.ghost_fallbackAtAdequateGas());
+        _bump("LA_WORKER_CHUNK_CAP_HIT", handler.ghost_workerChunkCapHit());
         _bump("LA_SWEEPS", handler.ghost_sweeps());
         _bump("LA_CLAIMS", handler.ghost_claims());
         _bump("LA_GATE_REJECTS", handler.ghost_gateRejects());
         _bump("LA_CLOSED", handler.ghost_closed());
-        string[16] memory keys = ["LA_RUNS", "LA_CALLS", "LA_BORROWS", "LA_TICKET_BORROWS", "LA_DAY20_BORROWS",
+        string[20] memory keys = ["LA_RUNS", "LA_CALLS", "LA_BORROWS", "LA_TICKET_BORROWS", "LA_DAY20_BORROWS",
             "LA_JACKPOT_BORROWS", "LA_VAULT_LOANS", "LA_REPAYS", "LA_REPAYS_CLAIMABLE", "LA_AUTO_REPAYS", "LA_SEIZURES",
-            "LA_ORDINARY_SWEEP_REJECTS", "LA_CHUNKED", "LA_SWEEPS", "LA_CLAIMS", "LA_GATE_REJECTS"];
+            "LA_ORDINARY_SWEEP_REJECTS", "LA_CHUNKED", "LA_SWEEPS", "LA_CLAIMS", "LA_GATE_REJECTS",
+            "LA_WORKER_ADEQUATE_GAS", "LA_WORKER_STARVED", "LA_FALLBACK_ADEQUATE_GAS", "LA_WORKER_CHUNK_CAP_HIT"];
         for (uint256 i; i < keys.length; ++i) {
             console.log(string.concat("LA_REPORT ", keys[i], "=", vm.toString(vm.envOr(keys[i], uint256(0)))));
         }

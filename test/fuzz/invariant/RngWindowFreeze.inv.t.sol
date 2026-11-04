@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
@@ -114,6 +115,7 @@ contract RngWindowFreeze is DeployProtocol {
     ///         handler increments ghost_frozenSlotMutations only for player-attributable changes — the
     ///         mineFlip heartbeat (the exempt mutator) is never measured against the property.
     function invariant_inWindowSloadsFrozen() public view {
+        handler.judgeCheck("RngWindowFreeze");
         assertEq(
             handler.ghost_frozenSlotMutations(),
             0,
@@ -134,7 +136,9 @@ contract RngWindowFreeze is DeployProtocol {
     ///         no action). Asserting both counters > 0 here makes a "passes because nothing happened" green
     ///         impossible: if the campaign never opened the window or never fired an in-window action, it
     ///         FAILS.
-    function afterInvariant() public view {
+    function afterInvariant() public {
+        ChainCallTally.tally("RngWindowFreeze", handler);
+        ChainStallProbe.check("RngWindowFreeze", address(game), mockVRF);
         assertGt(
             handler.ghost_windowsOpened(),
             0,

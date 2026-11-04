@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import "forge-std/Test.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -10,7 +11,7 @@ import {FLIP} from "../../../contracts/FLIP.sol";
 
 /// @notice Exercises real request-close, settlement, parked retries and terminal claims.
 /// Ghosts record submitted tokens and canonical claim events, independently of reserve storage.
-contract RedemptionHandler is Test {
+contract RedemptionHandler is Test, ChainCallJudge {
     sDGNRS public sdgnrs;
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
@@ -131,7 +132,7 @@ contract RedemptionHandler is Test {
             vm.prank(actor);
             try sdgnrs.claimRedemption(0, id) {} catch {}
         } else {
-            try game.mineRun(0) {} catch {}
+            _mine(address(game), 0, OK_IDLE_WAIT, 1);
         }
         _recordClaims(vm.getRecordedLogs());
         // Canonical events from a second claim are a double payment, even for a dust claim.
@@ -167,7 +168,7 @@ contract RedemptionHandler is Test {
     }
     function _crank() private {
         vm.recordLogs();
-        try game.mineRun(0) {} catch {}
+        _mine(address(game), 0, OK_IDLE_WAIT, 2);
         _recordClaims(vm.getRecordedLogs());
     }
     function _recordClaims(Vm.Log[] memory logs) private {

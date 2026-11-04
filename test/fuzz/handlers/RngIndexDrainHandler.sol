@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -196,7 +197,7 @@ abstract contract RngIndexDrainOracle is Test {
 /// @notice Stateful daily-drain binding checks over real ticket-only purchases, requests,
 /// fulfillments and time advances. A single buyer plus protocol recipients stays below
 /// the seated-round threshold; this suite makes no claim about foil/round RNG derivations.
-contract RngIndexDrainHandler is RngIndexDrainOracle {
+contract RngIndexDrainHandler is RngIndexDrainOracle, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
     DegenerusAdmin public admin;
@@ -248,12 +249,12 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         bool ok;
         for (uint256 k; k < 3 && !ok; ++k) {
             vm.recordLogs();
-            try game.mineRun{gas: allowances[k]}(k == 0 ? type(uint32).max : 0) {
-                ok = true;
-            } catch (bytes memory err) {
+            bytes4 sel;
+            (ok, sel) = _mineMul(address(game), k == 0 ? type(uint32).max : 0, allowances[k], OK_ALL, 1);
+            if (!ok) {
                 // Reverted logs are not committed state and must not be scored.
                 vm.getRecordedLogs();
-                if (err.length != 0 && bytes4(err) != bytes4(keccak256("InsufficientExecutionGas()"))) return;
+                if (sel != bytes4(0) && sel != SEL_INSUFFICIENT_GAS) return;
             }
         }
         if (!ok) return;

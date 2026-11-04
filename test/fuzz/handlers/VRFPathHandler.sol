@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ChainCallJudge} from "../helpers/ChainCallJudge.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -14,7 +15,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 /// @notice Wraps purchase/mineFlip/VRF/coordinatorSwap/warp operations while
 ///         tracking ghost variables for the lootbox index lifecycle,
 ///         the stall-to-recovery state machine, and sequential logical-day commitment.
-contract VRFPathHandler is Test {
+contract VRFPathHandler is Test, ChainCallJudge {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
     DegenerusAdmin public admin;
@@ -191,9 +192,8 @@ contract VRFPathHandler is Test {
         // terminal flow (gap backfill not owed from then on).
         if (_livenessMirror()) ghost_livenessLatched = true;
 
-        try game.mineRun(0) {} catch {
-            return;
-        }
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 1);
+        if (!mrOk) { return; }
         ghost_advances++;
 
         // one committed request per call at most, flips only on a request.
@@ -262,9 +262,8 @@ contract VRFPathHandler is Test {
         uint256 reqBefore = vrf.lastRequestId();
         bool unansweredBefore = _unansweredRequest();
 
-        try game.mineRun(0) {} catch {
-            return;
-        }
+        (bool mrOk,) = _mine(address(game), 0, OK_IDLE_WAIT, 2);
+        if (!mrOk) { return; }
 
         // same accounting as mineFlip.
         _noteRequests(indexBefore, reqBefore, unansweredBefore);
