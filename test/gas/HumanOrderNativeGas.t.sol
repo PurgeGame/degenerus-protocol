@@ -105,6 +105,8 @@ contract HumanOrderGasSeed is DegenerusGame {
 
 contract HumanOrderNativeGasTest is DeployProtocol {
     uint256 private constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
+    // mineRun(uint32 0): 21,000 + 4 nonzero selector bytes x 16 + 32 zero argument bytes x 4.
+    uint256 private constant MINE_RUN_INTRINSIC = 21_192;
 
     address private constant PLAYER = address(0xB0A100);
     address private constant MINER = address(0xB0A200);
@@ -221,8 +223,10 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(MINER);
         uint256 start = gasleft();
-        game.mineRun{gas: 25_000_000}(0);
-        emit log_named_uint("cold complete mineFlip human gas (no transaction cap)", start - gasleft() + 21_192);
+        // A real Osaka transaction (EIP-7825): 2^24 total, less the call's intrinsic gas.
+        game.mineRun{gas: NO_RESERVOIR_GAS_LIMIT - MINE_RUN_INTRINSIC}(0);
+        emit log_named_uint("cold complete mineFlip human gas (inside the 2^24 transaction cap)",
+            start - gasleft() + MINE_RUN_INTRINSIC);
         Vm.Log[] memory entries = vm.getRecordedLogs();
         for (uint256 i; i < entries.length; ++i) {
             if (entries[i].emitter != address(game) || entries[i].topics[0] == MINER_WORK
@@ -354,6 +358,42 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         emit log_named_uint("worker gas outside the atomic entry (loop, completion) peak", peakTail);
         emit log_named_uint("declared HUMAN_TAIL_GAS", GasBounds.HUMAN_TAIL_GAS);
         assertLe(peakTail, GasBounds.HUMAN_TAIL_GAS, "worker tail exceeds its declared reserve");
+    }
+
+    /// @dev End to end inside one Osaka transaction: the real engine admits and completes a
+    ///      maximum indivisible order, cold, across committed words, so dispatch, admission and
+    ///      return are bound as a caller sees them (about 70k over the atomic worker). Sampled
+    ///      words do not reach the all-ETH-spin branch; that worst case remains bounded by the
+    ///      component envelope behind HUMAN_ENTRY_GAS + 100 x HUMAN_BOX_GAS (MineFlipGasBounds).
+    function test_HundredBoxOrderCompletesInsideTransactionCap() public {
+        uint256[3] memory orders = [BoxOrderLib.boCustoms(100, 10 ether),
+            BoxOrderLib.boCustoms(100, 2_000 ether), BoxOrderLib.boLarges(100)];
+        uint256 peak;
+        for (uint256 i; i < orders.length; ++i) {
+            for (uint256 w; w < 24; ++w) {
+                uint256 snap = vm.snapshotState();
+                uint256 used = this.inCapCase(orders[i], uint256(keccak256(abi.encode("in-cap", i, w))));
+                if (used > peak) peak = used;
+                assertTrue(vm.revertToStateAndDelete(snap));
+            }
+        }
+        emit log_named_uint("peak cold 100-box mineRun, intrinsic included", peak);
+        emit log_named_uint("headroom under the 2^24 transaction cap", NO_RESERVOIR_GAS_LIMIT - peak);
+    }
+
+    function inCapCase(uint256 input, uint256 word) external returns (uint256 used) {
+        require(msg.sender == address(this), "in-cap self-call");
+        HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
+        host.seedOrder(PLAYER, input, word);
+        vm.etch(address(game), gameCode);
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.HumanBoxes), "engine selects the order");
+        _cool();
+        vm.prank(MINER);
+        uint256 start = gasleft();
+        game.mineRun{gas: NO_RESERVOIR_GAS_LIMIT - MINE_RUN_INTRINSIC}(0);
+        used = start - gasleft() + MINE_RUN_INTRINSIC;
+        vm.etch(address(game), type(HumanOrderGasSeed).runtimeCode);
+        assertEq(host.entriesLeft(), 0, "the 100-box order completed inside one transaction");
     }
 
     function test_Cold100SaturatedCustomBoxes() public {

@@ -14,6 +14,8 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {TicketQueueStorage as TQ} from "../helpers/TicketQueueStorage.sol";
 import {IDegenerusGameRngModule} from "../../../contracts/interfaces/IDegenerusGameModules.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
+import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
+import {EndingWitness} from "../helpers/EndingWitness.sol";
 
 /// @dev The RNG module's mid-day request worker (the one mineFlip's RequestMidday stage
 ///      dispatches), called alone in the Game's context so a check can read its own gates.
@@ -119,6 +121,8 @@ contract AdvanceLivenessHandler is Test {
     bytes4 private constant E_NO_PROGRESS_MARK = bytes4(keccak256("LivenessNoProgress()"));
     // Test-local marker: the backlog compression could not verify its write through entriesOwedView.
     bytes4 private constant E_BACKLOG_UNVERIFIED_MARK = bytes4(keccak256("LivenessBacklogUnverified()"));
+    // Test-local marker: the crank latched terminal state with no ending due.
+    bytes4 private constant E_PREMATURE_MARK = bytes4(keccak256("LivenessPrematureEnding()"));
 
     // ---- violation codes ----
     uint8 public constant V_NONE = 0;
@@ -131,6 +135,9 @@ contract AdvanceLivenessHandler is Test {
     uint8 public constant V_REQUEST_BLOCKED = 7; // the mid-day request worker blocked by a liveness gate
     uint8 public constant V_NO_PROGRESS = 8; // a successful mineFlip wrote no engine storage
     uint8 public constant V_BACKLOG_UNVERIFIED = 9; // compression's raw write disagreed with entriesOwedView
+    uint8 public constant V_UNJUSTIFIED_ENDING = 10; // terminal state latched with no ending due (EndingWitness)
+    uint8 public constant V_DAY_NOT_REQUESTED = 11; // idle and "sealed", but today's wall day has no daily request
+    uint8 public constant V_COMPLETION_UNSTAMPED = 12; // idle and sealed, but today's completion (deadman clock) unstamped
 
     struct Violation {
         uint8 code;
@@ -156,6 +163,9 @@ contract AdvanceLivenessHandler is Test {
         uint256 ffLenL2;
         bool foilPending;
         uint256 timestamp;
+        uint256 lastCompletedAt;
+        uint24 lastRequestWallDay;
+        bool dailyComplete;
         uint256 actionNo;
         string lastAction;
     }
@@ -202,6 +212,7 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_biasedRuns;
     uint256 public ghost_biasedReachedLpd;
     uint256 public ghost_gameOver;
+    uint256 public ghost_justifiedEndings; // real-run terminal latches with an ending due
 
     // real-run observation memory
     uint24 private _prevLevel;
@@ -268,9 +279,7 @@ contract AdvanceLivenessHandler is Test {
         uint8 next = game.minerAction();
         if (next != uint8(DegenerusGameStorage.MinerAction.Afking)
             && next != uint8(DegenerusGameStorage.MinerAction.HumanBoxes)) return;
-        vm.prank(a);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
-        ok;
+        _mine(a, 0);
     }
 
     /// Mid-day lootbox request through mineFlip from a random player (after optionally topping
@@ -300,13 +309,7 @@ contract AdvanceLivenessHandler is Test {
         n = bound(n, 1, 40);
         for (uint256 i = 0; i < n; i++) {
             if ((bits >> (i % 32)) & 1 != 0) _fulfillPending();
-            bool ok;
-            if ((bits >> (32 + (i % 32))) & 1 != 0) {
-                vm.prank(_actor(bits >> 64));
-                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
-            } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
-            }
+            (bool ok,) = _mine((bits >> (32 + (i % 32))) & 1 != 0 ? _actor(bits >> 64) : address(0), 0);
             if (!ok && (bits >> 100) & 1 == 0) break;
         }
     }
@@ -414,8 +417,7 @@ contract AdvanceLivenessHandler is Test {
         _fulfillPending();
         uint256 n = bound(seed >> 48, 1, 30);
         for (uint256 i = 0; i < n; i++) {
-            vm.prank(a);
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+            (bool ok,) = _mine(a, 0);
             if (!ok) break;
         }
         lvl;
@@ -444,7 +446,8 @@ contract AdvanceLivenessHandler is Test {
         {
             (bool quiet, bytes4 sel, uint256 cranks) = _crankToQuiescence(cycles);
             maxCr = cranks;
-            if (!game.gameOver()) v = _judge(quiet, sel, cranks, nextDay ? 2 : 0);
+            if (sel == E_PREMATURE_MARK) v = _snapshot(V_UNJUSTIFIED_ENDING, sel, cranks, nextDay ? 2 : 0);
+            else if (!game.gameOver()) v = _judge(quiet, sel, cranks, nextDay ? 2 : 0);
         }
         if (v.code == V_NONE && !game.gameOver()) {
             // (3) the mid-day request worker, for a fresh account, must not hit a liveness gate
@@ -479,8 +482,9 @@ contract AdvanceLivenessHandler is Test {
             vm.prank(probe);
             if (game.minerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) {
                 uint256 prior = vrf.lastRequestId();
-                vm.prank(probe);
-                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+                bool premature;
+                (ok,, premature) = _mineJudged(probe, 0);
+                if (premature) v = _snapshot(V_UNJUSTIFIED_ENDING, E_PREMATURE_MARK, 0, nextDay ? 3 : 1);
                 ok = ok && vrf.lastRequestId() > prior;
             }
             if (ok) {
@@ -491,7 +495,8 @@ contract AdvanceLivenessHandler is Test {
                 }
                 (bool quiet, bytes4 sel, uint256 cranks) = _crankToQuiescence(cycles);
                 if (cranks > maxCr) maxCr = cranks;
-                if (!game.gameOver()) v = _judge(quiet, sel, cranks, nextDay ? 3 : 1);
+                if (sel == E_PREMATURE_MARK) v = _snapshot(V_UNJUSTIFIED_ENDING, sel, cranks, nextDay ? 3 : 1);
+                else if (!game.gameOver()) v = _judge(quiet, sel, cranks, nextDay ? 3 : 1);
             }
         }
 
@@ -547,8 +552,11 @@ contract AdvanceLivenessHandler is Test {
                 owedBefore = _queueOwed(w.key);
             }
             vm.record();
-            (bool ok, bytes memory ret) = address(game).call{gas: MAX_CRANK_GAS}(
-                abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+            (bool ok, bytes memory ret, bool premature) = _mineJudged(address(0), MAX_CRANK_GAS);
+            if (premature) {
+                vm.stopRecord();
+                return (false, E_PREMATURE_MARK, cranks + 1);
+            }
             if (!ok) {
                 vm.stopRecord();
                 // One engine selects every action (60d31f775): its idle stop is NoWork().
@@ -676,6 +684,16 @@ contract AdvanceLivenessHandler is Test {
             return _snapshot(V_STAGED_NO_WORKER, sel, cranks, phase);
         }
         if (game.advanceDue()) return _snapshot(V_ADVANCE_DUE_LIES, sel, cranks, phase);
+        // advanceDue() reads the engine's own selection, so a day that can never request again
+        // (completion never certified) would look idle and sealed: judge the clocks directly.
+        uint24 wallDay = game.currentWallDayView();
+        if (EndingWitness.lastDailyRequestWallDay(address(game)) < wallDay) {
+            return _snapshot(V_DAY_NOT_REQUESTED, sel, cranks, phase);
+        }
+        if (!EndingWitness.dailyComplete(address(game))
+            || GameTimeLib.currentDayIndexAt(EndingWitness.lastCompletedAt(address(game))) != wallDay) {
+            return _snapshot(V_COMPLETION_UNSTAMPED, sel, cranks, phase);
+        }
     }
 
     function _requestRevertAllowed(bytes4 s) internal pure returns (bool) {
@@ -709,6 +727,9 @@ contract AdvanceLivenessHandler is Test {
         v.ffLenL2 = _queueLen((lvl + 2) | TICKET_FAR_FUTURE_BIT);
         v.foilPending = _foilPending();
         v.timestamp = vm.getBlockTimestamp();
+        v.lastCompletedAt = EndingWitness.lastCompletedAt(address(game));
+        v.lastRequestWallDay = EndingWitness.lastDailyRequestWallDay(address(game));
+        v.dailyComplete = EndingWitness.dailyComplete(address(game));
     }
 
     function firstViolation() external view returns (Violation memory) {
@@ -758,8 +779,7 @@ contract AdvanceLivenessHandler is Test {
         vm.prank(who);
         if (game.minerAction() != uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return;
         uint256 prior = vrf.lastRequestId();
-        vm.prank(who);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+        (bool ok,) = _mine(who, 0);
         if (!ok || vrf.lastRequestId() == prior) return;
         ghost_middayRequests++;
         if (who == address(uint160(0xD0D0D0))) ghost_middayAsCraps++;
@@ -778,15 +798,49 @@ contract AdvanceLivenessHandler is Test {
             _fulfillPending();
             bool ok;
             if (useMineFlip) {
-                vm.prank(actors[0]);
-                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
-                if (ok && !game.advanceDue()) {
-                    (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
-                }
+                (ok,) = _mine(actors[0], 0);
+                if (ok && !game.advanceDue()) (ok,) = _mine(address(0), 0);
             } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+                (ok,) = _mine(address(0), 0);
             }
             if (!ok) return;
+        }
+    }
+
+    /// Oracle self-test hook (not a fuzz target): one judged real-run mining call.
+    function oracleProbeMine() external {
+        _mine(address(0), 0);
+    }
+
+    /// Every mining call goes through here. `who == 0` calls as the handler; `gas == 0` forwards
+    /// everything. A terminal latch across the call must have had an ending due beforehand.
+    function _mineJudged(address who, uint256 gas) internal returns (bool ok, bytes memory ret, bool premature) {
+        bool wasLatched = EndingWitness.latched(address(game));
+        bool endingDue = wasLatched || EndingWitness.due(address(game));
+        if (who != address(0)) vm.prank(who);
+        (ok, ret) = address(game).call{gas: gas == 0 ? gasleft() : gas}(
+            abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+        if (!wasLatched && EndingWitness.latched(address(game))) premature = !endingDue;
+    }
+
+    /// A real-run mining call: an unjustified ending is recorded at once (a check cannot judge
+    /// a game that is already over).
+    function _mine(address who, uint256 gas) internal returns (bool ok, bytes memory ret) {
+        bool wasLatched = EndingWitness.latched(address(game));
+        bool premature;
+        (ok, ret, premature) = _mineJudged(who, gas);
+        if (!wasLatched && EndingWitness.latched(address(game))) {
+            if (premature) {
+                if (ghost_violations == 0) {
+                    Violation memory v = _snapshot(V_UNJUSTIFIED_ENDING, E_PREMATURE_MARK, 0, 0);
+                    v.actionNo = ghost_actions;
+                    v.lastAction = _lastAction;
+                    _firstViolation = v;
+                }
+                ghost_violations++;
+            } else {
+                ghost_justifiedEndings++;
+            }
         }
     }
 
@@ -802,7 +856,8 @@ contract AdvanceLivenessHandler is Test {
     function _buyLootbox(address a, uint256 amount) internal {
         if (game.gameOver()) return;
         vm.prank(a);
-        try game.purchaseOrderFor{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
+        // Floor to whole 0.001 ETH units: the strict encoder reverts on unaligned wei, outside the try.
+        try game.purchaseOrderFor{value: amount}(0, 0, BoxOrderLib.boCustomFloor(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_lootboxBuys++;
         } catch {}
     }

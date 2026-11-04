@@ -34,6 +34,28 @@ contract StalledDrainGame {
     }
 }
 
+/// @dev Oracle self-test stand-in: `mineRun` latches `gameOver` with no ending due; every other
+///      call runs the production Game code in the Game's own storage.
+contract PrematureLatcher {
+    address internal immutable production;
+
+    constructor(address production_) {
+        production = production_;
+    }
+
+    fallback() external payable {
+        if (msg.sig == bytes4(keccak256("mineRun(uint32)"))) {
+            assembly ("memory-safe") { sstore(0, or(sload(0), shl(168, 1))) }
+            return;
+        }
+        (bool ok, bytes memory ret) = production.delegatecall(msg.data);
+        assembly ("memory-safe") {
+            if iszero(ok) { revert(add(ret, 32), mload(ret)) }
+            return(add(ret, 32), mload(ret))
+        }
+    }
+}
+
 /// @title AdvanceLiveness — no "flag set, no work, every entry point reverts" state.
 ///
 /// @notice From ANY fuzzed state, with VRF cooperating and without moving time, mineFlip
@@ -102,7 +124,7 @@ contract AdvanceLiveness is DeployProtocol {
     /// Per-run coverage, accumulated across runs through the process environment
     /// (the only state that survives the per-run setUp).
     function afterInvariant() public {
-        string[25] memory keys = [
+        string[26] memory keys = [
             "checks",
             "nextDayChecks",
             "probeRequests",
@@ -127,9 +149,10 @@ contract AdvanceLiveness is DeployProtocol {
             "biasedReachedLpd",
             "gameOverRuns",
             "runs",
-            "backlogCompressions"
+            "backlogCompressions",
+            "lootboxBuys"
         ];
-        uint256[25] memory vals = [
+        uint256[26] memory vals = [
             handler.ghost_checks(),
             handler.ghost_nextDayChecks(),
             handler.ghost_probeRequests(),
@@ -154,10 +177,11 @@ contract AdvanceLiveness is DeployProtocol {
             handler.ghost_biasedReachedLpd(),
             game.gameOver() ? 1 : 0,
             1,
-            handler.ghost_backlogCompressions()
+            handler.ghost_backlogCompressions(),
+            handler.ghost_lootboxBuys()
         ];
         string memory line = "LIVENESS_COVERAGE";
-        for (uint256 i = 0; i < 25; i++) {
+        for (uint256 i = 0; i < 26; i++) {
             string memory k = string.concat("LIVE_COV_", keys[i]);
             uint256 acc = vm.envOr(k, uint256(0));
             // maxLevel is a max, everything else a sum
@@ -176,7 +200,11 @@ contract AdvanceLiveness is DeployProtocol {
             " backlogCompressions=",
             vm.toString(handler.ghost_backlogCompressions()),
             " backlogMaxOwed=",
-            vm.toString(handler.ghost_backlogMaxOwed())
+            vm.toString(handler.ghost_backlogMaxOwed()),
+            " lootboxBuys=",
+            vm.toString(handler.ghost_lootboxBuys()),
+            " justifiedEndings=",
+            vm.toString(handler.ghost_justifiedEndings())
         );
         console.log(run);
         if (handler.ghost_violations() != 0) _logViolation(handler.firstViolation());
@@ -191,10 +219,10 @@ contract AdvanceLiveness is DeployProtocol {
         // daily stalls) from 48 runs. middayLatchOnLpdFrozenPool (3 in 65 runs) is too rare to require.
         uint256 runs = vm.envOr("LIVE_COV_runs", uint256(0));
         if (runs < 16) return;
-        string[15] memory common = [
+        string[16] memory common = [
             "checks", "nextDayChecks", "probeRequests", "probeOnLpd", "lpdSeals", "turboSeals", "normalSeals",
             "levelTransitions", "x9Levels", "middayRequests", "middayLatchSet", "middayLatchOnLpd", "vrfStallsMidday",
-            "foilBuys", "biasedReachedLpd"
+            "foilBuys", "biasedReachedLpd", "lootboxBuys"
         ];
         for (uint256 i; i < common.length; ++i) {
             assertGt(vm.envOr(string.concat("LIVE_COV_", common[i]), uint256(0)), 0,
@@ -272,6 +300,97 @@ contract AdvanceLiveness is DeployProtocol {
         console.log("jackpot backlog compressions", h.ghost_backlogCompressions());
         console.log("jackpot backlog max owed entries", h.ghost_backlogMaxOwed());
         console.log("jackpot backlog max cranks", h.ghost_maxCranks());
+    }
+
+    /// @dev Replayed from a persisted 72-call deep-campaign failure. In the final check a human-box
+    ///      crank queues about 2.7M owed entries on the far-future lane two levels up (five
+    ///      holders), and about 560 Tickets calls drain it, past the flat per-cycle budget. The
+    ///      ranked window opens at the budget and the queue empties inside it, so the drain is
+    ///      proven without compression.
+    function test_FarFutureBacklogDrainsInsideTheWindow() public {
+        AdvanceLivenessHandler h = handler;
+        _farFutureBacklogSequence(h);
+        if (h.ghost_violations() != 0) _logViolation(h.firstViolation());
+        assertEq(h.ghost_violations(), 0, "far-future backlog must reach idle");
+        assertEq(h.ghost_actions(), 72, "every replayed action ran");
+        assertEq(h.ghost_backlogCompressions(), 0, "the queue drained inside the window");
+        assertGe(h.ghost_maxCranks(), 600, "non-vacuity: the drain ran past the flat budget");
+        console.log("far-future backlog max cranks", h.ghost_maxCranks());
+    }
+
+    function _farFutureBacklogSequence(AdvanceLivenessHandler h) internal {
+        h.actLastPurchaseDayMidday(274);
+        h.actOpenBoxes(170920198);
+        h.actNextDay(7461, 1182342661);
+        h.actStall(135487606500527586351396372573970);
+        h.actWhalePass(0);
+        h.actNextDay(25152830347282153503188519620118582881988189301823, 807994665343541085186688395858116735451107686371994668632633347684632836);
+        h.actFoil(1);
+        h.actStall(271015127546492286);
+        h.actMiddayRequest(10530, 15843);
+        h.actMiddayRequest(16383, 51008);
+        h.actWarpWithinDay(29585757801757273);
+        h.actMiddayRequest(9891, 40000);
+        h.actNextDay(195385690415954796681348944496431052, 300247704870238078677354724831087287);
+        h.actWarpWithinDay(20767640357497770256279353060187481269882393874846213356981);
+        h.actMiddayRequest(609546087, 11525759209690640403245518757014742738608);
+        h.actOpenBoxes(299);
+        h.actSeedPool(121694457631354755510522309771267);
+        h.actRunToIdle(7067244);
+        h.actCrank(21392, 4200);
+        h.actNextDay(151, 6471);
+        h.actMiddayRequest(18354, 64);
+        h.actNextDay(1592938749427352, 10193259210801627536606023519637210985769338823634901);
+        h.actFulfill();
+        h.actWarpWithinDay(64408888034188890720070650829666195471956032333875740335693);
+        h.actSeedPool(197);
+        h.actWhalePass(115792089237316195423570985008687907853269984665640564039457584007913129639934);
+        h.actCrank(40000, 10000000000000000);
+        h.actWhalePass(1334);
+        h.actOpenBoxes(75376775);
+        h.actFoil(8529708965949716113068400558660783296355391638931501);
+        h.actSeedPool(69130708002671459875891056038483667730483996010888719835580737139095618);
+        h.actFulfill();
+        h.actNextDay(695529900000000000000000, 7000);
+        h.actSeedPool(33675099802033142722284742171626861);
+        h.actNextDay(4033, 127);
+        h.actMiddayRequest(142573, 431029027849377293009099935400);
+        h.actNextDay(271, 1670);
+        h.actBuyTickets(540582017019437939590336746323671769881342, 749163715548394569311016492773352054539982728864150183338766563850192230);
+        h.actSeedPool(72370055827242515480310246955150653346168791186507307785844490411625550981024);
+        h.actFoil(17101159876);
+        h.actMiddayRequest(230450, 18472);
+        h.actSeedPool(2300000);
+        h.actWarpWithinDay(2425861200000000000);
+        h.actStall(925248084803030739962363);
+        h.actWarpWithinDay(73274681551368994924207535070198042713292093615344769114943325267790982571728);
+        h.actFulfill();
+        h.actCrank(144, 21283);
+        h.actNextDay(33, 15574);
+        h.actWarpWithinDay(198706581);
+        h.actMiddayRequest(1048275337840070235943100006270253348235546146472015940475531694073093297336, 49632);
+        h.actCrank(136, 220);
+        h.actFoil(296559413407705156846667172373792659201822231808113863242551897620482);
+        h.actFoil(2400000);
+        h.actFulfill();
+        h.actOpenBoxes(33786);
+        h.actNextDay(18734, 72370055827242515480310246955150653346168791186507307785844490411625550990688);
+        h.actBuyTickets(1, 252172160071787583100405538257);
+        h.actOpenBoxes(594730600550082);
+        h.actNextDay(15889, 17499);
+        h.actNextDay(30, 2203);
+        h.actFulfill();
+        h.actCrank(99767263412294512300870728527097100384088503632307663483594949343659103765790, 40397545929600181636417047310492680856735821878925485025261764560649566326334);
+        h.actFulfill();
+        h.actFoil(19472803273692390626381003004625429934);
+        h.actMiddayRequest(450400, 21388);
+        h.actStall(72370055827242515474033145219763972582333001763299641369742134967161516481472);
+        h.actMiddayRequest(1000000000, 279);
+        h.actRunToIdle(31566534335);
+        h.actMiddayRequest(40605464961392864732564, 2741784328782609243352012543);
+        h.actFulfill();
+        h.actFulfill();
+        h.actNextDay(535705892984595775627082949891588200867428984749124026489312514865, 43510324585678702396257909749461766590921469660499526204881869305016456411);
     }
 
     /// @dev The first 33 actions of that sequence; its 34th (actWhalePass(4570)) runs the
@@ -367,9 +486,66 @@ contract AdvanceLiveness is DeployProtocol {
         assertEq(handler.ghost_violations(), 0, "liveness violation in the biased scenario");
     }
 
+    /// @dev Oracle self-check: a mining call that latches terminal state with no ending due is
+    ///      flagged, through the same wrapper every handler mining call uses.
+    function test_OracleFlagsPrematureEnding() public {
+        handler.actRunToIdle(0);
+        assertEq(handler.ghost_violations(), 0, "healthy idle first");
+        bytes memory code = address(game).code;
+        address impl = address(uint160(0xC0DE51));
+        vm.etch(impl, code);
+        vm.etch(address(game), address(new PrematureLatcher(impl)).code);
+        handler.oracleProbeMine();
+        vm.etch(address(game), code);
+        assertEq(handler.ghost_violations(), 1, "premature latch flagged");
+        assertEq(handler.firstViolation().code, handler.V_UNJUSTIFIED_ENDING());
+    }
+
+    /// @dev A real deadman ending (no certified day for 14 days) is justified, not flagged.
+    function test_OracleAcceptsDeadmanEnding() public {
+        handler.actRunToIdle(0);
+        vm.warp(block.timestamp + 15 days);
+        for (uint256 i; i < 50 && !game.gameOver(); ++i) handler.oracleProbeMine();
+        assertTrue(game.gameOver(), "deadman ended the game");
+        assertEq(handler.ghost_violations(), 0, "a due ending is not premature");
+        assertEq(handler.ghost_justifiedEndings(), 1, "the latch was observed and justified");
+    }
+
+    /// @dev Oracle self-check: an idle, sealed day whose completion was never certified would
+    ///      stop the deadman clock; the check reports it instead of calling the day sealed.
+    function test_OracleFlagsUnstampedCompletion() public {
+        handler.actRunToIdle(0);
+        _clearDailyComplete();
+        handler.actFulfill();
+        assertEq(handler.ghost_violations(), 1, "uncertified idle day flagged");
+        assertEq(handler.firstViolation().code, handler.V_COMPLETION_UNSTAMPED());
+    }
+
+    /// @dev Oracle self-check: with completion stuck the next wall day never requests; the
+    ///      logical day (and its old word) would otherwise pass as sealed.
+    function test_OracleFlagsDayNeverRequested() public {
+        handler.actRunToIdle(0);
+        _clearDailyComplete();
+        vm.warp(_nextDayStart() + 1 hours);
+        handler.actFulfill();
+        assertEq(handler.ghost_violations(), 1, "unrequested wall day flagged");
+        assertEq(handler.firstViolation().code, handler.V_DAY_NOT_REQUESTED());
+    }
+
+    function _clearDailyComplete() internal {
+        bytes32 slot = bytes32(GameSlots.DAILY_COMPLETE);
+        uint256 word = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(word & ~(uint256(0xFF) << (GameSlots.DAILY_COMPLETE_OFFSET * 8))));
+    }
+
+    function _nextDayStart() internal view returns (uint256) {
+        uint256 ts = vm.getBlockTimestamp();
+        return ts - ((ts - 82_620) % 1 days) + 1 days;
+    }
+
     function _logViolation(AdvanceLivenessHandler.Violation memory v) internal pure {
         console.log("=== LIVENESS VIOLATION ===");
-        console.log("code (1 noQuiesce,2 terminalRevert,3 latchStuck,4 notSealed,5 stagedNoWorker,6 advanceDueLies,7 requestBlocked,8 noProgress,9 backlogUnverified)", uint256(v.code));
+        console.log("code (1 noQuiesce,2 terminalRevert,3 latchStuck,4 notSealed,5 stagedNoWorker,6 advanceDueLies,7 requestBlocked,8 noProgress,9 backlogUnverified,10 unjustifiedEnding,11 dayNotRequested,12 completionUnstamped)", uint256(v.code));
         console.log("phase (0 same-day,1 after CRAPS probe,2 next-day,3 next-day+probe)", uint256(v.phase));
         console.logBytes4(v.selector);
         console.log("cranks", uint256(v.cranks));
@@ -391,5 +567,8 @@ contract AdvanceLiveness is DeployProtocol {
         console.log("farFuture len L+1 / L+2", v.ffLenL1, v.ffLenL2);
         console.log("foilPending", v.foilPending);
         console.log("timestamp", uint256(v.timestamp));
+        console.log("lastDailyCompletedAt", v.lastCompletedAt);
+        console.log("lastDailyRequestWallDay", uint256(v.lastRequestWallDay));
+        console.log("dailyComplete", v.dailyComplete);
     }
 }

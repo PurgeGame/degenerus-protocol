@@ -193,6 +193,12 @@ jobs:
           ) > >(tee -a .audit-test-logs/foundry/runner-resources.log) 2>&1 &
           resource_monitor_pid=$!
           trap 'kill "$resource_monitor_pid" 2>/dev/null || true; wait "$resource_monitor_pid" 2>/dev/null || true' EXIT
+          # Push, PR and manual runs replay the pinned seed, so a red result reproduces exactly. The
+          # weekly scheduled run explores a fresh one; the runner records it with the evidence.
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            export FOUNDRY_FUZZ_SEED="$GITHUB_RUN_ID"
+            echo "fuzz seed: $FOUNDRY_FUZZ_SEED"
+          fi
           if [ "$TEST_GROUP" = integration-gas ]; then
             FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1
           else
@@ -637,3 +643,28 @@ jobs:
             cache/invariant/
           include-hidden-files: true
           if-no-files-found: ignore
+
+  # A tag is cut only on a manual or scheduled run whose every assurance job passed on that exact
+  # commit: build gates, all Foundry groups, the mainnet fork, Hardhat, Slither integrity, Halmos
+  # (a solver timeout fails it), the deep lifecycles and every deep invariant partition. Aderyn and
+  # the Slither detector step are reports that need review, not gates.
+  release-gate:
+    name: Release gate (every assurance job on this commit)
+    needs: [foundry-build, foundry-tests, foundry-fork, hardhat, slither, deep-guarantees, deep-selection,
+      deep-lifecycles, deep-invariants]
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every assurance job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "commit: $GITHUB_SHA"
+          python3 - <<'PYTHON'
+          import json, os, sys
+          needs = json.loads(os.environ["RESULTS"])
+          bad = {job: v["result"] for job, v in needs.items() if v["result"] != "success"}
+          for job, v in sorted(needs.items()):
+              print(f"{v['result']:>10}  {job}")
+          sys.exit(f"not releasable: {bad}" if bad else 0)
+          PYTHON
