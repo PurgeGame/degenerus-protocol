@@ -103,6 +103,10 @@ test-foundry` and `make test-hardhat` include the structural prerequisites.
 | Paid mining through level 31 | `test/gas/NativePaidLifecycle.t.sol` |
 | Subscriber gas/refusal recovery | `test/gas/SubscriberAdmissionRecovery.t.sol` |
 | Solvency, RNG freeze and liveness | `test/fuzz/invariant/` |
+| Coinflip bank, carry and ride-bonus ledger | `test/fuzz/invariant/FlipCarryAccounting.inv.t.sol`, `test/fuzz/invariant/FlipCarryDegenesis.inv.t.sol`, `test/fuzz/invariant/FlipCarryWidths.inv.t.sol` |
+| Mining-call judge and first-unit admission gas | `test/fuzz/helpers/ChainCallJudge.sol`, `test/fuzz/ChainCallJudge.t.sol` |
+| Unjustified endings | `test/fuzz/helpers/EndingWitness.sol`, `test/fuzz/invariant/AdvanceLiveness.inv.t.sol`, `test/fuzz/invariant/AnyInputSafety.inv.t.sol` |
+| 100-box human order inside one transaction | `test/gas/HumanOrderNativeGas.t.sol` |
 | DGVE governance | `test/governance/` |
 
 A bounded test run does not establish a universal proof. Imported helper suites may execute in
@@ -143,8 +147,36 @@ do not prove a complete lifecycle or resilience to arbitrary external asset fail
 
 Defaults are 1,000 fuzz cases and 256 invariant runs at depth 128. `deep` defaults to 1,000
 invariant runs at depth 256; explicit per-test overrides apply. CI partitions expensive suites with
-`scripts/deep-invariant-matrix.py`, including ten independently seeded AdvanceLiveness partitions.
+`scripts/deep-invariant-matrix.py`, including twenty independently seeded AdvanceLiveness partitions
+of 50 runs each.
 Coverage guards and actual run/call counts matter as well as pass counts.
+
+Stateful handlers route every `mineRun` they would otherwise swallow through `ChainCallJudge`, and
+each suite asserts `judgeCheck`. Where a site does not cap gas itself, the judge reads
+`minerAction()` as the same caller and calls with gas drawn from that action's
+`MineFlipAdmission.minGas` up to 2^24 − 21,000 (a quarter at the minimum, a quarter within 300,000
+above it, the rest up to the cap). Idle must answer `NoWork` and Wait `RngNotReady`; any other
+selected action must make progress, so a gas refusal at or above the minimum is a violation. An
+action whose declared minimum exceeds the cap, the 100-box human order, is drawn at the cap;
+`HumanOrderNativeGas` separately completes a maximum order cold inside one transaction. While work
+remains, the handler's original call follows, so handlers keep their pace. `EndingWitness`
+re-derives the 14-day deadman, the 14-day unpublished request and the 30-day purchase timeout from
+raw storage: AdvanceLiveness and AnyInputSafety fail when terminal state latches with no ending due,
+and AdvanceLiveness also requires an idle, sealed day to have requested its wall day and stamped its
+completion. AnyInputSafety's guided claim doors steer claims that random input does not reach to
+acceptance and check each accepted claim's effect. The FlipCarry suites hold an independent model of
+each tracked player's wallet, bank, carry, cursor and auto-rebuy settings; after every action raw
+storage must equal the model and the tracked ledger must balance.
+
+AdvanceLiveness allows 500 mining calls per cycle; a cycle restarts when the logical day advances.
+Past that budget, with an active ticket queue of 1–4,096 holders, it requires a ranking function
+instead of a count: for 100 calls the queue's owed total must fall on every ticket call and rise on
+none (at most four other calls), and only then is each holder cut to 1,024 entries inside the check's
+snapshot, verified through `entriesOwedView`, and a new cycle granted so the rest of the judgment
+runs. Two typed replays of persisted deep
+failures pin this: a Degenerette-jackpot backlog that is compressed, and a far-future backlog that
+drains inside the window. Non-vacuity floors that a single run can legitimately miss (for example a
+run that reaches the dead-VRF ending before any Degenesis cohort is priced) accumulate across runs.
 
 The Degenesis completion driver drains at the same timestamp when a 300-call chunk fills with work
 still ready. Its healthy completion path is bounded by 40 chunks / 12,000 calls, with independent
@@ -154,7 +186,7 @@ that draining ready work does not manufacture a deadline by advancing the clock.
 call boundaries do not reproduce every invariant-executor warmth property. Fixed-time draining models
 cooperating callers, not transaction throughput.
 
-Results apply to their captured inputs and configured limits. The complete 90-partition deep
+Results apply to their captured inputs and configured limits. The complete 93-partition deep
 invariant matrix and hosted CI must be assessed on the final handoff inputs; a focused pass or a
 collection of per-file passes on different revisions is not a full-matrix result. Local toolchain
 versions that differ from CI also require separate validation. Parser/IR integrity checks do not

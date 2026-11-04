@@ -67,22 +67,25 @@ INVARIANT_SHARDS = 4
 # profile). CI shards are filled heaviest-first onto the lightest shard so each job fits the
 # hosted time limit; unlisted roots count as one minute. Only the relative sizes matter.
 INVARIANT_COST_MINUTES = {
+    "test/fuzz/invariant/RngFreezeDegenesisTimeline.inv.t.sol": 41,
     "test/fuzz/invariant/AdvanceLiveness.inv.t.sol": 38,
+    "test/fuzz/invariant/CrapsRngSeal.inv.t.sol": 37,
     "test/fuzz/invariant/AnyInputSafetyDegenesis.inv.t.sol": 35,
-    "test/fuzz/invariant/RngFreezeDegenesisTimeline.inv.t.sol": 34,
-    "test/fuzz/invariant/CrapsRngSeal.inv.t.sol": 31,
     "test/fuzz/invariant/CompositionDegenesis.inv.t.sol": 21,
     "test/fuzz/invariant/CrapsRealWiringConservation.inv.t.sol": 20,
-    "test/fuzz/invariant/DegenesisTimelineVariants.inv.t.sol": 15,
-    "test/fuzz/invariant/PoolConservation.inv.t.sol": 14,
+    "test/fuzz/invariant/DegenesisTimelineVariants.inv.t.sol": 17,
     "test/fuzz/invariant/LoanAccounting.inv.t.sol": 14,
+    "test/fuzz/invariant/PoolConservation.inv.t.sol": 14,
     "test/fuzz/invariant/PoolConservationDegenesis.inv.t.sol": 11,
-    "test/fuzz/invariant/GameFSMDegenesis.inv.t.sol": 8,
+    "test/fuzz/invariant/GameFSMDegenesis.inv.t.sol": 10,
     "test/fuzz/invariant/DegenesisSolvency.inv.t.sol": 8,
+    "test/fuzz/invariant/FlipCarryDegenesis.inv.t.sol": 8,
+    "test/fuzz/invariant/FlipCarryWidths.inv.t.sol": 7,
+    "test/fuzz/invariant/FlipCarryAccounting.inv.t.sol": 6,
     "test/fuzz/invariant/AnyInputSafety.inv.t.sol": 5,
     "test/fuzz/invariant/WalletIdTruth.inv.t.sol": 5,
-    "test/fuzz/invariant/SeatCapDegenesis.inv.t.sol": 4,
     "test/fuzz/invariant/Composition.inv.t.sol": 4,
+    "test/fuzz/invariant/SeatCapDegenesis.inv.t.sol": 4,
     "test/fuzz/invariant/WalletIdTruthDegenesis.inv.t.sol": 4,
 }
 # Sources that only build against one profile's packaging. The Craps outcome-injection mock

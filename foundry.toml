@@ -15,10 +15,10 @@ evm_version = "osaka"
 # only — no effect on bytecode or contract sizes.
 extra_output = ["storageLayout"]
 
-# Gas limit for integration tests (default 2^64 - 1 for unit tests,
-# but block gas limit can restrict execution of multi-level game tests)
-gas_limit = 30_000_000_000
-block_gas_limit = 30_000_000_000
+# Per-test gas for integration tests and typed replays of long mining drains (the largest
+# replay uses about 28B); the block gas limit matches.
+gas_limit = 100_000_000_000
+block_gas_limit = 100_000_000_000
 
 # Pin block.timestamp so test setUp is DETERMINISTIC. Without this, the Foundry
 # nightly defaults block.timestamp to the real wall clock, and a protocol

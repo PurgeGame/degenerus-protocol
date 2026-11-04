@@ -81,7 +81,7 @@ forks, deep invariants and symbolic checks. Run the source hash check above befo
 fixture-driven tests. [The index](README.md) links mechanism-specific references.
 
 Verification evidence applies only to its captured inputs. Focused regressions do not certify the
-complete Foundry/Hardhat battery or the 90-partition deep invariant matrix on the final handoff.
+complete Foundry/Hardhat battery or the 93-partition deep invariant matrix on the final handoff.
 Hosted CI and the final audit commit/tag require their own validation; see [Testing](TESTING.md).
 
 ## Project High-severity criteria
