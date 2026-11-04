@@ -1500,6 +1500,6 @@
     "test/fuzz/invariant/RngWindowFreeze.inv.t.sol",
     "test/repro/MatureComposition.t.sol"
   ],
-  "input_manifest": "20261103T214625.822827Z-3e6dadb1/focused-01-inputs.json",
-  "input_manifest_sha256": "a2a43b308d4f2e72b44ba938ab876cd3d147625c148ef64aaae5980214c33f51"
+  "input_manifest": "20261104T032229.714327Z-90ecf67c/focused-01-inputs.json",
+  "input_manifest_sha256": "5327c951bd2ccd8fa98fb312298f156f46966215cd7fbbc0ac6673a7f076c37f"
 }

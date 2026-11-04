@@ -87,6 +87,20 @@ contract AdvanceLivenessHandler is Test {
     // Without moving time the daily request gate allows one new logical day per wall day.
     uint256 public constant MAX_DAY_ADVANCES = 2;
     uint256 public constant MAX_CRANKS = MAX_CRANKS_PER_CYCLE * (MAX_DAY_ADVANCES + 1);
+    // A legitimate backlog can outlast that budget: a top-tier Degenerette spin's pool-capped
+    // excess becomes one lootbox, which can queue tens of millions of entries for one wallet at
+    // one level (57.6M entries, about 12,000 calls, in one recorded case). Past the budget the
+    // check demands a ranking function instead of a count: for BACKLOG_WINDOW consecutive calls
+    // the active read queue's owed total must strictly fall on every Tickets call, and any other
+    // call (at most BACKLOG_SLACK of them) must not raise it. Only then is each entry's owed
+    // count cut to BACKLOG_COMPRESS_TO inside the check's snapshot, verified through
+    // entriesOwedView, and one fresh cycle budget granted for the drain's tail and the full
+    // judgment that follows.
+    uint256 public constant BACKLOG_WINDOW = 100;
+    uint256 public constant BACKLOG_SLACK = 4;
+    uint256 public constant BACKLOG_COMPRESS_TO = 1024;
+    uint256 public constant BACKLOG_MAX_QUEUE = 4096;
+    uint256 public constant MAX_BACKLOG_EXTENSIONS = 2; // ranked budget restarts per crank-to-quiescence call
     uint256 public constant NEXT_DAY_CHECK_EVERY = 4;
 
     // ---- error selectors (AdvanceModule / Storage) ----
@@ -103,6 +117,8 @@ contract AdvanceLivenessHandler is Test {
     bytes4 private constant E_RNG_LOCKED = bytes4(keccak256("RngLocked()"));
     // Test-local marker: the crank succeeded without writing engine storage.
     bytes4 private constant E_NO_PROGRESS_MARK = bytes4(keccak256("LivenessNoProgress()"));
+    // Test-local marker: the backlog compression could not verify its write through entriesOwedView.
+    bytes4 private constant E_BACKLOG_UNVERIFIED_MARK = bytes4(keccak256("LivenessBacklogUnverified()"));
 
     // ---- violation codes ----
     uint8 public constant V_NONE = 0;
@@ -114,6 +130,7 @@ contract AdvanceLivenessHandler is Test {
     uint8 public constant V_ADVANCE_DUE_LIES = 6; // advanceDue() true but mineFlip reverts
     uint8 public constant V_REQUEST_BLOCKED = 7; // the mid-day request worker blocked by a liveness gate
     uint8 public constant V_NO_PROGRESS = 8; // a successful mineFlip wrote no engine storage
+    uint8 public constant V_BACKLOG_UNVERIFIED = 9; // compression's raw write disagreed with entriesOwedView
 
     struct Violation {
         uint8 code;
@@ -157,6 +174,8 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_maxCranks;
     uint256 public ghost_maxCranksPerCycle;
     uint256 public ghost_maxDayAdvances;
+    uint256 public ghost_backlogCompressions; // ranked backlogs compressed inside a check
+    uint256 public ghost_backlogMaxOwed; // largest owed total (entries) at a compression
     uint256 public ghost_lpdSeals; // lastPurchaseDay false -> true
     uint256 public ghost_turboSeals; // ... with JACKPOT_TURBO
     uint256 public ghost_normalSeals;
@@ -481,6 +500,8 @@ contract AdvanceLivenessHandler is Test {
         if (maxCr > ghost_maxCranks) ghost_maxCranks = maxCr;
         if (cycles.maxPerCycle > ghost_maxCranksPerCycle) ghost_maxCranksPerCycle = cycles.maxPerCycle;
         if (cycles.maxAdvances > ghost_maxDayAdvances) ghost_maxDayAdvances = cycles.maxAdvances;
+        ghost_backlogCompressions += cycles.compressions;
+        if (cycles.maxBacklogOwed > ghost_backlogMaxOwed) ghost_backlogMaxOwed = cycles.maxBacklogOwed;
         if (probeFlags & 1 != 0) ghost_probeRequests++;
         if (probeFlags & 2 != 0) ghost_probeOnLpd++;
         if (probeFlags & 4 != 0) ghost_probeOnLpdFrozenPool++;
@@ -498,15 +519,33 @@ contract AdvanceLivenessHandler is Test {
     struct CycleStats {
         uint256 maxPerCycle;
         uint256 maxAdvances;
+        uint256 compressions;
+        uint256 maxBacklogOwed;
+    }
+
+    /// Ranking window over one read queue (see BACKLOG_WINDOW).
+    struct BacklogWindow {
+        bool active;
+        uint24 key;
+        uint256 steps;
+        uint256 slack;
     }
 
     function _crankToQuiescence(CycleStats memory stats) internal returns (bool quiet, bytes4 sel, uint256 cranks) {
         uint24 cycleDay = _dailyIdx();
         uint256 cycleStart;
         uint256 advances;
+        uint256 extensions;
+        BacklogWindow memory w;
         for (cranks = 0; ; cranks++) {
             if (game.gameOver()) return (true, bytes4(0), cranks);
             _fulfillPending();
+            uint8 act;
+            uint256 owedBefore;
+            if (w.active) {
+                act = _minerActionNow();
+                owedBefore = _queueOwed(w.key);
+            }
             vm.record();
             (bool ok, bytes memory ret) = address(game).call{gas: MAX_CRANK_GAS}(
                 abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
@@ -525,8 +564,83 @@ contract AdvanceLivenessHandler is Test {
             }
             uint256 inCycle = cranks + 1 - cycleStart;
             if (inCycle > stats.maxPerCycle) stats.maxPerCycle = inCycle;
-            if (inCycle > MAX_CRANKS_PER_CYCLE) return (false, bytes4(0), cranks + 1);
+            if (w.active) {
+                uint256 owedAfter = _queueOwed(w.key);
+                if (act == uint8(DegenerusGameStorage.MinerAction.Tickets)) {
+                    if (owedAfter >= owedBefore) return (false, bytes4(0), cranks + 1);
+                } else if (owedAfter > owedBefore || ++w.slack > BACKLOG_SLACK) {
+                    return (false, bytes4(0), cranks + 1);
+                }
+                if (owedAfter == 0 || ++w.steps == BACKLOG_WINDOW) {
+                    // A queue that drained inside the window needs no compression; either way
+                    // every call in it was ranked, so the cycle budget restarts.
+                    if (++extensions > MAX_BACKLOG_EXTENSIONS) return (false, bytes4(0), cranks + 1);
+                    if (owedAfter != 0) {
+                        if (!_compressBacklog(w.key)) return (false, E_BACKLOG_UNVERIFIED_MARK, cranks + 1);
+                        stats.compressions++;
+                        if (owedAfter >> 8 > stats.maxBacklogOwed) stats.maxBacklogOwed = owedAfter >> 8;
+                    }
+                    w.active = false;
+                    cycleStart = cranks + 1;
+                }
+                continue;
+            }
+            if (inCycle > MAX_CRANKS_PER_CYCLE) {
+                uint24 key = _activeTicketKey();
+                uint256 n = key == 0 ? 0 : TQ.length(address(game), key);
+                if (n == 0 || n > BACKLOG_MAX_QUEUE) return (false, bytes4(0), cranks + 1);
+                w = BacklogWindow({active: true, key: key, steps: 0, slack: 0});
+            }
         }
+    }
+
+    /// The queue the ticket drain is working: ticketLevel holds the level with its slot and
+    /// far-future bits (zero between drains).
+    function _activeTicketKey() internal view returns (uint24) {
+        uint256 word = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_LEVEL)));
+        return uint24(word >> (GameSlots.TICKET_LEVEL_OFFSET * 8));
+    }
+
+    /// Owed balance of one read queue, in 1/256 entries (whole entries above the fractional byte),
+    /// so the final fractional draw of an entry still lowers it.
+    function _queueOwed(uint24 key) internal view returns (uint256 total) {
+        uint256 n = TQ.length(address(game), key);
+        for (uint256 i; i < n; ++i) {
+            total += uint256(TQ.owedById(address(game), key, TQ.ownerIdAt(address(game), key, i))) & ((uint256(1) << 40) - 1);
+        }
+    }
+
+    function _minerActionNow() internal view returns (uint8 act) {
+        (bool ok, bytes memory ret) = address(game).staticcall(abi.encodeWithSignature("minerAction()"));
+        act = ok && ret.length >= 32 ? uint8(abi.decode(ret, (uint256))) : type(uint8).max;
+    }
+
+    /// Cut every entry of `key` above BACKLOG_COMPRESS_TO down to it. Each raw read is first
+    /// checked against entriesOwedView, and each write is checked through it afterwards, so a
+    /// layout change fails the check instead of compressing the wrong word.
+    function _compressBacklog(uint24 key) internal returns (bool) {
+        uint24 lvl = key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
+        uint256 n = TQ.length(address(game), key);
+        for (uint256 i; i < n; ++i) {
+            uint32 id = TQ.ownerIdAt(address(game), key, i);
+            uint80 packed = TQ.owedById(address(game), key, id);
+            uint32 owed = uint32(packed >> 8);
+            if (owed <= BACKLOG_COMPRESS_TO) continue;
+            address player = TQ.ownerAt(address(game), key, lvl, i);
+            if (game.walletIdOf_g3120(player) != id) return false;
+            uint32 viewBefore = game.entriesOwedView(lvl, player);
+            uint256 raw = uint256(uint32(TQ.owedById(address(game), lvl, id) >> 8))
+                + uint32(TQ.owedById(address(game), lvl | TICKET_SLOT_BIT, id) >> 8)
+                + uint32(TQ.owedById(address(game), lvl | TICKET_FAR_FUTURE_BIT, id) >> 8);
+            if (uint32(raw) != viewBefore) return false;
+            TQ.setOwedById(address(game), key, id,
+                (packed & ~(uint80(type(uint32).max) << 8)) | (uint80(BACKLOG_COMPRESS_TO) << 8));
+            if (uint32(TQ.owedById(address(game), key, id) >> 8) != BACKLOG_COMPRESS_TO) return false;
+            unchecked {
+                if (viewBefore - game.entriesOwedView(lvl, player) != owed - uint32(BACKLOG_COMPRESS_TO)) return false;
+            }
+        }
+        return true;
     }
 
     /// Engine progress lands in Game storage or in a worker contract it dispatches to.
@@ -549,7 +663,11 @@ contract AdvanceLivenessHandler is Test {
     }
 
     function _judge(bool quiet, bytes4 sel, uint256 cranks, uint8 phase) internal view returns (Violation memory v) {
-        if (!quiet) return _snapshot(sel == E_NO_PROGRESS_MARK ? V_NO_PROGRESS : V_NO_QUIESCENCE, sel, cranks, phase);
+        if (!quiet) {
+            uint8 code = sel == E_NO_PROGRESS_MARK ? V_NO_PROGRESS
+                : sel == E_BACKLOG_UNVERIFIED_MARK ? V_BACKLOG_UNVERIFIED : V_NO_QUIESCENCE;
+            return _snapshot(code, sel, cranks, phase);
+        }
         if (_midDayLatch() != 0) return _snapshot(V_LATCH_STUCK, sel, cranks, phase);
         if (sel != E_NOT_TIME_YET) return _snapshot(V_TERMINAL_REVERT, sel, cranks, phase);
         uint24 logicalDay = game.currentDayView_g542950();

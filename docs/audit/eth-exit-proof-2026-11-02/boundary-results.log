@@ -1,5 +1,5 @@
 Compiling 309 files with Solc 0.8.38
-Solc 0.8.38 finished in 213.43s
+Solc 0.8.38 finished in 185.55s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
     --> lib/forge-std/src/Vm.sol:1339:9:
@@ -1458,7 +1458,7 @@ Logs:
 [PASS] test_unansweredMiddayRequestAtDeadlineEndsDeterministically() (gas: 6803175)
 [PASS] test_weightsPastSixtyFourBitsClaimExactly() (gas: 4764131)
 [PASS] test_wordDeliveredAfterTheWindowIsDiscarded() (gas: 4057682)
-Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 354.26ms (344.25ms CPU time)
+Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 325.73ms (319.73ms CPU time)
 
 Ran 8 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfLivenessTest
 [PASS] test_backlogWordIsNeverDead() (gas: 105838)
@@ -1469,7 +1469,7 @@ Ran 8 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfLivenessTest
 [PASS] test_onlyAPublishedWordKeepsVrfAlivePastTheWindow() (gas: 69160)
 [PASS] test_retryBitKeepsTheWindowAndTheDay() (gas: 61798)
 [PASS] test_stallAcrossDeadlineWaitsForTheVrfDeadWindow() (gas: 61887)
-Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 364.64µs (235.17µs CPU time)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 351.54µs (236.52µs CPU time)
 
 Ran 8 tests for test/fuzz/DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
 [PASS] testBatchedPayoutEqualsPerSpinExpectation_Tier1() (gas: 458564)
@@ -1498,7 +1498,7 @@ Logs:
 
 [PASS] testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() (gas: 596252)
 [PASS] test_SharedBoardAcrossPlayersCurrenciesAndBets() (gas: 644398)
-Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 12.95ms (7.62ms CPU time)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 12.37ms (7.20ms CPU time)
 
 Ran 15 tests for test/fuzz/DegeneretteSingleSymbol.t.sol:DegeneretteSingleSymbolTest
 [PASS] testAllAxesAllHeroesAndWildsAgainstIndependentScoreAndRig() (gas: 398732037)
@@ -1516,23 +1516,23 @@ Ran 15 tests for test/fuzz/DegeneretteSingleSymbol.t.sol:DegeneretteSingleSymbol
 [PASS] testSharedHeroTicketsAndPrefixAcrossPlayersBetsStakesAndEthFlip() (gas: 1793351)
 [PASS] testUnsupportedCurrenciesRejectAtomicallyForEveryFundingRoute() (gas: 700687)
 [PASS] testWildScoringAndNoGoldPremium() (gas: 15769)
-Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 666.97ms (658.00ms CPU time)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 631.69ms (626.44ms CPU time)
 
 Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
 [PASS] test_deployerIsTestContract() (gas: 379)
 [PASS] test_nonceIncrements() (gas: 47513)
 [PASS] test_startingNonce() (gas: 2555)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 81.98µs (25.36µs CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 80.45µs (26.06µs CPU time)
 
 Ran 1 test for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerDegenesis
 [PASS] testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() (gas: 3492048)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.72ms (2.50ms CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.62ms (2.45ms CPU time)
 
 Ran 3 tests for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerShape
 [PASS] testActorsAreInDisjointRange() (gas: 34269)
 [PASS] testGhostCountersStartZero() (gas: 19042)
 [PASS] testTrackedAddrsIsCompleteCover() (gas: 27010)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.84ms (82.03µs CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.76ms (77.38µs CPU time)
 
 Ran 10 tests for test/fuzz/StethLossLiveness.t.sol:StethLossLiveness
 [PASS] testFuzz_stethLossAnyFractionAnyTime(uint256,uint8) (runs: 24, μ: 2452118993, ~: 2402522892)
@@ -1585,11 +1585,11 @@ Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 86.79s (86.78s CPU time)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 77.32s (77.31s CPU time)
 
 Ran 1 test for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanPendingBatchTest
 [PASS] test_HardDeadlineBypassesUnfinishedNormalLoanBatch() (gas: 34363808)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 38.34ms (32.70ms CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 37.33ms (32.01ms CPU time)
 
 Ran 7 tests for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanSettlementTest
 [PASS] testFuzz_RandomBookSettlesOnceAtTheRepaymentPrice(uint256) (runs: 24, μ: 9170488, ~: 9164705)
@@ -1599,11 +1599,11 @@ Ran 7 tests for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanSettlementTes
 [PASS] test_EmptyBookScansInOneCallThenTheEndingProceeds() (gas: 2717537)
 [PASS] test_HardDeadlineInterruptsTerminalLoanBookWithoutReversingPaidPrefix() (gas: 19149137)
 [PASS] test_OlderWordLandingDuringSettlementChangesNothing() (gas: 6842502)
-Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 467.67ms (461.35ms CPU time)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 366.60ms (360.63ms CPU time)
 
 Ran 2 tests for test/repro/VrfRotationMidDayReRoll.t.sol:VrfRotationMidDayReRoll
 [PASS] test_C1_rotationAfterMidDayWordLands_doesNotReRoll(uint256) (runs: 1000, μ: 7501850, ~: 7501850)
 [PASS] test_C1_rotationDuringGenuineMidDayFlight_stillReIssues(uint256) (runs: 1000, μ: 7591535, ~: 7591535)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 15.52s (15.52s CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 13.66s (13.65s CPU time)
 
-Ran 11 test suites in 103.87s (103.86s CPU time): 75 tests passed, 0 failed, 0 skipped (75 total tests)
+Ran 11 test suites in 92.36s (92.36s CPU time): 75 tests passed, 0 failed, 0 skipped (75 total tests)

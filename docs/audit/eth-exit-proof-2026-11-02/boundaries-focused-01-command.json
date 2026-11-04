@@ -1507,6 +1507,6 @@
     "test/fuzz/TerminalLoanSettlement.t.sol",
     "test/repro/VrfRotationMidDayReRoll.t.sol"
   ],
-  "input_manifest": "20261103T222419.096053Z-323042dc/focused-01-inputs.json",
-  "input_manifest_sha256": "a2a43b308d4f2e72b44ba938ab876cd3d147625c148ef64aaae5980214c33f51"
+  "input_manifest": "20261104T035852.686197Z-40bc34c7/focused-01-inputs.json",
+  "input_manifest_sha256": "5327c951bd2ccd8fa98fb312298f156f46966215cd7fbbc0ac6673a7f076c37f"
 }
