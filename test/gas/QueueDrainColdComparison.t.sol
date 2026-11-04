@@ -2,9 +2,7 @@
 pragma solidity 0.8.38;
 
 import {ChunkHarness, TicketChunkProbe} from "./RoundDrainChunkGas.t.sol";
-import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
-import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Preparation commits before the measured transaction. The resumed frozen-pool drain is
@@ -32,8 +30,9 @@ abstract contract QueueDrainColdFixture is TicketChunkProbe {
 
     function setUp() public {
         h = new ChunkHarness();
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
+        // Deployed EIP-170 shells at every module address (Eip170TicketFoil at GAME_TICKET_MODULE,
+        // Eip170DegenesisFoil at GAME_FOILPACK_MODULE), not the raw modules.
+        ProfileModules.installGame(vm);
         (uint256 n, uint32 scaled) = _shape();
         // warm = true: FF marker + cursor 1, so the chunk resumes mid-pool.
         h.seedFrozenPool(TARGET_LVL, n, scaled, 0xCD0000, true);

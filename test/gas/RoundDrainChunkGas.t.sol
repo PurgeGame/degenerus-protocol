@@ -11,8 +11,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
@@ -397,11 +396,10 @@ contract RoundDrainChunkGas is TicketChunkProbe {
     function setUp() public {
         h = new ChunkHarness();
         repricer = new TicketChunkRepricer();
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
-        vm.etch(
-            ContractAddresses.GAME_FOILPACK_MODULE,
-            address(new DegenerusGameFoilPackModule()).code
-        );
+        // The harness delegatecalls the ticket worker at its pinned address: install the deployed
+        // EIP-170 shells (Eip170TicketFoil at GAME_TICKET_MODULE, Eip170DegenesisFoil at
+        // GAME_FOILPACK_MODULE), not the raw modules.
+        ProfileModules.installGame(vm);
     }
 
     /// @dev Call only after every cold measurement in the test. Recording warms access

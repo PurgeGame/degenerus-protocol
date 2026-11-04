@@ -6,38 +6,53 @@ import {Test} from "forge-std/Test.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {IDegenerusGameJackpotModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {Vm} from "forge-std/Vm.sol";
+
+/// @dev TicketGasHarness only seeds storage here. The measured entry delegatecalls the deployed jackpot
+///      shell at GAME_JACKPOT_MODULE (etched by ProfileModules.installGame) in the harness storage, the way
+///      the Game dispatches runDailyJackpot, so the bytecode measured is the deployed one rather than the
+///      raw module compiled into the harness.
+contract DeployedJackpotHost is TicketGasHarness {
+    function runDeployedDailyJackpot(bool inJackpot, uint24 lvl, uint256 word, uint256 allowance)
+        external returns (MineFlipGas.Result memory)
+    {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameJackpotModule.runDailyJackpot.selector, inJackpot, lvl, word, allowance)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (MineFlipGas.Result));
+    }
+}
 
 /// @dev The original heavy 512-holder quadrants, isolated into individual units
 /// with the production first-progress context. A zero allowance commits exactly
 /// one mandatory unit, leaving no budget for an optional following unit.
 contract JackpotEthNativeUnitsTest is Test {
-    TicketGasHarness private h;
+    DeployedJackpotHost private h;
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
 
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
-        h = new TicketGasHarness();
+        // Deployed EIP-170 shells at every module address (jackpot, ticket, foil, whale, ...), not the raw modules.
+        ProfileModules.installGame(vm);
+        h = new DeployedJackpotHost();
         h.seed(LVL, WORD, false);
         h.seedDaily(LVL);
     }
 
     function _one() private returns (MineFlipGas.Result memory) {
-        return h.runDailyJackpot(true, LVL, WORD, MineFlipGas.budget(0, 10_000, true));
+        return h.runDeployedDailyJackpot(true, LVL, WORD, MineFlipGas.budget(0, 10_000, true));
     }
 
     function _measure(uint256 allowance, uint256 expectedWins, bool expectDone) private {
         vm.cool(address(h));
+        vm.cool(ContractAddresses.GAME_JACKPOT_MODULE);
         vm.cool(ContractAddresses.GAME_WHALE_MODULE);
         vm.recordLogs();
-        MineFlipGas.Result memory result = h.runDailyJackpot(true, LVL, WORD, allowance);
+        MineFlipGas.Result memory result = h.runDeployedDailyJackpot(true, LVL, WORD, allowance);
         uint256 used = vm.lastCallGas().gasTotalUsed;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 wins;

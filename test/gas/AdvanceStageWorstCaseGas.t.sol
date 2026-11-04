@@ -2,10 +2,9 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
-import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
+import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -24,16 +23,30 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 // Harness A — live 305-winner daily-ETH jackpot (stages 8 / 11 / 12 ETH leg)
 // =============================================================================
 
-/// @dev Extends the production jackpot module so the inherited external `runTerminalJackpotWork`
-///      executes the live ETH-award loop in THIS contract's storage. That is the IDENTICAL
+/// @dev Storage host and bucket seeder. `runTerminalJackpotWork` delegatecalls the deployed jackpot
+///      shell at GAME_JACKPOT_MODULE (etched by ProfileModules.installGame) in THIS contract's
+///      storage, exactly as the Game dispatches it, so the measured bytecode is the deployed one and
+///      not a module compiled into a harness. It executes the live ETH-award loop, the IDENTICAL
 ///      distribution path (`_resumeEth`) used by:
 ///        - stage 8  runDailyJackpot(false)  purchase-phase
 ///        - stage 11 runDailyJackpot(true)   jackpot-phase
 ///        - stage 12 runTerminalJackpotWork  game-over
 ///      The terminal jackpot pays the fixed 152/104/48/1 = 305 geometry measured here.
-contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
+contract JackpotStageHarness is BucketSeed {
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
         _seedBucketDistinct(lvl, traitId, count, base);
+    }
+
+    function runTerminalJackpotWork(uint256 poolWei, uint24 targetLvl, uint256 rngWord, uint256 allowance)
+        external returns (MineFlipGas.Result memory, uint256)
+    {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGame.runTerminalJackpotWork.selector, poolWei, targetLvl, rngWord, allowance
+            )
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (MineFlipGas.Result, uint256));
     }
 }
 
@@ -123,12 +136,10 @@ contract AdvanceStageWorstCaseGas is Test {
     function setUp() public {
         jp = new JackpotStageHarness();
         tb = new TicketBatchStageHarness();
-        vm.etch(
-            ContractAddresses.GAME_FOILPACK_MODULE,
-            address(new DegenerusGameFoilPackModule()).code
-        );
-        // The ticket harness delegates runTicketWork_g1150 to the ticket module at its pinned address.
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        // Both harnesses delegatecall the module at its pinned address. Install the deployed
+        // EIP-170 shells there (the jackpot shell at GAME_JACKPOT_MODULE, Eip170TicketFoil at
+        // GAME_TICKET_MODULE, Eip170DegenesisFoil at GAME_FOILPACK_MODULE), not the raw modules.
+        ProfileModules.installGame(vm);
     }
 
     /// @dev runTicketWork_g1150 admits ticket checkpoints while its allowance covers the next declared

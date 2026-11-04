@@ -6,15 +6,18 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {ChunkHarness} from "./RoundDrainChunkGas.t.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {DeadTallyCheckpointHarness} from "../repro/DeadTallyGasCheckpoints.t.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 
+/// @dev DegenerusGame is the deployed Game (Eip170Game). `bufferBase` and `bucketRead` measure internal layout
+///      helpers (`_traitBufferBase`, `_bucketLength`, `_bucketIdAtUnchecked`) that the deployed Game does not
+///      expose, so those two stay on this harness. `sampleTraitEntries` is external on the deployed Game; its
+///      tests re-etch the deployed Game runtime over the seeded harness (storage is kept) before measuring.
 contract TraitLayoutReadHarness is DegenerusGame, BucketSeed {
     function bufferBase(uint24 lvl) external pure returns (uint256) { return _traitBufferBase(lvl); }
     function seed(uint24 lvl) external { _seedBucketDistinct(lvl, 7, 64, 0x10000); }
@@ -43,6 +46,21 @@ contract TraitLayoutFoilSeeder is BucketSeed {
         // Suppress the unrelated grand prize path while retaining the terminal level's writes.
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
+    }
+}
+
+/// @dev DeadTallyCheckpointHarness only seeds storage. The measured entry delegatecalls the deployed game-over
+///      shell at GAME_GAMEOVER_MODULE (Eip170Endgame, etched by ProfileModules.installGame) in the harness
+///      storage, the way the Game dispatches the terminal stage.
+contract TraitLayoutTallyHost is DeadTallyCheckpointHarness {
+    function runGameOverAdvanceDeployed(uint24 day, uint24 lvl, uint256 allowance)
+        external returns (bool, uint8, bool, bool)
+    {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
+            abi.encodeWithSelector(DegenerusGameGameOverModule.runGameOverAdvance.selector, day, lvl, allowance)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (bool, uint8, bool, bool));
     }
 }
 
@@ -76,7 +94,7 @@ contract TraitLayoutComparisonTest is Test {
     TraitLayoutMeter private meter;
     TraitLayoutReadHarness private reader;
     ChunkHarness private ticket;
-    DeadTallyCheckpointHarness private tally;
+    TraitLayoutTallyHost private tally;
 
     function setUp() public {
         vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
@@ -84,9 +102,10 @@ contract TraitLayoutComparisonTest is Test {
         meter = new TraitLayoutMeter();
         reader = new TraitLayoutReadHarness();
         ticket = new ChunkHarness();
-        tally = new DeadTallyCheckpointHarness();
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
+        tally = new TraitLayoutTallyHost();
+        // Deployed EIP-170 shells at every module address (Eip170TicketFoil at GAME_TICKET_MODULE,
+        // Eip170Endgame at GAME_GAMEOVER_MODULE, ...), not the raw modules.
+        ProfileModules.installGame(vm);
     }
 
     function _measure(string memory name, address target, bytes memory input) private {
@@ -139,12 +158,18 @@ contract TraitLayoutComparisonTest is Test {
         reader.seed(43);
         _measure("bucket_odd", address(reader), abi.encodeCall(reader.bucketRead, (43, 7, 23)));
     }
+    /// @dev Replace the seeded harness code with the deployed Game runtime; the seeded storage stays.
+    function _deployedGame(address at) private {
+        vm.etch(at, vm.getDeployedCode("DegenerusGame.sol:DegenerusGame"));
+    }
     function test_Layout_SampleEven() public {
         reader.seed(42);
+        _deployedGame(address(reader));
         _measure("sample_even", address(reader), abi.encodeCall(reader.sampleTraitEntries, (false, 7, 23 << 40)));
     }
     function test_Layout_SampleOdd() public {
         reader.seed(43);
+        _deployedGame(address(reader));
         _measure("sample_odd", address(reader), abi.encodeCall(reader.sampleTraitEntries, (true, 7, 23 << 40)));
     }
     function _ticket(uint24 lvl, bool reused) private {
@@ -160,7 +185,9 @@ contract TraitLayoutComparisonTest is Test {
     function _foil(uint24 lvl, bool reused) private {
         vm.etch(ContractAddresses.GAME, type(TraitLayoutFoilSeeder).runtimeCode);
         TraitLayoutFoilSeeder(ContractAddresses.GAME).seed(lvl, reused);
-        vm.etch(ContractAddresses.GAME, address(new DegenerusGameFoilPackModule()).code);
+        // The foil worker is merged into the ticket shell at the deployed ticket module (`runFoilWork` is external
+        // there and `runTicketWork_g1150` reaches the same `_runFoilWork`); the seeded storage stays.
+        vm.etch(ContractAddresses.GAME, vm.getDeployedCode("Eip170TicketFoil.sol:Eip170TicketFoil"));
         _measure(string.concat("foil_", lvl == 42 ? "even" : "odd", reused ? "_reused" : "_fresh"),
             ContractAddresses.GAME, abi.encodeCall(IDegenerusGameFoilWorkerModule.runFoilWork, (10_000_000)));
     }
@@ -172,7 +199,7 @@ contract TraitLayoutComparisonTest is Test {
         tally.latchDeadTally();
         tally.seedCreated(lvl, type(uint256).max, 123);
         _measure(lvl == 42 ? "tally_even" : "tally_odd", address(tally),
-            abi.encodeCall(DegenerusGameGameOverModule.runGameOverAdvance, (0, lvl, 10_000_000)));
+            abi.encodeCall(tally.runGameOverAdvanceDeployed, (0, lvl, 10_000_000)));
     }
     function test_Layout_TallyEven() public { _tally(42); }
     function test_Layout_TallyOdd() public { _tally(43); }

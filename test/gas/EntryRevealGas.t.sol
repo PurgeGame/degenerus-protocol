@@ -4,8 +4,8 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
@@ -84,8 +84,10 @@ contract EntryRevealGas is Test {
     function setUp() public {
         vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
         h = new EntryRevealHarness();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        // The harness delegatecalls the ticket worker at its pinned address: install the deployed
+        // EIP-170 shells (Eip170TicketFoil at GAME_TICKET_MODULE, Eip170DegenesisFoil at
+        // GAME_FOILPACK_MODULE), not the raw modules.
+        ProfileModules.installGame(vm);
     }
 
     /// @dev `supplied` != 0 bounds the call's gas; the worker admits checkpoints while the

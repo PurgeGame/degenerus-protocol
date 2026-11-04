@@ -9,9 +9,7 @@ import {BoundaryGasFixture, PhaseEndSeeder} from "./Lvl100PhaseEndAdvanceGas.t.s
 import {ChunkHarness} from "./RoundDrainChunkGas.t.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
-import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
@@ -49,6 +47,9 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
     uint160 private constant SURVIVOR_BASE = 0xF0100000;
 
     function setUp() public {
+        // _deployProtocol builds the deployed EIP-170 profile (the Eip170 shells at every module address). The
+        // seeder runtimes below are etched over the Game only to write state; the deployed runtime is
+        // restored before the measured call.
         _deployProtocol();
         TQ.retireCompleted(address(game), LVL);
         bytes memory original = address(game).code;
@@ -114,9 +115,10 @@ contract DeityFrozenPoolDrainGasTest is Test {
 
     function setUp() public {
         h = new ChunkHarness();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
-        // The harness delegates runTicketWork_g1150 to the ticket module at its pinned address.
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        // The harness delegates runTicketWork_g1150 to the ticket module at its pinned address: install
+        // the deployed EIP-170 shells (Eip170TicketFoil at GAME_TICKET_MODULE, Eip170DegenesisFoil at
+        // GAME_FOILPACK_MODULE), not the raw modules.
+        ProfileModules.installGame(vm);
         // 1,000,000 entries each = 100,000,000 scaled. Cold start: no marker, cursor 0.
         h.seedFrozenPool(POOL_LVL, 8, 100_000_000, BASE, false);
     }
