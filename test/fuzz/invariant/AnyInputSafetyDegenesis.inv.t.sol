@@ -129,6 +129,7 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 0)), 0);
         _bystanderClaimable();
+        _seedSdgnrsBacking();
         // Two actors run coinflip auto-rebuy, so the carry / take-profit doors have a live subject.
         for (uint256 i = 1; i < 4; i += 2) {
             vm.prank(actors[i]);
@@ -146,9 +147,13 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
         baseline = handler.holdings();
         _buildTracked();
         startTotal = _trackedTotal();
+        _recordTrackedStart();
 
         targetContract(address(handler));
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: _selectors()}));
+        // The handler ignores msg.sender (actors are chosen by index), so fixed senders lose nothing.
+        // Fuzzer-picked senders drawn from state could otherwise be actor or protocol addresses.
+        for (uint160 i = 1; i <= 4; ++i) targetSender(address(0xCAFE00 + i));
     }
 
     /// @dev Inline config is not inherited, so the base suite's deep budget is restated here.

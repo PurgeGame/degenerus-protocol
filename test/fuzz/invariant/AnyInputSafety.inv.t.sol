@@ -13,6 +13,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../../contracts/storage/DegenerusGameStorage.sol";
 import {GameFunding} from "../../helpers/GameFunding.sol";
+import {EndingWitness} from "../helpers/EndingWitness.sol";
 
 /// @dev Runs the production seizure worker for loans due at `due` while leaving `level` in place.
 contract AnyInputSeizer is DegenerusGameStorage {
@@ -29,8 +30,30 @@ contract AnyInputSeizer is DegenerusGameStorage {
     }
 }
 
+/// @dev Oracle self-test stand-in: mineRun latches gameOver (slot 0 byte 21) and does nothing else;
+///      every other call runs the production runtime parked at `production`.
+contract AnyInputPrematureLatcher {
+    address internal immutable production;
+
+    constructor(address production_) {
+        production = production_;
+    }
+
+    fallback() external payable {
+        if (msg.sig == bytes4(keccak256("mineRun(uint32)"))) {
+            assembly ("memory-safe") { sstore(0, or(sload(0), shl(168, 1))) }
+            return;
+        }
+        (bool ok, bytes memory ret) = production.delegatecall(msg.data);
+        assembly ("memory-safe") {
+            if iszero(ok) { revert(add(ret, 32), mload(ret)) }
+            return(add(ret, 32), mload(ret))
+        }
+    }
+}
+
 /// @title AnyInputSafety -- arbitrary inputs on the player doors no other handler drives
-/// @notice One campaign, five properties, checked after every handler call:
+/// @notice One campaign, seven properties, checked after every handler call:
 ///         (a) ETH solvency: Game ETH + stETH >= SolvencyObligations.obligations(game).
 ///         (b) A passive BYSTANDER (funded in setUp through normal flows, never acts again, approves
 ///             no operator) never loses any tracked holding: afking funding, claimable winnings,
@@ -51,6 +74,15 @@ contract AnyInputSeizer is DegenerusGameStorage {
 ///             (unsplit Degenesis volume, Vault budget, redemption reserve, staged BAF reservation,
 ///             sealed Decimator rounds), and every allocated wallet keeps its sentinel; after the
 ///             sweep it is zero. See ClaimablePoolIdentity.
+///         (f) Endings are justified: every mining call, in the handler and in (d)'s drive, is
+///             judged by EndingWitness immediately before the call at the same timestamp. A
+///             terminal latch across a call with no documented ending due (14-day deadman,
+///             14-day unpublished VRF request, 30-day purchase timeout with the pool at or
+///             below target), or a latch outside any judged mining call, fails. (d) counts a
+///             game over as a sealed day only when its ending was judged justified.
+///         (g) A guided claim door (AnyInputHandler) that finds a valid claim in live state must
+///             see it accepted where acceptance is certain, and every accepted guided claim
+///             must have its documented effect (payout amount, claim cleared).
 contract AnyInputSafety is DeployProtocol {
     AnyInputHandler public handler;
     address[] internal actors;
@@ -173,6 +205,7 @@ contract AnyInputSafety is DeployProtocol {
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 0)), 0);
         _bystanderClaimable();
+        _seedSdgnrsBacking();
         // Two actors run coinflip auto-rebuy, so the carry / take-profit doors have a live subject.
         for (uint256 i = 1; i < 4; i += 2) {
             vm.prank(actors[i]);
@@ -190,9 +223,13 @@ contract AnyInputSafety is DeployProtocol {
         baseline = handler.holdings();
         _buildTracked();
         startTotal = _trackedTotal();
+        _recordTrackedStart();
 
         targetContract(address(handler));
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: _selectors()}));
+        // The handler ignores msg.sender (actors are chosen by index), so fixed senders lose nothing.
+        // Fuzzer-picked senders drawn from state could otherwise be actor or protocol addresses.
+        for (uint160 i = 1; i <= 4; ++i) targetSender(address(0xCAFE00 + i));
     }
 
     // =====================================================================================
@@ -210,7 +247,29 @@ contract AnyInputSafety is DeployProtocol {
         _checkBystander();
         _checkConservation();
         _checkClaimablePoolIdentity();
+        _checkEndings();
+        _checkGuided();
         _checkLiveness();
+    }
+
+    function _checkEndings() internal view {
+        if (handler.ghost_prematureEndings() != 0) {
+            console.log("PREMATURE ENDING during action", handler.actionName(handler.prematureAction()));
+            revert("(f) ENDING: terminal state latched by a mining call with no ending due");
+        }
+        if (handler.ghost_unjudgedLatches() != 0) {
+            console.log("UNJUDGED LATCH after action", handler.actionName(handler.unjudgedAction()));
+            revert("(f) ENDING: terminal state latched outside a judged mining call");
+        }
+    }
+
+    function _checkGuided() internal view {
+        if (handler.guidedBad() != 0) {
+            console.log("GUIDED door", handler.actionName(handler.guidedBadAction()));
+            console.log("  ", handler.guidedBadReason());
+            console.logBytes(handler.guidedBadRevert());
+            revert("(g) GUIDED: a valid claim was refused or paid the wrong effect");
+        }
     }
 
     function _checkClaimablePoolIdentity() internal view {
@@ -252,6 +311,19 @@ contract AnyInputSafety is DeployProtocol {
             console.log("CONSERVATION start", startTotal);
             console.log("CONSERVATION now  ", total);
             console.log("custody now", _custody());
+            // The failing call's logs are not shown by the campaign, so the deltas ride the message.
+            string memory d;
+            for (uint256 i; i < tracked.length; ++i) {
+                uint256 b = tracked[i].balance + mockStETH.balanceOf(tracked[i]);
+                if (b > trackedStart[i]) d = string.concat(d, " +", vm.toString(tracked[i]), ":", vm.toString(b - trackedStart[i]));
+                if (b < trackedStart[i]) d = string.concat(d, " -", vm.toString(tracked[i]), ":", vm.toString(trackedStart[i] - b));
+            }
+            if (handler.ethAnomalies() != 0) {
+                d = string.concat(d, " | first actor ETH drop beyond its own sends: action ",
+                    handler.actionName(handler.ethAnomalyAction()), " actor ", vm.toString(handler.ethAnomalyActor()),
+                    " ", vm.toString(handler.ethAnomalyBefore()), "->", vm.toString(handler.ethAnomalyAfter()));
+            }
+            revert(string.concat("(c) CONSERVATION: ETH+stETH over custody+participants changed; deltas since setUp:", d));
         }
         assertEq(total, startTotal, "(c) CONSERVATION: ETH+stETH over custody+participants changed");
     }
@@ -263,10 +335,16 @@ contract AnyInputSafety is DeployProtocol {
         bool sealedDay;
         bytes4 badSel;
         bool gasFailure;
+        bool premature; // a drive crank latched terminal state with no ending due
+        bool justifiedEnding; // the game is over and its ending was judged due
     }
 
     function _checkLiveness() internal {
         LiveResult memory r = _liveness();
+        if (r.premature) {
+            console.log("PREMATURE ENDING in the liveness drive at crank", r.cranks);
+            revert("(f) ENDING: the liveness drive latched terminal state with no ending due");
+        }
         if (!r.quiet || !r.sealedDay || r.badSel != bytes4(0) || r.gasFailure || r.maxGas > CRANK_GAS) {
             console.log("LIVENESS cranks", r.cranks);
             console.log("  quiet", r.quiet);
@@ -284,17 +362,33 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _liveness() internal returns (LiveResult memory r) {
+        // An ending latched earlier in the run counts only if the handler judged it due.
+        if (EndingWitness.latched(address(game))) {
+            r.justifiedEnding = handler.latchJudged() && handler.ghost_prematureEndings() == 0
+                && handler.ghost_unjudgedLatches() == 0;
+        }
         uint256 snap = vm.snapshotState();
         vm.warp(block.timestamp + 1 days);
         address keeper = address(uint160(0x4B33E5));
         for (r.cranks = 0; r.cranks < MAX_CRANKS; ++r.cranks) {
             _fulfillLast(r.cranks);
+            // Judged at the crank's own timestamp and state, before the cool-down so the crank's
+            // gas is still measured from cold storage.
+            bool wasLatched = EndingWitness.latched(address(game));
+            bool endingDue = wasLatched || EndingWitness.due(address(game));
             _coolProtocol();
             uint256 g0 = gasleft();
             vm.prank(keeper);
             (bool ok, bytes memory ret) = address(game).call{gas: CRANK_GAS}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
             uint256 used = g0 - gasleft();
             if (used > r.maxGas) r.maxGas = used;
+            if (!wasLatched && EndingWitness.latched(address(game))) {
+                if (!endingDue) {
+                    r.premature = true;
+                    break;
+                }
+                r.justifiedEnding = true;
+            }
             if (ok) continue;
             if (ret.length < 4) {
                 r.gasFailure = true;
@@ -323,7 +417,9 @@ contract AnyInputSafety is DeployProtocol {
                 || s == bytes4(keccak256("EmptyRevert()"))) r.gasFailure = true;
             break;
         }
-        r.sealedDay = game.gameOver() || (game.rngWordForDay(game.currentDayView_g542950()) != 0 && !game.rngLocked());
+        r.sealedDay = game.gameOver()
+            ? r.justifiedEnding
+            : game.rngWordForDay(game.currentDayView_g542950()) != 0 && !game.rngLocked();
         vm.revertToStateAndDelete(snap);
     }
 
@@ -365,6 +461,14 @@ contract AnyInputSafety is DeployProtocol {
             string memory k = vm.toString(id);
             vm.setEnv(string.concat(_counterKey("ANY_C_"), k), vm.toString(vm.envOr(string.concat(_counterKey("ANY_C_"), k), uint256(0)) + handler.calls(id)));
             vm.setEnv(string.concat(_counterKey("ANY_OK_"), k), vm.toString(vm.envOr(string.concat(_counterKey("ANY_OK_"), k), uint256(0)) + handler.oks(id)));
+            if (handler.cands(id) != 0) {
+                string memory ck = string.concat(_counterKey("ANY_G_"), k);
+                vm.setEnv(ck, vm.toString(vm.envOr(ck, uint256(0)) + handler.cands(id)));
+            }
+            if (handler.refused(id) != 0) {
+                string memory rk = string.concat(_counterKey("ANY_RF_"), k);
+                vm.setEnv(rk, vm.toString(vm.envOr(rk, uint256(0)) + handler.refused(id)));
+            }
             bytes4[] memory sels = handler.revertSelectors(id);
             for (uint256 j; j < sels.length; ++j) {
                 string memory sk = string.concat(_counterKey("ANY_RV_"), k, "_", vm.toString(abi.encodePacked(sels[j])));
@@ -378,6 +482,8 @@ contract AnyInputSafety is DeployProtocol {
         }
         vm.setEnv(_counterKey("ANY_LEVELS"), vm.toString(vm.envOr(_counterKey("ANY_LEVELS"), uint256(0)) + handler.ghost_levels()));
         vm.setEnv(_counterKey("ANY_GAMEOVER"), vm.toString(vm.envOr(_counterKey("ANY_GAMEOVER"), uint256(0)) + handler.ghost_gameOver()));
+        vm.setEnv(_counterKey("ANY_JUSTIFIED"), vm.toString(vm.envOr(_counterKey("ANY_JUSTIFIED"), uint256(0)) + handler.ghost_justifiedEndings()));
+        vm.setEnv(_counterKey("ANY_DMBURNS"), vm.toString(vm.envOr(_counterKey("ANY_DMBURNS"), uint256(0)) + handler.ghost_deadmanBurns()));
         uint256 maxLvl = vm.envOr(_counterKey("ANY_MAXLEVEL"), uint256(0));
         if (game.currentLvl() > maxLvl) vm.setEnv(_counterKey("ANY_MAXLEVEL"), vm.toString(uint256(game.currentLvl())));
         _printReport(runs, n);
@@ -389,12 +495,21 @@ contract AnyInputSafety is DeployProtocol {
     ///      (so at least ~10 expected by run 48). The arbitrary-input doors that never succeeded in that
     ///      measurement are not required: their properties are checked only on rejected inputs (see the
     ///      handler's revert report).
+    ///      Guided claim doors, measured over 64 default-profile runs (seed 0xdeadbeef, 47 levels, 15 game
+    ///      overs): required gd_claimRedemption 8 (post-game-over, one per ~2 endings), gd_gnrusVote 69,
+    ///      gd_vaultClaimStethFirst 9, gd_wwxrpEnter 88, gd_claimDeadVrf 13, gd_claimBingo 16,
+    ///      gd_buyFoilPack 78. Not required, their claim too rare at this scale: gd_gnrusBurn 2 (needs a
+    ///      level resolved to an actor's slot), gd_claimWhalePass 1, gd_claimFoilMatchMany 1,
+    ///      gd_claimFoilMatchOpen 0 and gd_claimGoldenTicket 0 (a 4+ match or 3+ golds inside a two-day
+    ///      window; packs hold 0-2 golds typically), gd_wwxrpClaim 0 (a 1-in-30 prize day with the
+    ///      winning bucket filled), gd_decimatorBurn 0 (the window opens at level 4; max level 2).
     function _assertCoverage(uint256 runs, uint256 n) internal view {
         if (runs < 16) return;
         assertGt(vm.envOr(_counterKey("ANY_LEVELS"), uint256(0)), 0, "vacuous: no run ever gained a level");
         assertGt(vm.envOr(_counterKey("ANY_LIVE_CHECKS"), uint256(0)), 0, "vacuous: the liveness probe never ran");
         if (runs < 48) return;
         assertGt(vm.envOr(_counterKey("ANY_GAMEOVER"), uint256(0)), 0, "vacuous: no run ever reached game over");
+        assertGt(vm.envOr(_counterKey("ANY_JUSTIFIED"), uint256(0)), 0, "vacuous: the ending oracle never judged an ending");
         bool[] memory req = _requiredDoors(n);
         for (uint256 id; id < n; ++id) {
             if (!req[id]) continue;
@@ -406,11 +521,12 @@ contract AnyInputSafety is DeployProtocol {
     /// @dev Doors that must succeed at least once by run 48 (handler action ids).
     function _requiredDoors(uint256 n) internal pure returns (bool[] memory req) {
         req = new bool[](n);
-        uint8[35] memory ids = [
+        uint8[42] memory ids = [
             1, 3, 7, 15, 17, 18, 19, 23, 34, 36, 38, 40, 46, 47, 53, 74, // cf/g/f/d/v/af/st doors
             77, 78, 79, 81, 82, 83, // prog_buy, prog_bigBuy, prog_mineFlip, prog_warp, prog_driveDay, prog_topUp
             84, 85, 86, 87, 88, 89, 90, 92, 93, 95, 100, // guided doors
-            101, 102 // prog_driveDayAligned, prog_deadman
+            101, 102, // prog_driveDayAligned, prog_deadman
+            104, 106, 108, 109, 111, 112, 113 // guided claim doors (see _assertCoverage for the measurement)
         ];
         for (uint256 i; i < ids.length; ++i) req[ids[i]] = true;
     }
@@ -423,12 +539,15 @@ contract AnyInputSafety is DeployProtocol {
         console.log("ANY_REPORT levels gained (sum over runs)", vm.envOr(_counterKey("ANY_LEVELS"), uint256(0)));
         console.log("ANY_REPORT max level", vm.envOr(_counterKey("ANY_MAXLEVEL"), uint256(0)));
         console.log("ANY_REPORT runs reaching game over", vm.envOr(_counterKey("ANY_GAMEOVER"), uint256(0)));
+        console.log("ANY_REPORT judged-justified endings", vm.envOr(_counterKey("ANY_JUSTIFIED"), uint256(0)));
+        console.log("ANY_REPORT deadman pre-ending gambling burns", vm.envOr(_counterKey("ANY_DMBURNS"), uint256(0)));
         for (uint256 id; id < n; ++id) {
             string memory k = vm.toString(id);
             console.log(string.concat(
                 "ANY_ACTION ", handler.actionName(id),
                 " calls=", vm.toString(vm.envOr(string.concat(_counterKey("ANY_C_"), k), uint256(0))),
                 " ok=", vm.toString(vm.envOr(string.concat(_counterKey("ANY_OK_"), k), uint256(0))),
+                _guidedCols(k),
                 " reverts:", _revList(k)
             ));
         }
@@ -437,6 +556,14 @@ contract AnyInputSafety is DeployProtocol {
     /// @dev Process-environment key for a campaign counter; a variant sharing the process overrides it.
     function _counterKey(string memory k) internal pure virtual returns (string memory) {
         return k;
+    }
+
+    /// @dev Guided claim doors also report how often a valid claim existed and how often it was refused.
+    function _guidedCols(string memory k) internal view returns (string memory) {
+        uint256 c = vm.envOr(string.concat(_counterKey("ANY_G_"), k), uint256(0));
+        uint256 f = vm.envOr(string.concat(_counterKey("ANY_RF_"), k), uint256(0));
+        if (c == 0 && f == 0) return "";
+        return string.concat(" cand=", vm.toString(c), " refused=", vm.toString(f));
     }
 
     function _revList(string memory k) internal view returns (string memory out) {
@@ -466,21 +593,30 @@ contract AnyInputSafety is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         for (uint256 k; k < 4; ++k) {
             _fulfillLast(k);
-            vm.prank(address(0x4B33E5));
-            try game.mineRun(0) { console.log("ok", k); } catch (bytes memory r) { console.logBytes(r); }
+            handler.oracleProbeMine();
         }
+        _checkEndings();
     }
 
     function _driveDay(uint256 salt) internal {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 200; ++i) {
             _fulfillLast(salt * 1000 + i);
-            try game.mineRun(0) {} catch (bytes memory reason) {
-                if (bytes4(reason) == NO_WORK) return;
-                if (bytes4(reason) == RNG_NOT_READY && _fulfillLast(salt * 1000 + i + 500)) continue;
-                return;
-            }
+            (bool ok, bytes memory reason) = address(game).call(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+            require(!EndingWitness.latched(address(game)), "fixture: the game ended during setUp");
+            if (ok) continue;
+            if (bytes4(reason) == NO_WORK) return;
+            if (bytes4(reason) == RNG_NOT_READY && _fulfillLast(salt * 1000 + i + 500)) continue;
+            return;
         }
+    }
+
+    /// @dev sDGNRS backing as a live game would have accrued it (a backed Game claimable), so a
+    ///      holder's gambling burn clears MIN_REDEMPTION_VALUE: without it every live burn in the
+    ///      fixture prices at 0 and the redemption batch, its settlement and its post-game-over
+    ///      claim are unreachable.
+    function _seedSdgnrsBacking() internal {
+        GameFunding.credit(game.walletIdOf_g3120(address(sdgnrs)), 50 ether);
     }
 
     /// @dev Seed a backed claim through the authenticated sDGNRS award hook.
@@ -518,6 +654,12 @@ contract AnyInputSafety is DeployProtocol {
         tracked.push(account);
     }
 
+    uint256[] internal trackedStart;
+
+    function _recordTrackedStart() internal {
+        for (uint256 i; i < tracked.length; ++i) trackedStart.push(tracked[i].balance + mockStETH.balanceOf(tracked[i]));
+    }
+
     function _trackedTotal() internal view returns (uint256 total) {
         for (uint256 i; i < tracked.length; ++i) {
             total += tracked[i].balance + mockStETH.balanceOf(tracked[i]);
@@ -529,7 +671,7 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](114);
+        s = new bytes4[](137);
         uint256 i;
         s[i++] = AnyInputHandler.cf_deposit.selector;
         s[i++] = AnyInputHandler.cf_claim.selector;
@@ -632,7 +774,22 @@ contract AnyInputSafety is DeployProtocol {
         for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.prog_driveDayAligned.selector;
         s[i++] = AnyInputHandler.prog_deadman.selector;
         s[i++] = AnyInputHandler.gd_buyDegenesisBox.selector;
-        require(i == 114, "selector table size");
+        // guided claim doors; the post-game-over and window-bound ones weighted up
+        for (uint256 w; w < 4; ++w) s[i++] = AnyInputHandler.gd_claimRedemption.selector;
+        s[i++] = AnyInputHandler.gd_decimatorBurn.selector;
+        for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.gd_gnrusVote.selector;
+        s[i++] = AnyInputHandler.gd_gnrusBurn.selector;
+        for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.gd_vaultClaimStethFirst.selector;
+        for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.gd_wwxrpEnter.selector;
+        s[i++] = AnyInputHandler.gd_wwxrpClaim.selector;
+        for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.gd_claimDeadVrf.selector;
+        s[i++] = AnyInputHandler.gd_claimBingo.selector;
+        for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.gd_buyFoilPack.selector;
+        s[i++] = AnyInputHandler.gd_claimGoldenTicket.selector;
+        for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.gd_claimFoilMatchOpen.selector;
+        s[i++] = AnyInputHandler.gd_claimFoilMatchMany.selector;
+        s[i++] = AnyInputHandler.gd_claimWhalePass.selector;
+        require(i == 137, "selector table size");
     }
 
     // =====================================================================================
@@ -696,6 +853,141 @@ contract AnyInputSafety is DeployProtocol {
         handler.prog_mineFlip(1139325335);
         handler.prog_fulfillVrf(0);
         _checkLiveness();
+    }
+
+    /// @notice Falsifiable: a mineRun that latches gameOver with no ending due is flagged, both in a
+    ///         handler mining call and in the invariant's liveness drive.
+    function test_OracleFlagsPrematureEnding() public {
+        handler.prog_mineFlip(0);
+        assertEq(handler.ghost_prematureEndings(), 0, "healthy crank first");
+        assertFalse(EndingWitness.due(address(game)), "no ending is due in the fixture");
+        bytes memory code = address(game).code;
+        address impl = address(uint160(0xC0DE51));
+        vm.etch(impl, code);
+        vm.etch(address(game), address(new AnyInputPrematureLatcher(impl)).code);
+        LiveResult memory r = _liveness();
+        assertTrue(r.premature, "the drive flags the premature latch");
+        handler.prog_mineFlip(0);
+        vm.etch(address(game), code);
+        assertTrue(game.gameOver(), "the latcher ended the game");
+        assertEq(handler.ghost_prematureEndings(), 1, "the handler flags the premature latch");
+        assertEq(handler.ghost_justifiedEndings(), 0);
+        vm.expectRevert(bytes("(f) ENDING: terminal state latched by a mining call with no ending due"));
+        this.invariant_anyInputSafety();
+    }
+
+    /// @notice Falsifiable: a latch that no judged mining call observed (written here by hand, as a
+    ///         VRF callback or player door would) is flagged after the next handler action.
+    function test_OracleFlagsUnjudgedLatch() public {
+        vm.store(address(game), bytes32(0), bytes32(uint256(vm.load(address(game), bytes32(0))) | (uint256(1) << 168)));
+        handler.prog_warp(1);
+        assertEq(handler.ghost_unjudgedLatches(), 1, "the latch outside a mining call is flagged");
+    }
+
+    /// @notice A real deadman ending (no completed day for 14+ days) is judged justified, and the
+    ///         liveness check then accepts the game over as sealed.
+    function test_OracleAcceptsDeadmanEnding() public {
+        handler.prog_deadman(0, 0);
+        assertTrue(game.gameOver(), "deadman ended the game");
+        assertEq(handler.ghost_prematureEndings(), 0, "a due ending is not premature");
+        assertEq(handler.ghost_unjudgedLatches(), 0);
+        assertEq(handler.ghost_justifiedEndings(), 1, "the latch was observed and justified");
+        LiveResult memory r = _liveness();
+        assertTrue(r.justifiedEnding && r.sealedDay && !r.premature, "a justified game over seals");
+        _checkEndings();
+        _checkLiveness();
+    }
+
+    /// @notice The post-game-over guided claims settle real claims after a deadman ending: the
+    ///         pre-ending gambling burn unwinds, terminal holdings pay, the Vault claims its afking.
+    function test_guidedPostGameOverClaims() public {
+        handler.prog_buy(0, 4_000, 0);
+        handler.prog_driveDay(0, 7);
+        handler.prog_deadman(0, 256);
+        assertTrue(game.gameOver(), "deadman ended the game");
+        assertEq(handler.ghost_deadmanBurns(), 1, "a gambling burn was pending at the ending");
+        handler.gd_claimRedemption(0);
+        handler.gd_claimDeadVrf(0);
+        handler.gd_vaultClaimStethFirst(0);
+        _checkGuided();
+        for (uint256 id = 104; id < 112; ++id) {
+            if (handler.cands(id) == 0) continue;
+            console.log(handler.actionName(id), handler.cands(id), handler.oks(id));
+        }
+        assertEq(handler.oks(104), 1, "redemption claim settled");
+        assertEq(handler.oks(108), 1, "vault claim settled");
+        assertEq(handler.oks(111), 1, "dead-VRF claim settled");
+        _checkSolvency();
+        _checkConservation();
+        _checkClaimablePoolIdentity();
+        _checkBystander();
+    }
+
+    /// @notice The live-game guided doors run their probes and, where the fixture state holds a
+    ///         valid action, succeed with their effect over a few driven days.
+    function test_guidedLiveDoors() public {
+        for (uint256 d; d < 3; ++d) {
+            for (uint256 a; a < 6; ++a) {
+                handler.gd_buyFoilPack(a);
+                handler.gd_wwxrpEnter(a, a * 97);
+                handler.gd_gnrusVote(a, a);
+                handler.gd_sdgnrsBurn(a, 0);
+            }
+            handler.prog_bigBuy(d, 20 ether);
+            handler.prog_driveDay(d, d + 11);
+            for (uint256 a; a < 6; ++a) {
+                handler.gd_claimBingo(a);
+                handler.gd_claimGoldenTicket(a);
+                handler.gd_claimFoilMatchOpen(a);
+                handler.gd_claimFoilMatchMany(a, a, 0, 0);
+                handler.gd_claimWhalePass(a);
+                handler.gd_wwxrpClaim(a);
+                handler.gd_vaultClaimStethFirst(a);
+                handler.gd_decimatorBurn(a, a, a);
+                handler.gd_gnrusBurn(a, a);
+            }
+        }
+        for (uint256 id = 104; id < handler.N_ACTIONS(); ++id) {
+            console.log(handler.actionName(id), handler.calls(id), handler.cands(id), handler.oks(id));
+        }
+        _checkGuided();
+        assertGt(handler.oks(113), 0, "a foil pack was bought");
+        assertGt(handler.oks(109), 0, "a WWXRP draw entry was made");
+        assertGt(handler.oks(106), 0, "a GNRUS ballot was cast");
+        _checkSolvency();
+        _checkConservation();
+        _checkClaimablePoolIdentity();
+        _checkBystander();
+        _checkEndings();
+    }
+
+    /// @notice The foil probe reads real packs: bought packs materialize ready with stored lines and
+    ///         an open gold window, and every probe-located 4+ match is accepted and marked.
+    function test_guidedFoilProbeReadsPacks() public {
+        for (uint256 a; a < 6; ++a) handler.gd_buyFoilPack(a);
+        assertEq(handler.oks(113), 6, "six packs bought");
+        uint24 cur = game.currentLvl(); // packs key on the active cycle: cur + 1, or cur in a jackpot phase
+        handler.prog_driveDay(0, 5);
+        uint256 ready;
+        for (uint256 a; a < 6; ++a) {
+            (uint256 rec,, bool open) = handler.foilStatusOf(a, cur + 1);
+            if (rec == 0) (rec,, open) = handler.foilStatusOf(a, cur);
+            if (rec >> 255 == 1 && open) ++ready;
+        }
+        assertEq(ready, 6, "every pack materialized with its gold window open");
+        for (uint256 d; d < 2; ++d) {
+            for (uint256 a; a < 6; ++a) {
+                handler.gd_claimGoldenTicket(a);
+                handler.gd_claimFoilMatchOpen(a);
+            }
+            handler.prog_driveDay(d + 1, d + 6);
+        }
+        // The base fixture's words give one 4+ match on day 1; the Degenesis fixture's give none.
+        console.log("located foil matches", handler.cands(115));
+        assertEq(handler.oks(115), handler.cands(115), "every located match was accepted");
+        _checkGuided();
+        _checkConservation();
+        _checkClaimablePoolIdentity();
     }
 
     /// @notice The liveness probe completes from the fixture state and reports its gas.
