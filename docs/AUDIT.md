@@ -60,8 +60,11 @@ caller-induced accounting or authorization failure.
 
 Gas admission uses `MineFlipGas` and `MineFlipGasBounds`. Zero calibration normalizes to 10,000
 basis points. Optional continuations need their estimate and return tail to fit; the first work unit
-bypasses the chunk estimate but still requires actual execution gas. Nested funding can refuse a
-caller's calibration. A failed attempt alone is not a protocol stall if another caller can complete
+bypasses the chunk estimate but still requires actual execution gas. Calibration scales the
+protocol's own estimates and return tails; it can raise an external dependency call's (`BoundedCall`)
+minimum but never lower it, so a short continuation refuses before the call rather than reaching the
+dependency's failure policy. Nested funding can refuse a caller's calibration. A failed attempt
+alone is not a protocol stall if another caller can complete
 the chain. Caller gas must not select a committed outcome or turn an out-of-gas failure into a
 semantic fallback. Terminal ETH distribution is reviewed independently of unfinished FLIP
 bookkeeping.

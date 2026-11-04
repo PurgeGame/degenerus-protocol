@@ -170,10 +170,16 @@ same. Mining rewards depend on gas spent per call.
 `mineRun` rejects invalid gas multipliers, initial idle/wait states and insufficient initial
 execution gas. Request refusals return without reverting earlier work; recognized checkpoint
 refusals preserve a completed prefix. Other worker failures propagate. Workers report progress
-through `MineFlipGas.Result`.
+through `MineFlipGas.Result`. Caller calibration can raise a dependency call's minimum but never
+lower it, so a short continuation refuses before the call instead of reaching the dependency's
+failure policy (the stake fallback, the AFKing stETH pull or the VRF cancel).
 
-- **Implementation.** `GameMiner` (dispatch and `MineFlipGas.Result`), `BoundedCall.admitFirst`.
+- **Implementation.** `GameMiner` (dispatch and `MineFlipGas.Result`), `BoundedCall.admitFirst`,
+  `BoundedCall._remaining`.
 - **Tests.**
+  - `test/fuzz/DependencyMinimumCalibration.t.sol::test_CalibrationNeverLowersTheDependencyMinimum`,
+    `::test_LowCalibrationCannotUnderfundTheStake`;
+    `test/fuzz/AfkingStethFunding.t.sol::test_LowCalibrationCannotShrinkThePullMinimum`
   - `test/repro/MineFlipGasSweep.t.sol::test_SweepFromPublish`, `::test_SweepFromDailyPhase`,
     `::test_SweepFromSealingDailyPhase` (helpers `_sweep`: "never WorkGasBound"; `_fullSweep`: "near
     the cap every call succeeds")

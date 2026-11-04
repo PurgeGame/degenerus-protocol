@@ -12,7 +12,8 @@ library BoundedCall {
     uint256 private constant VALUE_STIPEND = 2_300;
 
     /// @dev Forward everything above the active meter floor and scaled caller tail.
-    /// The scaled minimum is admission only. Never classify failures using gasleft.
+    /// Caller calibration can raise the minimum but never lower it, so a dependency failure is
+    /// never a gas shortage the caller chose. Never classify failures using gasleft.
     /// Malformed successful output does not undo callee writes: callers needing
     /// receipt atomicity must retain their separate rollback frame.
     /// @dev The mandatory first unit forwards all gas, so a coordinator call it cannot finish
@@ -90,9 +91,11 @@ library BoundedCall {
         private view returns (uint256 available)
     {
         // The mandatory first unit owns all available gas, including its dependency calls.
-        // Scaled minima and tail reservations admit optional continuation only.
+        // A continuation admits at least the declared minimum. A higher calibration scales it with
+        // the tail, so a nested protocol frame keeps room for its own calibrated admissions.
         if (meter.mustProgress) return gasleft();
-        minimum = MineFlipGas.scale(meter, minimum);
+        uint256 scaled = MineFlipGas.scale(meter, minimum);
+        if (scaled > minimum) minimum = scaled;
         reserve = MineFlipGas.scale(meter, reserve + overhead);
         available = gasleft();
         if (meter.floor > available || reserve > available - meter.floor) {

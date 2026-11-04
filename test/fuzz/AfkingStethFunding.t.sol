@@ -498,6 +498,20 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertGt(host.entries(NEXT), 0);
     }
 
+    /// @dev A quarter-calibrated continuation funds the scaled subscriber item but not the pull's
+    ///      fixed 1M minimum: the worker refuses before the attempt instead of expiring the member.
+    function test_LowCalibrationCannotShrinkThePullMinimum() public {
+        _add(PLAYER, true, 1, 0, 0);
+        mockStETH.mint(PLAYER, 1 ether);
+        _authorize(PLAYER, type(uint256).max);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        host.subWork{gas: 900_000}(MineFlipGas.budget(900_000, MineFlipGas.MIN_MULTIPLIER, false));
+        assertGt(host.memberOf(PLAYER), 0, "calibration cannot expire a subscriber");
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
+        _work();
+        assertGt(host.entries(PLAYER), 0);
+    }
+
     function test_LowWorkerAllowanceDefersBeforeAttemptThenSucceeds() public {
         _add(PLAYER, true, 1, 0, 0);
         mockStETH.mint(PLAYER, 1 ether);
