@@ -200,14 +200,27 @@ contract BoundedCallTest is Test {
     /// @dev The mandatory first unit owns all available gas: scaled minima and tail reservations
     ///      admit optional continuation only, so an underfunded first unit still attempts its call
     ///      (the same supply refuses an optional call, see testUnderfundedCallRevertsBeforeFailureBranch).
+    /// @dev An admitted first unit forwards everything it holds, not only the declared minimum.
     function testFirstUnitOwnsAllAvailableGas() public {
-        (bool ok, bytes memory output) = address(harness).call{gas: BUDGET + 5_000}(
+        uint256 supplied = 10 * BUDGET;
+        (bool ok, bytes memory output) = address(harness).call{gas: supplied}(
             abi.encodeCall(harness.firstUnit, (address(target), BUDGET, 10))
         );
-        assertTrue(ok, "the first unit attempts its call instead of refusing admission");
+        assertTrue(ok, "an admitted first unit attempts its call");
         (bool callOk, bytes memory result) = abi.decode(output, (bool, bytes));
         assertTrue(callOk);
-        assertGt(abi.decode(result, (uint256)), BUDGET - 10_000, "the first unit's callee gets all available gas");
+        assertGt(abi.decode(result, (uint256)), supplied - supplied / 16, "the first unit's callee gets all available gas");
+    }
+
+    /// @dev A first unit short of the minimum, its EIP-150 share and the call overhead refuses
+    ///      before the call, so the dependency never runs short and its failure policy is never reached.
+    function testFirstUnitShortOfTheMinimumRefusesBeforeTheCall() public {
+        (bool ok, bytes memory output) = address(harness).call{gas: BUDGET + 5_000}(
+            abi.encodeCall(harness.firstUnit, (address(target), BUDGET, 7))
+        );
+        assertFalse(ok, "a short first unit refuses admission");
+        assertEq(output, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
+        assertEq(vm.load(address(target), bytes32(0)), bytes32(0), "the dependency is never called");
     }
 
     /// @dev The coordinator calls forward everything, so a first unit too short for them is refused
