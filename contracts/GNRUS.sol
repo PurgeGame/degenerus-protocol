@@ -457,18 +457,18 @@ contract GNRUS {
     function onFinalSweep() external onlyGame {
         sweptAt = uint40(block.timestamp);
         // The sweep has already paid sDGNRS, so cash out the sDGNRS and DGNRS GNRUS earned at the
-        // final price. A refused burn never blocks the sweep. A burn is attempted only with its
-        // whole budget and a gas refusal is re-raised, so a skipped burn is never a shortage of gas
-        // the caller chose.
+        // final price. A refused burn, including a dead stETH leg, never blocks the sweep. A burn is
+        // attempted only with its whole budget and the protocol's gas refusals are re-raised, so a
+        // skipped burn is never a shortage of gas the caller chose.
         uint256 held = sdgnrs.balanceOf(address(this));
         if (held != 0) {
             _admitCashout();
-            try sdgnrs.burn(held) {} catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
+            try sdgnrs.burn(held) {} catch (bytes memory reason) { MineFlipGas.rethrowGasRefusal(reason); }
         }
         held = ISDGNRSSnapshot(ContractAddresses.DGNRS).balanceOf(address(this));
         if (held != 0) {
             _admitCashout();
-            try sdgnrs.burnWrapped(held) {} catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
+            try sdgnrs.burnWrapped(held) {} catch (bytes memory reason) { MineFlipGas.rethrowGasRefusal(reason); }
         }
     }
 

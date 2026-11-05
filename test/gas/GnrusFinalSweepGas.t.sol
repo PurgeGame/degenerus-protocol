@@ -266,6 +266,30 @@ contract GnrusFinalSweepGasTest is FinalSweepPayoutLegs, MinerloopGasProbe {
         assertGt(ContractAddresses.GNRUS.balance + mockStETH.balanceOf(ContractAddresses.GNRUS), beforeValue);
     }
 
+    /// @notice A dead stETH leg (an empty revert or a short return) skips both cash-outs, never the
+    ///         one-shot sweep: only the protocol's own gas refusals are re-raised.
+    function test_deadStethLegSkipsTheCashoutsNotTheSweep() public {
+        bytes memory toGnrus = abi.encodeWithSelector(mockStETH.transfer.selector, ContractAddresses.GNRUS);
+        for (uint256 mode; mode < 2; ++mode) {
+            uint256 snap = vm.snapshotState();
+            this.seedSweep(0, true);
+            uint256 nativeHeld = sdgnrs.balanceOf(ContractAddresses.GNRUS);
+            uint256 wrappedHeld = dgnrs.balanceOf(ContractAddresses.GNRUS);
+            uint256 subId = admin.subscriptionId();
+            if (mode == 0) vm.mockCallRevert(address(mockStETH), toGnrus, "");
+            else vm.mockCall(address(mockStETH), toGnrus, hex"01");
+            vm.prank(keeper); game.mineRun(0);
+            assertGt(gnrus.sweptAt(), 0, "the sweep completes");
+            assertEq(admin.subscriptionId(), 0, "the sweep retires the subscription");
+            (,,, address owner,) = mockVRF.getSubscription(subId);
+            assertEq(owner, address(0), "the sweep cancels the subscription");
+            assertEq(sdgnrs.balanceOf(ContractAddresses.GNRUS), nativeHeld, "the sDGNRS cash-out is skipped");
+            assertEq(dgnrs.balanceOf(ContractAddresses.GNRUS), wrappedHeld, "the DGNRS cash-out is skipped");
+            vm.clearMockedCalls();
+            assertTrue(vm.revertToState(snap));
+        }
+    }
+
     function test_holderExitBeforeAndAfterCashoutUsesThenCurrentLiquidBacking() public {
         this.seedSweep(2, true);
         address early = address(0xA111);

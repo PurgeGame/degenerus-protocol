@@ -175,14 +175,16 @@ through `MineFlipGas.Result`.
 A dependency call is reached only with at least its declared minimum, in the first unit and in
 continuation mode at any calibration; calibration can raise the minimum but never lower it.
 Otherwise the call refuses before reaching the dependency, so no failure policy (the stake fallback,
-the VRF reads and top-up, the AFKing stETH pull, the VRF cancellation, the terminal and sweep balance
-reads, or GNRUS's final cash-outs, which admit their own budget and re-raise gas refusals) is ever a
-gas shortage the caller chose. The selection guard between workers keeps the coordinator read's
-minimum unscaled, so a selection never refuses after a committed prefix.
+the VRF reads and top-up, the AFKing stETH pull, the VRF cancellation, the terminal and sweep
+balance reads, or GNRUS's final cash-outs, which admit their own budget and re-raise the protocol's
+gas refusals) is ever a gas shortage the caller chose. A dead stETH leg in a cash-out (a revert,
+missing code or a short return) skips that cash-out, never the sweep. The selection guard between
+workers keeps the coordinator read's minimum unscaled, so a selection never refuses after a
+committed prefix.
 
 - **Implementation.** `GameMiner` (dispatch, `MineFlipGas.Result`, `_selectionAdmission`),
   `BoundedCall._remaining` (both modes), `BoundedCall.admitFirst`, `GNRUS.onFinalSweep`
-  (`_admitCashout`, `MineFlipGas.rethrowGasFailure`).
+  (`_admitCashout`, `MineFlipGas.rethrowGasRefusal`).
 - **Tests.**
   - `test/fuzz/DependencyAdmissionGuarantee.t.sol::testFuzz_ValueCallReachesItsDependencyOnlyWithItsMinimum`,
     `::testFuzz_ReadReachesItsDependencyOnlyWithItsMinimum`,
@@ -193,7 +195,8 @@ minimum unscaled, so a selection never refuses after a committed prefix.
     `test/fuzz/AfkingStethFunding.t.sol::test_LowCalibrationCannotShrinkThePullMinimum`
   - `test/gas/GnrusFinalSweepGas.t.sol::test_sweepAtAnyGasCompletesWholeOrRevertsWhole` (the sweep
     cancels the subscription and cashes out both tokens, or reverts with both intact),
-    `::test_cashoutIsNeverSkippedForShortGas`, `::test_GasCashoutBurnsFitTheirAdmission`
+    `::test_cashoutIsNeverSkippedForShortGas`, `::test_GasCashoutBurnsFitTheirAdmission`,
+    `::test_deadStethLegSkipsTheCashoutsNotTheSweep`
   - `test/fork/ForkGlamsterdamBudgets.t.sol` (every enforced dependency minimum is at least 1.2x its
     mainnet Glamsterdam cost), including `::test_c01_vrfFundNativeHeldBalance`,
     `::test_c02_vrfFundNativeZeroBalance` and `::test_a09_stethTransferIntoEmptyBalance`

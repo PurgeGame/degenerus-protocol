@@ -149,10 +149,25 @@ library MineFlipGas {
         if (meter.bounded && gasleft() < meter.floor) revert WorkGasBound();
     }
 
-    /// @dev Only for trusted protocol frames (module delegatecalls and protocol contracts), never
-    ///      external dependencies. The Game re-raises an empty module revert as EmptyRevert().
+    /// @dev Only for trusted protocol frames (module delegatecalls and protocol contracts) whose
+    ///      failures never carry a dependency's revert data. The Game re-raises an empty module
+    ///      revert as EmptyRevert().
     function rethrowGasFailure(bytes memory reason) internal pure {
         if (reason.length == 0) revert InsufficientExecutionGas();
+        bytes4 selector;
+        assembly ("memory-safe") { selector := mload(add(reason, 32)) }
+        if (selector == InsufficientExecutionGas.selector || selector == WorkGasBound.selector
+            || selector == EmptyRevert.selector) {
+            assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+        }
+    }
+
+    /// @dev For a protocol frame that passes a dependency's revert data through: re-raise only the
+    ///      protocol's own gas refusals. Empty data can be a dead dependency (a revert, missing code
+    ///      or a short return), so it is not re-raised; the caller admits the frame's whole budget
+    ///      before the call, so the frame never runs short of gas.
+    function rethrowGasRefusal(bytes memory reason) internal pure {
+        if (reason.length < 4) return;
         bytes4 selector;
         assembly ("memory-safe") { selector := mload(add(reason, 32)) }
         if (selector == InsufficientExecutionGas.selector || selector == WorkGasBound.selector
