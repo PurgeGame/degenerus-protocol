@@ -275,6 +275,8 @@
       "--skip",
       "test/fuzz/CenturyPoolDoubling.t.sol",
       "--skip",
+      "test/fuzz/ChainCallJudge.t.sol",
+      "--skip",
       "test/fuzz/CoinflipAccounts.t.sol",
       "--skip",
       "test/fuzz/CoinflipBonusDay.t.sol",
@@ -426,6 +428,10 @@
       "test/fuzz/DeityRefundEligibility.t.sol",
       "--skip",
       "test/fuzz/DelegateOnlyGuards.t.sol",
+      "--skip",
+      "test/fuzz/DependencyAdmissionGuarantee.t.sol",
+      "--skip",
+      "test/fuzz/DependencyMinimumCalibration.t.sol",
       "--skip",
       "test/fuzz/DeployCanary.t.sol",
       "--skip",
@@ -934,6 +940,12 @@
       "test/fuzz/invariant/DegenesisTimelineVariants.inv.t.sol",
       "--skip",
       "test/fuzz/invariant/EthSolvency.inv.t.sol",
+      "--skip",
+      "test/fuzz/invariant/FlipCarryAccounting.inv.t.sol",
+      "--skip",
+      "test/fuzz/invariant/FlipCarryDegenesis.inv.t.sol",
+      "--skip",
+      "test/fuzz/invariant/FlipCarryWidths.inv.t.sol",
       "--skip",
       "test/fuzz/invariant/GameFSM.inv.t.sol",
       "--skip",
@@ -1513,13 +1525,13 @@
       "test/repro/VrfRotationMidDayReRoll.t.sol"
     ],
     "input_manifest": "boundaries-focused-01-inputs.json",
-    "input_manifest_sha256": "5327c951bd2ccd8fa98fb312298f156f46966215cd7fbbc0ac6673a7f076c37f",
+    "input_manifest_sha256": "57920f4ef6b97952f83a525390ce18407c6e9edad7ec07bcd0fac8b2e406d1ae",
     "forge_exit_code": 0,
     "suites": 11,
     "passed": 75,
     "failed": 0,
     "skipped": 0,
     "exit_code": 0,
-    "run_id": "20261104T035852.686197Z-40bc34c7"
+    "run_id": "20261105T024901.028766Z-ecc2394a"
   }
 ]
