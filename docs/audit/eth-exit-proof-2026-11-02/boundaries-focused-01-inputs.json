@@ -1218,7 +1218,7 @@
   "test/repro/AfkingSections.t.sol": "582f57cb10fd984bd15dbc5b97d568213e980eff1589beddc52f93d61438475c",
   "test/repro/BafDrawArming.t.sol": "faa8e5bac41ba727f21b7f249435c02edfd00edb45a5f6ce87c75f10cc480113",
   "test/repro/BinaryRngBuffers.t.sol": "da5428641756a3f20c9d044afaf33d1a8487a7571371bd555cde9ae7678a0d13",
-  "test/repro/BoundedCall.t.sol": "76a54c9bd427e18f840052c06e6d7608bda8e04ab68be150536a68edae6f4a2a",
+  "test/repro/BoundedCall.t.sol": "4118ecfae77d7e39abc992f1fa1b11cd2e1bf0b1d18c2f4f9dc29d4962015c2f",
   "test/repro/C1BoxAutoOpen.t.sol": "7318cc1d6fc19db70af861d399b1a07be3caad3280755231dae99096719de2ac",
   "test/repro/ChainPinAdvanceDriven.t.sol": "9271753026687851b1a2b2fb78e997752206596db938d873b7cab6d1a2e964ce",
   "test/repro/ChainPinAdvanceHarness.t.sol": "d87f8cf001783397d3e42cb90712d99691ec4fc90e6fcb78d40afc8e0317f623",
