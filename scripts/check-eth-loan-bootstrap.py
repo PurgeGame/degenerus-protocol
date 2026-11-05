@@ -25,10 +25,12 @@ SOURCES = (
 # Reviewed 2026-11-01: player-created child accounts removed (one-link ownership, no loan
 # family field or child cap); loan quote, rates, prices and whale-pass awards are unchanged.
 # Reviewed 2026-11-01: Storage and WhaleModule refund comment text only; the loan model is unaffected.
+# Reviewed 2026-11-04: Storage VRF native funding minimum and WhaleModule empty-revert error only;
+# the loan model is unaffected.
 SOURCE_SHA256 = {
-    "contracts/storage/DegenerusGameStorage.sol": "3bcf92e274405de96bd7d604e74a880a5f947cd347dee37d032f7e3d12c8820b",
+    "contracts/storage/DegenerusGameStorage.sol": "4fcafe766b038b76e483234363a9c8eae488e7d7df6585fc6930a5e4cf1ce17c",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
-    "contracts/modules/DegenerusGameWhaleModule.sol": "cbd55c06694967bcc8063e1c870dc1044f4eb72f0d12af4f97f32cb60d0653b2",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "a7b9b88d1f646984e3ada611c64f820cf17e9d8b6a575c7333a9ab8f0859af2e",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",
 }
 
