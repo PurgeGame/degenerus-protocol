@@ -690,34 +690,59 @@ contract SdgnrsWhaleUnderfundedRevert is DeployProtocol {
         vm.cool(ContractAddresses.DEITY_PASS);
     }
 
-    function test_UnderfundedWhaleStageRevertsE_MinimumProgresses() public {
+    bytes32 private constant WHALE_BOUGHT = keccak256("WhalePassPurchased(uint32,uint256,uint256)");
+
+    /// @dev Below the stage minimum a call either refuses, committing nothing, or makes exactly the
+    ///      purchase the minimum makes: the caller's gas never changes what the whale stage buys, and
+    ///      an out-of-gas inside the purchase reverts the call instead of latching a skipped level.
+    function test_UnderfundedWhaleStageRefusesOrBuysWhatTheMinimumBuys() public {
         uint256 minimum = MineFlipAdmission.minGas(MineFlipAdmission.PREPARE_SUBS, false);
-        uint256 eAt;
-        uint256 eCount;
-        for (uint256 g = 300_000; g < minimum; g += 10_000) {
-            uint256 snap = vm.snapshotState();
-            _coolEngine();
-            vm.prank(MINER);
-            (bool ok, bytes memory ret) = address(game).call{gas: g}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
-            vm.revertToStateAndDelete(snap);
-            if (ok) continue;
-            if (keccak256(ret) == keccak256(abi.encodeWithSignature("E()"))) {
-                if (eAt == 0) eAt = g;
-                ++eCount;
-                continue;
-            }
-            bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
-            assertTrue(ret.length == 0 || sel == bytes4(keccak256("InsufficientExecutionGas()"))
-                || sel == bytes4(keccak256("EmptyRevert()")), "below the minimum: a gas refusal or the E() case");
-        }
-        emit log_named_uint("lowest gas surfacing E()", eAt);
-        emit log_named_uint("gas levels surfacing E() (10k steps)", eCount);
-        assertGt(eAt, 0, "an underfunded whale stage surfaces the out-of-gas as E()");
-        _coolEngine();
-        vm.prank(MINER);
-        (bool okMin,) = address(game).call{gas: minimum}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+        uint256 snap = vm.snapshotState();
+        (bool okMin, bytes memory boughtMin) = _whaleStageAt(minimum);
         assertTrue(okMin, "the minimum admission progresses");
-        assertEq(uint24(uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR))) >> (17 * 8)), 4,
-            "the whale attempt ran at the minimum");
+        assertEq(_whaleLatch(), 4, "the whale attempt ran at the minimum");
+        assertGt(boughtMin.length, 0, "the minimum buys sDGNRS's whale passes");
+        vm.revertToStateAndDelete(snap);
+        uint256 refused;
+        uint256 bought;
+        for (uint256 g = 300_000; g < minimum; g += 10_000) {
+            snap = vm.snapshotState();
+            (bool ok, bytes memory out) = _whaleStageAt(g);
+            if (ok) {
+                assertEq(_whaleLatch(), 4, "a completed call ran the whale attempt");
+                assertEq(out, boughtMin, "a completed call buys what the minimum buys");
+                ++bought;
+            } else {
+                bytes4 sel = out.length >= 4 ? bytes4(out) : bytes4(0);
+                assertTrue(out.length == 0 || sel == MineFlipGas.InsufficientExecutionGas.selector
+                    || sel == MineFlipGas.EmptyRevert.selector, "below the minimum: only a gas refusal");
+                ++refused;
+            }
+            vm.revertToStateAndDelete(snap);
+        }
+        emit log_named_uint("gas levels refused (10k steps)", refused);
+        emit log_named_uint("gas levels buying what the minimum buys (10k steps)", bought);
+        assertGt(refused, 0, "an underfunded whale stage refuses");
+    }
+
+    /// @dev One mineRun with `gasAmount`: on success the sDGNRS whale purchase's event data (empty
+    ///      when nothing was bought), otherwise the revert data.
+    function _whaleStageAt(uint256 gasAmount) internal returns (bool ok, bytes memory out) {
+        _coolEngine();
+        vm.recordLogs();
+        vm.prank(MINER);
+        (ok, out) = address(game).call{gas: gasAmount}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        if (!ok) return (ok, out);
+        out = "";
+        uint256 buyer = game.walletIdOf_g3120(ContractAddresses.SDGNRS);
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == WHALE_BOUGHT
+                && uint256(logs[i].topics[1]) == buyer) out = logs[i].data;
+        }
+    }
+
+    function _whaleLatch() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR))) >> (17 * 8));
     }
 }
