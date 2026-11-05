@@ -1108,8 +1108,9 @@ abstract contract DegenerusGameStorage {
     // Coordinator reads and funding forward all gas above the meter floor and these caller
     // tails, like the request; the minimum admits the call and never caps it.
     uint256 internal constant VRF_READ_RESERVE = 200_000;
-    // A first funding creates the subscription's balance slot: 125,077 gas natively.
-    uint256 internal constant VRF_FUND_MIN_GAS = 150_000;
+    // Funding a zero native balance writes it fresh: 129,709 at Glamsterdam without a state
+    // reservoir, 34,489 Osaka cold (mainnet fork).
+    uint256 internal constant VRF_FUND_MIN_GAS = 250_000;
 
     /// @dev Native balance is the second static ABI word; never decode consumers.
     function _vrfNativeBalance(MineFlipGas.Meter memory meter, uint256 tail)

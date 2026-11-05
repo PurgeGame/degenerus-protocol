@@ -158,15 +158,19 @@ each suite asserts `judgeCheck`. Where a site does not cap gas itself, the judge
 above it, the rest up to the cap). Idle must answer `NoWork` and Wait `RngNotReady`; any other
 selected action must make progress, so a gas refusal at or above the minimum is a violation. An
 action whose declared minimum exceeds the cap, the 100-box human order, is drawn at the cap;
-`HumanOrderNativeGas` separately completes a maximum order cold inside one transaction. While work
-remains, the handler's original call follows, so handlers keep their pace. `EndingWitness`
-re-derives the 14-day deadman, the 14-day unpublished request and the 30-day purchase timeout from
-raw storage: AdvanceLiveness and AnyInputSafety fail when terminal state latches with no ending due,
-and AdvanceLiveness also requires an idle, sealed day to have requested its wall day and stamped its
-completion. AnyInputSafety's guided claim doors steer claims that random input does not reach to
-acceptance and check each accepted claim's effect. The FlipCarry suites hold an independent model of
-each tracked player's wallet, bank, carry, cursor and auto-rebuy settings; after every action raw
-storage must equal the model and the tracked ledger must balance.
+`HumanOrderNativeGas` separately completes a maximum order cold inside one transaction. Half the
+judged calls draw a calibration (0.25x, below 1x, above 1x or 4x): below 1x a gas refusal is
+accepted, since a continuation admitted on a scaled estimate may overrun and roll back its worker,
+and at 1x and above the rule is unchanged. `judgeCheck` also fails when a dependency mock records a
+call that arrived below the protocol's admission. While work remains, the handler's original call
+follows, so handlers keep their pace. `EndingWitness` re-derives the 14-day deadman, the 14-day
+unpublished request and the 30-day purchase timeout from raw storage: AdvanceLiveness and
+AnyInputSafety fail when terminal state latches with no ending due, and AdvanceLiveness also
+requires an idle, sealed day to have requested its wall day and stamped its completion.
+AnyInputSafety's guided claim doors steer claims that random input does not reach to acceptance and
+check each accepted claim's effect. The FlipCarry suites hold an independent model of each tracked
+player's wallet, bank, carry, cursor and auto-rebuy settings; after every action raw storage must
+equal the model and the tracked ledger must balance.
 
 AdvanceLiveness allows 500 mining calls per cycle; a cycle restarts when the logical day advances.
 Past that budget, with an active ticket queue of 1–4,096 holders, it requires a ranking function

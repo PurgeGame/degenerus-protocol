@@ -1116,7 +1116,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             )
         );
         if (!ok) {
-            if (data.length == 0) revert E();
+            if (data.length == 0) revert EmptyRevert();
             assembly ("memory-safe") {
                 revert(add(32, data), mload(data))
             }

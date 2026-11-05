@@ -90,10 +90,19 @@ library BoundedCall {
     function _remaining(MineFlipGas.Meter memory meter, uint256 minimum, uint256 reserve, uint256 overhead)
         private view returns (uint256 available)
     {
-        // The mandatory first unit owns all available gas, including its dependency calls.
+        // The mandatory first unit forwards all available gas, but only once the declared minimum,
+        // its EIP-150 share and the call overhead fit unscaled: a first unit short of a dependency's
+        // minimum refuses before the call and never reaches its failure policy. Forwarding everything
+        // keeps no tail, so the reserve adds nothing here; the callee returns what it leaves unused.
         // A continuation admits at least the declared minimum. A higher calibration scales it with
         // the tail, so a nested protocol frame keeps room for its own calibrated admissions.
-        if (meter.mustProgress) return gasleft();
+        if (meter.mustProgress) {
+            available = gasleft();
+            if (minimum + minimum / 63 + overhead > available) {
+                revert MineFlipGas.InsufficientExecutionGas();
+            }
+            return available;
+        }
         uint256 scaled = MineFlipGas.scale(meter, minimum);
         if (scaled > minimum) minimum = scaled;
         reserve = MineFlipGas.scale(meter, reserve + overhead);

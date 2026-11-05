@@ -170,16 +170,36 @@ same. Mining rewards depend on gas spent per call.
 `mineRun` rejects invalid gas multipliers, initial idle/wait states and insufficient initial
 execution gas. Request refusals return without reverting earlier work; recognized checkpoint
 refusals preserve a completed prefix. Other worker failures propagate. Workers report progress
-through `MineFlipGas.Result`. Caller calibration can raise a dependency call's minimum but never
-lower it, so a short continuation refuses before the call instead of reaching the dependency's
-failure policy (the stake fallback, the AFKing stETH pull or the VRF cancel).
+through `MineFlipGas.Result`.
 
-- **Implementation.** `GameMiner` (dispatch and `MineFlipGas.Result`), `BoundedCall.admitFirst`,
-  `BoundedCall._remaining`.
+A dependency call is reached only with at least its declared minimum, in the first unit and in
+continuation mode at any calibration; calibration can raise the minimum but never lower it.
+Otherwise the call refuses before reaching the dependency, so no failure policy (the stake fallback,
+the VRF reads and top-up, the AFKing stETH pull, the VRF cancellation, the terminal and sweep balance
+reads, or GNRUS's final cash-outs, which admit their own budget and re-raise gas refusals) is ever a
+gas shortage the caller chose. The selection guard between workers keeps the coordinator read's
+minimum unscaled, so a selection never refuses after a committed prefix.
+
+- **Implementation.** `GameMiner` (dispatch, `MineFlipGas.Result`, `_selectionAdmission`),
+  `BoundedCall._remaining` (both modes), `BoundedCall.admitFirst`, `GNRUS.onFinalSweep`
+  (`_admitCashout`, `MineFlipGas.rethrowGasFailure`).
 - **Tests.**
+  - `test/fuzz/DependencyAdmissionGuarantee.t.sol::testFuzz_ValueCallReachesItsDependencyOnlyWithItsMinimum`,
+    `::testFuzz_ReadReachesItsDependencyOnlyWithItsMinimum`,
+    `::test_FirstUnitRefusesBelowTheDependencyMinimum` (gas, calibration 0.25x–10x, first unit or
+    continuation, ancestor floor, minimum, reserve and value)
   - `test/fuzz/DependencyMinimumCalibration.t.sol::test_CalibrationNeverLowersTheDependencyMinimum`,
     `::test_LowCalibrationCannotUnderfundTheStake`;
     `test/fuzz/AfkingStethFunding.t.sol::test_LowCalibrationCannotShrinkThePullMinimum`
+  - `test/gas/GnrusFinalSweepGas.t.sol::test_sweepAtAnyGasCompletesWholeOrRevertsWhole` (the sweep
+    cancels the subscription and cashes out both tokens, or reverts with both intact),
+    `::test_cashoutIsNeverSkippedForShortGas`, `::test_GasCashoutBurnsFitTheirAdmission`
+  - `test/fork/ForkGlamsterdamBudgets.t.sol` (every enforced dependency minimum is at least 1.2x its
+    mainnet Glamsterdam cost), including `::test_c01_vrfFundNativeHeldBalance`,
+    `::test_c02_vrfFundNativeZeroBalance` and `::test_a09_stethTransferIntoEmptyBalance`
+  - The dependency mocks count calls that arrive below the protocol's admission
+    (`MockVRFCoordinator.starvedCalls`, `MockStETH.starvedCalls`); `ChainCallJudge.judgeCheck` fails any
+    judged suite that records one.
   - `test/repro/MineFlipGasSweep.t.sol::test_SweepFromPublish`, `::test_SweepFromDailyPhase`,
     `::test_SweepFromSealingDailyPhase` (helpers `_sweep`: "never WorkGasBound"; `_fullSweep`: "near
     the cap every call succeeds")

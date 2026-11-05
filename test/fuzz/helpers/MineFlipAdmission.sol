@@ -79,6 +79,13 @@ library MineFlipAdmission {
             b = GasBounds.DAILY_APPLY;
             uint256 setup = GasBounds.TERMINAL_SETUP + GasBounds.DEGENESIS_TERMINAL_GAS;
             if (setup > b) b = setup;
+            // The final sweep: its measured work plus both GNRUS cash-out admissions and the
+            // shutdown's, each of which must fit before its call.
+            uint256 shutdown = 1_000_000;
+            uint256 sweep = GasBounds.TERMINAL_FINAL_SWEEP + GasBounds.TERMINAL_SWEEP_TAIL
+                + 2 * (GasBounds.GNRUS_CASHOUT_BURN + GasBounds.GNRUS_CASHOUT_BURN / 63 + 10_000)
+                + shutdown + shutdown / 63 + 10_000;
+            if (sweep > b) b = sweep;
             return b + 250_000 + GasBounds.TERMINAL_TAIL + GasBounds.DAILY_PHASE_TAIL;
         }
         if (action == SEIZE_LOANS) {

@@ -78,6 +78,9 @@ abstract contract ChainCallJudge {
     /// @dev Admission-judged calls: per action, at exactly the minimum, at the cap because the
     ///      declared minimum exceeds it, and ample sites whose selection could not be read.
     uint256 public judgeDrawnCalls;
+    /// @dev Judged calls at a drawn non-default calibration, and those below 1x that refused for gas.
+    uint256 public judgeCalibratedCalls;
+    uint256 public judgeLowCalibrationRefusals;
     uint256 public judgeAtMinimum;
     uint256 public judgeAboveCap;
     uint256 public judgeUnread;
@@ -111,17 +114,64 @@ abstract contract ChainCallJudge {
             return _settle(ok, ret, game, 0, allowed, site, ACTION_UNREAD);
         }
         uint256 g = _admissionGas(game, action);
+        uint32 drawn = multiplier == 0 ? _drawMultiplier() : multiplier;
         _coolProtocol(game);
         if (once) _jvm.prank(sender, origin);
-        (ok, ret) = game.call{gas: g}(cd);
-        (ok, sel) = _settle(ok, ret, game, g, allowed, site, action);
-        if (!ok || action == ACTION_IDLE || action == ACTION_WAIT) return (ok, sel);
+        (ok, ret) = game.call{gas: g}(abi.encodeWithSelector(SEL_MINE_RUN, drawn));
+        if (!ok && drawn != 0 && drawn < DEFAULT_MULTIPLIER && _isGasRefusal(ret)) {
+            // Below 1x a continuation admitted on a scaled estimate may overrun and roll back its
+            // worker, taking the first unit with it: a keeper's own loss, never a commit. The
+            // ample call below still has to progress.
+            ++judgeLowCalibrationRefusals;
+            ++judgeCalls;
+        } else {
+            (ok, sel) = _settle(ok, ret, game, g, allowed, site, action);
+            if (!ok || action == ACTION_IDLE || action == ACTION_WAIT) return (ok, sel);
+        }
         if (once) _jvm.prank(sender, origin);
         action = _selected(game);
         if (action == ACTION_IDLE || action == ACTION_WAIT || action == ACTION_UNREAD) return (true, bytes4(0));
         if (once) _jvm.prank(sender, origin);
         (ok, ret) = game.call(cd);
         return _settle(ok, ret, game, 0, allowed, site, action);
+    }
+
+    uint32 private constant DEFAULT_MULTIPLIER = 10_000;
+
+    /// @dev Half the judged calls run at the default calibration; the rest at the lowest (0.25x), below
+    ///      1x, or above it. Calibration only moves where work splits, so every invariant and the
+    ///      starved-dependency oracle must hold at each.
+    function _drawMultiplier() private returns (uint32) {
+        uint256 seed = uint256(keccak256(abi.encode("judge multiplier", ++_judgeNonce, block.timestamp)));
+        uint256 mode = seed % 8;
+        if (mode < 4) return 0;
+        ++judgeCalibratedCalls;
+        if (mode == 4) return 2_500;
+        if (mode == 5) return uint32(2_500 + (seed >> 8) % 7_500);
+        if (mode == 6) return uint32(10_001 + (seed >> 8) % 30_000);
+        return 40_000;
+    }
+
+    function _isGasRefusal(bytes memory ret) private pure returns (bool) {
+        return ret.length == 0 || _is(ret, SEL_INSUFFICIENT_GAS) || _is(ret, SEL_WORK_GAS_BOUND)
+            || _is(ret, SEL_EMPTY_REVERT);
+    }
+
+    /// @dev Calls the dependency mocks counted as arriving below the protocol's admission for their
+    ///      entry point (zero when a mock is absent or replaced).
+    function judgeStarvedDependencyCalls() public view returns (uint256 n, bytes4 first) {
+        address[2] memory deps = [ContractAddresses.VRF_COORDINATOR, ContractAddresses.STETH_TOKEN];
+        for (uint256 i; i < 2; ++i) {
+            (bool ok, bytes memory ret) = deps[i].staticcall(abi.encodeWithSignature("starvedCalls()"));
+            if (!ok || ret.length != 32) continue;
+            uint256 c = abi.decode(ret, (uint256));
+            if (c == 0) continue;
+            if (n == 0) {
+                (ok, ret) = deps[i].staticcall(abi.encodeWithSignature("firstStarvedSelector()"));
+                if (ok && ret.length == 32) first = abi.decode(ret, (bytes4));
+            }
+            n += c;
+        }
     }
 
     /// @dev `minerAction()` as the current caller, or ACTION_UNREAD when it cannot be read.
@@ -285,6 +335,11 @@ abstract contract ChainCallJudge {
 
     /// @notice Reverts when any unexpected mineRun revert was recorded; the message names the first.
     function judgeCheck(string memory suite) public view {
+        (uint256 starved, bytes4 firstStarved) = judgeStarvedDependencyCalls();
+        if (starved != 0) {
+            revert(string.concat(suite, ": dependency reached below its admission x", _u(starved),
+                " first selector ", _hex4(firstStarved)));
+        }
         if (judgeUnexpected == 0) return;
         revert(
             string.concat(

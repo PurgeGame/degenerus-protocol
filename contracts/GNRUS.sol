@@ -28,6 +28,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {BoundedCall} from "./libraries/BoundedCall.sol";
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "./libraries/MineFlipGasBounds.sol";
 
 /// @notice Minimal sDGNRS interface: governance balance snapshots and the game-over cash-out.
 interface ISDGNRSSnapshot {
@@ -455,11 +457,26 @@ contract GNRUS {
     function onFinalSweep() external onlyGame {
         sweptAt = uint40(block.timestamp);
         // The sweep has already paid sDGNRS, so cash out the sDGNRS and DGNRS GNRUS earned at the
-        // final price. A refused burn never blocks the sweep.
+        // final price. A refused burn never blocks the sweep. A burn is attempted only with its
+        // whole budget and a gas refusal is re-raised, so a skipped burn is never a shortage of gas
+        // the caller chose.
         uint256 held = sdgnrs.balanceOf(address(this));
-        if (held != 0) try sdgnrs.burn(held) {} catch {}
+        if (held != 0) {
+            _admitCashout();
+            try sdgnrs.burn(held) {} catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
+        }
         held = ISDGNRSSnapshot(ContractAddresses.DGNRS).balanceOf(address(this));
-        if (held != 0) try sdgnrs.burnWrapped(held) {} catch {}
+        if (held != 0) {
+            _admitCashout();
+            try sdgnrs.burnWrapped(held) {} catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
+        }
+    }
+
+    /// @dev Below the cash-out budget, its EIP-150 share and the call frame, the whole sweep refuses
+    ///      and a later call retries it.
+    function _admitCashout() private view {
+        uint256 budget = GasBounds.GNRUS_CASHOUT_BURN;
+        if (gasleft() < budget + budget / 63 + 10_000) revert MineFlipGas.InsufficientExecutionGas();
     }
 
     // =====================================================================

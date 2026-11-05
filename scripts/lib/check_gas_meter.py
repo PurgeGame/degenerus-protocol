@@ -22,9 +22,10 @@ REVIEWED = {
     ("libraries/MineFlipGas.sol", "forwardable"): ["if (meter.mustProgress) return gasleft();"],
     # Pre-call minimum and tail reservation; never classifies a callee failure.
     ("libraries/BoundedCall.sol", "_remaining"): [
-        # The first mandatory checkpoint forwards all remaining gas, regardless of estimates.
+        # The first mandatory checkpoint forwards all remaining gas, regardless of estimates, once
+        # the unscaled dependency minimum fits; a shortfall reverts before the call.
         # mustProgress is a deterministic checkpoint flag, never a gas-dependent outcome branch.
-        "if (meter.mustProgress) return gasleft();", "available = gasleft();"],
+        "available = gasleft();", "available = gasleft();"],
     # Pre-call admission of the mandatory first unit; never classifies a callee failure.
     ("libraries/BoundedCall.sol", "admitFirst"): [
         "if (meter.mustProgress && gasleft() < minimum + reserve) revert MineFlipGas.InsufficientExecutionGas();"],
@@ -32,6 +33,10 @@ REVIEWED = {
     # never classifies a callee failure from post-call gas.
     ("libraries/BoundedCall.sol", "stethBalanceOrZero"): [
         "if (gasleft() < STETH_READ_MIN_GAS + CALL_OVERHEAD + (STETH_READ_MIN_GAS + 62) / 63) {"],
+    # Pre-call admission of GNRUS's final cash-out burns; a shortfall reverts the whole sweep and
+    # never classifies a callee failure.
+    ("GNRUS.sol", "_admitCashout"): [
+        "if (gasleft() < budget + budget / 63 + 10_000) revert MineFlipGas.InsufficientExecutionGas();"],
     ("modules/GameMiner.sol", "_mineFlip"): [
         "uint256 rewardStart = gasleft();",
         "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",

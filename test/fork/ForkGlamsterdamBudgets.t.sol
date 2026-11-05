@@ -6,9 +6,11 @@ import {ForkDeployProtocol} from "./ForkDeployProtocol.sol";
 import {ForkPins} from "./ForkPins.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../../contracts/interfaces/IVRFCoordinator.sol";
 
 interface ICoordinatorExtra {
+    function createSubscription() external returns (uint256 subId);
     function addConsumer(uint256 subId, address consumer) external;
     function fundSubscriptionWithNative(uint256 subId) external payable;
     function cancelSubscription(uint256 subId, address to) external;
@@ -25,7 +27,7 @@ interface ICoordinatorExtra {
 ///         SSTORE first changes and cold accounts through GlamsterdamReprice, +97,920 state gas per new
 ///         slot, +183,600 per account created by a value call, +2,300 per value-bearing CALL inside the
 ///         frame, +100 per EXTCODESIZE/EXTCODECOPY inside the frame. Refunds are ignored (conservative).
-///         Every budget must cover the Glamsterdam total.
+///         Every budget must cover the Glamsterdam total with at least 20% to spare.
 abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
     struct Probe {
         address sender;
@@ -277,6 +279,9 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
         if (enforce) {
             assertTrue(r.ok, string.concat(name, ": call failed"));
             assertGe(budget, r.total, string.concat(name, ": budget below Glamsterdam total"));
+            // A minimum is an admission, never a cap: hold every one at least 20% above the
+            // measured cost, so a repricing or a dearer path cannot reach a failure policy.
+            assertGe(budget * 5, r.total * 6, string.concat(name, ": budget within 20% of the Glamsterdam total"));
         }
     }
 
@@ -355,6 +360,21 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
             false, true);
     }
 
+    /// @dev The stETH leg of a GNRUS cash-out burn: sDGNRS pays real stETH into a GNRUS balance that
+    ///      may still be empty. Measured whole and compared with the mock leg the cash-out gas test
+    ///      prices, so GNRUS_CASHOUT_BURN covers the real token's extra cost.
+    function test_a09_stethTransferIntoEmptyBalance() public {
+        vm.deal(address(sdgnrs), 2 ether);
+        vm.prank(address(sdgnrs));
+        lido.submit{value: 2 ether}(address(0));
+        assertEq(lido.sharesOf(ContractAddresses.GNRUS), 0, "fixture: GNRUS holds no stETH");
+        _run("stETH.transfer sDGNRS -> GNRUS, empty recipient  [GNRUS cash-out stETH leg]",
+            GasBounds.GNRUS_CASHOUT_BURN,
+            _send(address(sdgnrs), ForkPins.STETH, 0,
+                abi.encodeWithSignature("transfer(address,uint256)", ContractAddresses.GNRUS, 1 ether)),
+            false, true);
+    }
+
     // ------------------------------------------------------------------ VRF coordinator
 
     function test_b01_vrfRequestFirst() public {
@@ -396,6 +416,28 @@ contract ForkGlamsterdamBudgetsTest is ForkGlamsterdamBudgetsBase {
             _run(string.concat("VRF.getSubscription, consumers=", vm.toString(counts[k]), " (analytic cold)"),
                 50_000, _view(address(game), co, data), false, false);
         }
+    }
+
+    // ------------------------------------------------------------------ VRF native funding (250k)
+
+    function test_c01_vrfFundNativeHeldBalance() public {
+        vm.deal(address(game), 1 ether);
+        _run("VRF.fundSubscriptionWithNative, balance already nonzero  [Storage._topUpVrfNative]", 250_000,
+            _send(address(game), ForkPins.VRF_COORDINATOR, 0.5 ether,
+                abi.encodeWithSelector(ICoordinatorExtra.fundSubscriptionWithNative.selector, subId)),
+            true, true);
+    }
+
+    /// @dev A drained subscription's native balance is zero, so the top-up writes a fresh value:
+    ///      the dearest funding the refill and the level's yield split can reach.
+    function test_c02_vrfFundNativeZeroBalance() public {
+        vm.prank(address(admin));
+        uint256 fresh = ICoordinatorExtra(ForkPins.VRF_COORDINATOR).createSubscription();
+        vm.deal(address(game), 1 ether);
+        _run("VRF.fundSubscriptionWithNative, zero native balance  [Storage._topUpVrfNative]", 250_000,
+            _send(address(game), ForkPins.VRF_COORDINATOR, 0.5 ether,
+                abi.encodeWithSelector(ICoordinatorExtra.fundSubscriptionWithNative.selector, fresh)),
+            true, true);
     }
 
     // ------------------------------------------------------------------ feed, sDGNRS

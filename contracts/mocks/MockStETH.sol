@@ -33,6 +33,7 @@ contract MockStETH {
     }
 
     function submit(address) external payable returns (uint256) {
+        _admitted(300_000);
         uint256 shares = _ethToShares(msg.value);
         sharesOf[msg.sender] += shares;
         totalShares += shares;
@@ -76,6 +77,7 @@ contract MockStETH {
     }
 
     function transferSharesFrom(address from, address to, uint256 shares) public virtual returns (uint256 amount) {
+        if (msg.sig == this.transferSharesFrom.selector) _admitted(300_000);
         require(from != address(0) && to != address(0) && to != address(this));
         amount = getPooledEthByShares(shares);
         uint256 approved = allowance[from][msg.sender];
@@ -119,6 +121,18 @@ contract MockStETH {
     }
 
     /// @dev Convert ETH amount to shares at current exchange rate (1:1 if first deposit).
+    /// @dev Test oracle: calls that arrived with less gas than the protocol admits each guarded entry
+    ///      point with (stake 300k, AFKing share pull 300k). A failure the protocol swallows is sound
+    ///      only at or above that admission, so the count stays zero.
+    uint256 public starvedCalls;
+    bytes4 public firstStarvedSelector;
+
+    function _admitted(uint256 minimum) internal {
+        // Function dispatch precedes this read.
+        if (gasleft() + 2_000 >= minimum) return;
+        if (starvedCalls++ == 0) firstStarvedSelector = msg.sig;
+    }
+
     function _ethToShares(uint256 ethAmount) private view returns (uint256) {
         if (totalShares == 0 || totalPooledEther == 0) return ethAmount;
         return (ethAmount * totalShares) / totalPooledEther;

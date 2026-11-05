@@ -69,10 +69,10 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
 
         // There are fewer than 32 category transitions. Workers own all unbounded queues.
         for (uint256 transitions; transitions < 32; ++transitions) {
-            // Selection can read native ETH and its price. Scale its complete admission
-            // with the dependency minima, preserving any committed prefix.
-            if (transitions != 0 && MineFlipGas.remaining(meter)
-                < MineFlipGas.scale(meter, GasBounds.ENGINE_SELECTION + RETURN_RESERVE)) break;
+            // Selection can read the coordinator's native balance. Its admission scales with the
+            // calibration but never below that read's own minimum, as BoundedCall admits it, so a
+            // selection never refuses after a committed prefix.
+            if (transitions != 0 && MineFlipGas.remaining(meter) < _selectionAdmission(meter)) break;
             // Only reads separate the initial selection from the first dispatch.
             // Every later iteration must reselect after the preceding worker's changes.
             MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender, meter);
@@ -303,6 +303,15 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
             }
         }
         emit MinerWork(msg.sender, uint8(first), used, reward);
+    }
+
+    /// @dev The scaled selection bound, holding the coordinator read's minimum at no less than its
+    ///      declared value.
+    function _selectionAdmission(MineFlipGas.Meter memory meter) private pure returns (uint256 admission) {
+        uint256 total = GasBounds.ENGINE_SELECTION + RETURN_RESERVE;
+        admission = MineFlipGas.scale(meter, total);
+        uint256 held = MineFlipGas.scale(meter, total - EXTERNAL_READ_GAS) + EXTERNAL_READ_GAS;
+        if (held > admission) admission = held;
     }
 
     /// @dev Saturate before shifting or multiplying so arbitrary elapsed time cannot overflow.

@@ -98,6 +98,101 @@ contract GnrusFinalSweepGasTest is FinalSweepPayoutLegs, MinerloopGasProbe {
         assertEq(dgnrs.balanceOf(ContractAddresses.GNRUS), 0);
     }
 
+    /// @dev The sweep with GNRUS's hook mocked: every sink paid, GNRUS still holding both tokens.
+    function _sinksPaid(uint8 assets) private {
+        this.seedSweep(assets, true);
+        vm.mockCall(address(gnrus), abi.encodeCall(gnrus.onFinalSweep, ()), bytes(""));
+        vm.prank(keeper); game.mineRun(0);
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Each cash-out burn, cold, for every asset mix the sweep can leave: an empty, ETH-only
+    ///         or mixed Game means GNRUS may hold no stETH yet, so the burn's stETH leg can write a
+    ///         fresh balance. Every case fits GNRUS_CASHOUT_BURN at Osaka and Glamsterdam prices.
+    function test_GasCashoutBurnsFitTheirAdmission() public {
+        uint256 worst;
+        for (uint8 assets; assets < 3; ++assets) {
+            uint256 snap = vm.snapshotState();
+            _sinksPaid(assets);
+            uint256 nativeHeld = sdgnrs.balanceOf(ContractAddresses.GNRUS);
+            uint256 wrappedHeld = dgnrs.balanceOf(ContractAddresses.GNRUS);
+            assertGt(nativeHeld, 0);
+            assertGt(wrappedHeld, 0);
+            (GlamsterdamReprice.Result memory r,) = _probe(address(sdgnrs), ContractAddresses.GNRUS,
+                abi.encodeCall(sdgnrs.burn, (nativeHeld)), GasBounds.GNRUS_CASHOUT_BURN);
+            _report(string.concat("gnrus_cashout_burn_assets_", vm.toString(assets)), r, GasBounds.GNRUS_CASHOUT_BURN);
+            worst = _fits(r, worst);
+            (r,) = _probe(address(sdgnrs), ContractAddresses.GNRUS,
+                abi.encodeCall(sdgnrs.burnWrapped, (wrappedHeld)), GasBounds.GNRUS_CASHOUT_BURN);
+            _report(string.concat("gnrus_cashout_burn_wrapped_assets_", vm.toString(assets)), r,
+                GasBounds.GNRUS_CASHOUT_BURN);
+            worst = _fits(r, worst);
+            vm.revertToState(snap);
+        }
+        emit log_named_uint("gnrus_cashout_worst_total", worst);
+    }
+
+    function _fits(GlamsterdamReprice.Result memory r, uint256 worst) private pure returns (uint256) {
+        uint256 glamsterdam = r.glamsterdamExec + r.stateGas;
+        assertLe(r.osakaExec, GasBounds.GNRUS_CASHOUT_BURN);
+        assertLe(glamsterdam, GasBounds.GNRUS_CASHOUT_BURN);
+        if (r.osakaExec > worst) worst = r.osakaExec;
+        return glamsterdam > worst ? glamsterdam : worst;
+    }
+
+    /// @notice A refused cash-out never blocks the sweep, so a refusal must never be a gas shortage the
+    ///         caller chose: at every gas the hook either refuses whole or cashes out both tokens.
+    function test_cashoutIsNeverSkippedForShortGas() public {
+        _sinksPaid(2);
+        uint256 snap = vm.snapshotState();
+        uint256 completed;
+        for (uint256 g = 40_000; g <= 2_500_000; g += 5_000) {
+            vm.prank(address(game));
+            (bool ok,) = address(gnrus).call{gas: g}(abi.encodeCall(gnrus.onFinalSweep, ()));
+            if (ok) {
+                ++completed;
+                assertEq(sdgnrs.balanceOf(ContractAddresses.GNRUS), 0, "a completed hook cashed out sDGNRS");
+                assertEq(dgnrs.balanceOf(ContractAddresses.GNRUS), 0, "a completed hook cashed out DGNRS");
+            }
+            vm.revertToState(snap);
+        }
+        assertGt(completed, 0, "the hook completes with enough gas");
+    }
+
+    /// @notice The final sweep is one-shot: at every supplied gas it either reverts whole, keeping the
+    ///         VRF subscription and GNRUS's holdings, or it completes with the subscription cancelled
+    ///         and both cash-outs done. No gas makes it skip the cancellation or a cash-out.
+    function test_sweepAtAnyGasCompletesWholeOrRevertsWhole() public {
+        this.seedSweep(2, true);
+        uint256 subId = admin.subscriptionId();
+        assertGt(subId, 0);
+        (,,, address owner,) = mockVRF.getSubscription(subId);
+        assertTrue(owner != address(0), "fixture: a live subscription");
+        assertEq(mockVRF.pendingCount(subId), 0, "fixture: no pending request, so a cancel is accepted");
+        uint256 snap = vm.snapshotState();
+        uint256 lowest = type(uint256).max;
+        for (uint256 g = 600_000; g <= 6_000_000; g += 20_000) {
+            vm.prank(keeper);
+            (bool ok,) = address(game).call{gas: g}(abi.encodeCall(game.mineRun, (uint32(0))));
+            if (ok) {
+                if (g < lowest) lowest = g;
+                assertGt(gnrus.sweptAt(), 0, "a completed call swept");
+                assertEq(admin.subscriptionId(), 0, "a completed sweep retired the subscription");
+                (,,, owner,) = mockVRF.getSubscription(subId);
+                assertEq(owner, address(0), "a completed sweep cancelled the subscription");
+                assertEq(sdgnrs.balanceOf(ContractAddresses.GNRUS), 0, "a completed sweep cashed out sDGNRS");
+                assertEq(dgnrs.balanceOf(ContractAddresses.GNRUS), 0, "a completed sweep cashed out DGNRS");
+            } else {
+                assertEq(gnrus.sweptAt(), 0, "a refused call left the sweep undone");
+                assertEq(admin.subscriptionId(), subId, "a refused call kept the subscription");
+            }
+            vm.revertToState(snap);
+        }
+        assertLt(lowest, type(uint256).max, "the sweep completes within the swept range");
+        emit log_named_uint("lowest_completing_sweep_gas_warm", lowest);
+        assertLt(lowest, (uint256(1) << 24) - 21_000, "the sweep fits one transaction");
+    }
+
     function test_afterReadReserveWithGnrusCanRefuseOptionalSweep() public {
         this.seedSweep(2, true);
         // Copy the healthy mock's runtime into a fresh implementation; retain all token storage.

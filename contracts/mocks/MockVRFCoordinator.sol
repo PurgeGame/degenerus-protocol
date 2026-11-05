@@ -38,6 +38,7 @@ contract MockVRFCoordinator {
     }
 
     function cancelSubscription(uint256 subId, address to) external {
+        _admitted(450_000);
         if (pendingCount[subId] != 0) revert PendingRequestExists();
         uint96 bal = subs[subId].balance;
         delete subs[subId];
@@ -75,6 +76,7 @@ contract MockVRFCoordinator {
     function requestRandomWords(
         VRFRandomWordsRequest calldata req
     ) external returns (uint256 requestId) {
+        _admitted(500_000);
         if (requireFunds) require(subs[req.subId].balance != 0, "not funded before request");
         require(keccak256(req.extraArgs) == keccak256(hex"92fd13380000000000000000000000000000000000000000000000000000000000000001"), "native payment required");
         lastCallbackGasLimit = req.callbackGasLimit;
@@ -143,6 +145,7 @@ contract MockVRFCoordinator {
     }
 
     function fundSubscriptionWithNative(uint256 subId) external payable {
+        _admitted(250_000);
         require(subs[subId].owner != address(0), "invalid subscription");
         require(msg.value <= type(uint96).max, "oversized funding");
         subs[subId].balance += uint96(msg.value);
@@ -156,6 +159,18 @@ contract MockVRFCoordinator {
     /// @dev Unanswered requests per subscription; v2.5 refuses cancellation while any exist.
     mapping(uint256 => uint256) public pendingCount;
     error PendingRequestExists();
+
+    /// @dev Test oracle: calls that arrived with less gas than the protocol admits each guarded entry
+    ///      point with (request 500k, native funding 250k, cancellation 450k). A failure the protocol
+    ///      swallows is sound only at or above that admission, so the count stays zero.
+    uint256 public starvedCalls;
+    bytes4 public firstStarvedSelector;
+
+    function _admitted(uint256 minimum) private {
+        // Function dispatch precedes this read.
+        if (gasleft() + 2_000 >= minimum) return;
+        if (starvedCalls++ == 0) firstStarvedSelector = msg.sig;
+    }
 
     receive() external payable {}
 }

@@ -28,8 +28,8 @@ library MineFlipGasBounds {
     // above the request's own 1M floor and reserve; retain forwarding and frame headroom.
     uint256 internal constant RNG_MIDDAY_REQUEST = 2_200_000;
     // Native daily witnesses: 1.55M normal, 1.60M refill (EIP-170 profile, Amsterdam; Osaka
-    // 0.55M/0.59M). Refill admission: VRF_DAILY_REFILL_TAIL + 150k funding minimum + 45k value
-    // frame, 3.25M. Coordinator calls forward all gas above the tails; only stETH stays at 50k.
+    // 0.55M/0.59M). Refill admission: VRF_DAILY_REFILL_TAIL + 250k funding minimum + 45k value
+    // frame, 3.35M. Coordinator calls forward all gas above the tails; only stETH stays at 50k.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
     // GNRUS's purchase-phase-end step (one flip settlement walk and an ordinary FLIP ticket
     // purchase burning wallet FLIP, then claimable, then carry) rides only a request that can end
@@ -52,7 +52,7 @@ library MineFlipGasBounds {
     uint256 internal constant LEVEL_ONE_DRAW = 7_500_000;
     // Cold losing x00 flip, incinerator search, seals and yield/keep roll: 1.368M. Native x00
     // with VRF funding 1.216M (Amsterdam), 0.45M Osaka. Funding admission at the call: about
-    // 0.42M spent + VRF_LEVEL_FUND_TAIL + 150k minimum + 45k frame, 1.62M, within this plus
+    // 0.42M spent + VRF_LEVEL_FUND_TAIL + 250k minimum + 45k frame, 1.72M, within this plus
     // DAILY_PHASE_TAIL.
     uint256 internal constant POOL_CONSOLIDATION = 1_650_000;
     // Level entry after its VRF top-up: the yield split, the rest of the consolidation and the
@@ -85,9 +85,15 @@ library MineFlipGasBounds {
     // Sweep return reserve.
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;
     // After the sweep's stETH read: the three payout legs and the VRF shutdown admission
-    // (1M floor + 250k reserve + 15,873 EIP-150 + 10k frame), with margin. GNRUS's cash-out after
-    // the legs is outside this reserve: the first-unit sweep carries all the transaction's gas.
+    // (1M floor + 250k reserve + 15,873 EIP-150 + 10k frame), with margin. GNRUS's cash-outs after
+    // the legs are outside this reserve: each admits GNRUS_CASHOUT_BURN before its call, and the
+    // first-unit sweep carries all the transaction's gas.
     uint256 internal constant TERMINAL_SWEEP_AFTER_READ = 1_400_000;
+    // One GNRUS cash-out burn (sDGNRS or wrapped DGNRS) after the sinks are paid, admitted before
+    // its call so a refused burn is never a gas shortage. Worst cold burn: an empty Game, so the
+    // stETH leg writes GNRUS's balance fresh, 191,278 at Glamsterdam with the mock token. The real
+    // Lido leg into an empty balance alone is 159,469 (mainnet fork). Their sum with 20% margin.
+    uint256 internal constant GNRUS_CASHOUT_BURN = 450_000;
     // Eight changed seats, a fresh seat word, cursor/release writes and return: <=209.8k.
     uint256 internal constant TICKET_TAIL = 260_000;
     // Cold selection reads and arithmetic; no materialization writes. Amsterdam, no reservoir: 150,198.
