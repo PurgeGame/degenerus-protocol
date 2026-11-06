@@ -436,6 +436,8 @@
     "--skip",
     "test/fuzz/EarlyBirdWhalePass.t.sol",
     "--skip",
+    "test/fuzz/EndingWitnessTarget.t.sol",
+    "--skip",
     "test/fuzz/EthInEvents.t.sol",
     "--skip",
     "test/fuzz/ExternalDoorAccounts.t.sol",
@@ -1512,6 +1514,6 @@
     "test/fuzz/invariant/RngWindowFreeze.inv.t.sol",
     "test/repro/MatureComposition.t.sol"
   ],
-  "input_manifest": "20261105T151607.474662Z-69dc67b9/focused-01-inputs.json",
-  "input_manifest_sha256": "eb879d0aa491a5392c55fad2c5ba25051c99be6836caa92063c402fc7ade03d4"
+  "input_manifest": "20261106T070337.782343Z-4217a643/focused-01-inputs.json",
+  "input_manifest_sha256": "25f486b132e98c4de7b491590176889ed08948e01a0082f3cc0759ae97790d5c"
 }
