@@ -251,7 +251,9 @@ contract CrapsRngSeal is DeployProtocol {
     function test_armUnderTheDailyLockIsInWindowAndInert() public {
         handler.primeLockedArm(3, 9);
         assertEq(handler.ghost_armsWhileDailyLocked(), 1, "the arm ran under the daily lock");
-        assertEq(handler.ghost_inWindowCrapsActions(), 1);
+        assertEq(handler.ghost_postArmAmendAttempts(), 1, "the shut is followed by a re-spread attempt");
+        assertEq(handler.ghost_postArmAmendsAccepted(), 0, "the shut slip refused the re-spread");
+        assertEq(handler.ghost_inWindowCrapsActions(), 2, "the arm and the attempt both ran in the window");
         assertEq(handler.ghost_inWindowGameSetMutations(), 0, "the arm moved the daily consumed set");
         assertTrue(game.rngLocked(), "the daily window is still held after the arm");
     }

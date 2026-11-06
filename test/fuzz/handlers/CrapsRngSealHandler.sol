@@ -702,6 +702,10 @@ contract CrapsRngSealHandler is Test, ChainCallJudge {
                 }
             }
         }
+        _amend(betId, boardSeed);
+    }
+
+    function _amend(uint256 betId, uint256 boardSeed) internal {
         CrapsViews.Bet memory b = craps.betOf(betId);
         if (b.player == address(0)) return;
         uint64 slot = uint64(betId >> 64);
@@ -794,6 +798,12 @@ contract CrapsRngSealHandler is Test, ChainCallJudge {
         _after(open, midDay, h0);
         if (!ok) return;
         _recordArm(slot, index, cursorBefore, reqBefore, open, midDay);
+        // Every shut the handler makes is followed at once by an attempt to re-spread one of the
+        // slips it froze, so each run that shuts a field tries the door property (4) exists for.
+        uint256[] storage ids = slotBets[slot];
+        if (ids.length == 0) return;
+        uint256 seed = uint256(keccak256(abi.encode("amend after shut", slot, ghost_arms)));
+        _amend(ids[seed % ids.length], seed >> 8);
     }
 
     function _recordArm(uint64 slot, uint48 index, uint256 cursorBefore, uint256 reqBefore, bool open, bool midDay)
