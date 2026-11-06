@@ -112,7 +112,7 @@ Source: [contracts/storage/DegenerusGameStorage.sol](../contracts/storage/Degene
 | `foilRecord[level&3][id]` | 0–23; 24–39; 40–55; 56–183 | First eligible day; multiplier; activity; four uint32 ticket lines. |
 | `foilRecord[level&3][id]` | 184–207; 208–231; 232; 255 | Generation day; exact level; gold paid; ready. |
 | `dailyFoilDraw[day&1]` | 0–31; 64–87; 88–215; 216; 217–240 | Traits; level; payout seed; seed present; exact day. |
-| `foilQueue[buffer] payload` | Eight 32-bit lanes | Wallet IDs; read/write counts are separate control fields. |
+| `foilQueue[cohort][p]` | 160–183; 192–223 | One word per pack: cycle level; buyer wallet ID. Cohort 0/1 follows `foilWriteSlot`; `foilWriteCount`/`foilReadCount` are separate control fields. |
 | `goldenTicket` | 0–31; 160–161; 162–164; 165–188; 189 | Armed wallet ID; quadrant; symbol; day; armed flag. |
 | `goldenTicket` | 190; 191–192; 193–216 | Resolve-day ban flag; ban quadrant; ban day. |
 | `decBattleEntries[(id-1)/2]` | Two 128-bit lanes | Lane: ID 0–31; board 32–61; whole-FLIP stack 62–127. |

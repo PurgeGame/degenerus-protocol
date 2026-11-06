@@ -1,13 +1,13 @@
 # Randomness inputs and domain separation
 
 Every hash that derives a value from VRF entropy is `EntropyLib.hashN(RngTags.X, ...)`: Keccak-256
-over 32-byte ABI words (`hash2`..`hash4`), with the numeric domain constant first. The 113 domains
+over 32-byte ABI words (`hash2`..`hash4`), with the numeric domain constant first. The 112 domains
 are defined once in [`contracts/libraries/RngTags.sol`](../../contracts/libraries/RngTags.sol)
-(values 1–115; 58 and 68 are unassigned). A tagged hash takes either the raw word or a seed already
-derived from it: the payout seed stored with each [foil draw](#foil-packs) and the direct-award
-round seed feed later tagged hashes, and the uint64 LCG inside each sixteen-entry [ticket
-group](#ticket-generation) expands a tagged seed without further hashing. The only use of a raw word
-bit is the coinflip win bit, bit 0 of the coin word ([below](#coin-word-and-nudges)).
+(values 1–115; 58, 68 and 106 are unassigned). A tagged hash takes either the raw word or a seed
+already derived from it: the payout seed stored with each [foil draw](#foil-packs) and the
+direct-award round seed feed later tagged hashes, and the uint64 LCG inside each sixteen-entry
+[ticket group](#ticket-generation) expands a tagged seed without further hashing. The only use of a
+raw word bit is the coinflip win bit, bit 0 of the coin word ([below](#coin-word-and-nudges)).
 
 The trust boundary is request → fulfillment → consumption. Hashing supplies domain separation, not
 fresh entropy and not protection for inputs chosen after a word is known; the commitment guards

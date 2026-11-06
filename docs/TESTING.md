@@ -34,16 +34,18 @@ address-patching lifecycle. `--no-pins` selects the profile without changing dep
 
 Use the sliced test above for an initial smoke check.
 Artifact gates require a complete production build, with a separate output/cache pair from fixture
-builds. Choose an empty pair if these paths contain unrelated artifacts.
+builds. Choose an empty pair if these paths contain unrelated artifacts. Exported `FOUNDRY_OUT` and
+`FOUNDRY_CACHE_PATH` take precedence over `--out` and `--cache-path`, so the production build and
+the peripheral check's probe build below unset them.
 
 ```sh
-forge build --skip test --threads 1 --out "$AUDIT_SCRATCH/production-out" \
-  --cache-path "$AUDIT_SCRATCH/production-cache"
+env -u FOUNDRY_OUT -u FOUNDRY_CACHE_PATH forge build --skip test --threads 1 \
+  --out "$AUDIT_SCRATCH/production-out" --cache-path "$AUDIT_SCRATCH/production-cache"
 node scripts/check-deployment-sizes.js "$AUDIT_SCRATCH/production-out"
 CHECK_ARTIFACTS="$AUDIT_SCRATCH/production-out" bash scripts/layout/storage_layout_oracle.sh
 python3 scripts/layout/check_recursive_layout.py --out "$AUDIT_SCRATCH/production-out" \
   --report "$AUDIT_SCRATCH/recursive-layout.json"
-XA_PROBE_OUT="$AUDIT_SCRATCH/xa-probe-out" \
+XA_PROBE_OUT="$AUDIT_SCRATCH/xa-probe-out" env -u FOUNDRY_OUT -u FOUNDRY_CACHE_PATH \
   python3 scripts/layout/check_peripheral_layouts.py "$AUDIT_SCRATCH/production-out"
 node scripts/check-owner-actions.js "$AUDIT_SCRATCH/production-out"
 node scripts/check-owner-governance-layout.js "$AUDIT_SCRATCH/production-out"
@@ -233,7 +235,7 @@ liveness of the gas-metered state machine. The complete symbolic campaign and it
 
 ```sh
 python3 -m pip install slither-analyzer==0.11.5
-forge build --skip test --build-info --force --threads 1 \
+env -u FOUNDRY_OUT -u FOUNDRY_CACHE_PATH forge build --skip test --build-info --force --threads 1 \
   --out "$AUDIT_SCRATCH/slither-out" --cache-path "$AUDIT_SCRATCH/slither-cache"
 python3 scripts/check-slither.py "$AUDIT_SCRATCH/slither-out"
 slither . --compile-force-framework foundry --ignore-compile \

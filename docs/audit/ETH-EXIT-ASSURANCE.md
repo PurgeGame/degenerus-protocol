@@ -119,8 +119,8 @@ skipped in either completed campaign or the final helper run.
 
 The independent split-arithmetic checker passed 24 checks, including sensitivity controls. Those are
 source-pinned mathematical models, not symbolic execution of every production payout caller.
-Structural gates also passed: 103 pool accesses, 141 VRF-window accesses, 406 RNG-taint sites, 200
-reviewed hash sites, including 142 RNG sites across 113 tags (plus one raw-bit exception), and 1,575
+Structural gates also passed: 103 pool accesses, 141 VRF-window accesses, 404 RNG-taint sites, 199
+reviewed hash sites, including 142 RNG sites across 112 tags (plus one raw-bit exception), and 1,559
 recipient/call expressions. These gates detect missing classifications and source drift. A manifest
 entry does not prove its classification correct.
 

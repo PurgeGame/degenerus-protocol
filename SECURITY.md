@@ -27,12 +27,14 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
   set operator approvals and the liquidation-buyer fallback (on/off and its ETH floor).
 - Grant comps and set delegate limits. Create custom battles, authorize creators, choose the vault's
   default craps board and amend its open slips.
-- Mint WWXRP for free to any nonzero recipient up to the uint256 supply ceiling; register or revoke
-  trusted WWXRP minters, each of which may mint or credit amounts within the uint256 ceilings, burn
-  any holder's WWXRP and consume any player's WWXRP boon ([WWXRP
-  boons](docs/WWXRP-BOONS.md#future-ecosystem-applications)). Distribute AFKing seats within the
-  token's tranche/lock rules; manage eligible vault seats and recover foreign tokens/NFTs. The
-  foreign-token sweep excludes stETH backing. Share redemption still burns the relevant shares.
+- Mint WWXRP for free to any nonzero recipient up to the uint256 supply ceiling; set the
+  whole-number multiplier on WWXRP the game contracts award (`setGameMintScale`: default 1x, 0 stops
+  game awards, no upper bound); register or revoke trusted WWXRP minters, each of which may mint or
+  credit amounts within the uint256 ceilings, burn any holder's WWXRP and consume any player's WWXRP
+  boon ([WWXRP boons](docs/WWXRP-BOONS.md#future-ecosystem-applications)). Distribute AFKing seats
+  within the token's tranche/lock rules; manage eligible vault seats and recover foreign
+  tokens/NFTs. The foreign-token sweep excludes stETH backing. Share redemption still burns the
+  relevant shares.
 - Set lootbox RNG threshold and midday basefee ceiling. Declare Thanos scaling at least three levels
   ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
 - Stake surplus Game ETH into stETH, keeping the player-claim ETH reserve and the VRF funding target
@@ -48,10 +50,11 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
   there is no post-proposal delay. Execution still needs the decaying vote threshold; recovery
   cancels applicable proposals. Retry retired-subscription cancellation with prescribed recovery
   destinations.
-- Manage permitted charity slots; burn or unwrap the Vault's DGNRS under its restrictions (the
-  level-vested release is permissionless and always pays the Vault); set supported NFT
-  renderers/colors; and edit or finalize the icon data until it is finalized. Charity slots 0..2
-  lock once filled; residual charity recovery has its own long post-game delay.
+- Manage permitted charity slots; after the final sweep, redeem any GNRUS holder's full balance to
+  that holder at what its own burn would pay (`vaultRedeemFor`); burn or unwrap the Vault's DGNRS
+  under its restrictions (the level-vested release is permissionless and always pays the Vault); set
+  supported NFT renderers/colors; and edit or finalize the icon data until it is finalized. Charity
+  slots 0..2 lock once filled; residual charity recovery has its own long post-game delay.
 
 There is no owner setter for the craps engine, comp rate or shared comp balance. Contracts have no
 proxy upgrade path. This does not make every configuration immutable: governance can replace the

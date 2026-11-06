@@ -49,8 +49,9 @@ tables and reward curves.
     sDGNRS AFKing funding. The vault owner spends the budget through `spendDegenesis` on tickets,
     lootboxes or whale passes at normal prices for **any allocated account it selects** (recipient 0
     selects the Vault); the recipient receives the products and their normal rewards. The budget is
-    never withdrawable. Unspent Vault budget and all sDGNRS AFKing funding join the final prize
-    distribution at game over.
+    never withdrawable. When the seventh cohort closes, sDGNRS AFKing funding above **10 ETH** moves
+    to sDGNRS's claimable. Unspent Vault budget and the sDGNRS AFKing balance remaining at game over
+    join the final prize distribution.
   - **Outcomes.** Each order rolls one exclusive category: **50%** FLIP-valued reward, **40%**
     sDGNRS, **10%** WWXRP, with an independent size roll for FLIP and sDGNRS. A FLIP result below
     one whole FLIP, a lost fractional pass, or a zero sDGNRS award pays the WWXRP consolation (1
@@ -141,8 +142,10 @@ carry forfeit; already banked claimable winnings do not expire. The Game banks t
 winnings every 45 resolved days as well as at the x0 purchase seal. Skipped-bracket BAF consolation
 expires when that player's two alternating score records are reused. Gameplay FLIP burns spend the
 wallet, then banked coinflip winnings, then the player's auto-rebuy carry once that day's flip is
-applied. Transfers and claims never spend carry, and the Vault, sDGNRS and GNRUS never spend it
-through a gameplay burn.
+applied. Transfers and ordinary coinflip claims (`claimCoinflips`) never spend carry;
+`claimCoinflipCarry` withdraws it. The Vault never spends carry through a gameplay burn; GNRUS's
+purchase-phase-end ticket buy and sDGNRS's automatic Decimator entry do spend it, after that
+account's banked coinflip winnings.
 
 Affiliate leaderboard and proportional DGNRS scores cap at **34,359,738,367 whole FLIP per wallet ID
 per level**. The allocation denominator counts only accepted score. Commissions, kickbacks, quest
@@ -161,9 +164,10 @@ realized payout.
 Jackpot prize shapes (mechanics in [jackpot legs](docs/ARCHITECTURE-DETAILS.md#jackpot-legs)):
 
 - **ETH quadrants, jackpot phase.** Up to 25% of each quadrant's ETH allocation (solo included)
-  converts to full whale passes at 4.5 ETH each, starting at 18 ETH; one fresh draw from the
-  quadrant receives all its passes, the rest pays its normal ETH winners, and the pass cost goes to
-  futurePrizePool. The passes are a longer-term participation claim, not a cash claim.
+  converts to full whale passes at 4.5 ETH each, starting at 18 ETH; the quadrant's first ETH
+  winner receives all its passes in addition to its ETH prize (the solo winner holds both), the rest
+  pays the quadrant's ETH winners, and the pass cost goes to futurePrizePool. The passes are a
+  longer-term participation claim, not a cash claim.
 - **Orange King.** On a jackpot-phase ETH draw without an active Decimator jackpot plan, an Orange
   King drawn in Cards moves half of the Cards allocation to the solo quadrant, or, when Cards is
   itself solo, half of each other quadrant's allocation to Cards. It applies before pass conversion

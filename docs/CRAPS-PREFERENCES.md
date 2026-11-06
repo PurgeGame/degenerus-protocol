@@ -224,7 +224,10 @@ window seats, then day tickets, then awarded seats.
 - After the first mandatory checkpoint, each advance step admits further seats against
   `CRAPS_SEAT_GAS_MAX` (2,800,000) and draw chunks against `JACKPOT_BATTLE_DRAW` (4,700,000),
   including their return tails. The first mandatory checkpoint bypasses the estimate gate.
-  Settlement starts in the call after the seal; the sealing call settles nothing.
+  Settlement never starts before the seal. The sealing call continues into settlement only when
+  the metered gas left after its draw still admits a full seat batch
+  (`JACKPOT_BATTLE_SETTLE_ADMISSION`), never on the first-unit permission; otherwise settlement
+  starts in the next call.
 - Every jackpot battle run has the shared 600-roll between-shooter budget (1,111-roll ceiling).
 
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat

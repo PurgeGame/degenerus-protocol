@@ -179,13 +179,13 @@ Early-created tickets leave the unminted future-queue jackpot-battle draw. No ex
 scheduled for ticket minting.
 
 `rngComplete` (slot 0 bit 248) is cleared by a fresh normal request and set only after committed
-tickets, the midday latch, sDGNRS redemption settlement, AFKing boxes, the combined human box/bet
-cursor, Decimator rounds and read-bound Craps all finish. The daily RNG lock stays held from the
-daily request through the day's daily-phase work, across midnight if necessary; foil claims revert
-`RngLocked`, and craps preference edits revert `BetLocked`, while it holds. Coinflip freezes changes
-to an already-enabled auto-rebuy position only until the requested daily flip is applied; first
-enablement remains available. The jackpot battle field, Decimator generated entries and BAF award
-groups run under the daily lock with their inputs frozen
+tickets, the midday latch, sDGNRS redemption settlement, AFKing boxes, the human box cursor, the
+Degenerette bet cursor, Decimator rounds and read-bound Craps all finish. The daily RNG lock stays
+held from the daily request through the day's daily-phase work, across midnight if necessary; foil
+claims revert `RngLocked`, and craps preference edits revert `BetLocked`, while it holds. Coinflip
+freezes changes to an already-enabled auto-rebuy position only until the requested daily flip is
+applied; first enablement remains available. The jackpot battle field, Decimator generated entries
+and BAF award groups run under the daily lock with their inputs frozen
 ([craps](CRAPS-PREFERENCES.md#the-jackpot-battle),
 [Decimator](DECIMATOR-BATTLE.md), [BAF](ARCHITECTURE-DETAILS.md#baf-scatter-and-staged-payout)).
 

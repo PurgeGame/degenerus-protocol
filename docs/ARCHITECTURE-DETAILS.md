@@ -215,21 +215,24 @@ transition in a later century uses the curve in the table.
 
 `subscribe(uint32 id, bool useTickets, uint8 dailyQuantity, uint256 seatId)` (Afking module,
 payable) starts, changes or cancels a subscription; `msg.value` is credited to the account's prepaid
-AFKing balance. It is closed once liveness triggers and reverts `RngLocked` while the daily lock, a
-due daily request or pending AFKing boxes are outstanding. `dailyQuantity` is 1..8
-(`SUB_MAX_QUANTITY`); 0 cancels. A new run (other than the Vault's and sDGNRS's) starts only after
-the day's subscriber pass, burns one `AFKingSubscriptionToken` seat held by the account's payee
-(`consumeSeat`, never reminted), and starts the quest-side run with `DegenerusQuests.beginAfking(id,
-today)`; its first purchase and first credited day are the next day. Changing quantity or mode
-settles the run first and keeps its start. Cancelling settles, then `finalizeAfking(id,
-earnedStreak, endpoint)` hands the accumulated streak back to Quests and anchors the manual quest
-streak at the run's reward endpoint. Unfunded members expire at the daily pass (rewards not yet
-settled are forfeit); loan seizure cancels a borrower's run. The member set is capped at 10,002
-(`SUBSCRIBER_CAP`): 10,000 player places plus the Vault's and sDGNRS's exempt subscriptions, which
-hold no seat. Live seats plus members are capped at the same 10,002 (`SEAT_CAP`). The first 5,000
-seats (`FREE_TRANCHE`, serials from 1) are minted free to pass buyers, one per purchasing account
-for life; the Vault owner mints the rest (`afkingSeatMint`) once all 5,000 are minted. A member
-leaving the set frees room for another Vault mint.
+AFKing balance. It is closed once liveness triggers and reverts `RngLocked` from the day boundary
+until that day's daily session completes: while a daily request is due, subscriber preparation has
+started for an unsent request, the daily lock holds, or the session's work (committed tickets, the
+midday latch, sDGNRS redemption, AFKing boxes, human boxes, Degenerette bets, Decimator rounds or
+read-bound Craps) has not finished. `dailyQuantity` is 1..8 (`SUB_MAX_QUANTITY`); 0 cancels. A new
+run (other than the Vault's and sDGNRS's) starts only after the day's subscriber pass, burns one
+`AFKingSubscriptionToken` seat held by the account's payee (`consumeSeat`, never reminted), and
+starts the quest-side run with `DegenerusQuests.beginAfking(id, today)`; its first purchase and
+first credited day are the next day. Changing quantity or mode settles the run first and keeps its
+start. Cancelling settles, then `finalizeAfking(id, earnedStreak, endpoint)` hands the accumulated
+streak back to Quests and anchors the manual quest streak at the run's reward endpoint. Unfunded
+members expire at the daily pass (rewards not yet settled are forfeit); loan seizure cancels a
+borrower's run. The member set is capped at 10,002 (`SUBSCRIBER_CAP`): 10,000 player places plus the
+Vault's and sDGNRS's exempt subscriptions, which hold no seat. Live seats plus members are capped at
+the same 10,002 (`SEAT_CAP`). The first 5,000 seats (`FREE_TRANCHE`, serials from 1) are minted free
+to pass buyers, one per purchasing account for life; the Vault owner mints the rest
+(`afkingSeatMint`) once all 5,000 are minted. A member leaving the set frees room for another Vault
+mint.
 
 Each day the subscriber pass (`PrepareSubscriptions`, ahead of the daily request) buys for every
 member at the active ticket level's price times quantity: in box mode one lootbox, its activity
@@ -325,8 +328,9 @@ game phase by itself.
 
 `rngComplete` is cached in slot 0 bit 248. A fresh normal request clears it; consumer completion and
 the daily seal set it only after committed tickets, the midday latch, sDGNRS redemption settlement,
-AFKing boxes, the combined human box/bet cursor, Decimator rounds and read-bound Craps all finish.
-Requests read this flag; unanswered retries preserve the same session and buffer tags.
+AFKing boxes, the human box cursor, the Degenerette bet cursor, Decimator rounds and read-bound
+Craps all finish. Requests read this flag; unanswered retries preserve the same session and buffer
+tags.
 
 There is one reusable `rngWordCurrent` and two physical queue tags, 0 and 1. Slot 0 bit 252 selects
 write; read is its opposite. A normal fresh request swaps only after read completion and resets the
@@ -363,9 +367,11 @@ ceiling is 4x for a pending craps window), in the last minute before the day res
 daily word is recorded, and, outside a craps window, below 1.5 times the subscription's minimum
 fulfillment balance. A pending craps window waives the pending-work, threshold and balance gates.
 Raw values 0 and 1 are refused and remain retryable; 1 is the nonzero waiting sentinel. Mandatory
-miner publication emits the applied word and performs request cleanup outside the callback. Request
-ID and timestamp keep nonzero idle values; callback authority is the coordinator plus the retained
-nonzero low-64-bit request ID, with no active-flag check (see [the
+miner publication emits the applied word and performs request cleanup outside the callback. The
+request timestamp keeps a nonzero idle value. A consumed session keeps its answered nonzero request
+ID; the ID is 0 before the first request, and terminal paths that close or abandon a request reset
+it to 0, which accepts no answer. Callback authority is the coordinator plus the retained nonzero
+low-64-bit request ID, with no active-flag check (see [the
 callback](ARCHITECTURE.md#request-callback-and-publication)). Terminal advancement bypasses normal
 read completion and ends unfinished boxes, bets and Craps rather than keeping earlier session words.
 Paid ending tickets and already-earned claims follow the terminal distribution.
