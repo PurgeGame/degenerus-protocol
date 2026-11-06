@@ -155,8 +155,12 @@ invariant runs at depth 256; explicit per-test overrides apply. CI partitions ex
 of 50 runs each.
 Coverage guards and actual run/call counts matter as well as pass counts.
 
-Stateful handlers route every `mineRun` they would otherwise swallow through `ChainCallJudge`, and
-each suite asserts `judgeCheck`. Where a site does not cap gas itself, the judge reads
+Except in AnyInputSafety (with its Degenesis variant), AdvanceLiveness and DegenesisLiveness,
+stateful handlers route every `mineRun` they would otherwise swallow through `ChainCallJudge`, and
+those suites assert `judgeCheck` and run `ChainStallProbe`. AnyInputSafety does not judge mining
+reverts; it judges terminal latches (below). AdvanceLiveness applies its own liveness and quiescence
+checks, and DegenesisLiveness judges each mining call inline against the selected action and its
+`MineFlipAdmission.minGas`. Where a site does not cap gas itself, `ChainCallJudge` reads
 `minerAction()` as the same caller and calls with gas drawn from that action's
 `MineFlipAdmission.minGas` up to 2^24 − 21,000 (a quarter at the minimum, a quarter within 300,000
 above it, the rest up to the cap). Idle must answer `NoWork` and Wait `RngNotReady`; any other

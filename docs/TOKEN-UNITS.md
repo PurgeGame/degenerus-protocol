@@ -7,8 +7,9 @@ entering a WWXRP draw with 25 tokens passes `25`. Do not multiply these amounts 
 
 ETH, stETH, GNRUS and the two vault share tokens use 18 decimals. DGNRS and sDGNRS use 12 decimals.
 Mathematical fixed-point scales are separate from token denominations. The stateless Craps
-simulation, Decimator normalized peak, and internal box/foil spin stakes carry 10^18 sub-units per
-token (`TOKEN_MATH_SCALE`); their receipts are computation results, not ERC20 balances. FLIP/WWXRP
+simulation (`Craps.FLIP`), the Decimator normalized peak (an engine run with a 3,000-FLIP bankroll,
+`SCALE = 3000 * 1e18`) and internal box/foil spin stakes (`TOKEN_MATH_SCALE`) carry 10^18 sub-units
+per token; their receipts are computation results, not ERC20 balances. FLIP/WWXRP
 `BoxSpin` payouts and Craps battle payments are whole tokens; ETH `BoxSpin` payouts are wei.
 
 Craps and FLIP box/foil spin payments floor to whole tokens before award rounding. WWXRP spins floor
