@@ -105,7 +105,7 @@ test-foundry` and `make test-hardhat` include the structural prerequisites.
 | Solvency, RNG freeze and liveness | `test/fuzz/invariant/` |
 | Coinflip bank, carry and ride-bonus ledger | `test/fuzz/invariant/FlipCarryAccounting.inv.t.sol`, `test/fuzz/invariant/FlipCarryDegenesis.inv.t.sol`, `test/fuzz/invariant/FlipCarryWidths.inv.t.sol` |
 | Mining-call judge and first-unit admission gas | `test/fuzz/helpers/ChainCallJudge.sol`, `test/fuzz/ChainCallJudge.t.sol` |
-| Unjustified endings | `test/fuzz/helpers/EndingWitness.sol`, `test/fuzz/invariant/AdvanceLiveness.inv.t.sol`, `test/fuzz/invariant/AnyInputSafety.inv.t.sol` |
+| Unjustified endings | `test/fuzz/helpers/EndingWitness.sol`, `test/fuzz/EndingWitnessTarget.t.sol`, `test/fuzz/invariant/AdvanceLiveness.inv.t.sol`, `test/fuzz/invariant/AnyInputSafety.inv.t.sol` |
 | 100-box human order inside one transaction | `test/gas/HumanOrderNativeGas.t.sol` |
 | DGVE governance | `test/governance/` |
 
@@ -143,7 +143,9 @@ The fork runner applies real dependency addresses and selects isolation by suite
 both wrapped exit entry points, open/closed redemption claims and GNRUS exits against Lido share
 rounding. It bounds rounding loss using real Lido shares with seeded protocol boundary state.
 GNRUS coverage does not establish that GNRUS shares the Vault/sDGNRS failure mode. These fixtures
-do not prove a complete lifecycle or resilience to arbitrary external asset failure.
+do not prove a complete lifecycle or resilience to arbitrary external asset failure. The fork's
+stand-in VRF delivery calls back with exactly the request's own callback gas limit, recovered from
+the real coordinator's commitment for that request.
 
 Defaults are 1,000 fuzz cases and 256 invariant runs at depth 128. `deep` defaults to 1,000
 invariant runs at depth 256; explicit per-test overrides apply. CI partitions expensive suites with
@@ -156,15 +158,25 @@ each suite asserts `judgeCheck`. Where a site does not cap gas itself, the judge
 `minerAction()` as the same caller and calls with gas drawn from that action's
 `MineFlipAdmission.minGas` up to 2^24 − 21,000 (a quarter at the minimum, a quarter within 300,000
 above it, the rest up to the cap). Idle must answer `NoWork` and Wait `RngNotReady`; any other
-selected action must make progress, so a gas refusal at or above the minimum is a violation. An
+selected action must make progress, so a gas refusal at or above the minimum is a violation. Every
+successful judged or capped call (at most a transaction's gas) is recorded with Foundry's state-diff
+recording and must commit work: some storage slot must end the call with a value different from the
+one it started with, outside the caller's FLIP reward credit. The one success that may commit
+nothing is a refused request or terminal attempt (the selected action is a request or Terminal, and
+an inner call reverted). An
 action whose declared minimum exceeds the cap, the 100-box human order, is drawn at the cap;
 `HumanOrderNativeGas` separately completes a maximum order cold inside one transaction. Half the
 judged calls draw a calibration (0.25x, below 1x, above 1x or 4x): below 1x a gas refusal is
 accepted, since a continuation admitted on a scaled estimate may overrun and roll back its worker,
 and at 1x and above the rule is unchanged. `judgeCheck` also fails when a dependency mock records a
 call that arrived below the protocol's admission. While work remains, the handler's original call
-follows, so handlers keep their pace. `EndingWitness` re-derives the 14-day deadman, the 14-day
-unpublished request and the 30-day purchase timeout from raw storage: AdvanceLiveness and
+follows, so handlers keep their pace; that pacing call is counted but not recorded. At the end of
+every run `ChainStallProbe` drives the engine to quiescence on a snapshot in transaction-sized
+calls, delivering outstanding VRF words; every success must commit work, a
+ticket call that strictly lowers the active read queue's owed total is ranked, and any other call
+spends a 1,000-call budget, so work that changes state without finishing is flagged. `EndingWitness`
+re-derives the 14-day deadman, the 14-day unpublished request and the 30-day purchase timeout,
+including the next-pool target and its century floor, from raw storage: AdvanceLiveness and
 AnyInputSafety fail when terminal state latches with no ending due, and AdvanceLiveness also
 requires an idle, sealed day to have requested its wall day and stamped its completion.
 AnyInputSafety's guided claim doors steer claims that random input does not reach to acceptance and
@@ -179,8 +191,12 @@ none (at most four other calls), and only then is each holder cut to 1,024 entri
 snapshot, verified through `entriesOwedView`, and a new cycle granted so the rest of the judgment
 runs. Two typed replays of persisted deep
 failures pin this: a Degenerette-jackpot backlog that is compressed, and a far-future backlog that
-drains inside the window. Non-vacuity floors that a single run can legitimately miss (for example a
-run that reaches the dead-VRF ending before any Degenesis cohort is priced) accumulate across runs.
+drains inside the window. The cut leaves the campaign a smaller tail than the one it ranked, so the
+deep profile also replays the jackpot backlog without it: about 25,900 calls drain the real queue
+with every ticket call ranked, and a self-check that stalls only after 23,000 honest calls (about
+90% of the drain) must be flagged; the cut drain never reaches that stall. Non-vacuity floors that
+a single run can legitimately miss (for example a run that reaches the dead-VRF ending before any
+Degenesis cohort is priced) accumulate across runs.
 
 The Degenesis completion driver drains at the same timestamp when a 300-call chunk fills with work
 still ready. Its healthy completion path is bounded by 40 chunks / 12,000 calls, with independent

@@ -114,8 +114,8 @@ interface ILidoStETH {
 ///         verification: it deletes the request commitment (s_requestCommitments[requestId]),
 ///         decrements the consumer's pendingReqCount (what pendingRequestExists and
 ///         cancelSubscription read), and calls the consumer's rawFulfillRandomWords from the
-///         coordinator address, with the
-///         request's 300k callback gas limit and the real requestId. Billing of the fulfilment
+///         coordinator address with exactly the request's own callback gas limit (recovered from
+///         its commitment) and the real requestId. Billing of the fulfilment
 ///         (the native debit) is not simulated; every request and commitment IS the real
 ///         coordinator's.
 abstract contract ForkDeployProtocol is DeployProtocol {
@@ -131,7 +131,6 @@ abstract contract ForkDeployProtocol is DeployProtocol {
     );
     /// @dev VRFV2PlusClient.EXTRA_ARGS_V1_TAG = bytes4(keccak256("VRF ExtraArgsV1")).
     bytes4 internal constant EXTRA_ARGS_V1_TAG = bytes4(keccak256("VRF ExtraArgsV1"));
-    uint32 internal constant GAME_CALLBACK_GAS = 300_000;
 
     /// @dev The coordinator's s_requestCommitments mapping slot, found on first use.
     uint256 private commitmentsSlot = type(uint256).max;
@@ -299,7 +298,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
 
     /// @dev Deliver `word` for `requestId` the way the coordinator does after a valid proof:
     ///      delete the commitment, decrement the consumer's pendingReqCount, then call the consumer
-    ///      with the request's callback gas limit. Returns whether the callback itself succeeded (the
+    ///      with exactly the request's callback gas limit. Returns whether the callback itself succeeded (the
     ///      coordinator never reverts on a failing callback; it emits success=false).
     function _fulfill(uint256 requestId, uint256 word) internal returns (bool callbackOk) {
         return _fulfillOn(uint256(vm.load(address(game), bytes32(GameSlots.VRF_SUBSCRIPTION_ID))), requestId, word);
@@ -307,6 +306,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
 
     /// @dev As _fulfill, for a request made on subscription `subId` (a retired one after a swap).
     function _fulfillOn(uint256 subId, uint256 requestId, uint256 word) internal returns (bool callbackOk) {
+        uint32 callbackGas = _requestCallbackGas(subId, requestId);
         bytes32 consumer = _consumerSlot(subId);
         uint256 cfg = uint256(vm.load(ForkPins.VRF_COORDINATOR, consumer));
         uint256 pendingCount = uint64(cfg >> 72);
@@ -317,17 +317,28 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         uint256[] memory words = new uint256[](1);
         words[0] = word;
         vm.prank(ForkPins.VRF_COORDINATOR);
-        (callbackOk,) = address(game).call{gas: GAME_CALLBACK_GAS}(
+        (callbackOk,) = address(game).call{gas: callbackGas}(
             abi.encodeWithSelector(game.rawFulfillRandomWords.selector, requestId, words)
         );
         ++fulfilments;
+    }
+
+    /// @dev The callback gas limit `requestId` was made with: the game requests with its configured
+    ///      limit, and the coordinator's commitment binds the limit to the request's block,
+    ///      subscription, word count, sender and extra args, so a match proves it is this request's.
+    function _requestCallbackGas(uint256 subId, uint256 requestId) internal view returns (uint32 callbackGas) {
+        callbackGas = uint32(uint256(vm.load(address(game), bytes32(GameSlots.VRF_COORDINATOR))) >> 160);
+        bytes32 expected = keccak256(abi.encode(requestId, block.number, subId, callbackGas, uint32(1), address(game),
+            abi.encodeWithSelector(EXTRA_ARGS_V1_TAG, true)));
+        require(coordinator.s_requestCommitments(requestId) == expected,
+            "fork: the configured callback gas is not the request's committed limit");
     }
 
     /// @dev Answer the outstanding request, if any. The callback must fit its gas limit.
     function _fulfillPending(uint256 word) internal returns (bool answered) {
         uint256 id = _pendingRequest();
         if (id == 0) return false;
-        require(_fulfill(id, word), "fork: rawFulfillRandomWords callback failed within 300k gas");
+        require(_fulfill(id, word), "fork: rawFulfillRandomWords callback failed within its request's gas limit");
         return true;
     }
 

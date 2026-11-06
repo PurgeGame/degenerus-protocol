@@ -7,6 +7,85 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 import {MineFlipAdmission} from "./MineFlipAdmission.sol";
+import {TicketQueueStorage as TQ} from "./TicketQueueStorage.sol";
+
+/// @notice Whether one recorded mineRun committed work. Progress is a storage slot whose value
+///         after the call differs from its value before it, outside the caller's reward credit
+///         (Coinflip.creditFlip_g317 and everything it calls): a call that only pays its caller
+///         left the engine where it was, so the next call would repeat it. Nothing committed with
+///         a reverted inner call is a refusal; nothing committed and nothing refused is no work.
+/// @dev Commitment is read from the final state, not from the recorder's per-access revert
+///      flags: a reverted subcall can mark accesses of frames that went on to succeed, while a
+///      write that really rolled back leaves its slot at the value it had before the call.
+///      Only calls carrying at most a transaction's gas are recorded: their access list fits the
+///      EVM memory that decodes it. A larger call is UNCHECKED.
+library ChainProgress {
+    Vm private constant _vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+
+    uint8 internal constant PROGRESSED = 0;
+    uint8 internal constant REFUSED = 1;
+    uint8 internal constant NONE = 2;
+    uint8 internal constant UNCHECKED = 3;
+    /// @dev Osaka per-transaction gas cap (2^24) less the intrinsic 21,000.
+    uint256 internal constant TX_GAS_CAP = (uint256(1) << 24) - 21_000;
+    bytes4 private constant SEL_CREDIT_FLIP = bytes4(keccak256("creditFlip_g317(uint32,uint256)"));
+
+    function start() internal {
+        _vm.startStateDiffRecording();
+    }
+
+    /// @dev Stops the recording and classifies it, releasing the access list's memory.
+    function stop() internal returns (uint8 progress) {
+        uint256 free;
+        assembly ("memory-safe") { free := mload(0x40) }
+        progress = classify(_vm.stopAndReturnStateDiff());
+        assembly ("memory-safe") { mstore(0x40, free) }
+    }
+
+    function classify(Vm.AccountAccess[] memory acc) internal view returns (uint8) {
+        bool refused;
+        bool inReward;
+        uint64 rewardDepth;
+        for (uint256 i; i < acc.length; ++i) {
+            Vm.AccountAccess memory a = acc[i];
+            if (inReward) {
+                if (a.depth >= rewardDepth) continue;
+                inReward = false;
+            }
+            if (a.kind == VmSafe.AccountAccessKind.Call && a.account == ContractAddresses.COINFLIP
+                && a.data.length >= 4 && bytes4(a.data) == SEL_CREDIT_FLIP) {
+                (inReward, rewardDepth) = (true, a.depth);
+                continue;
+            }
+            if (a.reverted && a.kind != VmSafe.AccountAccessKind.StaticCall) refused = true;
+            Vm.StorageAccess[] memory ss = a.storageAccesses;
+            for (uint256 j; j < ss.length; ++j) {
+                if (!ss[j].isWrite || ss[j].previousValue == ss[j].newValue) continue;
+                if (_vm.load(ss[j].account, ss[j].slot) != _original(acc, i, j)) return PROGRESSED;
+            }
+        }
+        return refused ? REFUSED : NONE;
+    }
+
+    /// @dev The slot's value before the call: the prior value its first write saw.
+    function _original(Vm.AccountAccess[] memory acc, uint256 i, uint256 j) private pure returns (bytes32) {
+        Vm.StorageAccess memory w = acc[i].storageAccesses[j];
+        for (uint256 k; k <= i; ++k) {
+            Vm.StorageAccess[] memory ss = acc[k].storageAccesses;
+            uint256 end = k == i ? j : ss.length;
+            for (uint256 m; m < end; ++m) {
+                if (ss[m].isWrite && ss[m].account == w.account && ss[m].slot == w.slot) return ss[m].previousValue;
+            }
+        }
+        return w.previousValue;
+    }
+
+    /// @dev The one documented success that commits nothing: a refused request or terminal attempt.
+    function refusalAllowed(uint8 progress, uint8 action) internal pure returns (bool) {
+        return progress == REFUSED && (action == MineFlipAdmission.TERMINAL
+            || action == MineFlipAdmission.REQUEST_DAILY || action == MineFlipAdmission.REQUEST_MIDDAY);
+    }
+}
 
 /// @title ChainCallJudge -- classifies every `game.mineRun` result a stateful-fuzz handler swallows
 /// @notice `mineRun` is the permissionless daily chain (the protocol's liveness spine). Handlers call
@@ -32,12 +111,19 @@ import {MineFlipAdmission} from "./MineFlipAdmission.sol";
 ///      is drawn at the cap, so work that only fits above the cap is flagged. While work remains
 ///      after a successful judged call, the original ample call follows, so the handler progresses
 ///      as it did before.
+///      PROGRESS: every successful call carrying at most TX_GAS_CAP (every admission-judged call and
+///      every capped site) is recorded and must commit work (see ChainProgress). The one exception
+///      is a refused request or terminal attempt, which commits nothing by design: the selected
+///      action is a request or Terminal and an inner call reverted. A success with no readable
+///      selection is judged by the selection read after it (nothing changed, so it is the one the
+///      call saw). The ample follow-up call, a pacing device that can carry far more than a
+///      transaction's gas, is counted but not recorded; ChainStallProbe judges every end state.
 ///      Set CHAIN_JUDGE_TALLY=1 to print every selector seen (see `judgeTally`).
 abstract contract ChainCallJudge {
     Vm private constant _jvm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     /// @dev Osaka per-transaction gas cap (2^24) less the intrinsic 21,000.
-    uint256 public constant TX_GAS_CAP = (uint256(1) << 24) - 21_000;
+    uint256 public constant TX_GAS_CAP = ChainProgress.TX_GAS_CAP;
     uint8 private constant ACTION_IDLE = 0;
     uint8 private constant ACTION_WAIT = 2;
     uint8 internal constant ACTION_UNREAD = type(uint8).max;
@@ -55,10 +141,17 @@ abstract contract ChainCallJudge {
     bytes4 internal constant SEL_EMPTY_REVERT = bytes4(keccak256("EmptyRevert()"));
     bytes4 internal constant SEL_PANIC = 0x4e487b71;
     bytes4 internal constant SEL_MINE_RUN = bytes4(keccak256("mineRun(uint32)"));
+    /// @dev Test-local marker recorded for a success that committed no work.
+    bytes4 internal constant SEL_NO_PROGRESS = bytes4(keccak256("JudgeNoProgress()"));
 
     /// @dev Calls, successes and every revert selector seen (empty returndata keys as bytes4(0)).
     uint256 public judgeCalls;
     uint256 public judgeSucceeded;
+    /// @dev Successes that committed work, refused requests or terminal attempts that did not, and
+    ///      successes too large to record.
+    uint256 public judgeProgressed;
+    uint256 public judgeRefusals;
+    uint256 public judgeUnchecked;
     uint256 public judgeUnexpected;
     /// @dev Revert counts keyed by (selector << 16 | site).
     mapping(uint256 => uint256) public judgeKeyCount;
@@ -99,25 +192,24 @@ abstract contract ChainCallJudge {
     {
         bytes memory ret;
         bytes memory cd = abi.encodeWithSelector(SEL_MINE_RUN, multiplier);
-        if (gasLimit != 0) {
-            (ok, ret) = game.call{gas: gasLimit}(cd);
-            return _settle(ok, ret, game, gasLimit, allowed, site, ACTION_UNREAD);
-        }
         // A one-shot prank is spent by the selection read below; re-apply it to every later call.
         (VmSafe.CallerMode mode, address sender, address origin) = _jvm.readCallers();
         bool once = mode == VmSafe.CallerMode.Prank;
+        uint8 progress;
+        if (gasLimit != 0) {
+            (ok, ret, progress) = _recordedCall(game, gasLimit, cd, once, sender, origin);
+            return _settle(ok, ret, game, gasLimit, allowed, site, _after(game, ok, progress, once, sender, origin), progress);
+        }
         uint8 action = _selected(game);
         if (action == ACTION_UNREAD) {
             ++judgeUnread;
-            if (once) _jvm.prank(sender, origin);
-            (ok, ret) = game.call(cd);
-            return _settle(ok, ret, game, 0, allowed, site, ACTION_UNREAD);
+            (ok, ret, progress) = _recordedCall(game, 0, cd, once, sender, origin);
+            return _settle(ok, ret, game, 0, allowed, site, _after(game, ok, progress, once, sender, origin), progress);
         }
         uint256 g = _admissionGas(game, action);
         uint32 drawn = multiplier == 0 ? _drawMultiplier() : multiplier;
         _coolProtocol(game);
-        if (once) _jvm.prank(sender, origin);
-        (ok, ret) = game.call{gas: g}(abi.encodeWithSelector(SEL_MINE_RUN, drawn));
+        (ok, ret, progress) = _recordedCall(game, g, abi.encodeWithSelector(SEL_MINE_RUN, drawn), once, sender, origin);
         if (!ok && drawn != 0 && drawn < DEFAULT_MULTIPLIER && _isGasRefusal(ret)) {
             // Below 1x a continuation admitted on a scaled estimate may overrun and roll back its
             // worker, taking the first unit with it: a keeper's own loss, never a commit. The
@@ -125,15 +217,44 @@ abstract contract ChainCallJudge {
             ++judgeLowCalibrationRefusals;
             ++judgeCalls;
         } else {
-            (ok, sel) = _settle(ok, ret, game, g, allowed, site, action);
+            (ok, sel) = _settle(ok, ret, game, g, allowed, site, action, progress);
             if (!ok || action == ACTION_IDLE || action == ACTION_WAIT) return (ok, sel);
+            // A refusal leaves the same selection; the ample call below would only repeat it.
+            if (progress == ChainProgress.NONE || progress == ChainProgress.REFUSED) return (ok, sel);
         }
         if (once) _jvm.prank(sender, origin);
         action = _selected(game);
         if (action == ACTION_IDLE || action == ACTION_WAIT || action == ACTION_UNREAD) return (true, bytes4(0));
+        (ok, ret, progress) = _recordedCall(game, 0, cd, once, sender, origin);
+        return _settle(ok, ret, game, 0, allowed, site, action, progress);
+    }
+
+    /// @dev One mineRun, under state-diff recording when it carries at most a transaction's gas, the
+    ///      one-shot prank (if any) applied last. `g == 0` forwards all gas.
+    function _recordedCall(address game, uint256 g, bytes memory cd, bool once, address sender, address origin)
+        private
+        returns (bool ok, bytes memory ret, uint8 progress)
+    {
+        if (g == 0 || g > TX_GAS_CAP) {
+            if (once) _jvm.prank(sender, origin);
+            (ok, ret) = g == 0 ? game.call(cd) : game.call{gas: g}(cd);
+            return (ok, ret, ChainProgress.UNCHECKED);
+        }
+        ChainProgress.start();
         if (once) _jvm.prank(sender, origin);
-        (ok, ret) = game.call(cd);
-        return _settle(ok, ret, game, 0, allowed, site, action);
+        (ok, ret) = game.call{gas: g}(cd);
+        progress = ChainProgress.stop();
+    }
+
+    /// @dev The selection after a call that committed nothing is the one the call saw (ACTION_UNREAD
+    ///      when the call progressed or reverted, or when the selection cannot be read).
+    function _after(address game, bool ok, uint8 progress, bool once, address sender, address origin)
+        private
+        returns (uint8)
+    {
+        if (!ok || progress == ChainProgress.PROGRESSED || progress == ChainProgress.UNCHECKED) return ACTION_UNREAD;
+        if (once) _jvm.prank(sender, origin);
+        return _selected(game);
     }
 
     uint32 private constant DEFAULT_MULTIPLIER = 10_000;
@@ -242,23 +363,19 @@ abstract contract ChainCallJudge {
     /// @dev Count one call and judge its result. With a read selection the result must match it:
     ///      Idle answers NoWork, Wait answers RngNotReady (each still subject to the site's classes),
     ///      and any other action must succeed.
-    function _settle(bool ok, bytes memory ret, address game, uint256 g, uint8 allowed, uint16 site, uint8 action)
-        private
-        returns (bool, bytes4 sel)
-    {
+    function _settle(
+        bool ok,
+        bytes memory ret,
+        address game,
+        uint256 g,
+        uint8 allowed,
+        uint16 site,
+        uint8 action,
+        uint8 progress
+    ) private returns (bool, bytes4 sel) {
         ++judgeCalls;
-        if (action == ACTION_UNREAD) {
-            if (ok) {
-                ++judgeSucceeded;
-                return (true, bytes4(0));
-            }
-            return (false, _classify(ret, game, g, allowed, site, action));
-        }
-        if (ok) {
-            ++judgeSucceeded;
-            if (action == ACTION_IDLE || action == ACTION_WAIT) _record(ret, game, g, site, bytes4(0), action);
-            return (true, bytes4(0));
-        }
+        if (ok) return (true, _success(ret, game, g, site, action, progress));
+        if (action == ACTION_UNREAD) return (false, _classify(ret, game, g, allowed, site, action));
         if (action == ACTION_IDLE) {
             if (!_is(ret, SEL_NO_WORK)) allowed = 0;
             allowed &= OK_IDLE;
@@ -269,6 +386,32 @@ abstract contract ChainCallJudge {
             allowed = 0;
         }
         return (false, _classify(ret, game, g, allowed, site, action));
+    }
+
+    /// @dev A success must follow work the selection reported, and commit it (or be a refusal).
+    function _success(bytes memory ret, address game, uint256 g, uint16 site, uint8 action, uint8 progress)
+        private
+        returns (bytes4)
+    {
+        ++judgeSucceeded;
+        if (action == ACTION_IDLE || action == ACTION_WAIT) {
+            _record(ret, game, g, site, bytes4(0), action);
+            return bytes4(0);
+        }
+        if (progress == ChainProgress.PROGRESSED) {
+            ++judgeProgressed;
+            return bytes4(0);
+        }
+        if (progress == ChainProgress.UNCHECKED) {
+            ++judgeUnchecked;
+            return bytes4(0);
+        }
+        if (ChainProgress.refusalAllowed(progress, action)) {
+            ++judgeRefusals;
+            return bytes4(0);
+        }
+        _record(ret, game, g, site, SEL_NO_PROGRESS, action);
+        return SEL_NO_PROGRESS;
     }
 
     function _is(bytes memory ret, bytes4 want) private pure returns (bool) {
@@ -286,9 +429,11 @@ abstract contract ChainCallJudge {
         return _classify(ret, game, gasLimit, allowed, site, ACTION_UNREAD);
     }
 
+    /// @dev A success the handler issued with all its gas: counted, not recorded.
     function _judgeSuccess() internal {
         ++judgeCalls;
         ++judgeSucceeded;
+        ++judgeUnchecked;
     }
 
     function _classify(bytes memory ret, address game, uint256 gasLimit, uint8 allowed, uint16 site, uint8 action)
@@ -412,7 +557,10 @@ library ChainCallTally {
         string memory base = string.concat("CJ_", suite, "_");
         uint256 calls = _bump(string.concat(base, "calls"), j.judgeCalls());
         uint256 ok = _bump(string.concat(base, "ok"), j.judgeSucceeded());
-        console2.log(string.concat("JUDGE|", suite, "|calls|", _vm.toString(calls), "|ok|", _vm.toString(ok)));
+        console2.log(string.concat("JUDGE|", suite, "|calls|", _vm.toString(calls), "|ok|", _vm.toString(ok),
+            "|progressed|", _vm.toString(_bump(string.concat(base, "progressed"), j.judgeProgressed())),
+            "|refusals|", _vm.toString(_bump(string.concat(base, "refusals"), j.judgeRefusals())),
+            "|unchecked|", _vm.toString(_bump(string.concat(base, "unchecked"), j.judgeUnchecked()))));
         uint256 n = j.judgeSeenCount();
         string memory listKey = string.concat(base, "keys");
         string memory list = _vm.envOr(listKey, string(""));
@@ -439,48 +587,118 @@ library ChainCallTally {
     }
 }
 
-/// @notice End-of-run stall probe for a suite's `afterInvariant`: no iteration bound, so no flaky threshold.
-///         On a snapshot it delivers the outstanding VRF word (if any), then makes ONE ample-gas engine call.
-///         The call must succeed, or report NoWork with `advanceDue()` false. RngNotReady after the probe itself
-///         delivered a valid word, NoWork while work is owed, or any other revert at ample gas is a chain stuck
-///         behind an "allowed" refusal. RngNotReady when the request was already answered is the reserved-word
-///         case (raw 0/1 leave the request pending for the admin retry or the dead-VRF path, by design) and is
-///         not flagged. The snapshot is restored, so the suite's own end-of-run checks are unaffected.
+/// @notice End-of-run stall probe for a suite's `afterInvariant`. On a snapshot it drives the engine
+///         to quiescence in keeper-sized calls (TX_GAS_CAP each): before each call it delivers the
+///         outstanding VRF word (if any),
+///         and every successful call must commit work (see ChainProgress). It stops healthy on NoWork
+///         with `advanceDue()` false, on RngNotReady when the request was already answered (raw 0/1
+///         leave it pending for the admin retry or the dead-VRF path, by design), or on a refused
+///         request or terminal attempt (the engine waits on its dependency). RngNotReady after the
+///         probe itself delivered a word, NoWork while work is owed, any other revert with a full
+///         transaction's gas, or a success that committed nothing is a stall.
+///         Completion is a ranking, not a guess: a Tickets call that strictly lowers the active read
+///         queue's owed total is ranked (owed is a natural number, so ranked calls cannot go on
+///         forever), and every other call spends UNRANKED_BUDGET, so work that commits state without
+///         finishing is flagged. A ranked drain runs to its end unless the test's own gas limit
+///         would end it first (then the probe stops, still ranked). The snapshot is restored, so the
+///         suite's own end-of-run checks are unaffected.
 library ChainStallProbe {
     Vm private constant _vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
+    uint256 internal constant UNRANKED_BUDGET = 1_000;
+    uint256 internal constant GAS_RESERVE = 2_000_000_000;
+    bytes4 private constant SEL_NO_WORK = bytes4(keccak256("NoWork()"));
+    bytes4 private constant SEL_RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
+
     function check(string memory suite, address game, MockVRFCoordinator vrf) internal {
         uint256 snap = _vm.snapshotState();
-        string memory why = _probe(game, vrf);
+        (string memory why, uint256 calls, uint256 unranked) = _drain(game, vrf);
         _vm.revertToStateAndDelete(snap);
+        if (_vm.envOr("CHAIN_JUDGE_TALLY", false)) {
+            console2.log(string.concat("PROBE|", suite, "|calls|", _vm.toString(calls), "|unranked|", _vm.toString(unranked)));
+        }
         if (bytes(why).length != 0) revert(string.concat(suite, ": ", why));
     }
 
-    function _probe(address game, MockVRFCoordinator vrf) private returns (string memory) {
-        bool delivered;
-        uint256 req = vrf.lastRequestId();
-        if (req != 0) {
-            (,, bool done) = vrf.pendingRequests(req);
-            if (!done) {
-                try vrf.fulfillRandomWords(req, uint256(keccak256(abi.encode("chain-stall-probe", req))) | 2) {
-                    delivered = true;
-                } catch {}
+    function _drain(address game, MockVRFCoordinator vrf)
+        private
+        returns (string memory why, uint256 calls, uint256 unranked)
+    {
+        for (; ; ++calls) {
+            bool delivered = _deliver(vrf);
+            uint8 action = _selected(game);
+            uint24 key;
+            uint256 owedBefore;
+            if (action == MineFlipAdmission.TICKETS) {
+                key = _activeTicketKey(game);
+                if (key != 0) owedBefore = _queueOwed(game, key);
+            }
+            ChainProgress.start();
+            (bool ok, bytes memory ret) = game.call{gas: ChainProgress.TX_GAS_CAP}(
+                abi.encodeWithSelector(bytes4(keccak256("mineRun(uint32)")), uint32(0)));
+            uint8 progress = ChainProgress.stop();
+            if (!ok) return (_stopped(game, ret, delivered), calls, unranked);
+            if (progress != ChainProgress.PROGRESSED) {
+                if (ChainProgress.refusalAllowed(progress, action)) return ("", calls + 1, unranked);
+                why = string.concat("stalled: mineRun succeeded without committing work, action ",
+                    _vm.toString(action), ", after ", _vm.toString(calls), " calls");
+                return (why, calls + 1, unranked);
+            }
+            if (key != 0 && _queueOwed(game, key) < owedBefore) {
+                if (gasleft() < GAS_RESERVE) return ("", calls + 1, unranked);
+            } else if (++unranked > UNRANKED_BUDGET) {
+                why = string.concat("stalled: no quiescence within ", _vm.toString(UNRANKED_BUDGET),
+                    " unranked calls (", _vm.toString(calls + 1), " in all)");
+                return (why, calls + 1, unranked);
             }
         }
-        (bool ok, bytes memory ret) = game.call(abi.encodeWithSelector(bytes4(keccak256("mineRun(uint32)")), uint32(0)));
-        if (ok) return "";
+    }
+
+    function _deliver(MockVRFCoordinator vrf) private returns (bool delivered) {
+        uint256 req = vrf.lastRequestId();
+        if (req == 0) return false;
+        (,, bool done) = vrf.pendingRequests(req);
+        if (done) return false;
+        try vrf.fulfillRandomWords(req, uint256(keccak256(abi.encode("chain-stall-probe", req))) | 2) {
+            delivered = true;
+        } catch {}
+    }
+
+    function _stopped(address game, bytes memory ret, bool delivered) private view returns (string memory) {
         bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
-        if (ret.length == 4 && sel == bytes4(keccak256("RngNotReady()"))) {
+        if (ret.length == 4 && sel == SEL_RNG_NOT_READY) {
             if (delivered) return "stalled: mineRun answers RngNotReady after the outstanding VRF word was delivered";
             return "";
         }
-        if (ret.length == 4 && sel == bytes4(keccak256("NoWork()"))) {
+        if (ret.length == 4 && sel == SEL_NO_WORK) {
             (bool a, bytes memory due) = game.staticcall(abi.encodeWithSignature("advanceDue()"));
             if (a && due.length == 32 && abi.decode(due, (uint256)) != 0) {
                 return "stalled: mineRun answers NoWork while advanceDue() is true";
             }
             return "";
         }
-        return string.concat("stalled: mineRun reverts at ample gas with selector ", _vm.toString(abi.encodePacked(sel)));
+        return string.concat("stalled: mineRun reverts with a full transaction's gas, selector ",
+            _vm.toString(abi.encodePacked(sel)));
+    }
+
+    function _selected(address game) private view returns (uint8) {
+        (bool ok, bytes memory ret) = game.staticcall(abi.encodeWithSignature("minerAction()"));
+        if (!ok || ret.length != 32) return type(uint8).max;
+        uint256 a = abi.decode(ret, (uint256));
+        return a < type(uint8).max ? uint8(a) : type(uint8).max;
+    }
+
+    /// @dev The read queue the ticket drain is working (zero between drains).
+    function _activeTicketKey(address game) private view returns (uint24) {
+        uint256 word = uint256(_vm.load(game, bytes32(GameSlots.TICKET_LEVEL)));
+        return uint24(word >> (GameSlots.TICKET_LEVEL_OFFSET * 8));
+    }
+
+    /// @dev Owed balance of one read queue in 1/256 entries, so a final fractional draw still lowers it.
+    function _queueOwed(address game, uint24 key) private view returns (uint256 total) {
+        uint256 n = TQ.length(game, key);
+        for (uint256 i; i < n; ++i) {
+            total += uint256(TQ.owedById(game, key, TQ.ownerIdAt(game, key, i))) & ((uint256(1) << 40) - 1);
+        }
     }
 }

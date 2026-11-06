@@ -14,10 +14,11 @@ import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 ///         into a purchase phase whose next pool is still at or below its target). If the
 ///         engine latches terminal state (`gameOver` or the terminal entry bit) across a
 ///         call for which `due` was false, the ending was premature.
-/// @dev Mirrors `DegenerusGameStorage._endingReason` with one deliberate relaxation: the
-///      pool comparison is skipped where this helper cannot read the target (century
-///      levels and recycled target slots), which can only accept more endings. Constants
-///      mirror `_VRF_DEAD_TIMEOUT` and `_PURCHASE_TIMEOUT_DAYS`. The inputs are the
+/// @dev Mirrors `DegenerusGameStorage._endingReason`, including `_prizePoolTarget`: the
+///      previous level's recorded pool (zero once its recycled slot holds another level, as
+///      the engine reads it), raised at century levels to the curved multiple of the newest
+///      completed century's pool. Constants mirror `_VRF_DEAD_TIMEOUT`,
+///      `_PURCHASE_TIMEOUT_DAYS` and the `CENTURY_FLOOR_*` curve. The inputs are the
 ///      engine's own clocks; `AdvanceLivenessHandler` separately checks that an idle,
 ///      sealed day stamped its completion, so the deadman clock cannot go stale silently.
 library EndingWitness {
@@ -25,6 +26,11 @@ library EndingWitness {
 
     uint256 internal constant VRF_DEAD_TIMEOUT = 14 days;
     uint256 internal constant PURCHASE_TIMEOUT_DAYS = 30;
+    uint256 internal constant CENTURY_FLOOR_BPS = 20_000;
+    uint256 internal constant CENTURY_FLOOR_MID_BPS = 15_000;
+    uint256 internal constant CENTURY_FLOOR_TOP_BPS = 13_000;
+    uint256 internal constant CENTURY_FLOOR_MID_THRESHOLD = 500_000 ether;
+    uint256 internal constant CENTURY_FLOOR_TOP_THRESHOLD = 1_000_000 ether;
 
     uint256 private constant TERMINAL_ENTRY_BIT = 253; // rngFlagsAndNudges bit 13
     uint256 private constant REQUEST_ACTIVE_BIT = 254; // rngFlagsAndNudges bit 14
@@ -74,11 +80,23 @@ library EndingWitness {
             return false;
         }
         uint24 lvl = uint24(s0 >> (GameSlots.LEVEL_OFFSET * 8));
-        if ((uint256(lvl) + 1) % 100 == 0) return true;
-        uint256 target = GamePoolSlots.read(game, lvl);
-        if (target == 0) return true;
         uint256 next = uint128(uint256(VM.load(game, bytes32(GameSlots.PRIZE_POOLS_PACKED))));
-        return next <= target;
+        return next <= prizePoolTarget(game, lvl + 1);
+    }
+
+    /// @notice The next-pool target `nextPrizePool` must exceed for `purchaseLvl` (>= 1).
+    function prizePoolTarget(address game, uint24 purchaseLvl) internal view returns (uint256 target) {
+        target = GamePoolSlots.read(game, purchaseLvl - 1);
+        if (purchaseLvl % 100 != 0) return target;
+        uint256 completed = uint256(VM.load(game, bytes32(GameSlots.CENTURY_PRIZE_POOLS)));
+        if (completed == 0) return target;
+        uint256 i = completed - 1;
+        uint256 base = uint256(keccak256(abi.encode(GameSlots.CENTURY_PRIZE_POOLS)));
+        uint256 snap = uint128(uint256(VM.load(game, bytes32(base + i / 2))) >> ((i % 2) * 128));
+        uint256 multBps = snap > CENTURY_FLOOR_TOP_THRESHOLD ? CENTURY_FLOOR_TOP_BPS
+            : snap > CENTURY_FLOOR_MID_THRESHOLD ? CENTURY_FLOOR_MID_BPS : CENTURY_FLOOR_BPS;
+        uint256 centuryFloor = snap * multBps / 10_000;
+        if (centuryFloor > target) target = centuryFloor;
     }
 
     function dailyComplete(address game) internal view returns (bool) {

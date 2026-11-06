@@ -128,7 +128,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         (uint16 minConf, uint32 maxGasLimit,,,,,, uint8 nativePremium,) = coordinator.s_config();
         assertLe(minConf, 4, "mid-day confirmations (4) are above the coordinator minimum");
         assertGe(coordinator.MAX_REQUEST_CONFIRMATIONS(), 6, "daily confirmations (6) are below the maximum");
-        assertGe(maxGasLimit, GAME_CALLBACK_GAS, "the 150k callback fits the coordinator ceiling");
+        assertGe(maxGasLimit, 150_000, "the 150k callback fits the coordinator ceiling");
         assertGe(coordinator.MAX_NUM_WORDS(), 1);
         // Sizing pins the coordinator native premium.
         assertEq(nativePremium, 24, "native sizing assumes 24% premium");
@@ -176,7 +176,8 @@ contract ForkVrfTest is ForkDeployProtocol {
         game.rawFulfillRandomWords(r.id + 1, words);
         assertFalse(game.isRngFulfilled(), "a foreign request id is ignored");
 
-        assertTrue(_fulfill(r.id, 0xC0FFEE), "callback within 300k gas");
+        assertEq(_requestCallbackGas(subId, r.id), r.callbackGas, "the helper forwards the logged limit");
+        assertTrue(_fulfill(r.id, 0xC0FFEE), "callback within its 150k request limit");
         assertFalse(coordinator.pendingRequestExists(subId), "the coordinator retired the commitment");
         _crank(200);
         assertFalse(game.rngLocked(), "the daily lock released");

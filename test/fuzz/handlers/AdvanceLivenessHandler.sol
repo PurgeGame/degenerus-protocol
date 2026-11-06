@@ -97,7 +97,9 @@ contract AdvanceLivenessHandler is Test {
     // call (at most BACKLOG_SLACK of them) must not raise it. Only then is each entry's owed
     // count cut to BACKLOG_COMPRESS_TO inside the check's snapshot, verified through
     // entriesOwedView, and one fresh cycle budget granted for the drain's tail and the full
-    // judgment that follows.
+    // judgment that follows. The cut makes the campaign's tail a smaller workload than the one
+    // the window ranked; `fullBacklogDrain` (set by the pinned deep replays of recorded backlogs)
+    // never cuts: the window renews over the same queue until the real queue is empty.
     uint256 public constant BACKLOG_WINDOW = 100;
     uint256 public constant BACKLOG_SLACK = 4;
     uint256 public constant BACKLOG_COMPRESS_TO = 1024;
@@ -185,7 +187,8 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_maxCranksPerCycle;
     uint256 public ghost_maxDayAdvances;
     uint256 public ghost_backlogCompressions; // ranked backlogs compressed inside a check
-    uint256 public ghost_backlogMaxOwed; // largest owed total (entries) at a compression
+    uint256 public ghost_backlogMaxOwed; // largest owed total (entries) at a compression or renewal
+    uint256 public ghost_backlogRenewals; // full-drain windows renewed over an uncut queue
     uint256 public ghost_lpdSeals; // lastPurchaseDay false -> true
     uint256 public ghost_turboSeals; // ... with JACKPOT_TURBO
     uint256 public ghost_normalSeals;
@@ -214,6 +217,9 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_gameOver;
     uint256 public ghost_justifiedEndings; // real-run terminal latches with an ending due
 
+    /// Replays only: drain ranked backlogs in full instead of cutting them (see BACKLOG_WINDOW).
+    bool public fullBacklogDrain;
+
     // real-run observation memory
     uint24 private _prevLevel;
     bool private _prevLpd;
@@ -229,6 +235,11 @@ contract AdvanceLivenessHandler is Test {
             actors.push(a);
             vm.deal(a, 1_000_000 ether);
         }
+    }
+
+    /// Not a fuzz target (the suite's selector list names the actions only).
+    function setFullBacklogDrain(bool on) external {
+        fullBacklogDrain = on;
     }
 
     // =====================================================================
@@ -506,6 +517,7 @@ contract AdvanceLivenessHandler is Test {
         if (cycles.maxPerCycle > ghost_maxCranksPerCycle) ghost_maxCranksPerCycle = cycles.maxPerCycle;
         if (cycles.maxAdvances > ghost_maxDayAdvances) ghost_maxDayAdvances = cycles.maxAdvances;
         ghost_backlogCompressions += cycles.compressions;
+        ghost_backlogRenewals += cycles.renewals;
         if (cycles.maxBacklogOwed > ghost_backlogMaxOwed) ghost_backlogMaxOwed = cycles.maxBacklogOwed;
         if (probeFlags & 1 != 0) ghost_probeRequests++;
         if (probeFlags & 2 != 0) ghost_probeOnLpd++;
@@ -525,6 +537,7 @@ contract AdvanceLivenessHandler is Test {
         uint256 maxPerCycle;
         uint256 maxAdvances;
         uint256 compressions;
+        uint256 renewals;
         uint256 maxBacklogOwed;
     }
 
@@ -580,6 +593,14 @@ contract AdvanceLivenessHandler is Test {
                     return (false, bytes4(0), cranks + 1);
                 }
                 if (owedAfter == 0 || ++w.steps == BACKLOG_WINDOW) {
+                    if (owedAfter != 0 && fullBacklogDrain) {
+                        // The ranking restarts over the same uncut queue.
+                        stats.renewals++;
+                        if (owedAfter >> 8 > stats.maxBacklogOwed) stats.maxBacklogOwed = owedAfter >> 8;
+                        w.steps = 0;
+                        w.slack = 0;
+                        continue;
+                    }
                     // A queue that drained inside the window needs no compression; either way
                     // every call in it was ranked, so the cycle budget restarts.
                     if (++extensions > MAX_BACKLOG_EXTENSIONS) return (false, bytes4(0), cranks + 1);

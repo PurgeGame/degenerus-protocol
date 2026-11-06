@@ -8,6 +8,25 @@ import {FSMHandler} from "./handlers/FSMHandler.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MineFlipAdmission} from "./helpers/MineFlipAdmission.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
+
+/// @dev Stand-in engine that always has work and commits state on every call, but never finishes:
+///      each mineRun bumps a counter while the selection stays on maintenance.
+contract EndlessWorkGame {
+    uint256 public bumps;
+
+    function mineRun(uint32) external {
+        ++bumps;
+    }
+
+    function minerAction() external pure returns (uint256) {
+        return MineFlipAdmission.MAINTENANCE;
+    }
+
+    function advanceDue() external pure returns (bool) {
+        return true;
+    }
+}
 
 /// @dev Exposes the judge's call path to the self-test.
 contract ChainCallJudgeProbe is ChainCallJudge {
@@ -144,15 +163,46 @@ contract ChainCallJudgeTest is DeployProtocol {
         assertEq(probe.judgeFirstGas(), 700_000);
     }
 
-    function test_successIsCountedAndNeverFlagged() public {
-        _mockSelection(MineFlipAdmission.REQUEST_DAILY);
+    bytes4 internal constant NO_PROGRESS = bytes4(keccak256("JudgeNoProgress()"));
+
+    /// @dev A success that commits nothing is a crank that would repeat forever: flagged with work
+    ///      selected, with a request selected but nothing refused, and at a capped site (judged by the
+    ///      selection read after the call). No ample call repeats it.
+    function test_successWithoutProgressIsFlagged() public {
+        _mockSelection(MineFlipAdmission.TICKETS);
         vm.mockCall(address(game), abi.encodeWithSelector(game.mineRun.selector), bytes(""));
-        (bool ok,) = probe.mine(address(game), 0, IDLE_WAIT, 1);
+        (bool ok, bytes4 sel) = probe.mine(address(game), 0, IDLE_WAIT, 1);
         assertTrue(ok);
-        // The judged call, then the ample call while the selection still reports work.
-        assertEq(probe.judgeSucceeded(), 2);
-        assertEq(probe.judgeDrawnCalls(), 1);
+        assertEq(sel, NO_PROGRESS);
+        assertEq(probe.judgeUnexpected(), 1);
+        assertEq(probe.judgeFirstSel(), NO_PROGRESS);
+        assertEq(probe.judgeFirstAction(), MineFlipAdmission.TICKETS);
+        assertEq(probe.judgeSucceeded(), 1, "no ample call repeats a call that committed nothing");
+        _mockSelection(MineFlipAdmission.REQUEST_DAILY);
+        probe.mine(address(game), 0, IDLE_WAIT, 2);
+        assertEq(probe.judgeUnexpected(), 2, "a request that refused nothing is not a refusal");
+        probe.mine(address(game), 700_000, ALL, 3);
+        assertEq(probe.judgeUnexpected(), 3, "a capped site's success must commit work too");
+        assertEq(probe.judgeProgressed(), 0);
+        vm.expectRevert();
+        probe.judgeCheck("selftest");
+    }
+
+    /// @dev The real engine's work is counted as progress, and a refused daily request (the
+    ///      coordinator rejects it, so the engine waits on its dependency) is the one success
+    ///      that may commit nothing.
+    function test_realWorkProgressesAndARefusedRequestIsAllowed() public {
+        probe.mine(address(game), 0, IDLE_WAIT, 1);
+        assertGt(probe.judgeProgressed(), 0, "real work commits state");
         assertEq(probe.judgeUnexpected(), 0);
+        _driveToIdle();
+        vm.warp(block.timestamp + 1 days);
+        _refuseRequests();
+        for (uint256 i; i < 100 && probe.judgeRefusals() == 0; ++i) probe.mine(address(game), 0, IDLE_WAIT, 4);
+        assertGt(probe.judgeRefusals(), 0, "the refusal was recognised");
+        assertEq(probe.judgeUnexpected(), 0);
+        assertFalse(game.rngLocked(), "the refused request committed nothing");
+        assertEq(game.nextMinerAction(), MineFlipAdmission.REQUEST_DAILY, "the request stays selected");
     }
 
     // ----- admission: the selected action's first-unit gas, inside the Osaka transaction cap -----
@@ -296,7 +346,7 @@ contract ChainCallJudgeTest is DeployProtocol {
         h.check(address(game), mockVRF); // idle and nothing owed is a healthy end state
 
         _mockMineRun(abi.encodeWithSignature("InsufficientExecutionGas()"));
-        vm.expectRevert(bytes("selftest: stalled: mineRun reverts at ample gas with selector 0x331bb5b8"));
+        vm.expectRevert(bytes("selftest: stalled: mineRun reverts with a full transaction's gas, selector 0x331bb5b8"));
         h.check(address(game), mockVRF);
     }
 
@@ -308,6 +358,57 @@ contract ChainCallJudgeTest is DeployProtocol {
         assertTrue(game.rngLocked(), "a daily window opened");
         (,, bool done) = mockVRF.pendingRequests(mockVRF.lastRequestId());
         assertFalse(done, "the request is unanswered");
+    }
+
+    /// @dev A mineRun that returns without committing anything is a stall, not a healthy end state.
+    function test_stallProbeFlagsSuccessWithoutProgress() public {
+        ChainStallProbeHarness h = new ChainStallProbeHarness();
+        _mockSelection(MineFlipAdmission.TICKETS);
+        vm.mockCall(address(game), abi.encodeWithSelector(game.mineRun.selector), bytes(""));
+        vm.expectRevert(bytes("selftest: stalled: mineRun succeeded without committing work, action 4, after 0 calls"));
+        h.check(address(game), mockVRF);
+    }
+
+    /// @dev Work that commits state on every call but never finishes spends the unranked budget.
+    function test_stallProbeFlagsWorkThatNeverFinishes() public {
+        ChainStallProbeHarness h = new ChainStallProbeHarness();
+        EndlessWorkGame endless = new EndlessWorkGame();
+        vm.expectRevert(bytes("selftest: stalled: no quiescence within 1000 unranked calls (1001 in all)"));
+        h.check(address(endless), mockVRF);
+    }
+
+    /// @dev From a live day the probe drains the engine to idle; a refused request ends the drain
+    ///      healthy (the engine waits on its dependency), and the state is restored either way.
+    function test_stallProbeDrainsALiveDayAndAcceptsARefusedRequest() public {
+        ChainStallProbeHarness h = new ChainStallProbeHarness();
+        _openDailyWindow();
+        uint256 req = mockVRF.lastRequestId();
+        h.check(address(game), mockVRF);
+        assertTrue(game.rngLocked(), "state restored");
+        assertEq(mockVRF.lastRequestId(), req, "state restored");
+        _driveToIdle();
+        vm.warp(block.timestamp + 1 days);
+        _refuseRequests();
+        h.check(address(game), mockVRF);
+    }
+
+    /// @dev Deliver words and mine until the engine reports nothing to do.
+    function _driveToIdle() internal {
+        for (uint256 i; i < 600; ++i) {
+            if (game.nextMinerAction() == MineFlipAdmission.IDLE) return;
+            uint256 req = mockVRF.lastRequestId();
+            bool done = true;
+            if (req != 0) (,, done) = mockVRF.pendingRequests(req);
+            if (!done) mockVRF.fulfillRandomWords(req, uint256(keccak256(abi.encode("drive", i))) | 2);
+            else probe.mine(address(game), 0, IDLE_WAIT, 1);
+        }
+        revert("idle not reached");
+    }
+
+    /// @dev The coordinator rejects every request with a reason (an empty revert reads as a gas failure).
+    function _refuseRequests() internal {
+        vm.mockCallRevert(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector),
+            abi.encodeWithSignature("Refused()"));
     }
 
     /// @dev Raw words 0/1 leave a request pending (admin retry or the dead-VRF path): the wait is by design

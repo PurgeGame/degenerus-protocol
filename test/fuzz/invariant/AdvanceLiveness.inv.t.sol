@@ -34,6 +34,45 @@ contract StalledDrainGame {
     }
 }
 
+/// @dev Self-check double for a late stall: as StalledDrainGame, but the first `honest` mineRuns
+///      that lower the lane keep their progress (counted in a scratch slot of the Game's storage);
+///      only later ones are put back, so the drain stalls with most of its tail already worked.
+contract LateStalledDrainGame {
+    bytes32 private constant COUNT = keccak256("late-stall double: lowering calls");
+    address private immutable impl;
+    bytes32 private immutable lane;
+    uint256 private immutable honest;
+
+    constructor(address impl_, bytes32 lane_, uint256 honest_) {
+        impl = impl_;
+        lane = lane_;
+        honest = honest_;
+    }
+
+    fallback() external payable {
+        bool mine = msg.sig == bytes4(keccak256("mineRun(uint32)"));
+        bytes32 slot = lane;
+        uint256 prior;
+        assembly ("memory-safe") { prior := sload(slot) }
+        (bool ok, bytes memory ret) = impl.delegatecall(msg.data);
+        if (mine && ok) {
+            uint256 next;
+            assembly ("memory-safe") { next := sload(slot) }
+            if (uint32(next >> 50) < uint32(prior >> 50)) {
+                bytes32 c = COUNT;
+                uint256 n;
+                assembly ("memory-safe") {
+                    n := add(sload(c), 1)
+                    sstore(c, n)
+                }
+                if (n > honest) assembly ("memory-safe") { sstore(slot, prior) }
+            }
+        }
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        assembly ("memory-safe") { return(add(ret, 32), mload(ret)) }
+    }
+}
+
 /// @dev Oracle self-test stand-in: `mineRun` latches `gameOver` with no ending due; every other
 ///      call runs the production Game code in the Game's own storage.
 contract PrematureLatcher {
@@ -449,6 +488,69 @@ contract AdvanceLiveness is DeployProtocol {
         assertEq(h.firstViolation().cranks, h.MAX_CRANKS_PER_CYCLE() + 3, "rejected on the window's first call");
         assertEq(h.ghost_backlogCompressions(), 0);
     }
+
+    /// @dev The full replays drain a recorded backlog without the cut (about 25,900 calls and 345B
+    ///      gas), which needs the deep profile's gas limit; the default profile skips them.
+    function _deepOnly() internal {
+        vm.skip(keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("")))) != keccak256("deep"),
+            "full backlog drains run under the deep profile");
+    }
+
+    function _etchLateStall(uint256 honest) internal {
+        address impl = address(uint160(0x5A11ED));
+        vm.etch(impl, address(game).code);
+        bytes32 lane = keccak256(abi.encode(uint256(2), GameSlots.TICKET_PENDING));
+        vm.etch(address(game), address(new LateStalledDrainGame(impl, lane, honest)).code);
+    }
+
+    /// @dev The jackpot backlog replayed without the cut: every one of its ~57.6M entries is drained
+    ///      by real Tickets calls, each strictly lowering the owed total, and the day still seals idle.
+    function test_DegeneretteJackpotBacklogDrainsInFull() public {
+        _deepOnly();
+        AdvanceLivenessHandler h = handler;
+        h.setFullBacklogDrain(true);
+        _jackpotBacklogPrefix(h);
+        h.actWhalePass(4570);
+        if (h.ghost_violations() != 0) _logViolation(h.firstViolation());
+        assertEq(h.ghost_violations(), 0, "the uncut jackpot backlog must drain and reach idle");
+        assertEq(h.ghost_actions(), 34, "every replayed action ran");
+        assertEq(h.ghost_backlogCompressions(), 0, "nothing was cut");
+        assertGt(h.ghost_backlogRenewals(), 100, "non-vacuity: the ranking held over the whole drain");
+        assertGt(h.ghost_backlogMaxOwed(), 50_000_000, "non-vacuity: the queue held the jackpot's entries");
+        assertGt(h.ghost_maxCranks(), 12_000, "non-vacuity: every call of the tail ran");
+        console.log("full drain renewals", h.ghost_backlogRenewals());
+        console.log("full drain max cranks", h.ghost_maxCranks());
+    }
+
+    /// @dev Oracle self-check for the full drain: the same backlog, honest for its first
+    ///      LATE_STALL_AFTER lowering calls (about 90% of the queue), then stalled. The full replay
+    ///      must reject the first stalled call.
+    function test_OracleFlagsLateStallInAFullDrain() public {
+        _deepOnly();
+        AdvanceLivenessHandler h = handler;
+        h.setFullBacklogDrain(true);
+        _jackpotBacklogPrefix(h);
+        _etchLateStall(LATE_STALL_AFTER);
+        h.actWhalePass(4570);
+        assertEq(h.ghost_violations(), 1, "a drain that stalls late must be flagged");
+        assertEq(h.firstViolation().code, h.V_NO_QUIESCENCE());
+        assertGt(h.firstViolation().cranks, LATE_STALL_AFTER, "flagged late in the drain");
+        assertEq(h.ghost_backlogCompressions(), 0);
+    }
+
+    /// @dev Why the full replays exist: with the cut, the campaign check finishes a smaller
+    ///      workload and never reaches that stall.
+    function test_CutDrainNeverReachesALateStall() public {
+        AdvanceLivenessHandler h = handler;
+        _jackpotBacklogPrefix(h);
+        _etchLateStall(LATE_STALL_AFTER);
+        h.actWhalePass(4570);
+        assertEq(h.ghost_violations(), 0, "the cut drain ends before the stall");
+        assertGe(h.ghost_backlogCompressions(), 1);
+    }
+
+    /// @dev About 90% of the full drain's ~25,300 lowering calls.
+    uint256 private constant LATE_STALL_AFTER = 23_000;
 
     /// @dev Oracle self-check: if entriesOwedView disagrees with the raw lanes the compression
     ///      reads, the check fails with its own code rather than writing.
