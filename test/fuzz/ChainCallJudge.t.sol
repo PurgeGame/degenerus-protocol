@@ -41,6 +41,12 @@ contract ChainCallJudgeProbe is ChainCallJudge {
         VM.prank(who);
         return _mine(game, 0, 3, 1);
     }
+
+    /// @dev The same with the gas capped by the handler (the call is the prank's first use).
+    function minePrankedCapped(address game, address who, uint256 gasLimit) external returns (bool ok, bytes4 sel) {
+        VM.prank(who);
+        return _mine(game, gasLimit, 7, 1);
+    }
 }
 
 /// @dev Stand-in Game: every call runs the production code in the Game's own storage, but `mineRun`
@@ -280,6 +286,23 @@ contract ChainCallJudgeTest is DeployProtocol {
         }
         assertGe(seen, 1);
         assertEq(probe.judgeDrawnCalls(), 1);
+        assertEq(probe.judgeUnexpected(), 0);
+    }
+
+    function test_prankedCallerReachesACappedCall() public {
+        _spy(0);
+        address who = address(0xB0B);
+        vm.recordLogs();
+        probe.minePrankedCapped(address(game), who, 16_000_000);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != keccak256("MineSeen(address,uint256)") || logs[i].emitter != address(game)) continue;
+            (address caller,) = abi.decode(logs[i].data, (address, uint256));
+            assertEq(caller, who);
+            ++seen;
+        }
+        assertEq(seen, 1, "one capped call, from the pranked caller");
         assertEq(probe.judgeUnexpected(), 0);
     }
 

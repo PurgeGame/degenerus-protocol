@@ -222,7 +222,7 @@ abstract contract ChainCallJudge {
             // A refusal leaves the same selection; the ample call below would only repeat it.
             if (progress == ChainProgress.NONE || progress == ChainProgress.REFUSED) return (ok, sel);
         }
-        if (once) _jvm.prank(sender, origin);
+        _reprank(once, sender, origin);
         action = _selected(game);
         if (action == ACTION_IDLE || action == ACTION_WAIT || action == ACTION_UNREAD) return (true, bytes4(0));
         (ok, ret, progress) = _recordedCall(game, 0, cd, once, sender, origin);
@@ -230,20 +230,28 @@ abstract contract ChainCallJudge {
     }
 
     /// @dev One mineRun, under state-diff recording when it carries at most a transaction's gas, the
-    ///      one-shot prank (if any) applied last. `g == 0` forwards all gas.
+    ///      one-shot prank (if any) in force last. `g == 0` forwards all gas.
     function _recordedCall(address game, uint256 g, bytes memory cd, bool once, address sender, address origin)
         private
         returns (bool ok, bytes memory ret, uint8 progress)
     {
         if (g == 0 || g > TX_GAS_CAP) {
-            if (once) _jvm.prank(sender, origin);
+            _reprank(once, sender, origin);
             (ok, ret) = g == 0 ? game.call(cd) : game.call{gas: g}(cd);
             return (ok, ret, ChainProgress.UNCHECKED);
         }
         ChainProgress.start();
-        if (once) _jvm.prank(sender, origin);
+        _reprank(once, sender, origin);
         (ok, ret) = game.call{gas: g}(cd);
         progress = ChainProgress.stop();
+    }
+
+    /// @dev Re-applies a one-shot prank once a call has spent it; a prank still pending stands
+    ///      (Foundry refuses to overwrite an unspent prank).
+    function _reprank(bool once, address sender, address origin) private {
+        if (!once) return;
+        (VmSafe.CallerMode mode,,) = _jvm.readCallers();
+        if (mode != VmSafe.CallerMode.Prank) _jvm.prank(sender, origin);
     }
 
     /// @dev The selection after a call that committed nothing is the one the call saw (ACTION_UNREAD
@@ -253,7 +261,7 @@ abstract contract ChainCallJudge {
         returns (uint8)
     {
         if (!ok || progress == ChainProgress.PROGRESSED || progress == ChainProgress.UNCHECKED) return ACTION_UNREAD;
-        if (once) _jvm.prank(sender, origin);
+        _reprank(once, sender, origin);
         return _selected(game);
     }
 
