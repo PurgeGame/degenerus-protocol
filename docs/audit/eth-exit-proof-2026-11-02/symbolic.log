@@ -1,7 +1,7 @@
 Warning: This is a nightly build of Foundry. It is recommended to use the latest stable version. To mute this warning set `FOUNDRY_DISABLE_NIGHTLY_WARNING` in your environment. 
 
 Compiling 44 files with Solc 0.8.38
-Solc 0.8.38 finished in 2.55s
+Solc 0.8.38 finished in 2.62s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
     --> lib/forge-std/src/Vm.sol:1339:9:
@@ -475,12 +475,12 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
 
 Running 9 tests for test/halmos/EthLedgerProductionProof.t.sol:EthLedgerProductionProof
 [32m[PASS][0m check_claim_credit_is_local(uint32,uint32,uint96,uint96,uint96,uint256) (paths: 13, time: 0.06s, bounds: [])
-[32m[PASS][0m check_combined_debit_keeps_lanes_separate(uint32,uint32,uint96,uint96,uint96,uint96) (paths: 19, time: 0.22s, bounds: [])
-[32m[PASS][0m check_loan_credit_retains_total_obligations(uint32,uint32,uint96,uint96,uint96,uint96,uint96,uint96,bool) (paths: 147, time: 42.50s, bounds: [])
+[32m[PASS][0m check_combined_debit_keeps_lanes_separate(uint32,uint32,uint96,uint96,uint96,uint96) (paths: 19, time: 0.23s, bounds: [])
+[32m[PASS][0m check_loan_credit_retains_total_obligations(uint32,uint32,uint96,uint96,uint96,uint96,uint96,uint96,bool) (paths: 146, time: 44.45s, bounds: [])
 [32m[PASS][0m check_overdraw_reverts_without_cross_lane_borrow(uint32,uint32,uint96,uint96,uint256,uint256) (paths: 11, time: 0.15s, bounds: [])
 [32m[PASS][0m check_prepaid_credit_accounts_liability(uint32,uint32,uint96,uint96,uint96,uint96) (paths: 14, time: 0.07s, bounds: [])
-[32m[PASS][0m check_prize_contribution_conserves_in_either_buffer(uint96,uint96,uint96,uint96,uint96,uint96,bool) (paths: 27, time: 0.15s, bounds: [])
+[32m[PASS][0m check_prize_contribution_conserves_in_either_buffer(uint96,uint96,uint96,uint96,uint96,uint96,bool) (paths: 27, time: 0.16s, bounds: [])
 [32m[PASS][0m check_redemption_release_is_reclassification_and_once(uint96,uint96,uint96) (paths: 18, time: 0.25s, bounds: [])
-[32m[PASS][0m check_shortfall_conserves_and_preserves_sentinel(uint32,uint32,uint96,uint96,uint96,bool) (paths: 77, time: 4.82s, bounds: [])
-[32m[PASS][0m check_yield_excludes_all_counted_obligations(uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96) (paths: 19, time: 0.21s, bounds: [])
-Symbolic test result: 9 passed; 0 failed; time: 48.44s
+[32m[PASS][0m check_shortfall_conserves_and_preserves_sentinel(uint32,uint32,uint96,uint96,uint96,bool) (paths: 79, time: 5.03s, bounds: [])
+[32m[PASS][0m check_yield_excludes_all_counted_obligations(uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96,uint96) (paths: 19, time: 0.14s, bounds: [])
+Symbolic test result: 9 passed; 0 failed; time: 50.55s
