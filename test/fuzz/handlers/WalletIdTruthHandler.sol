@@ -60,9 +60,10 @@ interface IWidOwnerOf {
 ///      Two reachability shortcuts, both confined to one call: the Decimator window opens only at
 ///      levels x4/x99, so the burn doors open it for `level + 1` the way the advance does (window
 ///      flag, round's `openedDay` and shared entry-buffer level) and shut the flag after the burn.
-///      A queued battle must drain before that buffer can be reused. The growth market opens
-///      only in a jackpot phase at level >= 1, so the bet doors mock `getGrowth(0)` as open for
-///      that one bet when the real market is shut. Neither touches an ID path.
+///      As in production, the buffer passes to a new window only once the round holding it is
+///      paid. The growth market opens only in a jackpot phase at level >= 1, so the bet doors mock
+///      `getGrowth(0)` as open for that one bet when the real market is shut. Neither touches an
+///      ID path.
 contract WalletIdTruthHandler is Test, ChainCallJudge {
     // ------------------------------------------------------------------ wiring
     DegenerusGame public immutable game;
@@ -612,10 +613,14 @@ contract WalletIdTruthHandler is Test, ChainCallJudge {
 
     function _openDecWindow() internal returns (bool forced) {
         if (game.decimatorActive() || game.gameOver()) return false;
-        // Production drains sealed battles before opening the next window. The
-        // reachability shortcut must not overwrite a queued battle's entries.
+        // Production pays every round before the next window opens. The reachability shortcut
+        // must not overwrite the entries of a round still to be paid, queued or not yet sealed.
         if (uint256(vm.load(GAME, bytes32(GameSlots.DEC_BATTLE_QUEUE))) != 0) return false;
         uint24 lvl = game.currentLvl() + 1;
+        uint256 tagged = uint256(vm.load(GAME, bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
+        uint256 shift = 8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET;
+        uint24 held = uint24(tagged >> shift);
+        if (held != lvl && _decRoundUnpaid(held)) return false;
         bytes32 roundSlot = keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS));
         uint256 round = uint256(vm.load(GAME, roundSlot));
         if ((round >> 224) & 0xFF != 0) return false; // sealed (phase != 0)
@@ -623,15 +628,19 @@ contract WalletIdTruthHandler is Test, ChainCallJudge {
             uint256 day = game.currentDayView_g542950();
             vm.store(GAME, roundSlot, bytes32(round | (day << 200)));
         }
-        // Entries now reuse a single buffer. Opening only the flag/day leaves
+        // Entries reuse a single buffer. Opening only the flag/day leaves
         // the prior level's tag attached to freshly overwritten owner lanes.
-        uint256 tagged = uint256(vm.load(GAME, bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
-        uint256 shift = 8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET;
         vm.store(GAME, bytes32(GameSlots.DEC_ENTRIES_LEVEL),
             bytes32((tagged & ~(uint256(type(uint24).max) << shift)) | (uint256(lvl) << shift)));
         uint256 w = uint256(vm.load(GAME, bytes32(GameSlots.DECIMATOR_FLAGS)));
         vm.store(GAME, bytes32(GameSlots.DECIMATOR_FLAGS), bytes32(w | (uint256(1) << DEC_WINDOW_BIT)));
         return true;
+    }
+
+    /// @dev A round holding entries reads the shared buffer until it finishes (phase 3).
+    function _decRoundUnpaid(uint24 lvl) internal view returns (bool) {
+        uint256 round = uint256(vm.load(GAME, keccak256(abi.encode(uint256(lvl), GameSlots.DEC_BATTLE_ROUNDS))));
+        return (round >> 96) & type(uint40).max != 0 && (round >> 224) & 0xFF != 3;
     }
 
     function _shutDecWindow() internal {

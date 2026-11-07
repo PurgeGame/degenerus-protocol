@@ -270,10 +270,20 @@ contract WalletIdTruthInvariant is DeployProtocol {
 
         // A new synthetic level reuses the same physical entry lanes. The old
         // event remains in the ghost history and must be excluded by its tag.
+        uint24 first = game.currentLvl() + 1;
         uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LEVEL)));
         uint256 shift = 8 * GameSlots.LEVEL_OFFSET;
         vm.store(address(game), bytes32(GameSlots.LEVEL),
-            bytes32((packed & ~(uint256(type(uint24).max) << shift)) | (uint256(game.currentLvl() + 1) << shift)));
+            bytes32((packed & ~(uint256(type(uint24).max) << shift)) | (uint256(first) << shift)));
+        // The first round still holds the buffer until it is paid: no window may take it over.
+        before = handler.decEntryCount();
+        handler.f_decimatorBurn(0, 5_000, 5);
+        assertEq(handler.decEntryCount(), before, "shortcut must not take over an unpaid round's buffer");
+        tagged = uint256(vm.load(address(game), bytes32(GameSlots.DEC_ENTRIES_LEVEL)));
+        assertEq(uint24(tagged >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET)), first, "unpaid round lost its buffer");
+        bytes32 roundSlot = keccak256(abi.encode(uint256(first), GameSlots.DEC_BATTLE_ROUNDS));
+        uint256 round = uint256(vm.load(address(game), roundSlot));
+        vm.store(address(game), roundSlot, bytes32((round & ~(uint256(0xFF) << 224)) | (uint256(3) << 224)));
         before = handler.decEntryCount();
         handler.f_decimatorBurn(0, 5_000, 5);
         assertGt(handler.decEntryCount(), before, "second window must accept a real burn");
