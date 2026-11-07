@@ -142,14 +142,15 @@ jobs:
   foundry-tests:
     name: Foundry ${{ matrix.group }}
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       # Each group has its own hosted VM. Up to seven run at once so the long cold and
       # invariant campaigns do not wait behind unrelated fuzz compilations.
       max-parallel: 7
       matrix:
-        group: [repro-symbolic, census, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants-1, invariants-2, invariants-3, invariants-4, integration-gas]
+        group: [repro-symbolic, census, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants-1, invariants-2,
+          invariants-3, invariants-4, invariants-5, invariants-6, integration-gas-1, integration-gas-2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,7 +200,7 @@ jobs:
             export FOUNDRY_FUZZ_SEED="$GITHUB_RUN_ID"
             echo "fuzz seed: $FOUNDRY_FUZZ_SEED"
           fi
-          if [ "$TEST_GROUP" = integration-gas ]; then
+          if [[ "$TEST_GROUP" == integration-gas-* ]]; then
             FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1
           else
             FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1
@@ -601,7 +602,7 @@ jobs:
     needs: deep-selection
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       max-parallel: 16

@@ -19,6 +19,10 @@ import {TicketQueueStorage as TQ} from "./TicketQueueStorage.sol";
 ///      write that really rolled back leaves its slot at the value it had before the call.
 ///      Only calls carrying at most a transaction's gas are recorded: their access list fits the
 ///      EVM memory that decodes it. A larger call is UNCHECKED.
+///      Once a run starts a recording, Foundry records every storage access until the run ends:
+///      `stopAndReturnStateDiff` only empties the record, and only the mapping-slot recording that
+///      `startStateDiffRecording` turns on can be switched off. `stop` and `discard` empty the
+///      record and switch that one off, so each call's record is released after it.
 library ChainProgress {
     Vm private constant _vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -39,7 +43,14 @@ library ChainProgress {
         uint256 free;
         assembly ("memory-safe") { free := mload(0x40) }
         progress = classify(_vm.stopAndReturnStateDiff());
+        _vm.stopMappingRecording();
         assembly ("memory-safe") { mstore(0x40, free) }
+    }
+
+    /// @dev Drops what was recorded since the last `start`, `stop` or `discard` without decoding it.
+    function discard() internal {
+        _vm.startStateDiffRecording();
+        _vm.stopMappingRecording();
     }
 
     function classify(Vm.AccountAccess[] memory acc) internal view returns (uint8) {
@@ -109,21 +120,24 @@ library ChainProgress {
 ///      any revert of a selected action, is unexpected. TX_GAS_CAP is the Osaka transaction cap less
 ///      the intrinsic 21,000; an action whose declared minimum exceeds it (HUMAN_BOXES' 100-box bound)
 ///      is drawn at the cap, so work that only fits above the cap is flagged. While work remains
-///      after a successful judged call, the original ample call follows, so the handler progresses
-///      as it did before.
+///      after a successful judged call, an ample call (AMPLE_GAS) follows, so the handler keeps its
+///      pace.
 ///      PROGRESS: every successful call carrying at most TX_GAS_CAP (every admission-judged call and
 ///      every capped site) is recorded and must commit work (see ChainProgress). The one exception
 ///      is a refused request or terminal attempt, which commits nothing by design: the selected
 ///      action is a request or Terminal and an inner call reverted. A success with no readable
 ///      selection is judged by the selection read after it (nothing changed, so it is the one the
-///      call saw). The ample follow-up call, a pacing device that can carry far more than a
-///      transaction's gas, is counted but not recorded; ChainStallProbe judges every end state.
+///      call saw). The ample follow-up call, a pacing device carrying 256 transactions' gas, is
+///      counted but not judged; ChainStallProbe judges every end state.
 ///      Set CHAIN_JUDGE_TALLY=1 to print every selector seen (see `judgeTally`).
 abstract contract ChainCallJudge {
     Vm private constant _jvm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     /// @dev Osaka per-transaction gas cap (2^24) less the intrinsic 21,000.
     uint256 public constant TX_GAS_CAP = ChainProgress.TX_GAS_CAP;
+    /// @dev Gas of an ample call: 256 transactions' worth. The run's recorder sees every call (see
+    ///      ChainProgress), so an ample call is bounded and its record dropped after it.
+    uint256 public constant AMPLE_GAS = uint256(1) << 32;
     uint8 private constant ACTION_IDLE = 0;
     uint8 private constant ACTION_WAIT = 2;
     uint8 internal constant ACTION_UNREAD = type(uint8).max;
@@ -180,7 +194,7 @@ abstract contract ChainCallJudge {
     mapping(uint8 => uint256) public judgeActionCalls;
     uint256 private _judgeNonce;
 
-    /// @dev One mineRun through the judge. `gasLimit == 0` forwards all gas (ample); `site` is a
+    /// @dev One mineRun through the judge. `gasLimit == 0` is an ample site; `site` is a
     ///      handler-local label for the call site. Must be the first external call after any vm.prank.
     function _mine(address game, uint256 gasLimit, uint8 allowed, uint16 site) internal returns (bool ok, bytes4 sel) {
         return _mineMul(game, 0, gasLimit, allowed, site);
@@ -230,14 +244,15 @@ abstract contract ChainCallJudge {
     }
 
     /// @dev One mineRun, under state-diff recording when it carries at most a transaction's gas, the
-    ///      one-shot prank (if any) in force last. `g == 0` forwards all gas.
+    ///      one-shot prank (if any) in force last. `g == 0` is an ample call (AMPLE_GAS).
     function _recordedCall(address game, uint256 g, bytes memory cd, bool once, address sender, address origin)
         private
         returns (bool ok, bytes memory ret, uint8 progress)
     {
         if (g == 0 || g > TX_GAS_CAP) {
             _reprank(once, sender, origin);
-            (ok, ret) = g == 0 ? game.call(cd) : game.call{gas: g}(cd);
+            (ok, ret) = game.call{gas: g == 0 ? AMPLE_GAS : g}(cd);
+            ChainProgress.discard();
             return (ok, ret, ChainProgress.UNCHECKED);
         }
         ChainProgress.start();
@@ -607,13 +622,16 @@ library ChainCallTally {
 ///         Completion is a ranking, not a guess: a Tickets call that strictly lowers the active read
 ///         queue's owed total is ranked (owed is a natural number, so ranked calls cannot go on
 ///         forever), and every other call spends UNRANKED_BUDGET, so work that commits state without
-///         finishing is flagged. A ranked drain runs to its end unless the test's own gas limit
-///         would end it first (then the probe stops, still ranked). The snapshot is restored, so the
-///         suite's own end-of-run checks are unaffected.
+///         finishing is flagged. A ranked drain runs to its end unless it has spent RANKED_GAS or the
+///         test's own gas would run short first; then the probe stops, still ranked. The drain is one
+///         transaction, whose every write Foundry holds until it ends, so RANKED_GAS bounds its
+///         memory; AdvanceLiveness's deep replays drain the largest known backlog in full. The
+///         snapshot is restored, so the suite's own end-of-run checks are unaffected.
 library ChainStallProbe {
     Vm private constant _vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     uint256 internal constant UNRANKED_BUDGET = 1_000;
+    uint256 internal constant RANKED_GAS = 100_000_000_000;
     uint256 internal constant GAS_RESERVE = 2_000_000_000;
     bytes4 private constant SEL_NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 private constant SEL_RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
@@ -632,6 +650,7 @@ library ChainStallProbe {
         private
         returns (string memory why, uint256 calls, uint256 unranked)
     {
+        uint256 gasStart = gasleft();
         for (; ; ++calls) {
             bool delivered = _deliver(vrf);
             uint8 action = _selected(game);
@@ -653,7 +672,7 @@ library ChainStallProbe {
                 return (why, calls + 1, unranked);
             }
             if (key != 0 && _queueOwed(game, key) < owedBefore) {
-                if (gasleft() < GAS_RESERVE) return ("", calls + 1, unranked);
+                if (gasleft() < GAS_RESERVE || gasStart - gasleft() > RANKED_GAS) return ("", calls + 1, unranked);
             } else if (++unranked > UNRANKED_BUDGET) {
                 why = string.concat("stalled: no quiescence within ", _vm.toString(UNRANKED_BUDGET),
                     " unranked calls (", _vm.toString(calls + 1), " in all)");

@@ -9,9 +9,12 @@ import re
 
 
 HEAVY = {
+    "CompositionDegenesis.inv.t.sol",
     "CrapsConservation.inv.t.sol",
     "CrapsRealWiringConservation.inv.t.sol",
     "CrapsRngSeal.inv.t.sol",
+    "DegenesisTimelineVariants.inv.t.sol",
+    "LoanAccounting.inv.t.sol",
     "RngFreezeDegenesisTimeline.inv.t.sol",
 }
 ADVANCE_FILE = "AdvanceLiveness.inv.t.sol"

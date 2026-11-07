@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {ChainCallJudge, ChainStallProbe} from "./helpers/ChainCallJudge.sol";
+import {ChainCallJudge, ChainProgress, ChainStallProbe} from "./helpers/ChainCallJudge.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {FSMHandler} from "./handlers/FSMHandler.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -74,6 +74,14 @@ contract SpyGame {
             if iszero(ok) { revert(add(ret, 32), mload(ret)) }
             return(add(ret, 32), mload(ret))
         }
+    }
+}
+
+contract MappingWriter {
+    mapping(uint256 => uint256) public m;
+
+    function set(uint256 k) external {
+        m[k] = 1;
     }
 }
 
@@ -304,6 +312,47 @@ contract ChainCallJudgeTest is DeployProtocol {
         }
         assertEq(seen, 1, "one capped call, from the pranked caller");
         assertEq(probe.judgeUnexpected(), 0);
+    }
+
+    /// @dev A recorded call leaves no mapping-slot recording running, so a drain of many recorded
+    ///      calls holds one call's hashes at a time.
+    function test_recordedCallEndsMappingRecording() public {
+        MappingWriter w = new MappingWriter();
+        ChainProgress.start();
+        w.set(7);
+        ChainProgress.stop();
+        w.set(8);
+        assertEq(vm.getMappingLength(address(w), bytes32(0)), 0, "no mapping slot is recorded after stop");
+        w.set(9);
+        ChainProgress.discard();
+        w.set(10);
+        assertEq(vm.getMappingLength(address(w), bytes32(0)), 0, "no mapping slot is recorded after discard");
+        Vm.StorageAccess[] memory acc = vm.getStorageAccesses();
+        bytes32 dropped = keccak256(abi.encode(uint256(9), uint256(0)));
+        bytes32 kept = keccak256(abi.encode(uint256(10), uint256(0)));
+        bool sawKept;
+        for (uint256 i; i < acc.length; ++i) {
+            assertTrue(acc[i].slot != dropped, "discard dropped the write before it");
+            if (acc[i].slot == kept) sawKept = true;
+        }
+        assertTrue(sawKept, "accesses after discard are still recorded");
+    }
+
+    /// @dev The ample follow-up call carries more than a transaction's gas but at most AMPLE_GAS.
+    function test_ampleCallIsBounded() public {
+        _spy(0);
+        vm.recordLogs();
+        (bool ok,) = probe.mine(address(game), 0, ALL, 1);
+        assertTrue(ok, "the fresh engine has work");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 ample;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != keccak256("MineSeen(address,uint256)") || logs[i].emitter != address(game)) continue;
+            (, uint256 gasIn) = abi.decode(logs[i].data, (address, uint256));
+            assertLe(gasIn, probe.AMPLE_GAS());
+            if (gasIn > probe.TX_GAS_CAP()) ++ample;
+        }
+        assertEq(ample, 1, "one ample call followed the judged call");
     }
 
     function _spy(uint256 need) internal {

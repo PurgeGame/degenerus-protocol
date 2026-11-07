@@ -87,13 +87,14 @@ python3 scripts/test-hardhat-groups.py --log-dir "$AUDIT_SCRATCH/logs/hardhat"
 ```
 
 Foundry's default groups are `integration-gas`, `repro-symbolic`, `census`, `fuzz-1` through
-`fuzz-4`, and `invariants`. Forks are opt-in. The runner selects CI's isolation mode per source,
-including the two cold fork suites, and splits mixed selections into separate batches.
-`FOUNDRY_ISOLATE` or Forge's `--isolate` explicitly overrides that choice; run metadata records
-the effective settings. `--file` selects
-a source and is repeatable. Hardhat defaults to one file per process; its runner includes
-statistical suites and rejects unassigned test files. Run artifact/source gates as well; `make
-test-foundry` and `make test-hardhat` include the structural prerequisites.
+`fuzz-4`, and `invariants`; CI runs `invariants` as `invariants-1` through `invariants-6` and
+`integration-gas` as `integration-gas-1` and `integration-gas-2`. Forks are opt-in. The runner
+selects CI's isolation mode per source, including the two cold fork suites, and splits mixed
+selections into separate batches. `FOUNDRY_ISOLATE` or Forge's `--isolate` explicitly overrides that
+choice; run metadata records the effective settings. `--file` selects a source and is repeatable.
+Hardhat defaults to one file per process; its runner includes statistical suites and rejects
+unassigned test files. Run artifact/source gates as well; `make test-foundry` and `make
+test-hardhat` include the structural prerequisites.
 
 | Review area | Focused input |
 | --- | --- |
@@ -169,26 +170,29 @@ successful judged or capped call (at most a transaction's gas) is recorded with 
 recording and must commit work: some storage slot must end the call with a value different from the
 one it started with, outside the caller's FLIP reward credit. The one success that may commit
 nothing is a refused request or terminal attempt (the selected action is a request or Terminal, and
-an inner call reverted). An
-action whose declared minimum exceeds the cap, the 100-box human order, is drawn at the cap;
-`HumanOrderNativeGas` separately completes a maximum order cold inside one transaction. Half the
-judged calls draw a calibration (0.25x, below 1x, above 1x or 4x): below 1x a gas refusal is
-accepted, since a continuation admitted on a scaled estimate may overrun and roll back its worker,
-and at 1x and above the rule is unchanged. `judgeCheck` also fails when a dependency mock records a
-call that arrived below the protocol's admission. While work remains, the handler's original call
-follows, so handlers keep their pace; that pacing call is counted but not recorded. At the end of
-every run `ChainStallProbe` drives the engine to quiescence on a snapshot in transaction-sized
-calls, delivering outstanding VRF words; every success must commit work, a
-ticket call that strictly lowers the active read queue's owed total is ranked, and any other call
-spends a 1,000-call budget, so work that changes state without finishing is flagged. `EndingWitness`
-re-derives the 14-day deadman, the 14-day unpublished request and the 30-day purchase timeout,
-including the next-pool target and its century floor, from raw storage: AdvanceLiveness and
-AnyInputSafety fail when terminal state latches with no ending due, and AdvanceLiveness also
-requires an idle, sealed day to have requested its wall day and stamped its completion.
-AnyInputSafety's guided claim doors steer claims that random input does not reach to acceptance and
-check each accepted claim's effect. The FlipCarry suites hold an independent model of each tracked
-player's wallet, bank, carry, cursor and auto-rebuy settings; after every action raw storage must
-equal the model and the tracked ledger must balance.
+an inner call reverted). An action whose declared minimum exceeds the cap, the 100-box human order,
+is drawn at the cap; `HumanOrderNativeGas` separately completes a maximum order cold inside one
+transaction. Half the judged calls draw a calibration (0.25x, below 1x, above 1x or 4x): below 1x a
+gas refusal is accepted, since a continuation admitted on a scaled estimate may overrun and roll
+back its worker, and at 1x and above the rule is unchanged. `judgeCheck` also fails when a
+dependency mock records a call that arrived below the protocol's admission. While work remains, an
+ample call of 2^32 gas follows, so handlers keep their pace; that pacing call is counted but not
+judged. Once a run records a call, Foundry records every storage access until the run ends, so the
+judge switches off the mapping-slot recording that state-diff recording also starts and drops each
+call's record after it. At the end of every run `ChainStallProbe` drives the engine to quiescence on
+a snapshot in transaction-sized calls, delivering outstanding VRF words; every success must commit
+work, a ticket call that strictly lowers the active read queue's owed total is ranked, and any other
+call spends a 1,000-call budget, so work that changes state without finishing is flagged. The drain
+is one transaction, whose writes Foundry holds until it ends, so a ranked drain stops, accepted,
+once it has spent 100 billion gas or the test's gas runs short; AdvanceLiveness's deep replays drain
+the largest known backlog in full. `EndingWitness` re-derives the 14-day deadman, the 14-day
+unpublished request and the 30-day purchase timeout, including the next-pool target and its century
+floor, from raw storage: AdvanceLiveness and AnyInputSafety fail when terminal state latches with no
+ending due, and AdvanceLiveness also requires an idle, sealed day to have requested its wall day and
+stamped its completion. AnyInputSafety's guided claim doors steer claims that random input does not
+reach to acceptance and check each accepted claim's effect. The FlipCarry suites hold an independent
+model of each tracked player's wallet, bank, carry, cursor and auto-rebuy settings; after every
+action raw storage must equal the model and the tracked ledger must balance.
 
 AdvanceLiveness allows 500 mining calls per cycle; a cycle restarts when the logical day advances.
 Past that budget, with an active ticket queue of 1–4,096 holders, it requires a ranking function
@@ -212,7 +216,7 @@ that draining ready work does not manufacture a deadline by advancing the clock.
 call boundaries do not reproduce every invariant-executor warmth property. Fixed-time draining models
 cooperating callers, not transaction throughput.
 
-Results apply to their captured inputs and configured limits. The complete 93-partition deep
+Results apply to their captured inputs and configured limits. The complete 116-partition deep
 invariant matrix and hosted CI must be assessed on the final handoff inputs; a focused pass or a
 collection of per-file passes on different revisions is not a full-matrix result. Local toolchain
 versions that differ from CI also require separate validation. Parser/IR integrity checks do not

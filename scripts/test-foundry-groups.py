@@ -62,7 +62,10 @@ ENV_KEYS = (
 # and a differently patched ContractAddresses.sol, so it is never part of a full-tree run: only
 # an explicit `--group fork` (or `--file test/fork/...`) selects it, and then alone.
 FORK_GROUP = "fork"
-INVARIANT_SHARDS = 4
+INVARIANT_SHARDS = 6
+# CI shards of integration-gas: each bounded batch spends minutes compiling, so two hosted jobs
+# split its roots; a default full-tree run uses the whole group.
+INTEGRATION_SHARDS = 2
 # Relative cost of the heaviest invariant roots (minutes of suite time, one thread, default
 # profile). CI shards are filled heaviest-first onto the lightest shard so each job fits the
 # hosted time limit; unlisted roots count as one minute. Only the relative sizes matter.
@@ -156,6 +159,10 @@ def groups():
         loads[i] += cost(root)
     for i, roots in enumerate(shards):
         result[f"invariants-{i + 1}"] = roots
+    integration_roots = sorted(p for p in result["integration-gas"] if p.name.endswith(".t.sol"))
+    size = -(-len(integration_roots) // INTEGRATION_SHARDS)
+    for i in range(INTEGRATION_SHARDS):
+        result[f"integration-gas-{i + 1}"] = set(integration_roots[i * size:(i + 1) * size])
     result[FORK_GROUP] = {p for p in files if is_fork_source(p)}
     missing = set(files) - support - set().union(*result.values())
     if missing:
@@ -176,7 +183,7 @@ def split_batches(selected, maximum, automatic_isolation=False):
         # Only integration-gas has demonstrated compiler memory exhaustion. Keep the
         # other established groups intact unless the caller explicitly asks for a cap.
         cap = maximum if maximum is not None else (
-            DEFAULT_BATCH_SOURCES if group == "integration-gas" else len(sources))
+            DEFAULT_BATCH_SOURCES if group.startswith("integration-gas") else len(sources))
         number = 0
         for partition in partitions:
             ordered = sorted(partition)
@@ -287,7 +294,7 @@ def main():
     parser.add_argument("--group", action="append", help="Run this logical group, in bounded batches (repeatable)")
     parser.add_argument("--file", action="append", help="Run only these test sources (repeatable)")
     parser.add_argument("--max-sources-per-batch", "--max-files", type=int,
-                        help="Cap roots in every selected group; default splits only integration-gas at 20")
+                        help="Cap roots in every selected group; default splits only integration-gas and its shards at 20")
     parser.add_argument("--log-dir", default=".audit-test-logs/foundry")
     parser.add_argument("--list", action="store_true", help="List groups/batches without building or patching")
     args, forge_args = parser.parse_known_args()
@@ -318,6 +325,8 @@ def main():
         selected.pop(FORK_GROUP, None)
         for i in range(INVARIANT_SHARDS):
             selected.pop(f"invariants-{i + 1}", None)
+        for i in range(INTEGRATION_SHARDS):
+            selected.pop(f"integration-gas-{i + 1}", None)
     chosen = set().union(*selected.values()) if selected else set()
     fork_run = any(is_fork_source(p) for p in chosen)
     if fork_run and not all(is_fork_source(p) for p in chosen):
@@ -375,7 +384,8 @@ def main():
         "effective_source_layout": source_layout,
         "environment": {key: env[key] for key in ENV_KEYS if key in env},
         "forge_arguments": forge_args, "max_sources_per_batch": args.max_sources_per_batch,
-        "default_group_caps": {"integration-gas": DEFAULT_BATCH_SOURCES},
+        "default_group_caps": {name: DEFAULT_BATCH_SOURCES for name in
+                               ["integration-gas"] + [f"integration-gas-{i + 1}" for i in range(INTEGRATION_SHARDS)]},
         "physical_batches": len(batches),
         "isolation_policy": "per-source CI mode" if automatic_isolation else "explicit caller override",
         "test_count_semantics": "execution counts; imported helper suites may repeat between batches",
