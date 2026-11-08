@@ -128,7 +128,8 @@ library ChainProgress {
 ///      action is a request or Terminal and an inner call reverted. A success with no readable
 ///      selection is judged by the selection read after it (nothing changed, so it is the one the
 ///      call saw). The ample follow-up call, a pacing device carrying 256 transactions' gas, is
-///      counted but not judged; ChainStallProbe judges every end state.
+///      counted and must not revert, but is not checked for committed work; ChainStallProbe
+///      judges every end state.
 ///      Set CHAIN_JUDGE_TALLY=1 to print every selector seen (see `judgeTally`).
 abstract contract ChainCallJudge {
     Vm private constant _jvm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
