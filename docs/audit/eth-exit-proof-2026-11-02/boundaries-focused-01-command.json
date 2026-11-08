@@ -416,6 +416,8 @@
     "--skip",
     "test/fuzz/DeityBoonPreviousDay.t.sol",
     "--skip",
+    "test/fuzz/DeityGiftExpiredLane.t.sol",
+    "--skip",
     "test/fuzz/DeityPassPriceCurve.t.sol",
     "--skip",
     "test/fuzz/DeityPerpetualTickets.t.sol",
@@ -539,6 +541,8 @@
     "test/fuzz/KeeperRewardRoutingSameResults.t.sol",
     "--skip",
     "test/fuzz/KeeperRouterOneCategory.t.sol",
+    "--skip",
+    "test/fuzz/LazyPassOverWhale.t.sol",
     "--skip",
     "test/fuzz/LensParity.t.sol",
     "--skip",
@@ -1521,6 +1525,6 @@
     "test/fuzz/TerminalLoanSettlement.t.sol",
     "test/repro/VrfRotationMidDayReRoll.t.sol"
   ],
-  "input_manifest": "20261108T104457.427629Z-0ee5c2be/focused-01-inputs.json",
-  "input_manifest_sha256": "47195865cceffa8f83d296e956e5e836624ac83698bad9568c5fb35b2825eaab"
+  "input_manifest": "20261108T145709.348076Z-1c30553e/focused-01-inputs.json",
+  "input_manifest_sha256": "1b1529260e5a8f782056db791fa087d42db2eb9b3d00dbdc38fd2668fbf9481e"
 }

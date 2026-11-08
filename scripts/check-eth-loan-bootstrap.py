@@ -27,10 +27,13 @@ SOURCES = (
 # Reviewed 2026-11-01: Storage and WhaleModule refund comment text only; the loan model is unaffected.
 # Reviewed 2026-11-04: Storage VRF native funding minimum and WhaleModule empty-revert error only;
 # the loan model is unaffected.
+# Reviewed 2026-11-08: WhaleModule refuses a lazy pass over an active whale pass and Storage's
+# lazy activation always records the lazy type; whale-pass awards, loan rates and prices are
+# unchanged, so the loan model is unaffected.
 SOURCE_SHA256 = {
-    "contracts/storage/DegenerusGameStorage.sol": "4fcafe766b038b76e483234363a9c8eae488e7d7df6585fc6930a5e4cf1ce17c",
+    "contracts/storage/DegenerusGameStorage.sol": "126fe1d73d86ae49fb845a48470c3aed972a57e744406164b3f9890864fe9bef",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
-    "contracts/modules/DegenerusGameWhaleModule.sol": "a7b9b88d1f646984e3ada611c64f820cf17e9d8b6a575c7333a9ab8f0859af2e",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "92efaa1b78518510f71a1cf02aef0769d4231a4edb6c3dbfdea4e48b37d5bbc5",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",
 }
 

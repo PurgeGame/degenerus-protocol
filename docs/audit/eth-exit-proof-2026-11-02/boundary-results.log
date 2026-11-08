@@ -1,5 +1,5 @@
 Compiling 313 files with Solc 0.8.38
-Solc 0.8.38 finished in 217.09s
+Solc 0.8.38 finished in 186.80s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
     --> lib/forge-std/src/Vm.sol:1339:9:
@@ -397,9 +397,9 @@ Note: The shadowed declaration is here:
    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3621:43:
+    --> contracts/storage/DegenerusGameStorage.sol:3618:43:
      |
-3621 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+3618 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
      |                                           ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
    --> contracts/storage/DegenerusGameStorage.sol:346:5:
@@ -408,9 +408,9 @@ Note: The shadowed declaration is here:
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3637:9:
+    --> contracts/storage/DegenerusGameStorage.sol:3634:9:
      |
-3637 |         uint24 level,
+3634 |         uint24 level,
      |         ^^^^^^^^^^^^
 Note: The shadowed declaration is here:
    --> contracts/storage/DegenerusGameStorage.sol:346:5:
@@ -419,9 +419,9 @@ Note: The shadowed declaration is here:
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3761:41:
+    --> contracts/storage/DegenerusGameStorage.sol:3758:41:
      |
-3761 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+3758 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
      |                                         ^^^^^^^^^^^^^
 Note: The shadowed declaration is here:
    --> contracts/storage/DegenerusGameStorage.sol:346:5:
@@ -430,9 +430,9 @@ Note: The shadowed declaration is here:
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
-    --> contracts/storage/DegenerusGameStorage.sol:3767:44:
+    --> contracts/storage/DegenerusGameStorage.sol:3764:44:
      |
-3767 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+3764 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
      |                                            ^^^^^^^^^^^^^
 Note: The shadowed declaration is here:
    --> contracts/storage/DegenerusGameStorage.sol:346:5:
@@ -593,9 +593,9 @@ Warning (3149): The result type of the shift operation is equal to the type of t
    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint24) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-   --> contracts/modules/DegenerusGameBoonModule.sol:502:26:
+   --> contracts/modules/DegenerusGameBoonModule.sol:500:26:
     |
-502 |             boonTypes |= uint24(boonType) << (8 * slot);
+500 |             boonTypes |= uint24(boonType) << (8 * slot);
     |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
@@ -1449,7 +1449,7 @@ Ran 17 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfEndingTest
 [PASS] test_lootboxOnlyMiddayRequestIsReissuedBySwap() (gas: 8531460)
 [PASS] test_pendingRedemptionResolvesAtExpectedValue() (gas: 4237499)
 [PASS] test_sdgnrsDeterministicBurnWorksAfterTheDeadEnding() (gas: 4308412)
-[PASS] test_stallAcrossDeadlineKeepsTheLevelRescuable() (gas: 16061399)
+[PASS] test_stallAcrossDeadlineKeepsTheLevelRescuable() (gas: 16061548)
 [PASS] test_starvedPreSwapBatchCannotCloseTheSwapWindow() (gas: 229108970)
 Logs:
   batchGas: 78256
@@ -1470,7 +1470,7 @@ Logs:
 [PASS] test_unansweredMiddayRequestAtDeadlineEndsDeterministically() (gas: 6807770)
 [PASS] test_weightsPastSixtyFourBitsClaimExactly() (gas: 4767080)
 [PASS] test_wordDeliveredAfterTheWindowIsDiscarded() (gas: 4060458)
-Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 340.42ms (330.73ms CPU time)
+Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 301.00ms (295.24ms CPU time)
 
 Ran 8 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfLivenessTest
 [PASS] test_backlogWordIsNeverDead() (gas: 105838)
@@ -1481,7 +1481,7 @@ Ran 8 tests for test/fuzz/DeadVrfEnding.t.sol:DeadVrfLivenessTest
 [PASS] test_onlyAPublishedWordKeepsVrfAlivePastTheWindow() (gas: 69160)
 [PASS] test_retryBitKeepsTheWindowAndTheDay() (gas: 61798)
 [PASS] test_stallAcrossDeadlineWaitsForTheVrfDeadWindow() (gas: 61887)
-Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 344.46µs (229.96µs CPU time)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 321.72µs (214.79µs CPU time)
 
 Ran 8 tests for test/fuzz/DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
 [PASS] testBatchedPayoutEqualsPerSpinExpectation_Tier1() (gas: 458868)
@@ -1491,7 +1491,7 @@ Logs:
   tier1_wwxrp_delta: 0
 
 [PASS] testDegeneretteUnfrozenPathRegression() (gas: 288420)
-[PASS] testDgnrsAwardStaysPerSpin() (gas: 989697)
+[PASS] testDgnrsAwardStaysPerSpin() (gas: 989846)
 Logs:
   dgnrs_parent_per_spin: 4037980161600000000000
   dgnrs_parent_stale_hypothetical: 4079592000000000000000
@@ -1503,14 +1503,14 @@ Logs:
   tier2_spins_capped: 2
 
 [PASS] testFlipSurvivalFlipLossZeroesMint() (gas: 305935)
-[PASS] testLootboxSummedPerBetIdNotAcrossBets() (gas: 3273828)
+[PASS] testLootboxSummedPerBetIdNotAcrossBets() (gas: 3275568)
 Logs:
   perbetid_eth_one_call: 95000000000000000
   perbetid_eth_two_calls: 95000000000000000
 
 [PASS] testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() (gas: 596605)
 [PASS] test_SharedBoardAcrossPlayersCurrenciesAndBets() (gas: 644702)
-Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 12.33ms (6.97ms CPU time)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 11.36ms (6.64ms CPU time)
 
 Ran 15 tests for test/fuzz/DegeneretteSingleSymbol.t.sol:DegeneretteSingleSymbolTest
 [PASS] testAllAxesAllHeroesAndWildsAgainstIndependentScoreAndRig() (gas: 398732037)
@@ -1519,103 +1519,103 @@ Ran 15 tests for test/fuzz/DegeneretteSingleSymbol.t.sol:DegeneretteSingleSymbol
 [PASS] testAutomaticWwxrpHashesItsSeedAndScoresTheRiggedReel() (gas: 3605312)
 [PASS] testDiceBetsRejectAtomicallyForEveryCurrencyAndFundingRoute() (gas: 2837742)
 [PASS] testDifferentHeroesRerollRemainingTicketButShareHouse() (gas: 2051782)
-[PASS] testFuzzPayoutBoundsAndWwxrpBonusTiers(uint128,uint8,uint8,uint16) (runs: 1000, μ: 17488, ~: 17920)
+[PASS] testFuzzPayoutBoundsAndWwxrpBonusTiers(uint128,uint8,uint8,uint16) (runs: 1000, μ: 17524, ~: 17920)
 [PASS] testHeroIsStoredOnlyInTheSelectedSymbol() (gas: 702941)
 [PASS] testHouseProducerAllColorSymbolPairsAndWildNibble() (gas: 2543558)
 [PASS] testInvalidSymbolRejectedAndNewBetJoinsUnrevealedWriteCohort() (gas: 472199)
-[PASS] testNaturalEthJackpotCapsCashAndResolvesOverflow() (gas: 451773)
+[PASS] testNaturalEthJackpotCapsCashAndResolvesOverflow() (gas: 451924)
 [PASS] testNaturalWwxrpJackpotPaysTokens() (gas: 59699)
 [PASS] testSharedHeroTicketsAndPrefixAcrossPlayersBetsStakesAndEthFlip() (gas: 1793807)
 [PASS] testUnsupportedCurrenciesRejectAtomicallyForEveryFundingRoute() (gas: 700687)
 [PASS] testWildScoringAndNoGoldPremium() (gas: 15769)
-Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 595.85ms (590.60ms CPU time)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 547.90ms (543.21ms CPU time)
 
 Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
 [PASS] test_deployerIsTestContract() (gas: 379)
 [PASS] test_nonceIncrements() (gas: 47513)
 [PASS] test_startingNonce() (gas: 2555)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 79.90µs (23.02µs CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 78.83µs (26.02µs CPU time)
 
 Ran 1 test for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerDegenesis
-[PASS] testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() (gas: 5685719)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 12.08ms (6.75ms CPU time)
+[PASS] testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() (gas: 5685868)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 11.34ms (6.46ms CPU time)
 
 Ran 3 tests for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerShape
 [PASS] testActorsAreInDisjointRange() (gas: 36953)
 [PASS] testGhostCountersStartZero() (gas: 20076)
 [PASS] testTrackedAddrsIsCompleteCover() (gas: 27934)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.89ms (90.54µs CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.42ms (76.06µs CPU time)
 
 Ran 10 tests for test/fuzz/StethLossLiveness.t.sol:StethLossLiveness
-[PASS] testFuzz_stethLossAnyFractionAnyTime(uint256,uint8) (runs: 24, μ: 2459291438, ~: 2402610095)
+[PASS] testFuzz_stethLossAnyFractionAnyTime(uint256,uint8) (runs: 24, μ: 2452236190, ~: 2402640320)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss100Percent_afterGameOver() (gas: 2572608018)
+[PASS] test_stethLoss100Percent_afterGameOver() (gas: 2572638243)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss100Percent_beforeSweep() (gas: 2402551183)
+[PASS] test_stethLoss100Percent_beforeSweep() (gas: 2402581408)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss100Percent_midGame() (gas: 2402611353)
+[PASS] test_stethLoss100Percent_midGame() (gas: 2402641578)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss10Percent_afterGameOver() (gas: 2572660592)
+[PASS] test_stethLoss10Percent_afterGameOver() (gas: 2572690817)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss10Percent_beforeSweep() (gas: 2402609157)
+[PASS] test_stethLoss10Percent_beforeSweep() (gas: 2402639382)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss10Percent_midGame() (gas: 2402609421)
+[PASS] test_stethLoss10Percent_midGame() (gas: 2402639646)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss50Percent_afterGameOver() (gas: 2572660724)
+[PASS] test_stethLoss50Percent_afterGameOver() (gas: 2572690949)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss50Percent_beforeSweep() (gas: 2402608321)
+[PASS] test_stethLoss50Percent_beforeSweep() (gas: 2402638546)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-[PASS] test_stethLoss50Percent_midGame() (gas: 2402608312)
+[PASS] test_stethLoss50Percent_midGame() (gas: 2402638537)
 Logs:
   redemption roll: 105
   redemption pending tokens: 0
 
-Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 77.43s (77.42s CPU time)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 70.97s (70.96s CPU time)
 
 Ran 1 test for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanPendingBatchTest
 [PASS] test_HardDeadlineBypassesUnfinishedNormalLoanBatch() (gas: 34392170)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 37.06ms (31.72ms CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 34.67ms (29.45ms CPU time)
 
 Ran 7 tests for test/fuzz/TerminalLoanSettlement.t.sol:TerminalLoanSettlementTest
-[PASS] testFuzz_RandomBookSettlesOnceAtTheRepaymentPrice(uint256) (runs: 24, μ: 9174045, ~: 9238485)
+[PASS] testFuzz_RandomBookSettlesOnceAtTheRepaymentPrice(uint256) (runs: 24, μ: 9209206, ~: 9256327)
 [PASS] test_ChunkedSettlementResumesAroundManualRepayment() (gas: 39696763)
 [PASS] test_DeadVrfAtTheDecisionLeavesLoansUntouched() (gas: 6832632)
 [PASS] test_DeadlineEndingSettlesEveryLoanBeforeTheTerminalRequest() (gas: 13553565)
 [PASS] test_EmptyBookScansInOneCallThenTheEndingProceeds() (gas: 2720293)
 [PASS] test_HardDeadlineInterruptsTerminalLoanBookWithoutReversingPaidPrefix() (gas: 19165912)
 [PASS] test_OlderWordLandingDuringSettlementChangesNothing() (gas: 6847593)
-Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 382.84ms (376.87ms CPU time)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 348.17ms (342.69ms CPU time)
 
 Ran 2 tests for test/repro/VrfRotationMidDayReRoll.t.sol:VrfRotationMidDayReRoll
 [PASS] test_C1_rotationAfterMidDayWordLands_doesNotReRoll(uint256) (runs: 1000, μ: 7564698, ~: 7564698)
 [PASS] test_C1_rotationDuringGenuineMidDayFlight_stillReIssues(uint256) (runs: 1000, μ: 7654463, ~: 7654463)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 13.61s (13.60s CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 12.50s (12.50s CPU time)
 
-Ran 11 test suites in 92.43s (92.43s CPU time): 75 tests passed, 0 failed, 0 skipped (75 total tests)
+Ran 11 test suites in 84.73s (84.73s CPU time): 75 tests passed, 0 failed, 0 skipped (75 total tests)
