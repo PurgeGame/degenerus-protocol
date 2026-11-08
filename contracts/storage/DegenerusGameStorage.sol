@@ -3089,9 +3089,6 @@ abstract contract DegenerusGameStorage {
 
         uint24 newLevelCount = _satLevelCount(levelCount, levelsToAdd);
 
-        uint8 currentPassType = uint8(
-            (prevData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3
-        );
         uint24 lastLevelTarget = newFrozenLevel > lastLevel
             ? newFrozenLevel
             : lastLevel;
@@ -3109,14 +3106,14 @@ abstract contract DegenerusGameStorage {
             BitPackingLib.MASK_24,
             newFrozenLevel
         );
-        if (1 >= currentPassType) {
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.WHALE_PASS_TYPE_SHIFT,
-                3,
-                1
-            );
-        }
+        // The lazy pass purchase refuses an active whale pass, so a stored type has lapsed and
+        // the whole freeze is now lazy coverage.
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.WHALE_PASS_TYPE_SHIFT,
+            3,
+            1
+        );
         data = BitPackingLib.setPacked(
             data,
             BitPackingLib.LAST_LEVEL_SHIFT,

@@ -184,8 +184,6 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     // Constants
     // =========================================================================
 
-    uint24 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
-
     uint24 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     // =========================================================================

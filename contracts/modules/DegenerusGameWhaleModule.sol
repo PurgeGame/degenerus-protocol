@@ -576,7 +576,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @notice Purchase a 10-level lazy pass (direct in-game activation).
      * @dev Available at levels 0-2, x9 (9, 19, 29...; not x99), any x0 (10, 20, 30...), a century
      *      x00 during its purchase phase (blocked once jackpotPhaseFlag is set), or with a valid lazy pass boon.
-     *      Can renew when 7 or fewer levels remain on current pass freeze.
+     *      Can renew when 7 or fewer levels remain on current pass freeze; an active whale pass
+     *      cannot be renewed this way.
      *      - Grants 4 entries (one whole ticket) per level for the next 10 levels (starting at current level + 1).
      *      - Applies the standard 10-level stat boost via _activate10LevelPass.
      *      - Price: flat 0.24 ETH at levels 0-2 (excess buys bonus tickets), sum of per-level
@@ -590,7 +591,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
      * @custom:reverts InvalidLevelForPass When the level is not 0-2, x9 (excl. x99), any x0, or a century x00 in its purchase phase, and no boon applies.
      * @custom:reverts DeityPassConflict When the buyer already holds a deity pass.
-     * @custom:reverts PassNotExpired When an active frozen pass still has 8+ levels remaining.
+     * @custom:reverts PassNotExpired When an active frozen pass still has 8+ levels remaining, or an active whale pass would be extended.
      */
     function purchaseLazyPass(
         uint32 buyerId,
@@ -647,6 +648,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         );
         // Allow if 7 or fewer levels remain on freeze (early renewal window)
         if (frozenUntilLevel > currentLevel + 7) revert PassNotExpired();
+        // A lazy pass may not extend an active whale pass: the freeze carries one pass type, so
+        // the added levels would take the whale bonus. Every purchase in the window extends it.
+        if (
+            (prevData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3 == 3 &&
+            frozenUntilLevel >= currentLevel
+        ) revert PassNotExpired();
 
         uint24 startLevel = currentLevel == 0 ? 1 : currentLevel + 1;
         uint256 baseCost = _lazyPassCost(startLevel);

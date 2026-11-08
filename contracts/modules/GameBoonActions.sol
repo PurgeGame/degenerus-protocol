@@ -13,6 +13,8 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 abstract contract GameBoonActions is GamePurchaseBoon {
     uint24 internal constant COINFLIP_BOON_EXPIRY_DAYS = 2;
 
+    uint24 internal constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
+
     /// @notice Consume the caller's coinflip, craps or WWXRP boon lane.
     /// @dev The Game facade authorizes COINFLIP, COIN and WWXRP. The original caller remains:
     ///      COINFLIP spends the coinflip boon, COIN spends the craps boon, and WWXRP spends its
@@ -364,6 +366,18 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     /// @notice Thrown when the deity boon slot has already been used on the current day.
     error SlotAlreadyUsed();
 
+    /// @dev The expiry rule of `checkAndClearExpiredBoon` for a held lane: a deity-stamped lane
+    ///      lives only on its day, a rolled one until `expiryDays` after its stamp. The deity gift
+    ///      path applies without that sweep, so `_applyBoon` re-checks liveness before comparing tiers.
+    function _heldBoonLive(uint24 stampDay, uint24 deityDay, uint24 expiryDays, uint24 currentDay)
+        private
+        pure
+        returns (bool)
+    {
+        if (deityDay != 0) return deityDay == currentDay;
+        return stampDay == 0 || currentDay <= stampDay + expiryDays;
+    }
+
     /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
     ///      Both sources use upgrade semantics (only if higher tier/amount).
     ///      Lootbox boons: emit LootBoxReward, deity day = 0.
@@ -396,6 +410,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             uint256 s0 = bp.slot0;
             uint8 newTier = _coinflipBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
+            if (!_heldBoonLive(uint24(s0 >> BP_COINFLIP_DAY_SHIFT), uint24(s0 >> BP_DEITY_COINFLIP_DAY_SHIFT),
+                COINFLIP_BOON_EXPIRY_DAYS, currentDay)) existingTier = 0;
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer
             // (nor zero a held deity boon's same-day flag).
@@ -416,6 +432,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
                             (boonType == BOON_LOOTBOX_15 ? uint8(2) : uint8(1));
             uint256 s0 = bp.slot0;
             uint8 existingTier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
+            if (!_heldBoonLive(uint24(s0 >> BP_LOOTBOX_DAY_SHIFT), uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT),
+                LOOTBOX_BOOST_EXPIRY_DAYS, currentDay)) existingTier = 0;
             // Both deity and lootbox: upgrade semantics — keep higher tier
             uint8 activeTier = newTier > existingTier ? newTier : existingTier;
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
@@ -445,6 +463,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             uint256 s0 = bp.slot0;
             uint8 newTier = _purchaseBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
+            if (!_heldBoonLive(uint24(s0 >> BP_PURCHASE_DAY_SHIFT), uint24(s0 >> BP_DEITY_PURCHASE_DAY_SHIFT),
+                PURCHASE_BOOST_EXPIRY_DAYS, currentDay)) existingTier = 0;
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
@@ -642,6 +662,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
             uint256 s1 = bp.slot1;
             uint8 newTier = _lazyPassBpsToTier(bps);
             uint8 existingTier = uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT);
+            if (!_heldBoonLive(uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT), uint24(s1 >> BP_DEITY_LAZY_PASS_DAY_SHIFT),
+                4, currentDay)) existingTier = 0;
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
