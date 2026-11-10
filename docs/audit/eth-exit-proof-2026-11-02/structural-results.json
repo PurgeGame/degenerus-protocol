@@ -41,7 +41,7 @@
       "scripts/check-recipient-calls.py"
     ],
     "exitcode": 0,
-    "stdout": "Recipient-call gate: 1559 reviewed expressions; external, value, hook, pointer, assembly and transitive helper calls covered.\n",
+    "stdout": "Recipient-call gate: 1558 reviewed expressions; external, value, hook, pointer, assembly and transitive helper calls covered.\n",
     "stderr": ""
   }
 ]
