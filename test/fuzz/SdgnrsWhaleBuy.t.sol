@@ -9,6 +9,7 @@ import {IDegenerusGameWhaleModule} from "../../contracts/interfaces/IDegenerusGa
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {GamePoolSlots} from "../helpers/GamePoolSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @dev Test-only stand-in for the Game facade's code at the pinned GAME address: forwards every
@@ -206,16 +207,16 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     // =====================================================================================
 
     function test_OncePerLevel_ThenAgainNextLevel() public {
+        _holdLevelFourTarget();
         _runLevelStage(4, 1_000 ether, 0x5D70300);
         (bool b1,,) = _lastWhalePurchase();
         assertTrue(b1, "first day of level 4 buys");
         assertEq(_sdgnrsBonusLevel(), 4, "latched at 4");
 
-        // Same level, next day, richer again: no second purchase. The fixture's pools meet the
-        // level target on day one, so the Game promotes itself to level 5; hold it at 4.
-        _setLevel(4);
+        // Same level, next day, richer again: no second purchase.
         _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
         _nextDay(0x5D70301);
+        assertEq(_storedLevel(), 4, "the target held the level");
         (bool b2,,) = _lastWhalePurchase();
         assertFalse(b2, "same level: no re-buy");
         assertEq(_sdgnrsBonusLevel(), 4, "latch unchanged");
@@ -230,22 +231,23 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     function test_ZeroBudget_LatchesOnTheAttempt_NoRetryThatLevel() public {
+        _holdLevelFourTarget();
         _runLevelStage(4, 10 ether, 0x5D70400);
         (bool b1,,) = _lastWhalePurchase();
         assertFalse(b1, "too poor: nothing");
         assertEq(_sdgnrsBonusLevel(), 4, "the attempt latched the level");
 
-        // Richer the next day, same level: no second attempt. The fixture's pools meet the
-        // level target on day one, so the Game promotes itself to level 5; hold it at 4.
-        _setLevel(4);
+        // Richer the next day, same level: no second attempt.
         _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
         _nextDay(0x5D70401);
+        assertEq(_storedLevel(), 4, "the target held the level");
         (bool b2,,) = _lastWhalePurchase();
         assertFalse(b2, "same level: one probe only, no retry");
         assertEq(_sdgnrsBonusLevel(), 4, "latch unchanged");
 
-        // The next level gets its own single attempt.
+        // The next level gets its own single attempt; 20,000 ETH affords more than the cap.
         _setLevel(5);
+        _setClaimable(ContractAddresses.SDGNRS, 20_000 ether);
         _nextDay(0x5D70402);
         (bool b3, uint256 qty,) = _lastWhalePurchase();
         assertTrue(b3, "level 5: its one attempt buys");
@@ -472,6 +474,18 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         uint256 p1 = uint256(vm.load(address(game), s1));
         uint256 pool = (p1 >> 128) + amount - prev;
         vm.store(address(game), s1, bytes32((p1 & mask128) | (pool << 128)));
+    }
+
+    /// @dev A raw level set leaves no level-4 ratchet entry, so the level-5 target reads zero
+    ///      and the Game advances on the first day. An unreached target keeps it at level 4,
+    ///      so a second day runs the stage at the same level. The level is never lowered: a
+    ///      completed level's ticket buffer may already serve a later level.
+    function _holdLevelFourTarget() internal {
+        GamePoolSlots.write(address(game), 4, 1e9 ether);
+    }
+
+    function _storedLevel() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> (LEVEL_OFFBYTES * 8));
     }
 
     function _setLevel(uint24 lvl) internal {

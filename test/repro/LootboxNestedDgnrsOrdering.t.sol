@@ -63,7 +63,8 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             _settleIdle(0xB00758);
         }
         assertEq(RecyclingState.writeBuffer(address(game)), PARENT_BUFFER);
-        _giveWalletId(makeAddr("nested-seed-wallet"));
+        // PLAYER takes wallet ID 5, the ID RNG_WORD was searched for. A filler buyer holds ID 4.
+        if (game.walletIdOf_g3120(makeAddr("nested-filler")) == 0) _giveWalletId(makeAddr("nested-seed-wallet"));
     }
 
     /// @dev Answer every outstanding request and finish every delivered cohort until the engine

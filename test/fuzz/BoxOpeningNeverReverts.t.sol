@@ -24,7 +24,11 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 ///         level-0 launch fixture and at a mature level reached by the real scripted opening.
 abstract contract BoxOpeningNeverRevertsBase is DeployProtocol {
     uint256 private constant CALL_GAS = 16_777_216;
-    uint256 private constant MAX_CALLS = 2_000;
+    /// @dev A backstop against non-termination, not a work bound. A maximum custom order can award
+    ///      tens of millions of future entries; when a mid-day cycle runs in the drive (a late day
+    ///      arms its elapsed Craps windows), their next-level queue is expanded here, about 3,000
+    ///      calls at the largest inputs seen.
+    uint256 private constant MAX_CALLS = 20_000;
     uint256 private constant SCORE_CODE_MAX = 4039; // BoxOrderLib.scoreCode(30_000)
     uint256 private constant BOOST_MAX = 2500;
     bytes4 private constant NO_WORK = bytes4(keccak256("NoWork()"));

@@ -736,9 +736,10 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 storedWord = _readLootboxWord(purchaseIndex);
         assertTrue(storedWord != 0, "Word should be stored at purchase index before open");
 
-        // The engine's human-box stage opens the box on that word.
+        // The engine's human-box stage opens the box on that word. It runs before Craps
+        // maintenance, whose mid-day request for the day's elapsed windows rotates the box buffers.
         vm.startPrank(buyer);
-        _mineAll(16);
+        for (uint256 i; i < 16 && !_settled(purchaseIndex, pos); ++i) game.mineRun(0);
         vm.stopPrank();
         assertTrue(_settled(purchaseIndex, pos), "the engine opened the box on its word");
     }

@@ -636,11 +636,29 @@ contract DegenesisLivenessHandler is Test {
         for (uint256 i; i < maxCalls; ++i) {
             if (game.gameOver()) return true;
             _fulfillPending();
-            if (!_mineJudged(caller, uint256(keccak256(abi.encode(seed, "idle", i))))) {
+            uint256 s = uint256(keccak256(abi.encode(seed, "idle", i)));
+            // While a cohort is priced, about half the calls take the cheapest step that
+            // progresses, so the settlement often starts a call instead of continuing the one
+            // that ends the day's chain.
+            if ((s >> 128) & 1 == 0 && _settleAhead(caller) && _tightStep(caller)) {
+                ++ghost_tightSteps;
+                continue;
+            }
+            if (!_mineJudged(caller, s)) {
                 if (!_fulfillPending()) return true;
             }
         }
         return false;
+    }
+
+    /// @dev A priced cohort awaits settlement and the next action is a unit ahead of it.
+    function _settleAhead(address caller) internal returns (bool) {
+        if (_degenesisClosed() >= 7 || vm.load(address(game), bytes32(GameSlots.DEGENESIS_ACTIVE)) == bytes32(0)) {
+            return false;
+        }
+        vm.prank(caller);
+        uint8 next = game.minerAction();
+        return next != A_DEGENESIS_SETTLE && next != A_IDLE && next != A_WAIT;
     }
 
     /// @dev Sale progress read from state (log capture would grow handler memory without bound):

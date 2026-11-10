@@ -70,6 +70,7 @@ contract AdvanceLivenessHandler is Test {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 private constant FOIL_CURSOR_SLOT = GameSlots.FOIL_CURSOR; // foilGenerationDay @4 (3B), foilFirstDrawDay @7 (3B)
     uint256 private constant LR_MID_DAY_SHIFT = 224;
+    uint256 private constant MID_DAY_FUTURE_POOL = 2; // LR_MID_DAY: a frozen next-level pool is draining
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
     uint24 private constant TICKET_FAR_FUTURE_BIT = uint24(1) << 22;
     uint8 private constant JACKPOT_TURBO = 1;
@@ -182,6 +183,7 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_probeRequests; // the donor probe issued a mid-day request inside a check
     uint256 public ghost_probeOnLpd; // ... while lastPurchaseDay latched (non-turbo)
     uint256 public ghost_probeOnLpdFrozenPool; // ... with the frozen next-level pool non-empty
+    uint256 public ghost_crankOnLpdFrozenPool; // checks whose cranking drained a frozen pool on lastPurchaseDay
     uint256 public ghost_skippedGameOver;
     uint256 public ghost_maxCranks;
     uint256 public ghost_maxCranksPerCycle;
@@ -519,6 +521,7 @@ contract AdvanceLivenessHandler is Test {
         ghost_backlogCompressions += cycles.compressions;
         ghost_backlogRenewals += cycles.renewals;
         if (cycles.maxBacklogOwed > ghost_backlogMaxOwed) ghost_backlogMaxOwed = cycles.maxBacklogOwed;
+        if (cycles.frozenPoolCranks != 0) ghost_crankOnLpdFrozenPool++;
         if (probeFlags & 1 != 0) ghost_probeRequests++;
         if (probeFlags & 2 != 0) ghost_probeOnLpd++;
         if (probeFlags & 4 != 0) ghost_probeOnLpdFrozenPool++;
@@ -539,6 +542,7 @@ contract AdvanceLivenessHandler is Test {
         uint256 compressions;
         uint256 renewals;
         uint256 maxBacklogOwed;
+        uint256 frozenPoolCranks;
     }
 
     /// Ranking window over one read queue (see BACKLOG_WINDOW).
@@ -576,6 +580,10 @@ contract AdvanceLivenessHandler is Test {
                 return (true, _sel(ret), cranks);
             }
             if (!_engineWrote()) return (false, E_NO_PROGRESS_MARK, cranks + 1);
+            if (_midDayLatch() == MID_DAY_FUTURE_POOL) {
+                (, bool inJp, bool lpd,,) = game.purchaseInfo_g1027();
+                if (lpd && !inJp) stats.frozenPoolCranks++;
+            }
             uint24 day = _dailyIdx();
             if (day != cycleDay) {
                 cycleDay = day;

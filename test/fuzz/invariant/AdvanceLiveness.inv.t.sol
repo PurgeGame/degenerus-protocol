@@ -163,7 +163,7 @@ contract AdvanceLiveness is DeployProtocol {
     /// Per-run coverage, accumulated across runs through the process environment
     /// (the only state that survives the per-run setUp).
     function afterInvariant() public {
-        string[26] memory keys = [
+        string[27] memory keys = [
             "checks",
             "nextDayChecks",
             "probeRequests",
@@ -189,9 +189,10 @@ contract AdvanceLiveness is DeployProtocol {
             "gameOverRuns",
             "runs",
             "backlogCompressions",
-            "lootboxBuys"
+            "lootboxBuys",
+            "crankOnLpdFrozenPool"
         ];
-        uint256[26] memory vals = [
+        uint256[27] memory vals = [
             handler.ghost_checks(),
             handler.ghost_nextDayChecks(),
             handler.ghost_probeRequests(),
@@ -217,10 +218,11 @@ contract AdvanceLiveness is DeployProtocol {
             game.gameOver() ? 1 : 0,
             1,
             handler.ghost_backlogCompressions(),
-            handler.ghost_lootboxBuys()
+            handler.ghost_lootboxBuys(),
+            handler.ghost_crankOnLpdFrozenPool()
         ];
         string memory line = "LIVENESS_COVERAGE";
-        for (uint256 i = 0; i < 26; i++) {
+        for (uint256 i = 0; i < 27; i++) {
             string memory k = string.concat("LIVE_COV_", keys[i]);
             uint256 acc = vm.envOr(k, uint256(0));
             // maxLevel is a max, everything else a sum
@@ -249,13 +251,17 @@ contract AdvanceLiveness is DeployProtocol {
         if (handler.ghost_violations() != 0) _logViolation(handler.firstViolation());
 
         // Non-vacuity. Coverage is accumulated (above) because one run can legitimately miss a shape.
-        // Measured over 65 default-profile runs (accumulated totals): checks 7,587, next-day checks 1,499,
-        // probe requests 6,918, probe on a last purchase day 319, probe with a frozen pool 22, lpd seals
-        // 185 (turbo 56, normal 129), level transitions 916, x9 levels 60, x0 levels 27, mid-day requests
-        // 332 (latch set 201, on a last purchase day 183), VRF stalls 100 (daily 44, mid-day 56), foil buys
-        // 400 (pending at mid-day 181), biased compound reaching the last purchase day 232. Shapes seen at
-        // >= 1 per run are required from 16 runs; the rarer ones (x0 levels, probe with a frozen pool,
-        // daily stalls) from 48 runs. middayLatchOnLpdFrozenPool (3 in 65 runs) is too rare to require.
+        // Measured over 65 default-profile runs (accumulated totals, seed 0xdeadbeef): checks 8,125,
+        // next-day checks 1,625, probe requests 7,457, probe on a last purchase day 226, lpd seals 204
+        // (turbo 110, normal 94), level transitions 1,067, x9 levels 78, x0 levels 45, mid-day requests
+        // 322 (latch set 159, on a last purchase day 132), VRF stalls 117 (daily 42, mid-day 75), foil
+        // buys 401 (pending at mid-day 282), biased compound reaching the last purchase day 215, checks
+        // whose cranking drained a frozen pool on a last purchase day 381 (273 under a second seed).
+        // A late day arms its elapsed Craps windows, and their mid-day request freezes and drains the
+        // next-level pool inside that cranking, before the donor probe or a handler request can: probe
+        // with a frozen pool and middayLatchOnLpdFrozenPool read 0 here and are logged, not required.
+        // Shapes seen at >= 1 per run are required from 16 runs; the rarer ones (x0 levels, a frozen
+        // pool drained while cranking, daily stalls) from 48 runs.
         uint256 runs = vm.envOr("LIVE_COV_runs", uint256(0));
         if (runs < 16) return;
         string[16] memory common = [
@@ -269,7 +275,7 @@ contract AdvanceLiveness is DeployProtocol {
         }
         assertGt(vm.envOr("LIVE_COV_foilPendingMidday", uint256(0)), 0, "vacuous: liveness coverage never reached foilPendingMidday");
         if (runs < 48) return;
-        string[3] memory rare = ["x0Levels", "probeOnLpdFrozenPool", "vrfStallsDaily"];
+        string[3] memory rare = ["x0Levels", "crankOnLpdFrozenPool", "vrfStallsDaily"];
         for (uint256 i; i < rare.length; ++i) {
             assertGt(vm.envOr(string.concat("LIVE_COV_", rare[i]), uint256(0)), 0,
                 string.concat("vacuous: liveness coverage never reached ", rare[i]));
