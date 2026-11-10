@@ -72,8 +72,9 @@ library BoundedCall {
         if (ok) word = abi.decode(output, (uint256));
     }
 
-    /// @dev Callee execution allowance for a working stETH balanceOf (normally about 25k gas).
-    ///      Admission must also cover cold-call overhead and EIP-150's retained caller gas.
+    /// @dev Callee execution allowance for a working stETH balanceOf (a cold read uses about 30k
+    ///      gas and needs about 40k at entry). Admission must also cover cold-call overhead and
+    ///      EIP-150's retained caller gas.
     uint256 internal constant STETH_READ_MIN_GAS = 100_000;
 
     /// @dev stETH balance for trusted holder exits: 0 unless the call succeeds with a full word,

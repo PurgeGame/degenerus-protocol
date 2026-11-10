@@ -157,7 +157,8 @@ interface IDrawCoinflip {
     /// @notice Coinflip's credit of `amount` FLIP stake to wallet `id` (0 is a no-op).
     function creditFlip_g317(uint32 id, uint256 amount) external;
     /// @notice The armed BAF draw day and its book: the whole-FLIP principal sum of every
-    ///         direct deposit that staked the armed day, and the entry count.
+    ///         direct deposit made after the arming seal that staked the armed day, and the entry
+    ///         count.
     function bafDrawInfo() external view returns (uint24 day, uint96 totalWeight, uint32 entryCount);
     /// @notice A flip day's stored result. An unresolved day reads (0, false).
     function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win);

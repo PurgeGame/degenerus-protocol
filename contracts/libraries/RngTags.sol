@@ -30,7 +30,7 @@ library RngTags {
     uint256 internal constant BOX_WWXRP_SPIN = 24;
     uint256 internal constant BUCKET_SAMPLE = 25;
     uint256 internal constant CENTURY_REFILL = 26;
-    uint256 internal constant CRAPS_AWARDED = 27;
+    uint256 internal constant CRAPS_BET_KEY = 27;
     uint256 internal constant CRAPS_BOARD = 28;
     uint256 internal constant CRAPS_BOOST = 29;
     uint256 internal constant CRAPS_DICE = 30;

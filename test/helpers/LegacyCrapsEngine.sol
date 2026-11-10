@@ -102,7 +102,7 @@ contract LegacyCrapsEngine is Craps, CrapsCustomTerms {
     {
         uint256 key = header >> 224 == 0
             ? uint160(header)
-            : uint160(EntropyLib.hash3(RngTags.CRAPS_AWARDED, word, betId));
+            : uint160(EntropyLib.hash3(RngTags.CRAPS_BET_KEY, word, betId));
         uint256 chips = (header >> 160) & 0x3fffffff;
         uint256 placed;
         for (uint256 i; i < 30; i += 3) placed += (chips >> i) & 7;

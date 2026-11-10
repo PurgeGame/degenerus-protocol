@@ -104,7 +104,7 @@ contract CrapsSlipHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(uint256(28), _wordAt(_indexOf(betId >> 64)), uint256(uint32(header))))),
+            uint256(keccak256(abi.encode(uint256(28), _wordAt(_indexOf(betId >> 64)), _seatKeyOf(betId)))),
             chipFlip,
             BONUS_CHIPS - placed
         );
@@ -498,7 +498,7 @@ contract CrapsSlipTest is CrapsPins {
             // The paying path runs lean (no per-leg books); the public view runs full. Pin them.
             assertEq(
                 won,
-                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player).bankrollOut / 1 ether,
+                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.seatSaltOf(betId)).bankrollOut / 1 ether,
                 "lean settlement != full-fidelity view"
             );
         }
@@ -521,7 +521,7 @@ contract CrapsSlipTest is CrapsPins {
             (uint256 won,) = craps.previewSettlement(betId);
             assertEq(
                 won,
-                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player).bankrollOut / 1 ether,
+                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.seatSaltOf(betId)).bankrollOut / 1 ether,
                 "side-only lean settlement != full resolver"
             );
             vm.revertToStateAndDelete(trialSnapshot);
@@ -557,7 +557,7 @@ contract CrapsSlipTest is CrapsPins {
         assertEq(
             won,
             craps.resolveSlipForBet(
-                craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player
+                craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.seatSaltOf(betId)
             ).bankrollOut / 1 ether,
             "the dark lane diverged from the independent oracle"
         );
@@ -583,7 +583,7 @@ contract CrapsSlipTest is CrapsPins {
             assertEq(
                 won,
                 craps.resolveSlipForBet(
-                    craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player
+                    craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.seatSaltOf(betId)
                 ).bankrollOut / 1 ether,
                 "the dark-only lean settlement != full resolver"
             );
@@ -749,7 +749,7 @@ contract CrapsSlipTest is CrapsPins {
         (uint256 won, uint256 expected) = craps.previewSettlement(betId);
         assertEq(
             won,
-            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * 50 * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player)
+            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * 50 * 1 ether, craps.MAX_SLIP_HANDS(), craps.seatSaltOf(betId))
                 .bankrollOut / 1 ether,
             "lean slip settlement != full view"
         );
@@ -842,7 +842,7 @@ contract CrapsSlipTest is CrapsPins {
         // An independent engine, handed only the drawn board and the table seed, reproduces the
         // run exactly — hand for hand and roll for roll.
         CrapsOracle.SlipResult memory r =
-            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player);
+            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.seatSaltOf(betId));
         assertEq(won, r.bankrollOut / 1 ether, "replay != settled won");
         assertGt(r.totalRolls, 0, "the replay rolled nothing");
         assertGt(r.handsPlayed, 0, "the replay played no hands");
@@ -959,11 +959,10 @@ contract CrapsSlipTest is CrapsPins {
     // Shared table
     // ---------------------------------------------------------------------------------------
 
-    /// @dev One index is one shooter, but not one board. Two slips from the SAME player with the
-    ///      same stack are the same run down to the wei — the three chips the dice place are drawn
-    ///      from the table's word and the OWNER, so nothing else can separate them. Two different
-    ///      players at that table share the shooter and get their own three chips, which is the
-    ///      whole point of keying the throw to the owner.
+    /// @dev One index is one shooter, but not one board. Every seat of a custom battle draws the
+    ///      chips the dice place from the table's word and its OWN bet id, so two identical slips
+    ///      from the same player are separate runs, and two players at that table share the
+    ///      shooter but get their own chips.
     function test_oneTableIsOneShooterButEveryPlayerTheirOwnBoard() public {
         uint64 slot = _openBattle(craps, PLAYED, 3, uint16(GOAL_FAR_MULT), 0);
         vm.startPrank(alice);
@@ -975,13 +974,15 @@ contract CrapsSlipTest is CrapsPins {
 
         _closeOn(craps, slot, 0, uint256(keccak256("vrf")));
 
-        (uint256 wonA, uint256 paidA) = craps.previewSettlement(a);
-        (uint256 wonTwin, uint256 paidTwin) = craps.previewSettlement(twin);
-        assertEq(wonA, wonTwin, "one player's identical slips diverged");
-        assertEq(paidA, paidTwin, "identical wagers paid differently");
+        assertEq(craps.betOf(a).chips, craps.betOf(twin).chips, "same ticket, different chips");
         assertEq(craps.betOf(a).chips, craps.betOf(c).chips, "same ticket, different chips");
 
-        // The throw is keyed to the OWNER, so two players at one table draw different boards.
+        // The throw is keyed to each seat, so one player's twin slips draw different boards.
+        assertTrue(
+            keccak256(abi.encode(craps.drawnBoardOf(a))) != keccak256(abi.encode(craps.drawnBoardOf(twin))),
+            "one player's identical slips drew the same board"
+        );
+        // And two players at one table draw different boards.
         assertTrue(
             keccak256(abi.encode(craps.drawnBoardOf(a))) != keccak256(abi.encode(craps.drawnBoardOf(c))),
             "two players at one table drew the same board"

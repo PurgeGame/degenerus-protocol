@@ -14,7 +14,9 @@ Paths: contracts under `contracts/`, tests under `test/`. `Storage` is
 ### Commitment before request
 
 The request seals its input cohorts before asking for their word; later purchases join the next
-cohort. Some payouts still read live pool balances and prices at settlement.
+cohort. The WWXRP daily draw is the exception during the terminal sequence: it stays enterable
+after the terminal word is recorded, and its prize is a FLIP stake on a day that never resolves after
+liveness. Some payouts still read live pool balances and prices at settlement.
 
 - **Implementation.** `DegenerusGameRngModule.requestDailyRng_g8190`: `_rngPrepareRequestBoundary`,
   `_swapTicketSlot`, `_swapFoilSlot`, `_sealHeroWagers`, `_freezePool`, `_sealRngWriteBuffer`
@@ -197,8 +199,9 @@ committed prefix.
     cancels the subscription and cashes out both tokens, or reverts with both intact),
     `::test_cashoutIsNeverSkippedForShortGas`, `::test_GasCashoutBurnsFitTheirAdmission`,
     `::test_deadStethLegSkipsTheCashoutsNotTheSweep`
-  - `test/fork/ForkGlamsterdamBudgets.t.sol` (every enforced dependency minimum is at least 1.2x its
-    mainnet Glamsterdam cost), including `::test_c01_vrfFundNativeHeldBalance`,
+  - `test/fork/ForkGlamsterdamBudgets.t.sol` (every enforced dependency minimum is at least 1.2x the gas
+    its cold mainnet-fork call uses at Glamsterdam prices; the cold stETH read needs 39,719 at entry,
+    and `EXTERNAL_READ_GAS` of 50,000 is 1.26x that), including `::test_c01_vrfFundNativeHeldBalance`,
     `::test_c02_vrfFundNativeZeroBalance` and `::test_a09_stethTransferIntoEmptyBalance`
   - The dependency mocks count calls that arrive below the protocol's admission
     (`MockVRFCoordinator.starvedCalls`, `MockStETH.starvedCalls`); `ChainCallJudge.judgeCheck` fails any
@@ -295,6 +298,7 @@ The equations and per-phase transitions are in [Accounting](ACCOUNTING.md).
 | Vault budget and sDGNRS AFKing release | `DegenerusGameGameOverModule._handleGameOverDrain` (before `gameOver`; returns early once set) | `test/fuzz/DegenesisTerminal.t.sol::test_HardDeadline_AfterSale_ReleasesOnceIntoFinalPrizes` ("no second release"), `::test_DeadVrfEnding_DuringSale_SplitsThenReleasesOnce` |
 | Vault budget spend | `spendDegenesis` (net move equals cost; `DegenesisMaxCostExceeded`) | `test/fuzz/DegenesisVaultSpend.t.sol::testFuzz_SpendLeavesNoCashout`; `test/fuzz/invariant/DegenesisSolvency.inv.t.sol::invariant_degenesisEthConservation` |
 | BAF reservation | `runBafJackpot`, `runBafAwards`, `_releaseBafReserve`; game-over latch (`jackpotWork.kind == 7`) | `test/fuzz/BafStagedResume.t.sol::test_EmptyBracketReturnsTheWholeReservation` (`_checkResidue`: "claimablePool releases exactly the residue"); `test/fuzz/BafStagedGameOver.t.sol::test_LatchReleasesTheUncreditedReservationAndTheEndingDistributesIt` ("claimablePool releases exactly work.paid"); `test/fuzz/BafStagedSkip.t.sol::test_X0LosingFlipSkipsWithoutAStage` |
+| Sealed Decimator reservation | A sealed round's pool stays in `claimablePool` at an ending, is unpayable once the terminal bit or liveness holds (`_rngConsumerStage` returns 0), and is released with `claimablePool = 0` at `DegenerusGameGameOverModule._handleFinalSweep`, which splits it with the remainder across the Vault, sDGNRS and GNRUS | `test/repro/ClaimablePoolIdentityComposed.t.sol::test_IdentityHoldsThroughEveryReservation` (the identity counts sealed Decimator rounds) |
 | Redemption reserve | `_closeRedemptionBatch`, `_releaseRedemptionReserve` | `test/repro/RedemptionReserve.t.sol::testSettlingReserveCountsOnceInBackingPreview`; `test/invariant/RedemptionAccounting.t.sol::invariant_INV_02_EthConservationExact` |
 
 ### Settled loans retire exactly once

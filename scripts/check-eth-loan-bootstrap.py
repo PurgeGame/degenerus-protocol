@@ -31,7 +31,7 @@ SOURCES = (
 # lazy activation always records the lazy type; whale-pass awards, loan rates and prices are
 # unchanged, so the loan model is unaffected.
 SOURCE_SHA256 = {
-    "contracts/storage/DegenerusGameStorage.sol": "126fe1d73d86ae49fb845a48470c3aed972a57e744406164b3f9890864fe9bef",
+    "contracts/storage/DegenerusGameStorage.sol": "9a002f022c65978ea157b8698da1ff7ff642f09a4a0893dfde8f03781419b48a",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
     "contracts/modules/DegenerusGameWhaleModule.sol": "92efaa1b78518510f71a1cf02aef0769d4231a4edb6c3dbfdea4e48b37d5bbc5",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",

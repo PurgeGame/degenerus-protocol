@@ -313,8 +313,8 @@ contract Craps {
     /// @param cap        Shooter cap on the run.
     /// @param rollBudget Roll cap on the run, judged between shooters; a budget below `_MAX_ROLLS`
     ///                   is exact, cutting the last hand where it runs out.
-    /// @param salt       The slip's owner identity, which seasons the survival coin: a real
-    ///                   owner's wallet ID, or a synthetic entry's 160-bit salt.
+    /// @param salt       The seat key, which seasons the survival coin: an owner's wallet ID,
+    ///                   or a 160-bit hash of the word and bet id.
     /// @param boost Packed schedule: the hot roll threshold in bits 0..7, the percent
     ///              added to subsequent-roll profit in bits 8..15, and above them the
     ///              ONE-BASED hand ordinal of this seat's rotation turn, or zero for none. Zero
@@ -729,12 +729,13 @@ contract Craps {
     }
 
     /// @dev The fair, committed second-chance coin for round `n`. Salting by the round keeps each
-    ///      affordability decision on its own coin, and salting by the OWNER keeps one player's
-    ///      coin off every other player's: the shooter is the table's, but a bust is not, so two
-    ///      seats reaching the same round do not live or die together. Both inputs were fixed
-    ///      before the word existed — the seed is the table's and the owner is who placed the slip
-    ///      — so settlement order cannot change the result. It is the same key the board scatter
-    ///      uses, so a player's whole run is decorrelated from the field by one key.
+    ///      affordability decision on its own coin, and salting by the SEAT KEY keeps one seat's
+    ///      coin off every other seat's: the shooter is the table's, but a bust is not, so two
+    ///      seats reaching the same round do not live or die together. The key is the owner for a
+    ///      paid seat in a day-derived window and a hash of the word and bet id otherwise. Apart
+    ///      from the word, every input was fixed before the word existed, so settlement order
+    ///      cannot change the result. It is the same key the board scatter uses, so a seat's whole
+    ///      run is decorrelated from the field by one key.
     function _survived(bytes32 seed, uint256 n, uint256 salt) internal pure returns (bool) {
         return EntropyLib.hash4(RngTags.CRAPS_SURVIVAL, uint256(seed), n, salt) & 1 == 1;
     }

@@ -53,7 +53,7 @@ const excluded = {
     "prepareJackpotBattle", "registerRngSlot", "runCrapsMaintenance", "runCrapsReadWork",
     "runDailyBattleWork", "settleHighRollerReserve",
     "vaultComp", "donate", // Dedicated Vault batch/delegate-budget controls.
-    "creditPasses", "deliverPasses", "resolveRngSlot_g1079",
+    "creditPasses", "deliverPasses", "openBonusDay", "resolveRngSlot_g1079", // Game-only.
     "setBattleCreator", // DGVE owner calls this directly, including to authorize the Vault.
   ],
   // Affiliate and Quests hooks: Game, token or Parimutuel authorized. A standalone Affiliate

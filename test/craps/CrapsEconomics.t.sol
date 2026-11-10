@@ -32,7 +32,7 @@ contract EconHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(uint256(28), _wordAt(_indexOf(betId >> 64)), uint256(uint32(header))))),
+            uint256(keccak256(abi.encode(uint256(28), _wordAt(_indexOf(betId >> 64)), _seatKeyOf(betId)))),
             chipFlip,
             BONUS_CHIPS - placed
         );
@@ -244,7 +244,7 @@ contract CrapsEconomicsTest is CrapsPins {
                 _run(b, bankMult, goalMult, idx, uint256(keccak256(abi.encode("netburn", i))));
 
             Craps.Bets memory drawn = craps.drawnBoardOf(betId);
-            CrapsOracle.SlipResult memory r = craps.resolveSlipForBet(drawn, slot, bankroll, uint256(bankroll) * goalMult, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player);
+            CrapsOracle.SlipResult memory r = craps.resolveSlipForBet(drawn, slot, bankroll, uint256(bankroll) * goalMult, craps.MAX_SLIP_HANDS(), craps.seatSaltOf(betId));
             (uint256 won,) = craps.previewSettlement(betId);
             craps.settleSlot(slot, WHOLE_FIELD);
 

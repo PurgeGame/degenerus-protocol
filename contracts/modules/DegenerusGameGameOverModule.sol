@@ -369,8 +369,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     // word has landed: drain it on that word first, so the write cohort can be
                     // swapped in behind it before the terminal request. After the swap the read
                     // side is the ending's own cohort, and it drains only on the terminal word:
-                    // the last delivered word predates it. Without its word the cohort waits for
-                    // the terminal one instead (no swap then; it keeps the read side).
+                    // the last delivered word predates it.
                     if (
                         _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
                             && _lootboxWord(_rngReadBuffer()) != 0

@@ -359,9 +359,9 @@ abstract contract CoinflipCore {
     uint24 public requestedDailyIdx = 1;
 
     // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
-    // purchase day stakes it): every direct self-funded deposit staking that day
-    // appends a cumulative interval weighted by its raw FLIP principal, and the
-    // BAF top-flipper slice pays ONE winner drawn over those intervals.
+    // purchase day stakes it): every direct self-funded deposit made after the arming
+    // seal and staking that day appends a cumulative interval weighted by its raw FLIP
+    // principal, and the BAF top-flipper slice pays ONE winner drawn over those intervals.
     /// @dev Per-day draw header:
     ///      bits [0..95]   total weight (whole FLIP; the last cumulative endpoint)
     ///      bits [96..127] entry count
@@ -883,8 +883,10 @@ abstract contract CoinflipCore {
                     }
                     // Inclusive: a flip that RESOLVED on the BAF day itself (staked
                     // the day before) seeds the NEXT bracket via claim-time routing,
-                    // so no flip day is score-dead. Days before the resolution stay
-                    // filtered out.
+                    // so no flip day is score-dead. Days before the last stamped resolution
+                    // stay filtered out. Between the x0 request (which promotes the level)
+                    // and the stamp, the filter still holds the previous bracket's day, so
+                    // every winning day a claim walks in that window seeds the next bracket.
                     if (cursor >= totals.bafResolvedDay) {
                         totals.winningBafCredit += payout;
                     }
@@ -1013,9 +1015,9 @@ abstract contract CoinflipCore {
 
         _addFlipStake(id, targetDay, coinflipDeposit, true);
         // BAF weighted draw: on the armed day (an x0 level's last purchase day stakes it),
-        // every direct deposit appends an interval weighted by its raw principal
-        // (recordAmount), never bonuses, boon boosts or record claims, so free stake carries
-        // no draw weight.
+        // every direct deposit made after the arming seal appends an interval weighted by
+        // its raw principal (recordAmount), never bonuses, boon boosts or record claims, so
+        // free stake carries no draw weight.
         if (drawEntry) {
             _appendBafDrawEntry(targetDay, id, recordAmount);
         }
@@ -1561,8 +1563,9 @@ abstract contract CoinflipCore {
         // folds into claimableStored — the genesis seed reserve burns drain first;
         // once auto-rebuy is armed, winnings (including incoming credits staked via
         // creditSdgnrsBacking) settle into the rolling carry (structurally zero
-        // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position solely
-        // through a redemption consume leg or the opening-day decimator burn.
+        // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position through a
+        // redemption consume leg, the opening-day decimator burn, or the craps house seat's
+        // FLIP fallback (settled balance only, never carry).
         //
         // The seed reserve does not drip onto the active flip. It remains available to
         // redemptions and the capped opening-day decimator entry; only new flip

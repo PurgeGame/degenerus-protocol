@@ -953,11 +953,9 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     // ── 14. Replay golden ────────────────────────────────────────────────────
 
-    // Keep the pre-P8C board and historical settlement amounts for replay compatibility.
+    // The fixture board and word nonce for the custom-seat key test.
     uint32 internal constant GOLDEN_BOARD = 3 | (3 << 12) | (1 << 15);
     uint256 internal constant GOLDEN_NONCE = 38;
-    uint256 internal constant GOLDEN_PAID = 32000;
-    uint256 internal constant GOLDEN_WON = 32010;
 
     function _engineRun(uint256 betId, uint256 owner, CrapsBattleStorage.Window memory w, uint256 word)
         internal
@@ -972,7 +970,9 @@ contract CrapsWalletIdsTest is CrapsPins {
         );
     }
 
-    function test_goldenPaidEntrySaltIsTheWalletId() public {
+    /// @dev A custom battle keys a paid seat's run to its bet id, not to its wallet: the table pays
+    ///      what the engine computes, and the same header settles identically under another owner.
+    function test_customPaidEntrySaltIsTheBetKey() public {
         // Three filler wallets after the protocol's 1..3, so the golden wallet holds ID 7.
         for (uint256 i; i < 3; ++i) _register(makeAddr(string.concat("filler-", vm.toString(i))));
         uint32 n = _register(alice);
@@ -998,13 +998,11 @@ contract CrapsWalletIdsTest is CrapsPins {
         }
         assertEq(seen, 1);
         Craps.SlipResult memory byId = _engineRun(betId, n, w, word);
-        Craps.SlipResult memory byAddress = _engineRun(betId, uint160(alice), w, word);
+        Craps.SlipResult memory otherOwner = _engineRun(betId, n + 1, w, word);
         assertEq(paid, byId.bankrollIn, "table paid == engine(betId, N | chips << 32)");
         assertEq(won, byId.bankrollOut, "table won == engine(betId, N | chips << 32)");
-        assertEq(byAddress.bankrollIn, 33900, "golden: the same header salted with the address");
-        assertTrue(byAddress.bankrollIn != paid, "the address-salted header pays differently");
-        assertEq(paid, GOLDEN_PAID, "golden paid");
-        assertEq(won, GOLDEN_WON, "golden won");
+        assertEq(otherOwner.bankrollIn, byId.bankrollIn, "a custom seat's payment moved with its owner");
+        assertEq(otherOwner.bankrollOut, byId.bankrollOut, "a custom seat's run moved with its owner");
     }
 
     // ── 15. Lapsed-day sweep ─────────────────────────────────────────────────

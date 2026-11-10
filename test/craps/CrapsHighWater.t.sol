@@ -61,7 +61,7 @@ contract WaterHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(uint256(28), _wordAt(_indexOf(slot)), uint256(uint32(header))))),
+            uint256(keccak256(abi.encode(uint256(28), _wordAt(_indexOf(slot)), _seatKeyOf(betId)))),
             chipFlip,
             BONUS_CHIPS - placed
         );
@@ -590,7 +590,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
                 goal,
                 craps.MAX_SLIP_HANDS(),
                 craps.SLIP_ROLL_BUDGET(),
-                craps.betOf(betId).player,
+                craps.seatSaltOf(betId),
                 0
             );
             assertEq(s.won, bare.bankrollOut / 1e18, "a custom copy did not settle to the bare legacy engine");
@@ -606,7 +606,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
                 goal,
                 craps.MAX_SLIP_HANDS(),
                 craps.SLIP_ROLL_BUDGET(),
-                craps.betOf(betId).player,
+                craps.seatSaltOf(betId),
                 craps.shooterBoostTerms(7)
             );
             if (scheduled.bankrollOut / 1e18 != bare.bankrollOut / 1e18) {

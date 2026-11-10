@@ -39,7 +39,7 @@ contract RngShapeTest is Test {
         tags[23] = RngTags.BOX_WWXRP_SPIN;
         tags[24] = RngTags.BUCKET_SAMPLE;
         tags[25] = RngTags.CENTURY_REFILL;
-        tags[26] = RngTags.CRAPS_AWARDED;
+        tags[26] = RngTags.CRAPS_BET_KEY;
         tags[27] = RngTags.CRAPS_BOARD;
         tags[28] = RngTags.CRAPS_BOOST;
         tags[29] = RngTags.CRAPS_DICE;

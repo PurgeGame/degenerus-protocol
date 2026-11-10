@@ -336,7 +336,7 @@ contract FLIP {
     /// @notice Transfer `amount` tokens from `from` to `to` on behalf of caller.
     /// @dev Standard ERC20 transferFrom with game-contract bypass.
     ///      SECURITY: DegenerusGame can transfer without approval (trusted contract pattern).
-    ///      This enables seamless gameplay transactions without pre-approval steps.
+    ///      No Game code path calls it.
     /// @param from The source address.
     /// @param to The destination address.
     /// @param amount The amount to transfer (0 decimals).

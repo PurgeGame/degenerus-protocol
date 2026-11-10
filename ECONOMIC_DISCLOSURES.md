@@ -213,6 +213,9 @@ obligations retain their specified protections.
   level 10, paid deity passes are refunded (the lesser of the price paid and 20 ETH, in purchase
   order, within the available funds), the remaining pool is shared across the terminal level's tickets
   through `claimDeadVrf`.
+- **Sealed Decimator round.** In either ending, a round that is sealed but not yet paid stays
+  reserved outside the terminal pot and cannot be paid after terminal entry. The final sweep releases
+  it with the rest of the remainder.
 - **Final sweep.** **30 days after terminal payout completes** (`GO_TIME`, stamped when the terminal
   jackpot finishes or the hard-stall pot is fixed), the Vault, sDGNRS and GNRUS receive their own
   game balances and thirds of the remaining Game ETH/stETH, and **every other unclaimed game

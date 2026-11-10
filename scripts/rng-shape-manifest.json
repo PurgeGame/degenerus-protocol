@@ -88,7 +88,7 @@
     {
       "file": "CrapsEngine.sol",
       "function": "settleBattle",
-      "expression": "EntropyLib.hash3(RngTags.CRAPS_AWARDED,word,betId)",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_BET_KEY,word,betId)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators against docs/audit/RNG-DOMAINS.md"
     },

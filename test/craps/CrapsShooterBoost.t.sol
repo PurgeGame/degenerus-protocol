@@ -103,7 +103,7 @@ contract BoostHarness is CrapsViews {
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
         board = _boardFrom(packed, chipFlip);
-        uint256 identity = header >> 72 == 0
+        uint256 identity = header >> 72 == 0 && slot < _CUSTOM_SLOT_BASE
             ? uint32(header)
             : uint160(uint256(keccak256(abi.encode(uint256(27), word, betId))));
         _scatterInto(
@@ -438,7 +438,8 @@ contract CrapsShooterBoostTest is CrapsPins {
             uint256 bank = 600 * 5e18;
             uint256 goal = bank * goalMult;
             Craps.SlipResult memory bare = craps.slip(
-                _scattered(betId, slot), craps.seedForBet(slot), bank, goal, craps.MAX_SLIP_HANDS(), alice, 0
+                _scattered(betId, slot), craps.seedForBet(slot), bank, goal, craps.MAX_SLIP_HANDS(),
+                craps.seatSaltOf(betId), 0
             );
             assertEq(s.won, bare.bankrollOut / 1e18, "a custom battle settled to something the bare engine did not");
             assertEq(s.peak, bare.peakBankroll / 1e18, "a custom boost changed the run's high point");

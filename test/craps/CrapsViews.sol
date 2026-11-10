@@ -12,6 +12,8 @@ import {CrapsSeedViews} from "./CrapsSeedViews.sol";
 import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 import {WalletTableLib} from "../../contracts/libraries/WalletTableLib.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 interface ICrapsWalletIdView {
     function walletIdOf_g3120(address player) external view returns (uint32);
@@ -65,6 +67,23 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
     function _saltOf(address player) internal view returns (uint256) {
         uint32 id = _idOf(player);
         return id != 0 ? id : uint256(uint160(player));
+    }
+
+    /// @dev The key the engine gives a seat's board scatter and survival coin: the owner ID for a
+    ///      paid seat in a day-derived window, else `uint160(H(CRAPS_BET_KEY, word, betId))`.
+    function _seatKeyOf(uint256 betId) internal view returns (uint256) {
+        uint256 header = _loadBet(betId);
+        uint256 slot = betId >> 64;
+        if (header >> 72 == 0 && slot < _CUSTOM_SLOT_BASE) return uint32(header);
+        return uint160(EntropyLib.hash3(RngTags.CRAPS_BET_KEY, _wordAt(_indexOf(slot)), betId));
+    }
+
+    /// @notice `_seatKeyOf` in the address form the salt helpers take: the owner's wallet for a
+    ///         paid day-window seat (so `_saltOf` maps it back to the ID), else the key itself.
+    function seatSaltOf(uint256 betId) external view returns (address) {
+        uint256 header = _loadBet(betId);
+        if (header >> 72 == 0 && betId >> 64 < _CUSTOM_SLOT_BASE) return _ownerOfId(uint32(header));
+        return address(uint160(_seatKeyOf(betId)));
     }
 
     function walletIdOfPlayer(address player) external view returns (uint32) {

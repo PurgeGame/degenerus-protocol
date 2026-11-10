@@ -67,10 +67,12 @@ calibration; calibration can raise that minimum but never lower it, and a short 
 `InsufficientExecutionGas` before the dependency is reached. No dependency failure policy (a skipped
 stake, an unfunded VRF top-up, a balance read as zero, a skipped cancellation, an unfunded AFKing
 subscriber or a skipped GNRUS cash-out) is therefore a gas shortage the caller chose. For the
-protocol's own subscription and holdings, each minimum is at least 20% above the dependency's
-measured mainnet cost at Glamsterdam prices (`test/fork/ForkGlamsterdamBudgets.t.sol`). A gas
-refusal inside a trusted protocol frame is re-raised, never swallowed. Nested funding can refuse a
-caller's calibration. A failed attempt alone is not a protocol stall if another caller can complete
+protocol's own subscription and holdings, each minimum is at least 20% above the gas the
+dependency's cold call uses on the mainnet fork at Glamsterdam prices
+(`test/fork/ForkGlamsterdamBudgets.t.sol`). A callee can need more gas at entry than it uses: a
+cold stETH `balanceOf` uses 29,893 but needs 39,719 at entry, and `EXTERNAL_READ_GAS` (50,000) is
+1.26x that. A gas refusal inside a trusted protocol frame is re-raised, never swallowed. Nested
+funding can refuse a caller's calibration. A failed attempt alone is not a protocol stall if another caller can complete
 the chain. Caller gas must not select a committed outcome or turn an out-of-gas failure into a
 semantic fallback. Terminal ETH distribution is reviewed independently of unfinished FLIP
 bookkeeping.
@@ -83,6 +85,13 @@ Start with [Architecture](ARCHITECTURE.md), [Token units](TOKEN-UNITS.md) and
 [Properties](PROPERTIES.md) maps review targets to assertions. [RNG domains](audit/RNG-DOMAINS.md)
 identifies entropy sources and consumers. [ETH exit assurance](audit/ETH-EXIT-ASSURANCE.md)
 describes the retained helper proof and its limits.
+
+Seven internal low-level calls encode one word more than their interface declares:
+`stakeExcessEth`, `distributeYieldSurplus`, `requestDailyRng_g8190`, `requestMinerRng_g4954` (two
+lengths), `pullAfkingSteth` and `DegenerusAdmin.shutdownVrf`. The extra word is the caller's gas
+budget, which the receiver reads with `MineFlipGas.fromCall(headSize)` only when the calldata length
+is exactly `headSize + 32`. Each of these receivers accepts only protocol callers, so no outside
+caller supplies that word.
 
 [TESTING.md](TESTING.md) is the build/test companion to this handoff: dependency setup, a sliced
 build smoke test, production size/layout checks, source gates, Foundry and Hardhat groups, mainnet

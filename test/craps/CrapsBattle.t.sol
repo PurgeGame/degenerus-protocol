@@ -581,31 +581,50 @@ contract CrapsBattleTest is CrapsPins {
         return wA > wB;
     }
 
-    /// @dev Two identical, separately funded entries from one player run identically. The table
-    ///      word selects one winner, which takes the contested pot as CREDIT. Duplicate claims die.
-    function test_identicalEntriesUseTheTableWordToBreakTheTie() public {
-        uint256 a = _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU);
-        uint256 b = _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU);
-        uint256 c = _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU);
+    /// @dev Identical, separately funded entries from one player in a custom battle are separate
+    ///      runs: each seat keys its scatter and survival coin to its own bet id, so a repeat seat
+    ///      is a real extra chance. The verdict follows the independent rules, and the winner
+    ///      takes the contested pot as CREDIT.
+    function test_repeatEntriesOfOneWalletPlaySeparateRuns() public {
+        uint256[] memory ids = _ids3(
+            _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU),
+            _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU),
+            _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU)
+        );
         assertEq(flip.burned(alice), (LW * 2 + SUW) * 3, "every entry funded separately");
         uint256 tableWord = uint256(keccak256("twins"));
         uint64 slot = _closeSlot(LW * 2, LW * 10, SU, 0, tableWord);
 
-        uint64 expected = _tag(tableWord, b) > _tag(tableWord, a) ? uint64(b) : uint64(a);
-        if (_tag(tableWord, c) > _tag(tableWord, expected)) expected = uint64(c);
-
         uint256 beforeMint = flip.minted(alice);
         PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
-        CrapsViews.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
-        assertTrue(info.finalized, "finalized");
-        assertEq(info.winnerId, expected, "the table word did not break the tie");
-        assertEq(craps.settlementAt(a).won, craps.settlementAt(b).won, "twins diverged");
-        assertEq(craps.settlementAt(a).won, craps.settlementAt(c).won, "triplets diverged");
+        bool[3] memory g;
+        uint256[3] memory prim;
+        uint256[3] memory w;
+        uint256 distinct;
+        for (uint256 k = 0; k < 3; ++k) {
+            CrapsBattle.Settlement memory st = craps.settlementAt(ids[k]);
+            g[k] = st.stop == Craps.SlipStop.Goal;
+            prim[k] = g[k]
+                ? st.peak / 1
+                : (st.handsPlayed << 64) | (uint256(st.won >= 1 ? 1 : 0) << 63) | (st.peak / 1);
+            w[k] = st.won;
+            if (k != 0 && (g[k] != g[0] || prim[k] != prim[0] || w[k] != w[0])) ++distinct;
+        }
+        assertGt(distinct, 0, "repeat seats of one wallet replayed the same run");
 
-        // The tiebreak is what the POT follows, so the seat the coin named is the seat paid — and
-        // the three identical runs make the credit the only thing that separates them.
-        assertEq(uint64(pot.betId), expected, "the pot went to a seat the tiebreak did not name");
+        uint256 best = 0;
+        for (uint256 k = 1; k < 3; ++k) {
+            bool level = g[k] == g[best] && prim[k] == prim[best] && w[k] / 1 == w[best] / 1;
+            bool takes = level
+                ? _tag(tableWord, ids[k]) > _tag(tableWord, ids[best])
+                : _beatsFully(g[k], prim[k], w[k], g[best], prim[best], w[best]);
+            if (takes) best = k;
+        }
+        CrapsViews.Battle memory info = craps.battleOf(craps.battleKeyOf(ids[0]));
+        assertTrue(info.finalized, "finalized");
+        assertEq(info.winnerId, uint64(ids[best]), "the verdict did not follow the rules");
+        assertEq(uint64(pot.betId), uint64(ids[best]), "the pot went to a seat the verdict did not name");
         assertEq(pot.amount, SUW * 3, "the winner did not take the whole pot");
         assertEq(flip.minted(alice), beforeMint, "a contested pot must not pay as a mint");
     }

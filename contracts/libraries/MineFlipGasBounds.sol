@@ -20,16 +20,18 @@ library MineFlipGasBounds {
     // Selection plus native-balance admission: 50k minimum + 200k read reserve + 10k frame,
     // caller-credit lookup and cold selection reads, with margin.
     uint256 internal constant ENGINE_SELECTION = 450_000;
-    // Return and one caller credit; native fresh/spill credit transactions: 130.7k/148.1k.
+    // Return and one caller credit; native fresh/spill credit transactions: 138.2k/153.6k
+    // Glamsterdam, 49.8k/57.9k Osaka.
     uint256 internal constant ENGINE_RETURN = 200_000;
-    // Cold-century envelope: 5.954M including 25 fresh slots.
+    // Cold-century envelope: 3.554M Glamsterdam including 23 fresh slots; 1.440M Osaka.
     uint256 internal constant DAILY_APPLY = 7_200_000;
     // Native cold request/credit witnesses peak at 523.9k. The subscription read admits at 50k
     // above the request's own 1M floor and reserve; retain forwarding and frame headroom.
     uint256 internal constant RNG_MIDDAY_REQUEST = 2_200_000;
     // Native daily witnesses: 1.55M normal, 1.60M refill (EIP-170 profile, Amsterdam; Osaka
     // 0.55M/0.59M). Refill admission: VRF_DAILY_REFILL_TAIL + 250k funding minimum + 45k value
-    // frame, 3.35M. Coordinator calls forward all gas above the tails; only stETH stays at 50k.
+    // frame, 3.35M. Coordinator calls and the stETH read forward all gas above the tails; both
+    // reads admit at a 50k minimum.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
     // GNRUS's purchase-phase-end step (one flip settlement walk and an ordinary FLIP ticket
     // purchase burning wallet FLIP, then claimable, then carry) rides only a request that can end
@@ -48,7 +50,7 @@ library MineFlipGasBounds {
     uint256 internal constant RNG_TERMINAL_REQUEST = 3_100_000;
     // Cold century close 4.762M + stake 248,175 + balance 60,794 and rollback frame.
     uint256 internal constant TRANSITION_CLOSE = 6_200_000;
-    // Cold level-one draw with 51 fresh slots: 6.240M.
+    // Cold level-one draw: 6.226M Glamsterdam with 52 fresh slots; largest Osaka call 1.809M.
     uint256 internal constant LEVEL_ONE_DRAW = 7_500_000;
     // Cold losing x00 flip, incinerator search, seals and yield/keep roll: 1.368M. Native x00
     // with VRF funding 1.216M (Amsterdam), 0.45M Osaka. Funding admission at the call: about
@@ -77,8 +79,9 @@ library MineFlipGasBounds {
     uint256 internal constant TERMINAL_TALLY_FINAL = 2_300_000;
     // Fresh cursor (110.1k) plus 80k frame, with margin.
     uint256 internal constant TERMINAL_TALLY_TAIL = 250_000;
-    // Cold sweep 547.3k + shutdown admission (1M + 250k reserve + 15,873 EIP-150
-    // + 10k frame), with margin. Admin's cancellation admission (450k + 50k tail + 10k) fits in 1M.
+    // Cold sweep 476.3k Glamsterdam (269.1k Osaka) + shutdown admission (1M + 250k reserve
+    // + 15,873 EIP-150 + 10k frame), with margin. Admin's cancellation admission (450k + 50k
+    // tail + 10k) fits in 1M.
     // The sweep is always its transaction's mandatory first unit (Terminal runs only first, 30 days
     // after the payout), so it runs with all gas, GNRUS's sDGNRS/DGNRS cash-out included.
     uint256 internal constant TERMINAL_FINAL_SWEEP = 2_200_000;
@@ -102,7 +105,8 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_SEAT_MAX = 25_000;
     // Eight persisted seats re-read on resume: 45k; read-only allowance.
     uint256 internal constant TICKET_RELOAD_MAX = 100_000;
-    // Four rare quadrants, fresh split appends: full cold worker 4.175M.
+    // Four rare quadrants, fresh split appends: full cold round 4.291M Glamsterdam, 1.073M
+    // Osaka.
     uint256 internal constant TICKET_ROUND_MAX = 5_100_000;
     // Fresh live-bitmap initialization differential: 204.9k.
     uint256 internal constant TICKET_SOLO_BASE = 250_000;
@@ -116,20 +120,23 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
     // Cold delivery 472.3k + atomic 1M pull + 15,873 EIP-150 + 10k frame, with margin.
     uint256 internal constant SUBSCRIBER_ITEM_GAS = 1_700_000;
-    // Cold sDGNRS 1,000-pass purchase 2.378M plus the AFKing top-up 20.2k.
+    // Cold sDGNRS 1,000-pass purchase 1.521M Glamsterdam (496.2k Osaka) plus the AFKing
+    // top-up 20.2k.
     uint256 internal constant SUBSCRIBER_WHALE_GAS = 2_800_000;
     // Subscriber cursor, flush and return reserve, including fresh state.
     uint256 internal constant SUBSCRIBER_TAIL_GAS = 250_000;
-    // Cold AFKing opening: 776.2k including EV allowance accounting.
+    // Cold AFKing opening, forced ETH spin with a recirculated box and its EV allowance
+    // accounting: 306.1k Osaka.
     uint256 internal constant AFKING_OPEN_GAS = 950_000;
     // Empty-run reads and cursor arithmetic.
     uint256 internal constant AFKING_SKIP_GAS = 20_000;
     // AFKing checkpoint and return reserve.
     uint256 internal constant AFKING_TAIL_GAS = 100_000;
     // One atomic human order, including a cold fresh EV allowance read-modify-write.
-    // Forced 100-box ETH-spin/recirculation component envelope: 12.878M plus
-    // a fresh allowance RMW (110.1k) and frame. ENTRY + 100 x BOX reserves 15.7M.
-    // This rare 100-box operation is an accepted exception to the 10M checkpoint target.
+    // Forced worst 100-box order between its checkpoints: 9.86M Osaka. At Glamsterdam its
+    // new-state gas takes the component envelope to 12.878M plus a fresh allowance RMW (110.1k)
+    // and frame. ENTRY + 100 x BOX reserves 15.7M. This rare 100-box operation is an accepted
+    // Glamsterdam state-gas exception to the 10M checkpoint target.
     uint256 internal constant HUMAN_ENTRY_GAS = 3_200_000;
     // Per-box term; ENTRY covers concave first-touch costs and the EV allowance.
     uint256 internal constant HUMAN_BOX_GAS = 125_000;
@@ -156,7 +163,8 @@ library MineFlipGasBounds {
     uint256 internal constant DEGENESIS_DAY_CLOSE = 215_000;
     // Six cold four-way splits, one empty close and pricing: 582.4k including four fresh slots.
     uint256 internal constant DEGENESIS_REQUEST_GAS = 700_000;
-    // Seven cold four-way splits, release and active clear: 478.1k peak including the transient budget slot.
+    // Seven cold four-way splits, release and active clear: 380.7k Glamsterdam peak including the
+    // transient budget slot; 107.9k Osaka.
     uint256 internal constant DEGENESIS_TERMINAL_GAS = 580_000;
     // Bound day's word into a fresh degenesisWord slot, with the gate reads: 120.4k.
     uint256 internal constant DEGENESIS_WORD_COPY_GAS = 145_000;
@@ -172,7 +180,7 @@ library MineFlipGasBounds {
     uint256 internal constant DEGENERETTE_RECORD_GAS = 350_000;
     // Bet cursor, checkpoint and return reserve.
     uint256 internal constant DEGENERETTE_TAIL_GAS = 150_000;
-    // Conservative sum: 286.2k heap/frame plus the full 511-roll engine (344.1k).
+    // Conservative sum: 286.2k heap/frame plus the full 511-roll engine (367.3k).
     uint256 internal constant DECIMATOR_RUN_GAS_MAX = 800_000;
     // Cold full rank checkpoint: 448.9k.
     uint256 internal constant DECIMATOR_RANK_GAS_MAX = 550_000;
@@ -182,7 +190,7 @@ library MineFlipGasBounds {
     uint256 internal constant DECIMATOR_FINAL_GAS_MAX = 90_000;
     // Decimator checkpoint and return reserve.
     uint256 internal constant DECIMATOR_WORK_TAIL_GAS = 80_000;
-    // Saved-board/heap item 388.4k plus full 511-roll engine 344.1k, with margin.
+    // Saved-board/heap item 388.4k plus full 511-roll engine 367.3k, with margin.
     uint256 internal constant DECIMATOR_GENERATED_GAS_MAX = 900_000;
     // Opposite-phase stratum: cold marginal 12.2k.
     uint256 internal constant DECIMATOR_SAMPLE_SKIP_GAS_MAX = 15_000;
@@ -211,7 +219,8 @@ library MineFlipGasBounds {
     uint256 internal constant JACKPOT_TICKET_AWARD_GAS_MAX = 350_000;
     // Canonical eight-position sampler group: total reserve with tail 3.014M.
     uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 8;
-    // Cold eight-award far-future pair group: 1.980M, independent of round count.
+    // Cold eight-award far-future group (4 ETH, 8 ticket rolls): 644.5k Osaka, independent of
+    // round count.
     uint256 internal constant BAF_AWARD_GROUP = 2_400_000;
     // 60k cursor/frame plus five changed-slot repricing deltas (35.5k), with margin.
     uint256 internal constant BAF_AWARD_TAIL = 120_000;
@@ -239,7 +248,7 @@ library MineFlipGasBounds {
     uint256 internal constant GROWTH_TAIL_GAS = 30_000;
     // Bound the fresh-state cost of a single growth credit flush.
     uint256 internal constant GROWTH_CREDIT_BATCH_SIZE = 32;
-    // Cold beneficiary without a lootbox leg: 496.3k including fresh state.
+    // Cold beneficiary without a lootbox leg: whole worker 118.7k Osaka.
     uint256 internal constant REDEMPTION_BASE_GAS = 600_000;
     // Redemption cursor and return reserve.
     uint256 internal constant REDEMPTION_TAIL_GAS = 100_000;

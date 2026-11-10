@@ -84,7 +84,9 @@ contract CrapsEngineParity is Test {
         uint256 betId = (uint256(slot) << 64) | 3;
         uint256 oldHeader = owner | (chips << 160) | (uint256(4) << 206) | (uint256(0x7f) << 217);
         uint256 compact = owner | (chips << 32) | (uint256(4) << 62) | (uint256(0x7f) << 65);
-        if (awarded) { oldHeader |= uint256(1) << 224; compact |= uint256(1) << 72; }
+        if (awarded) compact |= uint256(1) << 72;
+        // A custom-battle seat keys its run by bet id, exactly as an awarded seat does.
+        if (awarded || custom) oldHeader |= uint256(1) << 224;
         CrapsEngine engine = new SelectedCrapsEngine();
         LegacyCrapsEngine legacy = new LegacyCrapsEngine();
         Craps.SlipResult memory before = legacy.settleBattle(

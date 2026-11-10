@@ -82,7 +82,6 @@ library VaultPlayerActions {
                 || selector == JackpotBattle.convertNormalToHigh.selector
                 || selector == JackpotBattle.upgradeReservedDay.selector
                 || selector == CrapsBattle.upgradeDayWindows.selector
-                || selector == CrapsBattle.openBonusDay.selector
                 || selector == CrapsBattle.throwCraps.selector
                 || selector == CrapsBattle.playCraps.selector;
         }

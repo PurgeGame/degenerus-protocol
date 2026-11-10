@@ -87,6 +87,9 @@ operator approval lapses.
   default gameplay ID is cleared; its permanent wallet identity is kept, and the wallet may later
   register a fresh account. Redemption proceeds must be withdrawn before seizure to keep them
   outside the seized account. Already-submitted redemption claims stay with the account.
+- The borrower wallet's address-derived referral code keeps naming the seized ID, so a new referral
+  made with that code accrues to the seized ID and its payee, the lender. A replacement account
+  uses its own default or custom code.
 - The seized account's AFKing run stops. Already-paid box stamps still open, with rewards going to
   the lender.
 - A deity account's soulbound pass moves with it to the lender.

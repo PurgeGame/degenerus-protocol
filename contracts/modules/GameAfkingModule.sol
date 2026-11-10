@@ -891,8 +891,10 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     }
 
     /// @dev The cursor and the pending count are held locally and stored once after the loop.
-    ///      `resolveAfkingBox` reads neither and calls only pinned protocol contracts, none of
-    ///      which re-enters this walk.
+    ///      `resolveAfkingBox` reads neither and calls only pinned protocol contracts. An activity
+    ///      boon on a member's box writes that member's lane through Quests (checkpoint day and
+    ///      streak); the walk reads only the cached lanes' ID, quantity and score, which no such
+    ///      write changes.
     function _runAfkingWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         uint256 pending = _pendingBoxCount;

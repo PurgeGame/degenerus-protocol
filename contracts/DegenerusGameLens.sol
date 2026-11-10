@@ -195,7 +195,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     /// @notice Locate all three winning intervals without an on-chain participant sweep.
     /// @dev Inspectable while the day's pool is held (the wager day and the day after, which is
     ///      when it is drawn) until a later same-parity day takes over the slot; after that the
-    ///      day reads not-ready, and its entries and awards remain in the events.
+    ///      day reads not-ready, and its entries and awards remain in the events. The draw does not
+    ///      run once the game is over, so after game over this reports the winners the recorded
+    ///      word would select, not boons that were awarded.
     function findProtocolBoonWinners(address game, address issuer, uint24 day)
         external view returns (bool ready, address[3] memory winners, uint32[3] memory indices, uint64[3] memory rolls)
     {
@@ -883,7 +885,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     }
 
     /// @notice The open loan of `id` and what repaying it costs at the current level; zero when
-    ///         none is open. A game over decided with VRF alive auto-repays at this same price.
+    ///         none is open. A game over decided with VRF alive auto-repays at this same price. A
+    ///         dead-VRF ending leaves the loan open and repayment reverts, so the figure is then
+    ///         informational.
     function loanOf(address game, uint32 id) external view returns (LoanInfo memory info) {
         uint256 base;
         assembly { base := _loans.slot }

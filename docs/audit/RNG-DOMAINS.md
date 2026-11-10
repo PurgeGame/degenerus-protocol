@@ -70,7 +70,8 @@ At the daily apply (`DegenerusGameAdvanceModule.applyDailyWord_g1652`), `_applyD
 1. computes `coinWord = word + nudges` (unchecked), so each nudge reverses bit 0;
 2. clears the nudge count;
 3. records the raw `word` for the day (`_recordDailyRng`);
-4. emits `DailyRngApplied(day, word, nudges)`.
+4. stamps `lastVrfProcessedTimestamp`, the clock of the coordinator-swap stall test;
+5. emits `DailyRngApplied(day, word, nudges)`.
 
 The coin word goes only to `Coinflip.processCoinflipPayouts(bonus, coinWord, day)`, which uses it
 twice: `win = (coinWord & 1) == 1`, and the reward percent
@@ -283,7 +284,8 @@ liveness froze purchases. Terminal entry never invokes Craps. The ending checks 
 
 Miner compensation is separate from every outcome domain. It prices execution gas above
 `MineFlipGas.MIN_REWARDED_GAS` (1M) at `block.basefee`, capped according to work age, with an age-based
-FLIP multiplier, and requires successful nonterminal progress. The age anchor is the later of the
+FLIP multiplier that doubles for an active pass holder and doubles again when `rngLockedFlag` was
+set at call start, and requires successful nonterminal progress. The age anchor is the later of the
 latest VRF request time and the current 22:57 UTC reset. No entropy derivation or consumer payout
 reads gas price, work age or the multiplier, and the VRF callback writes no state other than the raw
 word.
@@ -310,10 +312,10 @@ word.
 | Degenerette spin internals | `SPIN_HOUSE`, `SPIN_HERO`, `SPIN_RIG`, `SPIN_RIG_PICK`, `SPIN_SURVIVAL`, `SPIN_ROUND`, `SPIN_RECIRC`; flip chain `H(SPIN_FLIP_ROUND, seed, i)` | Each `H(tag, seed)`; internal box and foil reward spins; the WWXRP rig `H(SPIN_RIG, spinSeed)` applies only to WWXRP reward spins |
 | Degenerette survival / rounding / box / record | `H(BET_SURVIVAL \| BET_ROUND \| BET_BOX \| BET_RECORD, word, betId)` | `betId` is the queue position + 1 within the bet's index ([bet queue](../DEGENERETTE-BET-QUEUE.md)); settlement batch excluded |
 | Craps dice / shooter | `seed = H(CRAPS_DICE, word, bound)`; rotation `H(CRAPS_SHOOTER, seed) % n`; hand `h` `H(CRAPS_HAND, seed, h)`; roll `i` `H(CRAPS_ROLL, handSeed, i)` | `bound` is the window slot; every seat of a field throws the same dice; `JackpotBattle.payBattlePot` re-derives the same seed and rotation from the slot |
-| Craps board / survival | board `boardRoot = H(CRAPS_BOARD, word, key)`; scatter `H(CRAPS_SCATTER_CHIP, boardRoot, i) % 10`; survival `H(CRAPS_SURVIVAL, seed, hand, key)` | `key` is the paid entry's committed owner wallet ID (bet header bits 0–31; protocol seats Vault 1, sDGNRS 2), or `uint160(H(CRAPS_AWARDED, word, betId))` for awarded entries |
+| Craps board / survival | board `boardRoot = H(CRAPS_BOARD, word, key)`; scatter `H(CRAPS_SCATTER_CHIP, boardRoot, i) % 10`; survival `H(CRAPS_SURVIVAL, seed, hand, key)` | `key` is the paid entry's committed owner wallet ID (bet header bits 0–31; protocol seats Vault 1, sDGNRS 2) in a day-derived window (`bound < 2^40`, at most one paid seat per wallet), or `uint160(H(CRAPS_BET_KEY, word, betId))` for awarded entries and every custom-battle entry, so repeat seats of one wallet are separate runs |
 | Craps bounty boost | `H(CRAPS_BOOST, word, bound) % 1000` | Window slot; battle financial key excluded |
 | Craps schedule / high multiple | `H(CRAPS_SCHEDULE, word, period)` (period 4 reuses period 0); `H(CRAPS_HIGH, word)` | Fixed scheduled period; period 5 prices the jackpot battle |
-| Craps ties / rounding | `H(CRAPS_TIE, word, bound << 64 \| betId)` / `H(CRAPS_ROUND, word, betId)` | Fixed window and entry |
+| Craps ties / rounding | `H(CRAPS_TIE, word, bound << 64 \| seat)` / `H(CRAPS_ROUND, word, betId)` | Tie: the window slot and the seat's ordinal in the window's field, ranking tied scores as a random total order. Rounding: the entry's `betId`, which holds the window slot for an own seat and the day's ticket slot for a day ticket |
 | Craps hot bonus | none | Scheduled fields: seats share hot activation after the twelfth surviving roll; rotation adds 30 percentage points for the seat's shooter hand from roll 13 on. Custom battles have no hot bonus |
 | Jackpot allocation / quadrants | `allocationRoot = H(JACKPOT_ALLOCATION, word, level)` (solo-adjusted on the ETH path); quadrant seed `H(JACKPOT_QUADRANT, allocationRoot, q)` | Pool size, pass quantity and previous winners excluded |
 | Whale pass recipient | Ticket jackpot: `H(WHALE_TICKET, quadrantSeed) % (len + virtualDeityCount)`; ETH quadrant passes: none | Ticket jackpot: one draw per quadrant over its winning-trait bucket, `quadrantSeed = H(JACKPOT_QUADRANT, entropy, q)`; an empty set awards no pass and moves no pool. ETH quadrant passes need no draw: they go to the quadrant's first ETH winner |

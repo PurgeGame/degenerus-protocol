@@ -218,9 +218,11 @@ Added and multiplier gains never enter the action books.
 Every seat throws the same dice. Seats settle through the table's normal resolver in one order: paid
 window seats, then day tickets, then awarded seats.
 
-- An awarded seat keys its scatter and survival coin to a hash of its own bet id
-  (`RngTags.CRAPS_AWARDED`) rather than to the wallet. Repeat awards to one wallet are therefore
-  separate runs. The shooter-boost turn follows the seat's position in the field.
+- An awarded seat, and every seat of a custom battle, keys its scatter and survival coin to a hash
+  of its own bet id (`RngTags.CRAPS_BET_KEY`) rather than to the wallet. Repeat awards to one
+  wallet, and repeat paid seats in a multi-entry custom battle, are therefore separate runs. A paid
+  seat in a day-derived window (one per wallet) keys both to its owner ID. The shooter-boost turn
+  follows the seat's position in the field.
 - After the first mandatory checkpoint, each advance step admits further seats against
   `CRAPS_SEAT_GAS_MAX` (2,800,000) and draw chunks against `JACKPOT_BATTLE_DRAW` (4,700,000),
   including their return tails. The first mandatory checkpoint bypasses the estimate gate.

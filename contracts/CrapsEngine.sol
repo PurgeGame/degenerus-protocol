@@ -21,12 +21,12 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @notice Play one slip to its stop.
     /// @param packedChips  The slip's named chips, ten three-bit legs, the dark side last.
     /// @param chipFlip     Whole FLIP per chip at this slot.
-    /// @param scatterHash  The owner-keyed draw that throws the unnamed chips.
+    /// @param scatterHash  The seat-keyed draw that throws the unnamed chips.
     /// @param scatterCount How many of the ten chips the dice place.
     /// @param seed         The window's shooter seed.
     /// @param bankroll     Starting bankroll in internal sub-units (10^18 per whole FLIP).
     /// @param goal         Goal in the same internal sub-units.
-    /// @param salt         The slip's owner identity, which seasons the survival coin.
+    /// @param salt         The seat key, which seasons the survival coin.
     /// @param boost        The shooter-boost terms, zero for a custom battle.
     /// @return r The run; money fields retain internal sub-units for exact replay and scoring.
     function settleSlip(
@@ -72,20 +72,21 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @dev Inputs and returned money fields are whole FLIP. The simulation retains 10^18
     ///      sub-units through every hand; bankrollIn becomes the rounded payment and unitsPlayed
     ///      becomes the unscaled merit rank. Ranking precedes conversion of the receipt.
-    ///      Every seat of a field throws the same dice. A paid entry salts its board scatter and
-    ///      survival coin with the bet word's owner field. An awarded entry keys both to a 160-bit
-    ///      hash of its own bet id rather than its wallet, so repeat awards to one wallet stay
-    ///      separate runs. Every field uses the shared 600-roll between-shooter budget and
-    ///      1,111-roll absolute ceiling.
+    ///      Every seat of a field throws the same dice. A paid entry in a day-derived window
+    ///      (`bound` below 2^40), where a wallet holds at most one paid seat, salts its board
+    ///      scatter and survival coin with the bet word's owner field. An awarded entry, and any
+    ///      entry in a custom battle, keys both to a 160-bit hash of its own bet id rather than
+    ///      its wallet, so repeat seats of one wallet stay separate runs. Every field uses the
+    ///      shared 600-roll between-shooter budget and 1,111-roll absolute ceiling.
     ///
     ///      Compact header: owner32, chips30, boon3, high6 (bit 71 unused), then the derived
     ///      awarded bit.
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
         uint256 goal, uint48 bound, uint256 field, uint256 word) public pure returns (SlipResult memory r)
     {
-        uint256 key = header >> 72 == 0
+        uint256 key = header >> 72 == 0 && bound < 1 << 40
             ? uint32(header)
-            : uint160(EntropyLib.hash3(RngTags.CRAPS_AWARDED, word, betId));
+            : uint160(EntropyLib.hash3(RngTags.CRAPS_BET_KEY, word, betId));
         uint256 chips = (header >> 32) & 0x3fffffff;
         uint256 placed;
         for (uint256 i; i < 30; i += 3) placed += (chips >> i) & 7;

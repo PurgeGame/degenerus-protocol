@@ -539,7 +539,7 @@ abstract contract DegenerusGameStorage {
         _setRngComplete(false);
         _setRngSessionPublished(false);
     }
-    /// @dev Terminal entry kills unfinished box/bet/Craps consumers, independently of tickets.
+    /// @dev Terminal entry kills unfinished box/bet/Decimator/Craps consumers, independently of tickets.
     function _setRngTerminal() internal { rngFlagsAndNudges |= uint16(1) << 13; }
 
     function _nudgeCount() internal view returns (uint256) {
