@@ -264,6 +264,14 @@ contract ChainPinCrapsMockTest is CrapsPins {
         craps.openBonusDay();
         assertTrue(_agree("B: separator with a budget"));
 
+        // The day opened after its opener's period; the opener still runs for its seated field.
+        uint64 opener = uint64(uint256(craps.currentDayIndex()) * 8 + 1);
+        assertGt(craps.slotIndexOf(opener), 0, "fixture: the elapsed opener was armed at open");
+        assertFalse(_agree("B1: elapsed opener armed, unresolved"));
+        _setWord(craps.slotIndexOf(opener) - 1, 0x0BE4ED);
+        for (uint256 i; i < 8 && game.rngConsumerStage_g379() == 6; ++i) _readWork(craps, craps.currentIndex() ^ 1);
+        assertEq(uint256(game.rngConsumerStage_g379()), 7, "fixture: the opener's read cohort did not drain");
+
         vm.warp(_dayStart() + _closeOf(3));
         assertTrue(_agree("B2: first live scheduled window closed"));
         assertGt(craps.slotIndexOf(craps.minerSlot()), 0, "fixture: the first live window was armed");

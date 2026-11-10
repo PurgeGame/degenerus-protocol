@@ -395,6 +395,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         crapsBattle.throwCraps(1, board, 1);
 
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
+        // The day opened after its opener's period; the opener still runs, for the house seats.
+        uint64 opener = slot - 1;
         // A reset closes admission but leaves the existing table committed to its logical day.
         vm.warp(vm.getBlockTimestamp() + 1 days);
         (, uint24 requestedWall,) = game.dailySessionState();
@@ -410,10 +412,11 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         for (uint256 i; i < 200 && mockVRF.lastRequestId() == requestBefore; ++i) {
             vm.prank(KEEPER);
             game.mineRun{gas: 16_777_216}(type(uint32).max);
+            assertEq(crapsBattle.bonusCursorOf(opener), 0, "the field cannot settle before the new word");
             assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field cannot settle before the new word");
         }
         assertGt(mockVRF.lastRequestId(), requestBefore, "bounded preparation reaches the daily request");
-        assertGt(crapsBattle.slotIndexOf(slot), 0, "the existing field joins the request commitment");
+        assertGt(crapsBattle.slotIndexOf(opener), 0, "the earliest closed field joins the request commitment");
         assertEq(game.currentDayView_g542950(), today + 1, "the request advances only one logical day");
     }
 

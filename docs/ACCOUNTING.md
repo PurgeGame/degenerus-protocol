@@ -142,7 +142,7 @@ session; real request integration is covered by `RedemptionForwardBatches` and t
 | The close moves the batch's maximum (175%) payout, capped at free backing, from sDGNRS's Game claimable into the redemption reserve; live legs pay only from that reserve, a stETH transfer failure cannot block the close or settlement, and token donations wait for the ending | `test/fuzz/RedemptionStethFallback.t.sol::test_StethTransferFailureCannotBlockReserveCloseOrSettlement`, `::test_TokenDonationWaitsForTheEndingAndGameReserveFundsClaim`, `::test_LargeTokenDonationCannotDropALiveClaim`, `::testFuzz_CloseAndClaimFundingMix`; `test/repro/RedemptionReserve.t.sol::testLargeGameBackingCapsBatchWithoutTruncating` |
 | Open escrow stays in the holder base until its batch closes; pending and resolved claims survive century refills | `test/economics/SdgnrsCenturyRecycle.t.sol::testPendingAndResolvedClaimsSurviveRefillsAndSettle`, `::testOpenBatchRemainsUnpricedAcrossRefill` |
 | Both endings resolve an unrolled settling batch at 100; a batch resolved live keeps its roll; the open batch unwinds at the terminal burn price | `test/fuzz/RedemptionForwardBatches.t.sol::test_TerminalWordResolvesTheSettlingBatchAndOpenBatchUnwinds`, `::test_DeadEndingResolvesTheSettlingBatchAtExpectedValue`, `::test_OpenBatchUnwindsAtTheGameOverBurnPrice`; `test/fuzz/DeadVrfEnding.t.sol::test_pendingRedemptionResolvesAtExpectedValue` |
-| Terminal claims pay exactly once, with no expiry; operators claim for the owner only | `test/fuzz/RedemptionEdgeCases.t.sol::testFuzz_TerminalClaimPaysExactlyOnce`, `::test_OperatorCanClaimTerminalForOwnerOnly` |
+| Terminal claims pay exactly once until the sDGNRS year sweep ends them; operators claim for the owner only | `test/fuzz/RedemptionEdgeCases.t.sol::testFuzz_TerminalClaimPaysExactlyOnce`, `::test_OperatorCanClaimTerminalForOwnerOnly` |
 
 The redemption suites also cover real payable forwarding, stETH-before-ETH reentrancy, protection of
 other claims' reserves, settlement order, parked retries and operator authorization.
@@ -203,7 +203,12 @@ Final sweep (`_handleFinalSweep`, at `GO_TIME + 30 days`, once):
 
 After the sweep, `claimWinnings`/`claimClaimable` revert `AlreadySwept`, AFKing withdrawal and
 `sweepAccounts` revert, `claimDeadVrf` reverts, and `claimablePoolView()` returns 0. sDGNRS terminal
-redemption claims are held by sDGNRS and have no expiry.
+redemption claims are held by sDGNRS until its year sweep.
+
+Year sweep (`sDGNRS.yearSweep`, from game over + 365 days, after the final sweep; permissionless and
+repeatable): sends all ETH and stETH sDGNRS holds, half to GNRUS and half to the Vault, stETH first.
+The first call stamps `yearSweptAt` and zeroes the redemption reserve; from then on sDGNRS native and
+wrapped burns, DGNRS burns and redemption claims revert `Swept`. GNRUS's `vaultRedeemFor` opens only after that stamp.
 
 | Assertion | Test |
 | --- | --- |

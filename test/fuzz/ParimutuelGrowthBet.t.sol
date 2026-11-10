@@ -771,12 +771,13 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         assertEq(side, 1, "the locked-window bet must record its side");
     }
 
-    /// The quest's streak leg is a counter credit only, never the daily activity marker:
-    /// a bet adds exactly +1 and leaves lastActiveDay untouched, so it cannot stand in
-    /// for a daily quest. Observable through the decay-aware view: with no anchor ever
-    /// set, later missed days have nothing to bill against and the +1 survives them —
-    /// where the old anchor-bumping behavior would have lapsed it to 0.
-    function testGrowthBetAddsAStreakDayWithoutMarkingActivity() public {
+    /// The quest's streak leg is a counter credit, never a stand-in for a daily quest: a bet
+    /// adds exactly +1, and an account with no reset anchor is anchored the day before the
+    /// bet, so the bet day itself counts as missed unless a daily quest completes it.
+    /// Observable through the decay-aware view: two protocol days with no daily quest lapse
+    /// the +1 to 0, exactly as they would for an account whose last daily quest was the day
+    /// before the bet.
+    function testGrowthBetStreakLapsesWithoutADailyQuest() public {
         vm.pauseGasMetering();
         uint24 round = _driveToLiveJackpotPhase();
 
@@ -799,17 +800,14 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         assertEq(quests.effectiveBaseStreak(game.walletIdOf_g3120(alice)), 0, "harness: fresh streak");
         _bet(alice, true);
 
-        // Two full protocol days pass with no daily quest from alice, then one read
-        // separates every world. No bump at all reads 0. A bump that also marked
-        // activity (the old behavior) anchors the lapse clock to the bet day, so the
-        // missed day bills the streak to 0. Only the pure counter credit — +1, no
-        // anchor, nothing for missed days to bill against — reads 1.
+        // Two full protocol days pass with no daily quest from alice: the bet day and the
+        // next are billed against the anchor the bet wrote, so the +1 lapses.
         _driveDay();
         _driveDay();
         assertEq(
             quests.effectiveBaseStreak(game.walletIdOf_g3120(alice)),
-            1,
-            "the bet must add one streak day that carries no daily-quest protection"
+            0,
+            "a bet's streak day lapses without a daily quest, anchored or not"
         );
     }
 

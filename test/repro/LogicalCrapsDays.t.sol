@@ -42,7 +42,9 @@ contract LogicalCrapsDaysTest is LogicalDaysFixture {
         (uint24 afterDay,) = crapsBattle.bonusDayOf();
         assertEq(afterDay, before);
     }
-    function test_LateOpeningAnnouncesOnlyRemainingPeriods() public {
+    /// @dev A late opening opens every period so prepaid seats play them, while an elapsed
+    ///      period takes no new entry.
+    function test_LateOpeningOpensEveryPeriodButAdmitsOnlyRemaining() public {
         _nextLogical(777);
         vm.warp(vm.getBlockTimestamp() + 1 days + 8 hours);
         uint256 request = _requestLogical();
@@ -51,13 +53,18 @@ contract LogicalCrapsDaysTest is LogicalDaysFixture {
         _finishLogical();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256("CrapsBonusOpened(bytes32,uint48,uint256,uint128,uint128,uint256,uint256)");
-        uint256 opened;
+        uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(crapsBattle) || logs[i].topics[0] != topic) continue;
-            uint256 slot = uint256(logs[i].topics[2]);
-            assertGe(slot % crapsBattle.BONUS_SLOTS_PER_DAY(), 3, "elapsed opener and first routine never reopen");
-            ++opened;
+            seen |= 1 << (uint256(logs[i].topics[2]) % crapsBattle.BONUS_SLOTS_PER_DAY());
         }
-        assertGt(opened, 0);
+        assertEq(seen, 0x7E, "all six periods open, elapsed ones included");
+
+        address player = address(0xB0B);
+        uint32 id = _giveWalletId(player);
+        vm.prank(ContractAddresses.GAME); coin.mintForGame_g152734(player, 10_000_000);
+        vm.prank(player);
+        vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()")));
+        crapsBattle.throwCraps(id, 0, 0, 1);
     }
 }

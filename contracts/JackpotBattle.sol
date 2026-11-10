@@ -749,13 +749,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             if (cur % _BONUS_SLOTS_PER_DAY > _BONUS_PERIODS_PER_DAY) { ++cur; continue; }
             if (_slotIndexOf(cur) == 0) {
                 if (cur >= open || _jackpotIsJackpotSlot(cur)) { result.done = true; break; }
-                if ((_loadBattle(bytes32(uint256(cur))) >> _BG_TERM_TIER_SHIFT) & _BG_TERMS_SKIPPED != 0) {
-                    (bool refunded, bool moved) = _refundSkippedWindow(cur, meter);
-                    result.progressed = result.progressed || moved;
-                    if (!refunded) break;
-                    ++cur;
-                    continue;
-                }
                 Window memory w = _jackpotWindowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
                 _jackpotArmSlot(cur, w, read ^ 1);
                 result.progressed = true;
@@ -774,25 +767,6 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         if (cur != _minerSlot) { _minerSlot = cur; result.progressed = true; MineFlipGas.markProgress(meter); }
         result.rewardBasis = result.progressed ? 1 : 0;
         MineFlipGas.finish(meter);
-    }
-
-    /// @dev A late daily opening never runs expired periods. Refund their prepaid window
-    ///      reservations under the same comp policy as an entirely unopened day.
-    function _refundSkippedWindow(uint64 slot, MineFlipGas.Meter memory meter)
-        private returns (bool doneAll, bool moved)
-    {
-        uint64 n = uint32(_loadBattle(bytes32(uint256(slot))));
-        uint64 done = _bonusCursorOf(slot);
-        uint256 comps;
-        while (done < n && MineFlipGas.canRun(meter, _REFUND_GAS_MAX, _SWEEP_TAIL_GAS)) {
-            uint256 header = _loadBet((uint256(slot) << 64) | ++done);
-            comps += _jackpotWindowAheadPrice(slot % _BONUS_SLOTS_PER_DAY - 1, header & _BET_HIGH_BIT != 0);
-            moved = true;
-            MineFlipGas.markProgress(meter);
-        }
-        if (moved) _setBonusCursor(slot, done);
-        if (comps != 0) _creditComps(comps);
-        return (done == n, moved);
     }
 
     function _sweepLapsedDay(uint64 daySlot_, uint24 day, MineFlipGas.Meter memory meter)

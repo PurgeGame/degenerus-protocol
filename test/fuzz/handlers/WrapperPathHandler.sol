@@ -22,10 +22,9 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 ///             burnForSdgnrs + burns the same amount of backing — paired.
 ///           - post-gameOver `DGNRS.burn`: burns caller DGNRS + deterministic-burns the same
 ///             amount of backing — paired.
-///         plus the SOLE intentional equality break:
-///           - `yearSweep` (365 days post-gameOver): burns ALL backing while DGNRS.totalSupply
-///             stays untouched — the terminal charity forfeiture. Sets `ghost_yearSweepRan` so
-///             the invariant can scope itself to the pre-sweep regime it is stated for.
+///         plus `sDGNRS.yearSweep` (365 days post-gameOver, after the final sweep): it moves
+///         sDGNRS's ETH/stETH to GNRUS and the Vault and leaves both token counts untouched, so the
+///         wrapper equality holds across it. Sets `ghost_yearSweepRan` for non-vacuity.
 ///
 /// @dev `unwrapTo` is vault-only, so the handler unwraps from the Vault's own DGNRS balance: the
 ///      property under test is the paired-decrement arithmetic. Actors are funded with DGNRS
@@ -51,12 +50,11 @@ contract WrapperPathHandler is Test {
     /// @notice Successful post-gameOver DGNRS.burn calls.
     uint256 public ghost_postGameOverBurns;
 
-    /// @notice Latched true once yearSweep has executed — the sole intentional break of the
-    ///         wrapper-backing equality. The invariants scope themselves on this flag.
+    /// @notice Latched true once sDGNRS.yearSweep has executed.
     bool public ghost_yearSweepRan;
 
     /// @notice Cumulative sDGNRS totalSupply burned by wrapper-path actions (burnWrapped /
-    ///         post-gameOver burn / yearSweep all burn backing supply). The RedemptionHandler's
+    ///         post-gameOver burn burn backing supply). The RedemptionHandler's
     ///         ghost ledger cannot see these — the supply-consistency invariant adds this
     ///         term so both handlers' burns reconcile against the live totalSupply.
     uint256 public ghost_sdgnrsBurnedViaWrapper;
@@ -157,12 +155,11 @@ contract WrapperPathHandler is Test {
     }
 
     // =========================================================================
-    // Action: yearSweep — the sole intentional equality break, under warp
+    // Action: yearSweep — sDGNRS's one-year sweep, under warp
     // =========================================================================
 
-    /// @notice Fire the terminal charity forfeiture: 365 days after gameOver, burn ALL
-    ///         remaining backing 50-50 to GNRUS/VAULT. This is the ONE path allowed to leave
-    ///         the wrapper under-backed; the ghost flag rescopes the invariants when it runs.
+    /// @notice 365 days after gameOver, drive the Game's final sweep with ordinary mining, then
+    ///         sweep all of sDGNRS's ETH/stETH to GNRUS and the Vault.
     function tryYearSweep() external {
         calls_yearSweep++;
         uint48 goTime = game.gameOverTimestamp();
@@ -170,10 +167,11 @@ contract WrapperPathHandler is Test {
         if (block.timestamp < uint256(goTime) + 365 days) {
             vm.warp(uint256(goTime) + 365 days + 1);
         }
-        uint256 supplyBefore = sdgnrs.totalSupply();
-        try dgnrs.yearSweep() {
+        for (uint256 i; i < 8 && !game.isFinalSwept(); ++i) {
+            try game.mineRun(0) {} catch { break; }
+        }
+        try sdgnrs.yearSweep() {
             ghost_yearSweepRan = true;
-            ghost_sdgnrsBurnedViaWrapper += supplyBefore - sdgnrs.totalSupply();
         } catch {}
     }
 }

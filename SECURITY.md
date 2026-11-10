@@ -50,10 +50,11 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
   there is no post-proposal delay. Execution still needs the decaying vote threshold; recovery
   cancels applicable proposals. Retry retired-subscription cancellation with prescribed recovery
   destinations.
-- Manage permitted charity slots; after the final sweep, redeem any GNRUS holder's full balance to
-  that holder at what its own burn would pay (`vaultRedeemFor`); burn or unwrap the Vault's DGNRS
-  under its restrictions (the level-vested release is permissionless and always pays the Vault); set
-  supported NFT renderers/colors; and edit or finalize the icon data until it is finalized. Charity
+- Manage permitted charity slots; after the final sweep and the sDGNRS year sweep, redeem any GNRUS
+  holder's full balance to that holder at what its own burn would pay (`vaultRedeemFor`); burn or
+  unwrap the Vault's DGNRS under its restrictions (the level-vested release is permissionless and
+  always pays the Vault); set supported NFT renderers/colors; and edit or finalize the icon data
+  until it is finalized. Charity
   slots 0..2 lock once filled; residual charity recovery has its own long post-game delay.
 
 There is no owner setter for the craps engine, comp rate or shared comp balance. Contracts have no

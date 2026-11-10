@@ -217,6 +217,10 @@ obligations retain their specified protections.
   jackpot finishes or the hard-stall pot is fixed), the Vault, sDGNRS and GNRUS receive their own
   game balances and thirds of the remaining Game ETH/stETH, and **every other unclaimed game
   balance, including unclaimed `claimDeadVrf` shares, is forfeited**.
+- **Year sweep.** From **365 days after game over**, once the final sweep has run, anyone may call
+  `sDGNRS.yearSweep`, which sends all ETH and stETH sDGNRS holds half to GNRUS and half to the Vault
+  (repeatable, so later arrivals are swept too). The first sweep **ends every sDGNRS claim**:
+  native and wrapped (DGNRS) burns and uncollected redemption claims revert from then on.
 
 The phase accounting is in [Accounting](docs/ACCOUNTING.md); owner authority is in
 [Security](SECURITY.md).

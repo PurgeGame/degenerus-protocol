@@ -235,6 +235,10 @@ The ending, in order:
    The sweep then clears Admin's active subscription reference and attempts to cancel the VRF subscription.
    A refused cancellation can be retried through `Admin.retrySubCancel`. Game balance claims revert
    after the sweep.
+5. **Year sweep.** From game over + 365 days, after the final sweep, anyone may call
+   `sDGNRS.yearSweep`: all sDGNRS ETH and stETH goes half to GNRUS and half to the Vault, and the
+   first call ends every sDGNRS and DGNRS burn and redemption claim. It is repeatable, so nothing
+   that reaches sDGNRS later is stranded.
 
 Read the terminal paths separately from live-game withdrawal paths;
 [Accounting](ACCOUNTING.md#terminal-and-post-game-over) gives the equations.

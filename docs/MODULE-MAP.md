@@ -750,6 +750,8 @@ Deployment aliases: `SDGNRS`.
 | `transferFromPool_g106128(uint8,address,uint256)` (`0x00001d96`) | [sDGNRS.transferFromPool_g106128](../contracts/sDGNRS.sol) | None |
 | `votingSupply()` (`0xe79dfcff`) | [sDGNRS.votingSupply](../contracts/sDGNRS.sol) | None |
 | `wrapperTransferTo(address,uint256)` (`0xb6fb0ded`) | [sDGNRS.wrapperTransferTo](../contracts/sDGNRS.sol) | None |
+| `yearSweep()` (`0xd2aa22aa`) | [sDGNRS.yearSweep](../contracts/sDGNRS.sol) | None |
+| `yearSweptAt()` (`0xcba797e2`) | Compiler-generated getter | None |
 
 ### DGNRS
 
@@ -772,7 +774,6 @@ Deployment aliases: `DGNRS`.
 | `transfer(address,uint256)` (`0xa9059cbb`) | [DGNRS.transfer](../contracts/DGNRS.sol) | None |
 | `transferFrom(address,address,uint256)` (`0x23b872dd`) | [DGNRS.transferFrom](../contracts/DGNRS.sol) | None |
 | `unwrapTo(address,uint256)` (`0xc12ea3ca`) | [DGNRS.unwrapTo](../contracts/DGNRS.sol) | None |
-| `yearSweep()` (`0xd2aa22aa`) | [DGNRS.yearSweep](../contracts/DGNRS.sol) | None |
 
 ### DegenerusAdmin
 

@@ -8,6 +8,7 @@ import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {RedemptionHandler} from "../handlers/RedemptionHandler.sol";
 import {WrapperPathHandler} from "../handlers/WrapperPathHandler.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {GameFunding} from "../../helpers/GameFunding.sol";
 
 /// @title RedemptionInvariants -- Proves gambling burn redemption system invariants
@@ -111,7 +112,7 @@ contract RedemptionInvariants is DeployProtocol {
     /// @notice totalSupply equals initialSupply plus mints minus burns.
     /// @dev Supply changes from all sources (handler burns, game operations,
     ///      pool transfers) are tracked via before/after delta in the handler; wrapper-path
-    ///      burns (burnWrapped / post-gameOver burn / yearSweep) live in the wrapper handler's
+    ///      burns (burnWrapped / post-gameOver burn) live in the wrapper handler's
     ///      own ledger and reconcile via its ghost term.
     function invariant_supplyConsistency() public view {
         uint256 expected = handler.ghost_initialSupply() + handler.ghost_totalMinted() - handler.ghost_totalBurned()
@@ -124,27 +125,15 @@ contract RedemptionInvariants is DeployProtocol {
     }
 
     // =========================================================================
-    //         INV-WRAP: DGNRS WRAPPER NEVER UNDER-BACKED (pre-yearSweep)
+    //         INV-WRAP: DGNRS WRAPPER NEVER UNDER-BACKED
     // =========================================================================
 
     /// @notice The DGNRS wrapper holds at least one sDGNRS unit of backing per liquid
     ///         DGNRS unit: `sDGNRS.balanceOf(DGNRS) >= DGNRS.totalSupply()`.
-    /// @dev Safety direction of the wrapper-backing property (audit/DGNRS-WRAPPER-BACKING-PROOF.md).
-    ///      Every wrapper burn (unwrapTo, burn, burnWrapped) decrements both sides equally — the
+    /// @dev Every wrapper burn (unwrapTo, burn, burnWrapped) decrements both sides equally — the
     ///      WrapperPathHandler drives all three as fuzz actions, so this holds non-vacuously over a
-    ///      MOVING pair. The only sub-equality path is yearSweep (terminal charity forfeiture), also
-    ///      a fuzz action: once its ghost flag latches, the property is out of its stated pre-sweep
-    ///      scope and the check rescopes to the swept regime (backing fully forfeited).
+    ///      MOVING pair. sDGNRS's year sweep moves ETH/stETH, not tokens, so it holds across it.
     function invariant_wrapperBackingSufficient() public view {
-        if (wrapperHandler.ghost_yearSweepRan()) {
-            // Post-sweep regime: the sweep burned ALL backing; the wrapper side is untouched.
-            assertEq(
-                sdgnrs.balanceOf(address(dgnrs)),
-                0,
-                "INV-WRAP(post-sweep): yearSweep must forfeit the ENTIRE backing"
-            );
-            return;
-        }
         assertGe(
             sdgnrs.balanceOf(address(dgnrs)),
             dgnrs.totalSupply(),
@@ -152,18 +141,17 @@ contract RedemptionInvariants is DeployProtocol {
         );
     }
 
-    /// @notice STRICT equality direction: pre-yearSweep, backing tracks wrapper supply EXACTLY —
+    /// @notice STRICT equality: backing tracks wrapper supply EXACTLY —
     ///         `sDGNRS.balanceOf(DGNRS) == DGNRS.totalSupply()`.
     /// @dev The proof's `==` needs ¬P1 (game never transferFromPool_g106128→wrapper) ∧ ¬P2 (no unwrap
     ///      recipient == wrapper); this campaign's handlers satisfy both by construction (actors
     ///      are the only recipients), so any drift the fuzzer finds is a REAL paired-decrement
     ///      break, not benign over-backing. This is the non-vacuous equality coverage.
-    function invariant_wrapperBackingExact_preSweep() public view {
-        if (wrapperHandler.ghost_yearSweepRan()) return; // yearSweep is the sole intentional break
+    function invariant_wrapperBackingExact() public view {
         assertEq(
             sdgnrs.balanceOf(address(dgnrs)),
             dgnrs.totalSupply(),
-            "INV-WRAP-EQ: wrapper backing diverged from wrapper supply pre-sweep (paired decrement broken)"
+            "INV-WRAP-EQ: wrapper backing diverged from wrapper supply (paired decrement broken)"
         );
     }
 
@@ -288,28 +276,56 @@ contract RedemptionInvariants is DeployProtocol {
         assertEq(backingAfter, supplyAfter, "strict equality preserved across the unwrap");
     }
 
-    /// @notice Proves yearSweep is reachable under warp and is the SOLE intentional equality
-    ///         break: after the terminal charity forfeiture, backing is fully burned while the
-    ///         wrapper supply is untouched — exactly the regime the scoped invariants exempt.
-    function test_yearSweepIsSoleEqualityBreak() public {
+    /// @notice sDGNRS's year sweep takes every wei it holds to GNRUS and the Vault, half each,
+    ///         leaves the wrapper token pair untouched, and ends burns and redemption claims.
+    function test_yearSweepTakesAllSdgnrsMoneyAndEndsClaims() public {
         // Drive a REAL game-over via the liveness timeout (the redemption handler's machinery).
         // Twelve actions: the genesis cohort's drain and the request cycle it shifts take ten.
         for (uint256 i; i < 12 && !game.gameOver(); i++) {
             handler.action_triggerGameOver();
         }
         assertTrue(game.gameOver(), "precondition: liveness game-over latched");
-
+        uint256 backingTokens = sdgnrs.balanceOf(address(dgnrs));
         uint256 supplyBefore = dgnrs.totalSupply();
-        assertGt(sdgnrs.balanceOf(address(dgnrs)), 0, "precondition: backing present pre-sweep");
+        assertGt(backingTokens, 0, "precondition: wrapper backing present");
 
-        wrapperHandler.tryYearSweep(); // warps to gameOverTimestamp + 365d and sweeps
-        assertTrue(wrapperHandler.ghost_yearSweepRan(), "non-vacuity: yearSweep actually executed");
+        // Too early: before game over + 365 days the sweep refuses.
+        vm.expectRevert(sDGNRS.SweepNotReady.selector);
+        sdgnrs.yearSweep();
 
-        assertEq(
-            sdgnrs.balanceOf(address(dgnrs)),
-            0,
-            "yearSweep forfeits the ENTIRE backing (the sole intentional equality break)"
-        );
-        assertEq(dgnrs.totalSupply(), supplyBefore, "the wrapper supply side is untouched by the sweep");
+        // A year on, the Game's final sweep runs first (it pays GNRUS and the Vault their own
+        // thirds); snapshot after it so the deltas below are the year sweep's alone.
+        vm.warp(uint256(game.gameOverTimestamp()) + 365 days + 1);
+        for (uint256 i; i < 8 && !game.isFinalSwept(); ++i) try game.mineRun(0) {} catch {}
+        assertTrue(game.isFinalSwept(), "precondition: final sweep ran");
+        uint256 sdgnrsEth = address(sdgnrs).balance;
+        uint256 gnrusEth = ContractAddresses.GNRUS.balance;
+        uint256 vaultEth = ContractAddresses.VAULT.balance;
+
+        sdgnrs.yearSweep();
+        assertGt(sdgnrs.yearSweptAt(), 0, "the first sweep latches");
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "no reserve outlives the claims it backed");
+
+        assertEq(address(sdgnrs).balance, 0, "no ETH left in sDGNRS");
+        assertEq(mockStETH.balanceOf(address(sdgnrs)), 0, "no stETH left in sDGNRS");
+        uint256 gnrusGot = ContractAddresses.GNRUS.balance - gnrusEth;
+        uint256 vaultGot = ContractAddresses.VAULT.balance - vaultEth;
+        assertEq(gnrusGot + vaultGot, sdgnrsEth, "every wei of sDGNRS ETH moved");
+        assertEq(vaultGot - gnrusGot, sdgnrsEth % 2, "ETH split half and half");
+        assertEq(sdgnrs.balanceOf(address(dgnrs)), backingTokens, "wrapper backing tokens untouched");
+        assertEq(dgnrs.totalSupply(), supplyBefore, "wrapper supply untouched");
+
+        // Every claim on the swept money is closed.
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(sDGNRS.Swept.selector);
+        dgnrs.burn(1e12);
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(sDGNRS.Swept.selector);
+        sdgnrs.burnWrapped(1e12);
+        vm.expectRevert(sDGNRS.Swept.selector);
+        sdgnrs.burn(1);
+
+        // Repeatable: a second call succeeds and finds nothing to move.
+        sdgnrs.yearSweep();
     }
 }

@@ -96,6 +96,14 @@ interface IsDGNRS {
     /// @custom:reverts NoClaim If the account has no entry in the batch.
     function claimRedemption(uint32 id, uint32 batchId) external;
 
+    /// @notice One year after game over and the Game's final sweep, send all sDGNRS ETH and stETH
+    ///         to GNRUS and the Vault, half each; repeatable. The first sweep ends holder claims.
+    /// @custom:reverts SweepNotReady Before game over + 365 days or before the final sweep.
+    function yearSweep() external;
+
+    /// @notice Timestamp of the first year sweep; 0 until then.
+    function yearSweptAt() external view returns (uint40);
+
     /// @notice Transfer sDGNRS from the wrapper to a recipient (DGNRS wrapper only)
     /// @param to Recipient address
     /// @param amount Amount to transfer

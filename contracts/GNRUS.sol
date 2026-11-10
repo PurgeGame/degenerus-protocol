@@ -39,6 +39,8 @@ interface ISDGNRSSnapshot {
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Burn the caller's DGNRS wrapper the same way.
     function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
+    /// @notice Timestamp of sDGNRS's first year sweep; 0 until then.
+    function yearSweptAt() external view returns (uint40);
 }
 
 /// @notice Minimal interface for DegenerusGame donation-facing functions used by GNRUS.
@@ -485,15 +487,17 @@ contract GNRUS {
 
     /// @notice Redeem a holder's entire GNRUS on their behalf, paying the holder its full
     ///         proportional ETH + stETH share.
-    /// @dev Vault-owner-only, after the final sweep (`sweptAt != 0`). Lets a holder that never
-    ///      calls burn() itself (a lost or
-    ///      contract address, or a charity that has wound down) be made whole so its share is not left
-    ///      stranded. Value-preserving — the holder receives exactly what burn() would pay it; the
-    ///      vault owner cannot extract the holder's value. Reverts if the holder's ETH sink rejects.
+    /// @dev Vault-owner-only, after the final sweep (`sweptAt != 0`) and sDGNRS's year sweep. Lets a
+    ///      holder that never calls burn() itself (a lost or contract address, or a charity that has
+    ///      wound down) be made whole so its share is not left stranded. Value-preserving — the holder
+    ///      receives exactly what burn() would pay it; the vault owner cannot extract the holder's
+    ///      value. The year sweep sends GNRUS its last scheduled inflow, so a forced redemption
+    ///      waits for it. Reverts if the holder's ETH sink rejects.
     /// @param holder Address whose full GNRUS balance is redeemed to itself
     function vaultRedeemFor(address holder) external {
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
         if (sweptAt == 0) revert NotSwept();
+        if (sdgnrs.yearSweptAt() == 0) revert TooEarly();
 
         uint256 supply = totalSupply;
         uint256 bal = balanceOf[holder];

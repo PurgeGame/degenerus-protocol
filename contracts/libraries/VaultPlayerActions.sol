@@ -96,12 +96,11 @@ library VaultPlayerActions {
         }
         if (target == ContractAddresses.SDGNRS) {
             return selector == IsDGNRS.burn.selector || selector == IsDGNRS.burnWrapped.selector
-                || selector == IsDGNRS.claimRedemption.selector;
+                || selector == IsDGNRS.claimRedemption.selector || selector == IsDGNRS.yearSweep.selector;
         }
         if (target == ContractAddresses.DGNRS) {
             return selector == DGNRS.burn.selector
-                || selector == DGNRS.claimVested.selector
-                || selector == DGNRS.yearSweep.selector;
+                || selector == DGNRS.claimVested.selector;
         }
         if (target == ContractAddresses.JACKPOTS) {
             return selector == IDegenerusJackpots.claimBafConsolation.selector;

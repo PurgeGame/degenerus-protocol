@@ -2645,17 +2645,22 @@ contract DegenerusQuests is IDegenerusQuests {
             _questsStorage().levelQuestPlayerState[id] = packed;
 
             // Level-quest completion advances the quest streak by LEVEL_QUEST_STREAK_BONUS (a daily
-            // quest is +1) without touching the primary reset anchor (lastActiveDay), so the
+            // quest is +1) without moving an existing reset anchor (lastActiveDay), so the
             // missed-day reset stays keyed to the daily primary. Off a run it credits the manual
             // streak (saturating at uint16 max, mirroring awardQuestStreakBonus); while afking it
-            // bumps the Sub streak base by the same amount so the unified score reflects it. The
-            // calling handler synced the player state for the current day before this runs.
+            // bumps the Sub streak base by the same amount so the unified score reflects it.
             PlayerQuestState storage qs = _questsStorage().questPlayerState[id];
             if (qs.afkingSince != 0) {
                 questGame.recordAfkingSecondary_g3316(id, LEVEL_QUEST_STREAK_BONUS);
             } else {
                 uint32 bumped = uint32(qs.streak) + LEVEL_QUEST_STREAK_BONUS;
                 qs.streak = bumped > type(uint16).max ? type(uint16).max : uint16(bumped);
+                // With no anchor the streak could never lapse: anchor the day before this credit,
+                // so this day counts as missed unless the primary completes it.
+                if (qs.lastActiveDay == 0) {
+                    uint24 day = _questGameDay();
+                    if (day > 1) qs.lastActiveDay = day - 1;
+                }
                 _grantCenturyShield(id, qs);
             }
 
@@ -2751,11 +2756,11 @@ contract DegenerusQuests is IDegenerusQuests {
 
         _questsStorage().levelQuestPlayerState[id] = packed | (uint256(1) << LQ_GROWTH_BET_BIT);
 
-        // Advance the streak by the participation +1 WITHOUT touching lastActiveDay —
-        // the level-quest completion's pattern, so the missed-day reset stays keyed to
-        // the daily primary and a bet never stands in for a daily quest. Sync first so
-        // the bump lands on a post-lapse streak rather than resurrecting one already
-        // missed; while afking it feeds the Sub streak base so finalize reconciles it.
+        // Advance the streak by the participation +1 WITHOUT moving an existing
+        // lastActiveDay — the level-quest completion's pattern, so the missed-day reset
+        // stays keyed to the daily primary and a bet never stands in for a daily quest.
+        // Sync first so the bump lands on a post-lapse streak rather than resurrecting one
+        // already missed; while afking it feeds the Sub streak base so finalize reconciles it.
         uint24 questDay = _currentQuestDayFast(_questGameDay());
         if (questDay != 0) {
             PlayerQuestState storage qs = _questsStorage().questPlayerState[id];
@@ -2765,6 +2770,9 @@ contract DegenerusQuests is IDegenerusQuests {
             } else {
                 uint32 bumped = uint32(qs.streak) + GROWTH_QUEST_STREAK_BONUS;
                 qs.streak = bumped > type(uint16).max ? type(uint16).max : uint16(bumped);
+                // With no anchor the streak could never lapse: anchor the day before this
+                // credit, so this day counts as missed unless the primary completes it.
+                if (qs.lastActiveDay == 0 && questDay > 1) qs.lastActiveDay = questDay - 1;
                 _grantCenturyShield(id, qs);
             }
         }

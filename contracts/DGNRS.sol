@@ -45,8 +45,6 @@ interface IDGNRSGame {
     function rngLocked() external view returns (bool);
     /// @notice Whether the game has ended, as implemented by DegenerusGame.
     function gameOver() external view returns (bool);
-    /// @notice Timestamp the game ended, 0 if still active, as implemented by DegenerusGame.
-    function gameOverTimestamp() external view returns (uint48);
     /// @notice The game's current level, as implemented by DegenerusGame.
     function currentLvl() external view returns (uint24);
 }
@@ -346,62 +344,6 @@ contract DGNRS {
             totalSupply -= amount;
         }
         emit Transfer(from, address(0), amount);
-    }
-
-    // =====================================================================
-    //                    1-YEAR POST-GAMEOVER SWEEP
-    // =====================================================================
-
-    /// @notice Thrown when 1-year sweep is called too early or game not over
-    error SweepNotReady();
-
-    /// @notice Thrown when no remaining sDGNRS to sweep
-    error NothingToSweep();
-
-    /// @notice Emitted when 1-year sweep distributes remaining backing
-    /// @param ethToGnrus ETH sent to GNRUS.
-    /// @param stethToGnrus stETH sent to GNRUS.
-    /// @param ethToVault ETH sent to the vault.
-    /// @param stethToVault stETH sent to the vault.
-    event YearSweep(uint256 ethToGnrus, uint256 stethToGnrus, uint256 ethToVault, uint256 stethToVault);
-
-    /// @notice Sweep remaining DGNRS backing 50-50 to GNRUS and VAULT after 1 year post-gameover.
-    /// @dev Permissionless. Burns all sDGNRS held by this contract and forwards the
-    ///      ETH/stETH output. stETH sent first, then ETH (CEI).
-    function yearSweep() external {
-        // goTime != 0 <=> gameOver: the sole gameOver latch writes the timestamp
-        // atomically, so the check below covers the game-over gate too.
-        uint48 goTime = game.gameOverTimestamp();
-        if (goTime == 0 || block.timestamp < uint256(goTime) + 365 days) revert SweepNotReady();
-
-        uint256 remaining = staked.balanceOf(address(this));
-        if (remaining == 0) revert NothingToSweep();
-
-        (uint256 ethOut, uint256 stethOut,) = staked.burn(remaining);
-
-        uint256 stethToGnrus = stethOut / 2;
-        uint256 stethToVault = stethOut - stethToGnrus;
-        uint256 ethToGnrus = ethOut / 2;
-        uint256 ethToVault = ethOut - ethToGnrus;
-
-        // stETH first (lower reentrancy risk)
-        if (stethToGnrus != 0) {
-            if (!steth.transfer(ContractAddresses.GNRUS, stethToGnrus)) revert TransferFailed();
-        }
-        if (stethToVault != 0) {
-            if (!steth.transfer(ContractAddresses.VAULT, stethToVault)) revert TransferFailed();
-        }
-        // ETH last
-        if (ethToGnrus != 0) {
-            (bool ok,) = payable(ContractAddresses.GNRUS).call{value: ethToGnrus}("");
-            if (!ok) revert TransferFailed();
-        }
-        if (ethToVault != 0) {
-            (bool ok,) = payable(ContractAddresses.VAULT).call{value: ethToVault}("");
-            if (!ok) revert TransferFailed();
-        }
-
-        emit YearSweep(ethToGnrus, stethToGnrus, ethToVault, stethToVault);
     }
 
     // =====================================================================

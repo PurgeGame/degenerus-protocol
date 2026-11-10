@@ -301,6 +301,10 @@ contract AfkingCompactTest is DeployProtocol {
     }
 
     function test_SdgnrsUnfundedPausesSettlesAndAutoResumes() public {
+        // `_flip` reads sDGNRS's next-day stake, which the house's craps seat wins also feed.
+        // The fixture's days open after the craps opener and still run all six windows, so keep
+        // the tables closed here: the stake then moves only by the AFKing settlement under test.
+        vm.mockCall(address(crapsBattle), abi.encodeWithSignature("openBonusDay()"), "");
         game.depositAfkingFunding{value: 10 ether}(SDGNRS_ID);
         // The protocol seats accrue from the bootstrap day, which the day-9 fixture already passed.
         uint256 owedBefore = _info(SDGNRS_ID).owedFlip;

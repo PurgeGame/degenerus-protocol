@@ -416,62 +416,6 @@
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
-    "path": "contracts/DGNRS.sol",
-    "scope": "DGNRS.yearSweep",
-    "kind": "external",
-    "expression": "game.gameOverTimestamp()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/DGNRS.sol",
-    "scope": "DGNRS.yearSweep",
-    "kind": "external",
-    "expression": "staked.balanceOf(address(this))",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/DGNRS.sol",
-    "scope": "DGNRS.yearSweep",
-    "kind": "external",
-    "expression": "staked.burn(remaining)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/DGNRS.sol",
-    "scope": "DGNRS.yearSweep",
-    "kind": "external",
-    "expression": "steth.transfer(ContractAddresses.GNRUS, stethToGnrus)",
-    "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
-  },
-  {
-    "path": "contracts/DGNRS.sol",
-    "scope": "DGNRS.yearSweep",
-    "kind": "external",
-    "expression": "steth.transfer(ContractAddresses.VAULT, stethToVault)",
-    "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
-  },
-  {
-    "path": "contracts/DGNRS.sol",
-    "scope": "DGNRS.yearSweep",
-    "kind": "opcode-or-value",
-    "expression": "payable(ContractAddresses.GNRUS).call{value: ethToGnrus}(\"\")",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/DGNRS.sol",
-    "scope": "DGNRS.yearSweep",
-    "kind": "opcode-or-value",
-    "expression": "payable(ContractAddresses.VAULT).call{value: ethToVault}(\"\")",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin._executeSwap",
     "kind": "bounded-wrapper",
@@ -2497,6 +2441,14 @@
   },
   {
     "path": "contracts/DegenerusQuests.sol",
+    "scope": "DegenerusQuests._handleLevelQuestProgress",
+    "kind": "recipient-helper",
+    "expression": "_questGameDay()",
+    "count": 1,
+    "review": "LOGICAL_DAYS: read once, only on a level-quest streak credit to an account with no reset anchor, to anchor it the day before the credit; the virtual logical-day accessor (Coinflip host overrides it with its packed local mirror). Recipients, rewards and caller authorization are unchanged."
+  },
+  {
+    "path": "contracts/DegenerusQuests.sol",
     "scope": "DegenerusQuests._isLevelQuestEligible",
     "kind": "external",
     "expression": "questGame.mintPackedOfId_g5372(id)",
@@ -3896,6 +3848,14 @@
     "review": "OFF_CHAIN: existing holder withdrawal/loan/charity route; transitive helper call pinned, new caller requires review."
   },
   {
+    "path": "contracts/GNRUS.sol",
+    "scope": "GNRUS.vaultRedeemFor",
+    "kind": "external",
+    "expression": "sdgnrs.yearSweptAt()",
+    "count": 1,
+    "review": "PINNED: O(1) view on the protocol sDGNRS token; gates the vault-owner forced redemption until sDGNRS's year sweep has sent GNRUS its last scheduled inflow."
+  },
+  {
     "path": "contracts/Icons32Data.sol",
     "scope": "Icons32Data._authorizeWrite",
     "kind": "external",
@@ -4099,14 +4059,6 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_refundSkippedWindow(cur, meter)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._keepScheduled",
-    "kind": "recipient-helper",
     "expression": "_sweepLapsedDay(cur, day, meter)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -4166,14 +4118,6 @@
     "expression": "ICoinflipStake(ContractAddresses.COINFLIP).armDiceRunRecord(winner, score)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._refundSkippedWindow",
-    "kind": "recipient-helper",
-    "expression": "_creditComps(comps)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6036,14 +5980,6 @@
     "scope": "CrapsBattleCore.minerMaintenancePending_g11976",
     "kind": "recipient-helper",
     "expression": "_currentDayIndex()",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore.openBonusDay",
-    "kind": "recipient-helper",
-    "expression": "_currentBonusSlot(today)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -12006,6 +11942,62 @@
     "expression": "_runRedemptionWork(word, allowance)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS.yearSweep",
+    "kind": "external",
+    "expression": "game.gameOverTimestamp()",
+    "count": 1,
+    "review": "PINNED: permissionless post-game-over year sweep, open from game over + 365 days after the Game's final sweep; repeatable; sends sDGNRS's whole ETH/stETH balance half to GNRUS and half to the Vault (fixed protocol recipients: GNRUS has an empty receive, the Vault emits). The first sweep latches yearSweptAt before any transfer and closes burns and redemption claims."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS.yearSweep",
+    "kind": "external",
+    "expression": "game.isFinalSwept()",
+    "count": 1,
+    "review": "PINNED: permissionless post-game-over year sweep, open from game over + 365 days after the Game's final sweep; repeatable; sends sDGNRS's whole ETH/stETH balance half to GNRUS and half to the Vault (fixed protocol recipients: GNRUS has an empty receive, the Vault emits). The first sweep latches yearSweptAt before any transfer and closes burns and redemption claims."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS.yearSweep",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this))",
+    "count": 1,
+    "review": "PINNED: permissionless post-game-over year sweep, open from game over + 365 days after the Game's final sweep; repeatable; sends sDGNRS's whole ETH/stETH balance half to GNRUS and half to the Vault (fixed protocol recipients: GNRUS has an empty receive, the Vault emits). The first sweep latches yearSweptAt before any transfer and closes burns and redemption claims. A failed stETH read sweeps ETH only; a later call sweeps the stETH."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS.yearSweep",
+    "kind": "external",
+    "expression": "steth.transfer(ContractAddresses.GNRUS, stethToGnrus)",
+    "count": 1,
+    "review": "PINNED: permissionless post-game-over year sweep, open from game over + 365 days after the Game's final sweep; repeatable; sends sDGNRS's whole ETH/stETH balance half to GNRUS and half to the Vault (fixed protocol recipients: GNRUS has an empty receive, the Vault emits). The first sweep latches yearSweptAt before any transfer and closes burns and redemption claims."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS.yearSweep",
+    "kind": "external",
+    "expression": "steth.transfer(ContractAddresses.VAULT, stethToVault)",
+    "count": 1,
+    "review": "PINNED: permissionless post-game-over year sweep, open from game over + 365 days after the Game's final sweep; repeatable; sends sDGNRS's whole ETH/stETH balance half to GNRUS and half to the Vault (fixed protocol recipients: GNRUS has an empty receive, the Vault emits). The first sweep latches yearSweptAt before any transfer and closes burns and redemption claims."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS.yearSweep",
+    "kind": "opcode-or-value",
+    "expression": "payable(ContractAddresses.GNRUS).call{value: ethToGnrus}(\"\")",
+    "count": 1,
+    "review": "PINNED: permissionless post-game-over year sweep, open from game over + 365 days after the Game's final sweep; repeatable; sends sDGNRS's whole ETH/stETH balance half to GNRUS and half to the Vault (fixed protocol recipients: GNRUS has an empty receive, the Vault emits). The first sweep latches yearSweptAt before any transfer and closes burns and redemption claims."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS.yearSweep",
+    "kind": "opcode-or-value",
+    "expression": "payable(ContractAddresses.VAULT).call{value: ethToVault}(\"\")",
+    "count": 1,
+    "review": "PINNED: permissionless post-game-over year sweep, open from game over + 365 days after the Game's final sweep; repeatable; sends sDGNRS's whole ETH/stETH balance half to GNRUS and half to the Vault (fixed protocol recipients: GNRUS has an empty receive, the Vault emits). The first sweep latches yearSweptAt before any transfer and closes burns and redemption claims."
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",

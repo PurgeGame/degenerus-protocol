@@ -1293,6 +1293,12 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @dev Opening walks nothing but today. A window that this day leaves unshut is not stranded
     ///      and does not need sweeping up: the scheduled miner shuts every window that has
     ///      stopped taking bets, in order.
+    ///
+    ///      A LATE OPENING STILL OPENS ALL SIX. A window whose period has already passed takes no
+    ///      new entry (`_joinableSlot` refuses it), so it plays exactly the seats committed before
+    ///      the word: day tickets, the house and vault day seats and prepaid reservations. The
+    ///      miner arms it at once and it settles on its own later word, so a slow word costs no
+    ///      seat a window it paid for.
     function openBonusDay() external {
         if (msg.sender != _GAME) revert OnlyGame();
         uint24 today = _currentDayIndex();
@@ -1327,14 +1333,8 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
             emit CrapsProgressiveFunded(today, contribution, pool);
             emit CrapsHighRollerDayOpened(today, uint16(_highMultOf(word)), mainBudget, highBudget);
             uint256 cost;
-            (, uint256 firstOpen,) = _currentBonusSlot(today);
             for (uint256 p = 0; p < _BONUS_PERIODS_PER_DAY; ++p) {
-                if (p < firstOpen) {
-                    bytes32 key = bytes32(_slotOf(today, p));
-                    _storeBattle(key, _loadBattle(key) | (_BG_TERMS_SKIPPED << _BG_TERM_TIER_SHIFT));
-                } else {
-                    cost += _openWindow(today, p, word);
-                }
+                cost += _openWindow(today, p, word);
             }
             // The house and the vault take DAY seats — one ticket each for the whole day, rather
             // than one per window. Two bet writes instead of twelve, for the same field in every

@@ -60,6 +60,10 @@ interface IDegenerusGamePlayer {
     function rngConsumerStage_g379() external view returns (uint8);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
+    /// @notice Game-over timestamp; 0 while the game is live.
+    function gameOverTimestamp() external view returns (uint48);
+    /// @notice Whether the Game's one-shot final sweep has run.
+    function isFinalSwept() external view returns (bool);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its payee, or an operator approved for an ordinary account). Reverts for an unallocated
@@ -164,6 +168,13 @@ contract sDGNRS {
     ///         registers one).
     error NoWalletId();
 
+    /// @notice Thrown when the year sweep is called before game over + 365 days or before the
+    ///         Game's final sweep.
+    error SweepNotReady();
+
+    /// @notice Thrown when a burn or redemption claim comes after the year sweep has ended them.
+    error Swept();
+
     // =====================================================================
     //                              EVENTS
     // =====================================================================
@@ -242,6 +253,9 @@ contract sDGNRS {
     event RedemptionClaimed(
         uint32 indexed player, uint32 indexed batchId, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid
     );
+
+    /// @notice Emitted by each year sweep with what it sent.
+    event YearSweep(uint256 ethToGnrus, uint256 stethToGnrus, uint256 ethToVault, uint256 stethToVault);
 
     // =====================================================================
     //                          ERC20 METADATA
@@ -937,6 +951,49 @@ contract sDGNRS {
         emit CenturyRecycled(completedLevel, refillPercent, burned, minted, whale, affiliate, lootbox, reward);
     }
 
+    /// @notice One year after game over, send everything sDGNRS holds to GNRUS and the Vault, half
+    ///         each, so no backing is stranded. This covers DGNRS's backing, unburned holders and
+    ///         uncollected redemption claims alike.
+    /// @dev Permissionless and repeatable: anything that reaches sDGNRS later is swept by a later
+    ///      call. Opens only after the Game's final sweep, which pays sDGNRS its last Game-side
+    ///      balance. The first sweep ends every holder claim: native and wrapped burns and
+    ///      redemption claims revert from then on. stETH goes first, ETH last.
+    /// @custom:reverts SweepNotReady Before game over + 365 days or before the Game's final sweep.
+    function yearSweep() external {
+        uint48 goTime = game.gameOverTimestamp();
+        if (goTime == 0 || block.timestamp < uint256(goTime) + 365 days || !game.isFinalSwept()) {
+            revert SweepNotReady();
+        }
+        if (yearSweptAt == 0) {
+            yearSweptAt = uint40(block.timestamp);
+            // The sweep ends every redemption claim, so nothing stays reserved for them.
+            _pendingRedemptionEthValue = 0;
+        }
+
+        uint256 ethBal = address(this).balance;
+        uint256 stethBal = BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
+        uint256 ethToGnrus = ethBal / 2;
+        uint256 stethToGnrus = stethBal / 2;
+        uint256 ethToVault = ethBal - ethToGnrus;
+        uint256 stethToVault = stethBal - stethToGnrus;
+        emit YearSweep(ethToGnrus, stethToGnrus, ethToVault, stethToVault);
+
+        if (stethToGnrus != 0) {
+            if (!steth.transfer(ContractAddresses.GNRUS, stethToGnrus)) revert TransferFailed();
+        }
+        if (stethToVault != 0) {
+            if (!steth.transfer(ContractAddresses.VAULT, stethToVault)) revert TransferFailed();
+        }
+        if (ethToGnrus != 0) {
+            (bool ok,) = payable(ContractAddresses.GNRUS).call{value: ethToGnrus}("");
+            if (!ok) revert TransferFailed();
+        }
+        if (ethToVault != 0) {
+            (bool ok,) = payable(ContractAddresses.VAULT).call{value: ethToVault}("");
+            if (!ok) revert TransferFailed();
+        }
+    }
+
     /// @notice Burn all undistributed pool tokens at game over and permanently close recycling.
     /// @dev Only callable by game contract. Burns this contract's own balance.
     function burnAtGameOver() external onlyGame {
@@ -1020,6 +1077,7 @@ contract sDGNRS {
     ///      Priced by `_gameOverValue`: reserves excluded, holder base including the escrow of a
     ///      batch still open at game over (its claims keep their share and unwind at this price).
     function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut) {
+        if (yearSweptAt != 0) revert Swept();
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
         uint256 value = _gameOverValue(amount);
@@ -1111,6 +1169,7 @@ contract sDGNRS {
         // Only once the game is over, which is irreversible: while the game-over trigger reads true
         // before that, it can still read false again, and a terminal settlement taken then would stick.
         if (!game.gameOver()) revert NotGameOver();
+        if (yearSweptAt != 0) revert Swept();
         (address payee, uint32 walletId) = _claimant(id);
         uint128 entry = _takeClaim(walletId, batchId);
         if (entry == 0) revert NoClaim();
@@ -1406,5 +1465,8 @@ contract sDGNRS {
     }
     /// @dev Open and settling batches occupy opposite parities; completed terms are reused.
     RedemptionBatch[2] private _redemptionBatches;
+
+    /// @notice Timestamp of the first year sweep; 0 until then. Nonzero ends every holder claim.
+    uint40 public yearSweptAt;
 
 }

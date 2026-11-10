@@ -144,7 +144,7 @@ Source: [contracts/storage/CrapsBattleStorage.sol](../contracts/storage/CrapsBat
 | --- | --- | --- |
 | `_bets[key]` | Three 72-bit lanes at 72k; day 216–239 | Lane: ID 0–31; ten 3-bit board counts 32–61; boon 62–64; high flags 65–70; unused 71. Awarded-seat bit 72 exists only in memory. |
 | `_battles[key]` | 0–31; 32–63; 64–168; 169–200 | Entrants; resolved count; composite score; leading seat (`_BG_*`). |
-| `_battles[key]` | 201–218; 219–249; 250–251; 252; 253; 255 | Stake units; seed units; tier; high-tail; skipped period; terms frozen. |
+| `_battles[key]` | 201–218; 219–249; 250–251; 252; 255 | Stake units; seed units; tier; high-tail; terms frozen. |
 | `_slotState[slot]` | 0–47; 48–111; 112–223; 232–255 | RNG index; settlement cursor; reserve draw; scheduled day tag. |
 | `_slotState reserve draw` | 112–143; 144–175; 176–207; 208–215; 216–223 | Nominee; eligible count; cursor; resolved byte; won byte. |
 | `_highField[key]` | 0–31; 32–136; 137–168; 169; 170–188; 232–255 | High seats; best score; winning seat; done; hottest hand; scheduled day tag. |
@@ -575,6 +575,7 @@ harness declaring the production struct types, without changing production sourc
 | 7 | 160–255 | `_settlingReserveLeft` | `uint96` |
 | 8 | root / multiple slots | `_batchPlayers` | `mapping(uint256 => uint256)[2]` |
 | 10 | root / multiple slots | `_redemptionBatches` | `struct sDGNRS.RedemptionBatch[2]` |
+| 14 | 0–39 | `yearSweptAt` | `uint40` |
 
 #### struct sDGNRS.RedemptionBatch
 

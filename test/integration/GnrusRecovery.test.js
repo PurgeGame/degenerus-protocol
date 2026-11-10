@@ -95,6 +95,21 @@ describe("GnrusRecovery", function () {
   }
 
   /**
+   * Run sDGNRS's year sweep: advance to one year after gameover (the final sweep
+   * has already run), then call the permissionless yearSweep, which sends all
+   * sDGNRS ETH/stETH to GNRUS and the Vault and latches yearSweptAt.
+   */
+  async function triggerYearSweep(game, sdgnrs) {
+    const goTime = await game.gameOverTimestamp();
+    const now = BigInt((await provider.getBlock("latest")).timestamp);
+    const target = goTime + 365n * 86400n;
+    if (now < target) await advanceTime(Number(target - now) + 60);
+    await sdgnrs.yearSweep();
+    expect(await sdgnrs.yearSweptAt()).to.not.equal(0n);
+    expect(await provider.getBalance(await sdgnrs.getAddress())).to.equal(0n);
+  }
+
+  /**
    * Manufacture a real external GNRUS holder before gameover.
    *
    * GNRUS is only ever distributed out of the contract via the pickCharity()
@@ -179,11 +194,12 @@ describe("GnrusRecovery", function () {
 
     it("reverts InsufficientBurn for a zero-balance holder after the sweep", async function () {
       const fixture = await loadFixture(deployFullProtocol);
-      const { game, gnrus, deployer, mockVRF, others } = fixture;
+      const { game, gnrus, sdgnrs, dgnrs, deployer, mockVRF, others } = fixture;
 
       await triggerGameOver(game, deployer, mockVRF);
       await triggerFinalSweep(game, gnrus, deployer, mockVRF);
       expect(await gnrus.sweptAt()).to.not.equal(0n);
+      await triggerYearSweep(game, sdgnrs);
 
       const zeroHolder = others[3]; // never received any GNRUS
       expect(await gnrus.balanceOf(zeroHolder.address)).to.equal(0n);
@@ -193,9 +209,29 @@ describe("GnrusRecovery", function () {
       ).to.be.revertedWithCustomError(gnrus, "InsufficientBurn");
     });
 
+    it("reverts TooEarly after the final sweep while the DGNRS year sweep is still pending", async function () {
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, gnrus, sdgnrs, dgnrs, deployer, alice, dan, mockVRF } = fixture;
+      const gameAddress = await game.getAddress();
+
+      const holderBal = await manufactureHolder(gnrus, sdgnrs, deployer, alice, dan, gameAddress);
+      expect(holderBal).to.be.gt(0n);
+
+      await triggerGameOver(game, deployer, mockVRF);
+      await triggerFinalSweep(game, gnrus, deployer, mockVRF);
+      expect(await gnrus.sweptAt()).to.not.equal(0n);
+      // A year has not passed, so sDGNRS's year sweep has not run.
+      expect(await sdgnrs.yearSweptAt()).to.equal(0n);
+
+      await expect(
+        ownerAction(gnrus.connect(deployer), "vaultRedeemFor", [dan.address])
+      ).to.be.revertedWithCustomError(gnrus, "TooEarly");
+      expect(await gnrus.balanceOf(dan.address)).to.equal(holderBal);
+    });
+
     it("vault owner redeems a real holder: holder's GNRUS zeroed, holder paid ETH+stETH, totalSupply drops by the holder's balance", async function () {
       const fixture = await loadFixture(deployFullProtocol);
-      const { game, gnrus, sdgnrs, deployer, alice, dan, mockVRF } = fixture;
+      const { game, gnrus, sdgnrs, dgnrs, deployer, alice, dan, mockVRF } = fixture;
       const gameAddress = await game.getAddress();
       const gnrusAddr = await gnrus.getAddress();
 
@@ -206,6 +242,7 @@ describe("GnrusRecovery", function () {
       await triggerGameOver(game, deployer, mockVRF);
       await triggerFinalSweep(game, gnrus, deployer, mockVRF);
       expect(await gnrus.sweptAt()).to.not.equal(0n);
+      await triggerYearSweep(game, sdgnrs);
 
       // Back the redemption: fund GNRUS with ETH (receive()) and stETH so the
       // holder is paid real value. dan is the sole external holder post-burn, so
