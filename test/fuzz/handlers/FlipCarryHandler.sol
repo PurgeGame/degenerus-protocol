@@ -257,6 +257,18 @@ contract FlipCarryHandler is Test {
         return seed % N;
     }
 
+    /// @dev Carry paths need a tracked player holding carry (a rolling win that no later loss
+    ///      wiped), which a uniform draw often misses. On odd seed halves a carry action takes the
+    ///      first holder from the seed's actor on; `rolling` admits only holders still rolling.
+    function _iCarry(uint256 seed, bool rolling) internal view returns (uint256 i) {
+        i = _i(seed);
+        if ((seed / N) & 1 == 0) return i;
+        for (uint256 k; k < N; ++k) {
+            uint256 j = (i + k) % N;
+            if (pos[j].carry != 0 && (!rolling || pos[j].rebuy)) return j;
+        }
+    }
+
     // ================================================================== model: the settlement walk
 
     function _load(uint256 i) internal view returns (Sim memory s) {
@@ -704,7 +716,7 @@ contract FlipCarryHandler is Test {
 
     /// @notice claimCoinflipCarry(0, amount): carry only; gated on rebuy and an applied flip.
     function claimCarry(uint256 actorSeed, uint256 amtSeed) external action {
-        uint256 i = _i(actorSeed);
+        uint256 i = _iCarry(actorSeed, true);
         uint32 id = ids[i];
         Sim memory s = _load(i);
         bool expectOk = s.p.rebuy && !_frozen();
@@ -839,7 +851,7 @@ contract FlipCarryHandler is Test {
 
     /// @notice FLIP's gameplay burn (burnCoin_g27673) as the Game would call it.
     function gameBurn(uint256 actorSeed, uint256 amtSeed) external action {
-        uint256 i = _i(actorSeed);
+        uint256 i = _iCarry(actorSeed, false);
         uint256 cap = spendable(i);
         uint256 A = bound(amtSeed, 1, cap + cap / 4 + 1);
         _burn(i, A, abi.encodeCall(FLIP.burnCoin_g27673, (actors[i], A)), address(coin), true, true, type(uint256).max);
@@ -848,7 +860,7 @@ contract FlipCarryHandler is Test {
     /// @notice Burn exactly the spendable total (must succeed and empty every spendable leg), or
     ///         one more (must revert).
     function burnExact(uint256 actorSeed, bool over) external action {
-        uint256 i = _i(actorSeed);
+        uint256 i = _iCarry(actorSeed, false);
         uint256 S = spendable(i);
         if (S == 0) return;
         uint256 A = over ? S + 1 : S;

@@ -90,17 +90,18 @@ contract AdvanceLivenessHandler is Test {
     // Without moving time the daily request gate allows one new logical day per wall day.
     uint256 public constant MAX_DAY_ADVANCES = 2;
     uint256 public constant MAX_CRANKS = MAX_CRANKS_PER_CYCLE * (MAX_DAY_ADVANCES + 1);
-    // A legitimate backlog can outlast that budget: a top-tier Degenerette spin's pool-capped
-    // excess becomes one lootbox, which can queue tens of millions of entries for one wallet at
-    // one level (57.6M entries, about 12,000 calls, in one recorded case). Past the budget the
+    // A legitimate backlog can outlast that budget: one wallet's maximum custom box order (100
+    // boxes of 2,000 ETH) queues millions of far-future entries at one level, about 2,100 calls
+    // to drain, and a top-tier Degenerette spin's pool-capped excess becomes one lootbox that can
+    // queue tens of millions of entries for one wallet at one level. Past the budget the
     // check demands a ranking function instead of a count: for BACKLOG_WINDOW consecutive calls
     // the active read queue's owed total must strictly fall on every Tickets call, and any other
     // call (at most BACKLOG_SLACK of them) must not raise it. Only then is each entry's owed
     // count cut to BACKLOG_COMPRESS_TO inside the check's snapshot, verified through
     // entriesOwedView, and one fresh cycle budget granted for the drain's tail and the full
     // judgment that follows. The cut makes the campaign's tail a smaller workload than the one
-    // the window ranked; `fullBacklogDrain` (set by the pinned deep replays of recorded backlogs)
-    // never cuts: the window renews over the same queue until the real queue is empty.
+    // the window ranked; `fullBacklogDrain` (set by the full-drain tests) never cuts: the window
+    // renews over the same queue until the real queue is empty.
     uint256 public constant BACKLOG_WINDOW = 100;
     uint256 public constant BACKLOG_SLACK = 4;
     uint256 public constant BACKLOG_COMPRESS_TO = 1024;
@@ -191,6 +192,7 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_backlogCompressions; // ranked backlogs compressed inside a check
     uint256 public ghost_backlogMaxOwed; // largest owed total (entries) at a compression or renewal
     uint256 public ghost_backlogRenewals; // full-drain windows renewed over an uncut queue
+    uint24 public ghost_backlogKey; // queue key of the latest ranked backlog
     uint256 public ghost_lpdSeals; // lastPurchaseDay false -> true
     uint256 public ghost_turboSeals; // ... with JACKPOT_TURBO
     uint256 public ghost_normalSeals;
@@ -521,6 +523,7 @@ contract AdvanceLivenessHandler is Test {
         ghost_backlogCompressions += cycles.compressions;
         ghost_backlogRenewals += cycles.renewals;
         if (cycles.maxBacklogOwed > ghost_backlogMaxOwed) ghost_backlogMaxOwed = cycles.maxBacklogOwed;
+        if (cycles.backlogKey != 0) ghost_backlogKey = cycles.backlogKey;
         if (cycles.frozenPoolCranks != 0) ghost_crankOnLpdFrozenPool++;
         if (probeFlags & 1 != 0) ghost_probeRequests++;
         if (probeFlags & 2 != 0) ghost_probeOnLpd++;
@@ -543,6 +546,7 @@ contract AdvanceLivenessHandler is Test {
         uint256 renewals;
         uint256 maxBacklogOwed;
         uint256 frozenPoolCranks;
+        uint24 backlogKey;
     }
 
     /// Ranking window over one read queue (see BACKLOG_WINDOW).
@@ -627,6 +631,7 @@ contract AdvanceLivenessHandler is Test {
                 uint256 n = key == 0 ? 0 : TQ.length(address(game), key);
                 if (n == 0 || n > BACKLOG_MAX_QUEUE) return (false, bytes4(0), cranks + 1);
                 w = BacklogWindow({active: true, key: key, steps: 0, slack: 0});
+                stats.backlogKey = key;
             }
         }
     }

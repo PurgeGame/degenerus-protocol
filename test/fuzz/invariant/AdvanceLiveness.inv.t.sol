@@ -6,16 +6,21 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {AdvanceLivenessHandler} from "../handlers/AdvanceLivenessHandler.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
+import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @dev Self-check double for the backlog ranking: forwards everything to the production code, but
-///      after a mineRun that lowered one wallet's level-10 read lane, writes the pre-call word back.
+///      after a mineRun that lowered one watched owed lane (the 32 bits at `shift` in `lane`),
+///      writes the pre-call word back.
 contract StalledDrainGame {
     address private immutable impl;
     bytes32 private immutable lane;
+    uint256 private immutable shift;
 
-    constructor(address impl_, bytes32 lane_) {
+    constructor(address impl_, bytes32 lane_, uint256 shift_) {
         impl = impl_;
         lane = lane_;
+        shift = shift_;
     }
 
     fallback() external payable {
@@ -27,7 +32,7 @@ contract StalledDrainGame {
         if (mine && ok) {
             uint256 next;
             assembly ("memory-safe") { next := sload(slot) }
-            if (uint32(next >> 50) < uint32(prior >> 50)) assembly ("memory-safe") { sstore(slot, prior) }
+            if (uint32(next >> shift) < uint32(prior >> shift)) assembly ("memory-safe") { sstore(slot, prior) }
         }
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         assembly ("memory-safe") { return(add(ret, 32), mload(ret)) }
@@ -41,11 +46,13 @@ contract LateStalledDrainGame {
     bytes32 private constant COUNT = keccak256("late-stall double: lowering calls");
     address private immutable impl;
     bytes32 private immutable lane;
+    uint256 private immutable shift;
     uint256 private immutable honest;
 
-    constructor(address impl_, bytes32 lane_, uint256 honest_) {
+    constructor(address impl_, bytes32 lane_, uint256 shift_, uint256 honest_) {
         impl = impl_;
         lane = lane_;
+        shift = shift_;
         honest = honest_;
     }
 
@@ -58,7 +65,7 @@ contract LateStalledDrainGame {
         if (mine && ok) {
             uint256 next;
             assembly ("memory-safe") { next := sload(slot) }
-            if (uint32(next >> 50) < uint32(prior >> 50)) {
+            if (uint32(next >> shift) < uint32(prior >> shift)) {
                 bytes32 c = COUNT;
                 uint256 n;
                 assembly ("memory-safe") {
@@ -73,8 +80,6 @@ contract LateStalledDrainGame {
     }
 }
 
-/// @dev Oracle self-test stand-in: `mineRun` latches `gameOver` with no ending due; every other
-///      call runs the production Game code in the Game's own storage.
 contract PrematureLatcher {
     address internal immutable production;
 
@@ -326,248 +331,142 @@ contract AdvanceLiveness is DeployProtocol {
         console.log("backlog max cranks per cycle", h.ghost_maxCranksPerCycle());
     }
 
-    /// @dev Replayed from a persisted 34-call deep-campaign failure. During the final check a
-    ///      human-box crank opens sDGNRS's boxes; one Degenerette box spin pays about 274,645 ETH,
-    ///      the 10% pool cap leaves 1,449 ETH as ETH and converts the rest to a lootbox, and that
-    ///      box queues 57,599,640 entries for sDGNRS at level 10. Every Tickets call then drains
-    ///      about 4,770 of them (~12,100 calls in all), which the flat per-cycle budget misread as
-    ///      nontermination. The ranked window must prove the drain, compress it, and still reach
-    ///      a sealed, idle day.
-    function test_DegeneretteJackpotBacklogStillReachesIdle() public {
-        AdvanceLivenessHandler h = handler;
-        _jackpotBacklogPrefix(h);
-        h.actWhalePass(4570);
-        if (h.ghost_violations() != 0) _logViolation(h.firstViolation());
-        assertEq(h.ghost_violations(), 0, "ranked jackpot backlog must reach idle");
-        assertEq(h.ghost_actions(), 34, "every replayed action ran");
-        assertGe(h.ghost_backlogCompressions(), 1, "non-vacuity: the ranked window compressed the backlog");
-        assertGt(h.ghost_backlogMaxOwed(), 50_000_000, "non-vacuity: the compressed queue held the jackpot's entries");
-        console.log("jackpot backlog compressions", h.ghost_backlogCompressions());
-        console.log("jackpot backlog max owed entries", h.ghost_backlogMaxOwed());
-        console.log("jackpot backlog max cranks", h.ghost_maxCranks());
+    uint256 private constant ORDER_BOX_ETH = 2_000 ether;
+    /// @dev The far-future lane of level 3, where the custom order's entries are queued.
+    uint24 private constant BACKLOG_KEY = (uint24(1) << 22) | 3;
+    /// @dev About 90% of the full drain's ~2,090 lowering calls.
+    uint256 private constant LATE_STALL_AFTER = 1_900;
+
+    /// @dev One wallet's custom box order of `boxes` boxes of 2,000 ETH, bought at level 0. The
+    ///      next day's check opens the boxes; a 100-box order queues about 4.6M entries for that
+    ///      wallet on BACKLOG_KEY, about 2,100 Tickets calls to drain.
+    function _customOrder(uint256 boxes) internal returns (address buyer) {
+        buyer = handler.actors(0);
+        vm.prank(buyer);
+        game.purchaseOrderFor{value: boxes * ORDER_BOX_ETH}(
+            0, 0, BoxOrderLib.boCustoms(boxes, ORDER_BOX_ETH), bytes32(0), MintPaymentKind.DirectEth, false
+        );
     }
 
-    /// @dev Replayed from a persisted 72-call deep-campaign failure. In the final check a human-box
-    ///      crank queues about 2.7M owed entries on the far-future lane two levels up (five
-    ///      holders), and about 560 Tickets calls drain it, past the flat per-cycle budget. The
+    /// @dev The buyer's owed lane on BACKLOG_KEY: 32 bits of its far-future word.
+    function _orderLane(address buyer) internal view returns (bytes32 lane, uint256 shift) {
+        uint256 position = ((BACKLOG_KEY & 0x3fffff) - 1) % 100;
+        uint256 id = game.walletIdOf_g3120(buyer);
+        lane = bytes32(uint256(keccak256(abi.encode(id, GameSlots.FAR_FUTURE_OWED))) + position / 8);
+        shift = (position & 7) * 32;
+    }
+
+    function _etchStalledDrain(address buyer) internal {
+        (bytes32 lane, uint256 shift) = _orderLane(buyer);
+        address impl = address(uint160(0x5A11ED));
+        vm.etch(impl, address(game).code);
+        vm.etch(address(game), address(new StalledDrainGame(impl, lane, shift)).code);
+    }
+
+    function _etchLateStall(address buyer, uint256 honest) internal {
+        (bytes32 lane, uint256 shift) = _orderLane(buyer);
+        address impl = address(uint160(0x5A11ED));
+        vm.etch(impl, address(game).code);
+        vm.etch(address(game), address(new LateStalledDrainGame(impl, lane, shift, honest)).code);
+    }
+
+    /// @dev A maximum custom order's backlog outlasts the flat per-cycle budget. The ranked window
+    ///      must prove the drain, compress it, and still reach a sealed, idle day.
+    function test_CustomOrderBacklogStillReachesIdle() public {
+        AdvanceLivenessHandler h = handler;
+        _customOrder(100);
+        h.actNextDay(0, 1);
+        if (h.ghost_violations() != 0) _logViolation(h.firstViolation());
+        assertEq(h.ghost_violations(), 0, "ranked custom-order backlog must reach idle");
+        assertEq(h.ghost_backlogKey(), BACKLOG_KEY, "the window ranked the order's far-future lane");
+        assertGe(h.ghost_backlogCompressions(), 1, "non-vacuity: the ranked window compressed the backlog");
+        assertGt(h.ghost_backlogMaxOwed(), 3_000_000, "non-vacuity: the compressed queue held the order's entries");
+        console.log("custom-order backlog compressions", h.ghost_backlogCompressions());
+        console.log("custom-order backlog max owed entries", h.ghost_backlogMaxOwed());
+        console.log("custom-order backlog max cranks", h.ghost_maxCranks());
+    }
+
+    /// @dev A 37-box order's backlog takes about 590 calls, past the flat per-cycle budget. The
     ///      ranked window opens at the budget and the queue empties inside it, so the drain is
     ///      proven without compression.
     function test_FarFutureBacklogDrainsInsideTheWindow() public {
         AdvanceLivenessHandler h = handler;
-        _farFutureBacklogSequence(h);
+        _customOrder(37);
+        h.actNextDay(0, 1);
         if (h.ghost_violations() != 0) _logViolation(h.firstViolation());
         assertEq(h.ghost_violations(), 0, "far-future backlog must reach idle");
-        assertEq(h.ghost_actions(), 72, "every replayed action ran");
+        assertEq(h.ghost_backlogKey(), BACKLOG_KEY, "the window ranked the order's far-future lane");
         assertEq(h.ghost_backlogCompressions(), 0, "the queue drained inside the window");
-        assertGe(h.ghost_maxCranks(), 600, "non-vacuity: the drain ran past the flat budget");
+        assertGt(h.ghost_maxCranks(), h.MAX_CRANKS_PER_CYCLE(), "non-vacuity: the drain ran past the flat budget");
         console.log("far-future backlog max cranks", h.ghost_maxCranks());
     }
 
-    function _farFutureBacklogSequence(AdvanceLivenessHandler h) internal {
-        h.actLastPurchaseDayMidday(274);
-        h.actOpenBoxes(170920198);
-        h.actNextDay(7461, 1182342661);
-        h.actStall(135487606500527586351396372573970);
-        h.actWhalePass(0);
-        h.actNextDay(25152830347282153503188519620118582881988189301823, 807994665343541085186688395858116735451107686371994668632633347684632836);
-        h.actFoil(1);
-        h.actStall(271015127546492286);
-        h.actMiddayRequest(10530, 15843);
-        h.actMiddayRequest(16383, 51008);
-        h.actWarpWithinDay(29585757801757273);
-        h.actMiddayRequest(9891, 40000);
-        h.actNextDay(195385690415954796681348944496431052, 300247704870238078677354724831087287);
-        h.actWarpWithinDay(20767640357497770256279353060187481269882393874846213356981);
-        h.actMiddayRequest(609546087, 11525759209690640403245518757014742738608);
-        h.actOpenBoxes(299);
-        h.actSeedPool(121694457631354755510522309771267);
-        h.actRunToIdle(7067244);
-        h.actCrank(21392, 4200);
-        h.actNextDay(151, 6471);
-        h.actMiddayRequest(18354, 64);
-        h.actNextDay(1592938749427352, 10193259210801627536606023519637210985769338823634901);
-        h.actFulfill();
-        h.actWarpWithinDay(64408888034188890720070650829666195471956032333875740335693);
-        h.actSeedPool(197);
-        h.actWhalePass(115792089237316195423570985008687907853269984665640564039457584007913129639934);
-        h.actCrank(40000, 10000000000000000);
-        h.actWhalePass(1334);
-        h.actOpenBoxes(75376775);
-        h.actFoil(8529708965949716113068400558660783296355391638931501);
-        h.actSeedPool(69130708002671459875891056038483667730483996010888719835580737139095618);
-        h.actFulfill();
-        h.actNextDay(695529900000000000000000, 7000);
-        h.actSeedPool(33675099802033142722284742171626861);
-        h.actNextDay(4033, 127);
-        h.actMiddayRequest(142573, 431029027849377293009099935400);
-        h.actNextDay(271, 1670);
-        h.actBuyTickets(540582017019437939590336746323671769881342, 749163715548394569311016492773352054539982728864150183338766563850192230);
-        h.actSeedPool(72370055827242515480310246955150653346168791186507307785844490411625550981024);
-        h.actFoil(17101159876);
-        h.actMiddayRequest(230450, 18472);
-        h.actSeedPool(2300000);
-        h.actWarpWithinDay(2425861200000000000);
-        h.actStall(925248084803030739962363);
-        h.actWarpWithinDay(73274681551368994924207535070198042713292093615344769114943325267790982571728);
-        h.actFulfill();
-        h.actCrank(144, 21283);
-        h.actNextDay(33, 15574);
-        h.actWarpWithinDay(198706581);
-        h.actMiddayRequest(1048275337840070235943100006270253348235546146472015940475531694073093297336, 49632);
-        h.actCrank(136, 220);
-        h.actFoil(296559413407705156846667172373792659201822231808113863242551897620482);
-        h.actFoil(2400000);
-        h.actFulfill();
-        h.actOpenBoxes(33786);
-        h.actNextDay(18734, 72370055827242515480310246955150653346168791186507307785844490411625550990688);
-        h.actBuyTickets(1, 252172160071787583100405538257);
-        h.actOpenBoxes(594730600550082);
-        h.actNextDay(15889, 17499);
-        h.actNextDay(30, 2203);
-        h.actFulfill();
-        h.actCrank(99767263412294512300870728527097100384088503632307663483594949343659103765790, 40397545929600181636417047310492680856735821878925485025261764560649566326334);
-        h.actFulfill();
-        h.actFoil(19472803273692390626381003004625429934);
-        h.actMiddayRequest(450400, 21388);
-        h.actStall(72370055827242515474033145219763972582333001763299641369742134967161516481472);
-        h.actMiddayRequest(1000000000, 279);
-        h.actRunToIdle(31566534335);
-        h.actMiddayRequest(40605464961392864732564, 2741784328782609243352012543);
-        h.actFulfill();
-        h.actFulfill();
-        h.actNextDay(535705892984595775627082949891588200867428984749124026489312514865, 43510324585678702396257909749461766590921469660499526204881869305016456411);
-    }
-
-    /// @dev The first 33 actions of that sequence; its 34th (actWhalePass(4570)) runs the
-    ///      check that meets the jackpot backlog.
-    function _jackpotBacklogPrefix(AdvanceLivenessHandler h) internal {
-        h.actSeedPool(1322);
-        h.actWhalePass(491097668805913737166441422320207150778401246708159625892686045777185076);
-        h.actFoil(9941);
-        h.actCrank(1655260984718715425435, 1479213843194745850558504502893737106795);
-        h.actMiddayRequest(11242815, 73274681551368994924207535070198042713292093615344769114943325267790982566672);
-        h.actWhalePass(176404421621618529934044969842097160113943218);
-        h.actNextDay(60924590352216425073238997996751312033674802929955, 206168849288354654415779);
-        h.actBuyTickets(16604207830365491876213400846227384836999803595354511760697079131146673586163, 20000);
-        h.actBuyTickets(26508109422230358590066026783865593567, 152442866293369741439262463789663257539770822457738252527343218146715654);
-        h.actStall(17868);
-        h.actSeedPool(363999);
-        h.actBuyTickets(15360, 4000000000000000000);
-        h.actMiddayRequest(1575718623160900586, 56068530670415006546437936714509210445628705336155484719832337508);
-        h.actMiddayRequest(875819144, 84577192631695642232076651949857587631);
-        h.actNextDay(154492951, 6787364146);
-        h.actFoil(9375);
-        h.actWhalePass(220521399483054597444270403749570237183);
-        h.actRunToIdle(9749);
-        h.actBuyTickets(51201562599859365977474564423688, 92338176);
-        h.actLastPurchaseDayMidday(73274681578328941591358174864865057800311724288981913537483897748894592827664);
-        h.actSeedPool(13506512847431197627377327090963309);
-        h.actFulfill();
-        h.actMiddayRequest(455638151205566443242641212496764951782317509806921322, 434986180889105379627522348739026594153658531625299);
-        h.actStall(4689366805399555359566614494964251575282446);
-        h.actStall(382969925940);
-        h.actStall(1057393236136550042428361090712810826039454179298451523752660804727940);
-        h.actWarpWithinDay(77318076419392289299902264530);
-        h.actWarpWithinDay(30088724374045935260142156206433004870839028484991476196186345887703051508107);
-        h.actMiddayRequest(3162753877957340906046201827136843102484899215157352315337502331, 325734073256572);
-        h.actBuyTickets(104265765657418059170669937121245398121528523680836293485708500746458423056128, 23688);
-        h.actNextDay(10095346766061645851, 72822368675825781893791978056887563541563784756938131903533043377012599702064);
-        h.actMiddayRequest(4000000000000000000, 73274681659208781592810094248866103061370616309893346805105615192205423574880);
-        h.actFulfill();
-    }
-
-    /// @dev Oracle self-check: the same backlog, with every call that lowers sDGNRS's level-10
-    ///      read lane put back afterwards (each call still writes, so the no-progress check stays
+    /// @dev Oracle self-check: the maximum order's backlog, with every call that lowers the buyer's
+    ///      lane put back afterwards (each call still writes, so the no-progress check stays
     ///      quiet). The ranked window must reject its first call instead of compressing.
     function test_OracleFlagsStalledBacklogDrain() public {
         AdvanceLivenessHandler h = handler;
-        _jackpotBacklogPrefix(h);
-        address impl = address(uint160(0x5A11ED));
-        vm.etch(impl, address(game).code);
-        bytes32 lane = keccak256(abi.encode(uint256(2), GameSlots.TICKET_PENDING));
-        vm.etch(address(game), address(new StalledDrainGame(impl, lane)).code);
-        h.actWhalePass(4570);
+        _etchStalledDrain(_customOrder(100));
+        h.actNextDay(0, 1);
         assertEq(h.ghost_violations(), 1, "a drain that never lowers owed must be flagged");
         assertEq(h.firstViolation().code, h.V_NO_QUIESCENCE());
-        // The day moves on the check's first call, so the cycle budget trips at call 502 and the
-        // window's first call, which must be rejected, is call 503.
-        assertEq(h.firstViolation().cranks, h.MAX_CRANKS_PER_CYCLE() + 3, "rejected on the window's first call");
+        // The cycle budget trips at call 501, so the window's first call, which must be rejected,
+        // is call 502.
+        assertEq(h.firstViolation().cranks, h.MAX_CRANKS_PER_CYCLE() + 2, "rejected on the window's first call");
         assertEq(h.ghost_backlogCompressions(), 0);
     }
 
-    /// @dev The full replays drain a recorded backlog without the cut (about 25,900 calls and 345B
-    ///      gas), which needs the deep profile's gas limit; the default profile skips them.
-    function _deepOnly() internal {
-        vm.skip(keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("")))) != keccak256("deep"),
-            "full backlog drains run under the deep profile");
-    }
-
-    function _etchLateStall(uint256 honest) internal {
-        address impl = address(uint160(0x5A11ED));
-        vm.etch(impl, address(game).code);
-        bytes32 lane = keccak256(abi.encode(uint256(2), GameSlots.TICKET_PENDING));
-        vm.etch(address(game), address(new LateStalledDrainGame(impl, lane, honest)).code);
-    }
-
-    /// @dev The jackpot backlog replayed without the cut: every one of its ~57.6M entries is drained
-    ///      by real Tickets calls, each strictly lowering the owed total, and the day still seals idle.
-    function test_DegeneretteJackpotBacklogDrainsInFull() public {
-        _deepOnly();
+    /// @dev The maximum order's backlog without the cut: every entry is drained by real Tickets
+    ///      calls, each strictly lowering the owed total, and the day still seals idle.
+    function test_CustomOrderBacklogDrainsInFull() public {
         AdvanceLivenessHandler h = handler;
         h.setFullBacklogDrain(true);
-        _jackpotBacklogPrefix(h);
-        h.actWhalePass(4570);
+        _customOrder(100);
+        h.actNextDay(0, 1);
         if (h.ghost_violations() != 0) _logViolation(h.firstViolation());
-        assertEq(h.ghost_violations(), 0, "the uncut jackpot backlog must drain and reach idle");
-        assertEq(h.ghost_actions(), 34, "every replayed action ran");
+        assertEq(h.ghost_violations(), 0, "the uncut backlog must drain and reach idle");
         assertEq(h.ghost_backlogCompressions(), 0, "nothing was cut");
-        assertGt(h.ghost_backlogRenewals(), 100, "non-vacuity: the ranking held over the whole drain");
-        assertGt(h.ghost_backlogMaxOwed(), 50_000_000, "non-vacuity: the queue held the jackpot's entries");
-        assertGt(h.ghost_maxCranks(), 12_000, "non-vacuity: every call of the tail ran");
+        assertGt(h.ghost_backlogRenewals(), 10, "non-vacuity: the ranking held over the whole drain");
+        assertGt(h.ghost_backlogMaxOwed(), 3_000_000, "non-vacuity: the queue held the order's entries");
+        assertGt(h.ghost_maxCranks(), 2_000, "non-vacuity: every call of the tail ran");
         console.log("full drain renewals", h.ghost_backlogRenewals());
         console.log("full drain max cranks", h.ghost_maxCranks());
     }
 
     /// @dev Oracle self-check for the full drain: the same backlog, honest for its first
-    ///      LATE_STALL_AFTER lowering calls (about 90% of the queue), then stalled. The full replay
-    ///      must reject the first stalled call.
+    ///      LATE_STALL_AFTER lowering calls, then stalled. The full drain must reject the first
+    ///      stalled call.
     function test_OracleFlagsLateStallInAFullDrain() public {
-        _deepOnly();
         AdvanceLivenessHandler h = handler;
         h.setFullBacklogDrain(true);
-        _jackpotBacklogPrefix(h);
-        _etchLateStall(LATE_STALL_AFTER);
-        h.actWhalePass(4570);
+        _etchLateStall(_customOrder(100), LATE_STALL_AFTER);
+        h.actNextDay(0, 1);
         assertEq(h.ghost_violations(), 1, "a drain that stalls late must be flagged");
         assertEq(h.firstViolation().code, h.V_NO_QUIESCENCE());
         assertGt(h.firstViolation().cranks, LATE_STALL_AFTER, "flagged late in the drain");
         assertEq(h.ghost_backlogCompressions(), 0);
     }
 
-    /// @dev Why the full replays exist: with the cut, the campaign check finishes a smaller
+    /// @dev Why the full drain exists: with the cut, the campaign check finishes a smaller
     ///      workload and never reaches that stall.
     function test_CutDrainNeverReachesALateStall() public {
         AdvanceLivenessHandler h = handler;
-        _jackpotBacklogPrefix(h);
-        _etchLateStall(LATE_STALL_AFTER);
-        h.actWhalePass(4570);
+        _etchLateStall(_customOrder(100), LATE_STALL_AFTER);
+        h.actNextDay(0, 1);
         assertEq(h.ghost_violations(), 0, "the cut drain ends before the stall");
         assertGe(h.ghost_backlogCompressions(), 1);
     }
-
-    /// @dev About 90% of the full drain's ~25,300 lowering calls.
-    uint256 private constant LATE_STALL_AFTER = 23_000;
 
     /// @dev Oracle self-check: if entriesOwedView disagrees with the raw lanes the compression
     ///      reads, the check fails with its own code rather than writing.
     function test_OracleFlagsUnverifiedBacklogWrite() public {
         AdvanceLivenessHandler h = handler;
-        _jackpotBacklogPrefix(h);
+        _customOrder(100);
         vm.mockCall(address(game), abi.encodeWithSelector(game.entriesOwedView.selector), abi.encode(uint32(7)));
-        h.actWhalePass(4570);
+        h.actNextDay(0, 1);
         assertEq(h.ghost_violations(), 1, "an unverifiable compression must be flagged");
         assertEq(h.firstViolation().code, h.V_BACKLOG_UNVERIFIED());
-        assertEq(h.firstViolation().cranks, h.MAX_CRANKS_PER_CYCLE() + 2 + h.BACKLOG_WINDOW(), "flagged at the compression");
+        assertEq(h.firstViolation().cranks, h.MAX_CRANKS_PER_CYCLE() + 1 + h.BACKLOG_WINDOW(), "flagged at the compression");
     }
 
     /// @dev Oracle self-check: a mineFlip that succeeds without writing engine state is flagged
