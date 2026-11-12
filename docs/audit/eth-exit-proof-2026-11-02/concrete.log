@@ -5,11 +5,11 @@ No files changed, compilation skipped
 Ran 2 tests for test/unit/EthLedgerProductionReplay.t.sol:EthLedgerProductionReplay
 [PASS] testFuzz_ledgerTransitions(uint96,uint96,uint96) (runs: 1000, μ: 167721, ~: 169658)
 [PASS] test_symbolicCounterexamplesReplay() (gas: 103622)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 40.79ms (40.61ms CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 40.66ms (40.39ms CPU time)
 
 Ran 2 tests for test/unit/EthLoanBootstrap.t.sol:EthLoanBootstrapTest
 [PASS] testFuzz_bootstrapModelMatchesProduction(uint8,uint16,bool) (runs: 1000, μ: 4906329, ~: 5111249)
 [PASS] test_maximumBootstrapWitness() (gas: 3121780)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 601.78ms (601.68ms CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 596.88ms (596.79ms CPU time)
 
-Ran 2 test suites in 643.49ms (642.56ms CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)
+Ran 2 test suites in 638.07ms (637.53ms CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)
