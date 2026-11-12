@@ -85,8 +85,9 @@ stored counts to the API encoding. Do not pass the compact field directly to a p
 
 `deliverPasses` and vault comp kinds 0, 1, 2 and 5 snapshot the recipient's preference. Kind 3
 upgrades the existing ticket without changing its board; kind 4 banks passes. Window-ahead batches
-reserve before the future day's terms are known. Protocol house and vault seats (`_seatBody`) play
-the body's saved board, fully random when unset.
+reserve before the future day's terms are known. Kind 5 refuses the house and vault (IDs 2 and 1),
+because one reserved window would replace their whole-day seat. Protocol house and vault seats
+(`_seatBody`) play the body's saved board, fully random when unset.
 
 ## The jackpot battle
 

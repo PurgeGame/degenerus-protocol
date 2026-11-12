@@ -666,6 +666,29 @@ contract CrapsCompBudgetTest is CrapsPins {
         craps.vaultComp(_code(KIND_FUTURE_DAYS, dave, false, today + 1, 1));
     }
 
+    function test_aWindowAheadIsRefusedForTheHouseAndTheVault() public {
+        _warpToDayStart();
+        uint24 day = craps.currentDayIndex() + 1;
+        assertEq(_idFor(ContractAddresses.VAULT), 1, "the fixture's vault is not wallet ID 1");
+        assertEq(_idFor(ContractAddresses.SDGNRS), 2, "the fixture's house is not wallet ID 2");
+        for (uint32 id = 1; id <= 2; ++id) {
+            uint256 code = uint256(id) | (uint256(KIND_WINDOW_AHEAD) << 160) | (uint256(day) << 176)
+                | (uint256(1) << 200) | (uint256(2) << 208);
+            vm.prank(ContractAddresses.VAULT);
+            vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
+            craps.vaultComp(code);
+            assertEq(craps.daySeatNumberOfId(day, id), 0, "a refused comp left a day seat");
+            assertTrue(!craps.seatedInId(_slotAt(day, 2), id), "a protocol body holds a window ahead");
+        }
+        // A player still takes the same window.
+        _ahead(dave, false, day, 2, 1);
+        assertTrue(craps.seatedIn(_slotAt(day, 2), dave), "the player's window ahead was refused");
+        // The house therefore sits the whole day when it opens, every window included.
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertEq(_openDay(10), day, "the fixture opened a different day");
+        assertTrue(craps.daySeatNumberOfId(day, 2) != 0, "the house does not hold the whole day");
+    }
+
     function test_aReservedSeatPlaysItsWindowAndNumbersTheFieldFromIt() public {
         _warpToDayStart();
         uint24 day = craps.currentDayIndex() + 1;

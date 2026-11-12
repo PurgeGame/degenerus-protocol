@@ -14,6 +14,7 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeityBoonViewerTreeHarness} from "./BoonRollTreeParity.t.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
@@ -108,16 +109,21 @@ contract DeityMenuSource {
     uint24 internal today;
     mapping(address => uint32) internal ids;
     mapping(uint24 => uint256) internal words;
+    mapping(uint32 => bool) internal deityPass;
 
     function set(uint256 s, uint24 d) external { seed = s; today = d; }
     function setId(address who, uint32 id) external { ids[who] = id; }
     function setWord(uint24 d, uint256 w) external { words[d] = w; }
+    function setDeityPass(uint32 id, bool held) external { deityPass[id] = held; }
 
     function deityBoonDataById(uint32) external view returns (uint256, uint24, uint8, bool, bool) {
         return (seed, today, 0, false, false);
     }
     function rngWordForDay(uint24 d) external view returns (uint256) { return words[d]; }
     function walletIdOf_g3120(address who) external view returns (uint32) { return ids[who]; }
+    function mintPackedOfId_g5372(uint32 id) external view returns (uint256) {
+        return deityPass[id] ? uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT : 0;
+    }
 }
 
 /// @title WalletIdEntropy — exact seed preimages after the wallet-ID swap
@@ -516,7 +522,9 @@ contract WalletIdEntropyTest is Test {
         uint24 day = 41;
         src.set(0xCAFE, day);
         src.setWord(day, 0xBEEF);
+        // ID 1 is the Vault, a protocol issuer with a menu and no pass; the top ID holds a pass.
         uint32[2] memory ids = [uint32(1), type(uint32).max];
+        src.setDeityPass(type(uint32).max, true);
         for (uint256 k; k < 2; ++k) {
             src.setId(deity, ids[k]);
             (uint8[3] memory slots,, uint24 d) = viewer.deityBoonSlots(address(src), deity);
@@ -528,9 +536,18 @@ contract WalletIdEntropyTest is Test {
             expected = _menu(viewer, 0xBEEF, ids[k], day + 1);
             for (uint256 i; i < 3; ++i) assertEq(next[i], expected[i], "tomorrow's menu from the deity ID");
         }
+        // An account with no deity pass has no menu, today or tomorrow; the Vault keeps its own.
+        src.setDeityPass(type(uint32).max, false);
+        (uint8[3] memory none,,) = viewer.deityBoonSlots(address(src), deity);
+        for (uint256 i; i < 3; ++i) assertEq(none[i], 0, "menu for an account with no deity pass");
+        (none,) = viewer.deityBoonSlotsTomorrow(address(src), deity);
+        for (uint256 i; i < 3; ++i) assertEq(none[i], 0, "tomorrow's menu for an account with no deity pass");
+        (uint8[3] memory vault,,) = viewer.deityBoonSlotsById(address(src), 1);
+        uint8[3] memory vaultMenu = _menu(viewer, 0xCAFE, 1, day);
+        for (uint256 i; i < 3; ++i) assertEq(vault[i], vaultMenu[i], "the Vault's protocol menu");
         // An address with no wallet ID has no menu.
         src.setId(deity, 0);
-        (uint8[3] memory none,,) = viewer.deityBoonSlots(address(src), deity);
+        (none,,) = viewer.deityBoonSlots(address(src), deity);
         for (uint256 i; i < 3; ++i) assertEq(none[i], 0);
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {RngTags} from "./libraries/RngTags.sol";
 
@@ -38,6 +39,9 @@ interface IDeityBoonDataSource {
 
     /// @notice The wallet ID of `player` (0 when unregistered).
     function walletIdOf_g3120(address player) external view returns (uint32);
+
+    /// @notice The packed mint word of a wallet ID; its deity-pass bit marks a deity.
+    function mintPackedOfId_g5372(uint32 id) external view returns (uint256);
 }
 
 /// @title DeityBoonViewer
@@ -46,6 +50,10 @@ interface IDeityBoonDataSource {
 ///         weighted random selection logic to determine boon types per slot.
 contract DeityBoonViewer {
     uint8 private constant DEITY_DAILY_BOON_COUNT = 3;
+
+    // Protocol issuers: their menus are what their daily protocol boon draws award.
+    uint32 private constant VAULT_WALLET_ID = 1;
+    uint32 private constant SDGNRS_WALLET_ID = 2;
 
     // Boon type IDs
     uint8 private constant DEITY_BOON_COINFLIP_5 = 1;
@@ -95,7 +103,9 @@ contract DeityBoonViewer {
     uint16 private constant W_DEITY_PASS_ALL = 40;
 
     /// @notice Compute deity boon slots for a given deity. The menu is keyed by the deity's
-    ///         wallet ID; an address with no wallet ID has no menu (all zeros).
+    ///         wallet ID. Only a deity-pass holder and the two protocol issuers (Vault 1,
+    ///         sDGNRS 2) have a menu; any other account, or an address with no wallet ID,
+    ///         gets all zeros.
     /// @param game Address of the DegenerusGame contract.
     /// @param deity The deity address to query.
     /// @return slots Array of 3 boon type IDs for today's slots.
@@ -123,14 +133,14 @@ contract DeityBoonViewer {
         day = d;
         usedMask = mask;
 
-        slots = _slotsForDay(deityId, day, dailySeed);
+        if (_hasMenu(game, deityId)) slots = _slotsForDay(deityId, day, dailySeed);
     }
 
     /// @notice Preview the three deity boon slots available on the next game day.
     /// @param game Address of the DegenerusGame contract.
     /// @param deity The deity address to query.
     /// @return slots Tomorrow's boon type IDs, or all zeros until today's RNG is finalized
-    ///         or when the deity has no wallet ID.
+    ///         or when the account has no menu (see `deityBoonSlots`).
     /// @return day The game day when these slots can be issued.
     function deityBoonSlotsTomorrow(
         address game,
@@ -145,9 +155,19 @@ contract DeityBoonViewer {
     ) public view returns (uint8[3] memory slots, uint24 day) {
         (, uint24 today, , , ) = IDeityBoonDataSource(game).deityBoonDataById(deityId);
         day = today + 1;
+        if (!_hasMenu(game, deityId)) return (slots, day);
         slots = _slotsForDay(
             deityId, day, IDeityBoonDataSource(game).rngWordForDay(today)
         );
+    }
+
+    /// @dev Whether `deityId` has a menu: a deity-pass holder, the only account that may issue
+    ///      boons by hand (GameBoonActions._issueDeityBoon), or a protocol issuer, whose menu
+    ///      its daily protocol boon draw awards (DegenerusGameBoonModule._drawProtocolBoons).
+    function _hasMenu(address game, uint32 deityId) private view returns (bool) {
+        if (deityId == VAULT_WALLET_ID || deityId == SDGNRS_WALLET_ID) return true;
+        if (deityId == 0) return false;
+        return (IDeityBoonDataSource(game).mintPackedOfId_g5372(deityId) >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0;
     }
 
     /// @dev Mirrors GameBoonActions._deityBoonForSlot using the issuance day and the
@@ -155,7 +175,7 @@ contract DeityBoonViewer {
     function _slotsForDay(uint32 deityId, uint24 day, uint256 dailySeed)
         private pure returns (uint8[3] memory slots)
     {
-        if (dailySeed == 0 || deityId == 0) return slots;
+        if (dailySeed == 0) return slots;
         // Decimator and deity-pass families are excluded from deity gifts.
         for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
             uint256 seed = uint256(EntropyLib.hash4(RngTags.DEITY_MENU, dailySeed, (uint256(deityId) << 24) | day, i));

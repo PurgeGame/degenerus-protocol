@@ -1233,7 +1233,8 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @custom:reverts NotVaultOwner If the caller is not the vault.
     /// @custom:reverts E (Game) If the recipient ID is zero or unallocated.
     /// @custom:reverts DayNotReservable If a reserved window's day is not strictly ahead.
-    /// @custom:reverts AlreadyInBonus If the player already holds that window or that day.
+    /// @custom:reverts AlreadyInBonus If the player already holds that window or that day, or a
+    ///                window ahead (kind 5) names the house or the vault, which sit whole days.
     function vaultComp(uint256 code) external returns (uint256 charged) {
         if (msg.sender != ContractAddresses.VAULT) revert NotVaultOwner();
         uint32 id = uint32(code);
@@ -1265,6 +1266,9 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
             charged = banked * (high ? _HIGH_PASS_VALUE : _NORMAL_PASS_VALUE);
             _burnForCraps(account, _tag(charged, _CRAPS_FLAG_COMP));
         } else if (kind == _COMP_WINDOW_AHEAD) {
+            // The house and the vault are seated for the whole of every day they sit; a single
+            // window ahead would stand in for that day seat and leave the other five without them.
+            if (id == _SDGNRS_ID || id == _VAULT_ID) revert AlreadyInBonus();
             uint256 period = (code >> _COMP_PERIOD_SHIFT) & 0xFF;
             charged = uint256(count) * _windowAheadPrice(period, high);
             _burnForCraps(account, _tag(charged, _CRAPS_FLAG_COMP));

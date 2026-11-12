@@ -6,7 +6,8 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title BoonStaticDiscard -- static boon table, discard-at-delivery, deity exclusions
 /// @notice Boon outcomes are pure functions of (word, player, amount). LOOTBOX draws walk
@@ -84,6 +85,13 @@ contract BoonStaticDiscard is DeployProtocol {
 
     function _boonSlot(address player, uint256 offset) internal view returns (bytes32) {
         return bytes32(uint256(keccak256(abi.encode(game.walletIdOf_g3120(player), SLOT_BOON_PACKED))) + offset);
+    }
+
+    /// @dev Set the deity-pass bit on `id`'s mint word: the bit deity issuance checks.
+    function _setDeityPass(uint32 id) internal {
+        bytes32 slot = GameSlotKeys.mintPacked(id);
+        uint256 word = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(word | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT)));
     }
 
     /// @notice At a level with the decimator window SHUT, dec-tier draws must still be
@@ -204,7 +212,11 @@ contract BoonStaticDiscard is DeployProtocol {
         DeityBoonViewer viewer = new DeityBoonViewer();
         for (uint256 i = 0; i < 200; i++) {
             address cand = makeAddr(string(abi.encodePacked("menuDeity", i)));
-            _giveWalletId(cand);
+            uint32 candId = _giveWalletId(cand);
+            // Without a deity pass the account cannot issue, so it has no menu.
+            (uint8[3] memory none, , ) = viewer.deityBoonSlots(address(game), cand);
+            for (uint8 s = 0; s < 3; s++) assertEq(none[s], 0, "menu for an account with no deity pass");
+            _setDeityPass(candId);
             (uint8[3] memory slots, , ) = viewer.deityBoonSlots(address(game), cand);
             for (uint8 s = 0; s < 3; s++) {
                 assertFalse(

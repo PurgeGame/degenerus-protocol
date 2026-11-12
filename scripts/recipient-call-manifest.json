@@ -3353,6 +3353,30 @@
   },
   {
     "path": "contracts/DeityBoonViewer.sol",
+    "scope": "DeityBoonViewer._hasMenu",
+    "kind": "external",
+    "expression": "IDeityBoonDataSource(game).mintPackedOfId_g5372(deityId)",
+    "count": 1,
+    "review": "VIEW: staticcall reading the caller-named game's packed mint word (GameFacade.mintPackedOfId_g5372, a plain storage read); only its deity-pass bit is used, the same bit GameBoonActions._issueDeityBoon checks. The viewer holds no state and no value."
+  },
+  {
+    "path": "contracts/DeityBoonViewer.sol",
+    "scope": "DeityBoonViewer.deityBoonSlotsById",
+    "kind": "recipient-helper",
+    "expression": "_hasMenu(game, deityId)",
+    "count": 1,
+    "review": "VIEW: menu eligibility helper; its one external read is listed under DeityBoonViewer._hasMenu."
+  },
+  {
+    "path": "contracts/DeityBoonViewer.sol",
+    "scope": "DeityBoonViewer.deityBoonSlotsTomorrowById",
+    "kind": "recipient-helper",
+    "expression": "_hasMenu(game, deityId)",
+    "count": 1,
+    "review": "VIEW: menu eligibility helper; its one external read is listed under DeityBoonViewer._hasMenu."
+  },
+  {
+    "path": "contracts/DeityBoonViewer.sol",
     "scope": "DeityBoonViewer.deityBoonSlotsTomorrowById",
     "kind": "external",
     "expression": "IDeityBoonDataSource(game).deityBoonDataById(deityId)",
