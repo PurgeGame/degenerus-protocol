@@ -425,6 +425,62 @@
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
+    "scope": "DegenerusAdmin._votingDenominator",
+    "kind": "external",
+    "expression": "dgnrs.totalUnwrapped()",
+    "count": 1,
+    "review": "Reviewed 2026-11-21: view read of protocol token state for the vote denominator (weight issued since the proposal's creation); no state change and no value moved."
+  },
+  {
+    "path": "contracts/DegenerusAdmin.sol",
+    "scope": "DegenerusAdmin._votingDenominator",
+    "kind": "external",
+    "expression": "sDGNRS.balanceOf(ContractAddresses.SDGNRS)",
+    "count": 1,
+    "review": "Reviewed 2026-11-21: view read of protocol token state for the vote denominator (weight issued since the proposal's creation); no state change and no value moved."
+  },
+  {
+    "path": "contracts/DegenerusAdmin.sol",
+    "scope": "DegenerusAdmin.canExecute",
+    "kind": "recipient-helper",
+    "expression": "_votingDenominator(proposalId, p.votingSnapshot)",
+    "count": 1,
+    "review": "Reviewed 2026-11-21: internal view helper that computes the vote denominator from the creation snapshot and two token view reads; no state change and no value moved."
+  },
+  {
+    "path": "contracts/DegenerusAdmin.sol",
+    "scope": "DegenerusAdmin.propose",
+    "kind": "external",
+    "expression": "dgnrs.totalUnwrapped()",
+    "count": 1,
+    "review": "Reviewed 2026-11-21: view read of protocol token state for the vote denominator (weight issued since the proposal's creation); no state change and no value moved."
+  },
+  {
+    "path": "contracts/DegenerusAdmin.sol",
+    "scope": "DegenerusAdmin.propose",
+    "kind": "external",
+    "expression": "sDGNRS.balanceOf(ContractAddresses.SDGNRS)",
+    "count": 1,
+    "review": "Reviewed 2026-11-21: view read of protocol token state for the vote denominator (weight issued since the proposal's creation); no state change and no value moved."
+  },
+  {
+    "path": "contracts/DegenerusAdmin.sol",
+    "scope": "DegenerusAdmin.vote",
+    "kind": "recipient-helper",
+    "expression": "_votingDenominator(proposalId, p.votingSnapshot)",
+    "count": 1,
+    "review": "Reviewed 2026-11-21: internal view helper that computes the vote denominator from the creation snapshot and two token view reads; no state change and no value moved."
+  },
+  {
+    "path": "contracts/DegenerusAdmin.sol",
+    "scope": "DegenerusAdmin.votingDenominator",
+    "kind": "recipient-helper",
+    "expression": "_votingDenominator(proposalId, proposals[proposalId].votingSnapshot)",
+    "count": 1,
+    "review": "Reviewed 2026-11-21: internal view helper that computes the vote denominator from the creation snapshot and two token view reads; no state change and no value moved."
+  },
+  {
+    "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin._executeSwap",
     "kind": "bounded-wrapper",
     "expression": "BoundedCall.callRemaining(unmetered, oldCoord, CANCEL_MIN_GAS, SWAP_TAIL, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, oldSub, address(this)), 0)",
@@ -742,30 +798,6 @@
     "expression": "_governanceId(voter)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/DegenerusAdmin.sol",
-    "scope": "DegenerusAdmin._votingDenominator",
-    "kind": "external",
-    "expression": "sDGNRS.votingSupply()",
-    "count": 1,
-    "review": "PINNED: O(1) view on the protocol sDGNRS token; the live voting supply a vote or execution check resolves against, never below the creation snapshot."
-  },
-  {
-    "path": "contracts/DegenerusAdmin.sol",
-    "scope": "DegenerusAdmin.canExecute",
-    "kind": "recipient-helper",
-    "expression": "_votingDenominator(p.votingSnapshot)",
-    "count": 1,
-    "review": "PINNED: transitive helper call (one sDGNRS supply view); no value moves, new caller requires review."
-  },
-  {
-    "path": "contracts/DegenerusAdmin.sol",
-    "scope": "DegenerusAdmin.vote",
-    "kind": "recipient-helper",
-    "expression": "_votingDenominator(p.votingSnapshot)",
-    "count": 1,
-    "review": "PINNED: transitive helper call (one sDGNRS supply view); no value moves, new caller requires review."
   },
   {
     "path": "contracts/DegenerusAffiliate.sol",

@@ -1039,6 +1039,90 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq(_field(id, OFF_STREAK, 16), 0, "manual streak dormant while afking");
     }
 
+    /// @dev A bet on an account with no reset anchor anchors it on the day before the bet, so the bet day itself
+    ///      still needs a primary: with none on day 20, day 21 bills one missed day, the views read 0 and the next
+    ///      sync resets the stored streak.
+    function test_GrowthBetWithoutAnchorLapsesWhenBetDayHasNoPrimary() public {
+        address p = makeAddr("growthNoAnchor");
+        uint32 id = _giveWalletId(p);
+        _eligible(p, false, 5);
+        _setDaily(20, QT_DEG_ETH);
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 0, "no anchor");
+        assertEq(_field(id, OFF_STREAK, 16), 0);
+        assertEq(_field(id, OFF_SHIELD, 8), 0, "no shields");
+
+        bytes memory ret = _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.currentLvl(), 50)));
+        assertEq(abi.decode(ret, (uint256)), 50);
+        assertEq(_field(id, OFF_STREAK, 16), 1, "bet credited the participation point");
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 19, "anchored the day before the bet");
+
+        _setDaily(21, QT_DEG_ETH);
+        assertEq(quests.getPlayerQuestView(id).baseStreak, 0, "view: bet day missed");
+        assertEq(quests.effectiveBaseStreak(id), 0, "effective streak lapsed");
+        (uint32 eff,) = quests.effectiveBaseStreakAndAfking_g1521(id, 21);
+        assertEq(eff, 0, "game-side streak lapsed");
+
+        vm.recordLogs();
+        _primary(id);
+        assertEq(_countTopic(vm.getRecordedLogs(), E_RESET, id), 1, "the sync reset the streak");
+        assertEq(_field(id, OFF_STREAK, 16), 1, "reset, then the day's primary");
+        assertEq(_field(id, OFF_LAST_SYNC, 24), 21);
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 21);
+    }
+
+    /// @dev Same start, but the primary completes on the bet day: day 21 bills no missed day and the run continues.
+    function test_GrowthBetWithoutAnchorKeptByPrimaryOnBetDay() public {
+        address p = makeAddr("growthNoAnchorKept");
+        uint32 id = _giveWalletId(p);
+        _eligible(p, false, 5);
+        _setDaily(20, QT_DEG_ETH);
+
+        bytes memory ret = _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.currentLvl(), 50)));
+        assertEq(abi.decode(ret, (uint256)), 50);
+        _primary(id);
+        assertEq(_field(id, OFF_STREAK, 16), 2, "bet point plus the primary");
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 20, "primary anchors the bet day");
+
+        _setDaily(21, QT_DEG_ETH);
+        assertEq(quests.getPlayerQuestView(id).baseStreak, 2, "view: streak kept");
+        assertEq(quests.effectiveBaseStreak(id), 2);
+        (uint32 eff,) = quests.effectiveBaseStreakAndAfking_g1521(id, 21);
+        assertEq(eff, 2);
+
+        vm.recordLogs();
+        _primary(id);
+        assertEq(_countTopic(vm.getRecordedLogs(), E_RESET, id), 0, "no streak reset");
+        assertEq(_field(id, OFF_STREAK, 16), 3, "the run continues");
+    }
+
+    /// @dev A bet never moves an anchor that is already set: after the day-20 primary anchors day 20, a later
+    ///      day-20 bet leaves it there, so day 21 bills no missed day and the run continues.
+    function test_GrowthBetLeavesExistingAnchor() public {
+        address p = makeAddr("growthKeepsAnchor");
+        uint32 id = _giveWalletId(p);
+        _eligible(p, false, 5);
+        _setDaily(20, QT_DEG_ETH);
+        _primary(id);
+        assertEq(_field(id, OFF_STREAK, 16), 1, "primary credit");
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 20, "primary anchors day 20");
+
+        bytes memory ret = _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.currentLvl(), 50)));
+        assertEq(abi.decode(ret, (uint256)), 50);
+        assertEq(_field(id, OFF_STREAK, 16), 2, "bet credited the participation point");
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 20, "anchor day unmoved");
+
+        _setDaily(21, QT_DEG_ETH);
+        assertEq(quests.getPlayerQuestView(id).baseStreak, 2, "view: no missed day");
+        assertEq(quests.effectiveBaseStreak(id), 2);
+        (uint32 eff,) = quests.effectiveBaseStreakAndAfking_g1521(id, 21);
+        assertEq(eff, 2);
+
+        vm.recordLogs();
+        _primary(id);
+        assertEq(_countTopic(vm.getRecordedLogs(), E_RESET, id), 0, "no streak reset");
+        assertEq(_field(id, OFF_STREAK, 16), 3, "the run continues");
+    }
+
     // =====================================================================
     // 24. Views by ID
     // =====================================================================

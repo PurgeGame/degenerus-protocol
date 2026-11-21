@@ -41,7 +41,7 @@ SOURCES = (
 SOURCE_SHA256 = {
     "contracts/storage/DegenerusGameStorage.sol": "761be6b8de5e20d3affbbb419784326127a6b430dc2a796edebe186a348e88a1",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d16d213649e5aa1e2dbd89ddb96400114c4d70e7b8cf79c7326a986dbbff150f",
-    "contracts/modules/DegenerusGameWhaleModule.sol": "25d46da1ca7cfc183046a788f2cd037afb247f74233380ec11246904ac8ce01f",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "591a1a33bfec8667ba7432e30118c94a5740867691a059ab2d2c4c3419232dba",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",
 }
 

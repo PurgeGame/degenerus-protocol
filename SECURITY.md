@@ -52,11 +52,14 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
   after a seven-day stall and requires the proposer to hold at least 0.5% of sDGNRS voting supply;
   there is no post-proposal delay. Execution still needs the decaying vote threshold; recovery
   cancels applicable proposals. A vote counts the sDGNRS weight its voter held when it was cast and
-  keeps that weight if the voter burns afterwards; a proposal's denominator is the larger of the
-  voting supply at its creation and the voting supply when a vote or execution check reads it, so
-  sDGNRS that reaches a holder after creation (pool rewards such as whale-pass purchases) votes
-  against a denominator that includes it. The Vault's DGNRS unwrap is refused while the daily RNG
-  lock is held or any VRF request, daily or mid-day, is unanswered or still being consumed. The
+  keeps that weight if the voter burns afterwards. A proposal's denominator is the voting supply
+  at its creation plus all sDGNRS paid out of the reward pools or unwrapped by the Vault since,
+  whoever received it and whether or not it was burned afterwards, so sDGNRS that reaches a holder
+  after creation (pool rewards such as whale-pass purchases) votes against a denominator that
+  includes it; a burn never lowers the denominator. The Vault's DGNRS unwrap is refused while the
+  daily RNG lock is held or any VRF request, daily or mid-day, is unanswered or still being
+  consumed. It stays refused after a game over that issued a terminal request or left a request
+  unanswered. The
   threshold is 50% of the denominator for the first 48 hours, then 40%, 30%, 20%, 10% and 5% after
   each further 24 hours; approvals execute once they reach it and exceed rejections, and rejections
   kill the proposal once they reach the same threshold and exceed approvals. Retry

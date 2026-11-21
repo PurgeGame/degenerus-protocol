@@ -11,6 +11,7 @@ import {ContractAddresses as Pins} from "../../contracts/ContractAddresses.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract OwnerGovernanceProtocolTest is DeployProtocol {
     DegenerusVaultShare internal dgve;
@@ -246,5 +247,190 @@ contract OwnerGovernanceProtocolTest is DeployProtocol {
         assertGe(uint256(approveWeight) * 10_000, uint256(admin.threshold(id)) * liveSupply);
         assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Executed));
         assertEq(admin.coordinator(), address(next));
+    }
+
+    // ---------------------------------------------------------------------
+    // Denominator: weight delivered after creation stays counted
+    // ---------------------------------------------------------------------
+
+    address internal constant HOLDER = address(0xA11CE);
+    address internal constant OTHER = address(0xB0B);
+    uint256 internal constant HOLDER_WEIGHT = 6_000_000_000;
+    uint256 internal constant OTHER_WEIGHT = 4_000_000_000;
+
+    function _proposalState(uint256 id) internal view returns (DegenerusAdmin.ProposalState state, uint256 approveWeight) {
+        uint40 approve;
+        (,,,, state,,, approve,,) = admin.proposals(id);
+        approveWeight = approve;
+    }
+
+    /// @dev The denominator view, called by signature.
+    function _denominator(uint256 id) internal view returns (uint256) {
+        (bool ok, bytes memory out) = address(admin).staticcall(abi.encodeWithSignature("votingDenominator(uint256)", id));
+        require(ok, "votingDenominator");
+        return abi.decode(out, (uint256));
+    }
+
+    /// @dev Two holders with voting weight, sDGNRS backed so a live burn clears the minimum
+    ///      redemption value, then an owner proposal 45 hours into a stall.
+    function _backedProposal() internal returns (uint256 id, uint256 snapshot, address next) {
+        GameFunding.credit(2, 10_000 ether);
+        vm.startPrank(address(game));
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, HOLDER, HOLDER_WEIGHT * 1e12);
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, OTHER, OTHER_WEIGHT * 1e12);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 45 hours);
+        next = address(new MockVRFCoordinator());
+        bytes memory result = _ownerAction(address(admin), abi.encodeCall(DegenerusAdmin.propose, (next, bytes32(uint256(123)), 300_000)), 0);
+        id = abi.decode(result, (uint256));
+        uint40 stored;
+        (,, stored,,,,,,,) = admin.proposals(id);
+        snapshot = stored;
+        assertEq(snapshot, sdgnrs.votingSupply() / 1e12);
+        // Fixture: the two holders are (nearly) the whole voting supply.
+        assertGe(snapshot, HOLDER_WEIGHT + OTHER_WEIGHT);
+        assertLe(snapshot, 12_000_000_000);
+        assertEq(admin.threshold(id), 5000);
+    }
+
+    function _burnAll(address who) internal {
+        uint256 balance = sdgnrs.balanceOf(who);
+        vm.prank(who); sdgnrs.burn(balance);
+        assertEq(sdgnrs.balanceOf(who), 0);
+    }
+
+    /// @dev Weight delivered after creation votes and then burns in the live game. The burn takes
+    ///      it out of the voting supply; the denominator keeps it, so the recorded approval does
+    ///      not execute, and approvals that reach 50% of the larger denominator still do.
+    function test_WeightBurnedAfterVotingStaysInTheDenominator() public {
+        (uint256 id, uint256 snapshot, address next) = _backedProposal();
+        address late = address(0xCAFE);
+        uint256 lateWeight = (snapshot * 6) / 10;
+        vm.prank(address(game));
+        sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, late, lateWeight * 1e12);
+
+        vm.prank(late); admin.vote(id, true);
+        (DegenerusAdmin.ProposalState state, uint256 approveWeight) = _proposalState(id);
+        assertEq(approveWeight, lateWeight);
+        assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Active));
+
+        _burnAll(late);
+        assertEq(sdgnrs.votingSupply() / 1e12, snapshot);
+
+        // Non-vacuity: the recorded weight clears 50% of the supply that is left and misses 50%
+        // of the snapshot plus the weight delivered since.
+        assertGe(lateWeight * 10_000, uint256(admin.threshold(id)) * snapshot);
+        assertLt(lateWeight * 10_000, uint256(admin.threshold(id)) * (snapshot + lateWeight));
+
+        assertFalse(admin.canExecute(id));
+        vm.prank(address(0xD00D)); admin.vote(id, true);
+        (state, approveWeight) = _proposalState(id);
+        assertEq(approveWeight, lateWeight);
+        assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Active));
+        assertTrue(admin.coordinator() != next);
+        assertEq(_denominator(id), snapshot + lateWeight);
+
+        // A holder from before creation brings approvals to 50% of the larger denominator.
+        vm.prank(HOLDER); admin.vote(id, true);
+        (state, approveWeight) = _proposalState(id);
+        assertGe(approveWeight * 10_000, uint256(admin.threshold(id)) * (snapshot + lateWeight));
+        assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Executed));
+        assertEq(admin.coordinator(), next);
+    }
+
+    /// @dev The same in small chunks across wallets: each wallet receives, votes and burns before
+    ///      the next receives, so the live voting supply never holds more than one chunk above
+    ///      the snapshot while approvals accumulate to 60% of it.
+    function test_ChunkedDeliverVoteBurnAcrossWalletsStaysInTheDenominator() public {
+        (uint256 id, uint256 snapshot, address next) = _backedProposal();
+        uint256 chunk = snapshot / 5;
+        uint256 total;
+        for (uint160 i; i < 3; ++i) {
+            address wallet = address(uint160(0xC0DE00) + i);
+            vm.prank(address(game));
+            sdgnrs.transferFromPool_g106128(sDGNRS.Pool.Reward, wallet, chunk * 1e12);
+            assertEq(sdgnrs.votingSupply() / 1e12, snapshot + chunk);
+            vm.prank(wallet); admin.vote(id, true);
+            _burnAll(wallet);
+            assertEq(sdgnrs.votingSupply() / 1e12, snapshot);
+            total += chunk;
+            (DegenerusAdmin.ProposalState state, uint256 approveWeight) = _proposalState(id);
+            assertEq(approveWeight, total);
+            assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Active));
+        }
+        assertGe(total * 10_000, uint256(admin.threshold(id)) * snapshot);
+        assertLt(total * 10_000, uint256(admin.threshold(id)) * (snapshot + total));
+
+        assertFalse(admin.canExecute(id));
+        vm.prank(address(0xD00D)); admin.vote(id, true);
+        (DegenerusAdmin.ProposalState end,) = _proposalState(id);
+        assertEq(uint8(end), uint8(DegenerusAdmin.ProposalState.Active));
+        assertTrue(admin.coordinator() != next);
+        assertEq(_denominator(id), snapshot + total);
+    }
+
+    /// @dev The unwrap route. With no request outstanding the wrapper accepts the Vault's unwrap
+    ///      during the stall; the unwrapped weight votes, burns, and stays in the denominator.
+    function test_UnwrappedWeightBurnedAfterVotingStaysInTheDenominator() public {
+        (uint256 id, uint256 snapshot, address next) = _backedProposal();
+        assertFalse(game.rngLocked());
+        assertTrue(game.rngComplete());
+        address late = address(0xCAFE);
+        uint256 lateWeight = (snapshot * 6) / 10;
+        _unwrapFromVault(late, lateWeight * 1e12);
+        assertEq(sdgnrs.votingSupply() / 1e12, snapshot + lateWeight);
+
+        vm.prank(late); admin.vote(id, true);
+        _burnAll(late);
+        assertEq(sdgnrs.votingSupply() / 1e12, snapshot);
+        assertGe(lateWeight * 10_000, uint256(admin.threshold(id)) * snapshot);
+
+        assertFalse(admin.canExecute(id));
+        vm.prank(address(0xD00D)); admin.vote(id, true);
+        (DegenerusAdmin.ProposalState state, uint256 approveWeight) = _proposalState(id);
+        assertEq(approveWeight, lateWeight);
+        assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Active));
+        assertTrue(admin.coordinator() != next);
+        assertEq(_denominator(id), snapshot + lateWeight);
+    }
+
+    /// @dev Control: with nothing delivered since creation the denominator is the creation
+    ///      snapshot, and weight held before creation that reaches 50% of it executes.
+    function test_PreCreationWeightExecutesAgainstTheCreationSnapshot() public {
+        (uint256 id, uint256 snapshot, address next) = _backedProposal();
+        assertGe(HOLDER_WEIGHT * 10_000, uint256(admin.threshold(id)) * snapshot);
+        assertFalse(admin.canExecute(id));
+        vm.prank(HOLDER); admin.vote(id, true);
+        (DegenerusAdmin.ProposalState state, uint256 approveWeight) = _proposalState(id);
+        assertEq(approveWeight, HOLDER_WEIGHT);
+        assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Executed));
+        assertEq(admin.coordinator(), next);
+    }
+
+    /// @dev Control: a burn by a holder from before creation, and an unwrap addressed to the token
+    ///      itself (which raises the balance pool payouts are measured against), leave the
+    ///      denominator at the creation snapshot or above.
+    function test_BurnsAndTokenBalanceRisesNeverLowerTheDenominator() public {
+        (uint256 id, uint256 snapshot, address next) = _backedProposal();
+        _giveWalletId(HOLDER);
+        _burnAll(HOLDER);
+        uint256 live = sdgnrs.votingSupply() / 1e12;
+        assertEq(live, snapshot - HOLDER_WEIGHT);
+
+        uint256 tokenHeld = sdgnrs.balanceOf(address(sdgnrs));
+        _unwrapFromVault(address(sdgnrs), 1_000_000_000e12);
+        assertEq(sdgnrs.balanceOf(address(sdgnrs)), tokenHeld + 1_000_000_000e12);
+        assertEq(sdgnrs.votingSupply() / 1e12, live);
+
+        // Non-vacuity: the remaining holder clears 50% of the live supply, not of the snapshot.
+        assertGe(OTHER_WEIGHT * 10_000, uint256(admin.threshold(id)) * live);
+        assertLt(OTHER_WEIGHT * 10_000, uint256(admin.threshold(id)) * snapshot);
+        vm.prank(OTHER); admin.vote(id, true);
+        (DegenerusAdmin.ProposalState state, uint256 approveWeight) = _proposalState(id);
+        assertEq(approveWeight, OTHER_WEIGHT);
+        assertEq(uint8(state), uint8(DegenerusAdmin.ProposalState.Active));
+        assertFalse(admin.canExecute(id));
+        assertTrue(admin.coordinator() != next);
     }
 }

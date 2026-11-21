@@ -62,5 +62,13 @@
     "offset": 0,
     "slot": 7,
     "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_issuanceAt",
+    "offset": 0,
+    "slot": 8,
+    "typeLabel": "mapping(uint256 => struct DegenerusAdmin.IssuanceSnapshot)"
   }
 ]

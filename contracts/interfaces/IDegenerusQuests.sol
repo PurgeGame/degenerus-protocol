@@ -136,7 +136,8 @@ interface IDegenerusQuests {
     /// @return reward Primary-leg FLIP reward (0 if not completed)
     /// @return questType The primary quest type processed
     /// @return completed Whether the primary quest completed by this action
-    /// @return streakSnapshot Pre-floor reward streak for the foil-EV activity score
+    /// @return streakSnapshot Reward streak for the foil-EV activity score, at least the foil
+    ///         streak floor
     /// @return afking Whether the buyer has an afking run (live streak resolved by Game)
     function handleFoilPurchase(
         uint32 id,

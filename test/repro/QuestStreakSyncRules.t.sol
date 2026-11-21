@@ -146,7 +146,7 @@ contract QuestStreakSyncRulesTest is DeployProtocol {
     }
 
     /// @dev The foil handler as the Game calls it for a pack of ten ticket prices; returns the
-    ///      score-basis streak.
+    ///      score-basis streak, which is at least the foil floor of 12.
     function _foil(uint32 id) private returns (uint32 snapshot) {
         bytes memory ret =
             _as(address(game), abi.encodeCall(quests.handleFoilPurchase, (id, price * 10, 0, 0, price, price)));
@@ -182,7 +182,7 @@ contract QuestStreakSyncRulesTest is DeployProtocol {
         _requestOnly(21);
 
         vm.recordLogs();
-        assertEq(_foil(id), 3, "the score basis is the streak before the floor");
+        assertEq(_foil(id), 12, "the score basis is the streak raised to the floor");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_field(id, OFF_STREAK, 16), 12, "floored");
         assertEq(_field(id, OFF_LAST_SYNC, 24), 21, "synced on the Game day");
@@ -209,12 +209,24 @@ contract QuestStreakSyncRulesTest is DeployProtocol {
         _requestOnly(21);
 
         vm.recordLogs();
-        assertEq(_foil(id), 0, "the lapsed streak scores zero");
+        assertEq(_foil(id), 12, "the lapsed streak scores the floor");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_countTopic(logs, E_RESET, id), 1, "the lapsed streak reset");
         assertEq(_field(id, OFF_STREAK, 16), 12, "reset, then floored");
         assertEq(_field(id, OFF_LAST_SYNC, 24), 21);
         assertEq(_field(id, OFF_LAST_ACTIVE, 24), 21);
+    }
+
+    /// @dev A streak above the floor is the score basis as it stands: the floor never lowers or
+    ///      raises it, and the stored streak keeps its value.
+    function test_FoilScoreBasisAboveTheFloorIsTheStreakItself() public {
+        uint32 id = _giveWalletId(makeAddr("foilAboveFloor"));
+        _setDaily(20, QT_DEG_ETH);
+        _bonus(id, 20);
+        _requestOnly(21);
+
+        assertEq(_foil(id), 20, "a streak above the floor is the score basis unchanged");
+        assertEq(_field(id, OFF_STREAK, 16), 20, "the floor does not move a higher streak");
     }
 
     /// @dev An afking buyer's run base takes the floor in the same window.

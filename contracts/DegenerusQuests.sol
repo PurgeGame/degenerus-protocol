@@ -659,7 +659,8 @@ contract DegenerusQuests is IDegenerusQuests {
         emit QuestStreakBonusAwarded(id, amount, newStreak, syncDay);
     }
 
-    /// @dev A foil purchase guarantees a quest streak of at least this floor.
+    /// @dev A foil purchase guarantees a quest streak of at least this floor, and the pack's
+    ///      frozen activity score counts a streak of at least this floor.
     uint16 internal constant FOIL_STREAK_FLOOR = 12;
 
     /**
@@ -1220,8 +1221,10 @@ contract DegenerusQuests is IDegenerusQuests {
      *      quest and streak floor. The returned streakSnapshot is the effective reward streak
      *      as the streak view reads it: the day's snapshot, which excludes completions made after
      *      it (this call's primary included) and is rewritten only by an afking handback, taken
-     *      before the secondary quest and streak floor — the basis the foil-EV boost freezes
-     *      against.
+     *      before the secondary quest and raised to FOIL_STREAK_FLOOR when below it — the basis
+     *      the foil-EV boost freezes against. The pack's floor applies before the score is
+     *      frozen for every buyer: here for a manual buyer, and through the floored run streak
+     *      Game reads for a live afking run.
      *      The secondary self-credits its FLIP reward; only the primary leg's reward/type/
      *      completion are returned (the caller batches the primary reward).
      * @param id Wallet ID of the player who bought the foil pack.
@@ -1234,7 +1237,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return reward Primary-leg FLIP reward (0 if not completed).
      * @return questType The primary quest type processed.
      * @return completed True if the primary quest completed by this action.
-     * @return streakSnapshot Pre-floor reward streak for the foil-EV activity score.
+     * @return streakSnapshot Reward streak for the foil-EV activity score, at least
+     *         FOIL_STREAK_FLOOR.
      * @return afking True while the buyer has an afking run; its live streak is held by Game.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
@@ -1260,11 +1264,13 @@ contract DegenerusQuests is IDegenerusQuests {
             quests
         );
         // Snapshot the effective reward streak (the streak view's value: the day's snapshot,
-        // without completions made after it), pre-floor: the foil-EV boost freezes against this
-        // streak, captured before the secondary quest and streak floor below mutate it.
+        // without completions made after it), captured before the secondary quest below
+        // mutates the streak, then raised to the pack's floor: the foil-EV boost freezes
+        // against a streak of at least FOIL_STREAK_FLOOR.
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
         uint24 currentDay = _currentQuestDay(quests, gameDay);
         streakSnapshot = _effectiveBaseStreak(state, gameDay);
+        if (streakSnapshot < FOIL_STREAK_FLOOR) streakSnapshot = FOIL_STREAK_FLOOR;
         _handleFoilPackQuest(
             id, state, quests, currentDay,
             ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0

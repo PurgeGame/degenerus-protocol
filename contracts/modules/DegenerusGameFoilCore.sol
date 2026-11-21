@@ -406,7 +406,8 @@ abstract contract DegenerusGameFoilCore is
         // still credits level-quest progress. When the foil is the buy that completes the
         // primary, it credits the reward, advances the mint streak (the recorder is per-level
         // idempotent), and unlocks the foil secondary. streakSnapshot is the effective reward
-        // streak, which excludes today's completions, pre-floor — the foil-EV score basis.
+        // streak, which excludes today's completions, raised to the pack's streak floor — the
+        // foil-EV score basis.
         // levelQuestPrice keys the level quest at the routed-next level: the level quest a jackpot-
         // phase foil feeds is level + 1's, so its MINT_ETH target must price at level + 1 — pricing it
         // at the current level under-targets and over-grants the reward. Mirrors the mint path; in the
@@ -438,11 +439,13 @@ abstract contract DegenerusGameFoilCore is
         if (kickback != 0) coinflip.creditFlip_g317(buyerId, kickback);
 
         // Boost freeze off the buyer's activity score: post-action units, and streakSnapshot,
-        // which excludes today's quest completions. Mirror the mint path's
-        // unified-streak swap: a live afking sub's reward streak lives on the Sub side (funded
-        // days + in-run secondaries), not the decayed manual snapshot, so use the afking-live
-        // value when a run is active — the same basis the mint path's cachedScore uses for the
-        // lootbox EV. The raw score is also frozen into the record and reused as the claim
+        // which excludes today's quest completions and is at least the pack's streak floor.
+        // Mirror the mint path's unified-streak swap: a live afking sub's reward streak lives on
+        // the Sub side (funded days + in-run secondaries), not the decayed manual snapshot, so
+        // use the afking-live value when a run is active — the same basis the mint path's
+        // cachedScore uses for the lootbox EV. The quest handler floored that run streak as
+        // well, so the floor applies before the freeze for manual buyers and subscribers
+        // alike. The raw score is also frozen into the record and reused as the claim
         // spin's RTP input, so the spin's RTP is fixed at buy (the match resolves later, against the future resolveDay word).
         if (afking) {
             (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyerId);

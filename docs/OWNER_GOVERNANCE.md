@@ -99,8 +99,11 @@ library.
 
 `DegenerusAdmin.propose` called by the executor (the admin VRF-coordinator-swap path) uses reserved
 proposer identity 1 and needs no Game wallet registration. Community sDGNRS proposal and voting
-rules stay separate. `Admin.swapGameEthForStEth(recipient)` includes the recipient in the approved
-calldata; zero and the executor itself are rejected.
+rules stay separate. On either path a coordinator-swap proposal resolves against the sDGNRS voting
+supply at its creation plus all sDGNRS paid out of the reward pools or unwrapped by the Vault
+since; a later burn removes none of it.
+`Admin.swapGameEthForStEth(recipient)` includes the recipient in the approved calldata; zero and
+the executor itself are rejected.
 
 ## Initial icons and deployment
 

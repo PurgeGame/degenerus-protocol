@@ -227,7 +227,10 @@ players. A cashout or smite curse lowers the activity score by one point per cur
 a ticket or box purchase paid in ETH, claimable or prepaid funds and costing at least one ticket
 price clears it (an AFKing subscription's daily purchase does not), as do a foil pack, a whale,
 lazy or deity pass purchase, and `decurse` for 100 FLIP. A FLIP-paid ticket purchase does not clear
-it. Anyone may settle another account's half-pass credits, bingo and AFKing FLIP. Settlement pays
+it. In a combined order with a foil pack, the ticket and box legs are scored before the foil leg
+clears the curse, so ticket and box legs that together cost less than one ticket price are scored
+with the curse. Anyone may settle another account's half-pass credits, bingo and AFKing FLIP.
+Settlement pays
 that account (and, for AFKing FLIP, its affiliate chain), never the caller, and uses the state when
 it runs: the whale-pass window starts at the next level, the bingo sDGNRS share is taken from the
 Reward pool as it stands then, and the AFKing affiliate base follows the referrer chain and
@@ -268,7 +271,11 @@ Jackpot prize shapes (mechanics in [jackpot legs](docs/ARCHITECTURE-DETAILS.md#j
   under the pass rules, depend on continued play and are not a segregated ETH reserve or cash claim.
 - **Foil packs.** A pack costs ten ticket prices of the active ticket level, times 2^s on a Thanos
   level with shift s; each wallet may buy one per level, and 75% of the price goes to nextPrizePool
-  and 25% to futurePrizePool. Each day's board grades each of the pack's four lines from 0 to 8;
+  and 25% to futurePrizePool. A pack raises the buyer's quest streak to at least 12 and freezes
+  the buyer's activity score at purchase; the frozen score counts a quest streak of at least 12,
+  sets the pack's multiplier (2.06x at the lowest score, 6, rising to 6x), which widens its four
+  rarest colors, gold included, and is the score its reward spins use. Each day's board grades
+  each of the pack's four lines from 0 to 8;
   grades 4 to 8 stake 16, 48, 280, 3,200 or 80,000 faces on reward spins, in ETH (40%, one face is
   one ticket price at the pack's level, without the Thanos factor), FLIP (40%, 1,000 FLIP a face) or
   WWXRP (20%, no value), and grade 8 adds a half whale pass. Three or more gold quadrants among the
@@ -306,7 +313,9 @@ refunds them, and FLIP and Craps passes have no value after game over.
   requests its own terminal word after liveness freezes purchases and latches the terminal cohort.
   After existing claims are reserved, the whole distributable pool goes to the terminal level's
   ticket jackpot. This ending refunds no deity pass; a deity holder can still win terminal ticket
-  prizes through its tickets.
+  prizes through its tickets. The terminal request leaves the RNG cycle unfinished for good, so the
+  Vault's DGNRS unwrap stays refused after this ending; no ETH or stETH exit reads that state, and
+  the Vault's DGNRS still redeems its backing through the wrapper's burn until the year sweep.
 - **Deterministic dead-VRF ending.** Fourteen days without a completed daily session, or a request
   whose word is still not in use 14 days after it was sent (including a terminal request), takes
   this path even if the coordinator would still answer. No daily session completes after terminal

@@ -685,6 +685,14 @@ harness declaring the production struct types, without changing production sourc
 | 5 | 0–255 | `voterRecords` | `mapping(uint256 => mapping(uint32 => uint256))` |
 | 6 | 0–255 | `_activeProposalId` | `mapping(uint32 => uint256)` |
 | 7 | 0–255 | `validFromId` | `uint256` |
+| 8 | 0–255 | `_issuanceAt` | `mapping(uint256 => struct DegenerusAdmin.IssuanceSnapshot)` |
+
+#### struct DegenerusAdmin.IssuanceSnapshot
+
+| Relative slot | Bits | Member | Type |
+| --- | --- | --- | --- |
+| 0 | 0–95 | `pool` | `uint96` |
+| 0 | 96–191 | `unwrapped` | `uint96` |
 
 #### struct DegenerusAdmin.Proposal
 

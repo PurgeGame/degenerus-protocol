@@ -158,6 +158,12 @@ interface IsDGNRSVotes {
     function votingSupply() external view returns (uint256);
 }
 
+/// @dev DGNRS wrapper interface for the unwrap counter governance measures against.
+interface IDGNRSUnwrapped {
+    /// @notice DGNRS unwrapped to soulbound sDGNRS over the wrapper's life; it only rises.
+    function totalUnwrapped() external view returns (uint128);
+}
+
 /**
  * @title DegenerusAdmin
  * @notice Central admin contract: owns the VRF subscription, wires VRF config,
@@ -326,6 +332,8 @@ contract DegenerusAdmin {
         IDegenerusGameAdmin(ContractAddresses.GAME);
     IsDGNRSVotes internal constant sDGNRS =
         IsDGNRSVotes(ContractAddresses.SDGNRS);
+    IDGNRSUnwrapped internal constant dgnrs =
+        IDGNRSUnwrapped(ContractAddresses.DGNRS);
 
     // =========================================================================
     // VRF STATE
@@ -409,6 +417,15 @@ contract DegenerusAdmin {
     ///      no longer vote or execute (they keep state == Active in storage). Advanced to
     ///      proposalCount + 1 on every execution, invalidating all prior competitors in O(1).
     uint256 private validFromId;
+
+    /// @dev sDGNRS issuance measures at a proposal's creation, in raw 12-decimal units; one word.
+    struct IssuanceSnapshot {
+        uint96 pool;       // sDGNRS held by the token itself; at most the 1e24 raw supply
+        uint96 unwrapped;  // DGNRS.totalUnwrapped; at most the 4e22 raw unwrap cap
+    }
+
+    /// @dev Creation-time issuance measures by proposal ID.
+    mapping(uint256 => IssuanceSnapshot) private _issuanceAt;
 
     // =========================================================================
     // GOVERNANCE CONSTANTS
@@ -529,6 +546,8 @@ contract DegenerusAdmin {
     ///      - Admin path: DGVE governance executor, requires 44h since the last processed daily word
     ///        (20h past the normal daily wait)
     ///      - Community path: 0.5%+ voting sDGNRS, requires 7d+ VRF stall
+    ///      Records the voting supply and the issuance measures the denominator counts from: the
+    ///      sDGNRS the token itself holds and the wrapper's unwrap total.
     /// @param newCoordinator Address of the proposed VRF coordinator.
     /// @param newKeyHash Key hash for the proposed coordinator.
     /// @param newCallbackGasLimit VRF callback gas limit after the swap. VRF checks the
@@ -580,6 +599,10 @@ contract DegenerusAdmin {
         p.keyHash = newKeyHash;
         p.callbackGasLimit = newCallbackGasLimit;
         p.votingSnapshot = uint40(circ / 1e12);
+        _issuanceAt[proposalId] = IssuanceSnapshot({
+            pool: uint96(sDGNRS.balanceOf(ContractAddresses.SDGNRS)),
+            unwrapped: uint96(dgnrs.totalUnwrapped())
+        });
 
         _activeProposalId[proposerId] = proposalId;
 
@@ -590,6 +613,8 @@ contract DegenerusAdmin {
     /// @dev Votes are changeable. After recording, checks execute/kill conditions.
     ///      On VRF recovery (a daily word processed at or after createdAt), the proposal is
     ///      auto-killed rather than executed — this IS the auto-cancellation.
+    ///      A recorded vote keeps its weight if its voter burns afterwards; the denominator is
+    ///      the voting supply at creation plus all sDGNRS delivered since, burned or not.
     ///      Zero-weight calls (no sDGNRS) skip vote recording and just check
     ///      execute/kill conditions — allows anyone to poke a proposal past threshold.
     /// @param proposalId ID of the proposal to vote on.
@@ -621,7 +646,7 @@ contract DegenerusAdmin {
         }
 
         // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke).
-        // Weight is read live; sDGNRS that circulates after creation also enters the denominator.
+        // Weight is read live; sDGNRS delivered after creation enters the denominator and stays in it.
         (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
@@ -634,7 +659,7 @@ contract DegenerusAdmin {
         }
 
         Resolution r = _resolveThreshold(
-            aw, rw, _votingDenominator(p.votingSnapshot), _thresholdFrom(createdAt)
+            aw, rw, _votingDenominator(proposalId, p.votingSnapshot), _thresholdFrom(createdAt)
         );
         if (r == Resolution.Execute) {
             _executeSwap(proposalId);
@@ -682,8 +707,16 @@ contract DegenerusAdmin {
         ) return false;
 
         return _resolveThreshold(
-            p.approveWeight, p.rejectWeight, _votingDenominator(p.votingSnapshot), _thresholdFrom(createdAt)
+            p.approveWeight, p.rejectWeight, _votingDenominator(proposalId, p.votingSnapshot), _thresholdFrom(createdAt)
         ) == Resolution.Execute;
+    }
+
+    /// @notice The whole-token denominator a proposal's votes resolve against now: the sDGNRS
+    ///         voting supply at its creation plus all sDGNRS delivered since.
+    /// @param proposalId ID of an existing proposal.
+    /// @return The denominator in whole tokens.
+    function votingDenominator(uint256 proposalId) external view returns (uint256) {
+        return _votingDenominator(proposalId, proposals[proposalId].votingSnapshot);
     }
 
     // =========================================================================
@@ -722,12 +755,22 @@ contract DegenerusAdmin {
         return uint40(sDGNRS.balanceOf(msg.sender) / 1e12);
     }
 
-    /// @dev Whole-token voting supply now, never below the creation snapshot: sDGNRS that reaches
-    ///      a holder after creation (pool rewards, Vault unwraps) counts in the denominator it votes
-    ///      against, and burns cannot lower the denominator below the creation snapshot.
-    function _votingDenominator(uint40 snapshot) private view returns (uint256 live) {
-        live = sDGNRS.votingSupply() / 1e12;
-        if (live < snapshot) live = snapshot;
+    /// @dev Whole-token denominator: the voting supply at creation plus every sDGNRS delivered
+    ///      since, rounded up. A delivery is a pool payout, which lowers the token's own balance, or
+    ///      a Vault unwrap, which raises the wrapper's unwrap total; a holder's burn moves neither,
+    ///      so delivered weight stays in the denominator whatever its holder does next. Payouts and
+    ///      unwraps to addresses that cannot vote are counted too. The pools are refilled only by the
+    ///      century recycle in a level transition of the daily advance, which does not run while
+    ///      randomness is stalled.
+    function _votingDenominator(uint256 proposalId, uint40 snapshot) private view returns (uint256) {
+        IssuanceSnapshot storage created = _issuanceAt[proposalId];
+        // The unwrap total only rises.
+        uint256 issued = uint256(dgnrs.totalUnwrapped()) - created.unwrapped;
+        uint256 pool = sDGNRS.balanceOf(ContractAddresses.SDGNRS);
+        uint256 poolAtCreation = created.pool;
+        // An unwrap addressed to the token itself raises its balance; the unwrap term carries it.
+        if (pool < poolAtCreation) issued += poolAtCreation - pool;
+        return uint256(snapshot) + (issued + 1e12 - 1) / 1e12;
     }
 
     /// @dev Validate a proposal is active and not expired.
@@ -751,16 +794,16 @@ contract DegenerusAdmin {
     function _resolveThreshold(
         uint256 approveWeight,
         uint256 rejectWeight,
-        uint256 snapshot,
+        uint256 denominator,
         uint16 t
     ) private pure returns (Resolution) {
         if (
-            approveWeight * BPS >= uint256(t) * snapshot &&
+            approveWeight * BPS >= uint256(t) * denominator &&
             approveWeight > rejectWeight
         ) return Resolution.Execute;
         if (
             rejectWeight > approveWeight &&
-            rejectWeight * BPS >= uint256(t) * snapshot
+            rejectWeight * BPS >= uint256(t) * denominator
         ) return Resolution.Kill;
         return Resolution.None;
     }

@@ -710,7 +710,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         // The pass is priced: register the buyer (the eligibility read above writes nothing back).
         buyerId = _registerCallerAccount(buyerId == 0 ? _walletIdOf(msg.sender) : buyerId, totalPrice);
-        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        // Claimable-pay: msg.value first (overpay -> payer's afking); claimable, then prepaid
+        // AFKing, cover the rest.
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         if (msg.value > freshPaid) _creditAfkingValue(_requireWalletId(msg.sender), msg.value - freshPaid);
         {
@@ -890,7 +891,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             affiliate.payAffiliate(0, affiliateCode, buyerId, level + 1, true, 0);
         }
 
-        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        // Claimable-pay: msg.value first (overpay -> payer's afking); claimable, then prepaid
+        // AFKing, cover the rest.
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         if (msg.value > freshPaid) _creditAfkingValue(_requireWalletId(msg.sender), msg.value - freshPaid);
         _settleShortfall(buyerId, totalPrice - freshPaid, true);

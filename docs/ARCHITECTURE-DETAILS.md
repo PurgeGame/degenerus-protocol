@@ -299,7 +299,17 @@ affiliate earnings, decimator burns and craps joins add no daily or level quest 
 pack bought then still raises the streak to its floor of 12, and Craps day passes, the whole-day
 Craps streak credit and growth bets still count in that interval. From the daily request that
 promotes the level until the pool consolidation that rolls the next level quest, the promoted
-level's quest prices its ETH targets at the ticket price of the level after it.
+level's quest prices its ETH targets at the ticket price of the level after it. A foil pack
+freezes its buyer's activity score at purchase; that score sets the pack's multiplier and is the
+score its reward spins use. The frozen score counts a quest streak of at least 12: an account in
+a live AFKing run uses the run's streak after the purchase, every other account uses its quest
+streak without that day's completions, and either is raised to 12 when lower. In a jackpot phase
+whose tickets route to the current level, the paired check a primary-completing purchase runs
+measures a Degenerette ETH secondary at the routed ticket price, while a bet and the quest views
+measure it at the next level's price; a bet below the displayed target that meets the target at
+the routed price can be completed by that purchase. A craps join or day pass first settles the
+account's missed days by syncing the streak on the Game's logical day, also between a daily
+request and the quest roll, where the join adds no quest progress.
 
 The Vault (wallet ID 1) and sDGNRS (ID 2) subscribe in their constructors at quantity 1 in box mode,
 burn no seat and cannot use ticket mode. The Vault owner can pause and resume the Vault's run;
@@ -633,6 +643,10 @@ day latches (turbo latch included), whichever opens generation first. Repeated m
 first block. The bound can precede actual generation; it is not a first-reveal timestamp.
 
 ## Jackpot phases and turbo
+
+From the daily request that promotes the level until the pool consolidation that opens its jackpot
+phase, tickets route to the next level, so a purchase in that interval records its mint streak
+against the next level.
 
 Jackpot phases use either one daily draw (turbo) or three daily draws; delayed processing can extend
 their wall-clock duration. Every non-turbo level uses the three-draw schedule, even when reaching

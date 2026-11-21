@@ -150,6 +150,37 @@ contract DeityGiftExpiredLane is DeployProtocol {
         assertEq(tier, 3, "stronger live lane kept");
     }
 
+    /// @dev Every covered family holds tier 3 from a deity gift made on `stampDay`.
+    function _holdDeityTier3(uint24 stampDay) private {
+        uint256 d = uint256(stampDay);
+        uint256 s0 = (d << CF_DAY) | (d << CF_DEITY) | (uint256(3) << CF_TIER)
+            | (d << LB_DAY) | (d << LB_DEITY) | (uint256(3) << LB_TIER)
+            | (d << PU_DAY) | (d << PU_DEITY) | (uint256(3) << PU_TIER);
+        uint256 s1 = (d << LZ_DAY) | (d << LZ_DEITY) | (uint256(3) << LZ_TIER);
+        _setBoon(s0, s1);
+    }
+
+    /// @dev A deity-stamped lane lives only on its day: yesterday's deity gift does not block
+    ///      today's, while a rolled lane with the same stamp is still live and does.
+    function test_deityStampedLaneFromYesterdayDoesNotBlockGift() public {
+        uint256 snap = vm.snapshotState();
+        _holdTier3(TODAY - 1);
+        _gift();
+        (uint24 day, uint24 deityDay, uint8 tier) = _lane();
+        assertEq(day, TODAY - 1, "a rolled lane stamped yesterday is live");
+        assertEq(deityDay, 0, "rolled lane kept");
+        assertEq(tier, 3, "stronger live lane kept");
+        vm.revertToState(snap);
+
+        _holdDeityTier3(TODAY - 1);
+        _gift();
+        (day, deityDay, tier) = _lane();
+        assertEq(day, TODAY, "gift stamps today");
+        assertEq(deityDay, TODAY, "gift is deity-stamped");
+        assertGt(tier, 0);
+        assertLe(tier, 3);
+    }
+
     /// @dev Days a held boon of the family stays live after its stamp day.
     function _expiry(uint8 fam) private pure returns (uint24) {
         return fam <= 2 ? 2 : 4;

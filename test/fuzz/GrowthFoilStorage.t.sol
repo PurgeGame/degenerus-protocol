@@ -32,7 +32,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
 
     function test_FoilZeroSpendStillSyncsAndFloors() public {
         (, , , uint32 snapshot, ) = _foil(0);
-        assertEq(snapshot, 0);
+        assertEq(snapshot, 12, "the score basis is at least the foil streak floor");
         bytes32 word = vm.load(address(quests), keccak256(abi.encode(uint256(pid), QaSlots.STATE)));
         assertEq(uint24(uint256(word) >> 48), DAY);
         assertEq(uint16(uint256(word) >> 72), 12);

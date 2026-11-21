@@ -18,8 +18,10 @@ MAX_UINT256 = 2**256 - 1
 BPS = 10_000
 MAX_POOL = 10**30
 # Any change requires reviewing both the integer model and Solidity carrier.
+# Reviewed 2026-11-20: JackpotBucketLib NatSpec text only (the source is token-identical once
+# comments are stripped); the integer model is unaffected.
 SOURCE_PINS = {
-    "contracts/libraries/JackpotBucketLib.sol": "08b4b5430c5d24506704e24e99991875016154bd61cb92d98f78207a52a621db",
+    "contracts/libraries/JackpotBucketLib.sol": "79190fae62d0288fa3498249143d1a4162e2b722ff032bc16c6b3af4bdb03727",
     "test/halmos/NewProperties.t.sol": "f411e81deab658d0f79bd245cdc95f3bb4f4dd5eb0718bd8c2bba00f920bd0cd",
     "test/halmos/SolvencyArithmetic.t.sol": "76a079692734ffc5a80d0aa8ee53417b06d9b66197f6c6f014517e609d64a170",
 }

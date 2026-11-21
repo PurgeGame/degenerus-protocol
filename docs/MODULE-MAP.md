@@ -797,6 +797,7 @@ Deployment aliases: `ADMIN`.
 | `vote(uint256,bool)` (`0xc9d27afe`) | [DegenerusAdmin.vote](../contracts/DegenerusAdmin.sol) | None |
 | `voteWeight(uint256,address)` (`0x2b0a999d`) | [DegenerusAdmin.voteWeight](../contracts/DegenerusAdmin.sol) | None |
 | `votes(uint256,address)` (`0xd23254b4`) | [DegenerusAdmin.votes](../contracts/DegenerusAdmin.sol) | None |
+| `votingDenominator(uint256)` (`0x53dba987`) | [DegenerusAdmin.votingDenominator](../contracts/DegenerusAdmin.sol) | None |
 | `vrfKeyHash()` (`0x041d443e`) | Compiler-generated getter | None |
 
 ### GNRUS
